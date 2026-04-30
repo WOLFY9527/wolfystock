@@ -113,6 +113,22 @@ class DatabaseManagerFormalIntegrationTestCase(unittest.TestCase):
             auto_apply_schema=True,
         )
 
+    def test_database_manager_initialization_bootstraps_phase_flags_before_migrations(self) -> None:
+        self._configure_environment(postgres_url=None)
+
+        with self.assertRaises(RuntimeError):
+            with patch.object(
+                DatabaseManager,
+                "_run_multi_user_migrations",
+                side_effect=RuntimeError("boom"),
+            ):
+                DatabaseManager(db_url="sqlite:///:memory:")
+
+        partial = DatabaseManager._instance
+        self.assertIsNotNone(partial)
+        self.assertTrue(hasattr(partial, "_phase_a_enabled"))
+        self.assertFalse(partial._phase_a_enabled)
+
     def test_database_manager_dispose_delegates_pg_bridge_cleanup(self) -> None:
         self._configure_environment(postgres_url=None)
         db = DatabaseManager.get_instance()

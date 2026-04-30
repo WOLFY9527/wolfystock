@@ -1120,12 +1120,32 @@ class DatabaseManager:
     
     _instance: Optional['DatabaseManager'] = None
     _initialized: bool = False
+
+    def _prime_runtime_state_defaults(self) -> None:
+        """Seed phase/store flags before any initialization step can fail."""
+        self._phase_a_store = None
+        self._phase_a_enabled = False
+        self._phase_b_store = None
+        self._phase_b_enabled = False
+        self._phase_c_store = None
+        self._phase_c_enabled = False
+        self._phase_d_store = None
+        self._phase_d_enabled = False
+        self._phase_e_store = None
+        self._phase_e_enabled = False
+        self._phase_f_store = None
+        self._phase_f_enabled = False
+        self._phase_g_store = None
+        self._phase_g_enabled = False
+        self._postgres_bridge_url = None
+        self._postgres_bridge_auto_apply_schema = True
     
     def __new__(cls, *args, **kwargs):
         """单例模式实现"""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
+            cls._instance._prime_runtime_state_defaults()
         return cls._instance
     
     def __init__(self, db_url: Optional[str] = None):
@@ -1137,6 +1157,8 @@ class DatabaseManager:
         """
         if getattr(self, '_initialized', False):
             return
+
+        self._prime_runtime_state_defaults()
         
         if db_url is None:
             config = get_config()
@@ -1161,20 +1183,6 @@ class DatabaseManager:
         # 创建所有表
         Base.metadata.create_all(self._engine)
         self._run_multi_user_migrations()
-        self._phase_a_store: Optional[PostgresPhaseAStore] = None
-        self._phase_a_enabled = False
-        self._phase_b_store: Optional[PostgresPhaseBStore] = None
-        self._phase_b_enabled = False
-        self._phase_c_store: Optional[PostgresPhaseCStore] = None
-        self._phase_c_enabled = False
-        self._phase_d_store: Optional[PostgresPhaseDStore] = None
-        self._phase_d_enabled = False
-        self._phase_e_store: Optional[PostgresPhaseEStore] = None
-        self._phase_e_enabled = False
-        self._phase_f_store: Optional[PostgresPhaseFStore] = None
-        self._phase_f_enabled = False
-        self._phase_g_store: Optional[PostgresPhaseGStore] = None
-        self._phase_g_enabled = False
         self._postgres_bridge_url = str(getattr(config, "postgres_phase_a_url", "") or "").strip() or None
         self._postgres_bridge_auto_apply_schema = bool(
             getattr(config, "postgres_phase_a_apply_schema", True)
