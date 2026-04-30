@@ -298,6 +298,26 @@ describe('Shell', () => {
     expect(document.querySelector('.shell-content-frame--backtest')).toBeNull();
   });
 
+  it('uses the full-width workspace lane for the market overview route', () => {
+    render(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    expect(document.querySelector('.theme-shell--market-overview')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'flex-1', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12');
+    expect(document.querySelector('.shell-main-column')).not.toHaveClass('mx-auto', 'max-w-[1600px]');
+    expect(document.documentElement.dataset.marketOverviewShell).toBe('true');
+    expect(document.body.dataset.marketOverviewShell).toBe('true');
+  });
+
   it('treats the system settings route as a wide workspace surface', () => {
     render(
       <MemoryRouter initialEntries={['/settings/system']}>

@@ -208,3 +208,58 @@ export const MarketOverviewDataRow: React.FC<{
     </article>
   );
 };
+
+export const MarketOverviewDenseQuoteItem: React.FC<{
+  item: MarketOverviewItem;
+  neutralLabel: string;
+  valueDigitsBelowHundred?: number;
+}> = ({ item, neutralLabel, valueDigitsBelowHundred = 2 }) => {
+  const direction = item.riskDirection || 'neutral';
+  const tone = getDirectionTone(direction);
+  const displayLabel = resolveMarketOverviewDisplayLabel(item);
+  const freshness = resolveFreshness(item);
+  const itemDetails = metaText(item);
+  const sparklineTone = direction === 'increasing'
+    ? 'text-rose-400'
+    : direction === 'decreasing'
+      ? 'text-emerald-400'
+      : 'text-white/35';
+
+  return (
+    <article
+      data-testid="market-overview-dense-quote-item"
+      data-quote-item-layout="compact-grid"
+      className="grid min-w-0 grid-cols-[minmax(0,1fr)_88px_minmax(86px,max-content)] items-center gap-x-3 gap-y-2 rounded-lg border border-white/[0.055] bg-white/[0.025] px-3 py-2.5"
+    >
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={cn('size-1.5 shrink-0 rounded-full bg-current shadow-[0_0_12px_currentColor]', tone)} aria-hidden="true" />
+          <p className="min-w-0 truncate text-xs font-semibold text-white/78">{displayLabel.primary}</p>
+        </div>
+        {displayLabel.secondary ? (
+          <p className="mt-0.5 truncate pl-3.5 font-mono text-[10px] font-semibold uppercase text-white/32">{displayLabel.secondary}</p>
+        ) : null}
+      </div>
+
+      <div data-testid="market-overview-dense-quote-sparkline" className="w-[88px] shrink-0 self-center">
+        <MarketOverviewSparkline values={item.trend} tone={sparklineTone} className="h-8" />
+      </div>
+
+      <div className="min-w-[86px] text-right font-mono tabular-nums">
+        <p className="truncate text-base font-semibold leading-none text-white">{formatMetricValue(item, valueDigitsBelowHundred)}</p>
+        <p className={cn('mt-1 truncate text-[11px] font-bold leading-none', tone)}>
+          {formatChangeSummary(item, neutralLabel)}
+        </p>
+      </div>
+
+      <div className="col-span-3 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-3.5 text-[9px] text-white/32">
+        <DataFreshnessBadge freshness={freshness} className="px-1.5 text-[9px]" />
+        {itemDetails.length ? <span className="min-w-0 truncate leading-4">{itemDetails.join(' · ')}</span> : null}
+        {item.warning ? <span className="w-full leading-4 text-amber-200/70">{item.warning}</span> : null}
+        {item.hoverDetails?.map((detail, index) => (
+          <span key={`${detail}-${index}`} className="leading-4 text-white/28">{detail}</span>
+        ))}
+      </div>
+    </article>
+  );
+};

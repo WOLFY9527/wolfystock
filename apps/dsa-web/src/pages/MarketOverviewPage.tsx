@@ -11,7 +11,6 @@ import type {
   MarketTemperatureScore,
 } from '../api/market';
 import { marketApi } from '../api/market';
-import { CryptoCard } from '../components/market-overview/CryptoCard';
 import { FundsFlowCard } from '../components/market-overview/FundsFlowCard';
 import { MacroIndicatorsCard } from '../components/market-overview/MacroIndicatorsCard';
 import { MarketSentimentCard } from '../components/market-overview/MarketSentimentCard';
@@ -61,24 +60,24 @@ const CATEGORY_LAYOUT: Record<MarketOverviewTab, {
   fallback: CardKey[];
 }> = {
   all: {
-    primary: ['indices', 'cnIndices', 'crypto', 'volatility', 'fundsFlow', 'macro'],
-    secondary: ['rates', 'sentiment'],
+    primary: ['indices', 'cnIndices', 'crypto', 'volatility', 'fundsFlow', 'rates', 'macro'],
+    secondary: ['sentiment'],
     fallback: ['cnBreadth', 'cnFlows', 'sectorRotation', 'cnShortSentiment', 'fxCommodities', 'futures'],
   },
   us: {
-    primary: ['indices', 'volatility', 'fundsFlow', 'macro'],
-    secondary: ['rates', 'sentiment', 'fxCommodities'],
-    fallback: ['futures'],
+    primary: ['indices', 'volatility', 'fundsFlow', 'rates', 'macro'],
+    secondary: ['sentiment'],
+    fallback: ['fxCommodities', 'futures'],
   },
   cn: {
     primary: ['cnIndices', 'cnBreadth', 'cnFlows', 'sectorRotation', 'cnShortSentiment'],
-    secondary: ['macro', 'rates'],
+    secondary: [],
     fallback: [],
   },
   global: {
     primary: ['macro', 'indices', 'rates', 'fxCommodities'],
-    secondary: ['volatility', 'sentiment', 'futures'],
-    fallback: [],
+    secondary: ['volatility', 'sentiment'],
+    fallback: ['futures'],
   },
   crypto: {
     primary: ['crypto', 'volatility', 'macro'],
@@ -95,12 +94,12 @@ const CATEGORY_CARDS: Record<MarketOverviewTab, CardKey[]> = Object.fromEntries(
 ) as Record<MarketOverviewTab, CardKey[]>;
 
 const CARD_LAYOUT_META: Record<CardKey, {
-  size: 'wide' | 'normal' | 'compact';
+  size: 'dense-wide' | 'wide' | 'normal' | 'compact';
   priority: 'primary' | 'secondary' | 'fallback';
 }> = {
-  indices: { size: 'wide', priority: 'primary' },
-  cnIndices: { size: 'wide', priority: 'primary' },
-  crypto: { size: 'wide', priority: 'primary' },
+  indices: { size: 'dense-wide', priority: 'primary' },
+  cnIndices: { size: 'dense-wide', priority: 'primary' },
+  crypto: { size: 'dense-wide', priority: 'primary' },
   volatility: { size: 'normal', priority: 'primary' },
   fundsFlow: { size: 'normal', priority: 'primary' },
   macro: { size: 'normal', priority: 'primary' },
@@ -509,20 +508,97 @@ const CategoryCoverageSummary: React.FC<{
   </div>
 );
 
+const CompactStatusTile: React.FC<{
+  testId: string;
+  eyebrow: string;
+  title: string;
+  value: string;
+  meta: React.ReactNode;
+  tone?: string;
+}> = ({ testId, eyebrow, title, value, meta, tone = 'text-white' }) => (
+  <GlassCard
+    as="section"
+    data-testid={testId}
+    className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'min-w-0 p-3')}
+  >
+    <div className="flex min-w-0 items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/38">{eyebrow}</p>
+        <p className="mt-1 truncate text-sm font-semibold text-white/78">{title}</p>
+      </div>
+      <p className={cn('shrink-0 text-right font-mono text-lg font-semibold leading-none tabular-nums', tone)}>{value}</p>
+    </div>
+    <div className="mt-2 min-w-0 text-xs leading-5 text-white/45">{meta}</div>
+  </GlassCard>
+);
+
+const MarketTemperatureCompactSummary: React.FC<{ data: MarketTemperatureResponse }> = ({ data }) => {
+  const score = data.scores.overall;
+  const reliable = isTemperatureReliable(data);
+  return (
+    <CompactStatusTile
+      testId="market-overview-temperature-summary"
+      eyebrow="TEMPERATURE"
+      title="市场温度"
+      value={reliable ? formatNumber(score.value, 0) : 'N/A'}
+      tone={reliable ? scoreTone(score) : 'text-white/45'}
+      meta={(
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="font-semibold text-white/68">{reliable ? score.label : '数据不足'}</span>
+          <span>信号可信：{confidenceLabel(data.confidence)}</span>
+          <span className="font-mono tabular-nums">真实 {data.reliableInputCount ?? 0} · 备用 {data.fallbackInputCount ?? 0}</span>
+        </div>
+      )}
+    />
+  );
+};
+
+const DataQualityCompactSummary: React.FC<{ summary: DataQualitySummary }> = ({ summary }) => (
+  <CompactStatusTile
+    testId="market-overview-data-quality-summary"
+    eyebrow="QUALITY"
+    title={`数据质量：${summary.status}`}
+    value={`${summary.counts.live + summary.counts.delayed + summary.counts.cached}`}
+    tone={summary.hasConcern ? 'text-amber-200' : 'text-emerald-300'}
+    meta={(
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span>可用快照</span>
+        <span className="font-mono tabular-nums">备用 {summary.counts.fallback} · 旧 {summary.counts.stale} · 异常 {summary.counts.error}</span>
+      </div>
+    )}
+  />
+);
+
+const MarketBriefingCompactSummary: React.FC<{ data: MarketBriefingResponse }> = ({ data }) => {
+  const lead = data.items[0];
+  return (
+    <CompactStatusTile
+      testId="market-overview-briefing-summary"
+      eyebrow="BRIEFING"
+      title="今日市场解读"
+      value={confidenceLabel(data.confidence)}
+      tone={data.isReliable === false || data.isFallback ? 'text-amber-200' : 'text-white'}
+      meta={(
+        <div className="min-w-0">
+          <p className="truncate text-white/55">{lead?.message || data.warning || '暂无简报'}</p>
+        </div>
+      )}
+    />
+  );
+};
+
 const MarketOverviewStatusStrip: React.FC<{
   temperature: React.ReactNode;
   dataQuality: React.ReactNode;
-}> = ({ temperature, dataQuality }) => (
+  briefing: React.ReactNode;
+}> = ({ temperature, dataQuality, briefing }) => (
   <section
     data-testid="market-overview-status-strip"
-    className="grid w-full grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]"
+    className="grid w-full grid-cols-1 gap-3 md:grid-cols-3"
   >
-    <div data-testid="market-overview-temperature-summary" className="min-w-0">
-      {temperature}
-    </div>
-    <div data-testid="market-overview-data-quality-summary" className="min-w-0">
-      {dataQuality}
-    </div>
+    {temperature}
+    {dataQuality}
+    {briefing}
   </section>
 );
 
@@ -642,11 +718,11 @@ const MarketTemperatureStrip: React.FC<{
         </div>
       ) : null}
       {shouldShowScores ? (
-        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
           {scores.map(({ key, label, pressure }) => {
             const score = data.scores[key];
             return (
-              <div key={key} className={cn('min-w-[188px] flex-1 rounded-lg border px-3 py-2.5', isReliable ? 'border-white/[0.06] bg-white/[0.025]' : 'border-white/[0.045] bg-white/[0.015]')} title={score.description}>
+              <div key={key} className={cn('min-w-0 rounded-lg border px-3 py-2.5', isReliable ? 'border-white/[0.06] bg-white/[0.025]' : 'border-white/[0.045] bg-white/[0.015]')} title={score.description}>
                 <div className="flex items-start justify-between gap-3">
                   <p className="text-[11px] font-semibold text-white/60">{label}</p>
                   <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold text-white/55">{score.label}</span>
@@ -680,7 +756,8 @@ const MarketBriefingCard: React.FC<{
   data: MarketBriefingResponse;
   refreshing: boolean;
   onRefresh: () => void;
-}> = ({ data, refreshing, onRefresh }) => {
+  compact?: boolean;
+}> = ({ data, refreshing, onRefresh, compact = false }) => {
   const { t } = useI18n();
   const title = t('marketOverviewPage.briefing.title');
   const hasWarning = Boolean(data.warning);
@@ -699,7 +776,7 @@ const MarketBriefingCard: React.FC<{
           {data.warning}
         </div>
       ) : null}
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+      <div className={cn('grid gap-2', compact ? 'grid-cols-1' : 'md:grid-cols-2 xl:grid-cols-3')}>
         {data.items.slice(0, hasWarning || !isReliable ? 3 : 5).map((item) => {
           const lowConfidence = !isReliable || (item.confidence != null && item.confidence < 0.45);
           return (
@@ -1194,6 +1271,7 @@ const MarketOverviewPage: React.FC = () => {
         panel={panels.indices}
         loading={loading && !panels.indices}
         refreshing={refreshingPanel === 'indices'}
+        variant="denseQuote"
         onRefresh={() => {
           void refreshPanel('indices', marketOverviewApi.getIndices);
         }}
@@ -1210,15 +1288,31 @@ const MarketOverviewPage: React.FC = () => {
       />
     ),
     crypto: (
-      <CryptoCard
-        panel={panels.crypto}
-        loading={loading && !panels.crypto}
-        refreshing={refreshingPanel === 'crypto'}
-        realtimeStatus={cryptoRealtimeStatus}
-        onRefresh={() => {
-          void refreshPanel('crypto', marketApi.getCrypto);
-        }}
-      />
+      <div className="flex h-full flex-col gap-2">
+        <div className="flex items-center justify-end">
+          <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold uppercase text-white/55">
+            {cryptoRealtimeStatus === 'live' ? 'Live' : cryptoRealtimeStatus === 'reconnecting' ? 'Reconnecting' : 'Snapshot'}
+          </span>
+        </div>
+        {cryptoRealtimeStatus === 'reconnecting' ? (
+          <div className="rounded-lg border border-amber-300/20 bg-amber-400/8 px-3 py-2 text-xs text-amber-100/80">
+            实时连接断开，显示最近快照
+          </div>
+        ) : null}
+        <MarketOverviewCard
+          title={t('marketOverviewPage.cards.crypto.title')}
+          eyebrow={t('marketOverviewPage.cards.crypto.eyebrow')}
+          description={t('marketOverviewPage.cards.crypto.description')}
+          sourceLabel={t('marketOverviewPage.cards.crypto.source')}
+          panel={panels.crypto}
+          loading={loading && !panels.crypto}
+          refreshing={refreshingPanel === 'crypto'}
+          variant="denseQuote"
+          onRefresh={() => {
+            void refreshPanel('crypto', marketApi.getCrypto);
+          }}
+        />
+      </div>
     ),
     sentiment: (
       <MarketSentimentCard
@@ -1259,6 +1353,7 @@ const MarketOverviewPage: React.FC = () => {
         panel={panels.cnIndices}
         loading={loading && !panels.cnIndices}
         refreshing={refreshingPanel === 'cnIndices'}
+        variant="denseQuote"
         onRefresh={() => {
           void refreshPanel('cnIndices', marketApi.getCnIndices);
         }}
@@ -1352,7 +1447,8 @@ const MarketOverviewPage: React.FC = () => {
   const renderCard = (cardKey: CardKey, rank: number, rail: 'primary' | 'side' | 'fallback' = 'primary') => {
     const layoutMeta = CARD_LAYOUT_META[cardKey];
     const shouldSpanPrimaryRail = rail === 'primary' && (
-      layoutMeta.size === 'wide'
+      layoutMeta.size === 'dense-wide'
+      || layoutMeta.size === 'wide'
       || (activeCategory === 'global' && cardKey === 'macro')
     );
     return (
@@ -1361,6 +1457,7 @@ const MarketOverviewPage: React.FC = () => {
       data-testid={`market-overview-card-${cardKey}`}
       data-market-card-rank={rank}
       data-market-card-size={layoutMeta.size}
+      data-market-card-density={layoutMeta.size === 'dense-wide' ? 'dense-quote' : 'standard'}
       className={cn(
         'min-w-0 w-full',
         shouldSpanPrimaryRail ? 'lg:col-span-2 2xl:col-span-3' : '',
@@ -1404,6 +1501,22 @@ const MarketOverviewPage: React.FC = () => {
         {primaryOrder.map((cardKey, index) => renderCard(cardKey, index, 'primary'))}
       </section>
       <aside data-testid="market-overview-side-rail" className="flex min-w-0 flex-col gap-6 xl:col-span-4 2xl:col-span-3">
+        <MarketTemperatureStrip
+          data={panels.temperature}
+          refreshing={refreshingPanel === 'temperature'}
+          onRefresh={() => {
+            void refreshPanel('temperature', marketApi.getTemperature);
+          }}
+        />
+        <DataQualityOverview summary={dataQuality} />
+        <MarketBriefingCard
+          data={panels.briefing}
+          refreshing={refreshingPanel === 'briefing'}
+          compact
+          onRefresh={() => {
+            void refreshPanel('briefing', marketApi.getMarketBriefing);
+          }}
+        />
         <CategoryCoverageSummary label={activeCategoryLabel} summary={coverageSummary} />
         {secondaryOrder.length > 0 ? renderCardGrid(secondaryOrder, 'side') : null}
         {renderFallbackSection()}
@@ -1412,52 +1525,38 @@ const MarketOverviewPage: React.FC = () => {
   );
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col bg-[#030303] text-white">
-      <div className="flex-1 overflow-y-auto pb-12 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <section data-testid="market-overview-shell" className="w-full px-4 py-6 sm:px-6 lg:px-8 2xl:px-10">
-          <div data-testid="market-overview-workbench" className="mx-auto flex w-full max-w-[1800px] flex-col gap-6">
-            <div data-testid="market-overview-category-tabs" className="sticky top-0 z-20 -mx-4 overflow-x-auto border-b border-white/8 bg-[#030303]/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 2xl:-mx-10 2xl:px-10 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div className="flex w-max min-w-full gap-2 rounded-lg bg-white/[0.03] p-1">
-                {categoryTabs.map((tab) => (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    aria-pressed={activeCategory === tab.key}
-                    onClick={() => setActiveCategory(tab.key)}
-                    className={`whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
-                      activeCategory === tab.key
-                        ? 'bg-white/10 text-white shadow-sm'
-                        : 'bg-transparent text-white/45 hover:text-white/75'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <CrossAssetHeroRibbon anchors={heroAnchors} />
-            <MarketOverviewStatusStrip
-              temperature={(
-                <MarketTemperatureStrip
-                  data={panels.temperature}
-                  refreshing={refreshingPanel === 'temperature'}
-                  onRefresh={() => {
-                    void refreshPanel('temperature', marketApi.getTemperature);
-                  }}
-                />
-              )}
-              dataQuality={<DataQualityOverview summary={dataQuality} />}
-            />
-            <MarketBriefingCard
-              data={panels.briefing}
-              refreshing={refreshingPanel === 'briefing'}
-              onRefresh={() => {
-                void refreshPanel('briefing', marketApi.getMarketBriefing);
-              }}
-            />
-            {renderDeterministicGrid()}
+    <div
+      data-testid="market-overview-shell"
+      data-bento-surface="true"
+      className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 bg-[#030303] text-white"
+    >
+      <div data-testid="market-overview-workbench" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6">
+        <div data-testid="market-overview-category-tabs" className="w-full overflow-x-auto rounded-xl border border-white/8 bg-white/[0.02] p-1 backdrop-blur-md [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex w-max min-w-full gap-2">
+            {categoryTabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                aria-pressed={activeCategory === tab.key}
+                onClick={() => setActiveCategory(tab.key)}
+                className={`whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
+                  activeCategory === tab.key
+                    ? 'bg-white/10 text-white shadow-sm'
+                    : 'bg-transparent text-white/45 hover:text-white/75'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
-        </section>
+        </div>
+        <CrossAssetHeroRibbon anchors={heroAnchors} />
+        <MarketOverviewStatusStrip
+          temperature={<MarketTemperatureCompactSummary data={panels.temperature} />}
+          dataQuality={<DataQualityCompactSummary summary={dataQuality} />}
+          briefing={<MarketBriefingCompactSummary data={panels.briefing} />}
+        />
+        {renderDeterministicGrid()}
       </div>
     </div>
   );

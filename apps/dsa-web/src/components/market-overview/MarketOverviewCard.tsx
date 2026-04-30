@@ -8,6 +8,7 @@ import {
   MARKET_OVERVIEW_CARD_TITLE_CLASS,
   MARKET_OVERVIEW_GHOST_CARD_CLASS,
   MarketOverviewDataRow,
+  MarketOverviewDenseQuoteItem,
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
@@ -33,6 +34,7 @@ type MarketOverviewCardProps = {
   refreshing?: boolean;
   onRefresh: () => void;
   className?: string;
+  variant?: 'default' | 'denseQuote';
 };
 
 export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
@@ -45,27 +47,35 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
   refreshing = false,
   onRefresh,
   className,
+  variant = 'default',
 }) => {
   const { t } = useI18n();
   const items = (panel?.items || []).filter(isRenderableMarketOverviewItem);
   const fallbackOnly = isFallbackOnlyPanel(panel);
+  const denseQuote = variant === 'denseQuote';
 
   return (
     <GlassCard
       as="section"
+      data-testid={denseQuote ? 'market-overview-dense-quote-card' : undefined}
       className={cn(
         MARKET_OVERVIEW_GHOST_CARD_CLASS,
         'flex h-full flex-col',
+        denseQuote ? 'p-4' : '',
         fallbackOnly ? 'border-orange-300/12' : '',
         className || '',
       )}
     >
-      <div className="flex h-full flex-col gap-5">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <div>
+      <div className={cn('flex h-full flex-col', denseQuote ? 'gap-4' : 'gap-5')}>
+        <div className={cn('flex items-start justify-between gap-4', denseQuote ? 'mb-2' : 'mb-6')}>
+          <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{eyebrow}</p>
-            <h2 className={cn(MARKET_OVERVIEW_CARD_TITLE_CLASS, 'mt-2')}>{title}</h2>
-            <p className="mt-1 max-w-xl text-sm text-white/55">{description}</p>
+            <h2 className={cn(
+              MARKET_OVERVIEW_CARD_TITLE_CLASS,
+              'mt-2',
+              denseQuote ? 'mb-1 text-sm normal-case tracking-normal text-white/82' : '',
+            )}>{title}</h2>
+            <p className={cn('mt-1 max-w-xl text-white/55', denseQuote ? 'line-clamp-2 text-xs leading-5' : 'text-sm')}>{description}</p>
           </div>
           <MarketOverviewRefreshButton
             label={t('marketOverviewPage.refreshCard', { title })}
@@ -87,15 +97,30 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
           </div>
         ) : null}
 
-        <div className="flex flex-col">
-          {items.map((item) => (
-            <MarketOverviewDataRow
-              key={item.symbol}
-              item={item}
-              neutralLabel={t('marketOverviewPage.direction.neutral')}
-            />
-          ))}
-        </div>
+        {denseQuote ? (
+          <div
+            data-testid="market-overview-dense-quote-grid"
+            className="grid grid-cols-1 gap-3 md:grid-cols-2"
+          >
+            {items.map((item) => (
+              <MarketOverviewDenseQuoteItem
+                key={item.symbol}
+                item={item}
+                neutralLabel={t('marketOverviewPage.direction.neutral')}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col">
+            {items.map((item) => (
+              <MarketOverviewDataRow
+                key={item.symbol}
+                item={item}
+                neutralLabel={t('marketOverviewPage.direction.neutral')}
+              />
+            ))}
+          </div>
+        )}
 
         {loading ? (
           <div className="rounded-xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/60">
