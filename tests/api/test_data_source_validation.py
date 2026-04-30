@@ -45,7 +45,7 @@ class DataSourceValidationTestCase(unittest.TestCase):
             _Response(200, [{"symbol": "MSFT", "price": 400.12}]),
             _Response(200, {"symbol": "MSFT", "historical": [{"close": 399.1}]}),
         ]
-        with patch("src.services.system_config_service.requests.request", side_effect=responses):
+        with patch("src.providers.validation.requests.request", side_effect=responses):
             payload = self.service.test_builtin_data_source(provider="fmp", symbol="MSFT")
 
         self.assertTrue(payload["ok"])
@@ -58,7 +58,7 @@ class DataSourceValidationTestCase(unittest.TestCase):
             _Response(200, [{"symbol": "MSFT", "price": 400.12}]),
             _Response(403, {"Error Message": "Forbidden"}),
         ]
-        with patch("src.services.system_config_service.requests.request", side_effect=responses):
+        with patch("src.providers.validation.requests.request", side_effect=responses):
             payload = self.service.test_builtin_data_source(provider="fmp", symbol="MSFT")
 
         self.assertFalse(payload["ok"])
@@ -71,7 +71,7 @@ class DataSourceValidationTestCase(unittest.TestCase):
             _Response(403, {"Error Message": "Forbidden"}),
             _Response(403, {"Error Message": "Forbidden"}),
         ]
-        with patch("src.services.system_config_service.requests.request", side_effect=responses):
+        with patch("src.providers.validation.requests.request", side_effect=responses):
             payload = self.service.test_builtin_data_source(provider="fmp", symbol="MSFT")
 
         self.assertFalse(payload["ok"])
@@ -79,7 +79,7 @@ class DataSourceValidationTestCase(unittest.TestCase):
         self.assertTrue(all(check["error_type"] == "Forbidden" for check in payload["checks"]))
 
     def test_fmp_timeout_returns_failed_timeout(self) -> None:
-        with patch("src.services.system_config_service.requests.request", side_effect=requests.exceptions.Timeout):
+        with patch("src.providers.validation.requests.request", side_effect=requests.exceptions.Timeout):
             payload = self.service.test_builtin_data_source(provider="fmp", symbol="MSFT")
 
         self.assertEqual(payload["status"], "failed")
@@ -98,7 +98,7 @@ class DataSourceValidationTestCase(unittest.TestCase):
             _Response(200, {"Error Message": "full-secret-fmp-key is invalid"}),
             _Response(403, {"Error Message": "Forbidden"}),
         ]
-        with patch("src.services.system_config_service.requests.request", side_effect=responses):
+        with patch("src.providers.validation.requests.request", side_effect=responses):
             payload = self.service.test_builtin_data_source(provider="fmp", symbol="MSFT")
 
         serialized = str(payload)
@@ -111,8 +111,8 @@ class DataSourceValidationTestCase(unittest.TestCase):
             "https://example.test/quote?symbol=MSFT&apikey=full-secret&token=another-secret"
         )
 
-        self.assertIn("apikey=%2A%2A%2A", sanitized)
-        self.assertIn("token=%2A%2A%2A", sanitized)
+        self.assertIn("apikey=***", sanitized)
+        self.assertIn("token=***", sanitized)
         self.assertNotIn("full-secret", sanitized)
         self.assertNotIn("another-secret", sanitized)
 

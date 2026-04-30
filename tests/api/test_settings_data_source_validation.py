@@ -39,7 +39,12 @@ class SettingsDataSourceValidationApiTestCase(unittest.TestCase):
         ).model_dump()
 
         self.assertEqual(payload["provider"], "fmp")
+        self.assertIn("ok", payload)
         self.assertEqual(payload["status"], "failed")
+        self.assertIn("summary", payload)
+        self.assertIn("suggestion", payload)
+        self.assertIn("key_masked", payload)
+        self.assertIn("duration_ms", payload)
         self.assertEqual(payload["checks"][0]["http_status"], 403)
         service.test_builtin_data_source.assert_called_once_with(
             provider="fmp",

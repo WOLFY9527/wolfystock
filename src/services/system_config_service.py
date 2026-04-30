@@ -8,7 +8,7 @@ import re
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import urlparse
 
 import requests
 
@@ -36,9 +36,10 @@ from src.core.config_registry import (
     get_field_definition,
     get_registered_field_keys,
 )
+from src.providers.validation import normalize_provider_name, validate_provider_connection
 from src.services.execution_log_service import ExecutionLogService
 from src.storage import get_db
-from src.utils.security import is_masked_secret, is_sensitive_key, mask_secret
+from src.utils.security import is_masked_secret, is_sensitive_key, mask_secret, sanitize_url
 
 logger = logging.getLogger(__name__)
 
@@ -646,252 +647,42 @@ class SystemConfigService:
         timeout_seconds: float = _REMOTE_VALIDATION_TIMEOUT_SECONDS,
     ) -> Dict[str, Any]:
         """Run bounded remote validation for a built-in data provider."""
-        normalized_provider = self._normalize_provider_name(provider)
+        normalized_provider = normalize_provider_name(provider)
         normalized_symbol = (symbol or "MSFT").strip().upper() or "MSFT"
         timeout = min(_REMOTE_VALIDATION_TIMEOUT_SECONDS, max(1.0, float(timeout_seconds or _REMOTE_VALIDATION_TIMEOUT_SECONDS)))
-        started_at = time.perf_counter()
-        checked_at = datetime.now(timezone.utc).isoformat()
-
+        resolved_credential = ""
         if normalized_provider in {"fmp", "finnhub", "alpha_vantage", "twelve_data", "tushare"}:
-            key = self._resolve_provider_key(normalized_provider, credential)
-            if not key:
-                return self._build_builtin_validation_response(
-                    provider=normalized_provider,
-                    status="missing_key",
-                    checked_at=checked_at,
-                    started_at=started_at,
-                    key="",
-                    checks=[],
-                    summary=f"{self._provider_display_name(normalized_provider)} 未配置 API key/token，无法执行远程校验。",
-                    suggestion="请先在系统设置中保存该 provider 的 API key/token，然后重新校验。",
-                )
-        else:
-            key = ""
+            resolved_credential = self._resolve_provider_key(normalized_provider, credential)
 
-        if normalized_provider == "fmp":
-            checks = [
-                self._run_remote_json_check(
-                    name="quote",
-                    endpoint=f"/api/v3/quote/{normalized_symbol}",
-                    url=f"https://financialmodelingprep.com/api/v3/quote/{normalized_symbol}",
-                    params={"apikey": key},
-                    timeout=timeout,
-                    validator=lambda data: (
-                        isinstance(data, list)
-                        and bool(data)
-                        and isinstance(data[0], dict)
-                        and str(data[0].get("symbol") or "").upper() == normalized_symbol
-                        and data[0].get("price") is not None
-                    ),
-                    success_message="quote endpoint 可用。",
-                    failure_message="quote endpoint 返回的数据结构不可用。",
-                ),
-                self._run_remote_json_check(
-                    name="historical",
-                    endpoint=f"/api/v3/historical-price-full/{normalized_symbol}",
-                    url=f"https://financialmodelingprep.com/api/v3/historical-price-full/{normalized_symbol}",
-                    params={"timeseries": "5", "apikey": key},
-                    timeout=timeout,
-                    validator=lambda data: isinstance(data, dict) and isinstance(data.get("historical"), list),
-                    success_message="historical endpoint 可用。",
-                    failure_message="historical endpoint 不可用。",
-                ),
-            ]
-            return self._summarize_builtin_checks(
-                provider=normalized_provider,
-                checked_at=checked_at,
-                started_at=started_at,
-                key=key,
-                checks=checks,
-                success_summary="FMP 连接成功：quote 和 historical endpoint 均可用。",
-                partial_summary="FMP 部分可用：部分 endpoint 失败。",
-                failed_summary="FMP 连接失败：quote 和 historical endpoint 均不可用。",
-                suggestion="请检查 FMP key 是否有效、套餐是否支持 quote/historical endpoint、额度是否用尽。",
-            )
-
-        if normalized_provider == "finnhub":
-            checks = [
-                self._run_remote_json_check(
-                    name="quote",
-                    endpoint="/api/v1/quote",
-                    url="https://finnhub.io/api/v1/quote",
-                    params={"symbol": normalized_symbol, "token": key},
-                    timeout=timeout,
-                    validator=lambda data: isinstance(data, dict) and data.get("c") not in (None, 0, 0.0),
-                    success_message="quote endpoint 可用。",
-                    failure_message="quote endpoint 返回的数据结构不可用。",
-                )
-            ]
-            return self._summarize_builtin_checks(
-                provider=normalized_provider,
-                checked_at=checked_at,
-                started_at=started_at,
-                key=key,
-                checks=checks,
-                success_summary="Finnhub 连接成功：quote endpoint 可用。",
-                partial_summary="Finnhub 部分可用。",
-                failed_summary="Finnhub 连接失败：quote endpoint 不可用。",
-                suggestion="请检查 Finnhub token 是否有效、额度是否用尽，或当前套餐是否支持 quote endpoint。",
-            )
-
-        if normalized_provider == "alpha_vantage":
-            checks = [
-                self._run_remote_json_check(
-                    name="global_quote",
-                    endpoint="/query?function=GLOBAL_QUOTE",
-                    url="https://www.alphavantage.co/query",
-                    params={"function": "GLOBAL_QUOTE", "symbol": normalized_symbol, "apikey": key},
-                    timeout=timeout,
-                    validator=lambda data: (
-                        isinstance(data, dict)
-                        and not any(field in data for field in ("Note", "Information", "Error Message"))
-                        and isinstance(data.get("Global Quote"), dict)
-                        and bool(data.get("Global Quote", {}).get("05. price"))
-                    ),
-                    success_message="GLOBAL_QUOTE endpoint 可用。",
-                    failure_message="GLOBAL_QUOTE endpoint 返回限流、错误或不可用数据。",
-                )
-            ]
-            return self._summarize_builtin_checks(
-                provider=normalized_provider,
-                checked_at=checked_at,
-                started_at=started_at,
-                key=key,
-                checks=checks,
-                success_summary="Alpha Vantage 连接成功：GLOBAL_QUOTE endpoint 可用。",
-                partial_summary="Alpha Vantage 部分可用。",
-                failed_summary="Alpha Vantage 连接失败：GLOBAL_QUOTE endpoint 不可用。",
-                suggestion="请检查 Alpha Vantage key 是否有效、是否触发频率限制，或切换到可用套餐。",
-            )
-
-        if normalized_provider == "twelve_data":
-            checks = [
-                self._run_remote_json_check(
-                    name="quote",
-                    endpoint="/quote",
-                    url="https://api.twelvedata.com/quote",
-                    params={"symbol": normalized_symbol, "apikey": key},
-                    timeout=timeout,
-                    validator=lambda data: (
-                        isinstance(data, dict)
-                        and str(data.get("status") or "").lower() != "error"
-                        and bool(data.get("price"))
-                    ),
-                    success_message="quote endpoint 可用。",
-                    failure_message="quote endpoint 返回错误或缺少 price。",
-                )
-            ]
-            return self._summarize_builtin_checks(
-                provider=normalized_provider,
-                checked_at=checked_at,
-                started_at=started_at,
-                key=key,
-                checks=checks,
-                success_summary="Twelve Data 连接成功：quote endpoint 可用。",
-                partial_summary="Twelve Data 部分可用。",
-                failed_summary="Twelve Data 连接失败：quote endpoint 不可用。",
-                suggestion="请检查 Twelve Data key 是否有效、额度是否用尽，或当前套餐是否支持 quote endpoint。",
-            )
-
-        if normalized_provider in {"yahoo", "yfinance"}:
-            checks = [
-                self._run_remote_json_check(
-                    name="chart",
-                    endpoint=f"/v8/finance/chart/{normalized_symbol}",
-                    url=f"https://query1.finance.yahoo.com/v8/finance/chart/{normalized_symbol}",
-                    params={"range": "1d", "interval": "1d"},
-                    timeout=timeout,
-                    validator=lambda data: (
-                        isinstance(data, dict)
-                        and isinstance(data.get("chart"), dict)
-                        and not data.get("chart", {}).get("error")
-                        and bool(data.get("chart", {}).get("result"))
-                    ),
-                    success_message="Yahoo public chart endpoint 可用。",
-                    failure_message="Yahoo public chart endpoint 不可用。",
-                )
-            ]
-            return self._summarize_builtin_checks(
-                provider="yahoo",
-                checked_at=checked_at,
-                started_at=started_at,
-                key="",
-                checks=checks,
-                success_summary="Yahoo/YFinance 公共行情接口当前可用。",
-                partial_summary="Yahoo/YFinance 公共行情接口部分可用。",
-                failed_summary="Yahoo/YFinance 公共行情接口当前不可用。",
-                suggestion="Yahoo/YFinance 是 public/unofficial 数据源；如失败，请稍后重试或配置带 key 的备用 provider。",
-            )
-
-        if normalized_provider == "tushare":
-            checks = [
-                self._run_remote_json_check(
-                    name="daily",
-                    endpoint="/",
-                    url="http://api.tushare.pro",
-                    method="POST",
-                    json_payload={
-                        "api_name": "daily",
-                        "token": key,
-                        "params": {"ts_code": "000001.SZ", "start_date": "20240101", "end_date": "20240105"},
-                        "fields": "ts_code,trade_date,close",
-                    },
-                    timeout=timeout,
-                    validator=lambda data: isinstance(data, dict) and data.get("code") == 0 and isinstance(data.get("data"), dict),
-                    success_message="daily endpoint 可用。",
-                    failure_message="daily endpoint 返回错误或 token 不可用。",
-                )
-            ]
-            return self._summarize_builtin_checks(
-                provider=normalized_provider,
-                checked_at=checked_at,
-                started_at=started_at,
-                key=key,
-                checks=checks,
-                success_summary="Tushare 连接成功：daily endpoint 可用。",
-                partial_summary="Tushare 部分可用。",
-                failed_summary="Tushare 连接失败：daily endpoint 不可用。",
-                suggestion="请检查 Tushare token 是否有效、积分/权限是否支持 daily endpoint。",
-            )
-
-        return self._build_builtin_validation_response(
-            provider=normalized_provider,
-            status="unsupported",
-            checked_at=checked_at,
-            started_at=started_at,
-            key="",
-            checks=[],
-            summary="该 provider 暂未实现远程校验。",
-            suggestion="请改用已支持远程校验的 provider，或先通过该 provider 官方控制台确认凭据权限。",
+        provider_result = validate_provider_connection(
+            normalized_provider,
+            normalized_symbol,
+            credential=resolved_credential,
+            timeout_seconds=timeout,
         )
+        checks = self._provider_result_checks(provider_result)
+        status = self._provider_result_status(provider_result)
+        checked_at = (
+            provider_result.finishedAt.isoformat()
+            if getattr(provider_result, "finishedAt", None) is not None
+            else datetime.now(timezone.utc).isoformat()
+        )
+        return {
+            "provider": normalized_provider,
+            "ok": status == "success",
+            "status": status,
+            "checked_at": checked_at,
+            "duration_ms": int(provider_result.durationMs or 0),
+            "key_masked": self._mask_secret(resolved_credential),
+            "checks": checks,
+            "summary": self._provider_validation_summary(normalized_provider, status, checks),
+            "suggestion": self._provider_validation_suggestion(normalized_provider, status),
+        }
 
     @staticmethod
     def sanitize_url(url: str) -> str:
         """Mask credential-bearing query params before returning or logging URLs."""
-        parsed = urlparse(str(url or ""))
-        if not parsed.query:
-            return str(url or "")
-        sensitive = {"apikey", "api_key", "token", "access_token", "secret", "api_secret"}
-        sanitized_query = urlencode(
-            [
-                (key, "***" if key.lower() in sensitive else value)
-                for key, value in parse_qsl(parsed.query, keep_blank_values=True)
-            ],
-            doseq=True,
-        )
-        return urlunparse(parsed._replace(query=sanitized_query))
-
-    @staticmethod
-    def _normalize_provider_name(provider: str) -> str:
-        normalized = re.sub(r"[^a-z0-9_]+", "_", str(provider or "").strip().lower()).strip("_")
-        aliases = {
-            "alphavantage": "alpha_vantage",
-            "alpha": "alpha_vantage",
-            "twelvedata": "twelve_data",
-            "twelve": "twelve_data",
-            "yfinance": "yahoo",
-        }
-        return aliases.get(normalized, normalized or "unknown")
+        return sanitize_url(str(url or ""))
 
     @staticmethod
     def _provider_display_name(provider: str) -> str:
@@ -936,218 +727,92 @@ class SystemConfigService:
                 return next((part.strip() for part in raw_value.split(",") if part.strip()), raw_value)
         return ""
 
-    def _run_remote_json_check(
-        self,
-        *,
-        name: str,
-        endpoint: str,
-        url: str,
-        timeout: float,
-        validator: Any,
-        success_message: str,
-        failure_message: str,
-        params: Optional[Dict[str, Any]] = None,
-        method: str = "GET",
-        json_payload: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        started_at = time.perf_counter()
-        try:
-            response = requests.request(
-                method,
-                url,
-                params=params,
-                json=json_payload,
-                headers={
-                    "User-Agent": _REMOTE_VALIDATION_USER_AGENT,
-                    "Accept": "application/json, text/plain;q=0.9, */*;q=0.8",
-                },
-                timeout=timeout,
-            )
-            duration_ms = int((time.perf_counter() - started_at) * 1000)
-            status_code = int(getattr(response, "status_code", 0) or 0)
-            if status_code != 200:
-                return {
-                    "name": name,
-                    "endpoint": endpoint,
-                    "ok": False,
-                    "http_status": status_code,
-                    "duration_ms": duration_ms,
-                    "error_type": self._classify_http_error_type(status_code),
-                    "message": self._http_status_message(status_code, name),
-                }
-            try:
-                data = response.json()
-            except ValueError:
-                return {
-                    "name": name,
-                    "endpoint": endpoint,
-                    "ok": False,
-                    "http_status": status_code,
-                    "duration_ms": duration_ms,
-                    "error_type": "InvalidResponse",
-                    "message": f"{name} endpoint 返回非 JSON 响应。",
-                }
-            ok = bool(validator(data))
-            provider_error = self._extract_provider_error(data)
-            provider_message = (
-                self._sanitize_secret_text(provider_error[1], self._request_secret_values(params=params, json_payload=json_payload))
-                if provider_error
-                else None
-            )
-            return {
-                "name": name,
-                "endpoint": endpoint,
-                "ok": ok,
-                "http_status": status_code,
-                "duration_ms": duration_ms,
-                "error_type": None if ok else (provider_error[0] if provider_error else "InvalidResponse"),
-                "message": success_message if ok else (provider_message if provider_message else failure_message),
-            }
-        except requests.exceptions.Timeout:
-            return {
-                "name": name,
-                "endpoint": endpoint,
-                "ok": False,
-                "http_status": None,
-                "duration_ms": int((time.perf_counter() - started_at) * 1000),
-                "error_type": "Timeout",
-                "message": f"{name} endpoint 在 {int(timeout)} 秒内未响应。",
-            }
-        except requests.exceptions.RequestException:
-            return {
-                "name": name,
-                "endpoint": endpoint,
-                "ok": False,
-                "http_status": None,
-                "duration_ms": int((time.perf_counter() - started_at) * 1000),
-                "error_type": "NetworkError",
-                "message": f"{name} endpoint 请求失败，请检查网络、代理或 provider 服务状态。",
-            }
-        finally:
-            close_fn = locals().get("response", None)
-            if close_fn is not None and callable(getattr(close_fn, "close", None)):
-                close_fn.close()
-
     @staticmethod
-    def _classify_http_error_type(status_code: int) -> str:
-        if status_code == 401:
-            return "Unauthorized"
-        if status_code == 403:
-            return "Forbidden"
-        if status_code == 429:
-            return "RateLimited"
-        if 500 <= status_code:
-            return "ProviderServerError"
-        return "HttpError"
-
-    @staticmethod
-    def _http_status_message(status_code: int, endpoint_name: str) -> str:
-        if status_code == 401:
-            return f"{endpoint_name} endpoint 返回 401，可能是 API key 无效或缺失。"
-        if status_code == 403:
-            return f"{endpoint_name} endpoint 返回 403，可能是 API key 无效、额度不足或当前套餐不支持该 endpoint。"
-        if status_code == 429:
-            return f"{endpoint_name} endpoint 返回 429，可能已触发 provider 频率限制或额度耗尽。"
-        return f"{endpoint_name} endpoint 返回 HTTP {status_code}，远程校验失败。"
-
-    @staticmethod
-    def _extract_provider_error(data: Any) -> Optional[Tuple[str, str]]:
-        if not isinstance(data, dict):
-            return None
-        for key in ("Error Message", "Note", "Information", "message", "error"):
-            value = data.get(key)
-            if value:
-                return ("ProviderError", str(value)[:240])
-        if str(data.get("status") or "").lower() == "error":
-            return ("ProviderError", str(data.get("message") or data.get("code") or "Provider returned error")[:240])
-        if data.get("code") not in (None, 0, "0"):
-            return ("ProviderError", str(data.get("msg") or data.get("message") or data.get("code"))[:240])
-        return None
-
-    @staticmethod
-    def _request_secret_values(
-        *,
-        params: Optional[Dict[str, Any]] = None,
-        json_payload: Optional[Dict[str, Any]] = None,
-    ) -> List[str]:
-        secrets: List[str] = []
-        for payload in (params or {}, json_payload or {}):
-            if not isinstance(payload, dict):
+    def _provider_result_checks(provider_result: Any) -> List[Dict[str, Any]]:
+        metadata = provider_result.metadata if isinstance(getattr(provider_result, "metadata", None), dict) else {}
+        raw_checks = metadata.get("checks") if isinstance(metadata.get("checks"), list) else []
+        checks: List[Dict[str, Any]] = []
+        for raw_check in raw_checks:
+            if not isinstance(raw_check, dict):
                 continue
-            for key, value in payload.items():
-                if str(key).lower() in {"apikey", "api_key", "token", "access_token", "secret", "api_secret"}:
-                    raw_value = str(value or "").strip()
-                    if raw_value:
-                        secrets.append(raw_value)
-        return secrets
+            checks.append(
+                {
+                    "name": str(raw_check.get("name") or ""),
+                    "endpoint": str(raw_check.get("endpoint") or ""),
+                    "ok": bool(raw_check.get("ok")),
+                    "http_status": raw_check.get("http_status"),
+                    "duration_ms": raw_check.get("duration_ms"),
+                    "error_type": raw_check.get("error_type"),
+                    "message": str(raw_check.get("message") or ""),
+                }
+            )
+        return checks
 
     @staticmethod
-    def _sanitize_secret_text(message: str, secrets: Sequence[str]) -> str:
-        sanitized = str(message or "")
-        for secret in secrets:
-            if len(secret) >= 4:
-                sanitized = sanitized.replace(secret, "***")
-        sanitized = re.sub(r"(?i)(apikey|api_key|token|access_token|secret|api_secret)=([^&\s]+)", r"\1=***", sanitized)
-        return sanitized
+    def _provider_result_status(provider_result: Any) -> str:
+        status = str(getattr(getattr(provider_result, "status", None), "value", getattr(provider_result, "status", "")) or "")
+        reason = str(getattr(getattr(provider_result, "reason", None), "value", getattr(provider_result, "reason", "")) or "")
+        metadata = provider_result.metadata if isinstance(getattr(provider_result, "metadata", None), dict) else {}
+        metadata_status = str(metadata.get("status") or "").strip().lower()
+        if status == "success" and metadata_status == "partial":
+            return "partial"
+        if status == "success":
+            return "success"
+        if status == "skipped" and reason == "missing_api_key":
+            return "missing_key"
+        if status == "skipped" and reason == "unsupported_capability":
+            return "unsupported"
+        if status == "skipped":
+            return "unsupported"
+        return "failed"
 
-    def _summarize_builtin_checks(
-        self,
-        *,
-        provider: str,
-        checked_at: str,
-        started_at: float,
-        key: str,
-        checks: List[Dict[str, Any]],
-        success_summary: str,
-        partial_summary: str,
-        failed_summary: str,
-        suggestion: str,
-    ) -> Dict[str, Any]:
-        ok_count = sum(1 for check in checks if check.get("ok"))
-        if ok_count == len(checks) and checks:
-            status = "success"
-            summary = success_summary
-        elif ok_count > 0:
-            status = "partial"
+    def _provider_validation_summary(self, provider: str, status: str, checks: List[Dict[str, Any]]) -> str:
+        display = self._provider_display_name(provider)
+        if status == "missing_key":
+            return f"{display} 未配置 API key/token，无法执行远程校验。"
+        if status == "unsupported":
+            return "该 provider 暂未实现远程校验。"
+        if provider == "fmp":
+            if status == "success":
+                return "FMP 连接成功：quote 和 historical endpoint 均可用。"
+            if status == "partial":
+                failed_names = ", ".join(str(check.get("name")) for check in checks if not check.get("ok"))
+                return f"FMP 部分可用：部分 endpoint 失败。 失败 endpoint：{failed_names}。"
+            return "FMP 连接失败：quote 和 historical endpoint 均不可用。"
+        if provider == "finnhub":
+            return "Finnhub 连接成功：quote endpoint 可用。" if status == "success" else "Finnhub 连接失败：quote endpoint 不可用。"
+        if provider == "alpha_vantage":
+            return "Alpha Vantage 连接成功：GLOBAL_QUOTE endpoint 可用。" if status == "success" else "Alpha Vantage 连接失败：GLOBAL_QUOTE endpoint 不可用。"
+        if provider == "twelve_data":
+            return "Twelve Data 连接成功：quote endpoint 可用。" if status == "success" else "Twelve Data 连接失败：quote endpoint 不可用。"
+        if provider == "tushare":
+            return "Tushare 连接成功：daily endpoint 可用。" if status == "success" else "Tushare 连接失败：daily endpoint 不可用。"
+        if provider == "yahoo":
+            return "Yahoo/YFinance 公共行情接口当前可用。" if status == "success" else "Yahoo/YFinance 公共行情接口当前不可用。"
+        if status == "partial":
             failed_names = ", ".join(str(check.get("name")) for check in checks if not check.get("ok"))
-            summary = f"{partial_summary} 失败 endpoint：{failed_names}。"
-        else:
-            status = "failed"
-            summary = failed_summary
-        return self._build_builtin_validation_response(
-            provider=provider,
-            status=status,
-            checked_at=checked_at,
-            started_at=started_at,
-            key=key,
-            checks=checks,
-            summary=summary,
-            suggestion=suggestion,
-        )
+            return f"{display} 部分可用。 失败 endpoint：{failed_names}。"
+        return f"{display} 远程校验失败。"
 
-    def _build_builtin_validation_response(
-        self,
-        *,
-        provider: str,
-        status: str,
-        checked_at: str,
-        started_at: float,
-        key: str,
-        checks: List[Dict[str, Any]],
-        summary: str,
-        suggestion: str,
-    ) -> Dict[str, Any]:
-        return {
-            "provider": provider,
-            "ok": status == "success",
-            "status": status,
-            "checked_at": checked_at,
-            "duration_ms": int((time.perf_counter() - started_at) * 1000),
-            "key_masked": self._mask_secret(key),
-            "checks": checks,
-            "summary": summary,
-            "suggestion": suggestion,
-        }
+    @staticmethod
+    def _provider_validation_suggestion(provider: str, status: str) -> str:
+        if status == "missing_key":
+            return "请先在系统设置中保存该 provider 的 API key/token，然后重新校验。"
+        if status == "unsupported":
+            return "请改用已支持远程校验的 provider，或先通过该 provider 官方控制台确认凭据权限。"
+        if provider == "fmp":
+            return "请检查 FMP key 是否有效、套餐是否支持 quote/historical endpoint、额度是否用尽。"
+        if provider == "finnhub":
+            return "请检查 Finnhub token 是否有效、额度是否用尽，或当前套餐是否支持 quote endpoint。"
+        if provider == "alpha_vantage":
+            return "请检查 Alpha Vantage key 是否有效、是否触发频率限制，或切换到可用套餐。"
+        if provider == "twelve_data":
+            return "请检查 Twelve Data key 是否有效、额度是否用尽，或当前套餐是否支持 quote endpoint。"
+        if provider == "tushare":
+            return "请检查 Tushare token 是否有效、积分/权限是否支持 daily endpoint。"
+        if provider == "yahoo":
+            return "Yahoo/YFinance 是 public/unofficial 数据源；如失败，请稍后重试或配置带 key 的备用 provider。"
+        return "请检查 provider 凭据、网络连通性和套餐权限后重试。"
 
     @staticmethod
     def _extract_llm_response_text(response: Any) -> str:
