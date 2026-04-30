@@ -62,27 +62,27 @@ const CATEGORY_LAYOUT: Record<MarketOverviewTab, {
 }> = {
   all: {
     primary: ['indices', 'cnIndices', 'crypto', 'volatility', 'fundsFlow', 'macro'],
-    secondary: ['rates', 'fxCommodities', 'sentiment', 'futures'],
-    fallback: ['cnBreadth', 'cnFlows', 'sectorRotation', 'cnShortSentiment'],
+    secondary: ['rates', 'sentiment'],
+    fallback: ['cnBreadth', 'cnFlows', 'sectorRotation', 'cnShortSentiment', 'fxCommodities', 'futures'],
   },
   us: {
     primary: ['indices', 'volatility', 'fundsFlow', 'macro'],
-    secondary: ['rates', 'sentiment', 'fxCommodities', 'futures'],
-    fallback: [],
+    secondary: ['rates', 'sentiment', 'fxCommodities'],
+    fallback: ['futures'],
   },
   cn: {
     primary: ['cnIndices', 'cnBreadth', 'cnFlows', 'sectorRotation', 'cnShortSentiment'],
-    secondary: ['futures', 'fxCommodities', 'rates'],
+    secondary: ['macro', 'rates'],
     fallback: [],
   },
   global: {
-    primary: ['macro', 'rates', 'fxCommodities', 'indices'],
-    secondary: ['volatility', 'futures', 'sentiment'],
+    primary: ['macro', 'indices', 'rates', 'fxCommodities'],
+    secondary: ['volatility', 'sentiment', 'futures'],
     fallback: [],
   },
   crypto: {
     primary: ['crypto', 'volatility', 'macro'],
-    secondary: ['fxCommodities', 'rates', 'sentiment'],
+    secondary: ['fxCommodities', 'sentiment'],
     fallback: [],
   },
 };
@@ -507,6 +507,23 @@ const CategoryCoverageSummary: React.FC<{
     <span className="font-semibold text-white/82">{label}数据覆盖：</span>
     <span className="font-mono">真实 {summary.real} · 混合 {summary.mixed} · 备用 {summary.fallback}</span>
   </div>
+);
+
+const MarketOverviewStatusStrip: React.FC<{
+  temperature: React.ReactNode;
+  dataQuality: React.ReactNode;
+}> = ({ temperature, dataQuality }) => (
+  <section
+    data-testid="market-overview-status-strip"
+    className="grid w-full grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]"
+  >
+    <div data-testid="market-overview-temperature-summary" className="min-w-0">
+      {temperature}
+    </div>
+    <div data-testid="market-overview-data-quality-summary" className="min-w-0">
+      {dataQuality}
+    </div>
+  </section>
 );
 
 const PendingDataSourceSection: React.FC<{
@@ -1325,11 +1342,8 @@ const MarketOverviewPage: React.FC = () => {
   const activeCategoryLabel = categoryTabs.find((tab) => tab.key === activeCategory)?.label || '';
   const activeLayout = CATEGORY_LAYOUT[activeCategory];
   const primaryCandidates = activeLayout.primary.filter((cardKey) => getCardCoverageKind(panels, cardKey) !== 'fallback');
-  const secondaryCandidates = activeLayout.secondary.filter((cardKey) => getCardCoverageKind(panels, cardKey) !== 'fallback');
-  const promotedSecondaryCount = primaryCandidates.length < 2 ? Math.min(2 - primaryCandidates.length, secondaryCandidates.length) : 0;
-  const promotedSecondary = secondaryCandidates.slice(0, promotedSecondaryCount);
-  const primaryOrder = [...primaryCandidates, ...promotedSecondary];
-  const secondaryOrder = secondaryCandidates.filter((cardKey) => !promotedSecondary.includes(cardKey));
+  const secondaryOrder = activeLayout.secondary.filter((cardKey) => getCardCoverageKind(panels, cardKey) !== 'fallback');
+  const primaryOrder = primaryCandidates;
   const fallbackOnlyOrder = CATEGORY_CARDS[activeCategory].filter((cardKey) => (
     getCardCoverageKind(panels, cardKey) === 'fallback' || activeLayout.fallback.includes(cardKey)
   ));
@@ -1361,7 +1375,7 @@ const MarketOverviewPage: React.FC = () => {
     <div className={cn(
       'grid w-full grid-cols-1 gap-4',
       rail === 'primary' ? 'lg:grid-cols-2 2xl:grid-cols-3' : '',
-      rail === 'fallback' ? 'lg:grid-cols-2 xl:grid-cols-1' : '',
+      rail === 'fallback' ? 'grid-cols-1' : '',
     )}>
       {rankOrder.map((cardKey, index) => renderCard(cardKey, index, rail))}
     </div>
@@ -1381,7 +1395,7 @@ const MarketOverviewPage: React.FC = () => {
 
   const renderDeterministicGrid = () => (
     <main data-testid="market-overview-main-grid" className="grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
-      <section data-testid="market-overview-primary-rail" className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2 xl:col-span-9 2xl:grid-cols-3">
+      <section data-testid="market-overview-primary-rail" className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2 xl:col-span-8 2xl:col-span-9 2xl:grid-cols-3">
         {showCategoryEmptyState ? (
           <div className="lg:col-span-2 2xl:col-span-3">
             <CategoryEmptyState onShowPending={() => setFallbackSectionExpanded(true)} />
@@ -1389,7 +1403,7 @@ const MarketOverviewPage: React.FC = () => {
         ) : null}
         {primaryOrder.map((cardKey, index) => renderCard(cardKey, index, 'primary'))}
       </section>
-      <aside data-testid="market-overview-side-rail" className="flex min-w-0 flex-col gap-6 xl:col-span-3">
+      <aside data-testid="market-overview-side-rail" className="flex min-w-0 flex-col gap-6 xl:col-span-4 2xl:col-span-3">
         <CategoryCoverageSummary label={activeCategoryLabel} summary={coverageSummary} />
         {secondaryOrder.length > 0 ? renderCardGrid(secondaryOrder, 'side') : null}
         {renderFallbackSection()}
@@ -1400,43 +1414,49 @@ const MarketOverviewPage: React.FC = () => {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col bg-[#030303] text-white">
       <div className="flex-1 overflow-y-auto pb-12 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <section data-testid="market-overview-shell" className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 2xl:px-10">
-          <div data-testid="market-overview-category-tabs" className="sticky top-0 z-10 -mx-4 overflow-x-auto border-b border-white/5 bg-[#030303]/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 2xl:-mx-10 2xl:px-10 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="flex w-max min-w-full gap-2 rounded-lg bg-white/[0.03] p-1">
-              {categoryTabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  aria-pressed={activeCategory === tab.key}
-                  onClick={() => setActiveCategory(tab.key)}
-                  className={`whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
-                    activeCategory === tab.key
-                      ? 'bg-white/10 text-white shadow-sm'
-                      : 'bg-transparent text-white/45 hover:text-white/75'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+        <section data-testid="market-overview-shell" className="w-full px-4 py-6 sm:px-6 lg:px-8 2xl:px-10">
+          <div data-testid="market-overview-workbench" className="mx-auto flex w-full max-w-[1800px] flex-col gap-6">
+            <div data-testid="market-overview-category-tabs" className="sticky top-0 z-20 -mx-4 overflow-x-auto border-b border-white/8 bg-[#030303]/95 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 2xl:-mx-10 2xl:px-10 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex w-max min-w-full gap-2 rounded-lg bg-white/[0.03] p-1">
+                {categoryTabs.map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    aria-pressed={activeCategory === tab.key}
+                    onClick={() => setActiveCategory(tab.key)}
+                    className={`whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
+                      activeCategory === tab.key
+                        ? 'bg-white/10 text-white shadow-sm'
+                        : 'bg-transparent text-white/45 hover:text-white/75'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
+            <CrossAssetHeroRibbon anchors={heroAnchors} />
+            <MarketOverviewStatusStrip
+              temperature={(
+                <MarketTemperatureStrip
+                  data={panels.temperature}
+                  refreshing={refreshingPanel === 'temperature'}
+                  onRefresh={() => {
+                    void refreshPanel('temperature', marketApi.getTemperature);
+                  }}
+                />
+              )}
+              dataQuality={<DataQualityOverview summary={dataQuality} />}
+            />
+            <MarketBriefingCard
+              data={panels.briefing}
+              refreshing={refreshingPanel === 'briefing'}
+              onRefresh={() => {
+                void refreshPanel('briefing', marketApi.getMarketBriefing);
+              }}
+            />
+            {renderDeterministicGrid()}
           </div>
-          <CrossAssetHeroRibbon anchors={heroAnchors} />
-          <MarketTemperatureStrip
-            data={panels.temperature}
-            refreshing={refreshingPanel === 'temperature'}
-            onRefresh={() => {
-              void refreshPanel('temperature', marketApi.getTemperature);
-            }}
-          />
-          <DataQualityOverview summary={dataQuality} />
-          <MarketBriefingCard
-            data={panels.briefing}
-            refreshing={refreshingPanel === 'briefing'}
-            onRefresh={() => {
-              void refreshPanel('briefing', marketApi.getMarketBriefing);
-            }}
-          />
-          {renderDeterministicGrid()}
         </section>
       </div>
     </div>
