@@ -1,3 +1,7 @@
+## 2026-05-01
+
+- 🧼 **Settings 全局输入与极简减法清洗** — `apps/dsa-web` 修复共享 `Input` 的前置图标输入框内边距，带 `iconType` 的原生 `<input>` 现在直接获得 `pl-12`，同时移除 Settings Drawer 里覆盖横向 padding 的作用域规则，避免密码框、API Key 框和搜索类输入出现图标与文字重叠。Settings 主操作按钮从高饱和蓝紫渐变切换为低对比 `bg-white/5 border-white/10` 幽灵态微光按钮；`/settings` 删除顶部个人偏好标题、重复语言卡和大段说明小字，`/settings/system` 删除顶部标题/副标题、导航说明和系统概览里的保姆式解释文案，仅保留核心标签与操作控件。
+
 ## 2026-04-30
 
 - 🧊 **Market Overview 全屏 Bento 终端化重塑** — `/market-overview` 外层容器放宽到 `max-w-[1600px]`，主内容区改为 `lg:grid-cols-12` 的 8/4 非对称 Bento 轨道：核心市场温度、解读、A股/港股、情绪、加密与宏观卡留在左侧主轨，全球核心指数与 ETF 资金流向进入右侧 `max-h-[600px]` 滚动辅助轨，避免页面退化成窄屏博客式纵向堆叠。Market Overview 专用卡片统一收敛为 `bg-white/[0.02] border-white/5 rounded-xl backdrop-blur-sm p-5` 幽灵态材质，卡片标题降噪为微型大写排版，涨跌与 Sparkline 统一切到 emerald/rose 霓虹色板。此次仅调整前端布局与视觉样式，不改变 API、数据刷新、分类、拖拽排序或 fallback 行为。

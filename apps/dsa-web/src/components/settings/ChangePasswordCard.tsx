@@ -19,9 +19,6 @@ export const ChangePasswordCard: React.FC = () => {
   const [error, setError] = useState<string | ParsedApiError | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const description = language === 'en'
-    ? 'Update the password for this signed-in account.'
-    : '更新当前登录账户的密码。';
   const successMessage = language === 'en'
     ? 'Your account password has been updated.'
     : '当前账户密码已更新。';
@@ -68,7 +65,6 @@ export const ChangePasswordCard: React.FC = () => {
   return (
     <SettingsSectionCard
       title={t('settings.passwordTitle')}
-      description={description}
     >
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid gap-4 md:grid-cols-2">
@@ -94,7 +90,6 @@ export const ChangePasswordCard: React.FC = () => {
               allowTogglePassword
               iconType="password"
               label={t('settings.passwordNew')}
-              hint={t('settings.passwordNewHint')}
               placeholder={t('settings.passwordNewPlaceholder')}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}

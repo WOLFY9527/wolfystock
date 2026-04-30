@@ -33,11 +33,11 @@ describe('Input', () => {
     expect(screen.getByRole('button', { name: '显示' })).toBeInTheDocument();
   });
 
-  it('renders a key icon and applies leading padding', () => {
+  it('renders a key icon and applies leading padding on the input element', () => {
     const { container } = render(<Input label="API Key" iconType="key" />);
 
     expect(container.querySelector('svg')).not.toBeNull();
-    expect(screen.getByLabelText('API Key')).toHaveClass('pl-10');
+    expect(screen.getByLabelText('API Key')).toHaveClass('pl-12');
   });
 
   it('toggles password visibility in uncontrolled mode', () => {

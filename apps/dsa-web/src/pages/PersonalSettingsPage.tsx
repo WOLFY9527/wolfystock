@@ -2,8 +2,8 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BellRing, LockKeyhole, ShieldCheck } from 'lucide-react';
-import { ApiErrorAlert, GlassCard, WorkspacePageHeader } from '../components/common';
-import { authApi, type UserNotificationPreferences } from '../api/auth';
+import { ApiErrorAlert, GlassCard } from '../components/common';
+import { authApi } from '../api/auth';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { ChangePasswordCard } from '../components/settings/ChangePasswordCard';
 import { FontSizeSettingsCard } from '../components/settings/FontSizeSettingsCard';
@@ -14,10 +14,8 @@ import { buildLoginPath, buildRegistrationPath, useProductSurface } from '../hoo
 import type { MarketColorConvention } from '../utils/marketColors';
 
 const GLASS_INPUT_CLASS = 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-white outline-none transition-[border-color,box-shadow] focus:border-white/24 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]';
-const SETTINGS_PRIMARY_BUTTON_CLASS = 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] rounded-lg px-6 py-2.5 text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50';
+const SETTINGS_PRIMARY_BUTTON_CLASS = 'rounded-lg border border-white/10 bg-white/5 px-6 py-2.5 text-sm font-medium text-white transition-all hover:border-blue-500/40 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] disabled:pointer-events-none disabled:opacity-50';
 const SETTINGS_GHOST_BUTTON_CLASS = 'bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white rounded-lg px-5 py-2.5 text-sm font-medium transition-all';
-const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.02] p-1';
-const SEGMENT_BUTTON_CLASS = 'min-w-[4.5rem] rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors';
 const OPTION_GROUP_WRAPPER_CLASS = 'mt-3 grid gap-2 sm:grid-cols-3';
 
 const buildOptionButtonClass = (active: boolean) => (
@@ -29,34 +27,31 @@ const buildOptionButtonClass = (active: boolean) => (
 const MARKET_COLOR_OPTIONS: Array<{
   value: MarketColorConvention;
   labelKey: string;
-  descriptionKey: string;
 }> = [
   {
     value: 'redDownGreenUp',
     labelKey: 'settings.marketColorConventional',
-    descriptionKey: 'settings.marketColorConventionalDesc',
   },
   {
     value: 'redUpGreenDown',
     labelKey: 'settings.marketColorCn',
-    descriptionKey: 'settings.marketColorCnDesc',
   },
 ];
 
 const DATA_DENSITY_OPTIONS = [
-  { value: 'compact', labelKey: 'settings.dataDensityCompact', descriptionKey: 'settings.dataDensityCompactDesc' },
-  { value: 'comfortable', labelKey: 'settings.dataDensityComfortable', descriptionKey: 'settings.dataDensityComfortableDesc' },
-  { value: 'relaxed', labelKey: 'settings.dataDensityRelaxed', descriptionKey: 'settings.dataDensityRelaxedDesc' },
+  { value: 'compact', labelKey: 'settings.dataDensityCompact' },
+  { value: 'comfortable', labelKey: 'settings.dataDensityComfortable' },
+  { value: 'relaxed', labelKey: 'settings.dataDensityRelaxed' },
 ] as const;
 
 const NUMBER_FORMAT_OPTIONS = [
-  { value: 'international', labelKey: 'settings.numberFormatInternational', descriptionKey: 'settings.numberFormatInternationalDesc' },
-  { value: 'zh', labelKey: 'settings.numberFormatZh', descriptionKey: 'settings.numberFormatZhDesc' },
-  { value: 'full', labelKey: 'settings.numberFormatFull', descriptionKey: 'settings.numberFormatFullDesc' },
+  { value: 'international', labelKey: 'settings.numberFormatInternational' },
+  { value: 'zh', labelKey: 'settings.numberFormatZh' },
+  { value: 'full', labelKey: 'settings.numberFormatFull' },
 ] as const;
 
 const PersonalSettingsPage: React.FC = () => {
-  const { language, setLanguage, t } = useI18n();
+  const { language, t } = useI18n();
   const {
     dataDensity,
     marketColorConvention,
@@ -71,7 +66,6 @@ const PersonalSettingsPage: React.FC = () => {
     loggedIn,
     currentUser,
   } = useProductSurface();
-  const [notificationPrefs, setNotificationPrefs] = useState<UserNotificationPreferences | null>(null);
   const [notificationEmail, setNotificationEmail] = useState('');
   const [notificationEmailEnabled, setNotificationEmailEnabled] = useState(false);
   const [notificationDiscordEnabled, setNotificationDiscordEnabled] = useState(false);
@@ -89,7 +83,6 @@ const PersonalSettingsPage: React.FC = () => {
 
   useEffect(() => {
     if (!loggedIn) {
-      setNotificationPrefs(null);
       setNotificationEmail('');
       setNotificationEmailEnabled(false);
       setNotificationDiscordEnabled(false);
@@ -109,7 +102,6 @@ const PersonalSettingsPage: React.FC = () => {
         if (cancelled) {
           return;
         }
-        setNotificationPrefs(prefs);
         setNotificationEmail(prefs.email || '');
         setNotificationEmailEnabled(Boolean(prefs.emailEnabled));
         setNotificationDiscordEnabled(Boolean(prefs.discordEnabled));
@@ -145,7 +137,6 @@ const PersonalSettingsPage: React.FC = () => {
           discordWebhook: notificationDiscordWebhook.trim() || null,
         },
       );
-      setNotificationPrefs(prefs);
       setNotificationEmail(prefs.email || '');
       setNotificationEmailEnabled(Boolean(prefs.emailEnabled));
       setNotificationDiscordEnabled(Boolean(prefs.discordEnabled));
@@ -161,53 +152,16 @@ const PersonalSettingsPage: React.FC = () => {
   return (
     <section
       data-testid="personal-settings-workspace"
-      className="flex w-full flex-1 min-h-0 min-w-0 flex-col gap-8"
+      className="flex w-full flex-1 min-h-0 min-w-0 flex-col gap-4"
     >
-      <WorkspacePageHeader
-        eyebrow={t('settings.personalEyebrow')}
-        title={t('settings.personalTitle')}
-        description={t('settings.personalDescription')}
-      />
-
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
         <GlassCard as="section" className="p-6 md:p-7">
-          <div className="mb-5 space-y-1">
+          <div className="mb-5">
             <h2 className="text-[1.125rem] font-normal tracking-[-0.02em] text-foreground md:text-[1.25rem]">{t('settings.personalInterfaceTitle')}</h2>
-            <p className="text-sm leading-6 text-muted-text">{t('settings.personalInterfaceSubtitle')}</p>
           </div>
           <div className="grid gap-4 xl:grid-cols-2">
             <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4">
-              <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{t('settings.languageTitle')}</p>
-              <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.languageDesc')}</p>
-              <div className="mt-3">
-                <div className={SEGMENT_WRAPPER_CLASS} role="tablist" aria-label={t('settings.languageTitle')}>
-                <button
-                  type="button"
-                  onClick={() => setLanguage('zh')}
-                  className={language === 'zh'
-                    ? `${SEGMENT_BUTTON_CLASS} bg-white/10 text-white`
-                    : `${SEGMENT_BUTTON_CLASS} text-white/70 hover:bg-white/10 hover:text-white`}
-                  aria-pressed={language === 'zh'}
-                >
-                  {t('language.zh')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLanguage('en')}
-                  className={language === 'en'
-                    ? `${SEGMENT_BUTTON_CLASS} bg-white/10 text-white`
-                    : `${SEGMENT_BUTTON_CLASS} text-white/70 hover:bg-white/10 hover:text-white`}
-                  aria-pressed={language === 'en'}
-                >
-                  {t('language.en')}
-                </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4">
               <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{t('settings.marketColorTitle')}</p>
-              <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.marketColorDesc')}</p>
               <div className="mt-3 space-y-2">
                 {MARKET_COLOR_OPTIONS.map((option) => {
                   const active = marketColorConvention === option.value;
@@ -220,7 +174,6 @@ const PersonalSettingsPage: React.FC = () => {
                       aria-pressed={active}
                     >
                       <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
-                      <p className="mt-1 text-xs text-muted-text">{t(option.descriptionKey)}</p>
                     </button>
                   );
                 })}
@@ -229,7 +182,6 @@ const PersonalSettingsPage: React.FC = () => {
 
             <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">{t('settings.dataDensityTitle')}</p>
-              <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.dataDensityDesc')}</p>
               <div className={OPTION_GROUP_WRAPPER_CLASS}>
                 {DATA_DENSITY_OPTIONS.map((option) => {
                   const active = dataDensity === option.value;
@@ -242,7 +194,6 @@ const PersonalSettingsPage: React.FC = () => {
                       aria-pressed={active}
                     >
                       <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
-                      <p className="mt-1 text-xs text-muted-text">{t(option.descriptionKey)}</p>
                     </button>
                   );
                 })}
@@ -251,7 +202,6 @@ const PersonalSettingsPage: React.FC = () => {
 
             <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">{t('settings.numberFormatTitle')}</p>
-              <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.numberFormatDesc')}</p>
               <div className={OPTION_GROUP_WRAPPER_CLASS}>
                 {NUMBER_FORMAT_OPTIONS.map((option) => {
                   const active = numberFormat === option.value;
@@ -264,7 +214,6 @@ const PersonalSettingsPage: React.FC = () => {
                       aria-pressed={active}
                     >
                       <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
-                      <p className="mt-1 text-xs text-muted-text">{t(option.descriptionKey)}</p>
                     </button>
                   );
                 })}
@@ -278,9 +227,8 @@ const PersonalSettingsPage: React.FC = () => {
         </GlassCard>
 
         <GlassCard as="section" className="p-6 md:p-7">
-          <div className="mb-5 space-y-1">
+          <div className="mb-5">
             <h2 className="text-[1.125rem] font-normal tracking-[-0.02em] text-foreground md:text-[1.25rem]">{t('settings.personalAccountAccessTitle')}</h2>
-            <p className="text-sm leading-6 text-muted-text">{t('settings.personalAccountAccessSubtitle')}</p>
           </div>
           <div className="space-y-4">
             {isGuest && authEnabled ? (
@@ -292,9 +240,6 @@ const PersonalSettingsPage: React.FC = () => {
                   <div>
                     <p className="text-sm font-semibold text-foreground">
                       {t('settings.personalGuestPreferencesTitle')}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-secondary-text">
-                      {t('settings.personalGuestPreferencesBody')}
                     </p>
                   </div>
                 </div>
@@ -327,9 +272,6 @@ const PersonalSettingsPage: React.FC = () => {
                         name: currentUser?.displayName || currentUser?.username || t('settings.personalFallbackUser'),
                       })}
                     </p>
-                    <p className="mt-1 text-xs leading-5 text-secondary-text">
-                      {t('settings.personalSignedInBody')}
-                    </p>
                   </div>
                 </div>
               </div>
@@ -345,9 +287,6 @@ const PersonalSettingsPage: React.FC = () => {
                 </div>
                 {loggedIn ? (
                   <div className="mt-3 space-y-3">
-                    <p className="text-xs leading-5 text-secondary-text">
-                      {t('settings.personalNotificationScopeBody')}
-                    </p>
                     <label className="flex items-center gap-3 text-xs text-secondary-text">
                       <input
                         type="checkbox"
@@ -369,11 +308,6 @@ const PersonalSettingsPage: React.FC = () => {
                         className={`mt-2 ${GLASS_INPUT_CLASS}`}
                       />
                     </label>
-                    {!notificationPrefs?.emailDeliveryAvailable ? (
-                      <p className="text-xs leading-5 text-secondary-text">
-                        {t('settings.personalNotificationEmailUnavailable')}
-                      </p>
-                    ) : null}
                     <label className="flex items-center gap-3 text-xs text-secondary-text">
                       <input
                         type="checkbox"
@@ -395,9 +329,6 @@ const PersonalSettingsPage: React.FC = () => {
                         className={`mt-2 ${GLASS_INPUT_CLASS}`}
                       />
                     </label>
-                    <p className="text-xs leading-5 text-secondary-text">
-                      {t('settings.personalNotificationDiscordHint')}
-                    </p>
                     {notificationNotice ? (
                       <p className="text-xs leading-5 text-[hsl(var(--accent-positive-hsl))]">{notificationNotice}</p>
                     ) : null}
@@ -411,13 +342,7 @@ const PersonalSettingsPage: React.FC = () => {
                       {notificationSaving ? t('settings.personalNotificationSaving') : t('settings.personalNotificationSaveAction')}
                     </button>
                   </div>
-                ) : (
-                  <p className="mt-2 text-xs leading-5 text-secondary-text">
-                    {language === 'en'
-                      ? 'Notification channels are still managed in admin settings. Personal preferences stay lightweight here.'
-                      : '本阶段仍将通知通道内部配置保留在管理员控制面，个人偏好在这里保持轻量。'}
-                  </p>
-                )}
+                ) : null}
               </div>
               <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-4">
                 <div className="flex items-center gap-3">
@@ -426,11 +351,6 @@ const PersonalSettingsPage: React.FC = () => {
                     {language === 'en' ? 'System settings stay separate' : '系统分层保持清晰'}
                   </p>
                 </div>
-                <p className="mt-2 text-xs leading-5 text-secondary-text">
-                  {language === 'en'
-                    ? 'Normal users only see local preferences here. System controls stay out of the default settings page.'
-                    : '普通用户在这里仅看到无害的本地偏好，系统级开关不会再出现在默认设置面。'}
-                </p>
               </div>
             </div>
           </div>

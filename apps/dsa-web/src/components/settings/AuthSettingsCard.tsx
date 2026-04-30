@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { authApi } from '../../api/auth';
 import { getParsedApiError, isParsedApiError, type ParsedApiError } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
@@ -35,21 +35,6 @@ export const AuthSettingsCard: React.FC = () => {
 
   const isDirty = desiredEnabled !== authEnabled || currentPassword || password || passwordConfirm;
   const targetActionLabel = createNextModeLabel(authEnabled, desiredEnabled, t);
-
-  const helperText = useMemo(() => {
-    switch (setupState) {
-      case 'no_password':
-        return t('settings.authHelperNoPassword');
-      case 'password_retained':
-        return t('settings.authHelperRetained');
-      case 'enabled':
-        return !desiredEnabled 
-          ? t('settings.authHelperDisable')
-          : t('settings.authHelperEnabled');
-      default:
-        return t('settings.authHelperDefault');
-    }
-  }, [desiredEnabled, setupState, t]);
 
   useEffect(() => {
     setDesiredEnabled(authEnabled);
@@ -99,7 +84,6 @@ export const AuthSettingsCard: React.FC = () => {
   return (
     <SettingsSectionCard
       title={t('settings.authTitle')}
-      description={t('settings.authDesc')}
       actions={
         <Badge variant={authEnabled ? 'success' : 'default'} size="sm">
           {authEnabled ? t('settings.authEnabled') : t('settings.authDisabled')}
@@ -111,7 +95,6 @@ export const AuthSettingsCard: React.FC = () => {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
               <p className="text-sm font-semibold text-foreground">{t('settings.authMode')}</p>
-              <p className="text-xs leading-6 text-muted-text">{helperText}</p>
             </div>
             <Checkbox
               checked={desiredEnabled}
@@ -140,7 +123,6 @@ export const AuthSettingsCard: React.FC = () => {
                   autoComplete="current-password"
                   disabled={isSubmitting}
                   placeholder={t('settings.authCurrentPasswordPlaceholder')}
-                  hint={setupState === 'password_retained' ? t('settings.authCurrentPasswordRetainedHint') : t('settings.authCurrentPasswordDisableHint')}
                 />
               </div>
             ) : null}

@@ -46,7 +46,6 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
               {t('settings.adminSurfaceActiveLabel')}
             </p>
             <p className="mt-1 text-base font-semibold text-foreground">{t('settings.adminSurfaceActiveTitle')}</p>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary-text">{t('settings.adminSurfaceActiveDesc')}</p>
           </div>
           <span className={GHOST_TAG_CLASS}>
             {t('settings.adminSurfaceGlobalScope')}
@@ -62,7 +61,6 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
                 {t('settings.controlPlaneMaintenanceTitle')}
               </p>
               <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.controlPlaneMaintenanceSummary')}</p>
-              <p className="mt-2 text-xs leading-5 text-secondary-text">{t('settings.controlPlaneMaintenanceDesc')}</p>
             </div>
             <span className={GHOST_TAG_CLASS}>
               {t('settings.controlPlaneMaintenanceBadge')}
@@ -75,7 +73,6 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
       >
         <GlassCard className="px-4 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">{t('settings.controlPlaneLogsTitle')}</p>
-          <p className="mt-2 text-sm leading-6 text-secondary-text">{t('settings.controlPlaneLogsDesc')}</p>
           <div className="mt-4 flex justify-end">
             <Button
               type="button"
@@ -96,7 +93,6 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
                 {t('settings.adminActionsTitle')}
               </p>
               <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.adminActionsDesc')}</p>
-              <p className="mt-2 text-xs leading-5 text-secondary-text">{t('settings.adminActionsSafetyDesc')}</p>
             </div>
           </div>
           <div className="mt-4 divide-y divide-white/5 rounded-2xl bg-white/[0.03]">
@@ -104,7 +100,6 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-foreground">{t('settings.adminMaintenanceTitle')}</p>
-                  <p className="mt-1 text-xs leading-5 text-secondary-text">{t('settings.adminMaintenanceDesc')}</p>
                 </div>
                 <Button
                   type="button"
@@ -119,13 +114,11 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
                     : t('settings.adminActionResetRuntimeCaches')}
                 </Button>
               </div>
-              <p className="mt-3 text-xs text-secondary-text">{t('settings.adminActionResetRuntimeCachesHint')}</p>
             </div>
             <div className="px-3 py-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-foreground">{t('settings.adminFactoryResetTitle')}</p>
-                  <p className="mt-1 text-xs leading-5 text-secondary-text">{t('settings.adminFactoryResetDesc')}</p>
                 </div>
                 <Button
                   type="button"
@@ -139,7 +132,6 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
                     : t('settings.adminActionFactoryReset')}
                 </Button>
               </div>
-              <p className="mt-3 text-xs text-[hsl(var(--accent-danger-hsl))]">{t('settings.adminActionFactoryResetHint')}</p>
             </div>
           </div>
           {adminActionMessage ? (

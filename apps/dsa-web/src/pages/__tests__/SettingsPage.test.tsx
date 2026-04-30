@@ -526,7 +526,8 @@ describe('SettingsPage', () => {
     expect(screen.getByTestId('settings-workspace')).toHaveClass('w-full', 'max-w-none', 'flex-1', 'min-h-0', 'gap-8', 'px-6', 'md:px-8', 'xl:px-12');
     expect(screen.getByTestId('settings-workspace')).not.toHaveClass('max-w-[1600px]', 'mx-auto', 'px-4');
     expect(container.querySelectorAll('main')).toHaveLength(0);
-    expect(await screen.findByRole('heading', { name: '系统控制面' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '系统控制面' })).not.toBeInTheDocument();
+    expect(screen.queryByText('这里是系统级设置，不是个人偏好页。保存会影响当前实例的全局运行路径。')).not.toBeInTheDocument();
     expect(await screen.findByText('认证与登录保护')).toBeInTheDocument();
     expect(await screen.findByText('修改密码')).toBeInTheDocument();
     expect(load).toHaveBeenCalled();

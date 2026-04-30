@@ -13,7 +13,6 @@ export const FontSizeSettingsCard: React.FC = () => {
     <div className="settings-surface rounded-[1rem] border settings-border px-4 py-4">
       <div className="mb-3">
         <p className="text-sm font-semibold text-foreground">{t('settings.fontSizeTitle')}</p>
-        <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.fontSizeDesc')}</p>
       </div>
       <div className="grid grid-cols-5 gap-1.5">
         {OPTIONS.map((option) => (

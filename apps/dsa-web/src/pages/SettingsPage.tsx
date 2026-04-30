@@ -112,7 +112,7 @@ const DRAWER_SECTION_CLASS = 'rounded-xl border border-white/5 bg-white/[0.015] 
 const DRAWER_LABEL_CLASS = 'text-[10px] uppercase tracking-widest text-white/40 mb-1.5 font-bold block';
 const DRAWER_TEXTAREA_CLASS = 'min-h-[6rem] w-full resize-y rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-white transition-all placeholder:text-white/20 focus:border-indigo-500/50 focus:bg-white/[0.05] focus:outline-none focus:ring-1 focus:ring-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-60';
 const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-6 flex cursor-pointer list-none items-center gap-1.5 border-t border-white/5 pt-4 text-xs text-white/30 transition-colors hover:text-white [&::-webkit-details-marker]:hidden';
-const DRAWER_GHOST_FORM_SCOPE_CLASS = '[&_.input-surface]:!rounded-lg [&_.input-surface]:!border-white/5 [&_.input-surface]:!bg-white/[0.02] [&_.input-surface]:!px-3 [&_.input-surface]:!py-2 [&_.input-surface]:!text-sm [&_.input-surface]:!text-white [&_.input-surface]:!transition-all [&_.input-surface]:placeholder:!text-white/20 [&_.input-surface]:focus:!border-indigo-500/50 [&_.input-surface]:focus:!bg-white/[0.05] [&_.input-surface]:focus:!outline-none [&_.input-surface]:focus:!ring-1 [&_.input-surface]:focus:!ring-indigo-500/50 [&_.theme-field-label]:!mb-1.5 [&_.theme-field-label]:!block [&_.theme-field-label]:!text-[10px] [&_.theme-field-label]:!font-bold [&_.theme-field-label]:!uppercase [&_.theme-field-label]:!tracking-widest [&_.theme-field-label]:!text-white/40';
+const DRAWER_GHOST_FORM_SCOPE_CLASS = '[&_.input-surface]:!rounded-lg [&_.input-surface]:!border-white/5 [&_.input-surface]:!bg-white/[0.02] [&_.input-surface]:!py-2 [&_.input-surface]:!text-sm [&_.input-surface]:!text-white [&_.input-surface]:!transition-all [&_.input-surface]:placeholder:!text-white/20 [&_.input-surface]:focus:!border-indigo-500/50 [&_.input-surface]:focus:!bg-white/[0.05] [&_.input-surface]:focus:!outline-none [&_.input-surface]:focus:!ring-1 [&_.input-surface]:focus:!ring-indigo-500/50 [&_.theme-field-label]:!mb-1.5 [&_.theme-field-label]:!block [&_.theme-field-label]:!text-[10px] [&_.theme-field-label]:!font-bold [&_.theme-field-label]:!uppercase [&_.theme-field-label]:!tracking-widest [&_.theme-field-label]:!text-white/40';
 type DataSourceEditorMode = 'create' | 'edit' | 'view' | 'manage_builtin';
 type DataSourceLibraryEntry = {
   key: string;
@@ -3125,7 +3125,6 @@ const SettingsPage: React.FC = () => {
                     onClick={() => handleSelectPanel(panel.domain)}
                   >
                     <span className="block">{nav.title}</span>
-                    <span className="mt-1 block text-xs text-white/40">{nav.desc}</span>
                   </button>
                 );
               })}
@@ -3149,12 +3148,7 @@ const SettingsPage: React.FC = () => {
             className="min-w-0 flex-1 overflow-y-auto pb-12 pr-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             <div className="mx-auto w-full max-w-5xl space-y-4">
-              <div className="mb-6 flex items-center justify-between gap-4 border-b border-white/5 pb-6">
-                <div>
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('settings.eyebrow')}</p>
-                  <h1 className="text-xl font-bold tracking-wide text-white">{t('settings.title')}</h1>
-                  <p className="mt-1 max-w-4xl text-xs leading-5 text-white/50">{t('settings.subtitle')}</p>
-                </div>
+              <div className="mb-4 flex items-center justify-end gap-4">
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <button
                     type="button"
