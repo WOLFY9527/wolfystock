@@ -29,6 +29,23 @@ class SystemConfigApiTestCase(unittest.TestCase):
     """System config API tests in isolation without loading the full app."""
 
     def setUp(self) -> None:
+        self._managed_env_keys = [
+            "ENV_FILE",
+            "STOCK_LIST",
+            "GEMINI_API_KEY",
+            "WECHAT_WEBHOOK_URL",
+            "DINGTALK_APP_KEY",
+            "PUSHOVER_USER_KEY",
+            "SERVERCHAN3_SENDKEY",
+            "DEBUG",
+            "HTTP_PROXY",
+            "LOG_LEVEL",
+            "SCHEDULE_TIME",
+            "SCHEDULE_ENABLED",
+            "ADMIN_AUTH_ENABLED",
+            "UNREGISTERED_SESSION_SECRET",
+        ]
+        self._previous_env = {key: os.environ.get(key) for key in self._managed_env_keys}
         self.temp_dir = tempfile.TemporaryDirectory()
         self.env_path = Path(self.temp_dir.name) / ".env"
         self.env_path.write_text(
@@ -36,9 +53,17 @@ class SystemConfigApiTestCase(unittest.TestCase):
                 [
                     "STOCK_LIST=600519,000001",
                     "GEMINI_API_KEY=secret-key-value",
+                    "WECHAT_WEBHOOK_URL=https://hooks.example.com/secret",
+                    "DINGTALK_APP_KEY=dingtalk-key",
+                    "PUSHOVER_USER_KEY=pushover-key",
+                    "SERVERCHAN3_SENDKEY=serverchan-key",
+                    "DEBUG=true",
+                    "HTTP_PROXY=http://proxy.example.com:8080",
                     "SCHEDULE_TIME=18:00",
+                    "SCHEDULE_ENABLED=true",
                     "LOG_LEVEL=INFO",
                     "ADMIN_AUTH_ENABLED=false",
+                    "UNREGISTERED_SESSION_SECRET=secret-value",
                 ]
             )
             + "\n",
@@ -52,7 +77,11 @@ class SystemConfigApiTestCase(unittest.TestCase):
 
     def tearDown(self) -> None:
         Config.reset_instance()
-        os.environ.pop("ENV_FILE", None)
+        for key, value in self._previous_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
         self.temp_dir.cleanup()
 
     def test_get_config_masks_secret_value(self) -> None:
@@ -62,6 +91,30 @@ class SystemConfigApiTestCase(unittest.TestCase):
         self.assertNotIn("secret-key-value", str(payload))
         self.assertTrue(item_map["GEMINI_API_KEY"]["is_masked"])
         self.assertTrue(item_map["GEMINI_API_KEY"]["raw_value_exists"])
+
+    def test_get_config_marks_raw_suppressed_fields(self) -> None:
+        payload = system_config.get_system_config(include_schema=True, service=self.service).model_dump(by_alias=True)
+        item_map = {item["key"]: item for item in payload["items"]}
+
+        for key in (
+            "ADMIN_AUTH_ENABLED",
+            "GEMINI_API_KEY",
+            "WECHAT_WEBHOOK_URL",
+            "DINGTALK_APP_KEY",
+            "PUSHOVER_USER_KEY",
+            "SERVERCHAN3_SENDKEY",
+            "DEBUG",
+            "HTTP_PROXY",
+            "LOG_LEVEL",
+            "UNREGISTERED_SESSION_SECRET",
+        ):
+            with self.subTest(key=key):
+                self.assertIn(key, item_map)
+                self.assertFalse(item_map[key]["raw_editable"])
+                self.assertIn(item_map[key]["ui_visibility"], {"curated", "hidden"})
+
+        self.assertTrue(item_map["SCHEDULE_ENABLED"]["raw_editable"])
+        self.assertEqual(item_map["SCHEDULE_ENABLED"]["ui_visibility"], "raw")
 
     def test_put_config_skips_masked_secret_placeholder(self) -> None:
         current = system_config.get_system_config(include_schema=False, service=self.service).model_dump()

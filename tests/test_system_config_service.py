@@ -22,6 +22,28 @@ from src.services.system_config_service import ConfigConflictError, SystemConfig
 
 class SystemConfigServiceTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        self._managed_env_keys = [
+            "ENV_FILE",
+            "STOCK_LIST",
+            "GEMINI_API_KEY",
+            "ADMIN_AUTH_ENABLED",
+            "WECHAT_WEBHOOK_URL",
+            "DINGTALK_APP_KEY",
+            "PUSHOVER_USER_KEY",
+            "SERVERCHAN3_SENDKEY",
+            "DEBUG",
+            "HTTP_PROXY",
+            "LOG_LEVEL",
+            "WEBUI_PORT",
+            "WEBHOOK_VERIFY_SSL",
+            "LITELLM_CONFIG",
+            "AGENT_SKILL_DIR",
+            "CUSTOM_DATA_SOURCE_LIBRARY",
+            "UNREGISTERED_BOOTSTRAP_PASSWORD",
+            "SCHEDULE_TIME",
+            "SCHEDULE_ENABLED",
+        ]
+        self._previous_env = {key: os.environ.get(key) for key in self._managed_env_keys}
         self.temp_dir = tempfile.TemporaryDirectory()
         self.env_path = Path(self.temp_dir.name) / ".env"
         self.env_path.write_text(
@@ -29,7 +51,21 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                 [
                     "STOCK_LIST=600519,000001",
                     "GEMINI_API_KEY=secret-key-value",
+                    "ADMIN_AUTH_ENABLED=false",
+                    "WECHAT_WEBHOOK_URL=https://hooks.example.com/secret",
+                    "DINGTALK_APP_KEY=dingtalk-key",
+                    "PUSHOVER_USER_KEY=pushover-key",
+                    "SERVERCHAN3_SENDKEY=serverchan-key",
+                    "DEBUG=true",
+                    "HTTP_PROXY=http://proxy.example.com:8080",
+                    "WEBUI_PORT=5173",
+                    "WEBHOOK_VERIFY_SSL=false",
+                    "LITELLM_CONFIG=/tmp/litellm.yaml",
+                    "AGENT_SKILL_DIR=/tmp/skills",
+                    "CUSTOM_DATA_SOURCE_LIBRARY=[]",
+                    "UNREGISTERED_BOOTSTRAP_PASSWORD=secret-password",
                     "SCHEDULE_TIME=18:00",
+                    "SCHEDULE_ENABLED=true",
                     "LOG_LEVEL=INFO",
                 ]
             )
@@ -44,7 +80,11 @@ class SystemConfigServiceTestCase(unittest.TestCase):
 
     def tearDown(self) -> None:
         Config.reset_instance()
-        os.environ.pop("ENV_FILE", None)
+        for key, value in self._previous_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
         self.temp_dir.cleanup()
 
     def _rewrite_env(self, *lines: str) -> None:
@@ -62,6 +102,44 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(items["GEMINI_API_KEY"]["is_masked"])
         self.assertTrue(items["GEMINI_API_KEY"]["raw_value_exists"])
         self.assertNotIn("secret-key-value", str(payload))
+
+    def test_get_config_marks_dangerous_and_dedicated_fields_non_raw_editable(self) -> None:
+        payload = self.service.get_config(include_schema=True)
+        items = {item["key"]: item for item in payload["items"]}
+
+        for key in (
+            "ADMIN_AUTH_ENABLED",
+            "GEMINI_API_KEY",
+            "WECHAT_WEBHOOK_URL",
+            "DINGTALK_APP_KEY",
+            "PUSHOVER_USER_KEY",
+            "SERVERCHAN3_SENDKEY",
+            "DEBUG",
+            "HTTP_PROXY",
+            "LOG_LEVEL",
+            "WEBUI_PORT",
+            "WEBHOOK_VERIFY_SSL",
+            "LITELLM_CONFIG",
+            "AGENT_SKILL_DIR",
+            "CUSTOM_DATA_SOURCE_LIBRARY",
+            "UNREGISTERED_BOOTSTRAP_PASSWORD",
+        ):
+            with self.subTest(key=key):
+                self.assertIn(key, items)
+                self.assertFalse(items[key]["raw_editable"])
+                self.assertIn(items[key]["ui_visibility"], {"curated", "hidden"})
+                self.assertFalse(items[key]["schema"]["raw_editable"])
+
+        self.assertTrue(items["SCHEDULE_ENABLED"]["raw_editable"])
+        self.assertEqual(items["SCHEDULE_ENABLED"]["ui_visibility"], "raw")
+        self.assertTrue(items["SCHEDULE_TIME"]["raw_editable"])
+
+    def test_backend_still_reads_values_suppressed_from_raw_editing(self) -> None:
+        config_map = self.manager.read_config_map()
+
+        self.assertEqual(config_map["ADMIN_AUTH_ENABLED"], "false")
+        self.assertEqual(config_map["GEMINI_API_KEY"], "secret-key-value")
+        self.assertEqual(config_map["CUSTOM_DATA_SOURCE_LIBRARY"], "[]")
 
     def test_get_task_progress_tolerates_task_without_updated_at(self) -> None:
         task = SimpleNamespace(

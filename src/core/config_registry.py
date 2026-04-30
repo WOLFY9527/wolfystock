@@ -12,6 +12,63 @@ from typing import Any, Dict, List, Optional
 
 SCHEMA_VERSION = "2026-03-19"
 
+_AUTH_RAW_HIDDEN_KEYS = {
+    "ADMIN_AUTH_ENABLED",
+    "ADMIN_PASSWORD",
+    "ADMIN_PASSWORD_HASH",
+    "ADMIN_BOOTSTRAP_PASSWORD",
+    "ADMIN_SESSION_SECRET",
+    "AUTH_SECRET",
+    "AUTH_SECRET_KEY",
+    "JWT_SECRET",
+    "SESSION_SECRET",
+    "SECRET_KEY",
+}
+
+_RAW_HIDDEN_EXACT_KEYS = {
+    "DEBUG",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "LOG_LEVEL",
+    "WEBUI_PORT",
+    "WEBHOOK_VERIFY_SSL",
+    "LITELLM_CONFIG",
+    "AGENT_SKILL_DIR",
+    "AGENT_STRATEGY_DIR",
+}
+
+_RAW_CURATED_EXACT_KEYS = {
+    "CUSTOM_DATA_SOURCE_LIBRARY",
+    "AIHUBMIX_KEY",
+    "GEMINI_API_KEY",
+    "GEMINI_API_KEYS",
+    "OPENAI_API_KEY",
+    "OPENAI_API_KEYS",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_API_KEYS",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_API_KEYS",
+    "ZHIPU_API_KEY",
+    "ZHIPU_API_KEYS",
+    "FMP_API_KEY",
+    "FMP_API_KEYS",
+    "FINNHUB_API_KEY",
+    "FINNHUB_API_KEYS",
+    "ALPHA_VANTAGE_API_KEY",
+    "ALPHA_VANTAGE_API_KEYS",
+    "GNEWS_API_KEY",
+    "GNEWS_API_KEYS",
+    "TUSHARE_TOKEN",
+    "TWELVE_DATA_API_KEY",
+    "TWELVE_DATA_API_KEYS",
+    "ALPACA_API_KEY_ID",
+    "ALPACA_API_SECRET_KEY",
+    "TICKFLOW_API_KEY",
+}
+
+_RAW_SECRET_TOKEN_RE = ("API_KEY", "API_KEYS", "TOKEN", "SECRET", "PASSWORD", "WEBHOOK", "BEARER")
+_RAW_NOTIFICATION_SECRET_RE = _RAW_SECRET_TOKEN_RE + ("APP_KEY", "USER_KEY", "SENDKEY")
+
 _CATEGORY_DEFINITIONS: List[Dict[str, Any]] = [
     {
         "category": "base",
@@ -2030,6 +2087,46 @@ def get_registered_field_keys() -> List[str]:
     return list(_FIELD_DEFINITIONS.keys())
 
 
+def get_raw_edit_visibility(key: str, field_schema: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Return generic raw-editor visibility for a config key.
+
+    This does not affect runtime reads or curated editor save paths. It only
+    gates whether a key may appear as a generic raw System Settings field.
+    """
+    key_upper = key.upper()
+    schema = field_schema or {}
+    category = str(schema.get("category") or _infer_category(key_upper))
+
+    if key_upper in _AUTH_RAW_HIDDEN_KEYS:
+        return {"raw_editable": False, "ui_visibility": "hidden"}
+
+    if (
+        key_upper.startswith(("ADMIN_", "AUTH_", "BOOTSTRAP_", "SESSION_"))
+        and any(token in key_upper for token in ("PASSWORD", "SECRET", "TOKEN", "AUTH"))
+    ):
+        return {"raw_editable": False, "ui_visibility": "hidden"}
+
+    if (
+        any(scope in key_upper for scope in ("BOOTSTRAP", "SESSION", "AUTH"))
+        and any(token in key_upper for token in ("PASSWORD", "SECRET", "TOKEN"))
+    ):
+        return {"raw_editable": False, "ui_visibility": "hidden"}
+
+    if key_upper in _RAW_HIDDEN_EXACT_KEYS:
+        return {"raw_editable": False, "ui_visibility": "hidden"}
+
+    if key_upper in _RAW_CURATED_EXACT_KEYS:
+        return {"raw_editable": False, "ui_visibility": "curated"}
+
+    if category in {"ai_model", "data_source"} and any(token in key_upper for token in _RAW_SECRET_TOKEN_RE):
+        return {"raw_editable": False, "ui_visibility": "curated"}
+
+    if category == "notification" and any(token in key_upper for token in _RAW_NOTIFICATION_SECRET_RE):
+        return {"raw_editable": False, "ui_visibility": "hidden"}
+
+    return {"raw_editable": True, "ui_visibility": "raw"}
+
+
 def _extract_option_values(options: List[Any]) -> List[str]:
     """Extract canonical option values from string/object style select options."""
     values: List[str] = []
@@ -2055,6 +2152,7 @@ def get_field_definition(key: str, value_hint: Optional[str] = None) -> Dict[str
         if field.get("ui_control") == "select" and option_values and "enum" not in validation:
             validation["enum"] = option_values
         field["validation"] = validation
+        field.update(get_raw_edit_visibility(key_upper, field))
         return field
 
     category = _infer_category(key_upper)
@@ -2074,6 +2172,7 @@ def get_field_definition(key: str, value_hint: Optional[str] = None) -> Dict[str
         "validation": {},
         "display_order": 9000,
     }
+    field.update(get_raw_edit_visibility(key_upper, field))
     return field
 
 

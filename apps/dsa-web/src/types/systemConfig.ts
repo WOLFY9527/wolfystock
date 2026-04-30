@@ -45,6 +45,8 @@ export interface SystemConfigFieldSchema {
   options: Array<string | SystemConfigOption>;
   validation: Record<string, unknown>;
   displayOrder: number;
+  rawEditable?: boolean;
+  uiVisibility?: 'raw' | 'curated' | 'hidden' | 'advanced';
 }
 
 export interface SystemConfigCategorySchema {
@@ -65,6 +67,8 @@ export interface SystemConfigItem {
   value: string;
   rawValueExists: boolean;
   isMasked: boolean;
+  rawEditable?: boolean;
+  uiVisibility?: 'raw' | 'curated' | 'hidden' | 'advanced';
   schema?: SystemConfigFieldSchema;
 }
 

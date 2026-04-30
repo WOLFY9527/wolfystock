@@ -1,5 +1,7 @@
 ## 2026-05-01
 
+- 🔒 **System Settings 原始编辑面 Phase 1 收口** — `/settings/system` 的高级原始配置抽屉现在只展示明确允许 raw-edit 的运行时字段，`ADMIN_AUTH_ENABLED`、AI/Data Source provider keys、通知 webhook/token/password、`DEBUG`、`HTTP_PROXY`、`WEBUI_PORT`、`WEBHOOK_VERIFY_SSL`、`LITELLM_CONFIG`、`AGENT_SKILL_DIR` 与 `CUSTOM_DATA_SOURCE_LIBRARY` 等危险、重复或已归属专用页面的字段不再作为通用原始配置暴露。后端仍保留既有 `.env` 读取、masked secret preservation 与专用设置页兼容性，只通过 `raw_editable / ui_visibility` 标记收口 UI 编辑面。
+
 - 🧼 **Settings 全局输入与极简减法清洗** — `apps/dsa-web` 修复共享 `Input` 的前置图标输入框内边距，带 `iconType` 的原生 `<input>` 现在直接获得 `pl-12`，同时移除 Settings Drawer 里覆盖横向 padding 的作用域规则，避免密码框、API Key 框和搜索类输入出现图标与文字重叠。Settings 主操作按钮从高饱和蓝紫渐变切换为低对比 `bg-white/5 border-white/10` 幽灵态微光按钮；`/settings` 删除顶部个人偏好标题、重复语言卡和大段说明小字，`/settings/system` 删除顶部标题/副标题、导航说明和系统概览里的保姆式解释文案，仅保留核心标签与操作控件。
 
 ## 2026-04-30

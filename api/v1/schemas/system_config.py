@@ -31,6 +31,8 @@ class SystemConfigFieldSchema(BaseModel):
     options: List[str | SystemConfigOption] = Field(default_factory=list)
     validation: Dict[str, Any] = Field(default_factory=dict)
     display_order: int
+    raw_editable: bool = True
+    ui_visibility: Literal["raw", "curated", "hidden", "advanced"] = "raw"
 
 
 class SystemConfigCategorySchema(BaseModel):
@@ -59,6 +61,8 @@ class SystemConfigItem(BaseModel):
     value: str
     raw_value_exists: bool
     is_masked: bool
+    raw_editable: bool = True
+    ui_visibility: Literal["raw", "curated", "hidden", "advanced"] = "raw"
     schema_: Optional[SystemConfigFieldSchema] = Field(default=None, alias="schema")
 
 

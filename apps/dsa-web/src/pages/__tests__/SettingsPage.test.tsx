@@ -164,7 +164,8 @@ const baseCategories = [
   { category: 'base', title: 'Base', description: '基础配置', displayOrder: 2, fields: [] },
   { category: 'ai_model', title: 'AI', description: '模型配置', displayOrder: 3, fields: [] },
   { category: 'data_source', title: 'Data', description: '数据源配置', displayOrder: 4, fields: [] },
-  { category: 'agent', title: 'Agent', description: 'Agent 配置', displayOrder: 5, fields: [] },
+  { category: 'notification', title: 'Notification', description: '通知配置', displayOrder: 5, fields: [] },
+  { category: 'agent', title: 'Agent', description: 'Agent 配置', displayOrder: 6, fields: [] },
 ];
 
 type ConfigState = {
@@ -208,6 +209,8 @@ function buildSystemConfigState(overrides: ConfigOverride = {}) {
           value: 'true',
           rawValueExists: true,
           isMasked: false,
+          rawEditable: false,
+          uiVisibility: 'hidden',
           schema: {
             key: 'ADMIN_AUTH_ENABLED',
             category: 'system',
@@ -216,9 +219,33 @@ function buildSystemConfigState(overrides: ConfigOverride = {}) {
             isSensitive: false,
             isRequired: false,
             isEditable: true,
+            rawEditable: false,
+            uiVisibility: 'hidden',
             options: [],
             validation: {},
             displayOrder: 1,
+          },
+        },
+        {
+          key: 'SCHEDULE_ENABLED',
+          value: 'true',
+          rawValueExists: true,
+          isMasked: false,
+          rawEditable: true,
+          uiVisibility: 'raw',
+          schema: {
+            key: 'SCHEDULE_ENABLED',
+            category: 'system',
+            dataType: 'boolean',
+            uiControl: 'switch',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            rawEditable: true,
+            uiVisibility: 'raw',
+            options: [],
+            validation: {},
+            displayOrder: 2,
           },
         },
       ],
@@ -286,6 +313,8 @@ function buildSystemConfigState(overrides: ConfigOverride = {}) {
           value: 'masked-finnhub-token',
           rawValueExists: true,
           isMasked: false,
+          rawEditable: false,
+          uiVisibility: 'curated',
           schema: {
             key: 'FINNHUB_API_KEY',
             category: 'data_source',
@@ -294,9 +323,79 @@ function buildSystemConfigState(overrides: ConfigOverride = {}) {
             isSensitive: true,
             isRequired: false,
             isEditable: true,
+            rawEditable: false,
+            uiVisibility: 'curated',
             options: [],
             validation: {},
             displayOrder: 2,
+          },
+        },
+      ],
+      notification: [
+        {
+          key: 'WECHAT_WEBHOOK_URL',
+          value: 'wechat-webhook-token',
+          rawValueExists: true,
+          isMasked: true,
+          rawEditable: false,
+          uiVisibility: 'hidden',
+          schema: {
+            key: 'WECHAT_WEBHOOK_URL',
+            category: 'notification',
+            dataType: 'string',
+            uiControl: 'password',
+            isSensitive: true,
+            isRequired: false,
+            isEditable: true,
+            rawEditable: false,
+            uiVisibility: 'hidden',
+            options: [],
+            validation: {},
+            displayOrder: 1,
+          },
+        },
+        {
+          key: 'PUSHOVER_USER_KEY',
+          value: 'pushover-key',
+          rawValueExists: true,
+          isMasked: true,
+          rawEditable: false,
+          uiVisibility: 'hidden',
+          schema: {
+            key: 'PUSHOVER_USER_KEY',
+            category: 'notification',
+            dataType: 'string',
+            uiControl: 'password',
+            isSensitive: true,
+            isRequired: false,
+            isEditable: true,
+            rawEditable: false,
+            uiVisibility: 'hidden',
+            options: [],
+            validation: {},
+            displayOrder: 2,
+          },
+        },
+        {
+          key: 'NOTIFICATION_BATCH_SIZE',
+          value: '10',
+          rawValueExists: true,
+          isMasked: false,
+          rawEditable: true,
+          uiVisibility: 'raw',
+          schema: {
+            key: 'NOTIFICATION_BATCH_SIZE',
+            category: 'notification',
+            dataType: 'integer',
+            uiControl: 'number',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            rawEditable: true,
+            uiVisibility: 'raw',
+            options: [],
+            validation: {},
+            displayOrder: 3,
           },
         },
       ],
@@ -792,6 +891,108 @@ describe('SettingsPage', () => {
     expect(screen.queryByText('STOCK_LIST')).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId('raw-fields-drawer-trigger'));
     expect(await screen.findByText('STOCK_LIST')).toBeInTheDocument();
+  });
+
+  it('keeps auth-owned keys out of the system raw drawer while safe runtime keys remain editable', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({ activeCategory: 'system' }));
+
+    render(<SettingsPage />);
+
+    expect(await screen.findByText('认证与登录保护')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('raw-fields-drawer-trigger'));
+
+    const drawer = await screen.findByRole('dialog', { name: zh('settings.rawFieldsSectionTitle') });
+    expect(within(drawer).queryByText('ADMIN_AUTH_ENABLED')).not.toBeInTheDocument();
+    expect(within(drawer).getByText('SCHEDULE_ENABLED')).toBeInTheDocument();
+  });
+
+  it('keeps AI provider secrets out of the generic raw drawer', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'ai_model',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        ai_model: [
+          {
+            key: 'OPENAI_API_KEY',
+            value: 'masked-openai-key',
+            rawValueExists: true,
+            isMasked: true,
+            rawEditable: false,
+            uiVisibility: 'curated',
+            schema: {
+              key: 'OPENAI_API_KEY',
+              category: 'ai_model',
+              dataType: 'string',
+              uiControl: 'password',
+              isSensitive: true,
+              isRequired: false,
+              isEditable: true,
+              rawEditable: false,
+              uiVisibility: 'curated',
+              options: [],
+              validation: {},
+              displayOrder: 1,
+            },
+          },
+          {
+            key: 'AI_PROVIDER_TIMEOUT_SECONDS',
+            value: '20',
+            rawValueExists: true,
+            isMasked: false,
+            rawEditable: true,
+            uiVisibility: 'raw',
+            schema: {
+              key: 'AI_PROVIDER_TIMEOUT_SECONDS',
+              category: 'ai_model',
+              dataType: 'integer',
+              uiControl: 'number',
+              isSensitive: false,
+              isRequired: false,
+              isEditable: true,
+              rawEditable: true,
+              uiVisibility: 'raw',
+              options: [],
+              validation: {},
+              displayOrder: 2,
+            },
+          },
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    expect(await screen.findByText('Provider 快速配置')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('raw-fields-drawer-trigger'));
+
+    const drawer = await screen.findByRole('dialog', { name: zh('settings.rawFieldsSectionTitle') });
+    expect(within(drawer).queryByText('OPENAI_API_KEY')).not.toBeInTheDocument();
+    expect(within(drawer).getByText('AI_PROVIDER_TIMEOUT_SECONDS')).toBeInTheDocument();
+  });
+
+  it('keeps data provider secrets out of the generic raw drawer', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({ activeCategory: 'data_source' }));
+
+    render(<SettingsPage />);
+
+    expect(await screen.findByRole('heading', { name: '数据源配置' })).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('raw-fields-drawer-trigger'));
+
+    const drawer = await screen.findByRole('dialog', { name: zh('settings.rawFieldsSectionTitle') });
+    expect(within(drawer).queryByText('FINNHUB_API_KEY')).not.toBeInTheDocument();
+    expect(within(drawer).getByText('REALTIME_SOURCE_PRIORITY')).toBeInTheDocument();
+  });
+
+  it('keeps notification secrets out of the generic raw drawer', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({ activeCategory: 'notification' }));
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByTestId('raw-fields-drawer-trigger'));
+    const drawer = await screen.findByRole('dialog', { name: zh('settings.rawFieldsSectionTitle') });
+    expect(within(drawer).queryByText('WECHAT_WEBHOOK_URL')).not.toBeInTheDocument();
+    expect(within(drawer).queryByText('PUSHOVER_USER_KEY')).not.toBeInTheDocument();
+    expect(within(drawer).getByText('NOTIFICATION_BATCH_SIZE')).toBeInTheDocument();
   });
 
   it('refreshes server state after intelligent import merges stock list', async () => {

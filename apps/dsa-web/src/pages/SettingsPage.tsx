@@ -15,7 +15,7 @@ import SystemControlPlane from '../components/settings/SystemControlPlane';
 import SystemLogsConfig from '../components/settings/SystemLogsConfig';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useAuth, useSystemConfig } from '../hooks';
-import type { BuiltinDataSourceEndpointCheck, TestBuiltinDataSourceResponse, SystemConfigCategory } from '../types/systemConfig';
+import type { BuiltinDataSourceEndpointCheck, TestBuiltinDataSourceResponse, SystemConfigCategory, SystemConfigItem } from '../types/systemConfig';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { formatDateTime, formatDurationMs } from '../utils/format';
 import {
@@ -183,6 +183,22 @@ const CATEGORY_TO_DOMAIN: Partial<Record<SystemConfigCategory, SettingsDomain>> 
 
 const FALSE_VALUES = new Set(['', '0', 'false', 'no', 'off']);
 const CUSTOM_DATA_SOURCE_LIBRARY_KEY = 'CUSTOM_DATA_SOURCE_LIBRARY';
+const RAW_VISIBILITY_ALLOWED = new Set(['raw', 'advanced']);
+const RAW_DRAWER_SUPPRESSED_KEYS = new Set([
+  'ADMIN_AUTH_ENABLED',
+  'ADMIN_PASSWORD',
+  'ADMIN_PASSWORD_HASH',
+  'DEBUG',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'WEBUI_PORT',
+  'WEBHOOK_VERIFY_SSL',
+  'LITELLM_CONFIG',
+  'AGENT_SKILL_DIR',
+  'AGENT_STRATEGY_DIR',
+  'CUSTOM_DATA_SOURCE_LIBRARY',
+]);
+const RAW_DRAWER_SECRET_PATTERN = /(API_KEYS?|TOKEN|SECRET|PASSWORD|WEBHOOK|BEARER)/i;
 const PROVIDER_LABEL_MAP: Record<string, string> = {
   aihubmix: 'AIHubMix',
   gemini: 'Gemini',
@@ -191,6 +207,35 @@ const PROVIDER_LABEL_MAP: Record<string, string> = {
   anthropic: 'Anthropic',
   zhipu: 'GLM / Zhipu',
 };
+
+function isRawEditableConfigItem(item: SystemConfigItem): boolean {
+  const key = item.key.toUpperCase();
+  const visibility = item.uiVisibility || item.schema?.uiVisibility || 'raw';
+  const category = item.schema?.category;
+
+  if (item.rawEditable === false || item.schema?.rawEditable === false) {
+    return false;
+  }
+  if (!RAW_VISIBILITY_ALLOWED.has(visibility)) {
+    return false;
+  }
+  if (RAW_DRAWER_SUPPRESSED_KEYS.has(key)) {
+    return false;
+  }
+  if (
+    /^(ADMIN|AUTH|BOOTSTRAP|SESSION)_/.test(key)
+    && /(AUTH|PASSWORD|SECRET|TOKEN)/i.test(key)
+  ) {
+    return false;
+  }
+  if (category === 'notification' && RAW_DRAWER_SECRET_PATTERN.test(key)) {
+    return false;
+  }
+  if ((category === 'ai_model' || category === 'data_source') && RAW_DRAWER_SECRET_PATTERN.test(key)) {
+    return false;
+  }
+  return true;
+}
 
 function createSingleKeyDataSourceManagement(params: {
   credentialEnvKey: string;
@@ -827,6 +872,10 @@ const SettingsPage: React.FC = () => {
   );
   const hasConfiguredChannels = Boolean((rawActiveItemMap.get('LLM_CHANNELS') || '').trim());
   const hasLitellmConfig = Boolean((rawActiveItemMap.get('LITELLM_CONFIG') || '').trim());
+  const rawEditableActiveItems = useMemo(
+    () => (itemsByCategory[activeCategory] || []).filter(isRawEditableConfigItem),
+    [activeCategory, itemsByCategory],
+  );
 
   const LLM_CHANNEL_KEY_RE = /^LLM_[A-Z0-9]+_(PROTOCOL|BASE_URL|API_KEY|API_KEYS|MODELS|EXTRA_HEADERS|ENABLED)$/;
   const AI_MODEL_HIDDEN_KEYS = new Set([
@@ -877,7 +926,7 @@ const SettingsPage: React.FC = () => {
 
   const activeItems =
     activeCategory === 'ai_model'
-      ? rawActiveItems.filter((item) => {
+      ? rawEditableActiveItems.filter((item) => {
         if (hasConfiguredChannels && LLM_CHANNEL_KEY_RE.test(item.key)) {
           return false;
         }
@@ -887,12 +936,12 @@ const SettingsPage: React.FC = () => {
         return true;
       })
       : activeCategory === 'data_source'
-        ? rawActiveItems.filter((item) => item.key !== CUSTOM_DATA_SOURCE_LIBRARY_KEY)
+        ? rawEditableActiveItems.filter((item) => item.key !== CUSTOM_DATA_SOURCE_LIBRARY_KEY)
       : activeCategory === 'system'
-        ? rawActiveItems.filter((item) => !SYSTEM_HIDDEN_KEYS.has(item.key))
+        ? rawEditableActiveItems.filter((item) => !SYSTEM_HIDDEN_KEYS.has(item.key))
       : activeCategory === 'agent'
-        ? rawActiveItems.filter((item) => !AGENT_HIDDEN_KEYS.has(item.key))
-      : rawActiveItems;
+        ? rawEditableActiveItems.filter((item) => !AGENT_HIDDEN_KEYS.has(item.key))
+      : rawEditableActiveItems;
   const activeCategoryDescription = getCategoryDescription(language, activeCategory as SystemConfigCategory, '') || t('settings.currentCategoryDesc');
   const activeCategoryLabel = getCategoryTitle(
     language,
@@ -904,7 +953,7 @@ const SettingsPage: React.FC = () => {
     ? t('settings.rawFieldsSectionTitle')
     : t('settings.currentCategory');
   const rawFieldsSectionDescription = shouldCollapseRawFields
-    ? ''
+    ? t('settings.rawFieldsSectionDesc')
     : activeCategoryDescription;
   const rawFieldsToggleLabel = activeCategory === 'ai_model'
     ? t('settings.aiRawFieldsToggle')
@@ -3484,6 +3533,10 @@ const SettingsPage: React.FC = () => {
         bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         <div className="space-y-3">
+          <div className={DRAWER_PANEL_CLASS}>
+            <p className="text-sm font-semibold text-foreground">{t('settings.rawFieldsPolicyTitle')}</p>
+            <p className="mt-1 text-xs leading-5 text-secondary-text">{t('settings.rawFieldsPolicyDesc')}</p>
+          </div>
           {activeItems.map((item) => (
             <SettingsField
               key={item.key}
