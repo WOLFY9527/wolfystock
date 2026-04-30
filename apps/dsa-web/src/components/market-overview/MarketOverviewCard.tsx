@@ -56,7 +56,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
       className={cn(
         MARKET_OVERVIEW_GHOST_CARD_CLASS,
         'flex h-full flex-col',
-        fallbackOnly ? 'border-orange-300/12 bg-white/[0.018]' : '',
+        fallbackOnly ? 'border-orange-300/12' : '',
         className || '',
       )}
     >

@@ -31,8 +31,8 @@ const FRESHNESS_CLASSES: Record<MarketDataFreshness, string> = {
   error: 'border-rose-300/35 bg-rose-400/10 text-rose-200',
 };
 
-export const MARKET_OVERVIEW_GHOST_CARD_CLASS = 'rounded-xl border border-white/5 bg-white/[0.02] p-5 backdrop-blur-sm transition-all hover:border-white/10';
-export const MARKET_OVERVIEW_CARD_TITLE_CLASS = 'mb-4 block text-[10px] font-bold uppercase tracking-widest text-white/40';
+export const MARKET_OVERVIEW_GHOST_CARD_CLASS = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md p-5 transition-all hover:border-white/10';
+export const MARKET_OVERVIEW_CARD_TITLE_CLASS = 'text-[10px] font-bold uppercase tracking-widest text-white/40 mb-5 block';
 
 function resolveFreshness(meta?: Partial<MarketDataMeta>): MarketDataFreshness {
   if (meta?.freshness) {

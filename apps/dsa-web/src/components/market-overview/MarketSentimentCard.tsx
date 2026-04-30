@@ -79,7 +79,7 @@ export const MarketSentimentCard: React.FC<{
         ) : null}
 
         {primary ? (
-          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5 backdrop-blur-sm transition-all hover:border-white/10">
+          <div className={MARKET_OVERVIEW_GHOST_CARD_CLASS}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.sentiment.primaryLabel')}</p>
@@ -125,7 +125,7 @@ export const MarketSentimentCard: React.FC<{
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {supporting.map((item) => (
-            <div key={item.symbol} className="rounded-xl border border-white/5 bg-white/[0.02] p-4 backdrop-blur-sm transition-all hover:border-white/10">
+            <div key={item.symbol} className={MARKET_OVERVIEW_GHOST_CARD_CLASS}>
               <div className="flex items-start justify-between gap-3">
                 <p className="min-w-0 text-[10px] font-semibold uppercase tracking-widest text-white/40">
                   {sentimentLabels[item.symbol] || item.label}
