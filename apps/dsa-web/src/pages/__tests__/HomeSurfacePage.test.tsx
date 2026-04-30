@@ -18,10 +18,6 @@ vi.mock('../../hooks/useProductSurface', () => ({
   useProductSurface: () => useProductSurfaceMock(),
 }));
 
-vi.mock('../GuestHomePage', () => ({
-  default: () => <div>guest home page</div>,
-}));
-
 vi.mock('../../api/history', () => ({
   historyApi: {
     getList: vi.fn(),
@@ -170,7 +166,10 @@ describe('HomeSurfacePage', () => {
   it('renders the guest homepage when the current surface role is guest', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
     renderSurface();
-    expect(screen.getByText('guest home page')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-clean-search')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-grid')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'WolfyStock 决策面板' })).toBeInTheDocument();
   });
 
   it('renders the signed-in bento dashboard for authenticated users', async () => {

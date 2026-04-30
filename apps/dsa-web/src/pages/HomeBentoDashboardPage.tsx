@@ -1,6 +1,10 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Lock, Search } from 'lucide-react';
+import { getParsedApiError, type ParsedApiError } from '../api/error';
+import { publicAnalysisApi } from '../api/publicAnalysis';
+import { withFallback } from '../api/withFallback';
 import {
   BentoCard,
   BENTO_SURFACE_ROOT_CLASS,
@@ -21,7 +25,9 @@ import {
 } from '../hooks/useSafariInteractionReady';
 import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
 import type { AnalysisReport, HistoryItem, StandardReportField } from '../types/analysis';
+import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
 import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
+import { createPublicAnalysisFallbackPreview } from '../utils/publicAnalysisFallback';
 
 type DrawerMetric = {
   label: string;
@@ -50,6 +56,10 @@ type DetailDrawerKey = 'decision' | 'strategy' | 'tech' | 'fundamentals';
 type PendingHistoryDelete =
   | { mode: 'single'; recordIds: number[] }
   | { mode: 'visible'; recordIds: number[] };
+
+type HomeBentoDashboardPageProps = {
+  isGuest?: boolean;
+};
 
 type DashboardField = {
   label: string;
@@ -1540,6 +1550,55 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
   });
 }
 
+function buildGuestDashboardFromPreview(
+  locale: DashboardLocale,
+  preview: PublicAnalysisPreviewResponse,
+): DashboardPayload {
+  const stockCode = normalizeTickerQuery(preview.report.meta.stockCode || preview.stockCode || 'AAPL');
+  const seed = buildInPlacePlaceholderDashboard(locale, stockCode);
+  const summary = preview.report.summary;
+  const score = typeof summary.sentimentScore === 'number' ? summary.sentimentScore : 68;
+  const sentimentTone = toneFromScore(score);
+  const scoreText = (score / 10).toFixed(1);
+  const rawCompany = preview.report.meta.stockName || preview.stockName || stockCode;
+  const companyProfile = resolveCompanyProfile(stockCode, rawCompany);
+  const actionText = localizeNarrativeText(locale, summary.operationAdvice, seed.decision.scoreValue);
+  const trendText = localizeNarrativeText(locale, summary.trendPrediction, actionText);
+  const summaryText = localizeNarrativeText(locale, summary.analysisSummary, seed.decision.summary);
+
+  return enrichDashboardPayload(locale, {
+    ...seed,
+    instrument: companyProfile.company,
+    ticker: stockCode,
+    decision: {
+      ...seed.decision,
+      company: companyProfile.company,
+      sector: companyProfile.sector,
+      heroValue: scoreText,
+      heroUnit: '/10',
+      heroLabel: locale === 'en' ? 'Conviction' : '置信度',
+      signalLabel: actionText,
+      signalTone: sentimentTone,
+      scoreValue: trendText,
+      badge: locale === 'en' ? 'Guest preview · live hook' : '游客预览 · 实时诱饵',
+      chartLabel: locale === 'en' ? 'Preview generated' : '预览已生成',
+      summary: summaryText,
+      reasonTitle: locale === 'en' ? 'Guest Preview Context' : '游客预览归因',
+      reasonBody: summaryText,
+    },
+    strategy: {
+      ...seed.strategy,
+      metrics: seed.strategy.metrics.map((metric) => ({
+        ...metric,
+        value: metric.value === EMPTY_FIELD_VALUE ? (locale === 'en' ? 'Unlock after account creation' : '创建账户后解锁') : metric.value,
+      })),
+      positionBody: locale === 'en'
+        ? 'Execution levels, stop discipline, and sizing logic unlock after a free account is created.'
+        : '建仓点位、止损纪律与仓位节奏会在免费创建账户后解锁。',
+    },
+  });
+}
+
 const SKELETON_CARD_CLASS = 'animate-pulse border-indigo-500/20 bg-white/[0.05] shadow-[0_0_42px_rgba(79,70,229,0.10)]';
 const SKELETON_LINE_CLASS = 'rounded-full bg-white/[0.08] shadow-[0_0_24px_rgba(99,102,241,0.12)]';
 
@@ -1648,7 +1707,27 @@ function InPlaceListSkeleton({
   );
 }
 
-const HomeBentoDashboardPage: React.FC = () => {
+function GuestPaywallOverlay({ registrationPath }: { registrationPath: string }) {
+  return (
+    <div
+      className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-black/40 px-6 text-center backdrop-blur-[8px]"
+      data-testid="guest-home-frosted-lock"
+    >
+      <Lock className="h-7 w-7 text-white/85 drop-shadow-[0_0_14px_rgba(99,102,241,0.55)]" />
+      <p className="mt-4 max-w-xs text-sm font-medium leading-6 text-white/80">
+        解锁完整 AI 量化策略与深度技术形态解析
+      </p>
+      <Link
+        to={registrationPath}
+        className="mt-5 inline-flex items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-3 text-sm font-medium text-white shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all hover:from-blue-400 hover:to-purple-500"
+      >
+        免费创建账户 (Create Free Account)
+      </Link>
+    </div>
+  );
+}
+
+const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest = false }) => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
@@ -1660,6 +1739,9 @@ const HomeBentoDashboardPage: React.FC = () => {
   const [hasHydratedInitialTicker, setHasHydratedInitialTicker] = useState(false);
   const [isDashboardLoading, setDashboardLoading] = useState(false);
   const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
+  const [guestPreview, setGuestPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
+  const [guestError, setGuestError] = useState<ParsedApiError | null>(null);
+  const [guestFallbackNotice, setGuestFallbackNotice] = useState<string | null>(null);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
   const historyItems = useStockPoolStore((state) => state.historyItems);
@@ -1681,6 +1763,7 @@ const HomeBentoDashboardPage: React.FC = () => {
   const syncTaskFailed = useStockPoolStore((state) => state.syncTaskFailed);
   const refreshTaskProgress = useStockPoolStore((state) => state.refreshTaskProgress);
   const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setHistoryDrawerOpen(true));
+  const registrationPath = '/login?mode=create&redirect=%2F';
   const recentHistoryItems = useMemo(
     () => historyItems.filter((item) => !item.isTest).slice(0, 8),
     [historyItems],
@@ -1714,9 +1797,16 @@ const HomeBentoDashboardPage: React.FC = () => {
     && focusedTask
     && (focusedTask.status === 'pending' || focusedTask.status === 'processing'),
   );
-  const isHomeAnalyzing = isAnalyzing || isTaskAnalyzing || Boolean(pendingAnalysisTicker && isDashboardLoading);
+  const isGuestAnalyzing = isGuest && isDashboardLoading;
+  const isHomeAnalyzing = isGuestAnalyzing || (!isGuest && (isAnalyzing || isTaskAnalyzing || Boolean(pendingAnalysisTicker && isDashboardLoading)));
   const isBusy = isHomeAnalyzing || isDashboardLoading;
   const dashboardData = useMemo<DashboardPayload>(() => {
+    if (isGuest) {
+      return guestPreview
+        ? buildGuestDashboardFromPreview(locale, guestPreview)
+        : buildInPlacePlaceholderDashboard(locale, activeTicker);
+    }
+
     const effectiveTicker = activeTicker || selectedTicker || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || null;
 
     if (completedTaskReport && effectiveTicker && normalizeTickerQuery(completedTaskReport.meta.stockCode) === effectiveTicker) {
@@ -1732,7 +1822,7 @@ const HomeBentoDashboardPage: React.FC = () => {
     }
 
     return buildInPlacePlaceholderDashboard(locale, effectiveTicker);
-  }, [activeTicker, completedTaskReport, locale, pendingAnalysisTicker, recentHistoryItems, selectedReport, selectedTicker]);
+  }, [activeTicker, completedTaskReport, guestPreview, isGuest, locale, pendingAnalysisTicker, recentHistoryItems, selectedReport, selectedTicker]);
   const copy = dashboardData;
   const standbyCopy = useMemo(() => (
     locale === 'en'
@@ -1746,6 +1836,8 @@ const HomeBentoDashboardPage: React.FC = () => {
       }
   ), [locale]);
   const activeDrawerPayload = activeDrawer && copy ? buildDrawerPayload(locale, copy, activeDrawer) : null;
+  const shouldRenderDashboardPanels = !isGuest || Boolean(guestPreview || pendingAnalysisTicker);
+  const guestPaywall = isGuest ? <GuestPaywallOverlay registrationPath={registrationPath} /> : null;
   const deleteCopy = useMemo(() => ({
     title: t('home.deleteTitle'),
     single: t('home.deleteSingle'),
@@ -1773,7 +1865,8 @@ const HomeBentoDashboardPage: React.FC = () => {
     syncTaskCreated,
     syncTaskUpdated,
     syncTaskFailed,
-    hasRunningTasks,
+    enabled: !isGuest,
+    hasRunningTasks: !isGuest && hasRunningTasks,
   });
 
   const focusedTaskId = focusedTask?.taskId;
@@ -1805,6 +1898,10 @@ const HomeBentoDashboardPage: React.FC = () => {
       return;
     }
 
+    if (isGuest) {
+      return;
+    }
+
     const nextTicker = normalizeTickerQuery(selectedReport?.meta.stockCode) || normalizeTickerQuery(recentHistoryItems[0]?.stockCode);
     if (!nextTicker) {
       return;
@@ -1816,10 +1913,10 @@ const HomeBentoDashboardPage: React.FC = () => {
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [hasHydratedInitialTicker, pendingAnalysisTicker, recentHistoryItems, selectedReport?.meta.stockCode]);
+  }, [hasHydratedInitialTicker, isGuest, pendingAnalysisTicker, recentHistoryItems, selectedReport?.meta.stockCode]);
 
   useEffect(() => {
-    if (pendingAnalysisTicker) {
+    if (isGuest || pendingAnalysisTicker) {
       return;
     }
 
@@ -1828,7 +1925,7 @@ const HomeBentoDashboardPage: React.FC = () => {
       return;
     }
 
-  }, [activeTicker, pendingAnalysisTicker, selectedTicker]);
+  }, [activeTicker, isGuest, pendingAnalysisTicker, selectedTicker]);
 
   useEffect(() => {
     if (pendingAnalysisTicker && selectedTicker === pendingAnalysisTicker) {
@@ -1884,12 +1981,43 @@ const HomeBentoDashboardPage: React.FC = () => {
     }
 
     setStatusToast(null);
-    clearError();
     setDashboardLoading(true);
     setActiveTicker(normalizedTicker);
     setPendingAnalysisTicker(normalizedTicker);
     setHasHydratedInitialTicker(true);
     setSearchQuery('');
+
+    if (isGuest) {
+      setGuestError(null);
+      setGuestFallbackNotice(null);
+      try {
+        const response = await withFallback(
+          () => publicAnalysisApi.preview({
+            stockCode: normalizedTicker,
+            stockName: undefined,
+            reportType: 'brief',
+          }),
+          {
+            fallback: () => createPublicAnalysisFallbackPreview(normalizedTicker, language),
+          },
+        );
+        setGuestPreview(response.data);
+        setPendingAnalysisTicker(null);
+        if (response.fallback) {
+          setGuestFallbackNotice(language === 'en'
+            ? 'Live preview is temporarily unavailable. Loaded a local snapshot instead.'
+            : '实时预览暂时不可用，已切换到本地快照。');
+        }
+      } catch (err) {
+        setGuestError(getParsedApiError(err));
+        setPendingAnalysisTicker(null);
+      } finally {
+        setDashboardLoading(false);
+      }
+      return;
+    }
+
+    clearError();
 
     try {
       const result = await submitAnalysis({
@@ -2003,21 +2131,29 @@ const HomeBentoDashboardPage: React.FC = () => {
         >
           {isHomeAnalyzing ? (locale === 'en' ? 'Analyzing...' : '分析中...') : (copy?.analyzeButton || standbyCopy.analyzeButton)}
         </button>
-        <button
-          ref={openHistoryDrawerButton.ref}
-          type="button"
-          aria-label={locale === 'en' ? 'History' : '历史记录'}
-          onClick={openHistoryDrawerButton.onClick}
-          onPointerUp={openHistoryDrawerButton.onPointerUp}
-          disabled={isBusy}
-          className="flex h-full shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 text-white/70 transition-all hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/40"
-          data-testid="home-bento-history-drawer-trigger"
-        >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
-          </svg>
-        </button>
+        {!isGuest ? (
+          <button
+            ref={openHistoryDrawerButton.ref}
+            type="button"
+            aria-label={locale === 'en' ? 'History' : '历史记录'}
+            onClick={openHistoryDrawerButton.onClick}
+            onPointerUp={openHistoryDrawerButton.onPointerUp}
+            disabled={isBusy}
+            className="flex h-full shrink-0 items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 text-white/70 transition-all hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:text-white/40"
+            data-testid="home-bento-history-drawer-trigger"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 1 1-3.2-6.9M21 4v5h-5" />
+            </svg>
+          </button>
+        ) : null}
       </form>
+      {guestFallbackNotice ? (
+        <p className="mt-3 text-xs text-white/50">{guestFallbackNotice}</p>
+      ) : null}
+      {guestError ? (
+        <p className="mt-3 text-xs font-medium text-rose-200">{guestError.message}</p>
+      ) : null}
     </div>
   );
 
@@ -2043,7 +2179,31 @@ const HomeBentoDashboardPage: React.FC = () => {
         </div>
       ) : null}
       <main className="w-full flex-1 flex flex-col min-h-0 min-w-0" data-testid="home-bento-main">
-        {(() => {
+        {!shouldRenderDashboardPanels ? (
+          <section
+            className="flex min-h-[min(62vh,620px)] w-full flex-col items-center justify-center gap-8 px-4 text-center"
+            data-testid="guest-home-clean-search"
+          >
+            <div className="flex flex-col items-center gap-5">
+              <img
+                src="/wolfystock-logo-mark.png"
+                alt="WolfyStock"
+                className="h-16 w-16 rounded-full bg-white/[0.03] p-2 shadow-[0_0_38px_rgba(99,102,241,0.28)]"
+              />
+              <div>
+                <h1 className="text-3xl font-black tracking-[0] text-white md:text-5xl">
+                  {locale === 'en' ? 'WolfyStock Command Center' : 'WolfyStock 决策面板'}
+                </h1>
+                <p className="mt-3 text-sm text-white/45">
+                  {locale === 'en' ? 'Enter a ticker to wake the AI decision dashboard.' : '输入股票代码，搜索后生成 AI 决策面板。'}
+                </p>
+              </div>
+            </div>
+            <div className="w-full max-w-3xl">
+              {omnibarModule}
+            </div>
+          </section>
+        ) : (() => {
           const readyCopy = dashboardData;
           return (
             <div
@@ -2084,6 +2244,8 @@ const HomeBentoDashboardPage: React.FC = () => {
                         reason={{ title: readyCopy.decision.reasonTitle, body: readyCopy.decision.reasonBody }}
                         detailLabel={readyCopy.decision.detailLabel}
                         onOpenDetails={() => setActiveDrawer('decision')}
+                        isGuest={isGuest}
+                        guestPaywall={guestPaywall}
                       />
                     </div>
                   )}
@@ -2107,31 +2269,36 @@ const HomeBentoDashboardPage: React.FC = () => {
                   </>
                 ) : (
                   <>
-                    <StrategyCard
-                      title={readyCopy.strategy.title}
-                      subtitle={readyCopy.strategy.subtitle}
-                      metrics={readyCopy.strategy.metrics}
-                      positionLabel={readyCopy.strategy.positionLabel}
-                      positionBody={readyCopy.strategy.positionBody}
-                      detailLabel={readyCopy.strategy.detailLabel}
-                      onOpenDetails={() => setActiveDrawer('strategy')}
-                    />
-                    <div
-                      className="grid w-full grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:flex-1"
-                      data-testid="home-bento-secondary-grid"
-                    >
-                      <TechCard
-                        title={readyCopy.tech.title}
-                        signals={readyCopy.tech.signals}
-                        detailLabel={readyCopy.tech.detailLabel}
-                        onOpenDetails={() => setActiveDrawer('tech')}
-                      />
-                      <FundamentalsCard
-                        title={readyCopy.fundamentals.title}
-                        metrics={readyCopy.fundamentals.metrics}
-                        detailLabel={readyCopy.fundamentals.detailLabel}
-                        onOpenDetails={() => setActiveDrawer('fundamentals')}
-                      />
+                    <div className={isGuest ? 'relative overflow-hidden rounded-[24px]' : undefined}>
+                      <div className={isGuest ? 'pointer-events-none opacity-85' : undefined}>
+                        <StrategyCard
+                          title={readyCopy.strategy.title}
+                          subtitle={readyCopy.strategy.subtitle}
+                          metrics={readyCopy.strategy.metrics}
+                          positionLabel={readyCopy.strategy.positionLabel}
+                          positionBody={readyCopy.strategy.positionBody}
+                          detailLabel={readyCopy.strategy.detailLabel}
+                          onOpenDetails={() => setActiveDrawer('strategy')}
+                        />
+                        <div
+                          className="mt-6 grid w-full grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:flex-1"
+                          data-testid="home-bento-secondary-grid"
+                        >
+                          <TechCard
+                            title={readyCopy.tech.title}
+                            signals={readyCopy.tech.signals}
+                            detailLabel={readyCopy.tech.detailLabel}
+                            onOpenDetails={() => setActiveDrawer('tech')}
+                          />
+                          <FundamentalsCard
+                            title={readyCopy.fundamentals.title}
+                            metrics={readyCopy.fundamentals.metrics}
+                            detailLabel={readyCopy.fundamentals.detailLabel}
+                            onOpenDetails={() => setActiveDrawer('fundamentals')}
+                          />
+                        </div>
+                      </div>
+                      {guestPaywall}
                     </div>
                   </>
                 )}

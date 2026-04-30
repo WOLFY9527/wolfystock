@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
 import GuestHomePage from '../GuestHomePage';
 
 const { previewMock, languageState, useAuthMock } = vi.hoisted(() => ({
@@ -26,27 +27,21 @@ vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
 }));
 
-vi.mock('../../components/StockAutocomplete', () => ({
-  StockAutocomplete: ({
-    value,
-    onChange,
-    placeholder,
-    disabled,
-  }: {
-    value: string;
-    onChange: (value: string) => void;
-    placeholder: string;
-    disabled?: boolean;
-  }) => (
-    <input
-      aria-label="guest-stock-input"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={placeholder}
-      disabled={disabled}
-    />
-  ),
+vi.mock('../../hooks/useTaskStream', () => ({
+  useTaskStream: vi.fn(() => ({
+    isConnected: false,
+    reconnect: vi.fn(),
+    disconnect: vi.fn(),
+  })),
 }));
+
+const renderGuest = (initialEntries = ['/guest']) => render(
+  <MemoryRouter initialEntries={initialEntries}>
+    <UiPreferencesProvider>
+      <GuestHomePage />
+    </UiPreferencesProvider>
+  </MemoryRouter>,
+);
 
 describe('GuestHomePage', () => {
   beforeEach(() => {
@@ -59,7 +54,7 @@ describe('GuestHomePage', () => {
     window.history.replaceState(window.history.state, '', '/zh');
   });
 
-  it('renders the minimalist guest funnel and generates a live preview snapshot', async () => {
+  it('uses the home bento source, hides the dashboard before search, and reveals the paywalled preview after submit', async () => {
     previewMock.mockResolvedValue({
       queryId: 'preview-q1',
       stockCode: 'AAPL',
@@ -82,45 +77,18 @@ describe('GuestHomePage', () => {
       },
     });
 
-    render(
-      <MemoryRouter>
-        <GuestHomePage />
-      </MemoryRouter>,
-    );
+    renderGuest();
 
-    expect(screen.getByTestId('guest-home-page')).toBeInTheDocument();
-    expect(screen.getByTestId('guest-home-page')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'gap-6', 'min-h-0', 'min-w-0');
-    expect(screen.getByTestId('guest-home-page')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar', 'overflow-x-hidden');
+    expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-clean-search')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-grid')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'WolfyStock 决策面板' })).toBeInTheDocument();
-    expect(screen.getAllByText('输入股票代码，唤醒 AI 深度分析...').length).toBeGreaterThan(0);
-    expect(screen.getByTestId('guest-home-search-card')).toHaveClass(
-      'w-full',
-      'bg-white/[0.02]',
-      'backdrop-blur-3xl',
-      'border-white/5',
-      'rounded-[24px]',
-      'p-6',
-      'shadow-2xl',
-    );
-    expect(screen.getByRole('button', { name: '生成简版判断' })).toHaveClass(
-      'shrink-0',
-      'bg-white/[0.05]',
-      'hover:bg-white/[0.1]',
-      'border-white/10',
-      'text-white',
-      'rounded-xl',
-      'px-6',
-      'py-3.5',
-    );
-    expect(screen.queryByTestId('guest-home-grid')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-omnibar')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '分析' })).toBeEnabled();
     expect(screen.queryByTestId('guest-home-frosted-lock')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '生成简版判断' })).toBeEnabled();
-    expect(screen.getByTestId('guest-home-waiting-action')).toHaveClass('text-white/40');
-    expect(screen.getByTestId('guest-home-waiting-trend')).toHaveClass('text-white/40');
-    expect(screen.getByTestId('guest-home-waiting-chart')).toHaveClass('text-white/40');
 
-    fireEvent.change(screen.getByLabelText('guest-stock-input'), { target: { value: 'AAPL' } });
-    fireEvent.click(screen.getByRole('button', { name: '生成简版判断' }));
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'AAPL' } });
+    fireEvent.submit(screen.getByTestId('home-bento-omnibar'));
 
     await waitFor(() => {
       expect(previewMock).toHaveBeenCalledWith({
@@ -130,28 +98,27 @@ describe('GuestHomePage', () => {
       });
     });
 
-    expect(await screen.findByText('趋势延续但需要等待更好的介入点。')).toBeInTheDocument();
-    expect(screen.getByText('等待回踩')).toBeInTheDocument();
-    expect(screen.getAllByText('偏强震荡').length).toBeGreaterThan(0);
-    expect(screen.getByText('72')).toBeInTheDocument();
-    expect(screen.getAllByText('突破观察').length).toBeGreaterThan(0);
-    expect(screen.getByText('AI 归因')).toBeInTheDocument();
+    expect(await screen.findByTestId('home-bento-grid')).toBeInTheDocument();
+    expect(screen.queryByTestId('guest-home-clean-search')).not.toBeInTheDocument();
+    expect(screen.getByText('Apple Inc.')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('7.2');
+    expect(screen.getByText('趋势延续但需要等待更好的介入点。')).toBeInTheDocument();
+    expect(screen.getAllByTestId('guest-home-frosted-lock')).toHaveLength(2);
+    expect(screen.getAllByText('解锁完整 AI 量化策略与深度技术形态解析')).toHaveLength(2);
+    expect(screen.getAllByRole('link', { name: '免费创建账户 (Create Free Account)' })).toHaveLength(2);
+    expect(screen.getByTestId('home-bento-secondary-stack')).toContainElement(screen.getAllByTestId('guest-home-frosted-lock')[1]);
   });
 
-  it('renders the English minimalist guest funnel copy', () => {
+  it('renders the English clean search funnel copy', () => {
     languageState.value = 'en';
     window.history.replaceState(window.history.state, '', '/en');
 
-    render(
-      <MemoryRouter>
-        <GuestHomePage />
-      </MemoryRouter>,
-    );
+    renderGuest(['/en/guest']);
 
-    expect(screen.getByRole('heading', { name: 'WolfyStock Decision Console' })).toBeInTheDocument();
-    expect(screen.getAllByText('Enter a ticker to wake up the AI analysis flow.').length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: 'Generate snapshot' })).toBeInTheDocument();
-    expect(screen.queryByTestId('guest-home-grid')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'WolfyStock Command Center' })).toBeInTheDocument();
+    expect(screen.getByText('Enter a ticker to wake the AI decision dashboard.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Analyze' })).toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-grid')).not.toBeInTheDocument();
   });
 
   it('falls back to a local snapshot when the live preview API rate-limits', async () => {
@@ -159,20 +126,16 @@ describe('GuestHomePage', () => {
     window.history.replaceState(window.history.state, '', '/en');
     previewMock.mockRejectedValueOnce(new Error('429 RateLimitError: upstream overloaded'));
 
-    render(
-      <MemoryRouter>
-        <GuestHomePage />
-      </MemoryRouter>,
-    );
+    renderGuest(['/en/guest']);
 
-    fireEvent.change(screen.getByLabelText('guest-stock-input'), { target: { value: 'NVDA' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate snapshot' }));
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'NVDA' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
 
     expect(await screen.findByText('Live preview is temporarily unavailable. Loaded a local snapshot instead.')).toBeInTheDocument();
-    expect(await screen.findByText('NVIDIA')).toBeInTheDocument();
-    expect(screen.getByText('Keep holding')).toBeInTheDocument();
-    expect(screen.getByTestId('guest-home-waiting-trend')).toHaveTextContent('Trend up');
-    expect(screen.getByText('84')).toBeInTheDocument();
+    expect(await screen.findByText('NVIDIA Corporation')).toBeInTheDocument();
+    expect(screen.getByText('The local snapshot keeps the leadership trend intact, with momentum still driving the short-term structure.')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('8.4');
+    expect(within(screen.getByTestId('home-bento-secondary-stack')).getByTestId('guest-home-frosted-lock')).toBeInTheDocument();
   });
 
   it('redirects signed-in users away from /guest and back to home', async () => {
@@ -190,7 +153,7 @@ describe('GuestHomePage', () => {
     render(
       <MemoryRouter initialEntries={['/guest']}>
         <Routes>
-          <Route path="/guest" element={<><GuestHomePage /><LocationProbe /></>} />
+          <Route path="/guest" element={<><UiPreferencesProvider><GuestHomePage /></UiPreferencesProvider><LocationProbe /></>} />
           <Route path="/" element={<><div>home workspace</div><LocationProbe /></>} />
         </Routes>
       </MemoryRouter>,

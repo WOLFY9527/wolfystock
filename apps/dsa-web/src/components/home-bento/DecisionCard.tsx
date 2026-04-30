@@ -43,6 +43,8 @@ type DecisionCardProps = {
   sector?: string;
   summary: string;
   ticker: string;
+  isGuest?: boolean;
+  guestPaywall?: React.ReactNode;
 };
 
 function resolveSignalActionKey(signalLabel: string, tone: SignalTone): SignalActionKey {
@@ -194,6 +196,8 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   sector,
   summary,
   ticker,
+  isGuest = false,
+  guestPaywall,
 }) => {
   const {
     ref: openDetailsButtonRef,
@@ -320,14 +324,17 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             </p>
           </div>
 
-          <div className="flex flex-col rounded-[28px] border border-white/[0.06] bg-black/10 px-5 py-4 backdrop-blur-xl md:px-6">
+          <div className="relative flex flex-col overflow-hidden rounded-[28px] border border-white/[0.06] bg-black/10 px-5 py-4 backdrop-blur-xl md:px-6">
             <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-3">
               <Label micro className="text-white/30">{isEnglish ? 'SUPPORTING INDICATORS' : '量化佐证指标'}</Label>
               <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/28">
                 {isEnglish ? 'SIMULATED FEED' : '模拟信号流'}
               </span>
             </div>
-            <div data-testid="home-bento-decision-support-grid">
+            <div
+              className={isGuest ? 'pointer-events-none opacity-80' : undefined}
+              data-testid="home-bento-decision-support-grid"
+            >
               {supportingIndicators.map((indicator) => (
                 <div
                   key={indicator.label}
@@ -348,6 +355,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
                 </div>
               ))}
             </div>
+            {isGuest ? guestPaywall : null}
           </div>
         </div>
       </div>

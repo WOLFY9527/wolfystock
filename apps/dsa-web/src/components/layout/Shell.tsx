@@ -210,7 +210,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         <div
           className={`shell-content-frame flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isChatRoute ? ' shell-content-frame--chat' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}${isSystemControlRoute ? ' shell-content-frame--system-control' : ''}`}
         >
-          <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isChatRoute ? ' p-0 shell-main-column--chat' : isSystemControlRoute ? ' p-0 shell-main-column--system-control' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
+          <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isChatRoute ? ' p-0 shell-main-column--chat' : isSystemControlRoute ? ' p-0 shell-main-column--system-control' : isMarketOverviewRoute ? ' max-w-[1600px] mx-auto px-4 pt-6 pb-12 md:px-6' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
             <div key={location.pathname} className={`theme-page-transition flex h-full min-h-0 min-w-0 w-full flex-col${isChatRoute ? ' theme-page-transition--chat' : ''}${isSystemControlRoute ? ' theme-page-transition--system-control' : ''}`}>
               {children ?? <Outlet />}
             </div>
