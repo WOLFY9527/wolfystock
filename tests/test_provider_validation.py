@@ -31,7 +31,7 @@ class TestProviderValidation(unittest.TestCase):
             _Response(200, {"symbol": "MSFT", "historical": [{"close": 399.1}]}),
         ]
 
-        with patch("src.providers.validation.requests.request", side_effect=responses):
+        with patch("src.providers.http.requests.request", side_effect=responses):
             result = validate_provider_connection("fmp", "MSFT", credential="full-secret-fmp-key")
 
         self.assertEqual(result.status, ProviderStatus.SUCCESS)
@@ -44,7 +44,7 @@ class TestProviderValidation(unittest.TestCase):
             _Response(403, {"Error Message": "Forbidden apikey=full-secret-fmp-key"}),
         ]
 
-        with patch("src.providers.validation.requests.request", side_effect=responses):
+        with patch("src.providers.http.requests.request", side_effect=responses):
             result = validate_provider_connection("fmp", "MSFT", credential="full-secret-fmp-key")
 
         self.assertEqual(result.status, ProviderStatus.SUCCESS)
@@ -59,7 +59,7 @@ class TestProviderValidation(unittest.TestCase):
             _Response(403, {"Error Message": "Forbidden"}),
         ]
 
-        with patch("src.providers.validation.requests.request", side_effect=responses):
+        with patch("src.providers.http.requests.request", side_effect=responses):
             result = validate_provider_connection("fmp", "MSFT", credential="full-secret-fmp-key")
 
         self.assertEqual(result.status, ProviderStatus.FAILED)
@@ -72,7 +72,7 @@ class TestProviderValidation(unittest.TestCase):
         self.assertEqual(result.reason, ProviderReason.MISSING_API_KEY)
 
     def test_timeout_failed(self) -> None:
-        with patch("src.providers.validation.requests.request", side_effect=requests.exceptions.Timeout):
+        with patch("src.providers.http.requests.request", side_effect=requests.exceptions.Timeout):
             result = validate_provider_connection("fmp", "MSFT", credential="full-secret-fmp-key")
 
         self.assertEqual(result.status, ProviderStatus.FAILED)
@@ -90,7 +90,7 @@ class TestProviderValidation(unittest.TestCase):
             _Response(403, {"Error Message": "Forbidden"}),
         ]
 
-        with patch("src.providers.validation.requests.request", side_effect=responses):
+        with patch("src.providers.http.requests.request", side_effect=responses):
             result = validate_provider_connection("fmp", "MSFT", credential="full-secret-fmp-key")
 
         serialized = json.dumps(result.to_dict())

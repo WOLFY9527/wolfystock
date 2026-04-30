@@ -7,9 +7,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
 
-import requests
-
-from src.providers.errors import provider_failed_result_from_exception, reason_from_http_status
+from src.providers.http import build_provider_check, provider_request_json
 from src.providers.types import (
     ProviderCapability,
     ProviderReason,
@@ -19,7 +17,6 @@ from src.providers.types import (
 from src.utils.security import sanitize_message
 
 _REMOTE_VALIDATION_TIMEOUT_SECONDS = 5.0
-_REMOTE_VALIDATION_USER_AGENT = "WolfyStock-Provider-Validation/1.0"
 _VALIDATION_CAPABILITY = ProviderCapability.DATA_SOURCE_VALIDATION
 
 
@@ -346,112 +343,64 @@ def _run_remote_json_check(
     method: str = "GET",
     json_payload: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    started_at = time.perf_counter()
-    response = None
-    try:
-        response = requests.request(
-            method,
-            url,
-            params=params,
-            json=json_payload,
-            headers={
-                "User-Agent": _REMOTE_VALIDATION_USER_AGENT,
-                "Accept": "application/json, text/plain;q=0.9, */*;q=0.8",
-            },
-            timeout=timeout,
+    result = provider_request_json(
+        provider="validation",
+        capability=_VALIDATION_CAPABILITY,
+        url=url,
+        params=params,
+        method=method,
+        json_payload=json_payload,
+        timeout_seconds=timeout,
+    )
+    if not result.ok:
+        message = _validation_transport_message(result, name=name, timeout=timeout)
+        return build_provider_check(
+            result=result,
+            name=name,
+            endpoint=endpoint,
+            success_message=success_message,
+            failure_message=message,
         )
-        duration_ms = int((time.perf_counter() - started_at) * 1000)
-        status_code = int(getattr(response, "status_code", 0) or 0)
-        if status_code != 200:
-            reason = reason_from_http_status(status_code) or ProviderReason.UNKNOWN_ERROR
-            return {
-                "name": name,
-                "endpoint": endpoint,
-                "ok": False,
-                "http_status": status_code,
-                "duration_ms": duration_ms,
-                "error_type": _reason_to_error_type(reason, status_code),
-                "reason": reason.value,
-                "message": _http_status_message(status_code, name),
-            }
 
-        try:
-            data = response.json()
-        except ValueError:
-            return {
-                "name": name,
-                "endpoint": endpoint,
-                "ok": False,
-                "http_status": status_code,
-                "duration_ms": duration_ms,
-                "error_type": "InvalidPayload",
-                "reason": ProviderReason.INVALID_PAYLOAD.value,
-                "message": f"{name} endpoint 返回非 JSON 响应。",
-            }
-
-        if validator(data):
-            return {
-                "name": name,
-                "endpoint": endpoint,
-                "ok": True,
-                "http_status": status_code,
-                "duration_ms": duration_ms,
-                "error_type": None,
-                "reason": None,
-                "message": success_message,
-            }
-
-        reason, message = _reason_from_payload(
-            data,
-            secrets=_request_secret_values(params=params, json_payload=json_payload),
-        )
+    data = result.data
+    if validator(data):
         return {
             "name": name,
             "endpoint": endpoint,
-            "ok": False,
-            "http_status": status_code,
-            "duration_ms": duration_ms,
-            "error_type": _reason_to_error_type(reason, status_code),
-            "reason": reason.value,
-            "message": message or failure_message,
-        }
-    except requests.exceptions.Timeout as exc:
-        result = provider_failed_result_from_exception(
-            exc,
-            provider="validation",
-            capability=_VALIDATION_CAPABILITY,
-            durationMs=int((time.perf_counter() - started_at) * 1000),
-        )
-        return {
-            "name": name,
-            "endpoint": endpoint,
-            "ok": False,
+            "ok": True,
             "http_status": result.httpStatus,
             "duration_ms": result.durationMs,
-            "error_type": "Timeout",
-            "reason": ProviderReason.TIMEOUT.value,
-            "message": f"{name} endpoint 在 {int(timeout)} 秒内未响应。",
+            "error_type": None,
+            "reason": None,
+            "message": success_message,
         }
-    except requests.exceptions.RequestException as exc:
-        result = provider_failed_result_from_exception(
-            exc,
-            provider="validation",
-            capability=_VALIDATION_CAPABILITY,
-            durationMs=int((time.perf_counter() - started_at) * 1000),
-        )
-        return {
-            "name": name,
-            "endpoint": endpoint,
-            "ok": False,
-            "http_status": result.httpStatus,
-            "duration_ms": result.durationMs,
-            "error_type": "NetworkError",
-            "reason": result.reason.value if hasattr(result.reason, "value") else str(result.reason),
-            "message": "endpoint 请求失败，请检查网络、代理或 provider 服务状态。",
-        }
-    finally:
-        if response is not None and callable(getattr(response, "close", None)):
-            response.close()
+
+    reason, message = _reason_from_payload(
+        data,
+        secrets=_request_secret_values(params=params, json_payload=json_payload),
+    )
+    return {
+        "name": name,
+        "endpoint": endpoint,
+        "ok": False,
+        "http_status": result.httpStatus,
+        "duration_ms": result.durationMs,
+        "error_type": _reason_to_error_type(reason, result.httpStatus),
+        "reason": reason.value,
+        "message": message or failure_message,
+    }
+
+
+def _validation_transport_message(result: ProviderResult, *, name: str, timeout: float) -> str:
+    if result.reason == ProviderReason.TIMEOUT:
+        return f"{name} endpoint 在 {int(timeout)} 秒内未响应。"
+    if result.reason == ProviderReason.INVALID_PAYLOAD:
+        return f"{name} endpoint 返回非 JSON 响应。"
+    if result.reason == ProviderReason.NO_DATA:
+        return "provider 返回空响应。"
+    if result.httpStatus:
+        return _http_status_message(int(result.httpStatus), name)
+    return "endpoint 请求失败，请检查网络、代理或 provider 服务状态。"
 
 
 def _reason_from_payload(data: Any, *, secrets: list[str] | None = None) -> tuple[ProviderReason, str]:
