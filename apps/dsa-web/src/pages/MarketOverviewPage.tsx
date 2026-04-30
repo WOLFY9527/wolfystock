@@ -1531,31 +1531,37 @@ const MarketOverviewPage: React.FC = () => {
       className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 bg-[#030303] text-white"
     >
       <div data-testid="market-overview-workbench" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6">
-        <div data-testid="market-overview-category-tabs" className="w-full overflow-x-auto rounded-xl border border-white/8 bg-white/[0.02] p-1 backdrop-blur-md [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex w-max min-w-full gap-2">
-            {categoryTabs.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                aria-pressed={activeCategory === tab.key}
-                onClick={() => setActiveCategory(tab.key)}
-                className={`whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
-                  activeCategory === tab.key
-                    ? 'bg-white/10 text-white shadow-sm'
-                    : 'bg-transparent text-white/45 hover:text-white/75'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+        <div data-testid="market-overview-top-stack" className="flex w-full min-w-0 flex-col gap-4">
+          <div
+            data-testid="market-overview-category-tabs"
+            data-selector-position="static-safe"
+            className="w-full overflow-x-auto rounded-xl border border-white/8 bg-white/[0.02] p-1 backdrop-blur-md [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            <div className="flex w-max min-w-full gap-2">
+              {categoryTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  aria-pressed={activeCategory === tab.key}
+                  onClick={() => setActiveCategory(tab.key)}
+                  className={`whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
+                    activeCategory === tab.key
+                      ? 'bg-white/10 text-white shadow-sm'
+                      : 'bg-transparent text-white/45 hover:text-white/75'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
+          <CrossAssetHeroRibbon anchors={heroAnchors} />
+          <MarketOverviewStatusStrip
+            temperature={<MarketTemperatureCompactSummary data={panels.temperature} />}
+            dataQuality={<DataQualityCompactSummary summary={dataQuality} />}
+            briefing={<MarketBriefingCompactSummary data={panels.briefing} />}
+          />
         </div>
-        <CrossAssetHeroRibbon anchors={heroAnchors} />
-        <MarketOverviewStatusStrip
-          temperature={<MarketTemperatureCompactSummary data={panels.temperature} />}
-          dataQuality={<DataQualityCompactSummary summary={dataQuality} />}
-          briefing={<MarketBriefingCompactSummary data={panels.briefing} />}
-        />
         {renderDeterministicGrid()}
       </div>
     </div>

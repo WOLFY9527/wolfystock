@@ -73,6 +73,10 @@ function metaText(meta?: Partial<MarketDataMeta>): string[] {
   return parts;
 }
 
+function metadataTitle(parts: string[], warning?: string | null, hoverDetails?: string[] | null): string | undefined {
+  return [...parts, warning, ...(hoverDetails || [])].filter(Boolean).join(' · ') || undefined;
+}
+
 export const MarketOverviewSparkline: React.FC<{ values?: number[]; tone?: string; className?: string }> = ({
   values,
   tone = 'text-white/35',
@@ -170,9 +174,9 @@ export const MarketOverviewDataRow: React.FC<{
       : 'text-white/35';
 
   return (
-    <article className="group flex min-h-12 items-center gap-3 border-b border-white/[0.045] py-2.5 last:border-b-0">
-      <div className="flex w-32 shrink-0 items-center gap-2">
-        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full bg-current shadow-[0_0_12px_currentColor]', tone)} aria-hidden="true" />
+    <article className="group grid min-h-12 grid-cols-[minmax(0,1fr)_92px_minmax(92px,max-content)] items-center gap-x-3 gap-y-1 border-b border-white/[0.045] py-2.5 last:border-b-0">
+      <div className="col-start-1 row-start-1 flex min-w-0 items-start gap-2">
+        <span className={cn('mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-current shadow-[0_0_12px_currentColor]', tone)} aria-hidden="true" />
         <div className="min-w-0">
           <p className="truncate text-[10px] font-semibold tracking-widest text-white/65">{displayLabel.primary}</p>
           {displayLabel.secondary ? (
@@ -180,30 +184,29 @@ export const MarketOverviewDataRow: React.FC<{
           ) : null}
         </div>
       </div>
-      <div className="w-24 shrink-0">
+      {(item.freshness || item.sourceLabel || item.warning || item.hoverDetails?.length) ? (
+        <div
+          data-testid="market-overview-quote-metadata"
+          data-metadata-position="under-label"
+          title={metadataTitle(itemDetails, item.warning, item.hoverDetails)}
+          className="col-start-1 row-start-2 flex min-w-0 max-w-full items-center gap-x-2 overflow-hidden whitespace-nowrap pl-3.5 text-[9px] text-white/32"
+        >
+          <DataFreshnessBadge freshness={freshness} className="shrink-0 px-1.5 text-[9px]" />
+          {itemDetails.length ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{itemDetails.join(' · ')}</span> : null}
+          {item.warning ? <span className="shrink-0 leading-4 text-amber-200/70">{item.warning}</span> : null}
+          {item.hoverDetails?.map((detail, index) => (
+            <span key={`${detail}-${index}`} className="shrink-0 leading-4 text-white/28">{detail}</span>
+          ))}
+        </div>
+      ) : null}
+      <div className="col-start-2 row-span-2 row-start-1 w-[92px] shrink-0 self-center">
         <MarketOverviewSparkline values={item.trend} tone={sparklineTone} className="h-8" />
       </div>
-      <div className="flex min-w-0 flex-1 flex-col items-end text-right font-mono">
+      <div data-testid="market-overview-quote-value" className="col-start-3 row-span-2 row-start-1 min-w-[92px] text-right font-mono tabular-nums">
         <p className={cn('truncate text-lg font-semibold leading-none text-white', valueClassName)}>{formatMetricValue(item, valueDigitsBelowHundred)}</p>
-        <div className="mt-0.5 flex items-center justify-end">
-          <span className={cn('text-[11px] font-bold leading-none', tone)}>
-            {formatChangeSummary(item, neutralLabel)}
-          </span>
-        </div>
-        {item.hoverDetails?.length ? (
-          <div className="mt-1 flex flex-wrap justify-end gap-x-2 gap-y-1 text-[9px] uppercase tracking-widest text-white/0 transition-opacity duration-150 group-hover:text-white/28">
-            {item.hoverDetails.map((detail, index) => (
-              <span key={`${detail}-${index}`}>{detail}</span>
-            ))}
-          </div>
-        ) : null}
-        {item.freshness || item.sourceLabel || item.warning ? (
-          <div className="mt-1 flex flex-wrap justify-end gap-1.5 text-[9px] text-white/30">
-            <DataFreshnessBadge freshness={freshness} className="px-1.5 text-[9px]" />
-            {itemDetails.length ? <span className="leading-4">{itemDetails.join(' · ')}</span> : null}
-            {item.warning ? <span className="w-full leading-4 text-amber-200/70">{item.warning}</span> : null}
-          </div>
-        ) : null}
+        <p className={cn('mt-1 truncate text-[11px] font-bold leading-none', tone)}>
+          {formatChangeSummary(item, neutralLabel)}
+        </p>
       </div>
     </article>
   );
@@ -229,9 +232,9 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
     <article
       data-testid="market-overview-dense-quote-item"
       data-quote-item-layout="compact-grid"
-      className="grid min-w-0 grid-cols-[minmax(0,1fr)_88px_minmax(86px,max-content)] items-center gap-x-3 gap-y-2 rounded-lg border border-white/[0.055] bg-white/[0.025] px-3 py-2.5"
+      className="grid min-w-0 grid-cols-[minmax(0,1fr)_92px_minmax(90px,max-content)] items-center gap-x-3 gap-y-1 rounded-lg border border-white/[0.055] bg-white/[0.025] px-3 py-2"
     >
-      <div className="min-w-0">
+      <div className="col-start-1 row-start-1 min-w-0">
         <div className="flex min-w-0 items-center gap-2">
           <span className={cn('size-1.5 shrink-0 rounded-full bg-current shadow-[0_0_12px_currentColor]', tone)} aria-hidden="true" />
           <p className="min-w-0 truncate text-xs font-semibold text-white/78">{displayLabel.primary}</p>
@@ -241,24 +244,29 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
         ) : null}
       </div>
 
-      <div data-testid="market-overview-dense-quote-sparkline" className="w-[88px] shrink-0 self-center">
+      <div
+        data-testid="market-overview-quote-metadata"
+        data-metadata-position="under-label"
+        title={metadataTitle(itemDetails, item.warning, item.hoverDetails)}
+        className="col-start-1 row-start-2 flex min-w-0 max-w-full items-center gap-x-2 overflow-hidden whitespace-nowrap pl-3.5 text-[9px] text-white/32"
+      >
+        <DataFreshnessBadge freshness={freshness} className="shrink-0 px-1.5 text-[9px]" />
+        {itemDetails.length ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{itemDetails.join(' · ')}</span> : null}
+        {item.warning ? <span className="shrink-0 leading-4 text-amber-200/70">{item.warning}</span> : null}
+        {item.hoverDetails?.map((detail, index) => (
+          <span key={`${detail}-${index}`} className="shrink-0 leading-4 text-white/28">{detail}</span>
+        ))}
+      </div>
+
+      <div data-testid="market-overview-dense-quote-sparkline" className="col-start-2 row-span-2 row-start-1 w-[92px] shrink-0 self-center">
         <MarketOverviewSparkline values={item.trend} tone={sparklineTone} className="h-8" />
       </div>
 
-      <div className="min-w-[86px] text-right font-mono tabular-nums">
+      <div data-testid="market-overview-quote-value" className="col-start-3 row-span-2 row-start-1 min-w-[90px] text-right font-mono tabular-nums">
         <p className="truncate text-base font-semibold leading-none text-white">{formatMetricValue(item, valueDigitsBelowHundred)}</p>
         <p className={cn('mt-1 truncate text-[11px] font-bold leading-none', tone)}>
           {formatChangeSummary(item, neutralLabel)}
         </p>
-      </div>
-
-      <div className="col-span-3 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-3.5 text-[9px] text-white/32">
-        <DataFreshnessBadge freshness={freshness} className="px-1.5 text-[9px]" />
-        {itemDetails.length ? <span className="min-w-0 truncate leading-4">{itemDetails.join(' · ')}</span> : null}
-        {item.warning ? <span className="w-full leading-4 text-amber-200/70">{item.warning}</span> : null}
-        {item.hoverDetails?.map((detail, index) => (
-          <span key={`${detail}-${index}`} className="leading-4 text-white/28">{detail}</span>
-        ))}
       </div>
     </article>
   );

@@ -651,6 +651,9 @@ describe('MarketOverviewPage', () => {
     expect(shell.className).not.toContain('max-w-6xl');
     expect(screen.getByTestId('market-overview-category-tabs')).toHaveClass('w-full', 'overflow-x-auto', 'bg-white/[0.02]', 'backdrop-blur-md');
     expect(screen.getByTestId('market-overview-category-tabs')).not.toHaveClass('sticky', 'top-0', 'z-20', '-mx-4');
+    expect(screen.getByTestId('market-overview-top-stack')).toContainElement(screen.getByTestId('market-overview-category-tabs'));
+    expect(screen.getByTestId('market-overview-top-stack').firstElementChild).toBe(screen.getByTestId('market-overview-category-tabs'));
+    expect(screen.getByTestId('market-overview-category-tabs')).toHaveAttribute('data-selector-position', 'static-safe');
     expect(shell).toContainElement(screen.getByTestId('market-overview-category-tabs'));
     expect(shell).toContainElement(screen.getByTestId('market-overview-workbench'));
     expect(screen.getByTestId('market-overview-status-strip')).toContainElement(screen.getByTestId('market-overview-temperature-summary'));
@@ -687,6 +690,28 @@ describe('MarketOverviewPage', () => {
     expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('data-freshness-badge-delayed').length).toBeGreaterThan(0);
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
+  });
+
+  it('places quote metadata under the label area instead of a right-side stack', async () => {
+    vi.mocked(marketOverviewApi.getIndices).mockResolvedValueOnce(denseQuotePanel('IndexTrendsCard', [
+      quoteItem('SPX', 'S&P 500', 5120.25, 0.42),
+      quoteItem('NDX', 'Nasdaq 100', 18220.42, 0.68),
+    ]));
+
+    render(<MarketOverviewPage />);
+
+    const indicesCard = await screen.findByTestId('market-overview-card-indices');
+    const firstQuote = within(indicesCard).getAllByTestId('market-overview-dense-quote-item')[0];
+    const metadata = within(firstQuote).getByTestId('market-overview-quote-metadata');
+    const valueBlock = within(firstQuote).getByTestId('market-overview-quote-value');
+
+    expect(metadata).toHaveAttribute('data-metadata-position', 'under-label');
+    expect(metadata).toHaveClass('col-start-1', 'row-start-2', 'whitespace-nowrap', 'overflow-hidden');
+    expect(metadata).not.toHaveClass('col-span-3', 'justify-end');
+    expect(metadata).toHaveTextContent(/Yahoo Finance/);
+    expect(metadata).toHaveTextContent(/行情时间/);
+    expect(metadata).toHaveTextContent(/更新/);
+    expect(valueBlock).toHaveClass('col-start-3', 'row-span-2', 'text-right');
   });
 
   it('downgrades unreliable market temperature and briefing copy', async () => {
@@ -812,7 +837,7 @@ describe('MarketOverviewPage', () => {
     expect(firstQuote).toHaveAttribute('data-quote-item-layout', 'compact-grid');
     expect(firstQuote).toHaveClass('grid', 'min-w-0');
     const sparklineSlot = within(firstQuote).getByTestId('market-overview-dense-quote-sparkline');
-    expect(sparklineSlot.className).toContain('w-[88px]');
+    expect(sparklineSlot.className).toContain('w-[92px]');
     expect(sparklineSlot.className).not.toContain('flex-1');
     expect(within(firstQuote).getByText('标普500')).toBeInTheDocument();
     expect(within(firstQuote).getByText('SPX')).toBeInTheDocument();
