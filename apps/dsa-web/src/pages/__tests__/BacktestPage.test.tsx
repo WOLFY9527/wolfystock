@@ -909,10 +909,10 @@ describe('BacktestPage', () => {
     expect(screen.getByLabelText('回测区间开始')).toBeInTheDocument();
     expect(screen.getByLabelText('回测区间结束')).toBeInTheDocument();
     expect(screen.getByLabelText('初始资金')).toBeInTheDocument();
-    expect(screen.getByLabelText('对比基准')).toBeInTheDocument();
+    expect(screen.getByLabelText('对比基准')).toHaveClass('min-h-[44px]', 'leading-6');
     expect(screen.getByLabelText('滑点')).toBeInTheDocument();
     expect(screen.getByLabelText('手续费 (bp)')).toBeInTheDocument();
-    expect(screen.getByLabelText('策略模板')).toBeInTheDocument();
+    expect(screen.getByLabelText('策略模板')).toHaveClass('min-h-[44px]', 'leading-6');
     expect(screen.queryByLabelText('策略文本')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '执行回测任务' })).toHaveClass('bg-emerald-500/10', 'text-emerald-400', 'rounded-lg');
   });

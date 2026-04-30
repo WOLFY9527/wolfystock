@@ -41,7 +41,7 @@ type NormalBacktestWorkspaceProps = {
   runError: ParsedApiError | null;
 };
 
-const FIELD_CLASS = 'w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
+const FIELD_CLASS = 'w-full min-w-0 min-h-[44px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm leading-6 text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
 const LABEL_CLASS = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
 const PRIMARY_CTA_CLASS = 'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-5 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/50 hover:bg-emerald-500/20 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-70';
 

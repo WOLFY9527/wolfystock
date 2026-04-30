@@ -666,7 +666,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
     setPresets(deleteRuleBacktestPreset(presetId));
   }, []);
 
-  const compactInputClass = 'w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
+  const compactInputClass = 'w-full min-w-0 min-h-[44px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm leading-6 text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
   const compactFieldLabelClass = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
   const denseCardClass = 'h-full bg-white/[0.02] border border-white/5 rounded-[24px] p-6 flex flex-col gap-5';
   const subCardClass = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6';

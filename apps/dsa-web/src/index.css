@@ -6627,9 +6627,11 @@ body::after {
 .backtest-control-rail select,
 .backtest-control-rail input,
 .backtest-control-rail textarea {
+  min-height: 2.75rem;
   border-color: transparent;
   background: rgb(255 255 255 / 0.02);
   box-shadow: none;
+  line-height: 1.5;
 }
 
 .backtest-control-rail .product-command-input:focus,
@@ -15781,6 +15783,7 @@ html[lang='en'][data-theme='spacex'] .report-price-chart[data-language='en'] .th
   background: #050505;
   color: rgba(255, 255, 255, 0.96);
   padding: 0.75rem 1rem;
+  line-height: 1.5;
   transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 
@@ -15894,12 +15897,14 @@ html[lang='en'][data-theme='spacex'] .report-price-chart[data-language='en'] .th
 .backtest-v1-stage :is(input:not([type='checkbox']), select, textarea) {
   width: 100%;
   min-width: 0;
+  min-height: 2.75rem;
   border-radius: 0.5rem;
   border: 1px solid rgb(255 255 255 / 0.1);
   background: rgb(255 255 255 / 0.02);
   color: rgb(255 255 255);
-  padding: 0.625rem 0.75rem;
+  padding: 0.6875rem 0.75rem;
   font-size: 0.875rem;
+  line-height: 1.5;
   outline: none;
   transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease;
 }
