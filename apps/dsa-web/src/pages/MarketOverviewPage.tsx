@@ -1337,6 +1337,10 @@ const MarketOverviewPage: React.FC = () => {
 
   const renderCard = (cardKey: CardKey, rank: number, rail: 'primary' | 'side' | 'fallback' = 'primary') => {
     const layoutMeta = CARD_LAYOUT_META[cardKey];
+    const shouldSpanPrimaryRail = rail === 'primary' && (
+      layoutMeta.size === 'wide'
+      || (activeCategory === 'global' && cardKey === 'macro')
+    );
     return (
     <div
       key={cardKey}
@@ -1345,7 +1349,7 @@ const MarketOverviewPage: React.FC = () => {
       data-market-card-size={layoutMeta.size}
       className={cn(
         'min-w-0 w-full',
-        rail === 'primary' && layoutMeta.size === 'wide' ? 'lg:col-span-2' : '',
+        shouldSpanPrimaryRail ? 'lg:col-span-2 2xl:col-span-3' : '',
       )}
     >
       {cardNodes[cardKey]}
@@ -1356,7 +1360,7 @@ const MarketOverviewPage: React.FC = () => {
   const renderCardGrid = (rankOrder: CardKey[], rail: 'primary' | 'side' | 'fallback') => (
     <div className={cn(
       'grid w-full grid-cols-1 gap-4',
-      rail === 'primary' ? 'lg:grid-cols-2' : '',
+      rail === 'primary' ? 'lg:grid-cols-2 2xl:grid-cols-3' : '',
       rail === 'fallback' ? 'lg:grid-cols-2 xl:grid-cols-1' : '',
     )}>
       {rankOrder.map((cardKey, index) => renderCard(cardKey, index, rail))}
@@ -1377,15 +1381,15 @@ const MarketOverviewPage: React.FC = () => {
 
   const renderDeterministicGrid = () => (
     <main data-testid="market-overview-main-grid" className="grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
-      <section data-testid="market-overview-primary-rail" className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2 xl:col-span-8">
+      <section data-testid="market-overview-primary-rail" className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2 xl:col-span-9 2xl:grid-cols-3">
         {showCategoryEmptyState ? (
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 2xl:col-span-3">
             <CategoryEmptyState onShowPending={() => setFallbackSectionExpanded(true)} />
           </div>
         ) : null}
         {primaryOrder.map((cardKey, index) => renderCard(cardKey, index, 'primary'))}
       </section>
-      <aside data-testid="market-overview-side-rail" className="flex min-w-0 flex-col gap-6 xl:col-span-4">
+      <aside data-testid="market-overview-side-rail" className="flex min-w-0 flex-col gap-6 xl:col-span-3">
         <CategoryCoverageSummary label={activeCategoryLabel} summary={coverageSummary} />
         {secondaryOrder.length > 0 ? renderCardGrid(secondaryOrder, 'side') : null}
         {renderFallbackSection()}
@@ -1396,8 +1400,8 @@ const MarketOverviewPage: React.FC = () => {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col bg-[#030303] text-white">
       <div className="flex-1 overflow-y-auto pb-12 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <section data-testid="market-overview-page-container" className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-          <div className="sticky top-0 z-10 -mx-4 overflow-x-auto border-b border-white/5 bg-[#030303]/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <section data-testid="market-overview-shell" className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 2xl:px-10">
+          <div data-testid="market-overview-category-tabs" className="sticky top-0 z-10 -mx-4 overflow-x-auto border-b border-white/5 bg-[#030303]/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 2xl:-mx-10 2xl:px-10 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex w-max min-w-full gap-2 rounded-lg bg-white/[0.03] p-1">
               {categoryTabs.map((tab) => (
                 <button
