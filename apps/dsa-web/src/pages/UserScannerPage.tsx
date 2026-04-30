@@ -1,6 +1,14 @@
-import type React from 'react';
+import React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { PanelRightOpen, Play } from 'lucide-react';
+import {
+  ArrowDownUp,
+  ChevronDown,
+  ChevronUp,
+  LayoutGrid,
+  PanelRightOpen,
+  Play,
+  Table2,
+} from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { scannerApi } from '../api/scanner';
 import { ApiErrorAlert, Drawer, Pagination, PillBadge, SectionShell } from '../components/common';
@@ -11,7 +19,17 @@ import {
   useSafariRenderReady,
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
-import type { ScannerRunDetail, ScannerRunHistoryItem } from '../types/scanner';
+import type {
+  ScannerCandidate,
+  ScannerCandidateOutcome,
+  ScannerCoverageSummary,
+  ScannerLabeledValue,
+  ScannerProviderDiagnostics,
+  ScannerReviewSummary,
+  ScannerRunDetail,
+  ScannerRunHistoryItem,
+  ScannerWatchlistComparison,
+} from '../types/scanner';
 import {
   getScannerDetailOptions,
   getScannerProfileOptions,
@@ -22,80 +40,10 @@ import {
 const HISTORY_PAGE_SIZE = 8;
 
 type PillOption = { value: string; label: string };
-type TacticalTagTone = 'indigo' | 'neutral';
-type TacticalTag = { name: string; description: string; tone: TacticalTagTone };
-type ScannerResultContext = {
-  companyName: string;
-  aiScore?: number;
-  tags: TacticalTag[];
-};
-
-const SCANNER_RESULT_CONTEXT: Record<string, ScannerResultContext> = {
-  AVGO: {
-    companyName: 'Broadcom Inc.',
-    aiScore: 94,
-    tags: [
-      { name: '半导体设备', description: '全球领先的有线和无线通信半导体公司。', tone: 'neutral' },
-      { name: 'AI 算力基建', description: '定制化 AI 芯片与网络交换芯片的核心供应商。', tone: 'indigo' },
-    ],
-  },
-  NVDA: {
-    companyName: 'NVIDIA Corp.',
-    aiScore: 97,
-    tags: [
-      { name: 'GPU 核心', description: '垄断全球 AI 训练端算力芯片市场。', tone: 'neutral' },
-      { name: '算力霸主', description: '数据中心业务维持三位数增长，是行业绝对龙头。', tone: 'indigo' },
-    ],
-  },
-  AMD: {
-    companyName: 'Advanced Micro Devices',
-    aiScore: 88,
-    tags: [
-      { name: '边缘推理', description: '终端侧 AI 推理正在扩散，部署速度与性价比优势明显。', tone: 'indigo' },
-      { name: 'GPU 替代链', description: '在训练与推理两端持续争夺高性能算力份额。', tone: 'neutral' },
-    ],
-  },
-  AMZN: {
-    companyName: 'Amazon.com Inc.',
-    aiScore: 84,
-    tags: [
-      { name: '云算力租赁', description: 'AWS 持续受益于企业级 AI 基础设施需求外溢。', tone: 'indigo' },
-      { name: '资本开支扩张', description: '云与物流双轮驱动，支撑中长期自由现金流修复。', tone: 'neutral' },
-    ],
-  },
-  SMH: {
-    companyName: 'VanEck Semiconductor ETF',
-    aiScore: 79,
-    tags: [
-      { name: '板块贝塔', description: '覆盖半导体核心权重股，可快速观察板块风险偏好。', tone: 'indigo' },
-      { name: '景气温度计', description: '适合跟踪芯片产业链整体强弱与资金轮动节奏。', tone: 'neutral' },
-    ],
-  },
-  NFLX: {
-    companyName: 'Netflix Inc.',
-    aiScore: 83,
-    tags: [
-      { name: '流媒体龙头', description: '订阅用户与内容投入形成双重护城河，现金流改善明显。', tone: 'indigo' },
-      { name: '广告变现', description: '广告版订阅持续扩容，提升单用户收入的弹性。', tone: 'neutral' },
-    ],
-  },
-  C: {
-    companyName: 'Citigroup Inc.',
-    aiScore: 82,
-    tags: [
-      { name: '全球银行', description: '跨境结算与投行业务覆盖全球，是美元流动性的重要受益者。', tone: 'indigo' },
-      { name: '利率敏感', description: '收益率曲线变化会直接影响净息差与估值修复节奏。', tone: 'neutral' },
-    ],
-  },
-  INTC: {
-    companyName: 'Intel Corp.',
-    aiScore: 82,
-    tags: [
-      { name: '晶圆代工转型', description: '正通过先进制程与代工战略争取产业链重新定价。', tone: 'indigo' },
-      { name: 'CPU 基座', description: 'PC 与服务器 CPU 仍是其核心现金流来源。', tone: 'neutral' },
-    ],
-  },
-};
+type ViewMode = 'cards' | 'table';
+type SortKey = 'score' | 'symbol' | 'target' | 'risk';
+type SortDirection = 'asc' | 'desc';
+type Tone = 'info' | 'success' | 'warning' | 'danger' | 'history';
 
 function ScannerEmptyState({
   title,
@@ -119,17 +67,19 @@ function ScannerEmptyState({
   );
 }
 
-function normalizeTacticalLabel(label?: string | null): string {
+function normalizeLabel(label?: string | null): string {
   return (label || '').trim().toLowerCase();
 }
 
-function findCandidateValue(
-  candidate: ScannerRunDetail['shortlist'][number],
-  keywords: string[],
-): string | null {
-  const entries = [...candidate.keyMetrics, ...candidate.watchContext, ...candidate.featureSignals];
-  const match = entries.find((entry) => keywords.some((keyword) => normalizeTacticalLabel(entry.label).includes(keyword)));
-  return match?.value?.trim() || null;
+function toDisplayText(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string') return value.trim() || null;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function parseFirstNumericValue(value?: string | null): number | null {
@@ -140,157 +90,9 @@ function parseFirstNumericValue(value?: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function tooltipToneClass(tone: TacticalTagTone): string {
-  return tone === 'neutral'
-    ? 'bg-white/[0.04] border-white/10 text-white/72 group-hover:border-white/20 group-hover:bg-white/[0.07]'
-    : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300 group-hover:border-indigo-400/35 group-hover:bg-indigo-500/14';
-}
-
-function tagDescriptionFor(name: string, language: 'zh' | 'en'): string {
-  const zhDescriptions: Record<string, string> = {
-    'AI 算力基建': '涵盖 GPU、光模块、液冷等核心硬件，当前处于行业高景气周期，业绩确定性极强。',
-    '半导体设备': '提供芯片制造与封测设备，是半导体产业链的上游核心。',
-    '数据中心': '受益于云厂商与企业级算力扩容，订单兑现速度快。',
-    '网络芯片': '聚焦交换、互联与高速传输，是 AI 集群扩容的关键底座。',
-    '边缘推理': '终端侧 AI 推理正在扩散，具备成本与部署速度优势。',
-    GPU: '兼具训练与推理能力，是 AI 计算平台的核心芯片。',
-  };
-  const enDescriptions: Record<string, string> = {
-    'AI infrastructure': 'Covers GPUs, optical links, and liquid cooling, with strong demand and visible earnings momentum.',
-    'Semiconductor equipment': 'Provides manufacturing and packaging equipment for the upstream semiconductor chain.',
-    'Data center': 'Benefits from cloud and enterprise compute expansion with fast order conversion.',
-    'Networking silicon': 'Powers switching and high-speed connectivity inside AI clusters.',
-    'Edge inference': 'AI inference is spreading to endpoint devices where deployment speed matters.',
-    GPU: 'Core compute silicon that serves both model training and inference workloads.',
-  };
-  const dictionary = language === 'en' ? enDescriptions : zhDescriptions;
-  return dictionary[name] || (language === 'en' ? 'Part of the current market leadership cluster with active capital attention.' : '属于当前市场主线中持续获得资金关注的方向。');
-}
-
-function formatCandidateTags(candidate: ScannerRunDetail['shortlist'][number], language: 'zh' | 'en'): TacticalTag[] {
-  const context = SCANNER_RESULT_CONTEXT[candidate.symbol.toUpperCase()];
-  if (candidate.tags?.length) {
-    return candidate.tags
-      .map((tag, index) => {
-        const tone: TacticalTagTone = tag.tone === 'indigo' ? 'indigo' : index === 0 ? 'indigo' : 'neutral';
-        return {
-          name: tag.name.trim(),
-          description: tag.description.trim(),
-          tone,
-        };
-      })
-      .filter((tag) => tag.name && tag.description)
-      .slice(0, 2);
-  }
-
-  if (context?.tags.length) {
-    return context.tags;
-  }
-
-  const rawTags = [
-    ...candidate.featureSignals.map((signal) => signal.value?.trim()).filter(Boolean),
-    ...candidate.boards.map((board) => board.trim()),
-    candidate.qualityHint?.trim(),
-  ].filter((tag): tag is string => Boolean(tag));
-
-  return Array.from(new Set(rawTags))
-    .filter((tag) => {
-      const normalized = tag.toLowerCase();
-      const looksLikeNumericTechMetric = /\d/.test(tag) || normalized.includes('/') || normalized.includes('trend');
-      return !['行业', '主线', 'board', 'theme'].includes(normalized) && !looksLikeNumericTechMetric;
-    })
-    .slice(0, 2)
-    .map((tag, index) => ({
-      name: tag,
-      description: tagDescriptionFor(tag, language),
-      tone: index === 0 ? 'indigo' : 'neutral',
-    }));
-}
-
-function formatEntryZone(candidate: ScannerRunDetail['shortlist'][number], language: 'zh' | 'en'): string {
-  const explicitEntry = findCandidateValue(candidate, ['建仓', '入场', 'entry', 'buy', 'support']);
-  if (explicitEntry) return explicitEntry;
-  const latestMetric = candidate.keyMetrics.find((metric) => ['最新价', '现价', 'close', 'price', 'last'].some((keyword) => normalizeTacticalLabel(metric.label).includes(keyword)));
-  const latestValue = parseFirstNumericValue(latestMetric?.value);
-  if (latestValue != null) {
-    const lower = latestValue * 0.992;
-    const upper = latestValue * 1.006;
-    return `${lower.toFixed(2)} - ${upper.toFixed(2)}`;
-  }
-  return language === 'en' ? 'Wait for open support' : '等待开盘承接';
-}
-
-function formatTargetLevel(candidate: ScannerRunDetail['shortlist'][number], language: 'zh' | 'en'): string {
-  const explicitTarget = findCandidateValue(candidate, ['目标', 'target', 'tp', 'resistance']);
-  if (explicitTarget) return explicitTarget;
-  const latestMetric = candidate.keyMetrics.find((metric) => ['最新价', '现价', 'close', 'price', 'last'].some((keyword) => normalizeTacticalLabel(metric.label).includes(keyword)));
-  const latestValue = parseFirstNumericValue(latestMetric?.value);
-  if (latestValue != null) {
-    return (latestValue * 1.04).toFixed(2);
-  }
-  return language === 'en' ? 'Breakout follow-through' : '放量突破后上看';
-}
-
-function formatStopLevel(candidate: ScannerRunDetail['shortlist'][number], language: 'zh' | 'en'): string {
-  const explicitStop = findCandidateValue(candidate, ['止损', 'stop', 'risk', 'invalid']);
-  if (explicitStop) return explicitStop;
-  const latestMetric = candidate.keyMetrics.find((metric) => ['最新价', '现价', 'close', 'price', 'last'].some((keyword) => normalizeTacticalLabel(metric.label).includes(keyword)));
-  const latestValue = parseFirstNumericValue(latestMetric?.value);
-  if (latestValue != null) {
-    return (latestValue * 0.982).toFixed(2);
-  }
-  return candidate.riskNotes[0] || (language === 'en' ? 'Exit on failed support' : '跌破承接位离场');
-}
-
-function PillTagGroup({
-  label,
-  value,
-  options,
-  onChange,
-  variant = 'default',
-  testId,
-}: {
-  label: string;
-  value: string;
-  options: PillOption[];
-  onChange: (next: string) => void;
-  variant?: 'default' | 'market';
-  testId?: string;
-}) {
-  const isMarketGroup = variant === 'market';
-
-  return (
-    <div className="flex flex-col gap-2">
-      <span className="text-xs uppercase tracking-widest text-white/40">{label}</span>
-      <div
-        className={isMarketGroup ? 'flex w-fit rounded-xl border border-white/5 bg-black/40 p-1' : 'flex flex-wrap gap-2'}
-        role="group"
-        aria-label={label}
-        data-testid={testId}
-      >
-        {options.map((option) => {
-          const isActive = option.value === value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={isActive}
-              onClick={() => onChange(option.value)}
-              className={isActive
-                ? isMarketGroup
-                  ? 'rounded-lg bg-white/10 px-5 py-1.5 text-sm font-bold text-white shadow-[0_2px_10px_rgba(0,0,0,0.5)] transition-all'
-                  : 'rounded-full border border-white/10 bg-white/10 px-4 py-1.5 text-sm text-white transition-colors'
-                : isMarketGroup
-                  ? 'rounded-lg bg-transparent px-5 py-1.5 text-sm font-medium text-white/40 transition-all hover:text-white/70'
-                  : 'rounded-full border border-white/5 bg-transparent px-4 py-1.5 text-sm text-white/50 transition-colors hover:bg-white/[0.05]'}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
+function formatPercent(value?: number | null): string {
+  if (value == null || !Number.isFinite(value)) return '--';
+  return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
 }
 
 function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
@@ -302,6 +104,17 @@ function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): s
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+  }).format(date);
+}
+
+function formatDateOnly(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
   }).format(date);
 }
 
@@ -323,46 +136,150 @@ function formatDuration(start?: string | null, end?: string | null, language: 'z
   return language === 'en' ? `${hours}h ${minutes}m` : `${hours}小时${minutes}分钟`;
 }
 
-function formatAiScore(score: number): number {
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
-
 function scoreBadgeClass(score: number): string {
   if (score >= 90) return 'bg-white/[0.08] text-white border-white/12';
   if (score >= 80) return 'bg-indigo-500/12 text-indigo-200 border-indigo-500/20';
   return 'bg-white/[0.04] text-white/72 border-white/10';
 }
 
-function formatForecastValue(candidate: ScannerRunDetail['shortlist'][number]): string {
-  const explicitForecast = findCandidateValue(candidate, ['年化收益', '收益预测', 'forecast', 'expected return']);
-  if (explicitForecast) return explicitForecast;
-  const forecastValue = candidate.score >= 0 ? candidate.score : 0;
-  return `+${forecastValue.toFixed(1)}%`;
+function noteBadgeClass(tone: Tone = 'history'): string {
+  const classes: Record<Tone, string> = {
+    info: 'border-sky-400/20 bg-sky-400/10 text-sky-100',
+    success: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100',
+    warning: 'border-amber-400/20 bg-amber-400/10 text-amber-100',
+    danger: 'border-red-400/20 bg-red-400/10 text-red-100',
+    history: 'border-white/10 bg-white/[0.04] text-white/70',
+  };
+  return classes[tone];
 }
 
-function formatDateOnly(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
-  if (!value) return '--';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
+function findCandidateValue(
+  candidate: ScannerCandidate,
+  keywords: string[],
+): string | null {
+  const entries = [
+    ...(candidate.keyMetrics || []),
+    ...(candidate.watchContext || []),
+    ...(candidate.featureSignals || []),
+  ];
+  const match = entries.find((entry) => keywords.some((keyword) => normalizeLabel(entry.label).includes(keyword)));
+  return match?.value?.trim() || null;
 }
 
-function statusVariant(status?: string | null): 'success' | 'warning' | 'danger' | 'history' {
-  if (status === 'completed') return 'success';
-  if (status === 'empty') return 'warning';
-  if (status === 'failed') return 'danger';
-  return 'history';
+function getEntryRange(candidate: ScannerCandidate): string | null {
+  return findCandidateValue(candidate, ['建仓', '入场', 'entry', 'buy', 'support']);
 }
 
-function marketVariant(market?: string | null): 'success' | 'info' | 'warning' | 'history' {
-  if (market === 'us') return 'success';
-  if (market === 'hk') return 'warning';
-  if (market === 'cn') return 'info';
-  return 'history';
+function getTargetPrice(candidate: ScannerCandidate): string | null {
+  return findCandidateValue(candidate, ['目标', 'target', 'tp', 'resistance']);
+}
+
+function getStopLoss(candidate: ScannerCandidate): string | null {
+  return findCandidateValue(candidate, ['止损', 'stop', 'invalid']);
+}
+
+function getRiskScore(candidate: ScannerCandidate): number | null {
+  const riskValue = findCandidateValue(candidate, ['risk score', 'risk/score', '风险评分', '风险分']);
+  return parseFirstNumericValue(riskValue);
+}
+
+function getRiskSummary(candidate: ScannerCandidate, language: 'zh' | 'en'): string {
+  return candidate.riskNotes?.[0] || candidate.aiInterpretation?.riskInterpretation || (language === 'en' ? 'No risk note provided' : '未提供风险说明');
+}
+
+function getKeyReason(candidate: ScannerCandidate, runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): string {
+  return candidate.reasonSummary
+    || candidate.reasons?.[0]
+    || candidate.featureSignals?.[0]?.value
+    || runDetail?.scoringNotes?.[0]
+    || (language === 'en' ? 'No selection note provided' : '未提供入选说明');
+}
+
+function getSourceBadge(candidate: ScannerCandidate, runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): string | null {
+  const candidateProvider = getProviderDiagnostics(candidate.diagnostics)?.quoteSourceUsed
+    || getProviderDiagnostics(candidate.diagnostics)?.snapshotSourceUsed
+    || getProviderDiagnostics(candidate.diagnostics)?.historySourceUsed;
+  const runProvider = runDetail ? getRunProviderDiagnostics(runDetail)?.quoteSourceUsed
+    || getRunProviderDiagnostics(runDetail)?.snapshotSourceUsed
+    || getRunProviderDiagnostics(runDetail)?.historySourceUsed : null;
+  return candidateProvider || runProvider || runDetail?.sourceSummary || (language === 'en' ? 'scanner payload' : '扫描载荷');
+}
+
+function getRunCoverageSummary(runDetail: ScannerRunDetail): ScannerCoverageSummary | null {
+  const diagnostics = runDetail.diagnostics || {};
+  return isRecord(diagnostics.coverageSummary) ? diagnostics.coverageSummary as unknown as ScannerCoverageSummary : null;
+}
+
+function getProviderDiagnostics(value?: ScannerRunDetail['diagnostics'] | ScannerCandidate['diagnostics']): ScannerProviderDiagnostics | null {
+  if (!value) return null;
+  const diagnostics = value as Record<string, unknown>;
+  return isRecord(diagnostics.providerDiagnostics) ? diagnostics.providerDiagnostics as unknown as ScannerProviderDiagnostics : null;
+}
+
+function getRunProviderDiagnostics(runDetail: ScannerRunDetail): ScannerProviderDiagnostics | null {
+  return getProviderDiagnostics(runDetail.diagnostics);
+}
+
+function getAiDiagnostics(runDetail: ScannerRunDetail): Record<string, unknown> | null {
+  const diagnostics = runDetail.diagnostics || {};
+  return isRecord(diagnostics.aiInterpretation) ? diagnostics.aiInterpretation : null;
+}
+
+function formatProviderDiagnostics(provider: ScannerProviderDiagnostics | null, language: 'zh' | 'en'): string | null {
+  if (!provider) return null;
+  const sources = [
+    provider.quoteSourceUsed,
+    provider.snapshotSourceUsed,
+    provider.historySourceUsed,
+    ...(provider.providersUsed || []),
+  ].filter((item): item is string => Boolean(item));
+  const sourceCopy = Array.from(new Set(sources)).slice(0, 3).join(' / ');
+  const fallbackCopy = provider.fallbackOccurred
+    ? (language === 'en' ? `fallback ${provider.fallbackCount}` : `降级 ${provider.fallbackCount}`)
+    : (language === 'en' ? 'no fallback' : '未降级');
+  const warningCopy = provider.providerWarnings?.length
+    ? String(provider.providerWarnings.length)
+    : null;
+  return [
+    sourceCopy || provider.configuredPrimaryProvider,
+    fallbackCopy,
+    warningCopy ? (language === 'en' ? `${warningCopy} warnings` : `${warningCopy} 条警告`) : null,
+  ].filter(Boolean).join(' · ');
+}
+
+function formatCoverageSummary(coverage: ScannerCoverageSummary | null, runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): string | null {
+  if (coverage) {
+    const scanned = coverage.inputUniverseSize || runDetail?.universeSize || 0;
+    const ranked = coverage.rankedCandidateCount || runDetail?.evaluatedSize || 0;
+    const selected = coverage.shortlistedCount || runDetail?.shortlist?.length || 0;
+    const bottleneck = coverage.likelyBottleneckLabel || coverage.likelyBottleneck;
+    const base = language === 'en'
+      ? `${scanned} scanned · ${ranked} ranked · ${selected} selected`
+      : `扫描 ${scanned} · 排名 ${ranked} · 入选 ${selected}`;
+    return bottleneck ? `${base} · ${bottleneck}` : base;
+  }
+  if (!runDetail) return null;
+  return language === 'en'
+    ? `${runDetail.universeSize} scanned · ${runDetail.shortlist?.length ?? runDetail.shortlistSize} selected`
+    : `扫描 ${runDetail.universeSize} · 入选 ${runDetail.shortlist?.length ?? runDetail.shortlistSize}`;
+}
+
+function formatNotesSummary(notes: string[], language: 'zh' | 'en'): string | null {
+  if (!notes.length) return null;
+  const first = notes[0];
+  return language === 'en' ? `${notes.length} notes · ${first}` : `${notes.length} 条 · ${first}`;
+}
+
+function hasReviewSummary(review?: ScannerReviewSummary | null): boolean {
+  return Boolean(review?.available || review?.reviewedCount || review?.candidateCount);
+}
+
+function hasComparison(comparison?: ScannerWatchlistComparison | null): boolean {
+  return Boolean(comparison?.available || comparison?.newCount || comparison?.retainedCount || comparison?.droppedCount);
+}
+
+function hasOutcome(outcome?: ScannerCandidateOutcome | null): boolean {
+  return Boolean(outcome && (outcome.reviewStatus !== 'pending' || outcome.outcomeLabel !== 'pending' || outcome.reviewWindowReturnPct != null));
 }
 
 function dedupeTickerSymbols(symbols: string[]): string[] {
@@ -419,6 +336,310 @@ function formatHistoryHeadline(
   return { title: trimmedHeadline, detail: null, symbols };
 }
 
+function statusVariant(status?: string | null): 'success' | 'warning' | 'danger' | 'history' {
+  if (status === 'completed') return 'success';
+  if (status === 'empty') return 'warning';
+  if (status === 'failed') return 'danger';
+  return 'history';
+}
+
+function marketVariant(market?: string | null): 'success' | 'info' | 'warning' | 'history' {
+  if (market === 'us') return 'success';
+  if (market === 'hk') return 'warning';
+  if (market === 'cn') return 'info';
+  return 'history';
+}
+
+function PillTagGroup({
+  label,
+  value,
+  options,
+  onChange,
+  variant = 'default',
+  testId,
+}: {
+  label: string;
+  value: string;
+  options: PillOption[];
+  onChange: (next: string) => void;
+  variant?: 'default' | 'market';
+  testId?: string;
+}) {
+  const isMarketGroup = variant === 'market';
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-xs uppercase tracking-widest text-white/40">{label}</span>
+      <div
+        className={isMarketGroup ? 'flex w-fit rounded-xl border border-white/5 bg-black/40 p-1' : 'flex flex-wrap gap-2'}
+        role="group"
+        aria-label={label}
+        data-testid={testId}
+      >
+        {options.map((option) => {
+          const isActive = option.value === value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => onChange(option.value)}
+              className={isActive
+                ? isMarketGroup
+                  ? 'rounded-lg bg-white/10 px-5 py-1.5 text-sm font-bold text-white shadow-[0_2px_10px_rgba(0,0,0,0.5)] transition-all'
+                  : 'rounded-full border border-white/10 bg-white/10 px-4 py-1.5 text-sm text-white transition-colors'
+                : isMarketGroup
+                  ? 'rounded-lg bg-transparent px-5 py-1.5 text-sm font-medium text-white/40 transition-all hover:text-white/70'
+                  : 'rounded-full border border-white/5 bg-transparent px-4 py-1.5 text-sm text-white/50 transition-colors hover:bg-white/[0.05]'}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FieldChip({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-white/8 bg-white/[0.035] px-2 py-1 text-[11px] text-white/72">
+      <span className="shrink-0 text-white/36">{label}</span>
+      <span className="min-w-0 truncate">{value}</span>
+    </span>
+  );
+}
+
+function LabeledValueGrid({
+  items,
+  empty,
+}: {
+  items: ScannerLabeledValue[];
+  empty: string;
+}) {
+  if (!items.length) {
+    return <p className="text-xs text-white/32">{empty}</p>;
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((item) => (
+        <FieldChip key={`${item.label}-${item.value}`} label={item.label} value={item.value} />
+      ))}
+    </div>
+  );
+}
+
+function NotesList({ notes, empty }: { notes: string[]; empty: string }) {
+  if (!notes.length) {
+    return <p className="text-xs text-white/32">{empty}</p>;
+  }
+  return (
+    <ul className="space-y-1.5">
+      {notes.map((note) => (
+        <li key={note} className="text-xs leading-relaxed text-white/64">
+          {note}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function DetailSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-white/5 bg-black/20 p-3">
+      <h5 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{title}</h5>
+      {children}
+    </section>
+  );
+}
+
+function CandidateDetailPanel({
+  candidate,
+  runDetail,
+  language,
+}: {
+  candidate: ScannerCandidate;
+  runDetail: ScannerRunDetail;
+  language: 'zh' | 'en';
+}) {
+  const candidateProvider = getProviderDiagnostics(candidate.diagnostics);
+  const ai = candidate.aiInterpretation;
+  const entryRange = getEntryRange(candidate);
+  const targetPrice = getTargetPrice(candidate);
+  const stopLoss = getStopLoss(candidate);
+
+  return (
+    <div
+      data-testid={`scanner-result-detail-${candidate.symbol}`}
+      className="mt-4 grid gap-3 rounded-2xl border border-white/8 bg-black/25 p-4 md:grid-cols-2"
+    >
+      <DetailSection title={language === 'en' ? 'Key metrics' : '关键指标'}>
+        <LabeledValueGrid items={candidate.keyMetrics || []} empty={language === 'en' ? 'No key metrics provided' : '未提供关键指标'} />
+      </DetailSection>
+      <DetailSection title={language === 'en' ? 'Feature signals' : '特征信号'}>
+        <LabeledValueGrid items={candidate.featureSignals || []} empty={language === 'en' ? 'No feature signals provided' : '未提供特征信号'} />
+      </DetailSection>
+      <DetailSection title={language === 'en' ? 'Risk notes' : '风险说明'}>
+        <NotesList notes={candidate.riskNotes || []} empty={language === 'en' ? 'No risk notes provided' : '未提供风险说明'} />
+      </DetailSection>
+      <DetailSection title={language === 'en' ? 'Trade plan fields' : '交易计划字段'}>
+        <div className="flex flex-wrap gap-2">
+          {entryRange ? <FieldChip label={language === 'en' ? 'Entry' : '建仓'} value={entryRange} /> : null}
+          {targetPrice ? <FieldChip label={language === 'en' ? 'Target' : '目标'} value={targetPrice} /> : null}
+          {stopLoss ? <FieldChip label={language === 'en' ? 'Stop' : '止损'} value={stopLoss} /> : null}
+          {!entryRange && !targetPrice && !stopLoss ? (
+            <p className="text-xs text-white/32">{language === 'en' ? 'No explicit entry, target, or stop fields were provided.' : '未提供明确建仓、目标或止损字段。'}</p>
+          ) : null}
+        </div>
+      </DetailSection>
+      <DetailSection title={language === 'en' ? 'Why selected' : '入选依据'}>
+        <NotesList
+          notes={[
+            candidate.reasonSummary,
+            ...(candidate.reasons || []),
+            ...(runDetail.scoringNotes || []),
+          ].filter((item): item is string => Boolean(item))}
+          empty={language === 'en' ? 'No selection notes provided' : '未提供入选说明'}
+        />
+      </DetailSection>
+      <DetailSection title={language === 'en' ? 'AI interpretation' : 'AI 解读'}>
+        {ai?.available ? (
+          <div className="space-y-2 text-xs leading-relaxed text-white/64">
+            {ai.provider || ai.model ? (
+              <p>
+                <span className="text-white/36">{language === 'en' ? 'Provider' : '供应商'}: </span>
+                {[ai.provider, ai.model].filter(Boolean).join(' / ')}
+              </p>
+            ) : null}
+            {ai.summary ? <p>{ai.summary}</p> : null}
+            {ai.watchPlan ? <p>{ai.watchPlan}</p> : null}
+            {ai.riskInterpretation ? <p>{ai.riskInterpretation}</p> : null}
+            {!ai.summary && !ai.watchPlan && !ai.riskInterpretation ? <p>{ai.status}</p> : null}
+          </div>
+        ) : (
+          <p className="text-xs text-white/32">{ai?.status || (language === 'en' ? 'AI interpretation not available' : 'AI 解读不可用')}</p>
+        )}
+      </DetailSection>
+      {hasOutcome(candidate.realizedOutcome) ? (
+        <DetailSection title={language === 'en' ? 'Realized outcome' : '实际表现'}>
+          <div className="flex flex-wrap gap-2">
+            <FieldChip label={language === 'en' ? 'Outcome' : '结果'} value={candidate.realizedOutcome.outcomeLabel} />
+            <FieldChip label={language === 'en' ? 'Thesis' : '验证'} value={candidate.realizedOutcome.thesisMatch} />
+            {candidate.realizedOutcome.reviewWindowReturnPct != null ? (
+              <FieldChip label={language === 'en' ? 'Window return' : '窗口收益'} value={formatPercent(candidate.realizedOutcome.reviewWindowReturnPct)} />
+            ) : null}
+            {candidate.realizedOutcome.benchmarkCode ? (
+              <FieldChip label={language === 'en' ? 'Benchmark' : '基准'} value={candidate.realizedOutcome.benchmarkCode} />
+            ) : null}
+          </div>
+        </DetailSection>
+      ) : null}
+      {candidateProvider ? (
+        <DetailSection title={language === 'en' ? 'Candidate provenance' : '候选来源'}>
+          <p className="text-xs leading-relaxed text-white/64">{formatProviderDiagnostics(candidateProvider, language)}</p>
+        </DetailSection>
+      ) : null}
+    </div>
+  );
+}
+
+function DiagnosticsPanel({
+  runDetail,
+  language,
+}: {
+  runDetail: ScannerRunDetail;
+  language: 'zh' | 'en';
+}) {
+  const coverage = getRunCoverageSummary(runDetail);
+  const provider = getRunProviderDiagnostics(runDetail);
+  const aiDiagnostics = getAiDiagnostics(runDetail);
+  const hasAnyDiagnostics = coverage
+    || provider
+    || runDetail.universeNotes.length
+    || runDetail.scoringNotes.length
+    || hasReviewSummary(runDetail.reviewSummary)
+    || hasComparison(runDetail.comparisonToPrevious)
+    || aiDiagnostics;
+
+  if (!hasAnyDiagnostics) return null;
+
+  return (
+    <details data-testid="scanner-diagnostics-panel" className="mt-5 rounded-2xl border border-white/5 bg-white/[0.02] p-4" open>
+      <summary className="cursor-pointer text-sm font-semibold text-white/78">
+        {language === 'en' ? 'Diagnostics and replay notes' : '诊断与复盘说明'}
+      </summary>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        {coverage ? (
+          <DetailSection title={language === 'en' ? 'Coverage summary' : '覆盖摘要'}>
+            <div className="flex flex-wrap gap-2">
+              <FieldChip label={language === 'en' ? 'Input' : '输入'} value={String(coverage.inputUniverseSize)} />
+              <FieldChip label={language === 'en' ? 'Liquidity' : '流动性后'} value={String(coverage.eligibleAfterLiquidityFilter)} />
+              <FieldChip label={language === 'en' ? 'Data OK' : '数据可用'} value={String(coverage.eligibleAfterDataAvailabilityFilter)} />
+              <FieldChip label={language === 'en' ? 'Ranked' : '已排名'} value={String(coverage.rankedCandidateCount)} />
+              <FieldChip label={language === 'en' ? 'Selected' : '入选'} value={String(coverage.shortlistedCount)} />
+              {coverage.likelyBottleneckLabel || coverage.likelyBottleneck ? (
+                <FieldChip label={language === 'en' ? 'Bottleneck' : '瓶颈'} value={coverage.likelyBottleneckLabel || coverage.likelyBottleneck || ''} />
+              ) : null}
+            </div>
+          </DetailSection>
+        ) : null}
+        {provider ? (
+          <DetailSection title={language === 'en' ? 'Provider diagnostics' : '供应商诊断'}>
+            <p className="text-xs leading-relaxed text-white/64">{formatProviderDiagnostics(provider, language)}</p>
+            {provider.providerWarnings?.length ? <NotesList notes={provider.providerWarnings} empty="" /> : null}
+          </DetailSection>
+        ) : null}
+        {runDetail.universeNotes.length ? (
+          <DetailSection title={language === 'en' ? 'Universe notes' : '候选范围说明'}>
+            <NotesList notes={runDetail.universeNotes} empty="" />
+          </DetailSection>
+        ) : null}
+        {runDetail.scoringNotes.length ? (
+          <DetailSection title={language === 'en' ? 'Scoring notes' : '评分说明'}>
+            <NotesList notes={runDetail.scoringNotes} empty="" />
+          </DetailSection>
+        ) : null}
+        {hasReviewSummary(runDetail.reviewSummary) ? (
+          <DetailSection title={language === 'en' ? 'Review summary' : '复盘摘要'}>
+            <div className="flex flex-wrap gap-2">
+              <FieldChip label={language === 'en' ? 'Status' : '状态'} value={runDetail.reviewSummary.reviewStatus} />
+              <FieldChip label={language === 'en' ? 'Reviewed' : '已复盘'} value={`${runDetail.reviewSummary.reviewedCount}/${runDetail.reviewSummary.candidateCount}`} />
+              {runDetail.reviewSummary.hitRatePct != null ? <FieldChip label={language === 'en' ? 'Hit rate' : '命中率'} value={formatPercent(runDetail.reviewSummary.hitRatePct)} /> : null}
+              {runDetail.reviewSummary.avgReviewWindowReturnPct != null ? <FieldChip label={language === 'en' ? 'Avg return' : '平均收益'} value={formatPercent(runDetail.reviewSummary.avgReviewWindowReturnPct)} /> : null}
+            </div>
+          </DetailSection>
+        ) : null}
+        {hasComparison(runDetail.comparisonToPrevious) ? (
+          <DetailSection title={language === 'en' ? 'Comparison to previous' : '相对上次变化'}>
+            <div className="flex flex-wrap gap-2">
+              <FieldChip label={language === 'en' ? 'New' : '新增'} value={String(runDetail.comparisonToPrevious.newCount)} />
+              <FieldChip label={language === 'en' ? 'Retained' : '保留'} value={String(runDetail.comparisonToPrevious.retainedCount)} />
+              <FieldChip label={language === 'en' ? 'Dropped' : '移出'} value={String(runDetail.comparisonToPrevious.droppedCount)} />
+            </div>
+          </DetailSection>
+        ) : null}
+        {aiDiagnostics ? (
+          <DetailSection title={language === 'en' ? 'AI status' : 'AI 状态'}>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(aiDiagnostics)
+                .map(([key, value]) => [key, toDisplayText(value)] as const)
+                .filter((entry): entry is readonly [string, string] => Boolean(entry[1]))
+                .slice(0, 6)
+                .map(([key, value]) => <FieldChip key={key} label={key} value={value} />)}
+            </div>
+          </DetailSection>
+        ) : null}
+      </div>
+    </details>
+  );
+}
+
 const UserScannerPage: React.FC = () => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
@@ -437,7 +658,11 @@ const UserScannerPage: React.FC = () => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [pageError, setPageError] = useState<ParsedApiError | null>(null);
   const [historyError, setHistoryError] = useState<ParsedApiError | null>(null);
-  const [isRationaleDrawerOpen, setIsRationaleDrawerOpen] = useState(false);
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [sortKey, setSortKey] = useState<SortKey>('score');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = t('scanner.documentTitle');
@@ -462,6 +687,7 @@ const UserScannerPage: React.FC = () => {
       const response = await scannerApi.getRun(runId);
       setRunDetail(response);
       setSelectedRunId(response.id);
+      setExpandedSymbol(null);
       setPageError(null);
     } catch (error) {
       setPageError(getParsedApiError(error));
@@ -503,6 +729,7 @@ const UserScannerPage: React.FC = () => {
   useEffect(() => {
     setRunDetail(null);
     setSelectedRunId(null);
+    setExpandedSymbol(null);
   }, [market, profile]);
 
   useEffect(() => {
@@ -521,6 +748,7 @@ const UserScannerPage: React.FC = () => {
       });
       setRunDetail(response);
       setSelectedRunId(response.id);
+      setExpandedSymbol(null);
       setPageError(null);
       await fetchHistory(1, response.id);
     } catch (error) {
@@ -530,6 +758,15 @@ const UserScannerPage: React.FC = () => {
     }
   }, [detailLimit, fetchHistory, market, profile, shortlistSize, universeLimit]);
 
+  const handleSortChange = useCallback((nextSortKey: SortKey) => {
+    if (sortKey === nextSortKey) {
+      setSortDirection((current) => current === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+    setSortKey(nextSortKey);
+    setSortDirection(nextSortKey === 'symbol' ? 'asc' : 'desc');
+  }, [sortKey]);
+
   const totalHistoryPages = useMemo(
     () => Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE)),
     [historyTotal],
@@ -537,22 +774,58 @@ const UserScannerPage: React.FC = () => {
   const runScannerButton = useSafariWarmActivation<HTMLButtonElement>(() => {
     void handleRun();
   });
-  const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setIsRationaleDrawerOpen(true));
+  const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setIsHistoryDrawerOpen(true));
   const shortlistCount = runDetail?.shortlist?.length ?? 0;
   const generatedAt = runDetail?.completedAt || runDetail?.runAt || null;
   const elapsedTime = formatDuration(runDetail?.runAt, runDetail?.completedAt, language);
-  const tacticalCards = runDetail?.shortlist.map((candidate) => ({
-    symbol: candidate.symbol,
-    name: candidate.name,
-    companyName: candidate.companyName?.trim() || SCANNER_RESULT_CONTEXT[candidate.symbol.toUpperCase()]?.companyName || candidate.name,
-    aiScore: formatAiScore(SCANNER_RESULT_CONTEXT[candidate.symbol.toUpperCase()]?.aiScore ?? candidate.score),
-    tags: formatCandidateTags(candidate, language),
-    forecastValue: formatForecastValue(candidate),
-    insight: candidate.aiInterpretation.summary || candidate.reasonSummary || candidate.reasons[0] || (language === 'en' ? 'Awaiting AI insight generation.' : '等待 AI 生成更完整的战术解读。'),
-    entryZone: formatEntryZone(candidate, language),
-    targetLevel: formatTargetLevel(candidate, language),
-    stopLevel: formatStopLevel(candidate, language),
-  })) || [];
+  const coverageSummary = runDetail ? getRunCoverageSummary(runDetail) : null;
+  const providerDiagnostics = runDetail ? getRunProviderDiagnostics(runDetail) : null;
+  const qualityItems = [
+    {
+      label: language === 'en' ? 'Coverage' : '覆盖',
+      value: formatCoverageSummary(coverageSummary, runDetail, language),
+      tone: 'info' as Tone,
+    },
+    {
+      label: language === 'en' ? 'Provider' : '供应商',
+      value: formatProviderDiagnostics(providerDiagnostics, language),
+      tone: providerDiagnostics?.fallbackOccurred ? 'warning' as Tone : 'success' as Tone,
+    },
+    {
+      label: language === 'en' ? 'Universe notes' : '候选说明',
+      value: runDetail ? formatNotesSummary(runDetail.universeNotes || [], language) : null,
+      tone: 'history' as Tone,
+    },
+    {
+      label: language === 'en' ? 'Scoring notes' : '评分说明',
+      value: runDetail ? formatNotesSummary(runDetail.scoringNotes || [], language) : null,
+      tone: 'history' as Tone,
+    },
+  ].filter((item): item is { label: string; value: string; tone: Tone } => Boolean(item.value));
+
+  const sortedCandidates = useMemo(() => {
+    const candidates = [...(runDetail?.shortlist || [])];
+    const directionMultiplier = sortDirection === 'asc' ? 1 : -1;
+    return candidates.sort((left, right) => {
+      let compare = 0;
+      if (sortKey === 'symbol') {
+        compare = left.symbol.localeCompare(right.symbol);
+      } else if (sortKey === 'target') {
+        const leftTarget = parseFirstNumericValue(getTargetPrice(left));
+        const rightTarget = parseFirstNumericValue(getTargetPrice(right));
+        compare = (leftTarget ?? Number.NEGATIVE_INFINITY) - (rightTarget ?? Number.NEGATIVE_INFINITY);
+      } else if (sortKey === 'risk') {
+        const leftRisk = getRiskScore(left);
+        const rightRisk = getRiskScore(right);
+        compare = (leftRisk ?? Number.NEGATIVE_INFINITY) - (rightRisk ?? Number.NEGATIVE_INFINITY);
+      } else {
+        compare = left.score - right.score;
+      }
+      if (compare === 0) return left.rank - right.rank;
+      return compare * directionMultiplier;
+    });
+  }, [runDetail?.shortlist, sortDirection, sortKey]);
+
   const historyCards = useMemo(() => historyItems.map((item) => {
     const fallbackTitle = item.market === 'us'
       ? t('scanner.currentRunFallbackUs')
@@ -589,7 +862,7 @@ const UserScannerPage: React.FC = () => {
         >
           <header className="shrink-0 flex justify-between items-start mb-3 mt-0">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.28em] text-white/36">{language === 'en' ? 'TACTICAL ROUTER' : 'TACTICAL ROUTER'}</p>
+              <p className="text-[10px] uppercase tracking-[0.28em] text-white/36">TACTICAL ROUTER</p>
               <h1 className="mt-3 text-[1.7rem] tracking-[-0.03em] text-foreground md:text-[1.9rem]">{language === 'en' ? 'MARKET SCANNER' : '市场扫描'}</h1>
             </div>
           </header>
@@ -631,132 +904,277 @@ const UserScannerPage: React.FC = () => {
               data-testid="scanner-results-pane"
               className="flex-1 min-h-0 min-w-0 overflow-y-auto no-scrollbar pb-24"
             >
-              <div data-testid="user-scanner-bento-hero" className="mb-5 flex shrink-0 items-end justify-between gap-3 border-b border-white/5 pb-4">
-                <div className="min-w-0">
-                  <h2 className="text-xl font-bold text-white mb-1">{language === 'en' ? 'Scanner results and tactical plan' : '扫描结果与战术计划'}</h2>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-white/40">
-                    <span>
-                      {language === 'en' ? 'Generated:' : '生成时间：'}
-                      {generatedAt ? ` ${formatTimestamp(generatedAt, language)}` : ' --'}
+              <div data-testid="user-scanner-bento-hero" className="mb-5 flex shrink-0 flex-col gap-4 border-b border-white/5 pb-4">
+                <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
+                  <div className="min-w-0">
+                    <h2 className="text-xl font-bold text-white mb-1">{language === 'en' ? 'Scanner workbench' : '扫描工作台'}</h2>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-white/40">
+                      <span>
+                        {language === 'en' ? 'Generated:' : '生成时间：'}
+                        {generatedAt ? ` ${formatTimestamp(generatedAt, language)}` : ' --'}
+                      </span>
+                      <span className="w-1 h-1 rounded-full bg-white/20" aria-hidden="true" />
+                      <span>
+                        {language === 'en' ? 'Elapsed:' : '耗时：'}
+                        {` ${elapsedTime}`}
+                      </span>
+                      {runDetail ? (
+                        <>
+                          <span className="w-1 h-1 rounded-full bg-white/20" aria-hidden="true" />
+                          <span>{`${runDetail.market.toUpperCase()} · ${runDetail.profileLabel || runDetail.profile}`}</span>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span
+                      data-testid="user-scanner-bento-hero-shortlist-value"
+                      className="shrink-0 rounded-full border border-white/12 bg-white/[0.08] px-3 py-1 text-xs font-bold text-white"
+                    >
+                      {language === 'en' ? `${shortlistCount} symbols selected` : `入选 ${shortlistCount} 只标的`}
                     </span>
-                    <span className="w-1 h-1 rounded-full bg-white/20" aria-hidden="true" />
-                    <span>
-                      {language === 'en' ? 'Elapsed:' : '耗时：'}
-                      {` ${elapsedTime}`}
-                    </span>
+                    <button
+                      ref={openHistoryDrawerButton.ref}
+                      type="button"
+                      data-testid="user-scanner-bento-drawer-trigger"
+                      onClick={openHistoryDrawerButton.onClick}
+                      onPointerUp={openHistoryDrawerButton.onPointerUp}
+                      className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-sm text-white/80 transition-colors hover:bg-white/[0.1]"
+                    >
+                      <PanelRightOpen className="h-4 w-4" />
+                      <span>{language === 'en' ? 'Historical replay' : '历史扫描回放'}</span>
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <span
-                    data-testid="user-scanner-bento-hero-shortlist-value"
-                    className="shrink-0 rounded-full border border-white/12 bg-white/[0.08] px-3 py-1 text-xs font-bold text-white"
-                  >
-                    {language === 'en' ? `${shortlistCount} symbols hit` : `命中 ${shortlistCount} 只标的`}
-                  </span>
+
+                {qualityItems.length ? (
+                  <div data-testid="scanner-quality-strip" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                    {qualityItems.map((item) => (
+                      <div key={item.label} className={`min-w-0 rounded-xl border px-3 py-2 ${noteBadgeClass(item.tone)}`}>
+                        <p className="text-[10px] uppercase tracking-[0.16em] opacity-65">{item.label}</p>
+                        <p className="mt-1 truncate text-xs font-medium">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex w-fit rounded-xl border border-white/5 bg-black/30 p-1" role="group" aria-label={language === 'en' ? 'Result view mode' : '结果视图'}>
                   <button
-                    ref={openHistoryDrawerButton.ref}
                     type="button"
-                    data-testid="user-scanner-bento-drawer-trigger"
-                    onClick={openHistoryDrawerButton.onClick}
-                    onPointerUp={openHistoryDrawerButton.onPointerUp}
-                    className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-sm text-white/80 transition-colors hover:bg-white/[0.1]"
+                    onClick={() => setViewMode('cards')}
+                    className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs ${viewMode === 'cards' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'}`}
                   >
-                    <PanelRightOpen className="h-4 w-4" />
-                    <span>{language === 'en' ? 'Run history' : '历史运行记录'}</span>
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    {language === 'en' ? 'Card view' : '卡片视图'}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('table')}
+                    className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs ${viewMode === 'table' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'}`}
+                  >
+                    <Table2 className="h-3.5 w-3.5" />
+                    {language === 'en' ? 'Table view' : '表格视图'}
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-white/42">
+                  <span>{language === 'en' ? 'Sort by' : '排序'}</span>
+                  {([
+                    ['score', language === 'en' ? 'scanner score' : '扫描评分'],
+                    ['symbol', language === 'en' ? 'symbol' : '代码'],
+                    ['target', language === 'en' ? 'target price' : '目标价'],
+                    ['risk', language === 'en' ? 'risk/score' : '风险/评分'],
+                  ] as const).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => handleSortChange(key)}
+                      className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 ${sortKey === key ? 'border-white/16 bg-white/[0.08] text-white' : 'border-white/5 bg-white/[0.02] text-white/48 hover:text-white/75'}`}
+                    >
+                      {label}
+                      {sortKey === key ? <ArrowDownUp className="h-3 w-3" /> : null}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {tacticalCards.length ? (
-                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                  {tacticalCards.map((candidate) => (
-                    <article
-                      key={`watchlist-${candidate.symbol}`}
-                      className="rounded-[24px] border border-white/5 bg-white/[0.02] p-5 transition-colors hover:border-white/16 hover:bg-white/[0.04]"
-                    >
-                      <div className="flex justify-between items-start gap-4 mb-4">
-                        <div className="min-w-0 flex flex-col gap-1.5">
-                          <div className="flex items-baseline gap-2 mb-1 min-w-0">
-                            <h3 className="text-xl font-bold text-white tracking-tight">
-                              {candidate.symbol}
-                            </h3>
-                            <span className="text-xs text-white/40 font-medium truncate max-w-[150px]">
-                              {candidate.companyName}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold ${scoreBadgeClass(candidate.aiScore)}`}>
-                              {language === 'en' ? `AI score ${candidate.aiScore}/100` : `AI 评分 ${candidate.aiScore}/100`}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5 mt-1">
-                            {candidate.tags.map((tag) => (
-                              <div
-                                key={`${candidate.symbol}-${tag.name}`}
-                                className="relative group cursor-help"
-                              >
-                                <span className={`text-[10px] px-2 py-1 rounded border transition-colors ${tooltipToneClass(tag.tone)}`}>
-                                  {tag.name}
+              {sortedCandidates.length ? (
+                viewMode === 'cards' ? (
+                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                    {sortedCandidates.map((candidate) => {
+                      const isExpanded = expandedSymbol === candidate.symbol;
+                      const entryRange = getEntryRange(candidate);
+                      const targetPrice = getTargetPrice(candidate);
+                      const stopLoss = getStopLoss(candidate);
+                      const sourceBadge = getSourceBadge(candidate, runDetail, language);
+                      return (
+                        <article
+                          key={`watchlist-${candidate.symbol}`}
+                          data-testid={`scanner-result-card-${candidate.symbol}`}
+                          className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 transition-colors hover:border-white/16 hover:bg-white/[0.04]"
+                        >
+                          <div className="flex justify-between items-start gap-4">
+                            <div className="min-w-0 flex flex-col gap-1.5">
+                              <div className="flex flex-wrap items-baseline gap-2 min-w-0">
+                                <span className="rounded-md border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-white/58">#{candidate.rank}</span>
+                                <h3 className="text-xl font-bold text-white tracking-tight">{candidate.symbol}</h3>
+                                <span className="text-xs text-white/40 font-medium truncate max-w-[180px]">
+                                  {candidate.companyName || candidate.name}
                                 </span>
-                                <div className="absolute bottom-full left-0 mb-2 w-48 rounded-lg border border-white/10 bg-[#111] p-2.5 shadow-2xl opacity-0 invisible transition-all duration-200 z-50 group-hover:opacity-100 group-hover:visible">
-                                  <p className="text-[10px] text-white/70 leading-relaxed font-normal whitespace-normal">
-                                    {tag.description}
-                                  </p>
-                                  <div className="absolute top-full left-4 -mt-px border-4 border-transparent border-t-[#111]" />
-                                </div>
                               </div>
-                            ))}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold ${scoreBadgeClass(candidate.score)}`}>
+                                  {language === 'en' ? `scanner score ${candidate.score}/100` : `扫描评分 ${candidate.score}/100`}
+                                </span>
+                                {candidate.aiInterpretation?.available ? (
+                                  <span className="inline-flex rounded border border-indigo-400/20 bg-indigo-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-100">
+                                    {language === 'en' ? 'AI interpretation' : 'AI 解读'}
+                                    {candidate.aiInterpretation.provider ? ` · ${candidate.aiInterpretation.provider}` : ''}
+                                  </span>
+                                ) : null}
+                                {sourceBadge ? (
+                                  <span className="inline-flex max-w-[220px] truncate rounded border border-white/8 bg-white/[0.035] px-1.5 py-0.5 text-[10px] text-white/45">
+                                    {sourceBadge}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setExpandedSymbol(isExpanded ? null : candidate.symbol)}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-white/8 bg-white/[0.04] px-2.5 py-1 text-xs text-white/65 hover:bg-white/[0.08]"
+                            >
+                              {language === 'en' ? 'Detail' : '详情'}
+                              {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                            </button>
                           </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <div className="font-bold text-white">{candidate.forecastValue}</div>
-                          <div className="text-xs text-white/30 mt-1">{language === 'en' ? 'Annualized return forecast' : '年化收益预测'}</div>
-                        </div>
-                      </div>
 
-                      <p className="text-sm text-white/60 mb-5 leading-relaxed">
-                        {language === 'en' ? 'AI insight: ' : 'AI 洞察：'}
-                        {candidate.insight}
-                      </p>
+                          <div className="mt-4 grid gap-3">
+                            <section>
+                              <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-white/34">{language === 'en' ? 'Why selected' : '入选依据'}</p>
+                              <p className="text-sm leading-relaxed text-white/66">{getKeyReason(candidate, runDetail, language)}</p>
+                              {candidate.featureSignals?.length ? (
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  {candidate.featureSignals.slice(0, 4).map((signal) => (
+                                    <FieldChip key={`${candidate.symbol}-${signal.label}-${signal.value}`} label={signal.label} value={signal.value} />
+                                  ))}
+                                </div>
+                              ) : null}
+                            </section>
 
-                      <div className="grid grid-cols-1 gap-2 rounded-[20px] border border-white/5 bg-white/[0.02] p-3 sm:grid-cols-3">
-                        <div>
-                          <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Entry zone' : '建仓区间'}</div>
-                          <div className="text-sm text-white font-medium">{candidate.entryZone}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Target' : '目标位'}</div>
-                          <div className="text-sm font-medium text-white">{candidate.targetLevel}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Hard stop' : '严格止损'}</div>
-                          <div className="text-sm text-red-400 font-medium">{candidate.stopLevel}</div>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
+                            <section className="grid grid-cols-1 gap-2 rounded-xl border border-white/5 bg-black/20 p-3 sm:grid-cols-3">
+                              <div>
+                                <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Entry range' : '建仓区间'}</div>
+                                <div className="text-sm text-white font-medium">{entryRange || '--'}</div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Target price' : '目标价'}</div>
+                                <div className="text-sm font-medium text-white">{targetPrice || '--'}</div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Stop loss' : '止损位'}</div>
+                                <div className="text-sm text-red-300 font-medium">{stopLoss || '--'}</div>
+                              </div>
+                            </section>
+
+                            <section>
+                              <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-white/34">{language === 'en' ? 'Risk notes' : '风险说明'}</p>
+                              <p className="text-sm leading-relaxed text-white/58">{getRiskSummary(candidate, language)}</p>
+                            </section>
+
+                            {candidate.keyMetrics?.length ? (
+                              <section>
+                                <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-white/34">{language === 'en' ? 'Metrics' : '指标'}</p>
+                                <LabeledValueGrid items={candidate.keyMetrics.slice(0, 5)} empty="" />
+                              </section>
+                            ) : null}
+                          </div>
+
+                          {isExpanded && runDetail ? <CandidateDetailPanel candidate={candidate} runDetail={runDetail} language={language} /> : null}
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div data-testid="scanner-result-table" className="overflow-x-auto rounded-2xl border border-white/5 bg-white/[0.02]">
+                    <table className="min-w-[980px] w-full border-collapse text-left text-sm">
+                      <thead className="border-b border-white/5 bg-black/25 text-[10px] uppercase tracking-[0.16em] text-white/38">
+                        <tr>
+                          <th className="px-3 py-3">{language === 'en' ? 'Rank' : '排名'}</th>
+                          <th className="px-3 py-3">{language === 'en' ? 'Symbol' : '代码'}</th>
+                          <th className="px-3 py-3">{language === 'en' ? 'Name' : '名称'}</th>
+                          <th className="px-3 py-3">{language === 'en' ? 'Scanner score' : '扫描评分'}</th>
+                          <th className="px-3 py-3">{language === 'en' ? 'Entry range' : '建仓区间'}</th>
+                          <th className="px-3 py-3">{language === 'en' ? 'Target price' : '目标价'}</th>
+                          <th className="px-3 py-3">{language === 'en' ? 'Stop loss' : '止损位'}</th>
+                          <th className="px-3 py-3">{language === 'en' ? 'Key reason' : '关键原因'}</th>
+                          <th className="px-3 py-3">{language === 'en' ? 'Risk summary' : '风险摘要'}</th>
+                          <th className="px-3 py-3">{language === 'en' ? 'Data/source' : '数据/来源'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedCandidates.map((candidate) => {
+                          const isExpanded = expandedSymbol === candidate.symbol;
+                          return (
+                            <React.Fragment key={`table-${candidate.symbol}`}>
+                              <tr
+                                data-testid={`scanner-result-row-${candidate.symbol}`}
+                                className="cursor-pointer border-b border-white/5 text-white/72 hover:bg-white/[0.035]"
+                                onClick={() => setExpandedSymbol(isExpanded ? null : candidate.symbol)}
+                              >
+                                <td className="px-3 py-3 text-white/45">#{candidate.rank}</td>
+                                <td className="px-3 py-3 font-semibold text-white">{candidate.symbol}</td>
+                                <td className="px-3 py-3 text-white/55">{candidate.companyName || candidate.name}</td>
+                                <td className="px-3 py-3">
+                                  <span className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold ${scoreBadgeClass(candidate.score)}`}>
+                                    {candidate.score}/100
+                                  </span>
+                                </td>
+                                <td className="px-3 py-3">{getEntryRange(candidate) || '--'}</td>
+                                <td className="px-3 py-3">{getTargetPrice(candidate) || '--'}</td>
+                                <td className="px-3 py-3">{getStopLoss(candidate) || '--'}</td>
+                                <td className="max-w-[220px] px-3 py-3 text-white/62">{getKeyReason(candidate, runDetail, language)}</td>
+                                <td className="max-w-[180px] px-3 py-3 text-white/52">{getRiskSummary(candidate, language)}</td>
+                                <td className="max-w-[180px] px-3 py-3 text-white/42">{getSourceBadge(candidate, runDetail, language) || '--'}</td>
+                              </tr>
+                              {isExpanded && runDetail ? (
+                                <tr>
+                                  <td colSpan={10} className="border-b border-white/5 px-3 pb-4">
+                                    <CandidateDetailPanel candidate={candidate} runDetail={runDetail} language={language} />
+                                  </td>
+                                </tr>
+                              ) : null}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )
               ) : (
                 <ScannerEmptyState
                   title={emptyStateTitle}
                   body={pageError?.message || emptyStateBody}
                 />
               )}
+
+              {runDetail ? <DiagnosticsPanel runDetail={runDetail} language={language} /> : null}
             </section>
           </div>
         </main>
       </div>
 
       <Drawer
-        isOpen={isRationaleDrawerOpen}
-        onClose={() => setIsRationaleDrawerOpen(false)}
-        title={language === 'en' ? 'Run history' : '历史运行记录'}
+        isOpen={isHistoryDrawerOpen}
+        onClose={() => setIsHistoryDrawerOpen(false)}
+        title={language === 'en' ? 'Historical scan replay' : '历史扫描回放'}
         width="max-w-4xl"
       >
         <div data-testid="user-scanner-bento-drawer" className="ml-auto w-full max-w-4xl rounded-l-[40px] bg-transparent p-6 text-foreground sm:p-8">
           <div className="grid gap-6">
             <div>
-              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{language === 'en' ? 'Run history' : '运行历史'}</p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{language === 'en' ? 'Historical scan replay' : '历史扫描回放'}</p>
               <h2 className="mt-1 text-xl text-foreground">{language === 'en' ? 'Recent scanner runs' : '近期扫描记录'}</h2>
             </div>
 
@@ -768,7 +1186,10 @@ const UserScannerPage: React.FC = () => {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => void loadRun(item.id)}
+                    onClick={() => {
+                      void loadRun(item.id);
+                      setIsHistoryDrawerOpen(false);
+                    }}
                     className={`w-full flex flex-col gap-3 bg-white/[0.02] border border-white/5 rounded-2xl p-5 hover:bg-white/[0.04] transition-colors text-left ${item.id === selectedRunId ? 'border-white/15 bg-white/[0.05]' : ''}`}
                   >
                     <div className="flex w-full max-w-full items-start gap-3 overflow-hidden">
@@ -777,6 +1198,7 @@ const UserScannerPage: React.FC = () => {
                           <PillBadge variant={marketVariant(item.market)}>{item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}</PillBadge>
                           <PillBadge variant={statusVariant(item.status)}>{t(`scanner.status.${item.status}`)}</PillBadge>
                           {item.watchlistDate ? <PillBadge variant="history">{formatDateOnly(item.watchlistDate, language)}</PillBadge> : null}
+                          <PillBadge variant="history">{item.profileLabel || item.profile}</PillBadge>
                         </div>
                         <h4 className="mt-3 mb-2 w-full truncate font-bold text-white">
                           {item.historyHeadline.title}
@@ -789,8 +1211,27 @@ const UserScannerPage: React.FC = () => {
                         <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-secondary-text">
                           <span>{`${t('scanner.metricShortlist')}: ${item.shortlistSize}`}</span>
                           <span>{`${t('scanner.metricUniverse')}: ${item.universeSize}`}</span>
+                          <span>{`${language === 'en' ? 'Evaluated' : '已评估'}: ${item.evaluatedSize}`}</span>
                           <span>{formatTimestamp(item.runAt, language)}</span>
                         </div>
+                        {hasReviewSummary(item.reviewSummary) || hasComparison(item.changeSummary) ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {hasComparison(item.changeSummary) ? (
+                              <span className="rounded border border-white/8 bg-white/[0.035] px-2 py-1 text-[10px] text-white/52">
+                                {language === 'en'
+                                  ? `new ${item.changeSummary.newCount} · retained ${item.changeSummary.retainedCount} · dropped ${item.changeSummary.droppedCount}`
+                                  : `新增 ${item.changeSummary.newCount} · 保留 ${item.changeSummary.retainedCount} · 移出 ${item.changeSummary.droppedCount}`}
+                              </span>
+                            ) : null}
+                            {hasReviewSummary(item.reviewSummary) ? (
+                              <span className="rounded border border-white/8 bg-white/[0.035] px-2 py-1 text-[10px] text-white/52">
+                                {language === 'en'
+                                  ? `reviewed ${item.reviewSummary.reviewedCount}/${item.reviewSummary.candidateCount}`
+                                  : `复盘 ${item.reviewSummary.reviewedCount}/${item.reviewSummary.candidateCount}`}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
                         {item.matchedSymbols.length ? (
                           <div className="product-chip-list product-chip-list--tight mt-3 w-full" data-testid={`scanner-history-symbols-${item.id}`}>
                             {item.matchedSymbols.map((symbol) => (
