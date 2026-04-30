@@ -128,7 +128,7 @@ export const ChangePasswordCard: React.FC = () => {
           <SettingsAlert title={t('settings.passwordSuccessTitle')} message={successMessage} variant="success" />
         ) : null}
 
-        <Button type="submit" variant="primary" isLoading={isSubmitting}>
+        <Button type="submit" variant="settings-primary" isLoading={isSubmitting}>
           {t('settings.passwordSave')}
         </Button>
       </form>

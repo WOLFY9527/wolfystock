@@ -123,7 +123,7 @@ describe('PersonalSettingsPage', () => {
     expect(screen.getByTestId('personal-settings-workspace')).not.toHaveClass('max-w-4xl', 'mx-auto');
     expect(screen.getByText(zh('settings.personalGuestPreferencesTitle'))).toBeInTheDocument();
     expect(screen.getByText(zh('settings.personalGuestPreferencesBody'))).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: zh('language.zh') })).toHaveClass('bg-white', 'text-black');
+    expect(screen.getByRole('button', { name: zh('language.zh') })).toHaveClass('bg-white/10', 'text-white');
     expect(screen.getByRole('button', { name: zh('language.zh') })).not.toHaveClass('bg-emerald-500');
     expect(screen.getByText(zh('settings.dataDensityTitle'))).toBeInTheDocument();
     expect(screen.getByText(zh('settings.numberFormatTitle'))).toBeInTheDocument();
@@ -133,7 +133,7 @@ describe('PersonalSettingsPage', () => {
     expect(getNotificationPreferences).not.toHaveBeenCalled();
   });
 
-  it('shows admin console links without changing personal settings content', async () => {
+  it('keeps admin console links out of personal settings content', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       passwordChangeable: true,
@@ -170,13 +170,15 @@ describe('PersonalSettingsPage', () => {
     expect(screen.getByTestId('personal-settings-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'gap-8');
     expect(screen.getByTestId('personal-settings-workspace')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8');
     await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole('link', { name: zh('nav.independentConsole') })).toHaveAttribute('href', '/settings/system');
-    expect(screen.getByRole('link', { name: zh('adminNav.logs') })).toHaveAttribute('href', '/admin/logs');
+    expect(screen.queryByText(zh('settings.personalAdminConsoleTitle'))).not.toBeInTheDocument();
+    expect(screen.queryByText(zh('settings.personalAdminConsoleDesc'))).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: zh('nav.independentConsole') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: zh('adminNav.logs') })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /管理工具/ })).not.toBeInTheDocument();
     expect(screen.getByDisplayValue('admin@example.com')).toBeInTheDocument();
     expect(screen.getByDisplayValue('https://discord.com/api/webhooks/123/token')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: zh('settings.personalNotificationSaveAction') })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: zh('settings.personalNotificationSaveAction') })).toHaveClass('bg-white', 'text-black');
+    expect(screen.getByRole('button', { name: zh('settings.personalNotificationSaveAction') })).toHaveClass('bg-gradient-to-r', 'from-blue-600', 'to-purple-600', 'text-white');
     expect(screen.getByTestId('change-password-card')).toBeInTheDocument();
     expect(screen.getByTestId('font-size-card')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /紧凑 Compact/ }));

@@ -300,7 +300,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
           />
           <Button
             type="button"
-            variant="secondary"
+            variant="settings-secondary"
             className="shrink-0 sm:self-start"
             onClick={handlePasteParse}
             disabled={disabled || isLoading || !pasteText.trim()}
@@ -386,7 +386,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
           </div>
           <Button
             type="button"
-            variant="primary"
+            variant="settings-primary"
             className="mt-2"
             onClick={() => void mergeToWatchlist()}
             disabled={disabled || isMerging || checkedCount === 0}
