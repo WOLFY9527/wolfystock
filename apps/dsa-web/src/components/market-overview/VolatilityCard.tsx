@@ -6,7 +6,7 @@ import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
 import {
   MARKET_OVERVIEW_CARD_TITLE_CLASS,
   MARKET_OVERVIEW_GHOST_CARD_CLASS,
-  MarketOverviewDataRow,
+  MarketOverviewDenseQuoteItem,
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
@@ -31,12 +31,12 @@ export const VolatilityCard: React.FC<{
   ];
 
   return (
-    <GlassCard as="section" className={`${MARKET_OVERVIEW_GHOST_CARD_CLASS} flex h-full flex-col`}>
-      <div className="flex h-full flex-col gap-5">
-        <div className="mb-6 flex items-center justify-between gap-4">
+    <GlassCard as="section" data-testid="market-overview-dense-quote-card" className={`${MARKET_OVERVIEW_GHOST_CARD_CLASS} flex h-full flex-col p-3.5`}>
+      <div className="flex h-full flex-col gap-3">
+        <div className="mb-1 flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.volatility.eyebrow')}</p>
-            <h2 className={`${MARKET_OVERVIEW_CARD_TITLE_CLASS} mt-2`}>{title}</h2>
+            <h2 className={`${MARKET_OVERVIEW_CARD_TITLE_CLASS} mt-2 mb-1 text-sm normal-case tracking-normal text-white/82`}>{title}</h2>
           </div>
           <MarketOverviewRefreshButton
             label={t('marketOverviewPage.refreshCard', { title })}
@@ -51,13 +51,12 @@ export const VolatilityCard: React.FC<{
           </div>
         ) : null}
 
-        <div className="flex flex-col">
+        <div data-testid="market-overview-dense-quote-grid" className="flex flex-col border-y border-white/[0.045]">
           {compactItems.map((item) => (
-            <MarketOverviewDataRow
+            <MarketOverviewDenseQuoteItem
               key={item.symbol}
               item={item}
               neutralLabel={t('marketOverviewPage.direction.neutral')}
-              valueClassName={item.symbol === 'FGI' ? 'text-emerald-400' : undefined}
               valueDigitsBelowHundred={item.symbol === 'FGI' ? 1 : 2}
             />
           ))}

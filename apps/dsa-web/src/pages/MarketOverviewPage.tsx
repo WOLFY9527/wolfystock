@@ -75,8 +75,8 @@ const CATEGORY_LAYOUT: Record<MarketOverviewTab, {
     fallback: [],
   },
   global: {
-    primary: ['macro', 'indices', 'rates', 'fxCommodities'],
-    secondary: ['volatility', 'sentiment'],
+    primary: ['macro', 'indices', 'volatility', 'rates', 'fxCommodities'],
+    secondary: ['sentiment'],
     fallback: ['futures'],
   },
   crypto: {
@@ -112,6 +112,7 @@ const CARD_LAYOUT_META: Record<CardKey, {
   sectorRotation: { size: 'normal', priority: 'fallback' },
   cnShortSentiment: { size: 'compact', priority: 'fallback' },
 };
+const DENSE_QUOTE_CARDS = new Set<CardKey>(['indices', 'cnIndices', 'crypto', 'volatility', 'fundsFlow', 'macro', 'rates', 'fxCommodities']);
 const AUTO_REFRESH_MS = 60_000;
 const PANEL_REQUEST_TIMEOUT_MS = 3_000;
 
@@ -225,12 +226,71 @@ function findPanelItem(panel: MarketOverviewPanel | undefined, symbols: string[]
   return panel?.items.find((item) => normalizedSymbols.includes(item.symbol.toUpperCase()));
 }
 
+function normalizeMarketToken(value?: string | null): string {
+  return (value || '').replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+const US_CORE_INDEX_TOKENS = new Set([
+  'SPX',
+  '^GSPC',
+  'S&P 500',
+  'NDX',
+  '^NDX',
+  'NASDAQ 100',
+  'IXIC',
+  '^IXIC',
+  'NASDAQ COMPOSITE',
+  'DJI',
+  'DJIA',
+  '^DJI',
+  'DOW JONES',
+  'DOW JONES INDUSTRIAL AVERAGE',
+  'RUT',
+  '^RUT',
+  'RUSSELL 2000',
+].map(normalizeMarketToken));
+
+const CN_HK_INDEX_TOKENS = new Set([
+  '000001.SH',
+  'SH000001',
+  'SHANGHAI COMPOSITE',
+  '399001.SZ',
+  'SZ399001',
+  'SHENZHEN COMPONENT',
+  'CSI300',
+  '000300.SH',
+  'CSI 300',
+  'HSI',
+  'HANG SENG INDEX',
+  'HSTECH',
+  'HANG SENG TECH',
+].map(normalizeMarketToken));
+
+function isUsCoreIndexItem(item: MarketOverviewItem): boolean {
+  const symbol = normalizeMarketToken(item.symbol);
+  const label = normalizeMarketToken(item.label);
+  if (CN_HK_INDEX_TOKENS.has(symbol) || CN_HK_INDEX_TOKENS.has(label)) {
+    return false;
+  }
+  return US_CORE_INDEX_TOKENS.has(symbol) || US_CORE_INDEX_TOKENS.has(label);
+}
+
+function filterPanelItems(panel: MarketOverviewPanel | undefined, predicate: (item: MarketOverviewItem) => boolean): MarketOverviewPanel | undefined {
+  if (!panel) {
+    return panel;
+  }
+  return {
+    ...panel,
+    items: panel.items.filter(predicate),
+  };
+}
+
 function buildHeroAnchors(panels: PanelState): HeroAnchor[] {
   return [
     { key: 'SPX', label: '标普500', item: findPanelItem(panels.indices, ['SPX']) },
     { key: 'CSI300', label: '沪深300', item: findPanelItem(panels.cnIndices, ['CSI300', '000300.SH']) || findPanelItem(panels.indices, ['CSI300']) },
     { key: 'BTC', label: '比特币', item: findPanelItem(panels.crypto, ['BTC']) },
-    { key: 'VIX', label: '恐慌指数', item: findPanelItem(panels.volatility, ['VIX']) },
+    { key: 'VIX', label: 'VIX 恐慌指数', item: findPanelItem(panels.volatility, ['VIX']) },
     { key: 'US10Y', label: '美债10年期', item: findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.macro, ['US10Y']) },
     { key: 'DXY', label: '美元指数', item: findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY']) },
   ];
@@ -261,38 +321,41 @@ function heroToneClass(item: MarketOverviewItem | undefined): string {
     : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.36)]';
 }
 
-const CrossAssetHeroRibbon: React.FC<{ anchors: HeroAnchor[] }> = ({ anchors }) => (
-  <GlassCard
-    as="section"
-    data-testid="market-overview-hero-ribbon"
-    className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'overflow-hidden p-0')}
-    aria-label="Cross asset hero ribbon"
-  >
-    <div className="grid grid-cols-2 divide-x divide-y divide-white/5 sm:grid-cols-3 md:grid-cols-6 md:divide-y-0">
-      {anchors.map((anchor) => {
-        const displayLabel = anchor.item ? resolveMarketOverviewDisplayLabel(anchor.item) : { primary: anchor.label, secondary: anchor.key };
-        return (
-          <div
-            key={anchor.key}
-            data-testid={`market-overview-hero-${anchor.key}`}
-            className="min-w-0 bg-white/[0.02] px-4 py-3.5"
-          >
-            <p className="block truncate text-[10px] font-semibold uppercase tracking-widest text-white/50">
-              {displayLabel.primary}
-              {displayLabel.secondary ? <span className="ml-1 text-white/28">({displayLabel.secondary})</span> : null}
-            </p>
-            <p className="mt-1 truncate font-mono text-[22px] font-semibold leading-none text-white md:text-2xl">
-              {formatHeroValue(anchor.item?.value)}
-            </p>
-            <p className={`mt-1 font-mono text-xs font-semibold ${heroToneClass(anchor.item)}`}>
-              {formatHeroChange(anchor.item?.changePct)}
-            </p>
-          </div>
-        );
-      })}
-    </div>
-  </GlassCard>
-);
+const CrossAssetHeroRibbon: React.FC<{ anchors: HeroAnchor[] }> = ({ anchors }) => {
+  const { language } = useI18n();
+  return (
+    <GlassCard
+      as="section"
+      data-testid="market-overview-hero-ribbon"
+      className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'overflow-hidden p-0')}
+      aria-label="Cross asset hero ribbon"
+    >
+      <div className="grid grid-cols-2 divide-x divide-y divide-white/5 sm:grid-cols-3 md:grid-cols-6 md:divide-y-0">
+        {anchors.map((anchor) => {
+          const displayLabel = anchor.item ? resolveMarketOverviewDisplayLabel(anchor.item, language) : { primary: anchor.label, secondary: anchor.key };
+          return (
+            <div
+              key={anchor.key}
+              data-testid={`market-overview-hero-${anchor.key}`}
+              className="min-w-0 bg-white/[0.02] px-4 py-3.5"
+            >
+              <p className="block truncate text-[10px] font-semibold uppercase tracking-widest text-white/50">
+                {displayLabel.primary}
+                {displayLabel.secondary ? <span className="ml-1 text-white/28">({displayLabel.secondary})</span> : null}
+              </p>
+              <p className="mt-1 truncate font-mono text-[22px] font-semibold leading-none text-white md:text-2xl">
+                {formatHeroValue(anchor.item?.value)}
+              </p>
+              <p className={`mt-1 font-mono text-xs font-semibold ${heroToneClass(anchor.item)}`}>
+                {formatHeroChange(anchor.item?.changePct)}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </GlassCard>
+  );
+};
 
 function formatNumber(value: number | null | undefined, digits = 2): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -472,18 +535,18 @@ const DataQualityOverview: React.FC<{ summary: DataQualitySummary }> = ({ summar
     ['error', '异常'],
   ];
   return (
-    <GlassCard as="section" data-testid="market-data-quality" className={MARKET_OVERVIEW_GHOST_CARD_CLASS}>
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <GlassCard as="section" data-testid="market-data-quality" className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'p-3.5')}>
+      <div className="flex flex-col gap-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">DATA QUALITY</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">当前数据质量：{summary.status}</h2>
+          <h2 className="mt-1 text-base font-semibold text-white">当前数据质量：{summary.status}</h2>
           {summary.hasConcern ? (
             <p className="mt-1 text-xs leading-5 text-amber-200/75">部分数据为备用或旧快照，请以交易所/券商行情为准。</p>
           ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           {countItems.filter(([key]) => summary.counts[key] > 0).map(([key, label]) => (
-            <div key={key} className="flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.025] px-2 py-1">
+            <div key={key} className="flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.025] px-1.5 py-1">
               <DataFreshnessBadge freshness={key} />
               <span className="font-mono text-xs text-white/70">{summary.counts[key]}</span>
               <span className="sr-only">{label}</span>
@@ -659,6 +722,7 @@ const MarketTemperatureStrip: React.FC<{
 }> = ({ data, refreshing, onRefresh }) => {
   const { t } = useI18n();
   const [showPlaceholderScores, setShowPlaceholderScores] = useState(false);
+  const [showScoreDetails, setShowScoreDetails] = useState(false);
   const scores: Array<{ key: keyof MarketTemperatureResponse['scores']; label: string; pressure?: boolean }> = [
     { key: 'overall', label: t('marketOverviewPage.temperature.overall') },
     { key: 'usRiskAppetite', label: t('marketOverviewPage.temperature.usRiskAppetite') },
@@ -668,13 +732,13 @@ const MarketTemperatureStrip: React.FC<{
   ];
   const isReliable = isTemperatureReliable(data);
   const confidenceText = confidenceLabel(data.confidence);
-  const shouldShowScores = isReliable || showPlaceholderScores;
+  const shouldShowScores = isReliable ? showScoreDetails : showPlaceholderScores;
   return (
-    <GlassCard as="section" data-testid="market-temperature-strip" className={MARKET_OVERVIEW_GHOST_CARD_CLASS}>
+    <GlassCard as="section" data-testid="market-temperature-strip" className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'p-3.5')}>
       <div className="mb-3 flex items-center justify-between gap-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.temperature.eyebrow')}</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">{t('marketOverviewPage.temperature.title')}</h2>
+          <h2 className="mt-1 text-base font-semibold text-white">{t('marketOverviewPage.temperature.title')}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             <span className={cn(
               'rounded-full border px-2 py-0.5 font-semibold',
@@ -716,6 +780,16 @@ const MarketTemperatureStrip: React.FC<{
             {showPlaceholderScores ? '收起占位评分' : '查看占位评分'}
           </button>
         </div>
+      ) : null}
+      {isReliable ? (
+        <button
+          type="button"
+          className="mb-3 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-left text-xs font-semibold text-white/65 transition hover:bg-white/[0.06] hover:text-white"
+          aria-expanded={showScoreDetails}
+          onClick={() => setShowScoreDetails((current) => !current)}
+        >
+          {showScoreDetails ? '收起分项评分' : '查看分项评分'}
+        </button>
       ) : null}
       {shouldShowScores ? (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
@@ -763,7 +837,7 @@ const MarketBriefingCard: React.FC<{
   const hasWarning = Boolean(data.warning);
   const isReliable = !hasWarning && data.isReliable !== false && (data.confidence == null || data.confidence >= 0.45);
   return (
-    <GlassCard as="section" data-testid="market-briefing-card" className={MARKET_OVERVIEW_GHOST_CARD_CLASS}>
+    <GlassCard as="section" data-testid="market-briefing-card" className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, compact ? 'p-3.5' : '')}>
       <div className="mb-3 flex items-center justify-between gap-4">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.briefing.eyebrow')}</p>
@@ -777,7 +851,7 @@ const MarketBriefingCard: React.FC<{
         </div>
       ) : null}
       <div className={cn('grid gap-2', compact ? 'grid-cols-1' : 'md:grid-cols-2 xl:grid-cols-3')}>
-        {data.items.slice(0, hasWarning || !isReliable ? 3 : 5).map((item) => {
+        {data.items.slice(0, compact ? 2 : hasWarning || !isReliable ? 3 : 5).map((item) => {
           const lowConfidence = !isReliable || (item.confidence != null && item.confidence < 0.45);
           return (
           <article key={`${item.category}-${item.title}`} className={cn('rounded-lg border px-3 py-2.5', lowConfidence ? severityClass.neutral : severityClass[item.severity] || severityClass.neutral)}>
@@ -1268,7 +1342,7 @@ const MarketOverviewPage: React.FC = () => {
         eyebrow={t('marketOverviewPage.cards.indexTrends.eyebrow')}
         description={t('marketOverviewPage.cards.indexTrends.description')}
         sourceLabel={t('marketOverviewPage.cards.indexTrends.source')}
-        panel={panels.indices}
+        panel={activeCategory === 'us' ? filterPanelItems(panels.indices, isUsCoreIndexItem) : panels.indices}
         loading={loading && !panels.indices}
         refreshing={refreshingPanel === 'indices'}
         variant="denseQuote"
@@ -1410,6 +1484,7 @@ const MarketOverviewPage: React.FC = () => {
         panel={panels.rates}
         loading={loading && !panels.rates}
         refreshing={refreshingPanel === 'rates'}
+        variant="denseQuote"
         onRefresh={() => {
           void refreshPanel('rates', marketApi.getRates);
         }}
@@ -1424,12 +1499,13 @@ const MarketOverviewPage: React.FC = () => {
         panel={panels.fxCommodities}
         loading={loading && !panels.fxCommodities}
         refreshing={refreshingPanel === 'fxCommodities'}
+        variant="denseQuote"
         onRefresh={() => {
           void refreshPanel('fxCommodities', marketApi.getFxCommodities);
         }}
       />
     ),
-  }), [cryptoRealtimeStatus, loading, panels, refreshPanel, refreshingPanel, t]);
+  }), [activeCategory, cryptoRealtimeStatus, loading, panels, refreshPanel, refreshingPanel, t]);
 
   const heroAnchors = useMemo(() => buildHeroAnchors(panels), [panels]);
   const dataQuality = useMemo(() => summarizeDataQuality(panels), [panels]);
@@ -1438,7 +1514,7 @@ const MarketOverviewPage: React.FC = () => {
   const activeLayout = CATEGORY_LAYOUT[activeCategory];
   const primaryCandidates = activeLayout.primary.filter((cardKey) => getCardCoverageKind(panels, cardKey) !== 'fallback');
   const secondaryOrder = activeLayout.secondary.filter((cardKey) => getCardCoverageKind(panels, cardKey) !== 'fallback');
-  const primaryOrder = primaryCandidates;
+  const primaryOrder = [...primaryCandidates, ...secondaryOrder];
   const fallbackOnlyOrder = CATEGORY_CARDS[activeCategory].filter((cardKey) => (
     getCardCoverageKind(panels, cardKey) === 'fallback' || activeLayout.fallback.includes(cardKey)
   ));
@@ -1457,7 +1533,7 @@ const MarketOverviewPage: React.FC = () => {
       data-testid={`market-overview-card-${cardKey}`}
       data-market-card-rank={rank}
       data-market-card-size={layoutMeta.size}
-      data-market-card-density={layoutMeta.size === 'dense-wide' ? 'dense-quote' : 'standard'}
+      data-market-card-density={DENSE_QUOTE_CARDS.has(cardKey) ? 'dense-quote' : 'standard'}
       className={cn(
         'min-w-0 w-full',
         shouldSpanPrimaryRail ? 'lg:col-span-2 2xl:col-span-3' : '',
@@ -1500,7 +1576,7 @@ const MarketOverviewPage: React.FC = () => {
         ) : null}
         {primaryOrder.map((cardKey, index) => renderCard(cardKey, index, 'primary'))}
       </section>
-      <aside data-testid="market-overview-side-rail" className="flex min-w-0 flex-col gap-6 xl:col-span-4 2xl:col-span-3">
+      <aside data-testid="market-overview-side-rail" className="flex min-w-0 flex-col gap-4 xl:col-span-4 2xl:col-span-3">
         <MarketTemperatureStrip
           data={panels.temperature}
           refreshing={refreshingPanel === 'temperature'}
@@ -1518,7 +1594,6 @@ const MarketOverviewPage: React.FC = () => {
           }}
         />
         <CategoryCoverageSummary label={activeCategoryLabel} summary={coverageSummary} />
-        {secondaryOrder.length > 0 ? renderCardGrid(secondaryOrder, 'side') : null}
         {renderFallbackSection()}
       </aside>
     </main>

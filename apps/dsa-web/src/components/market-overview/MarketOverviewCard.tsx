@@ -61,13 +61,13 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
       className={cn(
         MARKET_OVERVIEW_GHOST_CARD_CLASS,
         'flex h-full flex-col',
-        denseQuote ? 'p-4' : '',
+        denseQuote ? 'p-3.5' : '',
         fallbackOnly ? 'border-orange-300/12' : '',
         className || '',
       )}
     >
-      <div className={cn('flex h-full flex-col', denseQuote ? 'gap-4' : 'gap-5')}>
-        <div className={cn('flex items-start justify-between gap-4', denseQuote ? 'mb-2' : 'mb-6')}>
+      <div className={cn('flex h-full flex-col', denseQuote ? 'gap-3' : 'gap-5')}>
+        <div className={cn('flex items-start justify-between gap-3', denseQuote ? 'mb-1' : 'mb-6')}>
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{eyebrow}</p>
             <h2 className={cn(
@@ -75,7 +75,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
               'mt-2',
               denseQuote ? 'mb-1 text-sm normal-case tracking-normal text-white/82' : '',
             )}>{title}</h2>
-            <p className={cn('mt-1 max-w-xl text-white/55', denseQuote ? 'line-clamp-2 text-xs leading-5' : 'text-sm')}>{description}</p>
+            <p className={cn('mt-1 max-w-xl text-white/55', denseQuote ? 'line-clamp-1 text-[11px] leading-4' : 'text-sm')}>{description}</p>
           </div>
           <MarketOverviewRefreshButton
             label={t('marketOverviewPage.refreshCard', { title })}
@@ -90,7 +90,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
           </div>
         ) : null}
 
-        {fallbackOnly ? (
+        {fallbackOnly && !denseQuote ? (
           <div className="rounded-lg border border-orange-300/20 bg-orange-400/8 px-3 py-2 text-xs leading-5 text-orange-100/85" data-testid="market-overview-fallback-only-notice">
             <p className="font-semibold">暂未接入真实数据源</p>
             <p className="text-orange-100/70">当前为备用示例数据，不参与市场温度评分</p>
@@ -100,7 +100,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
         {denseQuote ? (
           <div
             data-testid="market-overview-dense-quote-grid"
-            className="grid grid-cols-1 gap-3 md:grid-cols-2"
+            className="flex flex-col border-y border-white/[0.045]"
           >
             {items.map((item) => (
               <MarketOverviewDenseQuoteItem

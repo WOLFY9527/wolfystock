@@ -21,6 +21,7 @@ export const MacroIndicatorsCard: React.FC<{
       loading={loading}
       refreshing={refreshing}
       onRefresh={onRefresh}
+      variant="denseQuote"
     />
   );
 };
