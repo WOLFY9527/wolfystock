@@ -2,6 +2,8 @@ import React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownUp,
+  BookmarkCheck,
+  BookmarkPlus,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -16,6 +18,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { scannerApi } from '../api/scanner';
+import { watchlistApi } from '../api/watchlist';
 import { ApiErrorAlert, Drawer, Pagination, PillBadge, SectionShell } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
@@ -36,6 +39,7 @@ import type {
   ScannerTheme,
   ScannerWatchlistComparison,
 } from '../types/scanner';
+import type { WatchlistItem } from '../types/watchlist';
 import { buildLocalizedPath } from '../utils/localeRouting';
 import {
   getScannerDetailOptions,
@@ -66,6 +70,53 @@ function getCandidateIdentity(candidate: ScannerCandidate): string {
 function normalizeScannerMarket(market?: string | null): string | null {
   const normalized = String(market || '').trim().toUpperCase();
   return normalized === 'CN' || normalized === 'US' || normalized === 'HK' ? normalized : null;
+}
+
+function getWatchlistIdentity(market?: string | null, symbol?: string | null): string {
+  const normalizedMarket = normalizeScannerMarket(market);
+  const normalizedSymbol = normalizeCandidateSymbol(symbol);
+  return normalizedMarket && normalizedSymbol ? `${normalizedMarket}:${normalizedSymbol}` : normalizedSymbol || '';
+}
+
+function buildWatchlistNotes(candidate: ScannerCandidate, runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): string | null {
+  const notes = [
+    getKeyReason(candidate, runDetail, language),
+    getRiskSummary(candidate, language),
+    candidate.aiInterpretation?.watchPlan,
+  ].filter((item): item is string => Boolean(item));
+  return notes.length ? notes.slice(0, 3).join(language === 'en' ? ' | ' : ' ｜ ') : null;
+}
+
+function getWatchlistActionLabel(
+  isTracked: boolean,
+  isPending: boolean,
+  isAuthBlocked: boolean,
+  language: 'zh' | 'en',
+): string {
+  if (isPending) {
+    return language === 'en' ? 'Saving...' : '保存中...';
+  }
+  if (isTracked) {
+    return language === 'en' ? 'Tracked' : '已追踪';
+  }
+  if (isAuthBlocked) {
+    return language === 'en' ? 'Sign in to track' : '登录后可追踪';
+  }
+  return language === 'en' ? 'Track' : '追踪';
+}
+
+function getWatchlistActionTitle(
+  isTracked: boolean,
+  isAuthBlocked: boolean,
+  language: 'zh' | 'en',
+): string | undefined {
+  if (isTracked) {
+    return language === 'en' ? 'This candidate is already tracked.' : '该候选已在观察名单中。';
+  }
+  if (isAuthBlocked) {
+    return language === 'en' ? 'Sign in to save candidates to your watchlist.' : '请登录后再保存候选到你的观察名单。';
+  }
+  return language === 'en' ? 'Save this candidate to your watchlist.' : '保存到你的观察名单。';
 }
 
 function buildScannerBacktestPath(
@@ -672,8 +723,12 @@ function CandidateDetailPanel({
   onAnalyze,
   onCopy,
   onExport,
+  onTrack,
   isAnalyzing,
   isCopied,
+  isTracked,
+  isTrackPending,
+  isWatchlistAuthBlocked,
   backtestActionLabel,
   backtestHref,
 }: {
@@ -683,8 +738,12 @@ function CandidateDetailPanel({
   onAnalyze: (candidate: ScannerCandidate) => void;
   onCopy: (candidate: ScannerCandidate) => void;
   onExport: (candidate: ScannerCandidate) => void;
+  onTrack: (candidate: ScannerCandidate) => void;
   isAnalyzing: boolean;
   isCopied: boolean;
+  isTracked: boolean;
+  isTrackPending: boolean;
+  isWatchlistAuthBlocked: boolean;
   backtestActionLabel: string;
   backtestHref: string | null;
 }) {
@@ -711,6 +770,14 @@ function CandidateDetailPanel({
           label={isCopied ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy symbol' : '复制代码')}
           icon={<Copy className="h-3.5 w-3.5" />}
           onClick={() => onCopy(candidate)}
+        />
+        <ActionButton
+          label={getWatchlistActionLabel(isTracked, isTrackPending, isWatchlistAuthBlocked, language)}
+          icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
+          onClick={() => onTrack(candidate)}
+          disabled={isTrackPending || isTracked}
+          variant={isTracked ? 'default' : 'primary'}
+          title={getWatchlistActionTitle(isTracked, isWatchlistAuthBlocked, language)}
         />
         <ActionButton
           label={language === 'en' ? 'Export candidate' : '导出该候选'}
@@ -911,6 +978,9 @@ const UserScannerPage: React.FC = () => {
   const [historyError, setHistoryError] = useState<ParsedApiError | null>(null);
   const [actionNotice, setActionNotice] = useState<ActionNotice>(null);
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
+  const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
+  const [watchlistAuthBlocked, setWatchlistAuthBlocked] = useState(false);
+  const [pendingWatchlistIdentity, setPendingWatchlistIdentity] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -968,6 +1038,28 @@ const UserScannerPage: React.FC = () => {
     const firstConfiguredTheme = marketThemes.find((theme) => theme.symbols.length > 0);
     setThemeId(firstConfiguredTheme?.id || '');
   }, [market, marketThemes, scanScope, selectedTheme?.market]);
+
+  useEffect(() => {
+    let isMounted = true;
+    watchlistApi.listWatchlistItems()
+      .then((response) => {
+        if (!isMounted) return;
+        setWatchlistItems(response.items || []);
+        setWatchlistAuthBlocked(false);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        const parsedError = getParsedApiError(error);
+        if (parsedError.isAuthError || parsedError.status === 401 || parsedError.status === 403 || parsedError.status === 405) {
+          setWatchlistAuthBlocked(true);
+          return;
+        }
+        setWatchlistItems([]);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const loadRun = useCallback(async (runId: number) => {
     try {
@@ -1060,6 +1152,10 @@ const UserScannerPage: React.FC = () => {
   const totalHistoryPages = useMemo(
     () => Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE)),
     [historyTotal],
+  );
+  const trackedWatchlistIdentitySet = useMemo(
+    () => new Set(watchlistItems.map((item) => getWatchlistIdentity(item.market, item.symbol))),
+    [watchlistItems],
   );
   const runScannerButton = useSafariWarmActivation<HTMLButtonElement>(() => {
     void handleRun();
@@ -1199,6 +1295,60 @@ const UserScannerPage: React.FC = () => {
       });
     }
   }, [language]);
+
+  const handleTrackCandidate = useCallback(async (candidate: ScannerCandidate) => {
+    const candidateMarket = normalizeScannerMarket(runDetail?.market || market);
+    if (!candidateMarket) return;
+    const candidateIdentity = getWatchlistIdentity(candidateMarket, candidate.symbol);
+    if (!candidateIdentity || trackedWatchlistIdentitySet.has(candidateIdentity)) {
+      return;
+    }
+
+    setPendingWatchlistIdentity(candidateIdentity);
+    setActionNotice(null);
+    try {
+      const savedItem = await watchlistApi.addWatchlistItem({
+        symbol: candidate.symbol,
+        market: candidateMarket.toLowerCase(),
+        name: candidate.companyName || candidate.name,
+        source: 'scanner',
+        scannerRunId: runDetail?.id,
+        scannerRank: candidate.rank,
+        scannerScore: candidate.score,
+        themeId: runDetail?.themeId || undefined,
+        universeType: runDetail?.universeType || undefined,
+        notes: buildWatchlistNotes(candidate, runDetail, language) || undefined,
+      });
+      setWatchlistItems((current) => {
+        const nextIdentity = getWatchlistIdentity(savedItem.market, savedItem.symbol);
+        const remaining = current.filter((item) => getWatchlistIdentity(item.market, item.symbol) !== nextIdentity);
+        return [savedItem, ...remaining];
+      });
+      setWatchlistAuthBlocked(false);
+      setActionNotice({
+        tone: 'success',
+        message: language === 'en' ? 'Saved to your watchlist.' : '已加入观察名单。',
+      });
+    } catch (error) {
+      const parsedError = getParsedApiError(error);
+      if (parsedError.isAuthError || parsedError.status === 401 || parsedError.status === 403 || parsedError.status === 405) {
+        setWatchlistAuthBlocked(true);
+        setActionNotice({
+          tone: 'warning',
+          message: language === 'en'
+            ? 'Sign in to save candidates to your watchlist.'
+            : '请登录后再保存候选到你的观察名单。',
+        });
+      } else {
+        setActionNotice({
+          tone: 'danger',
+          message: parsedError.message,
+        });
+      }
+    } finally {
+      setPendingWatchlistIdentity((current) => (current === candidateIdentity ? null : current));
+    }
+  }, [language, market, runDetail, trackedWatchlistIdentitySet]);
 
   return (
     <>
@@ -1455,6 +1605,9 @@ const UserScannerPage: React.FC = () => {
                     {sortedCandidates.map((candidate) => {
                       const isExpanded = expandedSymbol === candidate.symbol;
                       const candidateIdentity = getCandidateIdentity(candidate);
+                      const candidateWatchlistIdentity = getWatchlistIdentity(runDetail?.market || market, candidate.symbol);
+                      const isTracked = trackedWatchlistIdentitySet.has(candidateWatchlistIdentity);
+                      const isTrackPending = pendingWatchlistIdentity === candidateWatchlistIdentity;
                       const backtestHref = buildScannerBacktestPath(candidate, runDetail, language);
                       const entryRange = getEntryRange(candidate);
                       const targetPrice = getTargetPrice(candidate);
@@ -1488,6 +1641,11 @@ const UserScannerPage: React.FC = () => {
                                 {sourceBadge ? (
                                   <span className="inline-flex max-w-[220px] truncate rounded border border-white/8 bg-white/[0.035] px-1.5 py-0.5 text-[10px] text-white/45">
                                     {sourceBadge}
+                                  </span>
+                                ) : null}
+                                {isTracked ? (
+                                  <span className="inline-flex rounded border border-emerald-400/20 bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-100">
+                                    {language === 'en' ? 'Tracked' : '已追踪'}
                                   </span>
                                 ) : null}
                               </div>
@@ -1551,6 +1709,14 @@ const UserScannerPage: React.FC = () => {
                                 variant="primary"
                               />
                               <ActionButton
+                                label={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
+                                icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
+                                onClick={() => void handleTrackCandidate(candidate)}
+                                disabled={isTracked || isTrackPending}
+                                variant={isTracked ? 'default' : 'primary'}
+                                title={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
+                              />
+                              <ActionButton
                                 label={copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
                                 icon={<Copy className="h-3.5 w-3.5" />}
                                 onClick={() => void handleCopyText(candidate.symbol, `candidate:${candidate.symbol}`)}
@@ -1587,8 +1753,12 @@ const UserScannerPage: React.FC = () => {
                                 [buildScannerExportRow(nextCandidate, runDetail, language)],
                                 buildScannerExportFilename(runDetail, `candidate-${nextCandidate.symbol}`),
                               )}
+                              onTrack={(nextCandidate) => void handleTrackCandidate(nextCandidate)}
                               isAnalyzing={pendingAnalyzeSymbol === candidate.symbol}
                               isCopied={copiedKey === `candidate:${candidate.symbol}`}
+                              isTracked={isTracked}
+                              isTrackPending={isTrackPending}
+                              isWatchlistAuthBlocked={watchlistAuthBlocked}
                               backtestActionLabel={backtestUnavailableLabel}
                               backtestHref={backtestHref}
                             />
@@ -1619,6 +1789,9 @@ const UserScannerPage: React.FC = () => {
                         {sortedCandidates.map((candidate) => {
                           const isExpanded = expandedSymbol === candidate.symbol;
                           const candidateIdentity = getCandidateIdentity(candidate);
+                          const candidateWatchlistIdentity = getWatchlistIdentity(runDetail?.market || market, candidate.symbol);
+                          const isTracked = trackedWatchlistIdentitySet.has(candidateWatchlistIdentity);
+                          const isTrackPending = pendingWatchlistIdentity === candidateWatchlistIdentity;
                           const backtestHref = buildScannerBacktestPath(candidate, runDetail, language);
                           return (
                             <React.Fragment key={`table-${candidateIdentity}`}>
@@ -1651,6 +1824,17 @@ const UserScannerPage: React.FC = () => {
                                       }}
                                       disabled={pendingAnalyzeSymbol === candidate.symbol}
                                       variant="primary"
+                                    />
+                                    <ActionButton
+                                      label={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
+                                      icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        void handleTrackCandidate(candidate);
+                                      }}
+                                      disabled={isTracked || isTrackPending}
+                                      variant={isTracked ? 'default' : 'primary'}
+                                      title={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
                                     />
                                     <ActionButton
                                       label={copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
@@ -1691,8 +1875,12 @@ const UserScannerPage: React.FC = () => {
                                         [buildScannerExportRow(nextCandidate, runDetail, language)],
                                         buildScannerExportFilename(runDetail, `candidate-${nextCandidate.symbol}`),
                                       )}
+                                      onTrack={(nextCandidate) => void handleTrackCandidate(nextCandidate)}
                                       isAnalyzing={pendingAnalyzeSymbol === candidate.symbol}
                                       isCopied={copiedKey === `candidate:${candidate.symbol}`}
+                                      isTracked={isTracked}
+                                      isTrackPending={isTrackPending}
+                                      isWatchlistAuthBlocked={watchlistAuthBlocked}
                                       backtestActionLabel={backtestUnavailableLabel}
                                       backtestHref={backtestHref}
                                     />

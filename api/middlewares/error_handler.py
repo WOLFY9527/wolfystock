@@ -77,6 +77,7 @@ def add_error_handlers(app) -> None:
         app: FastAPI 应用实例
     """
     from fastapi import HTTPException
+    from fastapi.encoders import jsonable_encoder
     from fastapi.exceptions import RequestValidationError
     
     @app.exception_handler(HTTPException)
@@ -106,7 +107,7 @@ def add_error_handlers(app) -> None:
             content={
                 "error": "validation_error",
                 "message": "请求参数验证失败",
-                "detail": exc.errors()
+                "detail": jsonable_encoder(exc.errors())
             }
         )
     

@@ -1062,6 +1062,32 @@ class PortfolioFxRate(Base):
     )
 
 
+class UserWatchlistItem(Base):
+    """User-owned tracked candidate entry used by scanner actions."""
+
+    __tablename__ = 'user_watchlist_items'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), nullable=False, index=True, default=BOOTSTRAP_ADMIN_USER_ID)
+    symbol = Column(String(16), nullable=False, index=True)
+    market = Column(String(8), nullable=False, default='cn', index=True)
+    name = Column(String(128))
+    source = Column(String(32), nullable=False, default='scanner', index=True)
+    scanner_run_id = Column(Integer, index=True)
+    scanner_rank = Column(Integer)
+    scanner_score = Column(Float)
+    theme_id = Column(String(64), index=True)
+    universe_type = Column(String(32), index=True)
+    notes = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, index=True)
+
+    __table_args__ = (
+        UniqueConstraint('owner_id', 'symbol', 'market', name='uix_user_watchlist_owner_symbol_market'),
+        Index('ix_user_watchlist_owner_updated', 'owner_id', 'updated_at'),
+    )
+
+
 class ConversationMessage(Base):
     """
     Agent 对话历史记录表
@@ -2249,6 +2275,9 @@ class DatabaseManager:
                 ).rowcount or 0
             else:
                 counts["portfolio_broker_connections"] = 0
+            counts["user_watchlist_items"] = session.execute(
+                delete(UserWatchlistItem).where(UserWatchlistItem.owner_id.in_(user_ids))
+            ).rowcount or 0
             counts["portfolio_accounts"] = session.execute(
                 delete(PortfolioAccount).where(PortfolioAccount.owner_id.in_(user_ids))
             ).rowcount or 0

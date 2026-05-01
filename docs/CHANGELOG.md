@@ -1,5 +1,7 @@
 ## 2026-05-01
 
+- 📝 **Scanner 候选加入用户观察名单** — Scanner 结果页新增用户级 `Track / 已追踪` 动作，支持把候选保存到当前登录用户自己的观察名单，并在卡片/表格/详情里同步显示已追踪状态；后端新增独立的 `/api/v1/watchlist/items` 读写接口与 `user_watchlist_items` 持久化表，继续与现有 scanner admin/system watchlist endpoints 分离。该能力仅面向已认证用户，按 `owner_id + symbol + market` 做用户内幂等保存，并在 execution logs 中记录 watchlist add/remove 审计事件。
+
 - 🧭 **Market Scanner 主题与自定义标的池** — Scanner 新增 `/api/v1/scanner/themes` 主题池接口，手动扫描请求支持 `universe_type=theme|symbols`、`theme_id` 与自定义 `symbols`，并在运行详情/历史中返回主题、自定义代码数量与无效代码等 universe metadata。首批美股主题提供 crypto miners、memory/storage、AI semiconductors 的人工 seed list；A 股光模块/CPO、液冷、算力租赁、存储、半导体设备、机器人主题先作为未配置占位池暴露，明确要求人工维护，不冒充完整权威成分。
 
 - 🧾 **Guest / Portfolio / Scanner 执行日志归因补齐** — 公开 Guest analysis preview 现在会写入 execution log，不再只生成非持久化分析结果；日志中会标记 `actor_type=guest`、guest session/request id，并保留 symbol code 以便 Admin Logs 搜索 ORCL/AAPL 等游客分析。Execution log actor 元数据同步扩展为 `admin / user / guest / anonymous / system`，scanner 与 market overview 公共接口会传入当前 actor 或 anonymous/system 归因；Portfolio 的买卖、资金流水与公司行为写入路径新增 portfolio audit business event，记录 account、symbol、currency、record id 与 actor。

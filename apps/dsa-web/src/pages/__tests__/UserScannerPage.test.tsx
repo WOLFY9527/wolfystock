@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createApiError, createParsedApiError } from '../../api/error';
 import UserScannerPage from '../UserScannerPage';
 import { UiLanguageProvider, useI18n } from '../../contexts/UiLanguageContext';
 import type {
@@ -9,13 +10,17 @@ import type {
   ScannerRunHistoryItem,
   ScannerRunHistoryResponse,
 } from '../../types/scanner';
+import type { WatchlistItem } from '../../types/watchlist';
 
-const { getRuns, getRun, getThemes, runScan, analyzeAsync } = vi.hoisted(() => ({
+const { getRuns, getRun, getThemes, runScan, analyzeAsync, listWatchlistItems, addWatchlistItem, removeWatchlistItem } = vi.hoisted(() => ({
   getRuns: vi.fn(),
   getRun: vi.fn(),
   getThemes: vi.fn(),
   runScan: vi.fn(),
   analyzeAsync: vi.fn(),
+  listWatchlistItems: vi.fn(),
+  addWatchlistItem: vi.fn(),
+  removeWatchlistItem: vi.fn(),
 }));
 
 const writeTextMock = vi.fn();
@@ -29,6 +34,14 @@ vi.mock('../../api/scanner', () => ({
     getRun,
     getThemes,
     run: runScan,
+  },
+}));
+
+vi.mock('../../api/watchlist', () => ({
+  watchlistApi: {
+    listWatchlistItems,
+    addWatchlistItem,
+    removeWatchlistItem,
   },
 }));
 
@@ -355,6 +368,25 @@ function makeHistoryResponse(items: ScannerRunHistoryItem[] = [makeHistoryItem()
   };
 }
 
+function makeWatchlistItem(overrides: Partial<WatchlistItem> = {}): WatchlistItem {
+  return {
+    id: 101,
+    symbol: 'NVDA',
+    market: 'cn',
+    name: 'NVIDIA',
+    source: 'scanner',
+    scannerRunId: 11,
+    scannerRank: 1,
+    scannerScore: 94,
+    themeId: 'crypto_miners',
+    universeType: 'default',
+    notes: 'Backend reason: momentum and liquidity improved.',
+    createdAt: '2026-04-22T08:31:00',
+    updatedAt: '2026-04-22T08:31:00',
+    ...overrides,
+  };
+}
+
 function LanguageSwitch() {
   const { setLanguage } = useI18n();
   return (
@@ -395,6 +427,9 @@ describe('UserScannerPage', () => {
     getThemes.mockReset();
     runScan.mockReset();
     analyzeAsync.mockReset();
+    listWatchlistItems.mockReset();
+    addWatchlistItem.mockReset();
+    removeWatchlistItem.mockReset();
     writeTextMock.mockReset();
     createObjectUrlMock.mockClear();
     revokeObjectUrlMock.mockClear();
@@ -446,6 +481,9 @@ describe('UserScannerPage', () => {
     getRun.mockResolvedValue(makeRunDetail());
     runScan.mockResolvedValue(makeRunDetail());
     analyzeAsync.mockResolvedValue({ taskId: 'task-1' });
+    listWatchlistItems.mockResolvedValue({ items: [] });
+    addWatchlistItem.mockResolvedValue(makeWatchlistItem());
+    removeWatchlistItem.mockResolvedValue({ deleted: 1 });
   });
 
   it('renders scanner score without misleading AI score copy for normal scanner scores', async () => {
@@ -593,12 +631,72 @@ describe('UserScannerPage', () => {
     expect(backtestButton).toHaveAttribute('title', expect.stringMatching(/requires a candidate symbol|候选标的代码/i));
   });
 
-  it('does not expose watchlist actions when only admin or system watchlists exist', async () => {
+  it('renders scanner watchlist tracking actions and tracked state', async () => {
+    listWatchlistItems.mockResolvedValueOnce({
+      items: [makeWatchlistItem()],
+    });
     renderUserScannerPage();
 
     const card = await screen.findByTestId('scanner-result-card-NVDA');
-    expect(within(card).queryByRole('button', { name: /watchlist/i })).not.toBeInTheDocument();
-    expect(within(card).queryByRole('button', { name: /候选列表|观察名单/i })).not.toBeInTheDocument();
+    expect(within(card).getAllByText(/Tracked|已追踪/).length).toBeGreaterThan(0);
+    expect(within(card).getByRole('button', { name: /Tracked|已追踪/ })).toBeDisabled();
+    expect(within(card).getByRole('link', { name: /回测|Backtest/i })).toBeInTheDocument();
+  });
+
+  it('adds a scanner candidate to the watchlist and marks it tracked', async () => {
+    addWatchlistItem.mockResolvedValueOnce(makeWatchlistItem({
+      id: 202,
+      symbol: 'AVGO',
+      market: 'cn',
+      name: 'Broadcom',
+      scannerRunId: 11,
+      scannerRank: 2,
+      scannerScore: 88,
+    }));
+
+    renderUserScannerPage();
+
+    const card = await screen.findByTestId('scanner-result-card-AVGO');
+    fireEvent.click(within(card).getByRole('button', { name: /Track|追踪/i }));
+
+    await waitFor(() => {
+      expect(addWatchlistItem).toHaveBeenCalledWith(expect.objectContaining({
+        symbol: 'AVGO',
+        market: 'cn',
+        name: 'Backend Broadcom Label',
+        source: 'scanner',
+        scannerRunId: 11,
+        scannerRank: 2,
+        scannerScore: 88,
+        universeType: 'default',
+      }));
+    });
+
+    expect(await within(card).findByRole('button', { name: /Tracked|已追踪/ })).toBeDisabled();
+    expect(screen.getByText(/Saved to your watchlist|已加入观察名单/)).toBeInTheDocument();
+  });
+
+  it('shows a friendly sign-in message when watchlist writes are blocked', async () => {
+    addWatchlistItem.mockRejectedValueOnce(
+      createApiError(
+        createParsedApiError({
+          title: '登录已失效',
+          message: '请登录后再保存候选到你的观察名单。',
+          rawMessage: 'Unauthorized',
+          status: 401,
+          code: 'unauthorized',
+          category: 'auth_required',
+          isAuthError: true,
+        }),
+      ),
+    );
+
+    renderUserScannerPage();
+
+    const card = await screen.findByTestId('scanner-result-card-NVDA');
+    fireEvent.click(within(card).getByRole('button', { name: /Track|追踪/i }));
+
+    expect(await screen.findByText(/Sign in to save candidates to your watchlist|请登录后再保存候选到你的观察名单/)).toBeInTheDocument();
   });
 
   it('sorts frontend-only by scanner score and symbol', async () => {
