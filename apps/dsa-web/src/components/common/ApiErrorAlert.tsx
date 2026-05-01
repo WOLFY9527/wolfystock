@@ -78,7 +78,7 @@ export const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({
     <SupportBanner
       tone="danger"
       title={(
-        <div className="flex items-start justify-between gap-3">
+        <span className="flex items-start justify-between gap-3">
           <span>{error.title}</span>
           {onDismiss ? (
             <button
@@ -89,7 +89,7 @@ export const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({
               {dismissText}
             </button>
           ) : null}
-        </div>
+        </span>
       )}
       body={error.message}
       titleClassName="text-danger"
