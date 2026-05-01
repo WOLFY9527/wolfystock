@@ -30,6 +30,10 @@ from src.storage import DatabaseManager
 CN_TZ = timezone(timedelta(hours=8))
 
 
+def _fresh_sina_as_of() -> str:
+    return datetime.now(CN_TZ).isoformat(timespec="seconds")
+
+
 def _reset_auth_globals() -> None:
     auth._auth_enabled = None
     auth._session_secret = None
@@ -100,7 +104,7 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
 
     def test_cn_indices_supports_mixed_item_level_metadata(self) -> None:
         service = MarketOverviewService()
-        now = datetime(2026, 4, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+        now = _fresh_sina_as_of()
         quote = {
             "000001.SH": {
                 "name": "上证指数",
@@ -128,7 +132,7 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
 
     def test_cn_indices_sina_items_are_not_fallback(self) -> None:
         service = MarketOverviewService()
-        now = datetime.now(CN_TZ).isoformat(timespec="seconds")
+        now = _fresh_sina_as_of()
         quotes = {
             "000001.SH": {
                 "name": "上证指数",
@@ -175,7 +179,7 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         def fetcher(self: MarketOverviewService) -> dict:
             nonlocal calls
             calls += 1
-            updated_at = datetime(2026, 4, 30, 10, calls, tzinfo=CN_TZ).isoformat(timespec="seconds")
+            updated_at = _fresh_sina_as_of()
             return {
                 "source": "sina",
                 "updatedAt": updated_at,
@@ -208,7 +212,7 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         def fetcher(self: MarketOverviewService) -> dict:
             nonlocal calls
             calls += 1
-            updated_at = datetime(2026, 4, 30, 10, calls, tzinfo=CN_TZ).isoformat(timespec="seconds")
+            updated_at = _fresh_sina_as_of()
             return {
                 "source": "sina",
                 "updatedAt": updated_at,
@@ -257,7 +261,7 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         Config.reset_instance()
         DatabaseManager.reset_instance()
 
-        updated_at = datetime(2026, 4, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+        updated_at = _fresh_sina_as_of()
 
         def fetcher(self: MarketOverviewService) -> dict:
             return {
