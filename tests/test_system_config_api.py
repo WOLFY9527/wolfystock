@@ -141,6 +141,20 @@ class SystemConfigApiTestCase(unittest.TestCase):
                 self.assertFalse(item_map[key]["raw_editable"])
                 self.assertIn(item_map[key]["ui_visibility"], {"curated", "hidden"})
 
+        for key in (
+            "WECHAT_WEBHOOK_URL",
+            "DISCORD_MAIN_CHANNEL_ID",
+            "SLACK_CHANNEL_ID",
+            "DINGTALK_APP_KEY",
+            "PUSHOVER_USER_KEY",
+            "SERVERCHAN3_SENDKEY",
+            "WEBHOOK_VERIFY_SSL",
+        ):
+            with self.subTest(notification_key=key):
+                self.assertEqual(item_map[key]["managed_by"], "notifications")
+                self.assertEqual(item_map[key]["schema"]["managed_by"], "notifications")
+                self.assertEqual(item_map[key]["ui_visibility"], "curated")
+
         self.assertTrue(item_map["SCHEDULE_ENABLED"]["raw_editable"])
         self.assertEqual(item_map["SCHEDULE_ENABLED"]["ui_visibility"], "raw")
         self.assertTrue(item_map["SCHEDULE_TIME"]["raw_editable"])

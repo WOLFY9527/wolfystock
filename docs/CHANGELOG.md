@@ -1,6 +1,7 @@
 ## 2026-05-01
 
 - 🧾 **Admin Logs Health Summary Phase 2** — `/api/v1/admin/logs` 与原始 `/sessions` 列表在保持兼容的基础上新增可选 `health_summary`，按当前查询窗口派生 total/failed/warning/slow、failure rate、overall status、失败 category/provider/reason Top N、actor breakdown 与最近错误摘要，继续复用现有 execution log/business event 读取结果并保持错误摘要脱敏。`/admin/logs` 顶部新增紧凑健康摘要区，展示 healthy/degraded/failing、失败数量/比例、最常失败功能、provider/source 与 reason 聚合，以及最近严重错误。
+- 🔐 **Settings 新增 Notification Channels 专用管理面** — `/settings/system` 现在为 Feishu、Telegram、DingTalk、Email、Discord、Slack、WeChat webhook、PushPlus、Pushover、ServerChan 与 Custom webhook 提供专用通知渠道卡片，展示配置状态、非敏感路由字段和已脱敏凭据，并通过既有系统配置保存接口保留 masked secret placeholder 语义。后端继续兼容原有 `.env` 配置读取，同时为通知渠道键补充 `managed_by=notifications`、`ui_visibility=curated` 与 `raw_editable=false` 元数据，确保这些凭据不回流到通用 raw settings 抽屉。
 
 - 🧾 **Admin Logs 维护 triage 字段 Phase 1** — `/api/v1/admin/logs` 的业务事件响应在保持兼容的基础上新增可选 `actorType / actorLabel / contextLabel / provider / source / component / reason / errorSummary / requestId / traceId / rootCauseSummary / stepTraceAvailable` 等派生字段，优先从现有 summary、metadata、event detail 与已脱敏 raw payload 中读取，不改动 execution log 持久化格式。`/admin/logs` 列表同步改为 Time / Event / Actor / Context / Source Provider / Reason / Status / Duration / Trace / Actions，详情抽屉顶部增加 Root Cause 区块；失败但没有 step trace 的事件不再显示“成功 0 · 跳过 0 · 失败 0 · 未确认 0”，改为明确的“失败 · 无步骤明细”。
 

@@ -143,6 +143,20 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                 self.assertIn(items[key]["ui_visibility"], {"curated", "hidden"})
                 self.assertFalse(items[key]["schema"]["raw_editable"])
 
+        for key in (
+            "WECHAT_WEBHOOK_URL",
+            "DISCORD_MAIN_CHANNEL_ID",
+            "SLACK_CHANNEL_ID",
+            "DINGTALK_APP_KEY",
+            "PUSHOVER_USER_KEY",
+            "SERVERCHAN3_SENDKEY",
+            "WEBHOOK_VERIFY_SSL",
+        ):
+            with self.subTest(notification_key=key):
+                self.assertEqual(items[key]["managed_by"], "notifications")
+                self.assertEqual(items[key]["schema"]["managed_by"], "notifications")
+                self.assertEqual(items[key]["ui_visibility"], "curated")
+
         self.assertTrue(items["SCHEDULE_ENABLED"]["raw_editable"])
         self.assertEqual(items["SCHEDULE_ENABLED"]["ui_visibility"], "raw")
         self.assertTrue(items["SCHEDULE_TIME"]["raw_editable"])

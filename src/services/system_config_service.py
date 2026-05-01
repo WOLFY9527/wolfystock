@@ -392,6 +392,7 @@ class SystemConfigService:
                 "is_masked": bool(is_sensitive and raw_value),
                 "raw_editable": bool(field_schema.get("raw_editable", True)),
                 "ui_visibility": field_schema.get("ui_visibility", "raw"),
+                "managed_by": field_schema.get("managed_by"),
             }
             if include_schema:
                 item["schema"] = field_schema

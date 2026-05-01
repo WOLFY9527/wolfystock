@@ -8,3 +8,4 @@ export * from './SettingsSectionCard';
 export * from './SettingsCategoryNav';
 export * from './AuthSettingsCard';
 export * from './FontSizeSettingsCard';
+export * from './NotificationChannelsConfig';

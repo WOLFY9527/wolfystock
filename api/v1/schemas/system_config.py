@@ -33,6 +33,7 @@ class SystemConfigFieldSchema(BaseModel):
     display_order: int
     raw_editable: bool = True
     ui_visibility: Literal["raw", "curated", "hidden", "advanced"] = "raw"
+    managed_by: Optional[str] = None
 
 
 class SystemConfigCategorySchema(BaseModel):
@@ -63,6 +64,7 @@ class SystemConfigItem(BaseModel):
     is_masked: bool
     raw_editable: bool = True
     ui_visibility: Literal["raw", "curated", "hidden", "advanced"] = "raw"
+    managed_by: Optional[str] = None
     schema_: Optional[SystemConfigFieldSchema] = Field(default=None, alias="schema")
 
 

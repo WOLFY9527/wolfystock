@@ -530,6 +530,29 @@ function buildSystemConfigState(overrides: ConfigOverride = {}) {
             displayOrder: 4,
           },
         },
+        {
+          key: 'EMAIL_RECEIVERS',
+          value: '',
+          rawValueExists: false,
+          isMasked: false,
+          rawEditable: false,
+          uiVisibility: 'curated',
+          schema: {
+            key: 'EMAIL_RECEIVERS',
+            category: 'notification',
+            dataType: 'array',
+            uiControl: 'textarea',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            rawEditable: false,
+            uiVisibility: 'curated',
+            managedBy: 'notifications',
+            options: [],
+            validation: { multiValue: true },
+            displayOrder: 5,
+          },
+        },
       ],
       agent: [
         {
@@ -1131,6 +1154,64 @@ describe('SettingsPage', () => {
     expect(within(drawer).queryByText('PUSHOVER_USER_KEY')).not.toBeInTheDocument();
     expect(within(drawer).queryByText('SLACK_CHANNEL_ID')).not.toBeInTheDocument();
     expect(within(drawer).getByText('NOTIFICATION_BATCH_SIZE')).toBeInTheDocument();
+  });
+
+  it('renders notification channels as a curated settings surface with masked secret fields', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({ activeCategory: 'notification' }));
+
+    render(<SettingsPage />);
+
+    expect(await screen.findByRole('heading', { name: 'Notification Channels' })).toBeInTheDocument();
+    expect(screen.getByText('Notification credentials are managed here and kept out of raw system settings.')).toBeInTheDocument();
+
+    const wechatCard = screen.getByTestId('notification-channel-card-wechat');
+    expect(within(wechatCard).getByText('Configured')).toBeInTheDocument();
+    const webhookInput = within(wechatCard).getByLabelText('Webhook URL') as HTMLInputElement;
+    expect(webhookInput.type).toBe('password');
+    expect(webhookInput.value).toBe('wechat-webhook-token');
+    expect(within(wechatCard).getByText('Test send not available yet')).toBeInTheDocument();
+  });
+
+  it('saves notification channel fields through the existing masked config update flow', async () => {
+    saveExternalItems.mockResolvedValue(undefined);
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({ activeCategory: 'notification' }));
+
+    render(<SettingsPage />);
+
+    const emailCard = await screen.findByTestId('notification-channel-card-email');
+    fireEvent.change(within(emailCard).getByLabelText('Receivers'), {
+      target: { value: 'alerts@example.com' },
+    });
+    fireEvent.click(within(emailCard).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(saveExternalItems).toHaveBeenCalledWith(
+        [{ key: 'EMAIL_RECEIVERS', value: 'alerts@example.com' }],
+        'Email notification channel saved',
+      );
+    });
+  });
+
+  it('renders unconfigured notification channels without enabling no-op saves', async () => {
+    const emptyNotificationItems = buildSystemConfigState().itemsByCategory.notification.map((item) => ({
+      ...item,
+      value: '',
+      rawValueExists: false,
+      isMasked: false,
+    }));
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'notification',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        notification: emptyNotificationItems,
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const pushplusCard = await screen.findByTestId('notification-channel-card-pushplus');
+    expect(within(pushplusCard).getByText('Not configured')).toBeInTheDocument();
+    expect(within(pushplusCard).getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 
   it('refreshes server state after intelligent import merges stock list', async () => {

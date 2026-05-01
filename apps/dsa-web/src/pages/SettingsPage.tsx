@@ -11,6 +11,7 @@ import {
 import { useIsDesktopViewport } from '../components/layout/useIsDesktopViewport';
 import AIProviderConfig from '../components/settings/AIProviderConfig';
 import DataSourceConfig from '../components/settings/DataSourceConfig';
+import { NotificationChannelsConfig } from '../components/settings/NotificationChannelsConfig';
 import SystemControlPlane from '../components/settings/SystemControlPlane';
 import SystemLogsConfig from '../components/settings/SystemLogsConfig';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -39,7 +40,7 @@ import {
   SettingsSectionCard,
 } from '../components/settings';
 
-type SettingsDomain = 'ai_models' | 'data_sources' | 'advanced';
+type SettingsDomain = 'ai_models' | 'data_sources' | 'notifications' | 'advanced';
 type SettingsWorkspacePanel = 'overview' | SettingsDomain;
 type RoutingTier = 'primary' | 'backup' | 'fallback';
 type RouteModelMode = 'provider_default' | 'explicit';
@@ -168,12 +169,12 @@ type RoutingDraftState = {
   };
 };
 
-const DOMAIN_ORDER: SettingsDomain[] = ['ai_models', 'data_sources', 'advanced'];
+const DOMAIN_ORDER: SettingsDomain[] = ['ai_models', 'data_sources', 'notifications', 'advanced'];
 
 const CATEGORY_TO_DOMAIN: Partial<Record<SystemConfigCategory, SettingsDomain>> = {
   ai_model: 'ai_models',
   data_source: 'data_sources',
-  notification: 'advanced',
+  notification: 'notifications',
   system: 'advanced',
   agent: 'advanced',
   backtest: 'advanced',
@@ -993,6 +994,11 @@ const SettingsPage: React.FC = () => {
       domain: 'data_sources' as const,
       title: t('settings.domainDataTitle'),
       desc: t('settings.domainDataDesc'),
+    },
+    {
+      domain: 'notifications' as const,
+      title: 'Notification Channels',
+      desc: 'Curated notification credentials',
     },
     {
       domain: 'advanced' as const,
@@ -3292,6 +3298,15 @@ const SettingsPage: React.FC = () => {
                       onValidateDataSource={(sourceId) => {
                         void validateDataSourceEntry(sourceId);
                       }}
+                    />
+                  ) : null}
+
+                  {activeDomain === 'notifications' ? (
+                    <NotificationChannelsConfig
+                      items={itemsByCategory.notification || []}
+                      disabled={adminLocked}
+                      isSaving={isSaving}
+                      onSaveItems={saveExternalItems}
                     />
                   ) : null}
 

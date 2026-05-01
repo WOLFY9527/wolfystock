@@ -47,6 +47,7 @@ export interface SystemConfigFieldSchema {
   displayOrder: number;
   rawEditable?: boolean;
   uiVisibility?: 'raw' | 'curated' | 'hidden' | 'advanced';
+  managedBy?: string | null;
 }
 
 export interface SystemConfigCategorySchema {
@@ -69,6 +70,7 @@ export interface SystemConfigItem {
   isMasked: boolean;
   rawEditable?: boolean;
   uiVisibility?: 'raw' | 'curated' | 'hidden' | 'advanced';
+  managedBy?: string | null;
   schema?: SystemConfigFieldSchema;
 }
 

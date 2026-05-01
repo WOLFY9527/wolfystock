@@ -69,6 +69,36 @@ _RAW_CURATED_EXACT_KEYS = {
 _RAW_SECRET_TOKEN_RE = ("API_KEY", "API_KEYS", "TOKEN", "SECRET", "PASSWORD", "WEBHOOK", "BEARER")
 _RAW_NOTIFICATION_SECRET_RE = _RAW_SECRET_TOKEN_RE + ("APP_KEY", "USER_KEY", "SENDKEY")
 _RAW_NOTIFICATION_HIDDEN_PREFIXES = ("DINGTALK_", "DISCORD_", "SLACK_", "PUSHOVER_")
+_NOTIFICATION_CHANNEL_MANAGED_KEYS = {
+    "WECHAT_WEBHOOK_URL",
+    "FEISHU_WEBHOOK_URL",
+    "FEISHU_APP_ID",
+    "FEISHU_APP_SECRET",
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_CHAT_ID",
+    "TELEGRAM_MESSAGE_THREAD_ID",
+    "DINGTALK_APP_KEY",
+    "DINGTALK_APP_SECRET",
+    "EMAIL_SENDER",
+    "EMAIL_SENDER_NAME",
+    "EMAIL_PASSWORD",
+    "EMAIL_RECEIVERS",
+    "DISCORD_WEBHOOK_URL",
+    "DISCORD_BOT_TOKEN",
+    "DISCORD_MAIN_CHANNEL_ID",
+    "DISCORD_CHANNEL_ID",
+    "SLACK_BOT_TOKEN",
+    "SLACK_CHANNEL_ID",
+    "SLACK_WEBHOOK_URL",
+    "PUSHPLUS_TOKEN",
+    "PUSHPLUS_TOPIC",
+    "PUSHOVER_USER_KEY",
+    "PUSHOVER_API_TOKEN",
+    "SERVERCHAN3_SENDKEY",
+    "CUSTOM_WEBHOOK_URLS",
+    "CUSTOM_WEBHOOK_BEARER_TOKEN",
+    "WEBHOOK_VERIFY_SSL",
+}
 
 _CATEGORY_DEFINITIONS: List[Dict[str, Any]] = [
     {
@@ -2113,6 +2143,9 @@ def get_raw_edit_visibility(key: str, field_schema: Optional[Dict[str, Any]] = N
     ):
         return {"raw_editable": False, "ui_visibility": "hidden"}
 
+    if key_upper in _NOTIFICATION_CHANNEL_MANAGED_KEYS:
+        return {"raw_editable": False, "ui_visibility": "curated"}
+
     if key_upper in _RAW_HIDDEN_EXACT_KEYS:
         return {"raw_editable": False, "ui_visibility": "hidden"}
 
@@ -2160,6 +2193,8 @@ def get_field_definition(key: str, value_hint: Optional[str] = None) -> Dict[str
             validation["enum"] = option_values
         field["validation"] = validation
         field.update(get_raw_edit_visibility(key_upper, field))
+        if key_upper in _NOTIFICATION_CHANNEL_MANAGED_KEYS:
+            field["managed_by"] = "notifications"
         return field
 
     category = _infer_category(key_upper)
@@ -2180,6 +2215,8 @@ def get_field_definition(key: str, value_hint: Optional[str] = None) -> Dict[str
         "display_order": 9000,
     }
     field.update(get_raw_edit_visibility(key_upper, field))
+    if key_upper in _NOTIFICATION_CHANNEL_MANAGED_KEYS:
+        field["managed_by"] = "notifications"
     return field
 
 
