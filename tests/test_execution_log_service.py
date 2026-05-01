@@ -229,6 +229,64 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["events"][0]["detail"]["action"], "buy_trade")
         self.assertEqual(detail["events"][0]["detail"]["account_id"], 7)
 
+    def test_summarize_business_events_groups_and_sanitizes_failures(self) -> None:
+        service = ExecutionLogService()
+        summary = service.summarize_business_events([
+            {
+                "id": "evt-1",
+                "event": "TSLA",
+                "category": "analysis",
+                "status": "failed",
+                "provider": "newsapi",
+                "source": "newsapi",
+                "reason": "timeout",
+                "errorSummary": "upstream timeout token=SECRET",
+                "actorType": "user",
+                "startedAt": "2026-05-01T10:00:00",
+                "durationMs": 6200,
+            },
+            {
+                "id": "evt-2",
+                "event": "Scanner",
+                "category": "scanner",
+                "status": "partial",
+                "provider": "finnhub",
+                "reason": "rate_limited",
+                "actorType": "system",
+                "startedAt": "2026-05-01T10:05:00",
+            },
+            {
+                "id": "evt-3",
+                "event": "AAPL",
+                "category": "analysis",
+                "status": "success",
+                "provider": "fmp",
+                "actorType": "user",
+                "startedAt": "2026-05-01T10:10:00",
+            },
+        ])
+
+        self.assertEqual(summary["total_events"], 3)
+        self.assertEqual(summary["failed_events"], 1)
+        self.assertEqual(summary["warning_events"], 1)
+        self.assertEqual(summary["slow_events"], 1)
+        self.assertEqual(summary["status"], "degraded")
+        self.assertEqual(summary["failures_by_category"][0]["key"], "analysis")
+        self.assertEqual(summary["failures_by_provider"][0]["key"], "newsapi")
+        self.assertEqual(summary["failures_by_reason"][0]["key"], "timeout")
+        self.assertEqual(summary["actor_breakdown"][0]["key"], "user")
+        self.assertNotIn("SECRET", str(summary))
+
+    def test_summarize_business_events_handles_empty_input(self) -> None:
+        service = ExecutionLogService()
+        summary = service.summarize_business_events([])
+
+        self.assertEqual(summary["total_events"], 0)
+        self.assertEqual(summary["failed_events"], 0)
+        self.assertEqual(summary["failure_rate"], 0)
+        self.assertEqual(summary["status"], "healthy")
+        self.assertEqual(summary["top_recent_errors"], [])
+
     def test_list_sessions_filters_by_task_id(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()

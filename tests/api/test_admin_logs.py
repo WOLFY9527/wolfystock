@@ -446,6 +446,75 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.items[0].scannerId, "scanner-mainland")
         self.assertEqual(payload.items[0].skippedStepCount, 0)
 
+    def test_root_health_summary_groups_failures_and_sanitizes_top_errors(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            analysis_id = service.start_execution(
+                category="data_source",
+                type="market_overview_fetch",
+                event="MarketSentimentCard",
+                summary="MarketSentimentCard failed",
+                subject="MarketSentimentCard",
+                metadata={"provider": "newsapi"},
+                actor={"username": "alice", "role": "user"},
+            )
+            service.start_step(analysis_id, "fetch_news", "获取新闻", category="data_source", provider="newsapi")
+            service.finish_step_failed(
+                analysis_id,
+                "fetch_news",
+                provider="newsapi",
+                error_type="TimeoutError",
+                error_message="News API timeout token=SECRET",
+                reason="timeout",
+                metadata={"api_key": "SECRET"},
+            )
+            service.finish_execution(analysis_id, status="failed")
+
+            scanner_id = service.start_execution(
+                category="scanner",
+                type="scan_run",
+                event="Scanner Run",
+                summary="Scanner provider failed",
+                metadata={"provider": "finnhub", "reason": "rate_limited"},
+                actor={"actor_type": "system"},
+            )
+            service.start_step(scanner_id, "load_market_data", "加载行情", category="data_source", provider="finnhub")
+            service.finish_step_failed(
+                scanner_id,
+                "load_market_data",
+                provider="finnhub",
+                error_type="HTTPError",
+                error_message="provider rate limited api_key=SECRET",
+                reason="rate_limited",
+            )
+            service.finish_execution(scanner_id, status="partial")
+
+            payload = admin_logs.list_execution_logs_root(limit=10, _=_admin_user())
+
+        self.assertIsNotNone(payload.health_summary)
+        summary = payload.health_summary
+        self.assertEqual(summary.total_events, 2)
+        self.assertEqual(summary.failed_events, 1)
+        self.assertEqual(summary.warning_events, 1)
+        self.assertEqual(summary.status, "failing")
+        self.assertAlmostEqual(summary.failure_rate, 0.5)
+        self.assertEqual(summary.failures_by_category[0].key, "data_source")
+        self.assertTrue(any(item.key == "newsapi" for item in summary.failures_by_provider))
+        self.assertTrue(any(item.key == "timeout" for item in summary.failures_by_reason))
+        self.assertTrue(any(item.key == "user" for item in summary.actor_breakdown))
+        self.assertTrue(summary.top_recent_errors)
+        self.assertNotIn("SECRET", str(summary.model_dump()))
+
+    def test_root_health_summary_handles_empty_result(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            payload = admin_logs.list_execution_logs_root(limit=10, _=_admin_user())
+
+        self.assertIsNotNone(payload.health_summary)
+        self.assertEqual(payload.health_summary.total_events, 0)
+        self.assertEqual(payload.health_summary.failed_events, 0)
+        self.assertEqual(payload.health_summary.status, "healthy")
+        self.assertEqual(payload.health_summary.failures_by_category, [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -53,12 +53,46 @@ class ExecutionLogSummaryModel(BaseModel):
     data_source_failure_count: int = 0
     slow_request_count: int = 0
     latest_critical_at: Optional[str] = None
+    health_summary: Optional["AdminLogHealthSummaryModel"] = None
 
 
 class ExecutionLogSessionListResponse(BaseModel):
     total: int
     items: List[ExecutionLogSessionSummaryModel] = Field(default_factory=list)
     summary: ExecutionLogSummaryModel = Field(default_factory=ExecutionLogSummaryModel)
+
+
+class AdminLogHealthBucketModel(BaseModel):
+    key: str
+    label: str
+    count: int
+
+
+class AdminLogTopErrorModel(BaseModel):
+    id: str
+    event: Optional[str] = None
+    category: Optional[str] = None
+    provider: Optional[str] = None
+    source: Optional[str] = None
+    reason: Optional[str] = None
+    errorSummary: Optional[str] = None
+    startedAt: Optional[str] = None
+    status: Optional[str] = None
+
+
+class AdminLogHealthSummaryModel(BaseModel):
+    total_events: int = 0
+    failed_events: int = 0
+    warning_events: int = 0
+    slow_events: int = 0
+    failure_rate: float = 0
+    status: str = "healthy"
+    failures_by_category: List[AdminLogHealthBucketModel] = Field(default_factory=list)
+    failures_by_provider: List[AdminLogHealthBucketModel] = Field(default_factory=list)
+    failures_by_reason: List[AdminLogHealthBucketModel] = Field(default_factory=list)
+    top_recent_errors: List[AdminLogTopErrorModel] = Field(default_factory=list)
+    actor_breakdown: List[AdminLogHealthBucketModel] = Field(default_factory=list)
+    latest_critical_error: Optional[AdminLogTopErrorModel] = None
 
 
 class ExecutionStepModel(BaseModel):
@@ -136,3 +170,4 @@ class BusinessEventListResponse(BaseModel):
     limit: int
     offset: int
     hasMore: bool = False
+    health_summary: Optional[AdminLogHealthSummaryModel] = None

@@ -269,6 +269,31 @@ describe('AdminLogsPage', () => {
       offset: 0,
       hasMore: true,
       items: businessEvents,
+      healthSummary: {
+        totalEvents: businessEvents.length,
+        failedEvents: 1,
+        warningEvents: 1,
+        slowEvents: 1,
+        failureRate: 0.2,
+        status: 'degraded',
+        failuresByCategory: [{ key: 'data_source', label: 'data_source', count: 1 }],
+        failuresByProvider: [{ key: 'finnhub', label: 'finnhub', count: 1 }],
+        failuresByReason: [{ key: 'timeout', label: 'timeout', count: 2 }],
+        actorBreakdown: [{ key: 'user', label: 'user', count: 2 }],
+        topRecentErrors: [
+          {
+            id: 'market-card-failed',
+            event: 'MarketSentimentCard',
+            category: 'data_source',
+            provider: 'finnhub',
+            reason: 'timeout',
+            errorSummary: 'provider timeout token=***',
+            startedAt: '2026-04-30T13:10:00Z',
+            status: 'failed',
+          },
+        ],
+        latestCriticalError: null,
+      },
     });
     getBusinessEventDetail.mockImplementation((eventId: string) => (
       eventId === 'market-card-failed'
@@ -301,6 +326,13 @@ describe('AdminLogsPage', () => {
     expect(screen.getByRole('tab', { name: '安全事件' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '原始日志' })).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-filter-bar')).toBeInTheDocument();
+    expect(await screen.findByTestId('admin-logs-health-summary')).toBeInTheDocument();
+    expect(screen.getByText('Degraded')).toBeInTheDocument();
+    expect(screen.getByText('1 / 5')).toBeInTheDocument();
+    expect(screen.getByText('finnhub')).toBeInTheDocument();
+    expect(screen.getAllByText('timeout').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('provider timeout token=***').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/FRONTENDSECRET|FRONTENDTOKEN/)).not.toBeInTheDocument();
     expect(screen.getByLabelText('搜索日志')).toBeInTheDocument();
     expect(screen.getByLabelText('状态筛选')).toBeInTheDocument();
     expect(screen.getByLabelText('时间范围')).toBeInTheDocument();
@@ -384,7 +416,7 @@ describe('AdminLogsPage', () => {
   it('shows failed no-step events without all-zero step stats and can copy trace id', async () => {
     render(<AdminLogsPage />);
 
-    const row = (await screen.findAllByText('MarketSentimentCard'))[0];
+    const row = (await screen.findAllByText('MarketSentimentCard')).find((item) => item.closest('[data-testid="business-event-row"]'));
     const rowContainer = row.closest('[data-testid="business-event-row"]');
     expect(rowContainer).not.toBeNull();
     expect(within(rowContainer as HTMLElement).getByText('失败 · 无步骤明细')).toBeInTheDocument();
@@ -413,6 +445,36 @@ describe('AdminLogsPage', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('服务器暂时不可用');
     expect(alert).toHaveTextContent('服务器暂时不可用，请稍后重试。');
+  });
+
+  it('renders healthy health summary when there are no events', async () => {
+    listBusinessEvents.mockResolvedValueOnce({
+      total: 0,
+      limit: 20,
+      offset: 0,
+      hasMore: false,
+      items: [],
+      healthSummary: {
+        totalEvents: 0,
+        failedEvents: 0,
+        warningEvents: 0,
+        slowEvents: 0,
+        failureRate: 0,
+        status: 'healthy',
+        failuresByCategory: [],
+        failuresByProvider: [],
+        failuresByReason: [],
+        actorBreakdown: [],
+        topRecentErrors: [],
+        latestCriticalError: null,
+      },
+    });
+
+    render(<AdminLogsPage />);
+
+    expect(await screen.findByTestId('admin-logs-health-summary')).toHaveTextContent('Healthy');
+    expect(screen.getByText('0 / 0')).toBeInTheDocument();
+    expect(screen.getAllByText('--').length).toBeGreaterThan(0);
   });
 
   it('shows a unified message when the detail drawer fails to load', async () => {

@@ -3068,6 +3068,7 @@ class ExecutionLogService:
             top_detail.get("event_name"),
             top_event.get("event_name"),
         )
+        first_failed_step = next((step for step in steps if step.get("status") == "failed"), {})
         request_id = _compact_identifier(_first_text(
             business.get("requestId"),
             top_detail.get("request_id"),
@@ -3089,6 +3090,8 @@ class ExecutionLogService:
             business.get("reason"),
             business_metadata.get("reason"),
             business_metadata.get("failureReason"),
+            first_failed_step.get("reason") if isinstance(first_failed_step, dict) else None,
+            first_failed_step.get("errorType") if isinstance(first_failed_step, dict) else None,
             top_detail.get("reason"),
             top_detail.get("error_type"),
             top_event.get("error_code"),
@@ -3099,6 +3102,8 @@ class ExecutionLogService:
             business.get("errorSummary"),
             business_metadata.get("errorSummary"),
             business_metadata.get("error_message"),
+            first_failed_step.get("errorMessage") if isinstance(first_failed_step, dict) else None,
+            first_failed_step.get("message") if isinstance(first_failed_step, dict) else None,
             top_detail.get("error_summary"),
             top_detail.get("error_message"),
             top_detail.get("message"),
@@ -3341,6 +3346,7 @@ class ExecutionLogService:
             items.append(event)
         items.sort(key=lambda item: _as_str(item.get("startedAt")), reverse=True)
         total = len(items)
+        self._last_business_health_summary = self.summarize_business_events(items)
         requested_limit = max(1, min(int(limit), 200))
         start = max(0, int(offset))
         return items[start:start + requested_limit], total
@@ -3504,10 +3510,12 @@ class ExecutionLogService:
         data_source_failure_count = 0
         slow_request_count = 0
         latest_critical_at = None
+        health_items: List[Dict[str, Any]] = []
         for item in items:
-            level = _normalize_log_level((item.get("readable_summary") or {}).get("log_level"), "INFO")
-            category = _as_str((item.get("readable_summary") or {}).get("log_category"))
-            event_name = _as_str((item.get("readable_summary") or {}).get("event_name"))
+            readable_summary = item.get("readable_summary") if isinstance(item.get("readable_summary"), dict) else {}
+            level = _normalize_log_level(readable_summary.get("log_level"), "INFO")
+            category = _as_str(readable_summary.get("log_category"))
+            event_name = _as_str(readable_summary.get("event_name"))
             if level in {"ERROR", "CRITICAL"}:
                 error_count += 1
             if level == "WARNING":
@@ -3520,12 +3528,133 @@ class ExecutionLogService:
                 current = _as_str(item.get("started_at"))
                 if current and (latest_critical_at is None or current > latest_critical_at):
                     latest_critical_at = current
+            health_items.append({
+                "id": item.get("session_id"),
+                "event": event_name or item.get("name") or item.get("task_id"),
+                "category": category,
+                "status": "failed" if level in {"ERROR", "CRITICAL"} else ("partial" if level == "WARNING" else "success"),
+                "provider": readable_summary.get("provider"),
+                "source": readable_summary.get("source"),
+                "reason": readable_summary.get("reason") or readable_summary.get("top_failure_reason"),
+                "errorSummary": readable_summary.get("error_summary") or readable_summary.get("event_message"),
+                "actorType": readable_summary.get("actor_type") or readable_summary.get("actor_role"),
+                "startedAt": item.get("started_at"),
+                "durationMs": (item.get("summary") or {}).get("durationMs") if isinstance(item.get("summary"), dict) else None,
+            })
+        health_summary = ExecutionLogService.summarize_business_events(health_items)
+        if latest_critical_at and not health_summary.get("latest_critical_error"):
+            critical_item = next(
+                (
+                    health_item
+                    for health_item in health_items
+                    if health_item.get("status") == "failed" and health_item.get("startedAt") == latest_critical_at
+                ),
+                None,
+            )
+            if critical_item:
+                health_summary["latest_critical_error"] = ExecutionLogService._top_error_payload(critical_item)
         return {
             "error_count": error_count,
             "warning_count": warning_count,
             "data_source_failure_count": data_source_failure_count,
             "slow_request_count": slow_request_count,
             "latest_critical_at": latest_critical_at,
+            "health_summary": health_summary,
+        }
+
+    @staticmethod
+    def summarize_business_events(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        total_events = len(items)
+        failed_items = [item for item in items if ExecutionLogService._is_failed_business_event(item)]
+        warning_items = [item for item in items if ExecutionLogService._is_warning_business_event(item)]
+        slow_events = sum(1 for item in items if ExecutionLogService._is_slow_business_event(item))
+        failure_rate = round(len(failed_items) / total_events, 4) if total_events else 0
+        unhealthy_items = failed_items or warning_items
+        status = "healthy"
+        if failed_items and (failure_rate >= 0.5 or len(failed_items) >= 3):
+            status = "failing"
+        elif failed_items or warning_items:
+            status = "degraded"
+        latest_critical = next(
+            (
+                item
+                for item in sorted(failed_items, key=lambda value: _as_str(value.get("startedAt")), reverse=True)
+                if _as_str(item.get("status")).lower() in {"critical"} or _as_str(item.get("category")).lower() == "security"
+            ),
+            None,
+        )
+        return {
+            "total_events": total_events,
+            "failed_events": len(failed_items),
+            "warning_events": len(warning_items),
+            "slow_events": slow_events,
+            "failure_rate": failure_rate,
+            "status": status,
+            "failures_by_category": ExecutionLogService._health_buckets(unhealthy_items, ["category", "feature"]),
+            "failures_by_provider": ExecutionLogService._health_buckets(failed_items, ["provider", "source"]),
+            "failures_by_reason": ExecutionLogService._health_buckets(unhealthy_items, ["reason"]),
+            "top_recent_errors": [
+                ExecutionLogService._top_error_payload(item)
+                for item in sorted(unhealthy_items, key=lambda value: _as_str(value.get("startedAt")), reverse=True)[:5]
+            ],
+            "actor_breakdown": ExecutionLogService._health_buckets(items, ["actorType"]),
+            "latest_critical_error": ExecutionLogService._top_error_payload(latest_critical) if latest_critical else None,
+        }
+
+    @staticmethod
+    def _is_failed_business_event(item: Dict[str, Any]) -> bool:
+        status = _as_str(item.get("status")).lower()
+        return status in {"failed", "error", "critical"}
+
+    @staticmethod
+    def _is_warning_business_event(item: Dict[str, Any]) -> bool:
+        status = _as_str(item.get("status")).lower()
+        return status in {"partial", "warning", "timeout", "timed_out", "timeout_unknown"}
+
+    @staticmethod
+    def _is_slow_business_event(item: Dict[str, Any]) -> bool:
+        event_type = _as_str(item.get("eventType") or item.get("event")).lower()
+        if "slow" in event_type:
+            return True
+        try:
+            return float(item.get("durationMs") or 0) >= 5000
+        except Exception:
+            return False
+
+    @staticmethod
+    def _health_buckets(items: List[Dict[str, Any]], keys: List[str], *, limit: int = 5) -> List[Dict[str, Any]]:
+        counts: Dict[str, int] = {}
+        labels: Dict[str, str] = {}
+        for item in items:
+            value = None
+            for key in keys:
+                value = _as_str(item.get(key))
+                if value:
+                    break
+            if not value:
+                value = "unknown"
+            bucket_key = value.lower()
+            counts[bucket_key] = counts.get(bucket_key, 0) + 1
+            labels.setdefault(bucket_key, _masked_message(value) or bucket_key)
+        return [
+            {"key": key, "label": labels.get(key) or key, "count": count}
+            for key, count in sorted(counts.items(), key=lambda entry: (-entry[1], entry[0]))[:limit]
+        ]
+
+    @staticmethod
+    def _top_error_payload(item: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not item:
+            return None
+        return {
+            "id": _as_str(item.get("id")),
+            "event": _masked_message(_as_str(item.get("event"))) or None,
+            "category": _masked_message(_as_str(item.get("category"))) or None,
+            "provider": _masked_message(_as_str(item.get("provider"))) or None,
+            "source": _masked_message(_as_str(item.get("source"))) or None,
+            "reason": _masked_message(_as_str(item.get("reason"))) or None,
+            "errorSummary": _masked_message(_as_str(item.get("errorSummary") or item.get("rootCauseSummary") or item.get("summary"))) or None,
+            "startedAt": _as_str(item.get("startedAt")) or None,
+            "status": _as_str(item.get("status")) or None,
         }
 
     def get_session_detail(self, session_id: str) -> Optional[Dict[str, Any]]:

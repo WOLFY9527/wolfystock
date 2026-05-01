@@ -114,7 +114,41 @@ export interface ExecutionLogSessionListResponse {
     dataSourceFailureCount?: number;
     slowRequestCount?: number;
     latestCriticalAt?: string | null;
+    healthSummary?: AdminLogHealthSummary | null;
   };
+}
+
+export interface AdminLogHealthBucket {
+  key: string;
+  label: string;
+  count: number;
+}
+
+export interface AdminLogTopError {
+  id: string;
+  event?: string | null;
+  category?: string | null;
+  provider?: string | null;
+  source?: string | null;
+  reason?: string | null;
+  errorSummary?: string | null;
+  startedAt?: string | null;
+  status?: string | null;
+}
+
+export interface AdminLogHealthSummary {
+  totalEvents: number;
+  failedEvents: number;
+  warningEvents: number;
+  slowEvents: number;
+  failureRate: number;
+  status: 'healthy' | 'degraded' | 'failing' | string;
+  failuresByCategory: AdminLogHealthBucket[];
+  failuresByProvider: AdminLogHealthBucket[];
+  failuresByReason: AdminLogHealthBucket[];
+  topRecentErrors: AdminLogTopError[];
+  actorBreakdown: AdminLogHealthBucket[];
+  latestCriticalError?: AdminLogTopError | null;
 }
 
 export interface ExecutionStep {
@@ -192,6 +226,7 @@ export interface BusinessEventListResponse {
   offset: number;
   hasMore: boolean;
   items: BusinessEvent[];
+  healthSummary?: AdminLogHealthSummary | null;
 }
 
 function normalizeSessionSummary(payload: Record<string, unknown>): ExecutionLogSessionSummary {
@@ -256,6 +291,7 @@ export const adminLogsApi = {
       limit: Number(normalized.limit || params.limit || 50),
       offset: Number(normalized.offset || params.offset || 0),
       hasMore: Boolean(normalized.hasMore),
+      healthSummary: normalized.healthSummary as AdminLogHealthSummary | null | undefined,
       items: Array.isArray(normalized.items)
         ? normalized.items.map((item) => toCamelCase<BusinessEvent>(item as unknown as Record<string, unknown>))
         : [],

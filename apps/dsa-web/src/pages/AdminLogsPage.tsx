@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { adminLogsApi, type BusinessEvent, type BusinessEventDetail, type BusinessEventListResponse, type ExecutionLogSessionDetail, type ExecutionLogSessionListResponse, type ExecutionLogSessionSummary, type ExecutionStep } from '../api/adminLogs';
+import { adminLogsApi, type AdminLogHealthSummary, type BusinessEvent, type BusinessEventDetail, type BusinessEventListResponse, type ExecutionLogSessionDetail, type ExecutionLogSessionListResponse, type ExecutionLogSessionSummary, type ExecutionStep } from '../api/adminLogs';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Drawer, GlassCard } from '../components/common';
@@ -489,6 +489,25 @@ function actorBadgeLabel(value: unknown): string {
   return 'unknown';
 }
 
+function healthStatusLabel(status: unknown, locale: AdminLogsLanguage): string {
+  const normalized = String(status || 'healthy').trim().toLowerCase();
+  if (normalized === 'failing') return locale === 'zh' ? 'Failing' : 'Failing';
+  if (normalized === 'degraded') return locale === 'zh' ? 'Degraded' : 'Degraded';
+  return locale === 'zh' ? 'Healthy' : 'Healthy';
+}
+
+function healthStatusTone(status: unknown): string {
+  const normalized = String(status || 'healthy').trim().toLowerCase();
+  if (normalized === 'failing') return 'border-rose-300/30 bg-rose-500/10 text-rose-100';
+  if (normalized === 'degraded') return 'border-amber-300/28 bg-amber-400/10 text-amber-100';
+  return 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100';
+}
+
+function compactHealthList(items: AdminLogHealthSummary['failuresByProvider'] | undefined): string {
+  if (!items?.length) return '--';
+  return items.slice(0, 3).map((item) => `${text(item.label || item.key)} ${item.count}`).join(' · ');
+}
+
 function isFailedStatus(value: unknown): boolean {
   const status = normalizeStatus(String(value || ''));
   return status === 'failed' || status === 'error';
@@ -611,6 +630,7 @@ const AdminLogsPage: React.FC = () => {
   const [businessEvents, setBusinessEvents] = useState<BusinessEvent[]>([]);
   const [businessTotal, setBusinessTotal] = useState(0);
   const [businessHasMore, setBusinessHasMore] = useState(false);
+  const [businessHealth, setBusinessHealth] = useState<AdminLogHealthSummary | null>(null);
   const [pageOffset, setPageOffset] = useState(0);
   const [sessions, setSessions] = useState<ExecutionLogSessionSummary[]>([]);
   const [summary, setSummary] = useState<NonNullable<ExecutionLogSessionListResponse['summary']> | null>(null);
@@ -641,6 +661,7 @@ const AdminLogsPage: React.FC = () => {
         setBusinessEvents(response.items || []);
         setBusinessTotal(response.total || 0);
         setBusinessHasMore(Boolean(response.hasMore));
+        setBusinessHealth(response.healthSummary || null);
         setSessions([]);
         setSummary(null);
         return;
@@ -661,6 +682,7 @@ const AdminLogsPage: React.FC = () => {
       const items = response.items || [];
       setSessions(items.length ? items : (import.meta.env.DEV ? MOCK_WOLFY_LOG_DETAILS : []));
       setSummary(response.summary || null);
+      setBusinessHealth(null);
     } catch (err) {
       setError(getParsedApiError(err));
       if (activeTab === 'raw') {
@@ -669,6 +691,7 @@ const AdminLogsPage: React.FC = () => {
         setBusinessEvents([]);
         setBusinessTotal(0);
         setBusinessHasMore(false);
+        setBusinessHealth(null);
       }
       setSummary(null);
     } finally {
@@ -825,6 +848,28 @@ const AdminLogsPage: React.FC = () => {
       { ...emptySummary },
     );
   }, [activeTab, businessEvents, filteredSessions, summary]);
+  const healthSummary = useMemo<AdminLogHealthSummary>(() => {
+    const fallback: AdminLogHealthSummary = {
+      totalEvents: activeTab === 'raw' ? filteredSessions.length : businessTotal,
+      failedEvents: computedSummary.totalFailedCount || computedSummary.errorCount || 0,
+      warningEvents: computedSummary.warningCount || 0,
+      slowEvents: computedSummary.slowRequestCount || 0,
+      failureRate: (activeTab === 'raw' ? filteredSessions.length : businessTotal)
+        ? (computedSummary.totalFailedCount || computedSummary.errorCount || 0) / (activeTab === 'raw' ? filteredSessions.length : businessTotal)
+        : 0,
+      status: (computedSummary.totalFailedCount || computedSummary.errorCount || 0) > 0 ? 'degraded' : 'healthy',
+      failuresByCategory: [],
+      failuresByProvider: [],
+      failuresByReason: [],
+      actorBreakdown: [],
+      topRecentErrors: [],
+      latestCriticalError: null,
+    };
+    if (activeTab === 'raw') return summary?.healthSummary || fallback;
+    return businessHealth || fallback;
+  }, [activeTab, businessHealth, businessTotal, computedSummary, filteredSessions.length, summary]);
+  const topCategory = healthSummary.failuresByCategory?.[0];
+  const latestCriticalError = healthSummary.latestCriticalError || healthSummary.topRecentErrors?.[0] || null;
 
   return (
     <section data-testid="admin-logs-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-x-hidden">
@@ -954,6 +999,36 @@ const AdminLogsPage: React.FC = () => {
       </GlassCard>
 
       {error ? <ApiErrorAlert error={error} /> : null}
+
+      <section
+        data-testid="admin-logs-health-summary"
+        className="grid grid-cols-1 gap-2 rounded-xl border border-white/8 bg-black/20 p-3 sm:grid-cols-2 xl:grid-cols-[11rem_9rem_1fr_1fr_1.2fr]"
+      >
+        <div className={`rounded-lg border px-3 py-2 ${healthStatusTone(healthSummary.status)}`}>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? 'Overall status' : 'Overall status'}</p>
+          <p className="mt-1 text-lg font-semibold">{healthStatusLabel(healthSummary.status, locale)}</p>
+        </div>
+        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-secondary-text">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Failures' : 'Failures'}</p>
+          <p className="mt-1 text-lg font-semibold text-foreground">{healthSummary.failedEvents} / {healthSummary.totalEvents}</p>
+          <p className="text-[11px] text-muted-text">{Math.round((healthSummary.failureRate || 0) * 100)}% · {healthSummary.warningEvents} warning</p>
+        </div>
+        <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Top failing feature' : 'Top failing feature'}</p>
+          <p className="mt-1 truncate text-sm font-semibold text-foreground" title={text(topCategory?.label || topCategory?.key)}>{text(topCategory?.label || topCategory?.key)}</p>
+          <p className="text-[11px] text-muted-text">{topCategory ? `${topCategory.count} events` : '--'}</p>
+        </div>
+        <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Provider / reason' : 'Provider / reason'}</p>
+          <p className="mt-1 truncate text-sm text-foreground" title={compactHealthList(healthSummary.failuresByProvider)}>{compactHealthList(healthSummary.failuresByProvider)}</p>
+          <p className="truncate text-[11px] text-muted-text" title={compactHealthList(healthSummary.failuresByReason)}>{compactHealthList(healthSummary.failuresByReason)}</p>
+        </div>
+        <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Latest critical error' : 'Latest critical error'}</p>
+          <p className="mt-1 truncate text-sm font-semibold text-foreground" title={text(latestCriticalError?.event || latestCriticalError?.category)}>{text(latestCriticalError?.event || latestCriticalError?.category)}</p>
+          <p className="truncate text-[11px] text-muted-text" title={text(latestCriticalError?.errorSummary || latestCriticalError?.reason)}>{text(latestCriticalError?.errorSummary || latestCriticalError?.reason)}</p>
+        </div>
+      </section>
 
       <div data-testid="admin-logs-summary-grid" className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {[

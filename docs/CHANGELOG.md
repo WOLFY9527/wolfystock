@@ -1,5 +1,7 @@
 ## 2026-05-01
 
+- 🧾 **Admin Logs Health Summary Phase 2** — `/api/v1/admin/logs` 与原始 `/sessions` 列表在保持兼容的基础上新增可选 `health_summary`，按当前查询窗口派生 total/failed/warning/slow、failure rate、overall status、失败 category/provider/reason Top N、actor breakdown 与最近错误摘要，继续复用现有 execution log/business event 读取结果并保持错误摘要脱敏。`/admin/logs` 顶部新增紧凑健康摘要区，展示 healthy/degraded/failing、失败数量/比例、最常失败功能、provider/source 与 reason 聚合，以及最近严重错误。
+
 - 🧾 **Admin Logs 维护 triage 字段 Phase 1** — `/api/v1/admin/logs` 的业务事件响应在保持兼容的基础上新增可选 `actorType / actorLabel / contextLabel / provider / source / component / reason / errorSummary / requestId / traceId / rootCauseSummary / stepTraceAvailable` 等派生字段，优先从现有 summary、metadata、event detail 与已脱敏 raw payload 中读取，不改动 execution log 持久化格式。`/admin/logs` 列表同步改为 Time / Event / Actor / Context / Source Provider / Reason / Status / Duration / Trace / Actions，详情抽屉顶部增加 Root Cause 区块；失败但没有 step trace 的事件不再显示“成功 0 · 跳过 0 · 失败 0 · 未确认 0”，改为明确的“失败 · 无步骤明细”。
 
 - 📌 **观察列表新增候选追踪工作台** — `apps/dsa-web` 新增 `/watchlist` / `/:locale/watchlist` 页面与主导航入口，登录用户可集中查看 scanner 保存的候选，按代码/名称搜索，按市场、来源、主题或候选范围筛选，并按最新、扫描分数、代码或市场排序。页面展示总数、覆盖市场、scanner 来源和近期新增摘要，保留 run id、rank、score、theme、universe type 等扫描上下文，并复用既有分析触发、scanner-to-backtest query handoff、复制代码和 watchlist remove API。游客访问时继续显示登录保护，不开放持久观察名单。

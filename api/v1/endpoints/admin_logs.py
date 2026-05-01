@@ -213,6 +213,7 @@ def list_execution_logs_root(
         limit=effective_limit,
         offset=effective_offset,
         hasMore=effective_offset + effective_limit < total,
+        health_summary=getattr(service, "_last_business_health_summary", service.summarize_business_events(items)),
     )
 
 
