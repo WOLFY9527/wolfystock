@@ -28,7 +28,8 @@ def _make_history(
     volume_base: float,
     bars: int = 100,
 ) -> pd.DataFrame:
-    dates = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=bars)
+    end_date = pd.offsets.BDay().rollback(pd.Timestamp.today().normalize())
+    dates = pd.bdate_range(end=end_date, periods=bars)
     closes = np.array([start_price + slope * idx + 0.12 * np.sin(idx / 5.0) for idx in range(bars)], dtype=float)
     opens = closes * 0.992
     highs = closes * 1.018

@@ -128,7 +128,7 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
 
     def test_cn_indices_sina_items_are_not_fallback(self) -> None:
         service = MarketOverviewService()
-        now = datetime(2026, 4, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+        now = datetime.now(CN_TZ).isoformat(timespec="seconds")
         quotes = {
             "000001.SH": {
                 "name": "上证指数",
