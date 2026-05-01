@@ -1159,87 +1159,102 @@ class DatabaseManager:
             return
 
         self._prime_runtime_state_defaults()
-        
-        if db_url is None:
-            config = get_config()
-            db_url = config.get_db_url()
-        else:
-            config = get_config()
+        try:
+            if db_url is None:
+                config = get_config()
+                db_url = config.get_db_url()
+            else:
+                config = get_config()
 
-        # 创建数据库引擎
-        self._engine = create_engine(
-            db_url,
-            echo=False,  # 设为 True 可查看 SQL 语句
-            pool_pre_ping=True,  # 连接健康检查
-        )
-        
-        # 创建 Session 工厂
-        self._SessionLocal = sessionmaker(
-            bind=self._engine,
-            autocommit=False,
-            autoflush=False,
-        )
-        
-        # 创建所有表
-        Base.metadata.create_all(self._engine)
-        self._run_multi_user_migrations()
-        self._postgres_bridge_url = str(getattr(config, "postgres_phase_a_url", "") or "").strip() or None
-        self._postgres_bridge_auto_apply_schema = bool(
-            getattr(config, "postgres_phase_a_apply_schema", True)
-        )
-        if self._postgres_bridge_url:
-            try:
-                storage_postgres_bridge.initialize_postgres_phase_stores(
-                    self,
-                    bridge_url=self._postgres_bridge_url,
-                    auto_apply_schema=self._postgres_bridge_auto_apply_schema,
-                )
-            except Exception as exc:
-                self._dispose_postgres_phase_stores()
-                raise RuntimeError(
-                    storage_postgres_bridge.format_bridge_initialization_error(
-                        failed_phase=getattr(exc, "failed_phase", None),
-                        initialized_phases=getattr(exc, "initialized_phases", ()),
-                    )
-                ) from exc
-
-        self._initialized = True
-        logger.info(f"数据库初始化完成: {db_url}")
-        topology = self.describe_database_topology()
-        enabled_store_names = [
-            phase_key
-            for phase_key, phase_state in topology["stores"].items()
-            if phase_state.get("enabled")
-        ]
-        logger.info(
-            "数据库拓扑: primary=%s postgres_bridge=%s enabled_stores=%s phase_f_mode=%s phase_g_mode=%s",
-            topology["primary_runtime"],
-            topology["postgres_bridge"]["enabled"],
-            ",".join(enabled_store_names) if enabled_store_names else "none",
-            topology["stores"]["phase_f"]["mode"],
-            topology["stores"]["phase_g"]["mode"],
-        )
-        if topology["postgres_bridge"]["enabled"]:
-            logger.info(
-                "PostgreSQL store 初始化状态: %s",
-                json.dumps(
-                    {
-                        phase_key: {
-                            "mode": phase_state["mode"],
-                            "last_apply_status": phase_state["schema"]["last_apply_status"],
-                            "bootstrap_recorded": phase_state["schema"]["bootstrap_recorded"],
-                        }
-                        for phase_key, phase_state in topology["stores"].items()
-                        if phase_state.get("enabled")
-                    },
-                    ensure_ascii=False,
-                    sort_keys=True,
-                ),
+            # 创建数据库引擎
+            self._engine = create_engine(
+                db_url,
+                echo=False,  # 设为 True 可查看 SQL 语句
+                pool_pre_ping=True,  # 连接健康检查
             )
-        logger.debug("数据库拓扑详情: %s", json.dumps(topology, ensure_ascii=False, sort_keys=True))
 
-        # 注册退出钩子，确保程序退出时关闭数据库连接
-        atexit.register(DatabaseManager._cleanup_engine, self._engine)
+            # 创建 Session 工厂
+            self._SessionLocal = sessionmaker(
+                bind=self._engine,
+                autocommit=False,
+                autoflush=False,
+            )
+
+            # 创建所有表
+            Base.metadata.create_all(self._engine)
+            self._run_multi_user_migrations()
+            self._postgres_bridge_url = str(getattr(config, "postgres_phase_a_url", "") or "").strip() or None
+            self._postgres_bridge_auto_apply_schema = bool(
+                getattr(config, "postgres_phase_a_apply_schema", True)
+            )
+            if self._postgres_bridge_url:
+                try:
+                    storage_postgres_bridge.initialize_postgres_phase_stores(
+                        self,
+                        bridge_url=self._postgres_bridge_url,
+                        auto_apply_schema=self._postgres_bridge_auto_apply_schema,
+                    )
+                except Exception as exc:
+                    self._dispose_postgres_phase_stores()
+                    raise RuntimeError(
+                        storage_postgres_bridge.format_bridge_initialization_error(
+                            failed_phase=getattr(exc, "failed_phase", None),
+                            initialized_phases=getattr(exc, "initialized_phases", ()),
+                        )
+                    ) from exc
+
+            self._initialized = True
+            logger.info(f"数据库初始化完成: {db_url}")
+            topology = self.describe_database_topology()
+            enabled_store_names = [
+                phase_key
+                for phase_key, phase_state in topology["stores"].items()
+                if phase_state.get("enabled")
+            ]
+            logger.info(
+                "数据库拓扑: primary=%s postgres_bridge=%s enabled_stores=%s phase_f_mode=%s phase_g_mode=%s",
+                topology["primary_runtime"],
+                topology["postgres_bridge"]["enabled"],
+                ",".join(enabled_store_names) if enabled_store_names else "none",
+                topology["stores"]["phase_f"]["mode"],
+                topology["stores"]["phase_g"]["mode"],
+            )
+            if topology["postgres_bridge"]["enabled"]:
+                logger.info(
+                    "PostgreSQL store 初始化状态: %s",
+                    json.dumps(
+                        {
+                            phase_key: {
+                                "mode": phase_state["mode"],
+                                "last_apply_status": phase_state["schema"]["last_apply_status"],
+                                "bootstrap_recorded": phase_state["schema"]["bootstrap_recorded"],
+                            }
+                            for phase_key, phase_state in topology["stores"].items()
+                            if phase_state.get("enabled")
+                        },
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
+                )
+            logger.debug("数据库拓扑详情: %s", json.dumps(topology, ensure_ascii=False, sort_keys=True))
+
+            # 注册退出钩子，确保程序退出时关闭数据库连接
+            atexit.register(DatabaseManager._cleanup_engine, self._engine)
+        except Exception:
+            self._initialized = False
+            self._dispose_postgres_phase_stores()
+            engine = getattr(self, "_engine", None)
+            if engine is not None:
+                try:
+                    engine.dispose()
+                except Exception as cleanup_exc:
+                    logger.warning("初始化失败后清理数据库引擎时出错: %s", cleanup_exc)
+                finally:
+                    delattr(self, "_engine")
+            if hasattr(self, "_SessionLocal"):
+                delattr(self, "_SessionLocal")
+            type(self)._instance = None
+            raise
     
     @classmethod
     def get_instance(cls) -> 'DatabaseManager':

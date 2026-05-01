@@ -116,18 +116,31 @@ class DatabaseManagerFormalIntegrationTestCase(unittest.TestCase):
     def test_database_manager_initialization_bootstraps_phase_flags_before_migrations(self) -> None:
         self._configure_environment(postgres_url=None)
 
+        observed: dict[str, object] = {}
+
+        def _boom(manager: DatabaseManager) -> None:
+            observed["phase_a_enabled"] = manager._phase_a_enabled
+            observed["phase_a_store"] = manager._phase_a_store
+            raise RuntimeError("boom")
+
         with self.assertRaises(RuntimeError):
             with patch.object(
                 DatabaseManager,
                 "_run_multi_user_migrations",
-                side_effect=RuntimeError("boom"),
+                autospec=True,
+                side_effect=_boom,
             ):
                 DatabaseManager(db_url="sqlite:///:memory:")
 
-        partial = DatabaseManager._instance
-        self.assertIsNotNone(partial)
-        self.assertTrue(hasattr(partial, "_phase_a_enabled"))
-        self.assertFalse(partial._phase_a_enabled)
+        self.assertIsNone(DatabaseManager._instance)
+        self.assertEqual(observed["phase_a_enabled"], False)
+        self.assertIsNone(observed["phase_a_store"])
+
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+        self.assertTrue(db._initialized)
+        self.assertFalse(db._phase_a_enabled)
+        self.assertIsNone(db._phase_a_store)
 
     def test_database_manager_dispose_delegates_pg_bridge_cleanup(self) -> None:
         self._configure_environment(postgres_url=None)
@@ -189,6 +202,24 @@ class DatabaseManagerFormalIntegrationTestCase(unittest.TestCase):
             topology=topology,
             include_connection_probe=True,
         )
+
+    def test_database_manager_failure_isolated_by_reset_allows_followup_auth_flow(self) -> None:
+        self._configure_environment(postgres_url=None)
+
+        with self.assertRaises(RuntimeError):
+            with patch.object(
+                DatabaseManager,
+                "_run_multi_user_migrations",
+                autospec=True,
+                side_effect=RuntimeError("boom"),
+            ):
+                DatabaseManager(db_url="sqlite:///:memory:")
+
+        self.assertIsNone(DatabaseManager._instance)
+
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+        self.assertTrue(db._initialized)
+        self.assertFalse(db._phase_a_enabled)
 
 
 if __name__ == "__main__":
