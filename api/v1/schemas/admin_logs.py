@@ -88,11 +88,26 @@ class BusinessEventModel(BaseModel):
     event: str
     category: str
     type: Optional[str] = None
+    eventType: Optional[str] = None
     status: str
     summary: str
     subject: Optional[str] = None
     symbol: Optional[str] = None
     market: Optional[str] = None
+    actorType: Optional[str] = None
+    actorLabel: Optional[str] = None
+    contextLabel: Optional[str] = None
+    route: Optional[str] = None
+    endpoint: Optional[str] = None
+    provider: Optional[str] = None
+    source: Optional[str] = None
+    component: Optional[str] = None
+    feature: Optional[str] = None
+    reason: Optional[str] = None
+    errorSummary: Optional[str] = None
+    traceId: Optional[str] = None
+    rootCauseSummary: Optional[str] = None
+    stepTraceAvailable: Optional[bool] = None
     analysisType: Optional[str] = None
     strategyId: Optional[str] = None
     scannerId: Optional[str] = None

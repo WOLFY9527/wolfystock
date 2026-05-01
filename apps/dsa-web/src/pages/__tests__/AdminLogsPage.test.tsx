@@ -47,10 +47,22 @@ const businessEvents = [
     event: 'TSLA',
     category: 'analysis',
     type: 'stock_analysis',
+    eventType: 'stock_analysis',
     status: 'partial',
     summary: '用户分析 TSLA，部分数据源失败',
     symbol: 'TSLA',
     market: 'US',
+    actorType: 'user',
+    actorLabel: 'alice',
+    contextLabel: 'TSLA',
+    provider: 'newsapi',
+    source: 'Yahoo',
+    reason: 'timeout',
+    errorSummary: 'News API timeout after 3000ms token=***',
+    requestId: 'req-tsla-123456789',
+    traceId: 'trace-tsla-abcdef',
+    rootCauseSummary: 'News API timeout after 3000ms token=***',
+    stepTraceAvailable: true,
     startedAt: '2026-04-30T13:20:00Z',
     durationMs: 12345,
     stepCount: 4,
@@ -59,6 +71,37 @@ const businessEvents = [
     skippedStepCount: 0,
     unknownStepCount: 0,
     recordId: 'record-tsla',
+  },
+  {
+    id: 'market-card-failed',
+    event: 'MarketSentimentCard',
+    category: 'data_source',
+    type: 'market_overview_fetch',
+    eventType: 'ExternalSourceTimeout',
+    status: 'failed',
+    summary: 'MarketSentimentCard refresh failed',
+    subject: 'MarketSentimentCard',
+    component: 'MarketSentimentCard',
+    contextLabel: 'MarketSentimentCard',
+    route: '/market-overview',
+    endpoint: '/api/v1/market-overview/sentiment',
+    provider: 'finnhub',
+    source: 'market_overview',
+    actorType: 'anonymous',
+    actorLabel: 'anonymous',
+    reason: 'timeout',
+    errorSummary: 'provider timeout token=***',
+    requestId: 'req-market-card-123456',
+    traceId: 'trace-market-card-abcdef',
+    stepTraceAvailable: false,
+    startedAt: '2026-04-30T13:10:00Z',
+    durationMs: 0,
+    stepCount: 0,
+    successStepCount: 0,
+    failedStepCount: 0,
+    skippedStepCount: 0,
+    unknownStepCount: 0,
+    metadata: {},
   },
   {
     id: 'analysis-aapl',
@@ -189,6 +232,11 @@ const businessDetail = {
   ],
 };
 
+const failedNoStepDetail = {
+  ...businessEvents[1],
+  steps: [],
+};
+
 const rawSessions = [
   {
     sessionId: 'raw-timeout',
@@ -209,6 +257,11 @@ const rawSessions = [
 describe('AdminLogsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
     mockLanguage = 'zh';
     listBusinessEvents.mockResolvedValue({
       total: businessEvents.length,
@@ -217,7 +270,11 @@ describe('AdminLogsPage', () => {
       hasMore: true,
       items: businessEvents,
     });
-    getBusinessEventDetail.mockResolvedValue(businessDetail);
+    getBusinessEventDetail.mockImplementation((eventId: string) => (
+      eventId === 'market-card-failed'
+        ? Promise.resolve(failedNoStepDetail)
+        : Promise.resolve(businessDetail)
+    ));
     listSessions.mockResolvedValue({
       total: rawSessions.length,
       items: rawSessions,
@@ -248,8 +305,18 @@ describe('AdminLogsPage', () => {
     expect(screen.getByLabelText('状态筛选')).toBeInTheDocument();
     expect(screen.getByLabelText('时间范围')).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-summary-grid')).toHaveClass('grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-5');
-    expect(await screen.findByText('TSLA')).toBeInTheDocument();
-    expect(screen.getByText('用户分析 TSLA，部分数据源失败')).toBeInTheDocument();
+    expect((await screen.findAllByText('TSLA')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Actor')).toBeInTheDocument();
+    expect(screen.getByText('Context')).toBeInTheDocument();
+    expect(screen.getByText('Source / Provider')).toBeInTheDocument();
+    expect(screen.getByText('Reason')).toBeInTheDocument();
+    expect(screen.getByText('Trace')).toBeInTheDocument();
+    expect(screen.getByText('alice')).toBeInTheDocument();
+    expect(screen.getByText('newsapi')).toBeInTheDocument();
+    expect(screen.getAllByText('timeout').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('MarketSentimentCard').length).toBeGreaterThan(0);
+    expect(screen.getByText('失败 · 无步骤明细')).toBeInTheDocument();
+    expect(screen.queryByText('成功 0 · 跳过 0 · 失败 0 · 未确认 0')).not.toBeInTheDocument();
     expect(screen.getByText('Scanner: 大盘单机游戏')).toBeInTheDocument();
     expect(screen.getByText('Backtest: MA20 Breakout')).toBeInTheDocument();
     expect(screen.getByTestId('business-events-table-shell')).toHaveClass('overflow-x-auto');
@@ -257,7 +324,6 @@ describe('AdminLogsPage', () => {
     expect(screen.getByRole('button', { name: '上一页' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '下一页' })).toBeInTheDocument();
     expect(screen.queryByText('fetch_news')).not.toBeInTheDocument();
-    expect(screen.queryByText('ExternalSourceTimeout')).not.toBeInTheDocument();
     await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ since: '24h', limit: 20, offset: 0 })));
   });
 
@@ -283,7 +349,7 @@ describe('AdminLogsPage', () => {
   it('opens business-event detail with call-chain steps and failed error message', async () => {
     render(<AdminLogsPage />);
 
-    const row = await screen.findByText('TSLA');
+    const row = (await screen.findAllByText('TSLA'))[0];
     const rowContainer = row.closest('[data-testid="business-event-row"]');
     expect(rowContainer).not.toBeNull();
     fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
@@ -292,23 +358,44 @@ describe('AdminLogsPage', () => {
     expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('overflow-x-hidden');
     expect(screen.getByTestId('business-events-table-shell')).toHaveClass('overflow-x-auto');
     expect(screen.getByText('调用链 timeline')).toBeInTheDocument();
+    expect(screen.getByTestId('root-cause-section')).toBeInTheDocument();
+    expect(screen.getByText('Root Cause')).toBeInTheDocument();
+    expect(screen.getAllByText(/alice/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/trace-tsla-abcdef/)).toBeInTheDocument();
     expect(screen.getByText(/获取行情/)).toBeInTheDocument();
     expect(screen.getByText(/获取新闻/)).toBeInTheDocument();
     expect(screen.getByText(/获取财务数据/)).toBeInTheDocument();
     expect(screen.getAllByText(/AI 分析/).length).toBeGreaterThan(0);
     expect(screen.getByText(/保存分析记录/)).toBeInTheDocument();
-    expect(screen.getByText('News API timeout after 3000ms token=***')).toBeInTheDocument();
+    expect(screen.getAllByText('News API timeout after 3000ms token=***').length).toBeGreaterThan(0);
     expect(screen.queryByText(/FRONTENDSECRET/)).not.toBeInTheDocument();
     expect(screen.queryByText(/FRONTENDTOKEN/)).not.toBeInTheDocument();
     expect(screen.getAllByText('主数据源已成功，无需调用备用源').length).toBeGreaterThan(0);
     expect(screen.getAllByText('主模型已成功，无需调用备用模型').length).toBeGreaterThan(0);
-    expect(screen.getByText('步骤统计')).toBeInTheDocument();
+    expect(screen.getByText(/步骤统计/)).toBeInTheDocument();
     expect(screen.getByText('成功 2 · 跳过 2 · 失败 1 · 未确认 1')).toBeInTheDocument();
     expect(screen.getByText(/record-tsla/)).toBeInTheDocument();
     expect(document.querySelector('[data-status="success"]')).not.toBeNull();
     expect(document.querySelector('[data-status="skipped"]')).not.toBeNull();
     expect(document.querySelector('[data-status="failed"]')).not.toBeNull();
     expect(document.querySelector('[data-status="unknown"]')).not.toBeNull();
+  });
+
+  it('shows failed no-step events without all-zero step stats and can copy trace id', async () => {
+    render(<AdminLogsPage />);
+
+    const row = (await screen.findAllByText('MarketSentimentCard'))[0];
+    const rowContainer = row.closest('[data-testid="business-event-row"]');
+    expect(rowContainer).not.toBeNull();
+    expect(within(rowContainer as HTMLElement).getByText('失败 · 无步骤明细')).toBeInTheDocument();
+    expect(within(rowContainer as HTMLElement).queryByText('成功 0 · 跳过 0 · 失败 0 · 未确认 0')).not.toBeInTheDocument();
+
+    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: '复制' }));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('trace-market-card-abcdef');
+
+    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+    expect(await screen.findByTestId('root-cause-section')).toHaveTextContent('该事件在步骤级 trace 记录前已失败');
+    expect(screen.getAllByText('provider timeout token=***').length).toBeGreaterThan(0);
   });
 
   it('shows a unified message when the business-event list fails to load', async () => {
@@ -340,7 +427,7 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
-    const row = await screen.findByText('TSLA');
+    const row = (await screen.findAllByText('TSLA'))[0];
     const rowContainer = row.closest('[data-testid="business-event-row"]');
     expect(rowContainer).not.toBeNull();
     fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
@@ -362,7 +449,7 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
-    const row = await screen.findByText('TSLA');
+    const row = (await screen.findAllByText('TSLA'))[0];
     const rowContainer = row.closest('[data-testid="business-event-row"]');
     expect(rowContainer).not.toBeNull();
     fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
@@ -392,7 +479,7 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
-    const row = await screen.findByText('TSLA');
+    const row = (await screen.findAllByText('TSLA'))[0];
     const rowContainer = row.closest('[data-testid="business-event-row"]');
     expect(rowContainer).not.toBeNull();
     fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
@@ -431,6 +518,6 @@ describe('AdminLogsPage', () => {
     expect(await screen.findByRole('heading', { name: translate('en', 'adminLogs.pageTitle') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Business events' })).toBeInTheDocument();
     expect(screen.getByLabelText('Status filter')).toBeInTheDocument();
-    expect(await screen.findByText('TSLA')).toBeInTheDocument();
+    expect((await screen.findAllByText('TSLA')).length).toBeGreaterThan(0);
   });
 });

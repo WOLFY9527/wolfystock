@@ -1,5 +1,7 @@
 ## 2026-05-01
 
+- 🧾 **Admin Logs 维护 triage 字段 Phase 1** — `/api/v1/admin/logs` 的业务事件响应在保持兼容的基础上新增可选 `actorType / actorLabel / contextLabel / provider / source / component / reason / errorSummary / requestId / traceId / rootCauseSummary / stepTraceAvailable` 等派生字段，优先从现有 summary、metadata、event detail 与已脱敏 raw payload 中读取，不改动 execution log 持久化格式。`/admin/logs` 列表同步改为 Time / Event / Actor / Context / Source Provider / Reason / Status / Duration / Trace / Actions，详情抽屉顶部增加 Root Cause 区块；失败但没有 step trace 的事件不再显示“成功 0 · 跳过 0 · 失败 0 · 未确认 0”，改为明确的“失败 · 无步骤明细”。
+
 - 📌 **观察列表新增候选追踪工作台** — `apps/dsa-web` 新增 `/watchlist` / `/:locale/watchlist` 页面与主导航入口，登录用户可集中查看 scanner 保存的候选，按代码/名称搜索，按市场、来源、主题或候选范围筛选，并按最新、扫描分数、代码或市场排序。页面展示总数、覆盖市场、scanner 来源和近期新增摘要，保留 run id、rank、score、theme、universe type 等扫描上下文，并复用既有分析触发、scanner-to-backtest query handoff、复制代码和 watchlist remove API。游客访问时继续显示登录保护，不开放持久观察名单。
 
 - 📝 **Scanner 候选加入用户观察名单** — Scanner 结果页新增用户级 `Track / 已追踪` 动作，支持把候选保存到当前登录用户自己的观察名单，并在卡片/表格/详情里同步显示已追踪状态；后端新增独立的 `/api/v1/watchlist/items` 读写接口与 `user_watchlist_items` 持久化表，继续与现有 scanner admin/system watchlist endpoints 分离。该能力仅面向已认证用户，按 `owner_id + symbol + market` 做用户内幂等保存，并在 execution logs 中记录 watchlist add/remove 审计事件。

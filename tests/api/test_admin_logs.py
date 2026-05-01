@@ -251,6 +251,52 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(detail.steps[0].name, "fetch_news")
         self.assertEqual(detail.steps[0].errorMessage, "News API timeout after 3000ms")
 
+    def test_root_exposes_market_overview_triage_fields_without_steps(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            session_id = service.record_market_overview_fetch(
+                panel_name="MarketSentimentCard",
+                endpoint_url="/api/v1/market-overview/sentiment?api_key=SECRET",
+                status="failure",
+                fetch_timestamp="2026-04-30T10:00:00",
+                error_message="provider timeout token=SECRET",
+                raw_response={
+                    "provider": "finnhub",
+                    "source": "market_overview",
+                    "request_id": "req-sentiment",
+                    "trace_id": "trace-sentiment",
+                    "error": "upstream provider timeout token=SECRET",
+                },
+                actor={"actor_type": "anonymous", "request_id": "req-sentiment"},
+            )
+
+            payload = admin_logs.list_execution_logs_root(
+                category="data_source",
+                query="MarketSentimentCard",
+                limit=10,
+                _=_admin_user(),
+            )
+            detail = admin_logs.get_business_event_detail(session_id, _=_admin_user())
+
+        self.assertEqual(payload.total, 1)
+        item = payload.items[0]
+        self.assertEqual(item.actorType, "anonymous")
+        self.assertEqual(item.contextLabel, "MarketSentimentCard")
+        self.assertEqual(item.component, "MarketSentimentCard")
+        self.assertEqual(item.endpoint, "/api/v1/market-overview/sentiment?api_key=***")
+        self.assertEqual(item.provider, "finnhub")
+        self.assertEqual(item.source, "market_overview")
+        self.assertEqual(item.reason, "timeout")
+        self.assertEqual(item.requestId, "req-sentiment")
+        self.assertEqual(item.traceId, "trace-sentiment")
+        self.assertFalse(item.stepTraceAvailable)
+        self.assertEqual(item.failedStepCount, 0)
+        self.assertEqual(item.status, "failed")
+        self.assertIn("provider timeout", item.errorSummary or "")
+        self.assertNotIn("SECRET", str(item.model_dump()))
+        self.assertEqual(detail.contextLabel, "MarketSentimentCard")
+        self.assertEqual(detail.steps, [])
+
     def test_root_lists_guest_analysis_by_symbol(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()

@@ -147,11 +147,18 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
                 endpoint_url="/api/v1/market-overview/volatility",
                 status="failure",
                 fetch_timestamp="2026-04-29T10:00:00",
-                error_message="provider timeout",
-                raw_response={"cache": "stale_or_fallback", "error": "provider timeout"},
-                actor={"user_id": "user-1", "username": "alice", "role": "user"},
+                error_message="provider timeout api_key=SECRET",
+                raw_response={
+                    "cache": "stale_or_fallback",
+                    "error": "provider timeout token=SECRET",
+                    "provider": "finnhub",
+                    "trace_id": "trace-volatility",
+                    "request_id": "req-volatility",
+                },
+                actor={"user_id": "user-1", "username": "alice", "role": "user", "request_id": "req-volatility"},
             )
             detail = service.get_session_detail(session_id)
+            business = service.get_business_event_detail(session_id)
 
         self.assertIsNotNone(detail)
         self.assertEqual(detail["readable_summary"]["subsystem"], "data_source")
@@ -160,7 +167,22 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["events"][0]["category"], "data_source")
         self.assertEqual(detail["events"][0]["detail"]["panel_name"], "VolatilityCard")
         self.assertEqual(detail["events"][0]["detail"]["endpoint_url"], "/api/v1/market-overview/volatility")
-        self.assertEqual(detail["events"][0]["detail"]["raw_response"], {"cache": "stale_or_fallback", "error": "provider timeout"})
+        self.assertNotIn("SECRET", str(detail))
+        self.assertEqual(detail["events"][0]["detail"]["raw_response"]["provider"], "finnhub")
+        self.assertEqual(business["actorType"], "user")
+        self.assertEqual(business["actorLabel"], "alice")
+        self.assertEqual(business["contextLabel"], "VolatilityCard")
+        self.assertEqual(business["component"], "VolatilityCard")
+        self.assertEqual(business["endpoint"], "/api/v1/market-overview/volatility")
+        self.assertEqual(business["provider"], "finnhub")
+        self.assertEqual(business["reason"], "timeout")
+        self.assertIn("provider timeout", business["errorSummary"])
+        self.assertIn("api_key=***", business["errorSummary"])
+        self.assertEqual(business["traceId"], "trace-volatility")
+        self.assertEqual(business["requestId"], "req-volatility")
+        self.assertFalse(business["stepTraceAvailable"])
+        self.assertEqual(business["failedStepCount"], 0)
+        self.assertEqual(business["status"], "failed")
 
     def test_record_scanner_run_persists_actor_attribution(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):

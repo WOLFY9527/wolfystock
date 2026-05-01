@@ -37,6 +37,9 @@ export interface ExecutionLogSessionSummary {
     actorUsername?: string | null;
     actorDisplay?: string | null;
     actorRole?: string | null;
+    actorType?: string | null;
+    actorSessionId?: string | null;
+    actorRequestId?: string | null;
     sessionKind?: string | null;
     subsystem?: string | null;
     actionName?: string | null;
@@ -72,6 +75,13 @@ export interface ExecutionLogSessionSummary {
     eventName?: string | null;
     eventMessage?: string | null;
     requestId?: string | null;
+    traceId?: string | null;
+    reason?: string | null;
+    errorSummary?: string | null;
+    contextLabel?: string | null;
+    provider?: string | null;
+    endpoint?: string | null;
+    component?: string | null;
     source?: string | null;
   };
 }
@@ -84,6 +94,7 @@ export interface ExecutionLogSessionDetail extends ExecutionLogSessionSummary {
     target?: string | null;
     status?: string | null;
     keyMetric?: string | null;
+    durationMs?: number | null;
     aiCalls?: Array<Record<string, unknown>>;
     dataSourceCalls?: Array<Record<string, unknown>>;
     systemFallbacks?: Array<string | Record<string, unknown>>;
@@ -133,11 +144,26 @@ export interface BusinessEvent {
   event: string;
   category: string;
   type?: string | null;
+  eventType?: string | null;
   status: string;
   summary: string;
   subject?: string | null;
   symbol?: string | null;
   market?: string | null;
+  actorType?: string | null;
+  actorLabel?: string | null;
+  contextLabel?: string | null;
+  route?: string | null;
+  endpoint?: string | null;
+  provider?: string | null;
+  source?: string | null;
+  component?: string | null;
+  feature?: string | null;
+  reason?: string | null;
+  errorSummary?: string | null;
+  traceId?: string | null;
+  rootCauseSummary?: string | null;
+  stepTraceAvailable?: boolean | null;
   analysisType?: string | null;
   strategyId?: string | null;
   scannerId?: string | null;

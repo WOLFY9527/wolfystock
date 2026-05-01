@@ -281,6 +281,47 @@ def _duration_ms(started_at: Any, finished_at: Any) -> Optional[float]:
     return max(0.0, (finish - start).total_seconds() * 1000)
 
 
+def _first_text(*values: Any) -> Optional[str]:
+    for value in values:
+        text = _as_str(value)
+        if text:
+            return text
+    return None
+
+
+def _compact_identifier(value: Any) -> Optional[str]:
+    text = _as_str(value)
+    if not text:
+        return None
+    return text if len(text) <= 80 else f"{text[:36]}...{text[-16:]}"
+
+
+def _reason_from_failure_text(*values: Any, failed: bool = False) -> Optional[str]:
+    text = " ".join(_as_str(value) for value in values if _as_str(value)).lower()
+    if not text:
+        return "unknown" if failed else None
+    if "timeout" in text or "timed out" in text or "time out" in text:
+        return "timeout"
+    if "missing_api_key" in text or "missing api key" in text or "api key not configured" in text or "not_configured" in text:
+        return "missing_key"
+    if "invalid_payload" in text or "invalid payload" in text or "schema" in text or "validation" in text:
+        return "invalid_payload"
+    if "empty_result" in text or "empty result" in text or "no rows" in text or "no data" in text:
+        return "empty_result"
+    if "rate_limited" in text or "rate limited" in text or "429" in text:
+        return "rate_limited"
+    if "unauthorized" in text or "forbidden" in text or "401" in text or "403" in text:
+        return "unauthorized"
+    if "provider" in text or "source" in text or "upstream" in text or "external" in text:
+        return "provider_error"
+    if "fallback" in text or "stale" in text:
+        return "fallback"
+    simple = _first_text(*values)
+    if simple and re.fullmatch(r"[A-Za-z0-9_.:-]{2,48}", simple):
+        return simple.lower()
+    return "unknown" if failed else None
+
+
 def _trace_reason_message(reason: Optional[str]) -> Optional[str]:
     normalized = _as_str(reason).lower()
     if not normalized:
@@ -2929,6 +2970,191 @@ class ExecutionLogService:
             derived[key] = merged
         return [derived[key] for key in order]
 
+    def _business_event_triage_fields(
+        self,
+        *,
+        row: Dict[str, Any],
+        summary: Dict[str, Any],
+        business: Dict[str, Any],
+        detail: Dict[str, Any],
+        status: str,
+        symbol: Optional[str],
+        steps: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        meta = summary.get("meta") if isinstance(summary.get("meta"), dict) else {}
+        market_overview = summary.get("market_overview") if isinstance(summary.get("market_overview"), dict) else {}
+        business_metadata = business.get("metadata") if isinstance(business.get("metadata"), dict) else {}
+        events = detail.get("events") if isinstance(detail.get("events"), list) else []
+        enriched_events = [
+            _sanitize_metadata(self._enrich_event(event))
+            for event in events
+            if isinstance(event, dict)
+        ]
+        top_event = self._top_event(enriched_events) or {}
+        top_detail = top_event.get("detail") if isinstance(top_event.get("detail"), dict) else {}
+        raw_response = top_detail.get("raw_response") if isinstance(top_detail.get("raw_response"), dict) else (
+            market_overview.get("raw_response") if isinstance(market_overview.get("raw_response"), dict) else {}
+        )
+        actor_type = _first_text(
+            meta.get("actor_type"),
+            meta.get("actor_role"),
+            business_metadata.get("actor_type"),
+            business_metadata.get("actorRole"),
+        )
+        actor_label = _first_text(
+            meta.get("actor_display"),
+            meta.get("actor_username"),
+            meta.get("actor_user_id"),
+            meta.get("actor_session_id"),
+            business.get("userId"),
+            actor_type,
+        )
+        component = _first_text(
+            business.get("component"),
+            business_metadata.get("component"),
+            business_metadata.get("card"),
+            business_metadata.get("cardName"),
+            top_detail.get("component"),
+            top_detail.get("card"),
+            top_detail.get("panel_name"),
+            market_overview.get("panel_name"),
+            raw_response.get("component"),
+            raw_response.get("card"),
+        )
+        route = _sanitize_url(_first_text(
+            business.get("route"),
+            business_metadata.get("route"),
+            top_detail.get("route"),
+            top_detail.get("path"),
+            raw_response.get("route"),
+        ))
+        endpoint = _sanitize_url(_first_text(
+            business.get("endpoint"),
+            business_metadata.get("endpoint"),
+            business_metadata.get("apiPath"),
+            top_detail.get("endpoint"),
+            top_detail.get("endpoint_url"),
+            top_detail.get("apiPath"),
+            raw_response.get("endpoint"),
+            raw_response.get("endpoint_url"),
+        ))
+        provider = _first_text(
+            business.get("provider"),
+            business_metadata.get("provider"),
+            top_detail.get("provider"),
+            raw_response.get("provider"),
+            raw_response.get("data_provider"),
+            raw_response.get("source_provider"),
+        )
+        source = _first_text(
+            business.get("source"),
+            business_metadata.get("source"),
+            top_detail.get("source"),
+            raw_response.get("source"),
+            raw_response.get("sourceLabel"),
+            top_event.get("target"),
+        )
+        feature = _first_text(
+            business.get("feature"),
+            business_metadata.get("feature"),
+            top_detail.get("feature"),
+            market_overview.get("feature"),
+            meta.get("subsystem"),
+        )
+        event_type = _first_text(
+            business.get("eventType"),
+            business.get("type"),
+            top_detail.get("event_type"),
+            top_detail.get("event_name"),
+            top_event.get("event_name"),
+        )
+        request_id = _compact_identifier(_first_text(
+            business.get("requestId"),
+            top_detail.get("request_id"),
+            top_detail.get("requestId"),
+            raw_response.get("request_id"),
+            raw_response.get("requestId"),
+            meta.get("actor_request_id"),
+            row.get("query_id"),
+        ))
+        trace_id = _compact_identifier(_first_text(
+            business.get("traceId"),
+            top_detail.get("trace_id"),
+            top_detail.get("traceId"),
+            raw_response.get("trace_id"),
+            raw_response.get("traceId"),
+            raw_response.get("x_trace_id"),
+        ))
+        explicit_reason = _first_text(
+            business.get("reason"),
+            business_metadata.get("reason"),
+            business_metadata.get("failureReason"),
+            top_detail.get("reason"),
+            top_detail.get("error_type"),
+            top_event.get("error_code"),
+            raw_response.get("reason"),
+            raw_response.get("error_code"),
+        )
+        error_summary = _masked_message(_first_text(
+            business.get("errorSummary"),
+            business_metadata.get("errorSummary"),
+            business_metadata.get("error_message"),
+            top_detail.get("error_summary"),
+            top_detail.get("error_message"),
+            top_detail.get("message"),
+            top_event.get("message"),
+            market_overview.get("error_message"),
+            raw_response.get("error"),
+            raw_response.get("message"),
+            raw_response.get("detail"),
+            summary.get("error"),
+        ))
+        failed = status in {"failed", "partial"}
+        reason = _reason_from_failure_text(
+            explicit_reason,
+            error_summary,
+            top_event.get("event_name"),
+            top_event.get("status"),
+            top_detail.get("status"),
+            raw_response.get("status"),
+            failed=failed,
+        )
+        context_label = _first_text(
+            symbol,
+            component,
+            business.get("contextLabel"),
+            business_metadata.get("contextLabel"),
+            business.get("subject"),
+            business.get("event"),
+            row.get("name"),
+            row.get("task_id"),
+        )
+        provider_source = provider or source
+        root_cause = _first_text(
+            error_summary,
+            explicit_reason,
+            f"{provider_source} {reason}" if provider_source and reason else None,
+            reason,
+        )
+        return {
+            "eventType": event_type,
+            "actorType": actor_type or "unknown",
+            "actorLabel": actor_label,
+            "contextLabel": context_label,
+            "route": route,
+            "endpoint": endpoint,
+            "provider": provider,
+            "source": source,
+            "component": component,
+            "feature": feature,
+            "reason": reason,
+            "errorSummary": error_summary,
+            "requestId": request_id,
+            "traceId": trace_id,
+            "rootCauseSummary": _masked_message(root_cause),
+            "stepTraceAvailable": bool(steps),
+        }
+
     def _session_to_business_event(self, row: Dict[str, Any], *, include_steps: bool = False) -> Optional[Dict[str, Any]]:
         detail = self.db.get_execution_log_session_detail(str(row.get("session_id") or "")) or {}
         summary = detail.get("summary") if isinstance(detail.get("summary"), dict) else (row.get("summary") if isinstance(row.get("summary"), dict) else {})
@@ -2961,22 +3187,46 @@ class ExecutionLogService:
                 summary_text = f"用户分析 {event_name}，部分数据源失败"
             elif status == "failed":
                 summary_text = f"用户分析 {event_name}失败"
+        triage = self._business_event_triage_fields(
+            row=row,
+            summary=summary,
+            business=business,
+            detail=detail,
+            status=status,
+            symbol=symbol,
+            steps=steps,
+        )
         payload = {
             "id": _as_str(business.get("id") or row.get("session_id")),
             "event": event_name,
             "category": category,
             "type": _as_str(business.get("type")) or ("stock_analysis" if category == "analysis" else _as_str(row.get("task_id")) or category),
+            "eventType": triage.get("eventType"),
             "status": status,
             "summary": summary_text,
             "subject": _as_str(business.get("subject") or symbol or event_name) or None,
             "symbol": symbol,
             "market": business.get("market"),
+            "actorType": triage.get("actorType"),
+            "actorLabel": triage.get("actorLabel"),
+            "contextLabel": triage.get("contextLabel"),
+            "route": triage.get("route"),
+            "endpoint": triage.get("endpoint"),
+            "provider": triage.get("provider"),
+            "source": triage.get("source"),
+            "component": triage.get("component"),
+            "feature": triage.get("feature"),
+            "reason": triage.get("reason"),
+            "errorSummary": triage.get("errorSummary"),
+            "traceId": triage.get("traceId"),
+            "rootCauseSummary": triage.get("rootCauseSummary"),
+            "stepTraceAvailable": triage.get("stepTraceAvailable"),
             "analysisType": business.get("analysisType"),
             "strategyId": business.get("strategyId"),
             "scannerId": business.get("scannerId"),
             "backtestId": business.get("backtestId"),
             "userId": business.get("userId") or meta.get("actor_user_id"),
-            "requestId": business.get("requestId") or row.get("query_id"),
+            "requestId": triage.get("requestId") or business.get("requestId") or row.get("query_id"),
             "recordId": record_id,
             "startedAt": started_at,
             "finishedAt": finished_at,
@@ -3058,7 +3308,33 @@ class ExecutionLogService:
             if query_text:
                 haystack = " ".join(
                     _as_str(event.get(key))
-                    for key in ("event", "summary", "subject", "symbol", "market", "analysisType", "type", "requestId", "recordId", "scannerId", "strategyId", "backtestId")
+                    for key in (
+                        "event",
+                        "summary",
+                        "subject",
+                        "symbol",
+                        "market",
+                        "analysisType",
+                        "type",
+                        "eventType",
+                        "actorType",
+                        "actorLabel",
+                        "contextLabel",
+                        "route",
+                        "endpoint",
+                        "provider",
+                        "source",
+                        "component",
+                        "feature",
+                        "reason",
+                        "errorSummary",
+                        "requestId",
+                        "traceId",
+                        "recordId",
+                        "scannerId",
+                        "strategyId",
+                        "backtestId",
+                    )
                 ).lower()
                 if query_text not in haystack:
                     continue
