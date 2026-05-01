@@ -49,7 +49,21 @@ def _build_scanner_ops_service(
     return MarketScannerOperationsService(
         db_manager=db_manager,
         scanner_service=_build_scanner_service(db_manager, current_user),
+        actor=_actor(current_user),
     )
+
+
+def _actor(current_user: CurrentUser | object | None) -> dict | None:
+    if current_user is None or not getattr(current_user, "user_id", None):
+        return {"actor_type": "system", "role": "system", "display_name": "System"}
+    return {
+        "user_id": str(getattr(current_user, "user_id")),
+        "username": str(getattr(current_user, "username", "") or ""),
+        "display_name": getattr(current_user, "display_name", None),
+        "role": "admin" if bool(getattr(current_user, "is_admin", False)) else "user",
+        "actor_type": "admin" if bool(getattr(current_user, "is_admin", False)) else "user",
+        "session_id": getattr(current_user, "session_id", None),
+    }
 
 
 def _validation_error(exc: ValueError) -> HTTPException:

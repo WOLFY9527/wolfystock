@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import unittest
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -20,7 +21,7 @@ except ModuleNotFoundError:
 import src.auth as auth
 from api.app import create_app
 from src.config import Config
-from src.storage import AnalysisHistory, DatabaseManager
+from src.storage import AnalysisHistory, DatabaseManager, ExecutionLogSession
 
 
 def _reset_auth_globals() -> None:
@@ -135,6 +136,14 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
 
         with self.db.get_session() as session:
             self.assertEqual(session.query(AnalysisHistory).count(), 0)
+            log_row = session.query(ExecutionLogSession).filter_by(code="AAPL").one()
+            log_summary = json.loads(log_row.summary_json or "{}")
+            self.assertEqual(log_row.task_id, payload["query_id"])
+            self.assertEqual(log_row.overall_status, "success")
+            self.assertEqual(log_summary["meta"]["actor_role"], "guest")
+            self.assertEqual(log_summary["meta"]["actor_type"], "guest")
+            self.assertEqual(log_summary["meta"]["actor_session_id"], self.client.cookies.get("wolfystock_guest_session"))
+            self.assertEqual(log_summary["business_event"]["symbol"], "AAPL")
 
     def test_guest_preview_uses_isolated_anonymous_session_ids_without_persisting_history(self) -> None:
         captured_query_ids: list[str] = []

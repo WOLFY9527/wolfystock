@@ -34,11 +34,13 @@ class MarketScannerOperationsService:
         config: Optional[Config] = None,
         notifier_factory: Optional[Callable[[], NotificationService]] = None,
         execution_log_service: Optional[ExecutionLogService] = None,
+        actor: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.config = config or get_config()
         self.scanner_service = scanner_service or MarketScannerService(db_manager=db_manager)
         self.notifier_factory = notifier_factory or NotificationService
         self.execution_logs = execution_log_service or ExecutionLogService()
+        self.actor = actor
 
     def run_manual_scan(
         self,
@@ -254,6 +256,7 @@ class MarketScannerOperationsService:
         try:
             self.execution_logs.record_scanner_run(
                 run_detail=detail,
+                actor=self.actor,
                 session_kind=session_kind,
             )
         except Exception as exc:

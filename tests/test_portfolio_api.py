@@ -161,6 +161,15 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertAlmostEqual(account_snapshot["total_cash"], 0.0, places=6)
         self.assertAlmostEqual(account_snapshot["total_market_value"], 11000.0, places=6)
         self.assertAlmostEqual(account_snapshot["total_equity"], 11000.0, places=6)
+        logs, total_logs = self.db.list_execution_log_sessions(stock_code="600519", limit=10)
+        self.assertEqual(total_logs, 1)
+        self.assertEqual(logs[0]["summary"]["meta"]["subsystem"], "portfolio")
+        self.assertEqual(logs[0]["summary"]["meta"]["actor_type"], "admin")
+        self.assertEqual(logs[0]["summary"]["business_event"]["symbol"], "600519")
+
+        cash_logs, total_cash_logs = self.db.list_execution_log_sessions(task_id="portfolio:cash_ledger", limit=10)
+        self.assertEqual(total_cash_logs, 1)
+        self.assertEqual(cash_logs[0]["summary"]["portfolio_event"]["currency"], "CNY")
 
     def test_snapshot_api_returns_market_breakdown_for_multi_account_portfolio(self) -> None:
         cn_account = self.client.post(

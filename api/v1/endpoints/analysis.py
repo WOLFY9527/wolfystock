@@ -152,6 +152,16 @@ def _set_guest_session_cookie(response: Response, request: Request, guest_sessio
     )
 
 
+def _guest_actor(guest_session_id: str, query_id: str) -> Dict[str, Any]:
+    return {
+        "actor_type": "guest",
+        "role": "guest",
+        "session_id": guest_session_id,
+        "request_id": query_id,
+        "display_name": "Guest",
+    }
+
+
 # ============================================================
 # POST /analyze - 触发股票分析
 # ============================================================
@@ -176,6 +186,21 @@ def preview_analysis(
     stock_code = _resolve_and_normalize_input(request.stock_code)
     guest_session_id, is_new_guest_session = _resolve_guest_session_id(http_request)
     query_id = f"guest:{guest_session_id}:{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+    from src.services.execution_log_service import ExecutionLogService
+
+    execution_logs = ExecutionLogService()
+    execution_id = execution_logs.start_analysis_execution(
+        symbol=stock_code,
+        analysis_type=request.report_type,
+        request_id=query_id,
+        task_id=query_id,
+        stock_name=request.stock_name,
+        actor=_guest_actor(guest_session_id, query_id),
+        metadata={
+            "preview_scope": "guest",
+            "guest_session_id": guest_session_id,
+        },
+    )
 
     try:
         from src.services.analysis_service import AnalysisService
@@ -190,6 +215,21 @@ def preview_analysis(
             persist_history=False,
         )
         if result is None:
+            execution_logs.add_execution_step(
+                execution_id=execution_id,
+                name="ai_analysis",
+                label="AI 分析",
+                status="failed",
+                error_type="AnalysisFailed",
+                error_message=f"分析股票 {stock_code} 失败",
+                critical=True,
+            )
+            execution_logs.finish_analysis_execution(
+                execution_id=execution_id,
+                status="failed",
+                query_id=query_id,
+                metadata={"preview_scope": "guest"},
+            )
             raise HTTPException(
                 status_code=500,
                 detail={
@@ -216,6 +256,26 @@ def preview_analysis(
             report=report,
             preview_scope="guest",
         )
+        execution_logs.append_runtime_result(
+            session_id=execution_id,
+            runtime_execution=result.get("runtime_execution"),
+            notification_result=result.get("notification_result"),
+            query_id=resolved_query_id,
+            overall_status="success",
+        )
+        execution_logs.add_execution_step(
+            execution_id=execution_id,
+            name="ai_analysis",
+            label="AI 分析",
+            status="success",
+            critical=True,
+        )
+        execution_logs.finish_analysis_execution(
+            execution_id=execution_id,
+            status="success",
+            query_id=resolved_query_id,
+            metadata={"preview_scope": "guest"},
+        )
         json_response = JSONResponse(
             content=jsonable_encoder(preview_response.model_dump(by_alias=True)),
         )
@@ -226,6 +286,21 @@ def preview_analysis(
         raise
     except Exception as e:
         logger.error("生成公开分析预览失败: %s", e, exc_info=True)
+        execution_logs.add_execution_step(
+            execution_id=execution_id,
+            name="ai_analysis",
+            label="AI 分析",
+            status="failed",
+            error_type=type(e).__name__,
+            error_message=str(e),
+            critical=True,
+        )
+        execution_logs.finish_analysis_execution(
+            execution_id=execution_id,
+            status="failed",
+            query_id=query_id,
+            metadata={"preview_scope": "guest"},
+        )
         raise HTTPException(
             status_code=500,
             detail={

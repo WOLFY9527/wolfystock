@@ -2,6 +2,8 @@
 
 - 🧭 **Market Scanner 主题与自定义标的池** — Scanner 新增 `/api/v1/scanner/themes` 主题池接口，手动扫描请求支持 `universe_type=theme|symbols`、`theme_id` 与自定义 `symbols`，并在运行详情/历史中返回主题、自定义代码数量与无效代码等 universe metadata。首批美股主题提供 crypto miners、memory/storage、AI semiconductors 的人工 seed list；A 股光模块/CPO、液冷、算力租赁、存储、半导体设备、机器人主题先作为未配置占位池暴露，明确要求人工维护，不冒充完整权威成分。
 
+- 🧾 **Guest / Portfolio / Scanner 执行日志归因补齐** — 公开 Guest analysis preview 现在会写入 execution log，不再只生成非持久化分析结果；日志中会标记 `actor_type=guest`、guest session/request id，并保留 symbol code 以便 Admin Logs 搜索 ORCL/AAPL 等游客分析。Execution log actor 元数据同步扩展为 `admin / user / guest / anonymous / system`，scanner 与 market overview 公共接口会传入当前 actor 或 anonymous/system 归因；Portfolio 的买卖、资金流水与公司行为写入路径新增 portfolio audit business event，记录 account、symbol、currency、record id 与 actor。
+
 - 🔒 **System Settings 原始编辑面 Phase 1 收口** — `/settings/system` 的高级原始配置抽屉现在只展示明确允许 raw-edit 的运行时字段，`ADMIN_AUTH_ENABLED`、AI/Data Source provider keys、通知 webhook/token/password、`DEBUG`、`HTTP_PROXY`、`WEBUI_PORT`、`WEBHOOK_VERIFY_SSL`、`LITELLM_CONFIG`、`AGENT_SKILL_DIR` 与 `CUSTOM_DATA_SOURCE_LIBRARY` 等危险、重复或已归属专用页面的字段不再作为通用原始配置暴露。后端仍保留既有 `.env` 读取、masked secret preservation 与专用设置页兼容性，只通过 `raw_editable / ui_visibility` 标记收口 UI 编辑面。
 
 - 🧼 **Settings 全局输入与极简减法清洗** — `apps/dsa-web` 修复共享 `Input` 的前置图标输入框内边距，带 `iconType` 的原生 `<input>` 现在直接获得 `pl-12`，同时移除 Settings Drawer 里覆盖横向 padding 的作用域规则，避免密码框、API Key 框和搜索类输入出现图标与文字重叠。Settings 主操作按钮从高饱和蓝紫渐变切换为低对比 `bg-white/5 border-white/10` 幽灵态微光按钮；`/settings` 删除顶部个人偏好标题、重复语言卡和大段说明小字，`/settings/system` 删除顶部标题/副标题、导航说明和系统概览里的保姆式解释文案，仅保留核心标签与操作控件。

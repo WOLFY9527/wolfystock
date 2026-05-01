@@ -530,6 +530,7 @@ class ExecutionLogService:
         request_id: Optional[str] = None,
         user_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        actor: Optional[Dict[str, Any]] = None,
     ) -> str:
         execution_id = uuid.uuid4().hex
         started_at = datetime.now()
@@ -566,7 +567,7 @@ class ExecutionLogService:
             {"business_event": business},
             self._summary_meta(
                 owner_id=user_id,
-                actor={"user_id": user_id} if user_id else None,
+                actor=actor or ({"user_id": user_id} if user_id else None),
                 session_kind="business_event",
                 subsystem=normalized_category,
                 action_name=business["type"],
@@ -781,6 +782,7 @@ class ExecutionLogService:
         task_id: Optional[str] = None,
         stock_name: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        actor: Optional[Dict[str, Any]] = None,
     ) -> str:
         execution_id = uuid.uuid4().hex
         started_at = datetime.now()
@@ -813,7 +815,7 @@ class ExecutionLogService:
             {"business_event": business},
             self._summary_meta(
                 owner_id=user_id,
-                actor={"user_id": user_id} if user_id else None,
+                actor=actor or ({"user_id": user_id} if user_id else None),
                 session_kind="business_event",
                 subsystem="analysis",
                 action_name="analysis_execution",
@@ -1048,6 +1050,9 @@ class ExecutionLogService:
         username = _as_str(actor_payload.get("username"))
         display_name = _as_str(actor_payload.get("display_name"))
         role = _as_str(actor_payload.get("role")).lower()
+        actor_type = _as_str(actor_payload.get("actor_type") or actor_payload.get("type")).lower()
+        session_id = _as_str(actor_payload.get("session_id"))
+        request_id = _as_str(actor_payload.get("request_id"))
 
         if user_id:
             user_row = self.db.get_app_user(user_id)
@@ -1056,14 +1061,19 @@ class ExecutionLogService:
                 display_name = display_name or _as_str(getattr(user_row, "display_name", None))
                 role = role or _as_str(getattr(user_row, "role", None)).lower()
 
-        if role not in {ROLE_ADMIN, ROLE_USER}:
+        if role not in {ROLE_ADMIN, ROLE_USER, "guest", "anonymous", "system"}:
             role = ROLE_ADMIN if user_id == BOOTSTRAP_ADMIN_USER_ID else ROLE_USER
+        if actor_type not in {"admin", "user", "guest", "anonymous", "system"}:
+            actor_type = role
 
         return {
             "user_id": user_id or None,
             "username": username or None,
-            "display_name": display_name or username or user_id or None,
+            "display_name": display_name or username or user_id or actor_type or None,
             "role": role,
+            "actor_type": actor_type,
+            "session_id": session_id or None,
+            "request_id": request_id or None,
         }
 
     def _summary_meta(
@@ -1084,6 +1094,9 @@ class ExecutionLogService:
                 "actor_username": actor_payload.get("username"),
                 "actor_display": actor_payload.get("display_name"),
                 "actor_role": actor_payload.get("role"),
+                "actor_type": actor_payload.get("actor_type"),
+                "actor_session_id": actor_payload.get("session_id"),
+                "actor_request_id": actor_payload.get("request_id"),
                 "session_kind": session_kind,
                 "subsystem": subsystem,
                 "action_name": action_name,
@@ -1424,6 +1437,102 @@ class ExecutionLogService:
             truth_level="actual",
             message=_masked_message(error_message) if error_message else f"{panel_name} refreshed via {_sanitize_url(endpoint_url)}",
             detail=detail,
+            event_at=started_at,
+        )
+        self.db.finalize_execution_log_session(
+            session_id=session_id,
+            overall_status=normalized_status,
+            truth_level="actual",
+            summary=summary,
+            ended_at=started_at,
+        )
+        return session_id
+
+    def record_portfolio_event(
+        self,
+        *,
+        action: str,
+        message: str,
+        status: str = "success",
+        actor: Optional[Dict[str, Any]] = None,
+        account_id: Optional[Any] = None,
+        symbol: Optional[str] = None,
+        currency: Optional[str] = None,
+        record_id: Optional[Any] = None,
+        detail: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        session_id = uuid.uuid4().hex
+        started_at = datetime.now()
+        normalized_status = _normalize_business_status(status)
+        action_name = _as_str(action) or "portfolio_event"
+        symbol_text = _as_str(symbol).upper() or None
+        safe_detail = _sanitize_metadata(
+            {
+                "category": "portfolio",
+                "action": action_name,
+                "account_id": account_id,
+                "symbol": symbol_text,
+                "currency": _as_str(currency).upper() or None,
+                "record_id": _as_str(record_id) or None,
+                "outcome": _outcome_from_status(normalized_status),
+                **(detail or {}),
+            }
+        )
+        business_event = {
+            "id": session_id,
+            "event": f"Portfolio: {action_name}",
+            "category": "portfolio",
+            "type": action_name,
+            "status": normalized_status,
+            "summary": _as_str(message) or f"Portfolio {action_name}",
+            "subject": symbol_text or _as_str(account_id) or action_name,
+            "symbol": symbol_text,
+            "market": _as_str(safe_detail.get("market")).upper() or None if isinstance(safe_detail, dict) else None,
+            "strategyId": None,
+            "scannerId": None,
+            "backtestId": None,
+            "recordId": _as_str(record_id) or None,
+            "requestId": None,
+            "userId": None,
+            "startedAt": started_at.isoformat(),
+            "finishedAt": started_at.isoformat(),
+            "durationMs": 0,
+            "stepCount": 1,
+            "successStepCount": 1 if normalized_status == "success" else 0,
+            "failedStepCount": 1 if normalized_status == "failed" else 0,
+            "skippedStepCount": 0,
+            "unknownStepCount": 0,
+            "metadata": safe_detail,
+        }
+        summary = self._merge_summary(
+            {"business_event": business_event, "portfolio_event": safe_detail},
+            self._summary_meta(
+                actor=actor,
+                session_kind="user_activity",
+                subsystem="portfolio",
+                action_name=action_name,
+                destructive=action_name.startswith("delete_"),
+            ),
+        )
+        self.db.create_execution_log_session(
+            session_id=session_id,
+            task_id=f"portfolio:{action_name}",
+            code=symbol_text,
+            name=business_event["event"],
+            overall_status=normalized_status,
+            truth_level="actual",
+            summary=summary,
+            started_at=started_at,
+        )
+        self.db.append_execution_log_event(
+            session_id=session_id,
+            phase="portfolio",
+            step=action_name,
+            target=symbol_text or _as_str(account_id) or "portfolio",
+            status=normalized_status,
+            truth_level="actual",
+            message=_masked_message(message) or business_event["summary"],
+            detail=safe_detail,
             event_at=started_at,
         )
         self.db.finalize_execution_log_session(
@@ -2557,6 +2666,9 @@ class ExecutionLogService:
             "actor_username": _as_str(meta.get("actor_username")) or None,
             "actor_display": _as_str(meta.get("actor_display")) or None,
             "actor_role": _as_str(meta.get("actor_role")) or None,
+            "actor_type": _as_str(meta.get("actor_type")) or _as_str(meta.get("actor_role")) or None,
+            "actor_session_id": _as_str(meta.get("actor_session_id")) or None,
+            "actor_request_id": _as_str(meta.get("actor_request_id")) or None,
             "session_kind": _as_str(meta.get("session_kind")) or "user_activity",
             "subsystem": _as_str(meta.get("subsystem")) or "analysis",
             "action_name": _as_str(meta.get("action_name")) or None,
@@ -3089,6 +3201,10 @@ class ExecutionLogService:
             _as_str(row.get("session_id")),
             _as_str(summary.get("meta", {}).get("actor_username") if isinstance(summary.get("meta"), dict) else ""),
             _as_str(summary.get("meta", {}).get("actor_display") if isinstance(summary.get("meta"), dict) else ""),
+            _as_str(summary.get("meta", {}).get("actor_role") if isinstance(summary.get("meta"), dict) else ""),
+            _as_str(summary.get("meta", {}).get("actor_type") if isinstance(summary.get("meta"), dict) else ""),
+            _as_str(summary.get("meta", {}).get("actor_session_id") if isinstance(summary.get("meta"), dict) else ""),
+            _as_str(summary.get("meta", {}).get("actor_request_id") if isinstance(summary.get("meta"), dict) else ""),
         ]
         for event in events:
             detail = event.get("detail") if isinstance(event.get("detail"), dict) else {}

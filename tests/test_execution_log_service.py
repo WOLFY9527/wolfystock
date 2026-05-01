@@ -90,6 +90,29 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertEqual(readable["session_kind"], "user_activity")
         self.assertEqual(readable["subsystem"], "analysis")
 
+    def test_start_analysis_execution_persists_guest_actor_and_symbol_search(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_analysis_execution(
+                symbol="ORCL",
+                request_id="guest:session-1:req-1",
+                actor={
+                    "actor_type": "guest",
+                    "role": "guest",
+                    "session_id": "session-1",
+                    "request_id": "guest:session-1:req-1",
+                },
+            )
+            service.finish_analysis_execution(execution_id=execution_id, status="success")
+            sessions, total = service.list_sessions(query="orcl", limit=10, min_level="DEBUG")
+            detail = service.get_session_detail(execution_id)
+
+        self.assertEqual(total, 1)
+        self.assertEqual(sessions[0]["code"], "ORCL")
+        self.assertEqual(detail["readable_summary"]["actor_role"], "guest")
+        self.assertEqual(detail["readable_summary"]["actor_type"], "guest")
+        self.assertEqual(detail["readable_summary"]["actor_session_id"], "session-1")
+
     def test_record_admin_action_persists_global_admin_observability_fields(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()
@@ -138,6 +161,51 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["events"][0]["detail"]["panel_name"], "VolatilityCard")
         self.assertEqual(detail["events"][0]["detail"]["endpoint_url"], "/api/v1/market-overview/volatility")
         self.assertEqual(detail["events"][0]["detail"]["raw_response"], {"cache": "stale_or_fallback", "error": "provider timeout"})
+
+    def test_record_scanner_run_persists_actor_attribution(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            session_id = service.record_scanner_run(
+                run_detail={
+                    "id": 99,
+                    "market": "us",
+                    "profile": "us_preopen_v1",
+                    "profile_label": "US Preopen",
+                    "trigger_mode": "manual",
+                    "status": "completed",
+                    "shortlist_size": 3,
+                    "diagnostics": {"coverage_summary": {"input_universe_size": 120, "shortlisted_count": 3}},
+                },
+                actor={"user_id": "user-1", "username": "alice", "role": "user"},
+            )
+            detail = service.get_session_detail(session_id)
+
+        self.assertEqual(detail["readable_summary"]["subsystem"], "scanner")
+        self.assertEqual(detail["readable_summary"]["actor_role"], "user")
+        self.assertEqual(detail["events"][0]["detail"]["market"], "us")
+
+    def test_record_portfolio_event_persists_business_audit_fields(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            session_id = service.record_portfolio_event(
+                action="buy_trade",
+                message="Portfolio buy trade recorded for AAPL",
+                actor={"user_id": "user-1", "username": "alice", "role": "user"},
+                account_id=7,
+                symbol="AAPL",
+                currency="USD",
+                record_id=42,
+                detail={"quantity": 3, "price": 188.2, "market": "us"},
+            )
+            sessions, total = service.list_sessions(query="AAPL", limit=10, min_level="DEBUG")
+            detail = service.get_session_detail(session_id)
+
+        self.assertEqual(total, 1)
+        self.assertEqual(sessions[0]["code"], "AAPL")
+        self.assertEqual(detail["readable_summary"]["subsystem"], "portfolio")
+        self.assertEqual(detail["readable_summary"]["actor_role"], "user")
+        self.assertEqual(detail["events"][0]["detail"]["action"], "buy_trade")
+        self.assertEqual(detail["events"][0]["detail"]["account_id"], 7)
 
     def test_list_sessions_filters_by_task_id(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):

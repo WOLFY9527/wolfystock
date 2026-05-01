@@ -251,6 +251,25 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(detail.steps[0].name, "fetch_news")
         self.assertEqual(detail.steps[0].errorMessage, "News API timeout after 3000ms")
 
+    def test_root_lists_guest_analysis_by_symbol(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            service.start_analysis_execution(
+                symbol="ORCL",
+                market="US",
+                request_id="guest:session-1:req-1",
+                actor={"actor_type": "guest", "role": "guest", "session_id": "session-1"},
+            )
+            payload = admin_logs.list_execution_logs_root(
+                query="ORCL",
+                limit=10,
+                _=_admin_user(),
+            )
+
+        self.assertEqual(payload.total, 1)
+        self.assertEqual(payload.items[0].symbol, "ORCL")
+        self.assertEqual(payload.items[0].requestId, "guest:session-1:req-1")
+
     def test_root_detail_returns_split_step_counts_and_skipped_reasons(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()

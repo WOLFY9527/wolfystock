@@ -47,6 +47,7 @@ from src.services.portfolio_service import (
     PortfolioOversellError,
     PortfolioService,
 )
+from src.services.execution_log_service import ExecutionLogService
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,43 @@ router = APIRouter()
 
 def _get_portfolio_service(current_user: CurrentUser) -> PortfolioService:
     return PortfolioService(owner_id=current_user.user_id)
+
+
+def _actor(current_user: CurrentUser) -> dict:
+    return {
+        "user_id": current_user.user_id,
+        "username": current_user.username,
+        "display_name": current_user.display_name,
+        "role": "admin" if current_user.is_admin else "user",
+        "actor_type": "admin" if current_user.is_admin else "user",
+        "session_id": current_user.session_id,
+    }
+
+
+def _record_portfolio_audit(
+    *,
+    action: str,
+    message: str,
+    current_user: CurrentUser,
+    account_id: Optional[int],
+    symbol: Optional[str] = None,
+    currency: Optional[str] = None,
+    record_id: Optional[object] = None,
+    detail: Optional[dict] = None,
+) -> None:
+    try:
+        ExecutionLogService().record_portfolio_event(
+            action=action,
+            message=message,
+            actor=_actor(current_user),
+            account_id=account_id,
+            symbol=symbol,
+            currency=currency,
+            record_id=record_id,
+            detail=detail,
+        )
+    except Exception as exc:
+        logger.warning("Record portfolio audit log failed: %s", exc)
 
 
 def _assert_owned_request(owner_id: Optional[str], current_user: CurrentUser) -> None:
@@ -404,6 +442,16 @@ def create_trade(
             trade_uid=request.trade_uid,
             note=request.note,
         )
+        _record_portfolio_audit(
+            action=f"{request.side}_trade",
+            message=f"Portfolio {request.side} trade recorded for {request.symbol}",
+            current_user=current_user,
+            account_id=request.account_id,
+            symbol=request.symbol,
+            currency=request.currency,
+            record_id=data.get("id"),
+            detail={"market": request.market, "quantity": request.quantity, "price": request.price},
+        )
         return PortfolioEventCreatedResponse(**data)
     except PortfolioBusyError as exc:
         raise _conflict_error(error="portfolio_busy", message=str(exc))
@@ -498,6 +546,15 @@ def create_cash_ledger(
             currency=request.currency,
             note=request.note,
         )
+        _record_portfolio_audit(
+            action="cash_ledger",
+            message=f"Portfolio cash ledger {request.direction} recorded",
+            current_user=current_user,
+            account_id=request.account_id,
+            currency=request.currency,
+            record_id=data.get("id"),
+            detail={"direction": request.direction, "amount": request.amount},
+        )
         return PortfolioEventCreatedResponse(**data)
     except PortfolioBusyError as exc:
         raise _conflict_error(error="portfolio_busy", message=str(exc))
@@ -588,6 +645,16 @@ def create_corporate_action(
             cash_dividend_per_share=request.cash_dividend_per_share,
             split_ratio=request.split_ratio,
             note=request.note,
+        )
+        _record_portfolio_audit(
+            action="corporate_action",
+            message=f"Portfolio corporate action recorded for {request.symbol}",
+            current_user=current_user,
+            account_id=request.account_id,
+            symbol=request.symbol,
+            currency=request.currency,
+            record_id=data.get("id"),
+            detail={"market": request.market, "action_type": request.action_type},
         )
         return PortfolioEventCreatedResponse(**data)
     except PortfolioBusyError as exc:
