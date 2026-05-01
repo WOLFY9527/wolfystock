@@ -33,15 +33,25 @@ class SystemConfigApiTestCase(unittest.TestCase):
             "ENV_FILE",
             "STOCK_LIST",
             "GEMINI_API_KEY",
+            "UNREGISTERED_VENDOR_API_KEY",
             "WECHAT_WEBHOOK_URL",
+            "DISCORD_MAIN_CHANNEL_ID",
+            "SLACK_CHANNEL_ID",
             "DINGTALK_APP_KEY",
             "PUSHOVER_USER_KEY",
             "SERVERCHAN3_SENDKEY",
             "DEBUG",
             "HTTP_PROXY",
             "LOG_LEVEL",
+            "WEBUI_PORT",
+            "WEBHOOK_VERIFY_SSL",
+            "LITELLM_CONFIG",
+            "AGENT_SKILL_DIR",
+            "CUSTOM_DATA_SOURCE_LIBRARY",
             "SCHEDULE_TIME",
             "SCHEDULE_ENABLED",
+            "MAX_WORKERS",
+            "ANALYSIS_DELAY",
             "ADMIN_AUTH_ENABLED",
             "UNREGISTERED_SESSION_SECRET",
         ]
@@ -53,14 +63,24 @@ class SystemConfigApiTestCase(unittest.TestCase):
                 [
                     "STOCK_LIST=600519,000001",
                     "GEMINI_API_KEY=secret-key-value",
+                    "UNREGISTERED_VENDOR_API_KEY=vendor-secret-value",
                     "WECHAT_WEBHOOK_URL=https://hooks.example.com/secret",
+                    "DISCORD_MAIN_CHANNEL_ID=channel-1",
+                    "SLACK_CHANNEL_ID=channel-2",
                     "DINGTALK_APP_KEY=dingtalk-key",
                     "PUSHOVER_USER_KEY=pushover-key",
                     "SERVERCHAN3_SENDKEY=serverchan-key",
                     "DEBUG=true",
                     "HTTP_PROXY=http://proxy.example.com:8080",
+                    "WEBUI_PORT=5173",
+                    "WEBHOOK_VERIFY_SSL=false",
+                    "LITELLM_CONFIG=/tmp/litellm.yaml",
+                    "AGENT_SKILL_DIR=/tmp/skills",
+                    "CUSTOM_DATA_SOURCE_LIBRARY=[]",
                     "SCHEDULE_TIME=18:00",
                     "SCHEDULE_ENABLED=true",
+                    "MAX_WORKERS=3",
+                    "ANALYSIS_DELAY=1.5",
                     "LOG_LEVEL=INFO",
                     "ADMIN_AUTH_ENABLED=false",
                     "UNREGISTERED_SESSION_SECRET=secret-value",
@@ -99,13 +119,21 @@ class SystemConfigApiTestCase(unittest.TestCase):
         for key in (
             "ADMIN_AUTH_ENABLED",
             "GEMINI_API_KEY",
+            "UNREGISTERED_VENDOR_API_KEY",
             "WECHAT_WEBHOOK_URL",
+            "DISCORD_MAIN_CHANNEL_ID",
+            "SLACK_CHANNEL_ID",
             "DINGTALK_APP_KEY",
             "PUSHOVER_USER_KEY",
             "SERVERCHAN3_SENDKEY",
             "DEBUG",
             "HTTP_PROXY",
             "LOG_LEVEL",
+            "WEBUI_PORT",
+            "WEBHOOK_VERIFY_SSL",
+            "LITELLM_CONFIG",
+            "AGENT_SKILL_DIR",
+            "CUSTOM_DATA_SOURCE_LIBRARY",
             "UNREGISTERED_SESSION_SECRET",
         ):
             with self.subTest(key=key):
@@ -115,6 +143,9 @@ class SystemConfigApiTestCase(unittest.TestCase):
 
         self.assertTrue(item_map["SCHEDULE_ENABLED"]["raw_editable"])
         self.assertEqual(item_map["SCHEDULE_ENABLED"]["ui_visibility"], "raw")
+        self.assertTrue(item_map["SCHEDULE_TIME"]["raw_editable"])
+        self.assertTrue(item_map["MAX_WORKERS"]["raw_editable"])
+        self.assertTrue(item_map["ANALYSIS_DELAY"]["raw_editable"])
 
     def test_put_config_skips_masked_secret_placeholder(self) -> None:
         current = system_config.get_system_config(include_schema=False, service=self.service).model_dump()

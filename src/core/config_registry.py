@@ -68,6 +68,7 @@ _RAW_CURATED_EXACT_KEYS = {
 
 _RAW_SECRET_TOKEN_RE = ("API_KEY", "API_KEYS", "TOKEN", "SECRET", "PASSWORD", "WEBHOOK", "BEARER")
 _RAW_NOTIFICATION_SECRET_RE = _RAW_SECRET_TOKEN_RE + ("APP_KEY", "USER_KEY", "SENDKEY")
+_RAW_NOTIFICATION_HIDDEN_PREFIXES = ("DINGTALK_", "DISCORD_", "SLACK_", "PUSHOVER_")
 
 _CATEGORY_DEFINITIONS: List[Dict[str, Any]] = [
     {
@@ -2118,10 +2119,16 @@ def get_raw_edit_visibility(key: str, field_schema: Optional[Dict[str, Any]] = N
     if key_upper in _RAW_CURATED_EXACT_KEYS:
         return {"raw_editable": False, "ui_visibility": "curated"}
 
+    if category == "notification" and key_upper.startswith(_RAW_NOTIFICATION_HIDDEN_PREFIXES):
+        return {"raw_editable": False, "ui_visibility": "hidden"}
+
     if category in {"ai_model", "data_source"} and any(token in key_upper for token in _RAW_SECRET_TOKEN_RE):
         return {"raw_editable": False, "ui_visibility": "curated"}
 
     if category == "notification" and any(token in key_upper for token in _RAW_NOTIFICATION_SECRET_RE):
+        return {"raw_editable": False, "ui_visibility": "hidden"}
+
+    if any(token in key_upper for token in _RAW_SECRET_TOKEN_RE):
         return {"raw_editable": False, "ui_visibility": "hidden"}
 
     return {"raw_editable": True, "ui_visibility": "raw"}

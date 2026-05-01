@@ -26,8 +26,11 @@ class SystemConfigServiceTestCase(unittest.TestCase):
             "ENV_FILE",
             "STOCK_LIST",
             "GEMINI_API_KEY",
+            "UNREGISTERED_VENDOR_API_KEY",
             "ADMIN_AUTH_ENABLED",
             "WECHAT_WEBHOOK_URL",
+            "DISCORD_MAIN_CHANNEL_ID",
+            "SLACK_CHANNEL_ID",
             "DINGTALK_APP_KEY",
             "PUSHOVER_USER_KEY",
             "SERVERCHAN3_SENDKEY",
@@ -42,6 +45,8 @@ class SystemConfigServiceTestCase(unittest.TestCase):
             "UNREGISTERED_BOOTSTRAP_PASSWORD",
             "SCHEDULE_TIME",
             "SCHEDULE_ENABLED",
+            "MAX_WORKERS",
+            "ANALYSIS_DELAY",
         ]
         self._previous_env = {key: os.environ.get(key) for key in self._managed_env_keys}
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -51,8 +56,11 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                 [
                     "STOCK_LIST=600519,000001",
                     "GEMINI_API_KEY=secret-key-value",
+                    "UNREGISTERED_VENDOR_API_KEY=vendor-secret-value",
                     "ADMIN_AUTH_ENABLED=false",
                     "WECHAT_WEBHOOK_URL=https://hooks.example.com/secret",
+                    "DISCORD_MAIN_CHANNEL_ID=channel-1",
+                    "SLACK_CHANNEL_ID=channel-2",
                     "DINGTALK_APP_KEY=dingtalk-key",
                     "PUSHOVER_USER_KEY=pushover-key",
                     "SERVERCHAN3_SENDKEY=serverchan-key",
@@ -66,6 +74,8 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                     "UNREGISTERED_BOOTSTRAP_PASSWORD=secret-password",
                     "SCHEDULE_TIME=18:00",
                     "SCHEDULE_ENABLED=true",
+                    "MAX_WORKERS=3",
+                    "ANALYSIS_DELAY=1.5",
                     "LOG_LEVEL=INFO",
                 ]
             )
@@ -110,7 +120,10 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         for key in (
             "ADMIN_AUTH_ENABLED",
             "GEMINI_API_KEY",
+            "UNREGISTERED_VENDOR_API_KEY",
             "WECHAT_WEBHOOK_URL",
+            "DISCORD_MAIN_CHANNEL_ID",
+            "SLACK_CHANNEL_ID",
             "DINGTALK_APP_KEY",
             "PUSHOVER_USER_KEY",
             "SERVERCHAN3_SENDKEY",
@@ -133,6 +146,8 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(items["SCHEDULE_ENABLED"]["raw_editable"])
         self.assertEqual(items["SCHEDULE_ENABLED"]["ui_visibility"], "raw")
         self.assertTrue(items["SCHEDULE_TIME"]["raw_editable"])
+        self.assertTrue(items["MAX_WORKERS"]["raw_editable"])
+        self.assertTrue(items["ANALYSIS_DELAY"]["raw_editable"])
 
     def test_backend_still_reads_values_suppressed_from_raw_editing(self) -> None:
         config_map = self.manager.read_config_map()

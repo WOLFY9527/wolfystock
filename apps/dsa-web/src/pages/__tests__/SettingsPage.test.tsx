@@ -248,6 +248,116 @@ function buildSystemConfigState(overrides: ConfigOverride = {}) {
             displayOrder: 2,
           },
         },
+        {
+          key: 'DEBUG',
+          value: 'true',
+          rawValueExists: true,
+          isMasked: false,
+          rawEditable: true,
+          uiVisibility: 'raw',
+          schema: {
+            key: 'DEBUG',
+            category: 'system',
+            dataType: 'boolean',
+            uiControl: 'switch',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            rawEditable: true,
+            uiVisibility: 'raw',
+            options: [],
+            validation: {},
+            displayOrder: 3,
+          },
+        },
+        {
+          key: 'HTTP_PROXY',
+          value: 'http://proxy.example.com:8080',
+          rawValueExists: true,
+          isMasked: false,
+          rawEditable: true,
+          uiVisibility: 'raw',
+          schema: {
+            key: 'HTTP_PROXY',
+            category: 'system',
+            dataType: 'string',
+            uiControl: 'text',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            rawEditable: true,
+            uiVisibility: 'raw',
+            options: [],
+            validation: {},
+            displayOrder: 4,
+          },
+        },
+        {
+          key: 'WEBUI_PORT',
+          value: '5173',
+          rawValueExists: true,
+          isMasked: false,
+          rawEditable: true,
+          uiVisibility: 'raw',
+          schema: {
+            key: 'WEBUI_PORT',
+            category: 'system',
+            dataType: 'integer',
+            uiControl: 'number',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            rawEditable: true,
+            uiVisibility: 'raw',
+            options: [],
+            validation: {},
+            displayOrder: 5,
+          },
+        },
+        {
+          key: 'WEBHOOK_VERIFY_SSL',
+          value: 'false',
+          rawValueExists: true,
+          isMasked: false,
+          rawEditable: true,
+          uiVisibility: 'raw',
+          schema: {
+            key: 'WEBHOOK_VERIFY_SSL',
+            category: 'system',
+            dataType: 'boolean',
+            uiControl: 'switch',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            rawEditable: true,
+            uiVisibility: 'raw',
+            options: [],
+            validation: {},
+            displayOrder: 6,
+          },
+        },
+        {
+          key: 'UNREGISTERED_VENDOR_API_KEY',
+          value: 'masked-vendor-key',
+          rawValueExists: true,
+          isMasked: true,
+          rawEditable: true,
+          uiVisibility: 'raw',
+          schema: {
+            key: 'UNREGISTERED_VENDOR_API_KEY',
+            category: 'uncategorized',
+            dataType: 'string',
+            uiControl: 'password',
+            isSensitive: true,
+            isRequired: false,
+            isEditable: true,
+            rawEditable: true,
+            uiVisibility: 'raw',
+            options: [],
+            validation: {},
+            displayOrder: 7,
+          },
+        },
       ],
       base: [
         {
@@ -396,6 +506,28 @@ function buildSystemConfigState(overrides: ConfigOverride = {}) {
             options: [],
             validation: {},
             displayOrder: 3,
+          },
+        },
+        {
+          key: 'SLACK_CHANNEL_ID',
+          value: 'ops-alerts',
+          rawValueExists: true,
+          isMasked: false,
+          rawEditable: true,
+          uiVisibility: 'raw',
+          schema: {
+            key: 'SLACK_CHANNEL_ID',
+            category: 'notification',
+            dataType: 'string',
+            uiControl: 'text',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            rawEditable: true,
+            uiVisibility: 'raw',
+            options: [],
+            validation: {},
+            displayOrder: 4,
           },
         },
       ],
@@ -903,6 +1035,11 @@ describe('SettingsPage', () => {
 
     const drawer = await screen.findByRole('dialog', { name: zh('settings.rawFieldsSectionTitle') });
     expect(within(drawer).queryByText('ADMIN_AUTH_ENABLED')).not.toBeInTheDocument();
+    expect(within(drawer).queryByText('DEBUG')).not.toBeInTheDocument();
+    expect(within(drawer).queryByText('HTTP_PROXY')).not.toBeInTheDocument();
+    expect(within(drawer).queryByText('WEBUI_PORT')).not.toBeInTheDocument();
+    expect(within(drawer).queryByText('WEBHOOK_VERIFY_SSL')).not.toBeInTheDocument();
+    expect(within(drawer).queryByText('UNREGISTERED_VENDOR_API_KEY')).not.toBeInTheDocument();
     expect(within(drawer).getByText('SCHEDULE_ENABLED')).toBeInTheDocument();
   });
 
@@ -992,6 +1129,7 @@ describe('SettingsPage', () => {
     const drawer = await screen.findByRole('dialog', { name: zh('settings.rawFieldsSectionTitle') });
     expect(within(drawer).queryByText('WECHAT_WEBHOOK_URL')).not.toBeInTheDocument();
     expect(within(drawer).queryByText('PUSHOVER_USER_KEY')).not.toBeInTheDocument();
+    expect(within(drawer).queryByText('SLACK_CHANNEL_ID')).not.toBeInTheDocument();
     expect(within(drawer).getByText('NOTIFICATION_BATCH_SIZE')).toBeInTheDocument();
   });
 

@@ -199,6 +199,7 @@ const RAW_DRAWER_SUPPRESSED_KEYS = new Set([
   'CUSTOM_DATA_SOURCE_LIBRARY',
 ]);
 const RAW_DRAWER_SECRET_PATTERN = /(API_KEYS?|TOKEN|SECRET|PASSWORD|WEBHOOK|BEARER)/i;
+const RAW_DRAWER_NOTIFICATION_PREFIX_PATTERN = /^(DINGTALK|DISCORD|SLACK|PUSHOVER)_/i;
 const PROVIDER_LABEL_MAP: Record<string, string> = {
   aihubmix: 'AIHubMix',
   gemini: 'Gemini',
@@ -211,7 +212,6 @@ const PROVIDER_LABEL_MAP: Record<string, string> = {
 function isRawEditableConfigItem(item: SystemConfigItem): boolean {
   const key = item.key.toUpperCase();
   const visibility = item.uiVisibility || item.schema?.uiVisibility || 'raw';
-  const category = item.schema?.category;
 
   if (item.rawEditable === false || item.schema?.rawEditable === false) {
     return false;
@@ -228,10 +228,10 @@ function isRawEditableConfigItem(item: SystemConfigItem): boolean {
   ) {
     return false;
   }
-  if (category === 'notification' && RAW_DRAWER_SECRET_PATTERN.test(key)) {
+  if (RAW_DRAWER_NOTIFICATION_PREFIX_PATTERN.test(key)) {
     return false;
   }
-  if ((category === 'ai_model' || category === 'data_source') && RAW_DRAWER_SECRET_PATTERN.test(key)) {
+  if (RAW_DRAWER_SECRET_PATTERN.test(key)) {
     return false;
   }
   return true;
