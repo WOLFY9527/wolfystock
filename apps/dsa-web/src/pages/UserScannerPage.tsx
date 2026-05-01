@@ -54,7 +54,6 @@ type PillOption = { value: string; label: string };
 type ViewMode = 'cards' | 'table';
 type SortKey = 'score' | 'symbol' | 'target' | 'risk';
 type SortDirection = 'asc' | 'desc';
-type Tone = 'info' | 'success' | 'warning' | 'danger' | 'history';
 type ScanScope = 'default' | 'theme' | 'symbols';
 type ActionNotice = { tone: 'success' | 'warning' | 'danger'; message: string } | null;
 
@@ -152,9 +151,9 @@ function ScannerEmptyState({
   className?: string;
 }) {
   return (
-    <div className={`w-full flex flex-col items-center justify-center py-16 px-4 border border-white/5 border-dashed rounded-2xl bg-white/[0.01] ${className}`.trim()}>
-      <div className="w-12 h-12 rounded-full bg-white/[0.02] border border-white/5 flex items-center justify-center mb-4">
-        <svg className="w-6 h-6 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+    <div className={`w-full flex flex-col items-center justify-center py-10 px-4 border border-white/5 border-dashed rounded-2xl bg-white/[0.01] ${className}`.trim()}>
+      <div className="w-10 h-10 rounded-full bg-white/[0.02] border border-white/5 flex items-center justify-center mb-3">
+        <svg className="w-5 h-5 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
       </div>
@@ -215,39 +214,10 @@ function formatDateOnly(value?: string | null, language: 'zh' | 'en' = 'zh'): st
   }).format(date);
 }
 
-function formatDuration(start?: string | null, end?: string | null, language: 'zh' | 'en' = 'zh'): string {
-  if (!start || !end) return '--';
-  const startTime = new Date(start).getTime();
-  const endTime = new Date(end).getTime();
-  if (Number.isNaN(startTime) || Number.isNaN(endTime) || endTime <= startTime) return '--';
-  const totalSeconds = Math.round((endTime - startTime) / 1000);
-  if (totalSeconds < 60) {
-    return language === 'en' ? `${totalSeconds}s` : `${totalSeconds}秒`;
-  }
-  const totalMinutes = Math.round(totalSeconds / 60);
-  if (totalMinutes < 60) {
-    return language === 'en' ? `${totalMinutes}m` : `${totalMinutes}分钟`;
-  }
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return language === 'en' ? `${hours}h ${minutes}m` : `${hours}小时${minutes}分钟`;
-}
-
 function scoreBadgeClass(score: number): string {
   if (score >= 90) return 'bg-white/[0.08] text-white border-white/12';
   if (score >= 80) return 'bg-indigo-500/12 text-indigo-200 border-indigo-500/20';
   return 'bg-white/[0.04] text-white/72 border-white/10';
-}
-
-function noteBadgeClass(tone: Tone = 'history'): string {
-  const classes: Record<Tone, string> = {
-    info: 'border-sky-400/20 bg-sky-400/10 text-sky-100',
-    success: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100',
-    warning: 'border-amber-400/20 bg-amber-400/10 text-amber-100',
-    danger: 'border-red-400/20 bg-red-400/10 text-red-100',
-    history: 'border-white/10 bg-white/[0.04] text-white/70',
-  };
-  return classes[tone];
 }
 
 function findCandidateValue(
@@ -344,29 +314,6 @@ function formatProviderDiagnostics(provider: ScannerProviderDiagnostics | null, 
   ].filter(Boolean).join(' · ');
 }
 
-function formatCoverageSummary(coverage: ScannerCoverageSummary | null, runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): string | null {
-  if (coverage) {
-    const scanned = coverage.inputUniverseSize || runDetail?.universeSize || 0;
-    const ranked = coverage.rankedCandidateCount || runDetail?.evaluatedSize || 0;
-    const selected = coverage.shortlistedCount || runDetail?.shortlist?.length || 0;
-    const bottleneck = coverage.likelyBottleneckLabel || coverage.likelyBottleneck;
-    const base = language === 'en'
-      ? `${scanned} scanned · ${ranked} ranked · ${selected} selected`
-      : `扫描 ${scanned} · 排名 ${ranked} · 入选 ${selected}`;
-    return bottleneck ? `${base} · ${bottleneck}` : base;
-  }
-  if (!runDetail) return null;
-  return language === 'en'
-    ? `${runDetail.universeSize} scanned · ${runDetail.shortlist?.length ?? runDetail.shortlistSize} selected`
-    : `扫描 ${runDetail.universeSize} · 入选 ${runDetail.shortlist?.length ?? runDetail.shortlistSize}`;
-}
-
-function formatNotesSummary(notes: string[], language: 'zh' | 'en'): string | null {
-  if (!notes.length) return null;
-  const first = notes[0];
-  return language === 'en' ? `${notes.length} notes · ${first}` : `${notes.length} 条 · ${first}`;
-}
-
 function parseCustomSymbols(value: string): string[] {
   return Array.from(
     new Set(
@@ -380,19 +327,6 @@ function parseCustomSymbols(value: string): string[] {
 
 function getThemeLabel(theme: ScannerTheme, language: 'zh' | 'en'): string {
   return language === 'en' ? theme.labelEn : theme.labelZh;
-}
-
-function getRunUniverseSummary(runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): string | null {
-  if (!runDetail || !runDetail.universeType || runDetail.universeType === 'default') return null;
-  const label = runDetail.themeLabel || (runDetail.universeType === 'theme' ? runDetail.themeId : null);
-  const typeLabel = runDetail.universeType === 'theme'
-    ? (language === 'en' ? 'Theme' : '主题')
-    : (language === 'en' ? 'Custom' : '自定义');
-  const counts = `${runDetail.acceptedSymbolsCount}/${runDetail.requestedSymbolsCount}`;
-  const rejected = runDetail.rejectedSymbols?.length
-    ? (language === 'en' ? ` · ${runDetail.rejectedSymbols.length} rejected` : ` · ${runDetail.rejectedSymbols.length} 个无效`)
-    : '';
-  return [typeLabel, label, counts].filter(Boolean).join(' · ') + rejected;
 }
 
 function hasReviewSummary(review?: ScannerReviewSummary | null): boolean {
@@ -566,7 +500,7 @@ function ActionButton({
   testId?: string;
 }) {
   const className = [
-    'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors',
+    'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors',
     variant === 'primary'
       ? 'border-indigo-500/25 bg-indigo-500/10 text-indigo-100 hover:border-indigo-500/45 hover:bg-indigo-500/15'
       : 'border-white/8 bg-white/[0.04] text-white/70 hover:bg-white/[0.08] hover:text-white',
@@ -625,8 +559,8 @@ function PillTagGroup({
   const isMarketGroup = variant === 'market';
 
   return (
-    <div className="flex flex-col gap-2">
-      <span className="text-xs uppercase tracking-widest text-white/40">{label}</span>
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{label}</span>
       <div
         className={isMarketGroup ? 'flex w-fit rounded-xl border border-white/5 bg-black/40 p-1' : 'flex flex-wrap gap-2'}
         role="group"
@@ -643,11 +577,11 @@ function PillTagGroup({
               onClick={() => onChange(option.value)}
               className={isActive
                 ? isMarketGroup
-                  ? 'rounded-lg bg-white/10 px-5 py-1.5 text-sm font-bold text-white shadow-[0_2px_10px_rgba(0,0,0,0.5)] transition-all'
-                  : 'rounded-full border border-white/10 bg-white/10 px-4 py-1.5 text-sm text-white transition-colors'
+                  ? 'rounded-lg bg-white/10 px-4 py-1 text-sm font-bold text-white shadow-[0_2px_10px_rgba(0,0,0,0.5)] transition-all'
+                  : 'rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-white transition-colors'
                 : isMarketGroup
-                  ? 'rounded-lg bg-transparent px-5 py-1.5 text-sm font-medium text-white/40 transition-all hover:text-white/70'
-                  : 'rounded-full border border-white/5 bg-transparent px-4 py-1.5 text-sm text-white/50 transition-colors hover:bg-white/[0.05]'}
+                  ? 'rounded-lg bg-transparent px-4 py-1 text-sm font-medium text-white/40 transition-all hover:text-white/70'
+                  : 'rounded-full border border-white/5 bg-transparent px-3 py-1 text-xs text-white/50 transition-colors hover:bg-white/[0.05]'}
             >
               {option.label}
             </button>
@@ -660,7 +594,7 @@ function PillTagGroup({
 
 function FieldChip({ label, value }: { label: string; value: string }) {
   return (
-    <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-white/8 bg-white/[0.035] px-2 py-1 text-[11px] text-white/72">
+    <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-white/8 bg-white/[0.035] px-1.5 py-0.5 text-[10px] text-white/72">
       <span className="shrink-0 text-white/36">{label}</span>
       <span className="min-w-0 truncate">{value}</span>
     </span>
@@ -691,7 +625,7 @@ function NotesList({ notes, empty }: { notes: string[]; empty: string }) {
     return <p className="text-xs text-white/32">{empty}</p>;
   }
   return (
-    <ul className="space-y-1.5">
+    <ul className="space-y-1">
       {notes.map((note) => (
         <li key={note} className="text-xs leading-relaxed text-white/64">
           {note}
@@ -709,8 +643,8 @@ function DetailSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-white/5 bg-black/20 p-3">
-      <h5 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{title}</h5>
+    <section className="rounded-xl border border-white/5 bg-black/20 p-2.5">
+      <h5 className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{title}</h5>
       {children}
     </section>
   );
@@ -756,7 +690,7 @@ function CandidateDetailPanel({
   return (
     <div
       data-testid={`scanner-result-detail-${getCandidateIdentity(candidate)}`}
-      className="mt-4 grid gap-3 rounded-2xl border border-white/8 bg-black/25 p-4 md:grid-cols-2"
+      className="mt-3 grid gap-2.5 rounded-2xl border border-white/8 bg-black/25 p-3 md:grid-cols-2"
     >
       <div className="md:col-span-2 flex flex-wrap gap-2">
         <ActionButton
@@ -883,11 +817,11 @@ function DiagnosticsPanel({
   if (!hasAnyDiagnostics) return null;
 
   return (
-    <details data-testid="scanner-diagnostics-panel" className="mt-5 rounded-2xl border border-white/5 bg-white/[0.02] p-4" open>
-      <summary className="cursor-pointer text-sm font-semibold text-white/78">
+    <details data-testid="scanner-diagnostics-panel" className="mt-3 rounded-xl border border-white/5 bg-white/[0.015] p-3">
+      <summary className="cursor-pointer text-xs font-semibold text-white/62">
         {language === 'en' ? 'Diagnostics and replay notes' : '诊断与复盘说明'}
       </summary>
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
         {coverage ? (
           <DetailSection title={language === 'en' ? 'Coverage summary' : '覆盖摘要'}>
             <div className="flex flex-wrap gap-2">
@@ -998,6 +932,14 @@ const UserScannerPage: React.FC = () => {
   const marketThemes = useMemo(
     () => themes.filter((theme) => theme.market === market),
     [market, themes],
+  );
+  const configuredMarketThemes = useMemo(
+    () => marketThemes.filter((theme) => theme.symbols.length > 0),
+    [marketThemes],
+  );
+  const unconfiguredMarketThemes = useMemo(
+    () => marketThemes.filter((theme) => theme.symbols.length === 0),
+    [marketThemes],
   );
   const selectedTheme = useMemo(
     () => marketThemes.find((theme) => theme.id === themeId) || null,
@@ -1163,40 +1105,9 @@ const UserScannerPage: React.FC = () => {
   const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setIsHistoryDrawerOpen(true));
   const shortlistCount = runDetail?.shortlist?.length ?? 0;
   const generatedAt = runDetail?.completedAt || runDetail?.runAt || null;
-  const elapsedTime = formatDuration(runDetail?.runAt, runDetail?.completedAt, language);
-  const coverageSummary = runDetail ? getRunCoverageSummary(runDetail) : null;
-  const providerDiagnostics = runDetail ? getRunProviderDiagnostics(runDetail) : null;
-  const universeSummary = getRunUniverseSummary(runDetail, language);
   const runDisabled = isRunning
     || (scanScope === 'theme' && (!selectedTheme || selectedTheme.symbols.length === 0))
     || (scanScope === 'symbols' && parsedCustomSymbols.length === 0);
-  const qualityItems = [
-    {
-      label: language === 'en' ? 'Scan scope' : '扫描范围',
-      value: universeSummary,
-      tone: 'info' as Tone,
-    },
-    {
-      label: language === 'en' ? 'Coverage' : '覆盖',
-      value: formatCoverageSummary(coverageSummary, runDetail, language),
-      tone: 'info' as Tone,
-    },
-    {
-      label: language === 'en' ? 'Provider' : '供应商',
-      value: formatProviderDiagnostics(providerDiagnostics, language),
-      tone: providerDiagnostics?.fallbackOccurred ? 'warning' as Tone : 'success' as Tone,
-    },
-    {
-      label: language === 'en' ? 'Universe notes' : '候选说明',
-      value: runDetail ? formatNotesSummary(runDetail.universeNotes || [], language) : null,
-      tone: 'history' as Tone,
-    },
-    {
-      label: language === 'en' ? 'Scoring notes' : '评分说明',
-      value: runDetail ? formatNotesSummary(runDetail.scoringNotes || [], language) : null,
-      tone: 'history' as Tone,
-    },
-  ].filter((item): item is { label: string; value: string; tone: Tone } => Boolean(item.value));
 
   const sortedCandidates = useMemo(() => {
     const candidates = [...(runDetail?.shortlist || [])];
@@ -1360,20 +1271,13 @@ const UserScannerPage: React.FC = () => {
         aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
         className={getSafariReadySurfaceClassName(
           isSafariReady,
-          'bento-surface-root flex w-full flex-1 flex-col gap-6 min-h-0 min-w-0 bg-transparent text-foreground',
+          'bento-surface-root flex w-full flex-1 flex-col min-h-0 min-w-0 bg-transparent text-foreground xl:h-[calc(100vh-96px)] xl:overflow-hidden',
         )}
       >
         <main
           data-testid="user-scanner-workspace"
-          className="w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0"
+          className="w-full flex-1 flex flex-col min-h-0 min-w-0"
         >
-          <header className="shrink-0 flex justify-between items-start mb-3 mt-0">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.28em] text-white/36">TACTICAL ROUTER</p>
-              <h1 className="mt-3 text-[1.7rem] tracking-[-0.03em] text-foreground md:text-[1.9rem]">{language === 'en' ? 'MARKET SCANNER' : '市场扫描'}</h1>
-            </div>
-          </header>
-
           {pageError ? <ApiErrorAlert error={pageError} /> : null}
           {actionNotice ? (
             <div
@@ -1390,18 +1294,20 @@ const UserScannerPage: React.FC = () => {
             </div>
           ) : null}
 
-          <div className="flex w-full flex-1 min-h-0 min-w-0 flex-col gap-6 xl:flex-row">
+          <div className="flex w-full flex-1 min-h-0 min-w-0 flex-col gap-3 xl:flex-row xl:overflow-hidden">
             <section
               data-testid="scanner-sidebar"
-              className="w-full xl:w-[320px] 2xl:w-[360px] shrink-0 flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-[24px] p-6 h-fit sticky top-6"
+              className="w-full xl:w-[268px] 2xl:w-[288px] shrink-0 flex flex-col bg-white/[0.015] border border-white/5 rounded-[16px] p-3 xl:max-h-full xl:overflow-hidden"
             >
               <SectionShell className="rounded-[24px] p-0 bg-transparent shadow-none">
-                <div className="flex flex-col gap-6">
+                <div className="flex min-h-0 flex-col gap-2.5">
                   <PillTagGroup label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
                   <PillTagGroup label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
-                  <PillTagGroup label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
-                  <PillTagGroup label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
-                  <PillTagGroup label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
+                  <div className="grid gap-2.5 sm:grid-cols-3 xl:grid-cols-1">
+                    <PillTagGroup label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
+                    <PillTagGroup label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
+                    <PillTagGroup label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
+                  </div>
                   <PillTagGroup
                     label={language === 'en' ? 'Scan scope' : '扫描范围'}
                     value={scanScope}
@@ -1414,52 +1320,58 @@ const UserScannerPage: React.FC = () => {
                     testId="scanner-scope-selector"
                   />
                   {scanScope === 'theme' ? (
-                    <div className="flex flex-col gap-2" data-testid="scanner-theme-control">
-                      <span className="text-xs uppercase tracking-widest text-white/40">{language === 'en' ? 'Theme' : '主题'}</span>
+                    <div className="flex flex-col gap-1.5" data-testid="scanner-theme-control">
+                      <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{language === 'en' ? 'Theme' : '主题'}</span>
                       <select
                         data-testid="scanner-theme-select"
                         value={themeId}
                         onChange={(event) => setThemeId(event.target.value)}
-                        className="w-full rounded-xl border border-white/8 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-indigo-400/50"
+                        className="w-full rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none focus:border-indigo-400/50"
                       >
                         <option value="">{language === 'en' ? 'Select a theme' : '选择主题'}</option>
-                        {marketThemes.map((theme) => (
-                          <option key={theme.id} value={theme.id} disabled={!theme.symbols.length}>
-                            {getThemeLabel(theme, language)} · {theme.symbols.length || (language === 'en' ? 'not configured' : '未配置')}
-                          </option>
-                        ))}
+                        {configuredMarketThemes.length ? (
+                          <optgroup label={language === 'en' ? 'Ready seed lists' : '可用 seed 主题'}>
+                            {configuredMarketThemes.map((theme) => (
+                              <option key={theme.id} value={theme.id}>
+                                {getThemeLabel(theme, language)} · {theme.symbols.length}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : null}
+                        {unconfiguredMarketThemes.length ? (
+                          <optgroup label={language === 'en' ? 'Unavailable / unconfigured' : '未配置'}>
+                            {unconfiguredMarketThemes.map((theme) => (
+                              <option key={theme.id} value={theme.id} disabled>
+                                {getThemeLabel(theme, language)} · {language === 'en' ? 'not configured' : '未配置'}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : null}
                       </select>
-                      {selectedTheme ? (
-                        <p className="text-xs leading-relaxed text-white/45">
-                          {selectedTheme.description}
-                          {' '}
-                          {language === 'en' ? `${selectedTheme.symbols.length} symbols` : `${selectedTheme.symbols.length} 只标的`}
-                          {selectedTheme.requiresManualMaintenance ? (language === 'en' ? ' · requires manual maintenance' : ' · 需要人工维护') : ''}
+                      {selectedTheme && !selectedTheme.symbols.length ? (
+                        <p className="text-[11px] leading-relaxed text-amber-100/72">
+                          {language === 'en' ? 'This theme is not configured yet.' : '该主题尚未配置成分股。'}
                         </p>
-                      ) : (
-                        <p className="text-xs leading-relaxed text-white/32">
-                          {language === 'en' ? 'Only themes matching the selected market are shown.' : '仅显示当前市场对应的主题。'}
-                        </p>
-                      )}
+                      ) : null}
                     </div>
                   ) : null}
                   {scanScope === 'symbols' ? (
-                    <div className="flex flex-col gap-2" data-testid="scanner-custom-symbols-control">
-                      <span className="text-xs uppercase tracking-widest text-white/40">{language === 'en' ? 'Symbols' : '代码'}</span>
+                    <div className="flex flex-col gap-1.5" data-testid="scanner-custom-symbols-control">
+                      <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{language === 'en' ? 'Symbols' : '代码'}</span>
                       <textarea
                         data-testid="scanner-custom-symbols-input"
                         value={customSymbols}
                         onChange={(event) => setCustomSymbols(event.target.value)}
-                        rows={4}
+                        rows={3}
                         placeholder={language === 'en' ? 'MARA RIOT CLSK' : 'MARA RIOT CLSK'}
-                        className="w-full resize-none rounded-xl border border-white/8 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
+                        className="w-full resize-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
                       />
-                      <p className="text-xs text-white/45">
+                      <p className="text-[11px] text-white/45">
                         {language === 'en' ? `Parsed ${parsedCustomSymbols.length}` : `已解析 ${parsedCustomSymbols.length}`}
                       </p>
                     </div>
                   ) : null}
-                  <div className="flex flex-col gap-4">
+                  <div className="mt-auto flex flex-col gap-2 pt-1">
                     <button
                       ref={runScannerButton.ref}
                       type="button"
@@ -1468,7 +1380,7 @@ const UserScannerPage: React.FC = () => {
                       disabled={runDisabled}
                       aria-busy={isRunning}
                       data-testid="scanner-run-button"
-                      className="group mt-8 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-8 py-4 text-sm font-bold text-indigo-400 transition-all hover:border-indigo-500/50 hover:bg-indigo-500/20 hover:shadow-[0_0_25px_rgba(99,102,241,0.2)] active:scale-95 disabled:pointer-events-none disabled:opacity-60 disabled:shadow-none disabled:transform-none"
+                      className="group flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-5 py-3 text-sm font-bold text-indigo-300 transition-all hover:border-indigo-500/50 hover:bg-indigo-500/20 hover:shadow-[0_0_20px_rgba(99,102,241,0.16)] active:scale-95 disabled:pointer-events-none disabled:opacity-60 disabled:shadow-none disabled:transform-none xl:sticky xl:bottom-0"
                     >
                       <Play className="h-4 w-4 group-hover:animate-pulse" />
                       <span>{isRunning ? t('scanner.running') : t('scanner.run')}</span>
@@ -1480,37 +1392,19 @@ const UserScannerPage: React.FC = () => {
 
             <section
               data-testid="scanner-results-pane"
-              className="flex-1 min-h-0 min-w-0 overflow-y-auto no-scrollbar pb-24"
+              className="flex flex-1 min-h-[520px] min-w-0 flex-col overflow-hidden rounded-[16px] border border-white/5 bg-white/[0.01] xl:min-h-0"
             >
-              <div data-testid="user-scanner-bento-hero" className="mb-5 flex shrink-0 flex-col gap-4 border-b border-white/5 pb-4">
-                <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
-                  <div className="min-w-0">
-                    <h2 className="text-xl font-bold text-white mb-1">{language === 'en' ? 'Scanner workbench' : '扫描工作台'}</h2>
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-white/40">
-                      <span>
-                        {language === 'en' ? 'Generated:' : '生成时间：'}
-                        {generatedAt ? ` ${formatTimestamp(generatedAt, language)}` : ' --'}
-                      </span>
-                      <span className="w-1 h-1 rounded-full bg-white/20" aria-hidden="true" />
-                      <span>
-                        {language === 'en' ? 'Elapsed:' : '耗时：'}
-                        {` ${elapsedTime}`}
-                      </span>
-                      {runDetail ? (
-                        <>
-                          <span className="w-1 h-1 rounded-full bg-white/20" aria-hidden="true" />
-                          <span>{`${runDetail.market.toUpperCase()} · ${runDetail.profileLabel || runDetail.profile}`}</span>
-                        </>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span
-                      data-testid="user-scanner-bento-hero-shortlist-value"
-                      className="shrink-0 rounded-full border border-white/12 bg-white/[0.08] px-3 py-1 text-xs font-bold text-white"
-                    >
-                      {language === 'en' ? `${shortlistCount} symbols selected` : `入选 ${shortlistCount} 只标的`}
+              <div data-testid="user-scanner-bento-hero" className="flex shrink-0 flex-col gap-2 border-b border-white/5 px-3 py-2.5">
+                <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-white/45">
+                    <span className="font-semibold text-white/78">{language === 'en' ? 'Results' : '扫描结果'}</span>
+                    <span className="rounded-full border border-white/8 bg-white/[0.04] px-2 py-0.5 text-white/60">
+                      {language === 'en' ? `${shortlistCount} selected` : `入选 ${shortlistCount}`}
                     </span>
+                    {generatedAt ? <span>{formatTimestamp(generatedAt, language)}</span> : null}
+                    {runDetail ? <span className="truncate">{`${runDetail.market.toUpperCase()} · ${runDetail.profileLabel || runDetail.profile}`}</span> : null}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
                     {runDetail && sortedCandidates.length ? (
                       <>
                         <ActionButton
@@ -1539,32 +1433,21 @@ const UserScannerPage: React.FC = () => {
                       data-testid="user-scanner-bento-drawer-trigger"
                       onClick={openHistoryDrawerButton.onClick}
                       onPointerUp={openHistoryDrawerButton.onPointerUp}
-                      className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-sm text-white/80 transition-colors hover:bg-white/[0.1]"
+                      className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.05] px-2.5 py-1 text-xs text-white/80 transition-colors hover:bg-white/[0.1]"
                     >
                       <PanelRightOpen className="h-4 w-4" />
                       <span>{language === 'en' ? 'Historical replay' : '历史扫描回放'}</span>
                     </button>
                   </div>
                 </div>
-
-                {qualityItems.length ? (
-                  <div data-testid="scanner-quality-strip" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                    {qualityItems.map((item) => (
-                      <div key={item.label} className={`min-w-0 rounded-xl border px-3 py-2 ${noteBadgeClass(item.tone)}`}>
-                        <p className="text-[10px] uppercase tracking-[0.16em] opacity-65">{item.label}</p>
-                        <p className="mt-1 truncate text-xs font-medium">{item.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
               </div>
 
-              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex w-fit rounded-xl border border-white/5 bg-black/30 p-1" role="group" aria-label={language === 'en' ? 'Result view mode' : '结果视图'}>
+              <div className="flex shrink-0 flex-col gap-2 border-b border-white/5 px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex w-fit rounded-lg border border-white/5 bg-black/30 p-0.5" role="group" aria-label={language === 'en' ? 'Result view mode' : '结果视图'}>
                   <button
                     type="button"
                     onClick={() => setViewMode('cards')}
-                    className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs ${viewMode === 'cards' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'}`}
+                    className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-xs ${viewMode === 'cards' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'}`}
                   >
                     <LayoutGrid className="h-3.5 w-3.5" />
                     {language === 'en' ? 'Card view' : '卡片视图'}
@@ -1572,7 +1455,7 @@ const UserScannerPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setViewMode('table')}
-                    className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs ${viewMode === 'table' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'}`}
+                    className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-xs ${viewMode === 'table' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'}`}
                   >
                     <Table2 className="h-3.5 w-3.5" />
                     {language === 'en' ? 'Table view' : '表格视图'}
@@ -1590,7 +1473,7 @@ const UserScannerPage: React.FC = () => {
                       key={key}
                       type="button"
                       onClick={() => handleSortChange(key)}
-                      className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 ${sortKey === key ? 'border-white/16 bg-white/[0.08] text-white' : 'border-white/5 bg-white/[0.02] text-white/48 hover:text-white/75'}`}
+                      className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 ${sortKey === key ? 'border-white/16 bg-white/[0.08] text-white' : 'border-white/5 bg-white/[0.02] text-white/48 hover:text-white/75'}`}
                     >
                       {label}
                       {sortKey === key ? <ArrowDownUp className="h-3 w-3" /> : null}
@@ -1599,9 +1482,10 @@ const UserScannerPage: React.FC = () => {
                 </div>
               </div>
 
-              {sortedCandidates.length ? (
-                viewMode === 'cards' ? (
-                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <div data-testid="scanner-candidate-scroll-region" className="min-h-0 flex-1 overflow-y-auto px-3 py-3 no-scrollbar">
+                {sortedCandidates.length ? (
+                  viewMode === 'cards' ? (
+                    <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
                     {sortedCandidates.map((candidate) => {
                       const isExpanded = expandedSymbol === candidate.symbol;
                       const candidateIdentity = getCandidateIdentity(candidate);
@@ -1617,13 +1501,13 @@ const UserScannerPage: React.FC = () => {
                         <article
                           key={`watchlist-${candidateIdentity}`}
                           data-testid={`scanner-result-card-${candidateIdentity}`}
-                          className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 transition-colors hover:border-white/16 hover:bg-white/[0.04]"
+                          className="rounded-xl border border-white/5 bg-white/[0.02] p-3 transition-colors hover:border-white/16 hover:bg-white/[0.04]"
                         >
-                          <div className="flex justify-between items-start gap-4">
+                          <div className="flex justify-between items-start gap-3">
                             <div className="min-w-0 flex flex-col gap-1.5">
                               <div className="flex flex-wrap items-baseline gap-2 min-w-0">
                                 <span className="rounded-md border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-white/58">#{candidate.rank}</span>
-                                <h3 className="text-xl font-bold text-white tracking-tight">{candidate.symbol}</h3>
+                                <h3 className="text-lg font-bold text-white tracking-tight">{candidate.symbol}</h3>
                                 <span className="text-xs text-white/40 font-medium truncate max-w-[180px]">
                                   {candidate.companyName || candidate.name}
                                 </span>
@@ -1660,47 +1544,40 @@ const UserScannerPage: React.FC = () => {
                             </button>
                           </div>
 
-                          <div className="mt-4 grid gap-3">
+                          <div className="mt-2.5 grid gap-2">
                             <section>
-                              <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-white/34">{language === 'en' ? 'Why selected' : '入选依据'}</p>
-                              <p className="text-sm leading-relaxed text-white/66">{getKeyReason(candidate, runDetail, language)}</p>
+                              <p className="line-clamp-1 text-xs leading-relaxed text-white/66">{getKeyReason(candidate, runDetail, language)}</p>
                               {candidate.featureSignals?.length ? (
-                                <div className="mt-2 flex flex-wrap gap-1.5">
-                                  {candidate.featureSignals.slice(0, 4).map((signal) => (
+                                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                  {candidate.featureSignals.slice(0, 2).map((signal) => (
                                     <FieldChip key={`${candidate.symbol}-${signal.label}-${signal.value}`} label={signal.label} value={signal.value} />
                                   ))}
                                 </div>
                               ) : null}
                             </section>
 
-                            <section className="grid grid-cols-1 gap-2 rounded-xl border border-white/5 bg-black/20 p-3 sm:grid-cols-3">
+                            <section className="grid grid-cols-3 gap-2 rounded-lg border border-white/5 bg-black/20 p-2">
                               <div>
                                 <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Entry range' : '建仓区间'}</div>
-                                <div className="text-sm text-white font-medium">{entryRange || '--'}</div>
+                                <div className="truncate text-xs text-white font-medium">{entryRange || '--'}</div>
                               </div>
                               <div>
                                 <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Target price' : '目标价'}</div>
-                                <div className="text-sm font-medium text-white">{targetPrice || '--'}</div>
+                                <div className="truncate text-xs font-medium text-white">{targetPrice || '--'}</div>
                               </div>
                               <div>
                                 <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Stop loss' : '止损位'}</div>
-                                <div className="text-sm text-red-300 font-medium">{stopLoss || '--'}</div>
+                                <div className="truncate text-xs text-red-300 font-medium">{stopLoss || '--'}</div>
                               </div>
-                            </section>
-
-                            <section>
-                              <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-white/34">{language === 'en' ? 'Risk notes' : '风险说明'}</p>
-                              <p className="text-sm leading-relaxed text-white/58">{getRiskSummary(candidate, language)}</p>
                             </section>
 
                             {candidate.keyMetrics?.length ? (
                               <section>
-                                <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-white/34">{language === 'en' ? 'Metrics' : '指标'}</p>
-                                <LabeledValueGrid items={candidate.keyMetrics.slice(0, 5)} empty="" />
+                                <LabeledValueGrid items={candidate.keyMetrics.slice(0, 3)} empty="" />
                               </section>
                             ) : null}
 
-                            <div className="flex flex-wrap gap-2 pt-1">
+                            <div className="flex flex-wrap gap-1.5 pt-0.5">
                               <ActionButton
                                 label={pendingAnalyzeSymbol === candidate.symbol ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
                                 icon={<Play className="h-3.5 w-3.5" />}
@@ -1768,21 +1645,21 @@ const UserScannerPage: React.FC = () => {
                     })}
                   </div>
                 ) : (
-                  <div data-testid="scanner-result-table" className="overflow-x-auto rounded-2xl border border-white/5 bg-white/[0.02]">
-                    <table className="min-w-[980px] w-full border-collapse text-left text-sm">
+                  <div data-testid="scanner-result-table" className="overflow-x-auto rounded-xl border border-white/5 bg-white/[0.02]">
+                    <table className="min-w-[980px] w-full border-collapse text-left text-xs">
                       <thead className="border-b border-white/5 bg-black/25 text-[10px] uppercase tracking-[0.16em] text-white/38">
                         <tr>
-                          <th className="px-3 py-3">{language === 'en' ? 'Rank' : '排名'}</th>
-                          <th className="px-3 py-3">{language === 'en' ? 'Symbol' : '代码'}</th>
-                          <th className="px-3 py-3">{language === 'en' ? 'Name' : '名称'}</th>
-                          <th className="px-3 py-3">{language === 'en' ? 'Scanner score' : '扫描评分'}</th>
-                          <th className="px-3 py-3">{language === 'en' ? 'Entry range' : '建仓区间'}</th>
-                          <th className="px-3 py-3">{language === 'en' ? 'Target price' : '目标价'}</th>
-                          <th className="px-3 py-3">{language === 'en' ? 'Stop loss' : '止损位'}</th>
-                          <th className="px-3 py-3">{language === 'en' ? 'Key reason' : '关键原因'}</th>
-                          <th className="px-3 py-3">{language === 'en' ? 'Risk summary' : '风险摘要'}</th>
-                          <th className="px-3 py-3">{language === 'en' ? 'Data/source' : '数据/来源'}</th>
-                          <th className="px-3 py-3">{language === 'en' ? 'Actions' : '操作'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Rank' : '排名'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Symbol' : '代码'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Name' : '名称'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Scanner score' : '扫描评分'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Entry range' : '建仓区间'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Target price' : '目标价'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Stop loss' : '止损位'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Key reason' : '关键原因'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Risk summary' : '风险摘要'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Data/source' : '数据/来源'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Actions' : '操作'}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1800,22 +1677,22 @@ const UserScannerPage: React.FC = () => {
                                 className="cursor-pointer border-b border-white/5 text-white/72 hover:bg-white/[0.035]"
                                 onClick={() => setExpandedSymbol(isExpanded ? null : candidate.symbol)}
                               >
-                                <td className="px-3 py-3 text-white/45">#{candidate.rank}</td>
-                                <td className="px-3 py-3 font-semibold text-white">{candidate.symbol}</td>
-                                <td className="px-3 py-3 text-white/55">{candidate.companyName || candidate.name}</td>
-                                <td className="px-3 py-3">
+                                <td className="px-2.5 py-2 text-white/45">#{candidate.rank}</td>
+                                <td className="px-2.5 py-2 font-semibold text-white">{candidate.symbol}</td>
+                                <td className="px-2.5 py-2 text-white/55">{candidate.companyName || candidate.name}</td>
+                                <td className="px-2.5 py-2">
                                   <span className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold ${scoreBadgeClass(candidate.score)}`}>
                                     {candidate.score}/100
                                   </span>
                                 </td>
-                                <td className="px-3 py-3">{getEntryRange(candidate) || '--'}</td>
-                                <td className="px-3 py-3">{getTargetPrice(candidate) || '--'}</td>
-                                <td className="px-3 py-3">{getStopLoss(candidate) || '--'}</td>
-                                <td className="max-w-[220px] px-3 py-3 text-white/62">{getKeyReason(candidate, runDetail, language)}</td>
-                                <td className="max-w-[180px] px-3 py-3 text-white/52">{getRiskSummary(candidate, language)}</td>
-                                <td className="max-w-[180px] px-3 py-3 text-white/42">{getSourceBadge(candidate, runDetail, language) || '--'}</td>
-                                <td className="px-3 py-3">
-                                  <div className="flex flex-wrap gap-2">
+                                <td className="px-2.5 py-2">{getEntryRange(candidate) || '--'}</td>
+                                <td className="px-2.5 py-2">{getTargetPrice(candidate) || '--'}</td>
+                                <td className="px-2.5 py-2">{getStopLoss(candidate) || '--'}</td>
+                                <td className="max-w-[220px] px-2.5 py-2 text-white/62">{getKeyReason(candidate, runDetail, language)}</td>
+                                <td className="max-w-[180px] px-2.5 py-2 text-white/52">{getRiskSummary(candidate, language)}</td>
+                                <td className="max-w-[180px] px-2.5 py-2 text-white/42">{getSourceBadge(candidate, runDetail, language) || '--'}</td>
+                                <td className="px-2.5 py-2">
+                                  <div className="flex flex-wrap gap-1.5">
                                     <ActionButton
                                       label={language === 'en' ? 'Analyze' : '分析'}
                                       onClick={(event) => {
@@ -1901,7 +1778,8 @@ const UserScannerPage: React.FC = () => {
                 />
               )}
 
-              {runDetail ? <DiagnosticsPanel runDetail={runDetail} language={language} /> : null}
+                {runDetail ? <DiagnosticsPanel runDetail={runDetail} language={language} /> : null}
+              </div>
             </section>
           </div>
         </main>

@@ -335,7 +335,18 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
         crypto = next(item for item in response.items if item.id == "crypto_miners")
         self.assertEqual(crypto.market, "us")
         self.assertIn("MARA", crypto.symbols)
+        self.assertIn("BTDR", crypto.symbols)
         self.assertTrue(crypto.is_seed_list)
+        self.assertIn("not an authoritative", crypto.description)
+
+        ai_semis = next(item for item in response.items if item.id == "ai_semiconductors")
+        self.assertEqual(ai_semis.market, "us")
+        self.assertIn("ASML", ai_semis.symbols)
+
+        cpo_cn = next(item for item in response.items if item.id == "optical_module_cpo_cn")
+        self.assertEqual(cpo_cn.market, "cn")
+        self.assertEqual(cpo_cn.symbols, [])
+        self.assertTrue(cpo_cn.requires_manual_maintenance)
 
     def test_run_market_scan_passes_theme_universe_request_to_service(self) -> None:
         service = MagicMock()

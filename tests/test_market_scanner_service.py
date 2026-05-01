@@ -843,7 +843,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 market="cn",
                 profile="cn_preopen_v1",
                 universe_type="theme",
-                theme_id="optical_modules_cpo_cn",
+                theme_id="optical_module_cpo_cn",
             )
 
     def test_run_scan_rejects_theme_market_mismatch(self) -> None:

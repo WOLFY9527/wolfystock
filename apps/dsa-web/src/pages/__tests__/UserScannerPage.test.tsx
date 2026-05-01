@@ -453,7 +453,7 @@ describe('UserScannerPage', () => {
           labelEn: 'Crypto miners',
           market: 'us',
           description: 'Curated US crypto miner seed list.',
-          symbols: ['MARA', 'RIOT', 'CLSK'],
+          symbols: ['MARA', 'RIOT', 'CLSK', 'IREN', 'CIFR', 'HUT', 'BTDR', 'WULF', 'CORZ', 'BITF', 'HIVE'],
           aliases: [],
           tags: ['crypto'],
           source: 'seed',
@@ -462,8 +462,22 @@ describe('UserScannerPage', () => {
           requiresManualMaintenance: false,
         },
         {
-          id: 'optical_modules_cpo_cn',
-          labelZh: '光模块/CPO',
+          id: 'ai_semiconductors',
+          labelZh: 'AI 半导体',
+          labelEn: 'AI semiconductors',
+          market: 'us',
+          description: 'Curated US AI semiconductor seed list.',
+          symbols: ['NVDA', 'AMD', 'AVGO', 'MRVL', 'ARM', 'TSM', 'ASML', 'AMAT', 'LRCX', 'KLAC'],
+          aliases: [],
+          tags: ['ai'],
+          source: 'seed',
+          version: '2026-05-01',
+          isSeedList: true,
+          requiresManualMaintenance: false,
+        },
+        {
+          id: 'optical_module_cpo_cn',
+          labelZh: '光模块 CPO',
           labelEn: 'Optical modules / CPO',
           market: 'cn',
           description: '待人工维护的 A 股主题占位池。',
@@ -496,16 +510,23 @@ describe('UserScannerPage', () => {
     expect(screen.getByText(/AI 解读 · gemini/)).toBeInTheDocument();
   });
 
-  it('renders run summary and data quality strip from existing diagnostics and notes', async () => {
+  it('renders compact scanner workspace without the old decorative hero', async () => {
     renderUserScannerPage();
 
-    const qualityStrip = await screen.findByTestId('scanner-quality-strip');
-    expect(within(qualityStrip).getByText('覆盖')).toBeInTheDocument();
-    expect(within(qualityStrip).getByText(/扫描 300 · 排名 40 · 入选 3 · Data availability/)).toBeInTheDocument();
-    expect(within(qualityStrip).getByText('供应商')).toBeInTheDocument();
-    expect(within(qualityStrip).getByText(/akshare_quote \/ local_snapshot \/ parquet_history/)).toBeInTheDocument();
-    expect(within(qualityStrip).getByText(/Using backend liquid universe note/)).toBeInTheDocument();
-    expect(within(qualityStrip).getByText(/Backend scoring note/)).toBeInTheDocument();
+    expect(await screen.findByTestId('user-scanner-workspace')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-sidebar')).toContainElement(screen.getByTestId('scanner-run-button'));
+    expect(screen.getByTestId('scanner-candidate-scroll-region')).toBeInTheDocument();
+    expect(screen.queryByText('TACTICAL ROUTER')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /MARKET SCANNER|市场扫描/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps diagnostics collapsed so results stay primary', async () => {
+    renderUserScannerPage();
+
+    const diagnostics = await screen.findByTestId('scanner-diagnostics-panel');
+    expect(diagnostics).not.toHaveAttribute('open');
+    expect(screen.queryByTestId('scanner-quality-strip')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('scanner-result-card-NVDA')).toBeInTheDocument();
   });
 
   it('toggles between card and table view', async () => {
@@ -825,7 +846,7 @@ describe('UserScannerPage', () => {
     });
   });
 
-  it('runs with a selected theme universe and shows returned metadata', async () => {
+  it('runs with a selected theme universe and keeps results in the compact header', async () => {
     const themedRun = makeRunDetail({
       market: 'us',
       profile: 'us_preopen_v1',
@@ -855,6 +876,7 @@ describe('UserScannerPage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'US' }));
     fireEvent.click(screen.getByRole('button', { name: /主题标的池|Theme universe/i }));
+    expect(screen.getByTestId('scanner-theme-select')).toHaveTextContent(/AI 半导体|AI semiconductors/);
     fireEvent.change(screen.getByTestId('scanner-theme-select'), { target: { value: 'crypto_miners' } });
     fireEvent.click(screen.getByRole('button', { name: /运行扫描|Run scanner/i }));
 
@@ -867,7 +889,7 @@ describe('UserScannerPage', () => {
       }));
     });
     expect((await screen.findAllByText(/加密矿企/)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/3\/3/)).toBeInTheDocument();
+    expect(screen.getByText(/入选 3|3 selected/)).toBeInTheDocument();
   });
 
   it('shows disabled unconfigured themes and sends custom symbol universes', async () => {
@@ -882,7 +904,7 @@ describe('UserScannerPage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /主题标的池|Theme universe/i }));
     const themeSelect = screen.getByTestId('scanner-theme-select') as HTMLSelectElement;
-    expect(within(themeSelect).getByRole('option', { name: /Optical modules \/ CPO.*not configured|光模块\/CPO.*未配置/ })).toBeDisabled();
+    expect(within(themeSelect).getByRole('option', { name: /Optical modules \/ CPO.*not configured|光模块 CPO.*未配置/ })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('button', { name: /自定义标的|Custom symbols/i }));
     fireEvent.change(screen.getByTestId('scanner-custom-symbols-input'), {
