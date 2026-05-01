@@ -22,7 +22,9 @@ from api.v1.schemas.scanner import (
     ScannerRunDetailResponse,
     ScannerRunHistoryResponse,
     ScannerRunRequest,
+    ScannerThemesResponse,
 )
+from src.core.scanner_theme_registry import list_scanner_themes
 from src.services.market_scanner_ops_service import MarketScannerOperationsService
 from src.services.market_scanner_service import MarketScannerService
 from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER
@@ -121,12 +123,32 @@ def run_market_scan(
             shortlist_size=request.shortlist_size,
             universe_limit=request.universe_limit,
             detail_limit=request.detail_limit,
+            universe_type=request.universe_type,
+            theme_id=request.theme_id,
+            symbols=request.symbols,
             request_source="api",
             notify=False,
         )
         return ScannerRunDetailResponse(**payload)
 
     return _run_endpoint("运行市场扫描失败", _operation)
+
+
+@router.get(
+    "/themes",
+    response_model=ScannerThemesResponse,
+    responses={
+        200: {"description": "Scanner theme universes"},
+    },
+    summary="获取 Scanner 主题标的池",
+)
+def get_scanner_themes(
+    market: Optional[str] = Query(None, description="市场过滤"),
+) -> ScannerThemesResponse:
+    normalized_market = (market.strip().lower() if isinstance(market, str) else "") or None
+    return ScannerThemesResponse(
+        items=[theme.to_dict() for theme in list_scanner_themes(market=normalized_market)]
+    )
 
 
 @router.get(

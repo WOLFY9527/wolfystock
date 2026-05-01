@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 from fastapi import HTTPException
 
 from api.v1.endpoints.scanner import (
+    get_scanner_themes,
     get_recent_watchlists,
     get_market_scan_run,
     get_market_scan_runs,
@@ -280,6 +281,9 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             shortlist_size=5,
             universe_limit=300,
             detail_limit=60,
+            universe_type="default",
+            theme_id=None,
+            symbols=[],
             request_source="api",
             notify=False,
         )
@@ -317,9 +321,67 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             shortlist_size=5,
             universe_limit=180,
             detail_limit=40,
+            universe_type="default",
+            theme_id=None,
+            symbols=[],
             request_source="api",
             notify=False,
         )
+
+    def test_get_scanner_themes_returns_registry_items(self) -> None:
+        response = get_scanner_themes()
+
+        self.assertGreaterEqual(len(response.items), 1)
+        crypto = next(item for item in response.items if item.id == "crypto_miners")
+        self.assertEqual(crypto.market, "us")
+        self.assertIn("MARA", crypto.symbols)
+        self.assertTrue(crypto.is_seed_list)
+
+    def test_run_market_scan_passes_theme_universe_request_to_service(self) -> None:
+        service = MagicMock()
+        service.run_manual_scan.return_value = _make_run_payload(
+            run_id=30,
+            market="us",
+            profile="us_preopen_v1",
+            profile_label="US Pre-open Scanner v1",
+            benchmark_code="SPY",
+        )
+
+        request = ScannerRunRequest(
+            market="us",
+            profile="us_preopen_v1",
+            universe_type="theme",
+            theme_id="crypto_miners",
+            shortlist_size=5,
+            universe_limit=180,
+            detail_limit=40,
+        )
+
+        with patch("api.v1.endpoints.scanner.MarketScannerOperationsService", return_value=service):
+            response = run_market_scan(request, db_manager=MagicMock())
+
+        self.assertEqual(response.id, 30)
+        service.run_manual_scan.assert_called_once_with(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=5,
+            universe_limit=180,
+            detail_limit=40,
+            universe_type="theme",
+            theme_id="crypto_miners",
+            symbols=[],
+            request_source="api",
+            notify=False,
+        )
+
+    def test_run_request_normalizes_custom_symbols(self) -> None:
+        request = ScannerRunRequest(
+            market="us",
+            universe_type="symbols",
+            symbols=[" mara ", "RIOT", "mara", "", "clsk"],
+        )
+
+        self.assertEqual(request.symbols, ["MARA", "RIOT", "CLSK"])
 
     def test_get_market_scan_runs_serializes_history(self) -> None:
         service = MagicMock()

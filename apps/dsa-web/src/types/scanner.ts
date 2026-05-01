@@ -4,6 +4,28 @@ export interface ScannerRunRequest {
   shortlistSize?: number;
   universeLimit?: number;
   detailLimit?: number;
+  universeType?: 'default' | 'theme' | 'symbols';
+  themeId?: string | null;
+  symbols?: string[];
+}
+
+export interface ScannerTheme {
+  id: string;
+  labelZh: string;
+  labelEn: string;
+  market: 'cn' | 'us' | 'hk';
+  description: string;
+  symbols: string[];
+  aliases: string[];
+  tags: string[];
+  source: string;
+  version: string;
+  isSeedList: boolean;
+  requiresManualMaintenance: boolean;
+}
+
+export interface ScannerThemesResponse {
+  items: ScannerTheme[];
 }
 
 export interface ScannerLabeledValue {
@@ -146,6 +168,16 @@ export interface ScannerProviderDiagnostics {
 export interface ScannerRunDiagnostics {
   coverageSummary?: ScannerCoverageSummary;
   providerDiagnostics?: ScannerProviderDiagnostics;
+  universeSelection?: {
+    universeType: string;
+    themeId?: string | null;
+    themeLabel?: string | null;
+    requestedSymbolsCount: number;
+    acceptedSymbolsCount: number;
+    acceptedSymbols?: string[];
+    rejectedSymbols: string[];
+    universeNotes: string[];
+  };
   [key: string]: unknown;
 }
 
@@ -195,6 +227,12 @@ export interface ScannerRunDetail {
   headline?: string | null;
   universeNotes: string[];
   scoringNotes: string[];
+  universeType: string;
+  themeId?: string | null;
+  themeLabel?: string | null;
+  requestedSymbolsCount: number;
+  acceptedSymbolsCount: number;
+  rejectedSymbols: string[];
   diagnostics: Record<string, unknown>;
   notification: ScannerNotificationResult;
   failureReason?: string | null;
@@ -220,6 +258,12 @@ export interface ScannerRunHistoryItem {
   evaluatedSize: number;
   sourceSummary?: string | null;
   headline?: string | null;
+  universeType: string;
+  themeId?: string | null;
+  themeLabel?: string | null;
+  requestedSymbolsCount: number;
+  acceptedSymbolsCount: number;
+  rejectedSymbols: string[];
   topSymbols: string[];
   notificationStatus?: string | null;
   failureReason?: string | null;

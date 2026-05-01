@@ -5,6 +5,7 @@ import type {
   ScannerRunDetail,
   ScannerRunHistoryResponse,
   ScannerRunRequest,
+  ScannerThemesResponse,
 } from '../types/scanner';
 
 export const scannerApi = {
@@ -16,6 +17,9 @@ export const scannerApi = {
     if (params.shortlistSize != null) requestData.shortlist_size = params.shortlistSize;
     if (params.universeLimit != null) requestData.universe_limit = params.universeLimit;
     if (params.detailLimit != null) requestData.detail_limit = params.detailLimit;
+    if (params.universeType) requestData.universe_type = params.universeType;
+    if (params.themeId) requestData.theme_id = params.themeId;
+    if (params.symbols?.length) requestData.symbols = params.symbols;
 
     const response = await apiClient.post<Record<string, unknown>>(
       '/api/v1/scanner/run',
@@ -23,6 +27,16 @@ export const scannerApi = {
       { timeout: 120000 },
     );
     return toCamelCase<ScannerRunDetail>(response.data);
+  },
+
+  getThemes: async (params: { market?: string } = {}): Promise<ScannerThemesResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(
+      '/api/v1/scanner/themes',
+      {
+        params: params.market ? { market: params.market } : undefined,
+      },
+    );
+    return toCamelCase<ScannerThemesResponse>(response.data);
   },
 
   getRuns: async (params: {

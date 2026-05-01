@@ -10,9 +10,10 @@ import type {
   ScannerRunHistoryResponse,
 } from '../../types/scanner';
 
-const { getRuns, getRun, runScan, analyzeAsync } = vi.hoisted(() => ({
+const { getRuns, getRun, getThemes, runScan, analyzeAsync } = vi.hoisted(() => ({
   getRuns: vi.fn(),
   getRun: vi.fn(),
+  getThemes: vi.fn(),
   runScan: vi.fn(),
   analyzeAsync: vi.fn(),
 }));
@@ -21,6 +22,7 @@ vi.mock('../../api/scanner', () => ({
   scannerApi: {
     getRuns,
     getRun,
+    getThemes,
     run: runScan,
   },
 }));
@@ -120,7 +122,22 @@ function makeRunDetail(overrides: Partial<ScannerRunDetail> = {}): ScannerRunDet
     headline: 'Backend manual scan: NVDA / AVGO / AMD',
     universeNotes: ['Using backend liquid universe note.'],
     scoringNotes: ['Backend scoring note: trend and liquidity are weighted.'],
+    universeType: 'default',
+    themeId: null,
+    themeLabel: null,
+    requestedSymbolsCount: 0,
+    acceptedSymbolsCount: 0,
+    rejectedSymbols: [],
     diagnostics: {
+      universeSelection: {
+        universeType: 'default',
+        themeId: null,
+        themeLabel: null,
+        requestedSymbolsCount: 0,
+        acceptedSymbolsCount: 0,
+        rejectedSymbols: [],
+        universeNotes: [],
+      },
       coverageSummary: {
         inputUniverseSize: 300,
         eligibleAfterUniverseFetch: 280,
@@ -279,6 +296,12 @@ function makeHistoryItem(overrides: Partial<ScannerRunHistoryItem> = {}): Scanne
     evaluatedSize: 40,
     sourceSummary: 'history source',
     headline: '历史扫描：NVDA / AVGO / AMD',
+    universeType: 'default',
+    themeId: null,
+    themeLabel: null,
+    requestedSymbolsCount: 0,
+    acceptedSymbolsCount: 0,
+    rejectedSymbols: [],
     topSymbols: ['NVDA', 'AVGO', 'AMD'],
     notificationStatus: 'not_attempted',
     failureReason: null,
@@ -362,9 +385,42 @@ describe('UserScannerPage', () => {
     window.localStorage.clear();
     getRuns.mockReset();
     getRun.mockReset();
+    getThemes.mockReset();
     runScan.mockReset();
     analyzeAsync.mockReset();
 
+    getThemes.mockResolvedValue({
+      items: [
+        {
+          id: 'crypto_miners',
+          labelZh: '加密矿企',
+          labelEn: 'Crypto miners',
+          market: 'us',
+          description: 'Curated US crypto miner seed list.',
+          symbols: ['MARA', 'RIOT', 'CLSK'],
+          aliases: [],
+          tags: ['crypto'],
+          source: 'seed',
+          version: '2026-05-01',
+          isSeedList: true,
+          requiresManualMaintenance: false,
+        },
+        {
+          id: 'optical_modules_cpo_cn',
+          labelZh: '光模块/CPO',
+          labelEn: 'Optical modules / CPO',
+          market: 'cn',
+          description: '待人工维护的 A 股主题占位池。',
+          symbols: [],
+          aliases: [],
+          tags: ['cn'],
+          source: 'placeholder',
+          version: '2026-05-01',
+          isSeedList: true,
+          requiresManualMaintenance: true,
+        },
+      ],
+    });
     getRuns.mockResolvedValue(makeHistoryResponse());
     getRun.mockResolvedValue(makeRunDetail());
     runScan.mockResolvedValue(makeRunDetail());
@@ -438,7 +494,7 @@ describe('UserScannerPage', () => {
     const getRunsCallsBeforeSort = getRuns.mock.calls.length;
     const getRunCallsBeforeSort = getRun.mock.calls.length;
 
-    fireEvent.click(screen.getByRole('button', { name: /代码|symbol/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /代码|symbol/i }).at(-1) as HTMLElement);
     expect(orderedSymbolsFromRows()).toEqual(['AMD', 'AVGO', 'NVDA']);
 
     fireEvent.click(screen.getByRole('button', { name: /扫描评分|scanner score/i }));
@@ -545,6 +601,80 @@ describe('UserScannerPage', () => {
         universeLimit: 180,
         detailLimit: 40,
       });
+    });
+  });
+
+  it('runs with a selected theme universe and shows returned metadata', async () => {
+    const themedRun = makeRunDetail({
+      market: 'us',
+      profile: 'us_preopen_v1',
+      profileLabel: 'US Pre-open Scanner v1',
+      universeType: 'theme',
+      themeId: 'crypto_miners',
+      themeLabel: '加密矿企',
+      requestedSymbolsCount: 3,
+      acceptedSymbolsCount: 3,
+      rejectedSymbols: [],
+      universeNotes: ['Theme universe: 加密矿企 · 3 symbols.'],
+      diagnostics: {
+        universeSelection: {
+          universeType: 'theme',
+          themeId: 'crypto_miners',
+          themeLabel: '加密矿企',
+          requestedSymbolsCount: 3,
+          acceptedSymbolsCount: 3,
+          rejectedSymbols: [],
+          universeNotes: ['Theme universe: 加密矿企 · 3 symbols.'],
+        },
+      },
+    });
+    runScan.mockResolvedValueOnce(themedRun);
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'US' }));
+    fireEvent.click(screen.getByRole('button', { name: /主题标的池|Theme universe/i }));
+    fireEvent.change(screen.getByTestId('scanner-theme-select'), { target: { value: 'crypto_miners' } });
+    fireEvent.click(screen.getByRole('button', { name: /运行扫描|Run scanner/i }));
+
+    await waitFor(() => {
+      expect(runScan).toHaveBeenCalledWith(expect.objectContaining({
+        market: 'us',
+        profile: 'us_preopen_v1',
+        universeType: 'theme',
+        themeId: 'crypto_miners',
+      }));
+    });
+    expect((await screen.findAllByText(/加密矿企/)).length).toBeGreaterThan(0);
+    expect(screen.getByText(/3\/3/)).toBeInTheDocument();
+  });
+
+  it('shows disabled unconfigured themes and sends custom symbol universes', async () => {
+    runScan.mockResolvedValueOnce(makeRunDetail({
+      universeType: 'symbols',
+      requestedSymbolsCount: 3,
+      acceptedSymbolsCount: 3,
+      rejectedSymbols: [],
+      universeNotes: ['Custom symbol universe: 3 accepted.'],
+    }));
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /主题标的池|Theme universe/i }));
+    const themeSelect = screen.getByTestId('scanner-theme-select') as HTMLSelectElement;
+    expect(within(themeSelect).getByRole('option', { name: /Optical modules \/ CPO.*not configured|光模块\/CPO.*未配置/ })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /自定义标的|Custom symbols/i }));
+    fireEvent.change(screen.getByTestId('scanner-custom-symbols-input'), {
+      target: { value: 'MARA RIOT\nCLSK' },
+    });
+    expect(screen.getByText(/已解析 3|Parsed 3/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /运行扫描|Run scanner/i }));
+
+    await waitFor(() => {
+      expect(runScan).toHaveBeenCalledWith(expect.objectContaining({
+        universeType: 'symbols',
+        symbols: ['MARA', 'RIOT', 'CLSK'],
+      }));
     });
   });
 

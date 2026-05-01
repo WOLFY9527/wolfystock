@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ScannerRunRequest(BaseModel):
@@ -14,6 +14,50 @@ class ScannerRunRequest(BaseModel):
     shortlist_size: int = Field(5, ge=1, le=20, description="输出观察名单数量")
     universe_limit: Optional[int] = Field(None, ge=50, le=1000, description="进入详细评估前的候选池上限")
     detail_limit: Optional[int] = Field(None, ge=10, le=200, description="进入详细特征计算的候选数")
+    universe_type: Literal["default", "theme", "symbols"] = Field("default", description="扫描标的池类型")
+    theme_id: Optional[str] = Field(None, description="theme 标的池 id")
+    symbols: List[str] = Field(default_factory=list, max_length=200, description="自定义扫描代码列表")
+
+    @field_validator("theme_id")
+    @classmethod
+    def _normalize_theme_id(cls, value: Optional[str]) -> Optional[str]:
+        normalized = (value or "").strip().lower()
+        return normalized or None
+
+    @field_validator("symbols", mode="before")
+    @classmethod
+    def _normalize_symbols(cls, value: Any) -> List[str]:
+        if value is None:
+            return []
+        raw_items = value if isinstance(value, list) else [value]
+        result: List[str] = []
+        seen = set()
+        for item in raw_items:
+            symbol = str(item or "").strip().upper()
+            if not symbol or symbol in seen:
+                continue
+            seen.add(symbol)
+            result.append(symbol)
+        return result
+
+
+class ScannerThemeResponse(BaseModel):
+    id: str
+    label_zh: str
+    label_en: str
+    market: str
+    description: str
+    symbols: List[str] = Field(default_factory=list)
+    aliases: List[str] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
+    source: str
+    version: str
+    is_seed_list: bool = True
+    requires_manual_maintenance: bool = False
+
+
+class ScannerThemesResponse(BaseModel):
+    items: List[ScannerThemeResponse] = Field(default_factory=list)
 
 
 class ScannerLabeledValue(BaseModel):
@@ -161,6 +205,12 @@ class ScannerRunDetailResponse(BaseModel):
     headline: Optional[str] = None
     universe_notes: List[str] = Field(default_factory=list)
     scoring_notes: List[str] = Field(default_factory=list)
+    universe_type: str = "default"
+    theme_id: Optional[str] = None
+    theme_label: Optional[str] = None
+    requested_symbols_count: int = 0
+    accepted_symbols_count: int = 0
+    rejected_symbols: List[str] = Field(default_factory=list)
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
     notification: ScannerNotificationResult = Field(default_factory=ScannerNotificationResult)
     failure_reason: Optional[str] = None
@@ -186,6 +236,12 @@ class ScannerRunHistoryItem(BaseModel):
     evaluated_size: int
     source_summary: Optional[str] = None
     headline: Optional[str] = None
+    universe_type: str = "default"
+    theme_id: Optional[str] = None
+    theme_label: Optional[str] = None
+    requested_symbols_count: int = 0
+    accepted_symbols_count: int = 0
+    rejected_symbols: List[str] = Field(default_factory=list)
     top_symbols: List[str] = Field(default_factory=list)
     notification_status: Optional[str] = None
     failure_reason: Optional[str] = None

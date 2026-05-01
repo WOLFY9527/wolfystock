@@ -28,6 +28,7 @@ import type {
   ScannerReviewSummary,
   ScannerRunDetail,
   ScannerRunHistoryItem,
+  ScannerTheme,
   ScannerWatchlistComparison,
 } from '../types/scanner';
 import {
@@ -44,6 +45,7 @@ type ViewMode = 'cards' | 'table';
 type SortKey = 'score' | 'symbol' | 'target' | 'risk';
 type SortDirection = 'asc' | 'desc';
 type Tone = 'info' | 'success' | 'warning' | 'danger' | 'history';
+type ScanScope = 'default' | 'theme' | 'symbols';
 
 function ScannerEmptyState({
   title,
@@ -268,6 +270,34 @@ function formatNotesSummary(notes: string[], language: 'zh' | 'en'): string | nu
   if (!notes.length) return null;
   const first = notes[0];
   return language === 'en' ? `${notes.length} notes · ${first}` : `${notes.length} 条 · ${first}`;
+}
+
+function parseCustomSymbols(value: string): string[] {
+  return Array.from(
+    new Set(
+      value
+        .split(/[\s,，;；]+/)
+        .map((symbol) => symbol.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function getThemeLabel(theme: ScannerTheme, language: 'zh' | 'en'): string {
+  return language === 'en' ? theme.labelEn : theme.labelZh;
+}
+
+function getRunUniverseSummary(runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): string | null {
+  if (!runDetail || !runDetail.universeType || runDetail.universeType === 'default') return null;
+  const label = runDetail.themeLabel || (runDetail.universeType === 'theme' ? runDetail.themeId : null);
+  const typeLabel = runDetail.universeType === 'theme'
+    ? (language === 'en' ? 'Theme' : '主题')
+    : (language === 'en' ? 'Custom' : '自定义');
+  const counts = `${runDetail.acceptedSymbolsCount}/${runDetail.requestedSymbolsCount}`;
+  const rejected = runDetail.rejectedSymbols?.length
+    ? (language === 'en' ? ` · ${runDetail.rejectedSymbols.length} rejected` : ` · ${runDetail.rejectedSymbols.length} 个无效`)
+    : '';
+  return [typeLabel, label, counts].filter(Boolean).join(' · ') + rejected;
 }
 
 function hasReviewSummary(review?: ScannerReviewSummary | null): boolean {
@@ -649,6 +679,10 @@ const UserScannerPage: React.FC = () => {
   const [shortlistSize, setShortlistSize] = useState('5');
   const [universeLimit, setUniverseLimit] = useState('300');
   const [detailLimit, setDetailLimit] = useState('60');
+  const [scanScope, setScanScope] = useState<ScanScope>('default');
+  const [themes, setThemes] = useState<ScannerTheme[]>([]);
+  const [themeId, setThemeId] = useState('');
+  const [customSymbols, setCustomSymbols] = useState('');
   const [runDetail, setRunDetail] = useState<ScannerRunDetail | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [historyItems, setHistoryItems] = useState<ScannerRunHistoryItem[]>([]);
@@ -671,6 +705,15 @@ const UserScannerPage: React.FC = () => {
   const profileOptions = useMemo(() => getScannerProfileOptions(market, t), [market, t]);
   const universeOptions = useMemo(() => getScannerUniverseOptions(market, language), [language, market]);
   const detailOptions = useMemo(() => getScannerDetailOptions(market, language), [language, market]);
+  const marketThemes = useMemo(
+    () => themes.filter((theme) => theme.market === market),
+    [market, themes],
+  );
+  const selectedTheme = useMemo(
+    () => marketThemes.find((theme) => theme.id === themeId) || null,
+    [marketThemes, themeId],
+  );
+  const parsedCustomSymbols = useMemo(() => parseCustomSymbols(customSymbols), [customSymbols]);
 
   const handleMarketChange = useCallback((nextMarket: string) => {
     const normalizedMarket = nextMarket === 'us' ? 'us' : nextMarket === 'hk' ? 'hk' : 'cn';
@@ -680,7 +723,31 @@ const UserScannerPage: React.FC = () => {
     setShortlistSize(defaults.shortlistSize);
     setUniverseLimit(defaults.universeLimit);
     setDetailLimit(defaults.detailLimit);
+    setThemeId('');
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    scannerApi.getThemes()
+      .then((response) => {
+        if (!isMounted) return;
+        setThemes(response.items || []);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setPageError(getParsedApiError(error));
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (scanScope !== 'theme') return;
+    if (selectedTheme?.market === market) return;
+    const firstConfiguredTheme = marketThemes.find((theme) => theme.symbols.length > 0);
+    setThemeId(firstConfiguredTheme?.id || '');
+  }, [market, marketThemes, scanScope, selectedTheme?.market]);
 
   const loadRun = useCallback(async (runId: number) => {
     try {
@@ -745,6 +812,9 @@ const UserScannerPage: React.FC = () => {
         shortlistSize: Number.parseInt(shortlistSize, 10),
         universeLimit: Number.parseInt(universeLimit, 10),
         detailLimit: Number.parseInt(detailLimit, 10),
+        ...(scanScope !== 'default' ? { universeType: scanScope } : {}),
+        ...(scanScope === 'theme' ? { themeId } : {}),
+        ...(scanScope === 'symbols' ? { symbols: parsedCustomSymbols } : {}),
       });
       setRunDetail(response);
       setSelectedRunId(response.id);
@@ -756,7 +826,7 @@ const UserScannerPage: React.FC = () => {
     } finally {
       setIsRunning(false);
     }
-  }, [detailLimit, fetchHistory, market, profile, shortlistSize, universeLimit]);
+  }, [detailLimit, fetchHistory, market, parsedCustomSymbols, profile, scanScope, shortlistSize, themeId, universeLimit]);
 
   const handleSortChange = useCallback((nextSortKey: SortKey) => {
     if (sortKey === nextSortKey) {
@@ -780,7 +850,16 @@ const UserScannerPage: React.FC = () => {
   const elapsedTime = formatDuration(runDetail?.runAt, runDetail?.completedAt, language);
   const coverageSummary = runDetail ? getRunCoverageSummary(runDetail) : null;
   const providerDiagnostics = runDetail ? getRunProviderDiagnostics(runDetail) : null;
+  const universeSummary = getRunUniverseSummary(runDetail, language);
+  const runDisabled = isRunning
+    || (scanScope === 'theme' && (!selectedTheme || selectedTheme.symbols.length === 0))
+    || (scanScope === 'symbols' && parsedCustomSymbols.length === 0);
   const qualityItems = [
+    {
+      label: language === 'en' ? 'Scan scope' : '扫描范围',
+      value: universeSummary,
+      tone: 'info' as Tone,
+    },
     {
       label: language === 'en' ? 'Coverage' : '覆盖',
       value: formatCoverageSummary(coverageSummary, runDetail, language),
@@ -881,13 +960,70 @@ const UserScannerPage: React.FC = () => {
                   <PillTagGroup label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
                   <PillTagGroup label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
                   <PillTagGroup label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
+                  <PillTagGroup
+                    label={language === 'en' ? 'Scan scope' : '扫描范围'}
+                    value={scanScope}
+                    onChange={(next) => setScanScope(next as ScanScope)}
+                    options={[
+                      { value: 'default', label: language === 'en' ? 'Default market universe' : '默认市场池' },
+                      { value: 'theme', label: language === 'en' ? 'Theme universe' : '主题标的池' },
+                      { value: 'symbols', label: language === 'en' ? 'Custom symbols' : '自定义标的' },
+                    ]}
+                    testId="scanner-scope-selector"
+                  />
+                  {scanScope === 'theme' ? (
+                    <div className="flex flex-col gap-2" data-testid="scanner-theme-control">
+                      <span className="text-xs uppercase tracking-widest text-white/40">{language === 'en' ? 'Theme' : '主题'}</span>
+                      <select
+                        data-testid="scanner-theme-select"
+                        value={themeId}
+                        onChange={(event) => setThemeId(event.target.value)}
+                        className="w-full rounded-xl border border-white/8 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-indigo-400/50"
+                      >
+                        <option value="">{language === 'en' ? 'Select a theme' : '选择主题'}</option>
+                        {marketThemes.map((theme) => (
+                          <option key={theme.id} value={theme.id} disabled={!theme.symbols.length}>
+                            {getThemeLabel(theme, language)} · {theme.symbols.length || (language === 'en' ? 'not configured' : '未配置')}
+                          </option>
+                        ))}
+                      </select>
+                      {selectedTheme ? (
+                        <p className="text-xs leading-relaxed text-white/45">
+                          {selectedTheme.description}
+                          {' '}
+                          {language === 'en' ? `${selectedTheme.symbols.length} symbols` : `${selectedTheme.symbols.length} 只标的`}
+                          {selectedTheme.requiresManualMaintenance ? (language === 'en' ? ' · requires manual maintenance' : ' · 需要人工维护') : ''}
+                        </p>
+                      ) : (
+                        <p className="text-xs leading-relaxed text-white/32">
+                          {language === 'en' ? 'Only themes matching the selected market are shown.' : '仅显示当前市场对应的主题。'}
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                  {scanScope === 'symbols' ? (
+                    <div className="flex flex-col gap-2" data-testid="scanner-custom-symbols-control">
+                      <span className="text-xs uppercase tracking-widest text-white/40">{language === 'en' ? 'Symbols' : '代码'}</span>
+                      <textarea
+                        data-testid="scanner-custom-symbols-input"
+                        value={customSymbols}
+                        onChange={(event) => setCustomSymbols(event.target.value)}
+                        rows={4}
+                        placeholder={language === 'en' ? 'MARA RIOT CLSK' : 'MARA RIOT CLSK'}
+                        className="w-full resize-none rounded-xl border border-white/8 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
+                      />
+                      <p className="text-xs text-white/45">
+                        {language === 'en' ? `Parsed ${parsedCustomSymbols.length}` : `已解析 ${parsedCustomSymbols.length}`}
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="flex flex-col gap-4">
                     <button
                       ref={runScannerButton.ref}
                       type="button"
                       onClick={runScannerButton.onClick}
                       onPointerUp={runScannerButton.onPointerUp}
-                      disabled={isRunning}
+                      disabled={runDisabled}
                       aria-busy={isRunning}
                       data-testid="scanner-run-button"
                       className="group mt-8 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-8 py-4 text-sm font-bold text-indigo-400 transition-all hover:border-indigo-500/50 hover:bg-indigo-500/20 hover:shadow-[0_0_25px_rgba(99,102,241,0.2)] active:scale-95 disabled:pointer-events-none disabled:opacity-60 disabled:shadow-none disabled:transform-none"

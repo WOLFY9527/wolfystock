@@ -23,6 +23,7 @@ from data_provider.base import (
 from data_provider.us_index_mapping import is_us_stock_code
 from src.config import get_config
 from src.core.scanner_profile import ScannerMarketProfile, get_scanner_profile
+from src.core.scanner_theme_registry import ScannerTheme, get_scanner_theme
 from src.data.stock_mapping import STOCK_NAME_MAP
 from src.core.trading_calendar import MARKET_TIMEZONE, is_market_open
 from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER, normalize_scope
@@ -429,6 +430,132 @@ class MarketScannerService:
             return None
         return self.db.require_user_id(self.owner_id if owner_id is None else owner_id)
 
+    @staticmethod
+    def _normalize_scanner_symbol(symbol: str, *, market: str) -> Optional[str]:
+        normalized_market = (market or "").strip().lower()
+        raw = str(symbol or "").strip().upper()
+        if not raw:
+            return None
+        if normalized_market == "us":
+            return raw if is_us_stock_code(raw) else None
+        normalized = normalize_stock_code(raw).upper()
+        if normalized_market == "hk":
+            return normalized if _is_hk_scanner_symbol(normalized) else None
+        if normalized_market == "cn":
+            return normalized if _is_cn_common_stock_code(normalized) else None
+        return None
+
+    def _normalize_scanner_symbols(
+        self,
+        symbols: Optional[Sequence[str]],
+        *,
+        market: str,
+    ) -> Tuple[List[str], List[str]]:
+        accepted: List[str] = []
+        rejected: List[str] = []
+        seen = set()
+        for raw_symbol in symbols or []:
+            raw_text = str(raw_symbol or "").strip()
+            if not raw_text:
+                continue
+            normalized = self._normalize_scanner_symbol(raw_text, market=market)
+            if not normalized:
+                rejected.append(raw_text)
+                continue
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            accepted.append(normalized)
+        return accepted, rejected
+
+    def _resolve_universe_selection(
+        self,
+        *,
+        market: str,
+        universe_type: str = "default",
+        theme_id: Optional[str] = None,
+        symbols: Optional[Sequence[str]] = None,
+    ) -> Dict[str, Any]:
+        normalized_market = (market or "cn").strip().lower()
+        normalized_type = (universe_type or "default").strip().lower()
+        if normalized_type not in {"default", "theme", "symbols"}:
+            raise ValueError(f"未知 scanner universe_type: {universe_type}")
+        if normalized_type == "default":
+            return {
+                "universe_type": "default",
+                "theme_id": None,
+                "theme_label": None,
+                "accepted_symbols": [],
+                "rejected_symbols": [],
+                "requested_symbols_count": 0,
+                "accepted_symbols_count": 0,
+                "source": "profile_default_universe",
+                "universe_notes": [],
+            }
+
+        theme: Optional[ScannerTheme] = None
+        raw_symbols: Sequence[str]
+        theme_label: Optional[str] = None
+        if normalized_type == "theme":
+            theme = get_scanner_theme(theme_id or "")
+            if theme is None:
+                raise ValueError(f"未知 scanner theme: {theme_id}")
+            if theme.market != normalized_market:
+                raise ValueError(f"scanner theme {theme.id} 不属于市场 {normalized_market}")
+            if not theme.symbols:
+                raise ValueError(f"scanner theme {theme.id} 尚未配置成分股，请先人工维护该主题标的池。")
+            raw_symbols = list(theme.symbols)
+            theme_label = theme.label_zh
+        else:
+            raw_symbols = list(symbols or [])
+
+        accepted_symbols, rejected_symbols = self._normalize_scanner_symbols(raw_symbols, market=normalized_market)
+        if not accepted_symbols:
+            raise ValueError("自定义 scanner 标的池为空或无有效代码。")
+        source = f"scanner_theme:{theme.id}" if theme else "custom_symbols"
+        if theme:
+            note = f"主题标的池：{theme.label_zh} / {theme.label_en}，使用 {len(accepted_symbols)} 只人工维护 seed symbols。"
+            if theme.requires_manual_maintenance:
+                note = f"{note} 该主题需要人工复核维护，不代表完整或权威成分。"
+        else:
+            note = f"自定义标的池：请求 {len(raw_symbols)} 个代码，接受 {len(accepted_symbols)} 个有效代码。"
+        if rejected_symbols:
+            note = f"{note} 已忽略无效代码：{', '.join(rejected_symbols[:8])}。"
+
+        return {
+            "universe_type": normalized_type,
+            "theme_id": theme.id if theme else None,
+            "theme_label": theme_label,
+            "accepted_symbols": accepted_symbols,
+            "rejected_symbols": rejected_symbols,
+            "requested_symbols_count": int(len(raw_symbols)),
+            "accepted_symbols_count": int(len(accepted_symbols)),
+            "source": source,
+            "universe_notes": [note],
+        }
+
+    @staticmethod
+    def _public_universe_selection(selection: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        payload = dict(selection or {})
+        return {
+            "universe_type": str(payload.get("universe_type") or "default"),
+            "theme_id": payload.get("theme_id"),
+            "theme_label": payload.get("theme_label"),
+            "requested_symbols_count": int(payload.get("requested_symbols_count") or 0),
+            "accepted_symbols_count": int(payload.get("accepted_symbols_count") or 0),
+            "accepted_symbols": list(payload.get("accepted_symbols") or []),
+            "rejected_symbols": list(payload.get("rejected_symbols") or []),
+            "universe_notes": list(payload.get("universe_notes") or []),
+        }
+
+    def _merge_universe_notes(
+        self,
+        notes: Sequence[str],
+        selection: Optional[Dict[str, Any]],
+    ) -> List[str]:
+        selection_notes = list((selection or {}).get("universe_notes") or [])
+        return selection_notes + list(notes or [])
+
     def run_scan(
         self,
         *,
@@ -437,6 +564,9 @@ class MarketScannerService:
         shortlist_size: Optional[int] = None,
         universe_limit: Optional[int] = None,
         detail_limit: Optional[int] = None,
+        universe_type: str = "default",
+        theme_id: Optional[str] = None,
+        symbols: Optional[Sequence[str]] = None,
         scope: str = OWNERSHIP_SCOPE_USER,
         owner_id: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -454,6 +584,12 @@ class MarketScannerService:
         resolved_detail_limit = self._resolve_positive_int(detail_limit, profile_config.detail_limit, 10, 200)
         if resolved_detail_limit < resolved_shortlist_size:
             raise ValueError("detail_limit 不能小于 shortlist_size")
+        universe_selection = self._resolve_universe_selection(
+            market=profile_config.market,
+            universe_type=universe_type,
+            theme_id=theme_id,
+            symbols=symbols,
+        )
 
         if profile_config.market == "us":
             return self._run_us_scan(
@@ -462,6 +598,7 @@ class MarketScannerService:
                 resolved_shortlist_size=resolved_shortlist_size,
                 resolved_universe_limit=resolved_universe_limit,
                 resolved_detail_limit=resolved_detail_limit,
+                universe_selection=universe_selection,
                 scope=normalized_scope,
                 owner_id=resolved_owner_id,
             )
@@ -472,6 +609,7 @@ class MarketScannerService:
                 resolved_shortlist_size=resolved_shortlist_size,
                 resolved_universe_limit=resolved_universe_limit,
                 resolved_detail_limit=resolved_detail_limit,
+                universe_selection=universe_selection,
                 scope=normalized_scope,
                 owner_id=resolved_owner_id,
             )
@@ -485,6 +623,29 @@ class MarketScannerService:
         stock_list_source = str(universe_resolution.get("source") or "unknown")
         snapshot = snapshot_resolution.get("data")
         snapshot_source = str(snapshot_resolution.get("source") or "unknown")
+        if universe_selection["universe_type"] != "default":
+            selected_codes = set(universe_selection["accepted_symbols"])
+            if stock_list is not None and not stock_list.empty:
+                stock_list = stock_list[
+                    stock_list["code"].astype(str).map(normalize_stock_code).isin(selected_codes)
+                ].copy()
+                universe_resolution = {
+                    **dict(universe_resolution),
+                    "data": stock_list,
+                    "source": universe_selection["source"],
+                    "universe_selection": self._public_universe_selection(universe_selection),
+                    "final_symbol_count": int(len(stock_list)),
+                }
+                stock_list_source = universe_selection["source"]
+            if snapshot is not None and not snapshot.empty:
+                snapshot = snapshot[
+                    snapshot["code"].astype(str).map(normalize_stock_code).isin(selected_codes)
+                ].copy()
+                snapshot_resolution = {
+                    **dict(snapshot_resolution),
+                    "data": snapshot,
+                    "restricted_by_universe_selection": True,
+                }
 
         if (stock_list is None or stock_list.empty) and snapshot is not None and not snapshot.empty:
             stock_list = snapshot[["code", "name"]].copy()
@@ -655,6 +816,7 @@ class MarketScannerService:
                 "snapshot_resolution": self._public_resolution_diagnostics(snapshot_resolution),
                 "degraded_mode_used": bool(snapshot_resolution.get("degraded_mode_used")),
             },
+            "universe_selection": self._public_universe_selection(universe_selection),
         }
         source_summary = self._build_source_summary(
             universe_source=stock_list_source,
@@ -678,9 +840,10 @@ class MarketScannerService:
             shortlist=shortlist,
             ai_interpretation_diag=ai_interpretation_diag,
             source_summary=source_summary,
-            universe_notes=universe_notes,
+            universe_notes=self._merge_universe_notes(universe_notes, universe_selection),
             scoring_notes=scoring_notes,
             diagnostics=diagnostics,
+            universe_selection=universe_selection,
         )
 
     def _quote_market_options(self, *, market: str) -> Dict[str, Any]:
@@ -882,6 +1045,7 @@ class MarketScannerService:
         universe_notes: Sequence[str],
         scoring_notes: Sequence[str],
         diagnostics: Dict[str, Any],
+        universe_selection: Optional[Dict[str, Any]] = None,
         ranked_candidates: Optional[Sequence[Dict[str, Any]]] = None,
         shortlist: Optional[Sequence[Dict[str, Any]]] = None,
         ai_interpretation_diag: Optional[Dict[str, Any]] = None,
@@ -900,6 +1064,7 @@ class MarketScannerService:
         finalized_diagnostics = dict(diagnostics or {})
         finalized_diagnostics["ai_interpretation"] = dict(ai_interpretation_diag or {})
         finalized_diagnostics["run_duration_seconds"] = round((run_completed_at - run_started_at).total_seconds(), 2)
+        public_universe_selection = self._public_universe_selection(universe_selection)
 
         run_model = MarketScannerRun(
             owner_id=owner_id,
@@ -920,6 +1085,7 @@ class MarketScannerService:
                     "headline": headline,
                     "profile_label": profile_config.label,
                     "shortlisted_codes": shortlisted_codes,
+                    "universe_selection": public_universe_selection,
                 },
                 ensure_ascii=False,
             ),
@@ -964,6 +1130,12 @@ class MarketScannerService:
             "headline": headline,
             "universe_notes": list(universe_notes or []),
             "scoring_notes": list(scoring_notes or []),
+            "universe_type": public_universe_selection["universe_type"],
+            "theme_id": public_universe_selection["theme_id"],
+            "theme_label": public_universe_selection["theme_label"],
+            "requested_symbols_count": public_universe_selection["requested_symbols_count"],
+            "accepted_symbols_count": public_universe_selection["accepted_symbols_count"],
+            "rejected_symbols": public_universe_selection["rejected_symbols"],
             "diagnostics": finalized_diagnostics,
             "shortlist": response_shortlist,
         }
@@ -978,12 +1150,36 @@ class MarketScannerService:
         resolved_detail_limit: int,
         scope: str,
         owner_id: Optional[str],
+        universe_selection: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         market_options = self._quote_market_options(market=profile_config.market)
-        universe_resolution = market_options["resolve_universe"](
-            profile=profile_config,
-            target_symbol_count=resolved_universe_limit,
+        universe_selection = universe_selection or self._resolve_universe_selection(
+            market=profile_config.market,
         )
+        if universe_selection["universe_type"] == "default":
+            universe_resolution = market_options["resolve_universe"](
+                profile=profile_config,
+                target_symbol_count=resolved_universe_limit,
+            )
+        else:
+            universe_resolution = {
+                "success": True,
+                "source": universe_selection["source"],
+                "data": list(universe_selection["accepted_symbols"]),
+                "attempts": [
+                    {
+                        "fetcher": universe_selection["source"],
+                        "status": "success",
+                        "rows": int(universe_selection["accepted_symbols_count"]),
+                    }
+                ],
+                "local_symbol_count": 0,
+                "supplemented_seed_count": 0,
+                "final_symbol_count": int(universe_selection["accepted_symbols_count"]),
+                "target_symbol_count": int(universe_selection["accepted_symbols_count"]),
+                "coverage_strategy": str(universe_selection["universe_type"]),
+                "universe_selection": self._public_universe_selection(universe_selection),
+            }
         universe_symbols = universe_resolution.get("data") or []
         universe_source = str(universe_resolution.get("source") or "unknown")
 
@@ -1117,6 +1313,7 @@ class MarketScannerService:
                 "snapshot_resolution": snapshot_resolution,
                 "degraded_mode_used": False,
             },
+            "universe_selection": self._public_universe_selection(universe_selection),
         }
         source_summary = self._build_source_summary(
             universe_source=universe_source,
@@ -1141,9 +1338,10 @@ class MarketScannerService:
             shortlist=shortlist,
             ai_interpretation_diag=ai_interpretation_diag,
             source_summary=source_summary,
-            universe_notes=universe_notes,
+            universe_notes=self._merge_universe_notes(universe_notes, universe_selection),
             scoring_notes=scoring_notes,
             diagnostics=diagnostics,
+            universe_selection=universe_selection,
         )
 
     def _run_us_scan(
@@ -1156,6 +1354,7 @@ class MarketScannerService:
         resolved_detail_limit: int,
         scope: str,
         owner_id: Optional[str],
+        universe_selection: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         return self._run_quote_market_scan(
             profile_config=profile_config,
@@ -1165,6 +1364,7 @@ class MarketScannerService:
             resolved_detail_limit=resolved_detail_limit,
             scope=scope,
             owner_id=owner_id,
+            universe_selection=universe_selection,
         )
 
     def _run_hk_scan(
@@ -1177,6 +1377,7 @@ class MarketScannerService:
         resolved_detail_limit: int,
         scope: str,
         owner_id: Optional[str],
+        universe_selection: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         return self._run_quote_market_scan(
             profile_config=profile_config,
@@ -1186,6 +1387,7 @@ class MarketScannerService:
             resolved_detail_limit=resolved_detail_limit,
             scope=scope,
             owner_id=owner_id,
+            universe_selection=universe_selection,
         )
 
     def _resolve_hk_stock_universe(
@@ -2586,6 +2788,13 @@ class MarketScannerService:
         previous_watchlist_run: Optional[MarketScannerRun] = None,
     ) -> Dict[str, Any]:
         summary, diagnostics, metadata = self._extract_run_metadata(run)
+        universe_selection = self._public_universe_selection(
+            summary.get("universe_selection")
+            if isinstance(summary.get("universe_selection"), dict)
+            else diagnostics.get("universe_selection")
+            if isinstance(diagnostics, dict)
+            else None
+        )
         universe_notes = _json_load(run.universe_notes_json, [])
         scoring_notes = _json_load(run.scoring_notes_json, [])
         candidates = self.repo.get_candidates_for_run(run.id)
@@ -2647,6 +2856,12 @@ class MarketScannerService:
             "headline": summary.get("headline"),
             "universe_notes": universe_notes if isinstance(universe_notes, list) else [],
             "scoring_notes": scoring_notes if isinstance(scoring_notes, list) else [],
+            "universe_type": universe_selection["universe_type"],
+            "theme_id": universe_selection["theme_id"],
+            "theme_label": universe_selection["theme_label"],
+            "requested_symbols_count": universe_selection["requested_symbols_count"],
+            "accepted_symbols_count": universe_selection["accepted_symbols_count"],
+            "rejected_symbols": universe_selection["rejected_symbols"],
             "diagnostics": diagnostics if isinstance(diagnostics, dict) else {},
             "notification": self._normalize_notification_result(diagnostics.get("notification")),
             "failure_reason": self._extract_failure_reason(diagnostics),
@@ -3030,6 +3245,13 @@ class MarketScannerService:
 
     def _run_row_to_history_item(self, row: MarketScannerRun) -> Dict[str, Any]:
         summary, diagnostics, metadata = self._extract_run_metadata(row)
+        universe_selection = self._public_universe_selection(
+            summary.get("universe_selection")
+            if isinstance(summary.get("universe_selection"), dict)
+            else diagnostics.get("universe_selection")
+            if isinstance(diagnostics, dict)
+            else None
+        )
         candidates = self.repo.get_candidates_for_run(row.id)
         top_symbols = summary.get("shortlisted_codes")
         if not isinstance(top_symbols, list) or not top_symbols:
@@ -3052,6 +3274,12 @@ class MarketScannerService:
             "evaluated_size": int(row.evaluated_size or 0),
             "source_summary": row.source_summary,
             "headline": summary.get("headline"),
+            "universe_type": universe_selection["universe_type"],
+            "theme_id": universe_selection["theme_id"],
+            "theme_label": universe_selection["theme_label"],
+            "requested_symbols_count": universe_selection["requested_symbols_count"],
+            "accepted_symbols_count": universe_selection["accepted_symbols_count"],
+            "rejected_symbols": universe_selection["rejected_symbols"],
             "top_symbols": [str(item) for item in top_symbols[:3]],
             "notification_status": notification.get("status"),
             "failure_reason": self._extract_failure_reason(diagnostics),

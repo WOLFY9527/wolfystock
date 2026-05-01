@@ -793,6 +793,72 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["market"], "us")
         self.assertEqual(detail["profile_label"], "US Pre-open Scanner v1")
 
+    def test_run_scan_restricts_us_custom_symbol_universe(self) -> None:
+        seed_us_local_history(self.stock_repo)
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeUsScannerDataManager(),
+        )
+
+        result = service.run_scan(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=2,
+            universe_limit=50,
+            detail_limit=10,
+            universe_type="symbols",
+            symbols=[" nvda ", "PLTR", "NVDA"],
+        )
+
+        self.assertEqual(result["diagnostics"]["universe_selection"]["universe_type"], "symbols")
+        self.assertEqual(result["diagnostics"]["coverage_summary"]["input_universe_size"], 2)
+        self.assertEqual(result["diagnostics"]["universe_selection"]["requested_symbols_count"], 3)
+        self.assertEqual(result["diagnostics"]["universe_selection"]["accepted_symbols_count"], 2)
+        self.assertEqual(result["diagnostics"]["universe_selection"]["accepted_symbols"], ["NVDA", "PLTR"])
+        self.assertEqual({item["symbol"] for item in result["shortlist"]}, {"NVDA", "PLTR"})
+
+        detail = service.get_run_detail(result["id"])
+        assert detail is not None
+        self.assertEqual(detail["universe_type"], "symbols")
+        self.assertEqual(detail["requested_symbols_count"], 3)
+        self.assertEqual(detail["accepted_symbols_count"], 2)
+
+    def test_run_scan_rejects_invalid_or_empty_theme_universe(self) -> None:
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeUsScannerDataManager(),
+        )
+
+        with self.assertRaisesRegex(ValueError, "未知 scanner theme"):
+            service.run_scan(
+                market="us",
+                profile="us_preopen_v1",
+                universe_type="theme",
+                theme_id="missing_theme",
+            )
+
+        with self.assertRaisesRegex(ValueError, "尚未配置成分股"):
+            service.run_scan(
+                market="cn",
+                profile="cn_preopen_v1",
+                universe_type="theme",
+                theme_id="optical_modules_cpo_cn",
+            )
+
+    def test_run_scan_rejects_theme_market_mismatch(self) -> None:
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeUsScannerDataManager(),
+        )
+
+        with self.assertRaisesRegex(ValueError, "不属于市场 cn"):
+            service.run_scan(
+                market="cn",
+                profile="cn_preopen_v1",
+                universe_type="theme",
+                theme_id="crypto_miners",
+            )
+
     def test_run_scan_supports_hk_preopen_profile_and_preserves_market_context(self) -> None:
         seed_hk_local_history(self.stock_repo)
         service = MarketScannerService(
