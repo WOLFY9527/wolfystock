@@ -122,6 +122,37 @@ const businessEvents = [
     recordId: 'record-aapl',
   },
   {
+    id: 'provider-fallback-success',
+    event: 'ProviderFallbackServed',
+    category: 'data_source',
+    type: 'provider_fallback',
+    eventType: 'DataSourceFallback',
+    status: 'success',
+    summary: 'Primary provider failed, fallback source served cached data',
+    subject: 'market overview',
+    actorType: 'system',
+    actorLabel: 'scheduler',
+    contextLabel: 'US market snapshot',
+    route: '/admin/logs',
+    endpoint: '/api/v1/market-overview',
+    provider: 'alpaca',
+    source: 'finnhub',
+    reason: 'fallback_used',
+    errorSummary: 'Primary provider timeout, fallback source completed',
+    requestId: 'req-fallback-123456',
+    traceId: 'trace-fallback-abcdef',
+    rootCauseSummary: 'Primary provider timeout',
+    stepTraceAvailable: true,
+    startedAt: '2026-04-30T12:00:00Z',
+    durationMs: 900,
+    stepCount: 2,
+    successStepCount: 1,
+    failedStepCount: 0,
+    skippedStepCount: 1,
+    unknownStepCount: 0,
+    metadata: { apiKey: 'FRONTENDSECRET', token: 'FRONTENDTOKEN' },
+  },
+  {
     id: 'scanner-mainland',
     event: 'Scanner: 大盘单机游戏',
     category: 'scanner',
@@ -237,6 +268,29 @@ const failedNoStepDetail = {
   steps: [],
 };
 
+const fallbackSuccessDetail = {
+  ...businessEvents[3],
+  steps: [
+    {
+      name: 'primary_provider',
+      label: 'Primary provider',
+      provider: 'alpaca',
+      status: 'skipped',
+      reason: 'provider_unhealthy',
+      message: 'Primary provider unhealthy; fallback used',
+      metadata: { apiKey: 'FRONTENDSECRET' },
+    },
+    {
+      name: 'fallback_provider',
+      label: 'Fallback provider',
+      provider: 'finnhub',
+      status: 'success',
+      message: 'Fallback provider completed',
+      metadata: {},
+    },
+  ],
+};
+
 const rawSessions = [
   {
     sessionId: 'raw-timeout',
@@ -298,6 +352,8 @@ describe('AdminLogsPage', () => {
     getBusinessEventDetail.mockImplementation((eventId: string) => (
       eventId === 'market-card-failed'
         ? Promise.resolve(failedNoStepDetail)
+        : eventId === 'provider-fallback-success'
+          ? Promise.resolve(fallbackSuccessDetail)
         : Promise.resolve(businessDetail)
     ));
     listSessions.mockResolvedValue({
@@ -327,25 +383,32 @@ describe('AdminLogsPage', () => {
     expect(screen.getByRole('tab', { name: '原始日志' })).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-filter-bar')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-health-summary')).toBeInTheDocument();
-    expect(screen.getByText('Degraded')).toBeInTheDocument();
-    expect(screen.getByText('1 / 5')).toBeInTheDocument();
+    expect(screen.getAllByText('Degraded').length).toBeGreaterThan(0);
+    expect(screen.getByText('1 / 6')).toBeInTheDocument();
     expect(screen.getByText('finnhub')).toBeInTheDocument();
-    expect(screen.getAllByText('timeout').length).toBeGreaterThan(0);
     expect(screen.getAllByText('provider timeout token=***').length).toBeGreaterThan(0);
     expect(screen.queryByText(/FRONTENDSECRET|FRONTENDTOKEN/)).not.toBeInTheDocument();
     expect(screen.getByLabelText('搜索日志')).toBeInTheDocument();
     expect(screen.getByLabelText('状态筛选')).toBeInTheDocument();
     expect(screen.getByLabelText('时间范围')).toBeInTheDocument();
-    expect(screen.getByTestId('admin-logs-summary-grid')).toHaveClass('grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-5');
+    expect(screen.queryByTestId('admin-logs-summary-grid')).not.toBeInTheDocument();
     expect((await screen.findAllByText('TSLA')).length).toBeGreaterThan(0);
     expect(screen.getByText('Actor')).toBeInTheDocument();
     expect(screen.getByText('Context')).toBeInTheDocument();
     expect(screen.getByText('Source / Provider')).toBeInTheDocument();
     expect(screen.getByText('Reason')).toBeInTheDocument();
-    expect(screen.getByText('Trace')).toBeInTheDocument();
+    expect(screen.queryByText('Trace')).not.toBeInTheDocument();
+    expect(screen.getByText('状态 / 严重度')).toBeInTheDocument();
+    expect(screen.queryByText('耗时')).not.toBeInTheDocument();
     expect(screen.getByText('alice')).toBeInTheDocument();
     expect(screen.getByText('newsapi')).toBeInTheDocument();
-    expect(screen.getAllByText('timeout').length).toBeGreaterThan(0);
+    expect(screen.getByText('ProviderFallbackServed')).toBeInTheDocument();
+    const fallbackRowLabel = screen.getByText('ProviderFallbackServed');
+    const fallbackRow = fallbackRowLabel.closest('[data-testid="business-event-row"]');
+    expect(fallbackRow).not.toBeNull();
+    expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).toHaveTextContent('Degraded');
+    expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).toHaveClass('text-amber-100');
+    expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).not.toHaveClass('text-rose-100');
     expect(screen.getAllByText('MarketSentimentCard').length).toBeGreaterThan(0);
     expect(screen.getByText('失败 · 无步骤明细')).toBeInTheDocument();
     expect(screen.queryByText('成功 0 · 跳过 0 · 失败 0 · 未确认 0')).not.toBeInTheDocument();
@@ -391,7 +454,8 @@ describe('AdminLogsPage', () => {
     expect(screen.getByTestId('business-events-table-shell')).toHaveClass('overflow-x-auto');
     expect(screen.getByText('调用链 timeline')).toBeInTheDocument();
     expect(screen.getByTestId('root-cause-section')).toBeInTheDocument();
-    expect(screen.getByText('Root Cause')).toBeInTheDocument();
+    expect(screen.queryByText('Root Cause')).not.toBeInTheDocument();
+    expect(screen.getByText('Degradation Summary')).toBeInTheDocument();
     expect(screen.getAllByText(/alice/).length).toBeGreaterThan(0);
     expect(screen.getByText(/trace-tsla-abcdef/)).toBeInTheDocument();
     expect(screen.getByText(/获取行情/)).toBeInTheDocument();
@@ -406,11 +470,39 @@ describe('AdminLogsPage', () => {
     expect(screen.getAllByText('主模型已成功，无需调用备用模型').length).toBeGreaterThan(0);
     expect(screen.getByText(/步骤统计/)).toBeInTheDocument();
     expect(screen.getByText('成功 2 · 跳过 2 · 失败 1 · 未确认 1')).toBeInTheDocument();
-    expect(screen.getByText(/record-tsla/)).toBeInTheDocument();
     expect(document.querySelector('[data-status="success"]')).not.toBeNull();
     expect(document.querySelector('[data-status="skipped"]')).not.toBeNull();
     expect(document.querySelector('[data-status="failed"]')).not.toBeNull();
     expect(document.querySelector('[data-status="unknown"]')).not.toBeNull();
+  });
+
+  it('shows degraded execution summary for successful fallback events and copies a sanitized debug summary', async () => {
+    render(<AdminLogsPage />);
+
+    const row = await screen.findByText('ProviderFallbackServed');
+    const rowContainer = row.closest('[data-testid="business-event-row"]');
+    expect(rowContainer).not.toBeNull();
+    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByText('Root Cause')).not.toBeInTheDocument();
+    expect(screen.getByText('Degradation Summary')).toBeInTheDocument();
+    const summarySection = screen.getByTestId('root-cause-section');
+    expect(summarySection).toHaveClass('border-amber-300/16');
+    expect(summarySection).not.toHaveClass('border-rose-300/12');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy debug summary' }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
+    const copied = String((navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] || '');
+    expect(copied).toContain('"event": "ProviderFallbackServed"');
+    expect(copied).toContain('"status": "success"');
+    expect(copied).toContain('"severity": "degraded"');
+    expect(copied).toContain('"requestId": "req-fallback-123456"');
+    expect(copied).toContain('"traceId": "trace-fallback-abcdef"');
+    expect(copied).toContain('"route": "/admin/logs"');
+    expect(copied).toContain('"endpoint": "/api/v1/market-overview"');
+    expect(copied).not.toContain('FRONTENDSECRET');
+    expect(copied).not.toContain('FRONTENDTOKEN');
   });
 
   it('shows failed no-step events without all-zero step stats and can copy trace id', async () => {
@@ -422,12 +514,12 @@ describe('AdminLogsPage', () => {
     expect(within(rowContainer as HTMLElement).getByText('失败 · 无步骤明细')).toBeInTheDocument();
     expect(within(rowContainer as HTMLElement).queryByText('成功 0 · 跳过 0 · 失败 0 · 未确认 0')).not.toBeInTheDocument();
 
-    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: '复制' }));
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('trace-market-card-abcdef');
-
     fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
     expect(await screen.findByTestId('root-cause-section')).toHaveTextContent('该事件在步骤级 trace 记录前已失败');
+    expect(screen.getByText('Root Cause')).toBeInTheDocument();
     expect(screen.getAllByText('provider timeout token=***').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '复制' }));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('trace-market-card-abcdef');
   });
 
   it('shows a unified message when the business-event list fails to load', async () => {

@@ -15,6 +15,7 @@ type LogLevel = 'DEBUG' | 'INFO' | 'NOTICE' | 'WARNING' | 'ERROR' | 'CRITICAL';
 type LevelFilter = 'all' | 'warning_plus' | 'error_plus' | LogLevel;
 type LogCategory = 'system' | 'auth' | 'market' | 'cache' | 'data_source' | 'analysis' | 'scanner' | 'backtest' | 'trading' | 'portfolio' | 'scheduler' | 'notification' | 'api' | 'security';
 type LogsTab = 'business' | 'analysis' | 'scanner' | 'backtest' | 'data_source' | 'security' | 'raw';
+type EventSeverity = 'success' | 'degraded' | 'failed';
 
 const LEVEL_FILTER_OPTIONS: LevelFilter[] = ['all', 'warning_plus', 'error_plus', 'DEBUG', 'INFO', 'NOTICE', 'WARNING', 'ERROR', 'CRITICAL'];
 const CATEGORY_OPTIONS: LogCategory[] = ['system', 'auth', 'market', 'cache', 'data_source', 'analysis', 'scanner', 'backtest', 'trading', 'portfolio', 'scheduler', 'notification', 'api', 'security'];
@@ -513,6 +514,113 @@ function isFailedStatus(value: unknown): boolean {
   return status === 'failed' || status === 'error';
 }
 
+function hasDegradationSignal(value: unknown): boolean {
+  return /fallback|degraded|partial|stale|timeout|circuit|unhealthy|fallback_used|回退|降级|部分|超时/i.test(String(value || ''));
+}
+
+function businessEventSeverity(event: BusinessEvent | BusinessEventDetail): EventSeverity {
+  const status = normalizeStatus(event.status);
+  if (status === 'failed' || status === 'error') return 'failed';
+  const signal = [
+    event.status,
+    event.eventType,
+    event.type,
+    event.reason,
+    event.errorSummary,
+    event.rootCauseSummary,
+    event.summary,
+  ].join(' ');
+  if (status === 'partial' || status === 'warning' || hasDegradationSignal(signal)) return 'degraded';
+  return 'success';
+}
+
+function rawEventSeverity(detail: ExecutionLogSessionDetail): EventSeverity {
+  const readable = detail.readableSummary || {};
+  const operationDetail = detail.operationDetail || {};
+  const status = normalizeStatus(String(operationDetail.status || readable.operationStatus || detail.overallStatus || ''));
+  const level = normalizeLogLevel(readable.logLevel);
+  if (status === 'failed' || status === 'error' || level === 'ERROR' || level === 'CRITICAL') return 'failed';
+  const signal = [
+    operationDetail.status,
+    operationDetail.finalResult,
+    readable.reason,
+    readable.topFailureReason,
+    readable.errorSummary,
+    readable.eventMessage,
+    readable.summaryParagraph,
+  ].join(' ');
+  if (status === 'partial' || status === 'warning' || level === 'WARNING' || hasDegradationSignal(signal)) return 'degraded';
+  return 'success';
+}
+
+function severityLabel(severity: EventSeverity, locale: AdminLogsLanguage): string {
+  if (severity === 'failed') return locale === 'zh' ? 'Failed' : 'Failed';
+  if (severity === 'degraded') return locale === 'zh' ? 'Degraded' : 'Degraded';
+  return locale === 'zh' ? 'Success' : 'Success';
+}
+
+function severityClass(severity: EventSeverity): string {
+  if (severity === 'failed') return 'border-rose-300/25 bg-rose-500/10 text-rose-100';
+  if (severity === 'degraded') return 'border-amber-300/25 bg-amber-400/10 text-amber-100';
+  return 'border-emerald-300/20 bg-emerald-400/10 text-emerald-100';
+}
+
+function summaryTitle(severity: EventSeverity, locale: AdminLogsLanguage): string {
+  if (severity === 'failed') return locale === 'zh' ? 'Root Cause' : 'Root Cause';
+  if (severity === 'degraded') return locale === 'zh' ? 'Degradation Summary' : 'Degradation Summary';
+  return locale === 'zh' ? 'Execution Summary' : 'Execution Summary';
+}
+
+function summarySectionClass(severity: EventSeverity): string {
+  if (severity === 'failed') return 'border-rose-300/12 bg-rose-500/[0.035]';
+  if (severity === 'degraded') return 'border-amber-300/16 bg-amber-400/[0.04]';
+  return 'border-emerald-300/12 bg-emerald-400/[0.035]';
+}
+
+function safeDebugSummaryPayload(payload: Record<string, unknown>): string {
+  return JSON.stringify(sanitizeDisplayValue(payload), null, 2);
+}
+
+function buildBusinessDebugSummary(detail: BusinessEventDetail): string {
+  return safeDebugSummaryPayload({
+    event: detail.event,
+    status: detail.status,
+    severity: businessEventSeverity(detail),
+    reason: detail.reason,
+    actor: [detail.actorType, detail.actorLabel || detail.userId].filter(Boolean).join(' / '),
+    context: detail.contextLabel || detail.symbol || detail.subject,
+    source: detail.source,
+    provider: detail.provider,
+    requestId: detail.requestId,
+    traceId: detail.traceId,
+    route: detail.route,
+    endpoint: detail.endpoint,
+    errorSummary: detail.errorSummary,
+    rootCauseSummary: detail.rootCauseSummary,
+  });
+}
+
+function buildRawDebugSummary(detail: ExecutionLogSessionDetail): string {
+  const readable = detail.readableSummary || {};
+  const operationDetail = detail.operationDetail || {};
+  return safeDebugSummaryPayload({
+    event: readable.eventName || detail.name || detail.code,
+    status: operationDetail.status || readable.operationStatus || detail.overallStatus,
+    severity: rawEventSeverity(detail),
+    reason: readable.reason || readable.topFailureReason,
+    actor: readable.actorDisplay || readable.actorUsername || readable.actorSessionId,
+    context: readable.contextLabel || readable.operationTarget || operationDetail.target || detail.code || detail.name,
+    source: readable.source,
+    provider: readable.provider,
+    requestId: readable.requestId || readable.actorRequestId,
+    traceId: readable.traceId || detail.queryId,
+    route: undefined,
+    endpoint: readable.endpoint,
+    errorSummary: readable.errorSummary,
+    rootCauseSummary: readable.topFailureReason || readable.summaryParagraph,
+  });
+}
+
 function sanitizeDisplayValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map((item) => sanitizeDisplayValue(item));
   if (value && typeof value === 'object') {
@@ -783,6 +891,8 @@ const AdminLogsPage: React.FC = () => {
     : diagnostics.filter((item) => /fallback|回退/i.test(`${item.message || ''} ${item.source || ''}`));
   const systemOperation = asRecord(operationDetail.systemOperation);
   const drawerStatus = normalizeStatus(String(businessDetail?.status || operationDetail.status || readable.operationStatus || drawerDetail?.overallStatus || ''));
+  const businessSeverity = businessDetail ? businessEventSeverity(businessDetail) : 'success';
+  const rawSeverity = drawerDetail ? rawEventSeverity(drawerDetail) : 'success';
   const drawerOperationType = normalizeOperationType(readable);
   const businessTraceValue = businessDetail?.traceId || businessDetail?.requestId;
   const businessActorLabel = text(businessDetail?.actorLabel || businessDetail?.userId, locale === 'zh' ? '未记录' : 'Not recorded');
@@ -875,7 +985,6 @@ const AdminLogsPage: React.FC = () => {
     <section data-testid="admin-logs-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-x-hidden">
       <GlassCard as="section" className="overflow-hidden p-0">
         <div className="relative px-4 py-4 sm:px-5">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.12),transparent_28%),radial-gradient(circle_at_top_right,rgba(239,68,68,0.1),transparent_26%)]" />
           <div className="relative flex min-w-0 flex-col gap-4">
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-emerald-200/70">WolfyStock Ops Trace</p>
@@ -1002,16 +1111,21 @@ const AdminLogsPage: React.FC = () => {
 
       <section
         data-testid="admin-logs-health-summary"
-        className="grid grid-cols-1 gap-2 rounded-xl border border-white/8 bg-black/20 p-3 sm:grid-cols-2 xl:grid-cols-[11rem_9rem_1fr_1fr_1.2fr]"
+        className="grid grid-cols-1 gap-2 rounded-xl border border-white/8 bg-black/20 p-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[10rem_9rem_9rem_minmax(10rem,1fr)_minmax(10rem,1fr)_minmax(12rem,1.2fr)]"
       >
         <div className={`rounded-lg border px-3 py-2 ${healthStatusTone(healthSummary.status)}`}>
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? 'Overall status' : 'Overall status'}</p>
-          <p className="mt-1 text-lg font-semibold">{healthStatusLabel(healthSummary.status, locale)}</p>
+          <p className="mt-1 text-base font-semibold">{healthStatusLabel(healthSummary.status, locale)}</p>
         </div>
         <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-secondary-text">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Failures' : 'Failures'}</p>
-          <p className="mt-1 text-lg font-semibold text-foreground">{healthSummary.failedEvents} / {healthSummary.totalEvents}</p>
+          <p className="mt-1 text-base font-semibold text-foreground">{healthSummary.failedEvents} / {healthSummary.totalEvents}</p>
           <p className="text-[11px] text-muted-text">{Math.round((healthSummary.failureRate || 0) * 100)}% · {healthSummary.warningEvents} warning</p>
+        </div>
+        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-secondary-text">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Warnings' : 'Warnings'}</p>
+          <p className="mt-1 text-base font-semibold text-foreground">{healthSummary.warningEvents}</p>
+          <p className="text-[11px] text-muted-text">{healthSummary.slowEvents} slow</p>
         </div>
         <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Top failing feature' : 'Top failing feature'}</p>
@@ -1030,21 +1144,6 @@ const AdminLogsPage: React.FC = () => {
         </div>
       </section>
 
-      <div data-testid="admin-logs-summary-grid" className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        {[
-          { label: locale === 'zh' ? '失败总数' : 'Total failed', value: computedSummary.totalFailedCount || computedSummary.errorCount || 0, tone: 'text-rose-100 border-rose-400/20 bg-rose-500/8' },
-          { label: locale === 'zh' ? '业务失败' : 'Business failed', value: computedSummary.businessFailureCount || computedSummary.errorCount || 0, tone: 'text-amber-100 border-amber-300/20 bg-amber-400/8' },
-          { label: locale === 'zh' ? 'Provider/Source 失败' : 'Provider/source failures', value: computedSummary.providerFailureCount || computedSummary.dataSourceFailureCount || 0, tone: 'text-cyan-100 border-cyan-300/20 bg-cyan-400/8' },
-          { label: locale === 'zh' ? '慢请求' : 'Slow requests', value: computedSummary.slowRequestCount || 0, tone: 'text-white/82 border-white/10 bg-white/[0.04]' },
-          { label: locale === 'zh' ? '最新原因' : 'Latest reason', value: computedSummary.latestErrorReason || (computedSummary.latestCriticalAt ? formatDateTime(computedSummary.latestCriticalAt, locale) : '--'), tone: 'text-red-100 border-red-300/20 bg-red-500/8' },
-        ].map((item) => (
-          <div key={item.label} className={`rounded-xl border px-3 py-2 ${item.tone}`}>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{item.label}</p>
-            <p className="mt-1 truncate text-lg font-semibold">{item.value}</p>
-          </div>
-        ))}
-      </div>
-
       <GlassCard as="section" className="min-h-0 p-4">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -1062,17 +1161,15 @@ const AdminLogsPage: React.FC = () => {
           ) : (
             <div className="overflow-hidden rounded-xl border border-white/6 bg-black/15">
               <div data-testid="business-events-table-shell" className="overflow-x-auto">
-                <div className="min-w-[1320px]">
-                  <div className="grid grid-cols-[9rem_minmax(8rem,0.8fr)_9rem_minmax(13rem,1.15fr)_minmax(10rem,0.9fr)_minmax(14rem,1.35fr)_6.5rem_5.5rem_7rem_6rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+                <div className="min-w-[1040px]">
+                  <div className="grid grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
                     <div>{locale === 'zh' ? '时间' : 'Time'}</div>
                     <div>{locale === 'zh' ? '事件' : 'Event'}</div>
+                    <div>{locale === 'zh' ? '状态 / 严重度' : 'Status / Severity'}</div>
+                    <div>{locale === 'zh' ? 'Reason' : 'Reason'}</div>
                     <div>{locale === 'zh' ? 'Actor' : 'Actor'}</div>
                     <div>{locale === 'zh' ? 'Context' : 'Context'}</div>
                     <div>{locale === 'zh' ? 'Source / Provider' : 'Source / Provider'}</div>
-                    <div>{locale === 'zh' ? 'Reason' : 'Reason'}</div>
-                    <div>{locale === 'zh' ? '状态' : 'Status'}</div>
-                    <div>{locale === 'zh' ? '耗时' : 'Duration'}</div>
-                    <div>{locale === 'zh' ? 'Trace' : 'Trace'}</div>
                     <div>{locale === 'zh' ? '操作' : 'Action'}</div>
                   </div>
                   <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto">
@@ -1091,17 +1188,27 @@ const AdminLogsPage: React.FC = () => {
                         .filter(Boolean)
                         .filter((value, index, values) => values.indexOf(value) === index)
                         .join(' · ');
+                      const severity = businessEventSeverity(item);
                       const reason = text(item.reason, isFailedStatus(item.status) ? 'unknown' : '--');
                       const errorSummary = text(item.errorSummary || item.rootCauseSummary, '');
                       const traceValue = item.traceId || item.requestId;
                       const stepLabel = stepStatsLabel(item, locale);
-                      const showStepTraceNote = isFailedStatus(item.status) && (item.stepCount || 0) === 0;
                       return (
-                        <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[9rem_minmax(8rem,0.8fr)_9rem_minmax(13rem,1.15fr)_minmax(10rem,0.9fr)_minmax(14rem,1.35fr)_6.5rem_5.5rem_7rem_6rem] items-center gap-3 px-3 py-2.5">
-                          <p className="truncate text-xs text-secondary-text">{formatDateTime(item.startedAt, locale)}</p>
+                        <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem] items-center gap-3 px-3 py-2.5">
+                          <p className="truncate text-xs text-secondary-text" title={formatDateTime(item.startedAt, locale)}>{formatDateTime(item.startedAt, locale)}</p>
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-foreground">{text(item.event || item.symbol)}</p>
+                            <p className="truncate text-sm font-semibold text-foreground" title={text(item.event || item.symbol)}>{text(item.event || item.symbol)}</p>
                             <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(item.type)}>{text(item.eventType || item.type)}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <StatusBadge status={status} label={statusLabel(status, locale)} variant="soft" size="sm" />
+                            <span data-testid="event-severity-pill" className={`mt-1 inline-flex w-fit rounded-full border px-2 py-0.5 text-[11px] font-semibold ${severityClass(severity)}`}>
+                              {severityLabel(severity, locale)}
+                            </span>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="line-clamp-2 text-xs font-medium leading-5 text-foreground" title={errorSummary || reason || stepLabel}>{errorSummary || reason || stepLabel}</p>
+                            <p className="mt-1 truncate text-[11px] text-muted-text" title={stepLabel}>{stepLabel}</p>
                           </div>
                           <div className="min-w-0">
                             <span className="inline-flex w-fit rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-100">{actorType}</span>
@@ -1110,27 +1217,11 @@ const AdminLogsPage: React.FC = () => {
                           <div className="min-w-0">
                             <p className="truncate text-xs font-medium text-foreground" title={contextPrimary}>{contextPrimary}</p>
                             <p className="mt-1 truncate text-[11px] text-muted-text" title={contextSecondary || text(item.summary)}>{contextSecondary || text(item.summary)}</p>
+                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(traceValue)}>{traceValue ? `trace ${shortIdentifier(traceValue)}` : '--'}</p>
                           </div>
                           <div className="min-w-0">
                             <p className="truncate text-xs text-secondary-text" title={sourcePrimary}>{sourcePrimary}</p>
                             <p className="mt-1 truncate text-[11px] text-muted-text" title={sourceSecondary}>{sourceSecondary || '--'}</p>
-                          </div>
-                          <div className="min-w-0">
-                            <span className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-[11px] font-semibold ${isFailedStatus(item.status) ? 'border-rose-300/25 bg-rose-500/10 text-rose-100' : 'border-white/10 bg-white/[0.035] text-secondary-text'}`}>{reason}</span>
-                            <p className="mt-1 truncate text-[11px] text-muted-text" title={errorSummary || stepLabel}>{errorSummary || stepLabel}</p>
-                            {showStepTraceNote && errorSummary ? (
-                              <p className="mt-0.5 truncate text-[11px] text-muted-text" title={stepLabel}>{stepLabel}</p>
-                            ) : null}
-                          </div>
-                          <StatusBadge status={status} label={statusLabel(status, locale)} variant="soft" size="sm" />
-                          <p className="text-xs text-muted-text">{formatDuration(item.durationMs)}</p>
-                          <div className="min-w-0">
-                            <p className="truncate text-xs text-muted-text" title={text(traceValue)}>{shortIdentifier(traceValue)}</p>
-                            {traceValue ? (
-                              <button type="button" className="mt-1 text-[11px] font-semibold text-emerald-100 underline decoration-emerald-300/30 underline-offset-2" onClick={() => void copyTextValue(traceValue)}>
-                                {locale === 'zh' ? '复制' : 'Copy'}
-                              </button>
-                            ) : null}
                           </div>
                           <button type="button" className="btn-secondary w-fit rounded-lg px-2.5 py-1 text-xs" onClick={() => void openBusinessDetail(item)}>
                             {t('adminLogs.viewDetails')}
@@ -1221,30 +1312,33 @@ const AdminLogsPage: React.FC = () => {
                   <div className="mb-3 flex items-center gap-2">
                     <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">{text(businessDetail.category).slice(0, 1).toUpperCase()}</span>
                     <StatusBadge status={drawerStatus} label={statusLabel(drawerStatus, locale)} variant="soft" size="sm" />
+                    <span className={`inline-flex min-h-6 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${severityClass(businessSeverity)}`}>
+                      {severityLabel(businessSeverity, locale)}
+                    </span>
                   </div>
                   <h2 className="break-words text-2xl font-semibold text-foreground">{text(businessDetail.event || businessDetail.symbol)}</h2>
                   <p className="mt-2 text-sm text-secondary-text">{businessDetail.summary} · {categoryLabel(businessDetail.category, locale)} · {text(businessDetail.type)} · {formatDateTime(businessDetail.startedAt, locale)}</p>
                 </div>
                 <div className="grid gap-2 text-xs text-secondary-text">
-                  <span>{locale === 'zh' ? '主体' : 'Subject'}: <span className="text-foreground">{text(businessDetail.subject || businessDetail.symbol)}</span></span>
-                  <span>recordId: <span className="text-foreground">{text(businessDetail.recordId)}</span></span>
-                  <span>scannerId: <span className="text-foreground">{text(businessDetail.scannerId)}</span></span>
-                  <span>strategyId/backtestId: <span className="text-foreground">{text([businessDetail.strategyId, businessDetail.backtestId].filter(Boolean).join(' / '))}</span></span>
+                  <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => void copyTextValue(buildBusinessDebugSummary(businessDetail))}>
+                    {locale === 'zh' ? 'Copy debug summary' : 'Copy debug summary'}
+                  </button>
                   <span>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(businessDetail.durationMs)}</span></span>
                   <span>{locale === 'zh' ? '步骤统计' : 'Step stats'}: <span className="text-foreground">{stepStatsLabel(businessDetail, locale)}</span></span>
                 </div>
               </div>
               <div className="mt-4">
-                <section data-testid="root-cause-section" className="rounded-2xl border border-rose-300/12 bg-rose-500/[0.035] p-4">
-                  <h3 className="text-sm font-semibold text-foreground">{locale === 'zh' ? 'Root Cause' : 'Root Cause'}</h3>
+                <section data-testid="root-cause-section" className={`rounded-2xl border p-4 ${summarySectionClass(businessSeverity)}`}>
+                  <h3 className="text-sm font-semibold text-foreground">{summaryTitle(businessSeverity, locale)}</h3>
                   <div className="mt-3 grid gap-2 text-xs text-secondary-text md:grid-cols-2">
                     <p>{locale === 'zh' ? '状态' : 'Status'}: <span className="text-foreground">{statusLabel(drawerStatus, locale)}</span></p>
                     <p>{locale === 'zh' ? '原因' : 'Reason'}: <span className="text-foreground">{text(businessDetail.reason, locale === 'zh' ? '原因未确认' : 'Reason unknown')}</span></p>
-                    <p className="md:col-span-2">{locale === 'zh' ? '错误摘要' : 'Error summary'}: <span className="text-foreground" title={text(businessDetail.errorSummary || businessDetail.rootCauseSummary)}>{text(businessDetail.errorSummary || businessDetail.rootCauseSummary, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                     <p>{locale === 'zh' ? 'Actor' : 'Actor'}: <span className="text-foreground">{actorBadgeLabel(businessDetail.actorType)} · {businessActorLabel}</span></p>
                     <p>{locale === 'zh' ? 'Context' : 'Context'}: <span className="text-foreground">{businessContextLabel}</span></p>
                     <p>{locale === 'zh' ? 'Source / Provider' : 'Source / Provider'}: <span className="text-foreground">{businessSourceLabel}</span></p>
+                    <p>{locale === 'zh' ? 'Route / Endpoint' : 'Route / Endpoint'}: <span className="text-foreground">{text([businessDetail.route, businessDetail.endpoint].filter(Boolean).join(' / '), locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                     <p>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(businessDetail.durationMs)}</span></p>
+                    <p className="md:col-span-2">{locale === 'zh' ? '错误摘要' : 'Error summary'}: <span className="text-foreground" title={text(businessDetail.errorSummary || businessDetail.rootCauseSummary)}>{text(businessDetail.errorSummary || businessDetail.rootCauseSummary, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                     <p className="md:col-span-2">
                       request/trace id: <span className="text-foreground">{text(businessTraceValue, locale === 'zh' ? '未记录' : 'Not recorded')}</span>
                       {businessTraceValue ? (
@@ -1309,6 +1403,9 @@ const AdminLogsPage: React.FC = () => {
                   <div className="mb-3 flex items-center gap-2">
                     <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">{operationIcon(drawerOperationType)}</span>
                     <StatusBadge status={drawerStatus} label={statusLabel(drawerStatus, locale)} variant="soft" size="sm" />
+                    <span className={`inline-flex min-h-6 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${severityClass(rawSeverity)}`}>
+                      {severityLabel(rawSeverity, locale)}
+                    </span>
                   </div>
                   <h2 className="break-words text-2xl font-semibold text-foreground">
                     {text(operationDetail.target || readable.operationTarget || drawerDetail.name || drawerDetail.code)}
@@ -1316,6 +1413,9 @@ const AdminLogsPage: React.FC = () => {
                   <p className="mt-2 text-sm text-secondary-text">{operationLabel(drawerOperationType, locale)} · {formatDateTime(drawerDetail.startedAt, locale)}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => void copyTextValue(buildRawDebugSummary(drawerDetail))}>
+                    {locale === 'zh' ? 'Copy debug summary' : 'Copy debug summary'}
+                  </button>
                   <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => void copyLogJson(drawerDetail)}>
                     {t('adminLogs.copyDetails')}
                   </button>
@@ -1332,16 +1432,17 @@ const AdminLogsPage: React.FC = () => {
               </div>
             </section>
 
-            <section data-testid="root-cause-section" className="rounded-3xl border border-rose-300/12 bg-rose-500/[0.035] p-5">
-              <h3 className="text-sm font-semibold text-foreground">{locale === 'zh' ? 'Root Cause' : 'Root Cause'}</h3>
+            <section data-testid="root-cause-section" className={`rounded-3xl border p-5 ${summarySectionClass(rawSeverity)}`}>
+              <h3 className="text-sm font-semibold text-foreground">{summaryTitle(rawSeverity, locale)}</h3>
               <div className="mt-4 grid gap-2 text-sm text-secondary-text md:grid-cols-2">
                 <p>{locale === 'zh' ? '状态' : 'Status'}: <span className="text-foreground">{statusLabel(drawerStatus, locale)}</span></p>
                 <p>{locale === 'zh' ? '原因' : 'Reason'}: <span className="text-foreground">{text(readable.reason || readable.topFailureReason, locale === 'zh' ? '原因未确认' : 'Reason unknown')}</span></p>
-                <p className="md:col-span-2">{locale === 'zh' ? '错误摘要' : 'Error summary'}: <span className="text-foreground" title={rawRootCause}>{rawRootCause}</span></p>
                 <p>{locale === 'zh' ? 'Actor' : 'Actor'}: <span className="text-foreground">{actorBadgeLabel(readable.actorType || readable.actorRole)} · {text(readable.actorDisplay || readable.actorUsername || readable.actorSessionId, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                 <p>{locale === 'zh' ? 'Context' : 'Context'}: <span className="text-foreground">{text(readable.contextLabel || readable.operationTarget || drawerDetail.code || drawerDetail.name, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                 <p>{locale === 'zh' ? 'Source / Provider' : 'Source / Provider'}: <span className="text-foreground">{text([readable.provider, readable.source].filter(Boolean).join(' / '), locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
+                <p>{locale === 'zh' ? 'Route / Endpoint' : 'Route / Endpoint'}: <span className="text-foreground">{text(readable.endpoint, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                 <p>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(operationDetail.durationMs || drawerDetail.summary?.durationMs)}</span></p>
+                <p className="md:col-span-2">{locale === 'zh' ? '错误摘要' : 'Error summary'}: <span className="text-foreground" title={rawRootCause}>{rawRootCause}</span></p>
                 <p className="md:col-span-2">
                   request/trace id: <span className="text-foreground">{text(rawTraceValue, locale === 'zh' ? '未记录' : 'Not recorded')}</span>
                   {rawTraceValue ? (
