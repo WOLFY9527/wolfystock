@@ -18,6 +18,11 @@ const { getRuns, getRun, getThemes, runScan, analyzeAsync } = vi.hoisted(() => (
   analyzeAsync: vi.fn(),
 }));
 
+const writeTextMock = vi.fn();
+const createObjectUrlMock = vi.fn(() => 'blob:scanner-export');
+const revokeObjectUrlMock = vi.fn();
+const anchorClickMock = vi.fn();
+
 vi.mock('../../api/scanner', () => ({
   scannerApi: {
     getRuns,
@@ -367,7 +372,9 @@ function renderUserScannerPage(withLanguageSwitch = false) {
         <Routes>
           <Route path="/scanner" element={<UserScannerPage />} />
           <Route path="/" element={<div>Home Landing</div>} />
+          <Route path="/:locale" element={<div>Home Landing</div>} />
           <Route path="/backtest" element={<div>Backtest Landing</div>} />
+          <Route path="/:locale/backtest" element={<div>Backtest Landing</div>} />
         </Routes>
       </MemoryRouter>
     </UiLanguageProvider>,
@@ -388,6 +395,20 @@ describe('UserScannerPage', () => {
     getThemes.mockReset();
     runScan.mockReset();
     analyzeAsync.mockReset();
+    writeTextMock.mockReset();
+    createObjectUrlMock.mockClear();
+    revokeObjectUrlMock.mockClear();
+    anchorClickMock.mockClear();
+
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: writeTextMock,
+      },
+    });
+    URL.createObjectURL = createObjectUrlMock;
+    URL.revokeObjectURL = revokeObjectUrlMock;
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(anchorClickMock);
 
     getThemes.mockResolvedValue({
       items: [
@@ -481,8 +502,87 @@ describe('UserScannerPage', () => {
     expect(within(table).getByText('关键原因')).toBeInTheDocument();
     expect(within(table).getByText('风险摘要')).toBeInTheDocument();
     expect(within(table).getByText('数据/来源')).toBeInTheDocument();
+    expect(within(table).getByText('操作')).toBeInTheDocument();
     expect(within(table).getByText('Backend Broadcom Label')).toBeInTheDocument();
     expect(within(table).getByText('1420')).toBeInTheDocument();
+  });
+
+  it('renders analyze and copy actions on candidate cards', async () => {
+    renderUserScannerPage();
+
+    const card = await screen.findByTestId('scanner-result-card-NVDA');
+    expect(within(card).getByRole('button', { name: /分析|Analyze/i })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: /复制|Copy/i })).toBeInTheDocument();
+  });
+
+  it('copies a single candidate symbol to the clipboard', async () => {
+    renderUserScannerPage();
+
+    const card = await screen.findByTestId('scanner-result-card-NVDA');
+    fireEvent.click(within(card).getByRole('button', { name: /复制|Copy/i }));
+
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith('NVDA');
+    });
+  });
+
+  it('copies all current result symbols from run-level actions', async () => {
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /复制全部代码|Copy all symbols/i }));
+
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith('NVDA, AVGO, AMD');
+    });
+  });
+
+  it('exports csv with expected scanner result headers', async () => {
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /导出 CSV|Export CSV/i }));
+
+    await waitFor(() => {
+      expect(createObjectUrlMock).toHaveBeenCalledTimes(1);
+      expect(anchorClickMock).toHaveBeenCalledTimes(1);
+    });
+
+    const exportBlob = createObjectUrlMock.mock.calls[0]?.[0] as Blob;
+    const exportText = await exportBlob.text();
+    expect(exportText).toContain('rank,symbol,name,scannerScore,entryRange,target,stop,reason,risk,universeType,theme,generatedAt,runId');
+    expect(exportText).toContain('1,NVDA');
+  });
+
+  it('analyze action triggers existing async analysis and routes to the home analysis surface', async () => {
+    renderUserScannerPage();
+
+    const card = await screen.findByTestId('scanner-result-card-NVDA');
+    fireEvent.click(within(card).getByRole('button', { name: /分析|Analyze/i }));
+
+    await waitFor(() => {
+      expect(analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
+        stockCode: 'NVDA',
+        originalQuery: 'NVDA',
+        selectionSource: 'manual',
+      }));
+    });
+    expect(await screen.findByText('Home Landing')).toBeInTheDocument();
+  });
+
+  it('shows backtest action as disabled when scanner-safe handoff is unavailable', async () => {
+    renderUserScannerPage();
+
+    const card = await screen.findByTestId('scanner-result-card-NVDA');
+    const backtestButton = within(card).getByRole('button', { name: /回测|Backtest/i });
+    expect(backtestButton).toBeDisabled();
+    expect(backtestButton).toHaveAttribute('title', expect.stringMatching(/not available yet|暂不可用/i));
+  });
+
+  it('does not expose watchlist actions when only admin or system watchlists exist', async () => {
+    renderUserScannerPage();
+
+    const card = await screen.findByTestId('scanner-result-card-NVDA');
+    expect(within(card).queryByRole('button', { name: /watchlist/i })).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: /候选列表|观察名单/i })).not.toBeInTheDocument();
   });
 
   it('sorts frontend-only by scanner score and symbol', async () => {
@@ -512,6 +612,9 @@ describe('UserScannerPage', () => {
 
     const detail = await screen.findByTestId('scanner-result-detail-NVDA');
     expect(within(detail).getByText('关键指标')).toBeInTheDocument();
+    expect(within(detail).getByRole('button', { name: /分析|Analyze/i })).toBeInTheDocument();
+    expect(within(detail).getByRole('button', { name: /复制代码|Copy symbol/i })).toBeInTheDocument();
+    expect(within(detail).getByRole('button', { name: /导出该候选|Export candidate/i })).toBeInTheDocument();
     expect(within(detail).getByText('Turnover')).toBeInTheDocument();
     expect(within(detail).getByText('Momentum expansion')).toBeInTheDocument();
     expect(within(detail).getByText('Backend risk: gap fade below support.')).toBeInTheDocument();

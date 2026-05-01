@@ -4,11 +4,16 @@ import {
   ArrowDownUp,
   ChevronDown,
   ChevronUp,
+  Copy,
+  Download,
   LayoutGrid,
   PanelRightOpen,
   Play,
   Table2,
+  TestTubeDiagonal,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { scannerApi } from '../api/scanner';
 import { ApiErrorAlert, Drawer, Pagination, PillBadge, SectionShell } from '../components/common';
@@ -31,6 +36,7 @@ import type {
   ScannerTheme,
   ScannerWatchlistComparison,
 } from '../types/scanner';
+import { buildLocalizedPath } from '../utils/localeRouting';
 import {
   getScannerDetailOptions,
   getScannerProfileOptions,
@@ -46,6 +52,7 @@ type SortKey = 'score' | 'symbol' | 'target' | 'risk';
 type SortDirection = 'asc' | 'desc';
 type Tone = 'info' | 'success' | 'warning' | 'danger' | 'history';
 type ScanScope = 'default' | 'theme' | 'symbols';
+type ActionNotice = { tone: 'success' | 'warning' | 'danger'; message: string } | null;
 
 function ScannerEmptyState({
   title,
@@ -380,6 +387,115 @@ function marketVariant(market?: string | null): 'success' | 'info' | 'warning' |
   return 'history';
 }
 
+function csvEscape(value: string | number | null | undefined): string {
+  const normalized = value == null ? '' : String(value);
+  if (!/[",\n]/.test(normalized)) return normalized;
+  return `"${normalized.replace(/"/g, '""')}"`;
+}
+
+type ScannerExportRow = {
+  rank: number;
+  symbol: string;
+  name: string;
+  scannerScore: number;
+  entryRange: string;
+  target: string;
+  stop: string;
+  reason: string;
+  risk: string;
+  universeType: string;
+  theme: string;
+  generatedAt: string;
+  runId: number | string;
+};
+
+function buildScannerExportRow(
+  candidate: ScannerCandidate,
+  runDetail: ScannerRunDetail,
+  language: 'zh' | 'en',
+): ScannerExportRow {
+  return {
+    rank: candidate.rank,
+    symbol: candidate.symbol,
+    name: candidate.companyName || candidate.name,
+    scannerScore: candidate.score,
+    entryRange: getEntryRange(candidate) || '',
+    target: getTargetPrice(candidate) || '',
+    stop: getStopLoss(candidate) || '',
+    reason: getKeyReason(candidate, runDetail, language),
+    risk: getRiskSummary(candidate, language),
+    universeType: runDetail.universeType || '',
+    theme: runDetail.themeLabel || runDetail.themeId || '',
+    generatedAt: runDetail.completedAt || runDetail.runAt || '',
+    runId: runDetail.id,
+  };
+}
+
+function buildScannerCsv(rows: ScannerExportRow[]): string {
+  const headers = ['rank', 'symbol', 'name', 'scannerScore', 'entryRange', 'target', 'stop', 'reason', 'risk', 'universeType', 'theme', 'generatedAt', 'runId'];
+  return [
+    headers.join(','),
+    ...rows.map((row) => headers.map((header) => csvEscape(row[header as keyof ScannerExportRow])).join(',')),
+  ].join('\n');
+}
+
+function buildScannerExportFilename(runDetail: ScannerRunDetail, suffix = 'results'): string {
+  const datePart = (runDetail.watchlistDate || runDetail.completedAt || runDetail.runAt || new Date().toISOString()).slice(0, 10);
+  const safeDatePart = datePart.replace(/[^0-9-]/g, '') || 'unknown-date';
+  const safeMarket = (runDetail.market || 'scanner').toLowerCase();
+  return `scanner_${safeMarket}_${safeDatePart}_run-${runDetail.id}_${suffix}.csv`;
+}
+
+function downloadScannerCsv(filename: string, csv: string): void {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(objectUrl);
+}
+
+function ActionButton({
+  label,
+  icon,
+  onClick,
+  disabled = false,
+  title,
+  variant = 'default',
+  testId,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  disabled?: boolean;
+  title?: string;
+  variant?: 'default' | 'primary';
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={[
+        'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors',
+        variant === 'primary'
+          ? 'border-indigo-500/25 bg-indigo-500/10 text-indigo-100 hover:border-indigo-500/45 hover:bg-indigo-500/15'
+          : 'border-white/8 bg-white/[0.04] text-white/70 hover:bg-white/[0.08] hover:text-white',
+        disabled ? 'cursor-not-allowed border-white/5 bg-white/[0.02] text-white/28 hover:bg-white/[0.02] hover:text-white/28' : '',
+      ].join(' ')}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
 function PillTagGroup({
   label,
   value,
@@ -493,10 +609,22 @@ function CandidateDetailPanel({
   candidate,
   runDetail,
   language,
+  onAnalyze,
+  onCopy,
+  onExport,
+  isAnalyzing,
+  isCopied,
+  backtestUnavailableLabel,
 }: {
   candidate: ScannerCandidate;
   runDetail: ScannerRunDetail;
   language: 'zh' | 'en';
+  onAnalyze: (candidate: ScannerCandidate) => void;
+  onCopy: (candidate: ScannerCandidate) => void;
+  onExport: (candidate: ScannerCandidate) => void;
+  isAnalyzing: boolean;
+  isCopied: boolean;
+  backtestUnavailableLabel: string;
 }) {
   const candidateProvider = getProviderDiagnostics(candidate.diagnostics);
   const ai = candidate.aiInterpretation;
@@ -509,6 +637,31 @@ function CandidateDetailPanel({
       data-testid={`scanner-result-detail-${candidate.symbol}`}
       className="mt-4 grid gap-3 rounded-2xl border border-white/8 bg-black/25 p-4 md:grid-cols-2"
     >
+      <div className="md:col-span-2 flex flex-wrap gap-2">
+        <ActionButton
+          label={isAnalyzing ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
+          icon={<Play className="h-3.5 w-3.5" />}
+          onClick={() => onAnalyze(candidate)}
+          disabled={isAnalyzing}
+          variant="primary"
+        />
+        <ActionButton
+          label={isCopied ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy symbol' : '复制代码')}
+          icon={<Copy className="h-3.5 w-3.5" />}
+          onClick={() => onCopy(candidate)}
+        />
+        <ActionButton
+          label={language === 'en' ? 'Export candidate' : '导出该候选'}
+          icon={<Download className="h-3.5 w-3.5" />}
+          onClick={() => onExport(candidate)}
+        />
+        <ActionButton
+          label={language === 'en' ? 'Backtest' : '回测'}
+          icon={<TestTubeDiagonal className="h-3.5 w-3.5" />}
+          disabled
+          title={backtestUnavailableLabel}
+        />
+      </div>
       <DetailSection title={language === 'en' ? 'Key metrics' : '关键指标'}>
         <LabeledValueGrid items={candidate.keyMetrics || []} empty={language === 'en' ? 'No key metrics provided' : '未提供关键指标'} />
       </DetailSection>
@@ -674,6 +827,7 @@ const UserScannerPage: React.FC = () => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { t, language } = useI18n();
+  const navigate = useNavigate();
   const [market, setMarket] = useState<'cn' | 'us' | 'hk'>('cn');
   const [profile, setProfile] = useState('cn_preopen_v1');
   const [shortlistSize, setShortlistSize] = useState('5');
@@ -692,11 +846,14 @@ const UserScannerPage: React.FC = () => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [pageError, setPageError] = useState<ParsedApiError | null>(null);
   const [historyError, setHistoryError] = useState<ParsedApiError | null>(null);
+  const [actionNotice, setActionNotice] = useState<ActionNotice>(null);
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
+  const [pendingAnalyzeSymbol, setPendingAnalyzeSymbol] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = t('scanner.documentTitle');
@@ -921,6 +1078,64 @@ const UserScannerPage: React.FC = () => {
   }), [historyItems, t]);
   const emptyStateTitle = language === 'en' ? 'No matching scanner results' : '当前无匹配的扫描结果';
   const emptyStateBody = language === 'en' ? 'Adjust the filters on the left or try again later' : '请调整左侧参数或稍后再试';
+  const backtestUnavailableLabel = language === 'en'
+    ? 'Backtest handoff not available yet.'
+    : '回测交接暂不可用。';
+
+  const handleAnalyzeCandidate = useCallback(async (candidate: ScannerCandidate) => {
+    setPendingAnalyzeSymbol(candidate.symbol);
+    setActionNotice(null);
+    try {
+      await analysisApi.analyzeAsync({
+        stockCode: candidate.symbol,
+        reportType: 'detailed',
+        stockName: candidate.name,
+        originalQuery: candidate.symbol,
+        selectionSource: 'manual',
+      });
+      navigate(buildLocalizedPath('/', language));
+    } catch (error) {
+      if (error instanceof DuplicateTaskError) {
+        navigate(buildLocalizedPath('/', language));
+        return;
+      }
+      const parsedError = getParsedApiError(error);
+      setActionNotice({
+        tone: 'danger',
+        message: parsedError.message,
+      });
+    } finally {
+      setPendingAnalyzeSymbol((current) => (current === candidate.symbol ? null : current));
+    }
+  }, [language, navigate]);
+
+  const handleCopyText = useCallback(async (text: string, nextCopiedKey: string) => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error(language === 'en' ? 'Clipboard is not available in this browser.' : '当前浏览器不支持剪贴板。');
+      }
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(nextCopiedKey);
+      setActionNotice(null);
+    } catch (error) {
+      setActionNotice({
+        tone: 'danger',
+        message: error instanceof Error ? error.message : (language === 'en' ? 'Copy failed.' : '复制失败。'),
+      });
+    }
+  }, [language]);
+
+  const handleExportRows = useCallback((rows: ScannerExportRow[], filename: string) => {
+    try {
+      downloadScannerCsv(filename, buildScannerCsv(rows));
+      setActionNotice(null);
+    } catch (error) {
+      setActionNotice({
+        tone: 'danger',
+        message: error instanceof Error ? error.message : (language === 'en' ? 'Export failed.' : '导出失败。'),
+      });
+    }
+  }, [language]);
 
   return (
     <>
@@ -947,6 +1162,20 @@ const UserScannerPage: React.FC = () => {
           </header>
 
           {pageError ? <ApiErrorAlert error={pageError} /> : null}
+          {actionNotice ? (
+            <div
+              role={actionNotice.tone === 'danger' ? 'alert' : 'status'}
+              className={`rounded-2xl border px-4 py-3 text-sm ${
+                actionNotice.tone === 'danger'
+                  ? 'border-red-400/20 bg-red-400/10 text-red-100'
+                  : actionNotice.tone === 'warning'
+                    ? 'border-amber-400/20 bg-amber-400/10 text-amber-100'
+                    : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+              }`}
+            >
+              {actionNotice.message}
+            </div>
+          ) : null}
 
           <div className="flex w-full flex-1 min-h-0 min-w-0 flex-col gap-6 xl:flex-row">
             <section
@@ -1069,6 +1298,28 @@ const UserScannerPage: React.FC = () => {
                     >
                       {language === 'en' ? `${shortlistCount} symbols selected` : `入选 ${shortlistCount} 只标的`}
                     </span>
+                    {runDetail && sortedCandidates.length ? (
+                      <>
+                        <ActionButton
+                          label={language === 'en' ? 'Export CSV' : '导出 CSV'}
+                          icon={<Download className="h-3.5 w-3.5" />}
+                          onClick={() => handleExportRows(
+                            sortedCandidates.map((candidate) => buildScannerExportRow(candidate, runDetail, language)),
+                            buildScannerExportFilename(runDetail),
+                          )}
+                        />
+                        <ActionButton
+                          label={language === 'en' ? 'Copy all symbols' : '复制全部代码'}
+                          icon={<Copy className="h-3.5 w-3.5" />}
+                          onClick={() => void handleCopyText(sortedCandidates.map((candidate) => candidate.symbol).join(', '), 'all-symbols')}
+                        />
+                        <ActionButton
+                          label={language === 'en' ? 'Copy top 5' : '复制前 5'}
+                          icon={<Copy className="h-3.5 w-3.5" />}
+                          onClick={() => void handleCopyText(sortedCandidates.slice(0, 5).map((candidate) => candidate.symbol).join(', '), 'top-5-symbols')}
+                        />
+                      </>
+                    ) : null}
                     <button
                       ref={openHistoryDrawerButton.ref}
                       type="button"
@@ -1225,9 +1476,56 @@ const UserScannerPage: React.FC = () => {
                                 <LabeledValueGrid items={candidate.keyMetrics.slice(0, 5)} empty="" />
                               </section>
                             ) : null}
+
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              <ActionButton
+                                label={pendingAnalyzeSymbol === candidate.symbol ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
+                                icon={<Play className="h-3.5 w-3.5" />}
+                                onClick={() => void handleAnalyzeCandidate(candidate)}
+                                disabled={pendingAnalyzeSymbol === candidate.symbol}
+                                variant="primary"
+                              />
+                              <ActionButton
+                                label={copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
+                                icon={<Copy className="h-3.5 w-3.5" />}
+                                onClick={() => void handleCopyText(candidate.symbol, `candidate:${candidate.symbol}`)}
+                              />
+                              <ActionButton
+                                label={language === 'en' ? 'Export' : '导出'}
+                                icon={<Download className="h-3.5 w-3.5" />}
+                                onClick={() => {
+                                  if (!runDetail) return;
+                                  handleExportRows(
+                                    [buildScannerExportRow(candidate, runDetail, language)],
+                                    buildScannerExportFilename(runDetail, `candidate-${candidate.symbol}`),
+                                  );
+                                }}
+                              />
+                              <ActionButton
+                                label={language === 'en' ? 'Backtest' : '回测'}
+                                icon={<TestTubeDiagonal className="h-3.5 w-3.5" />}
+                                disabled
+                                title={backtestUnavailableLabel}
+                              />
+                            </div>
                           </div>
 
-                          {isExpanded && runDetail ? <CandidateDetailPanel candidate={candidate} runDetail={runDetail} language={language} /> : null}
+                          {isExpanded && runDetail ? (
+                            <CandidateDetailPanel
+                              candidate={candidate}
+                              runDetail={runDetail}
+                              language={language}
+                              onAnalyze={(nextCandidate) => void handleAnalyzeCandidate(nextCandidate)}
+                              onCopy={(nextCandidate) => void handleCopyText(nextCandidate.symbol, `candidate:${nextCandidate.symbol}`)}
+                              onExport={(nextCandidate) => handleExportRows(
+                                [buildScannerExportRow(nextCandidate, runDetail, language)],
+                                buildScannerExportFilename(runDetail, `candidate-${nextCandidate.symbol}`),
+                              )}
+                              isAnalyzing={pendingAnalyzeSymbol === candidate.symbol}
+                              isCopied={copiedKey === `candidate:${candidate.symbol}`}
+                              backtestUnavailableLabel={backtestUnavailableLabel}
+                            />
+                          ) : null}
                         </article>
                       );
                     })}
@@ -1247,6 +1545,7 @@ const UserScannerPage: React.FC = () => {
                           <th className="px-3 py-3">{language === 'en' ? 'Key reason' : '关键原因'}</th>
                           <th className="px-3 py-3">{language === 'en' ? 'Risk summary' : '风险摘要'}</th>
                           <th className="px-3 py-3">{language === 'en' ? 'Data/source' : '数据/来源'}</th>
+                          <th className="px-3 py-3">{language === 'en' ? 'Actions' : '操作'}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1273,11 +1572,51 @@ const UserScannerPage: React.FC = () => {
                                 <td className="max-w-[220px] px-3 py-3 text-white/62">{getKeyReason(candidate, runDetail, language)}</td>
                                 <td className="max-w-[180px] px-3 py-3 text-white/52">{getRiskSummary(candidate, language)}</td>
                                 <td className="max-w-[180px] px-3 py-3 text-white/42">{getSourceBadge(candidate, runDetail, language) || '--'}</td>
+                                <td className="px-3 py-3">
+                                  <div className="flex flex-wrap gap-2">
+                                    <ActionButton
+                                      label={language === 'en' ? 'Analyze' : '分析'}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        void handleAnalyzeCandidate(candidate);
+                                      }}
+                                      disabled={pendingAnalyzeSymbol === candidate.symbol}
+                                      variant="primary"
+                                    />
+                                    <ActionButton
+                                      label={copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        void handleCopyText(candidate.symbol, `candidate:${candidate.symbol}`);
+                                      }}
+                                    />
+                                    <ActionButton
+                                      label={language === 'en' ? 'Detail' : '详情'}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setExpandedSymbol(isExpanded ? null : candidate.symbol);
+                                      }}
+                                    />
+                                  </div>
+                                </td>
                               </tr>
                               {isExpanded && runDetail ? (
                                 <tr>
-                                  <td colSpan={10} className="border-b border-white/5 px-3 pb-4">
-                                    <CandidateDetailPanel candidate={candidate} runDetail={runDetail} language={language} />
+                                  <td colSpan={11} className="border-b border-white/5 px-3 pb-4">
+                                    <CandidateDetailPanel
+                                      candidate={candidate}
+                                      runDetail={runDetail}
+                                      language={language}
+                                      onAnalyze={(nextCandidate) => void handleAnalyzeCandidate(nextCandidate)}
+                                      onCopy={(nextCandidate) => void handleCopyText(nextCandidate.symbol, `candidate:${nextCandidate.symbol}`)}
+                                      onExport={(nextCandidate) => handleExportRows(
+                                        [buildScannerExportRow(nextCandidate, runDetail, language)],
+                                        buildScannerExportFilename(runDetail, `candidate-${nextCandidate.symbol}`),
+                                      )}
+                                      isAnalyzing={pendingAnalyzeSymbol === candidate.symbol}
+                                      isCopied={copiedKey === `candidate:${candidate.symbol}`}
+                                      backtestUnavailableLabel={backtestUnavailableLabel}
+                                    />
                                   </td>
                                 </tr>
                               ) : null}
