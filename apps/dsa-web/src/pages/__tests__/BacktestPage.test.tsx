@@ -952,6 +952,24 @@ describe('BacktestPage', () => {
     expect(await screen.findByDisplayValue('600001')).toBeInTheDocument();
   });
 
+  it('prefills the symbol from scanner query params and shows scanner handoff context', async () => {
+    renderBacktestRoutes(['/backtest?symbol=msft&market=US&source=scanner&scannerRunId=42&scannerRank=1&scannerProfile=us_preopen_v1']);
+
+    expect(await screen.findByDisplayValue('MSFT')).toBeInTheDocument();
+    expect(screen.getByText(/来自扫描器|From scanner/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/MSFT/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Run #42/i)).toBeInTheDocument();
+    expect(screen.getByText(/Rank #1/i)).toBeInTheDocument();
+  });
+
+  it('ignores invalid scanner query params without crashing', async () => {
+    renderBacktestRoutes(['/backtest?symbol=%20%20&market=%3F%3F&source=scanner&scannerRank=abc']);
+
+    expect(await screen.findByTestId('backtest-v1-page')).toBeInTheDocument();
+    expect(screen.getByLabelText('标的代码')).toHaveValue('');
+    expect(screen.queryByText(/来自扫描器|From scanner/i)).not.toBeInTheDocument();
+  });
+
   it('keeps normal mode compact and transitions into the pro IDE workspace', async () => {
     renderBacktestRoutes();
 

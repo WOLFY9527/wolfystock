@@ -568,13 +568,29 @@ describe('UserScannerPage', () => {
     expect(await screen.findByText('Home Landing')).toBeInTheDocument();
   });
 
-  it('shows backtest action as disabled when scanner-safe handoff is unavailable', async () => {
+  it('enables backtest action with scanner handoff query params for candidates with symbol', async () => {
     renderUserScannerPage();
 
     const card = await screen.findByTestId('scanner-result-card-NVDA');
+    const backtestLink = within(card).getByRole('link', { name: /回测|Backtest/i });
+    expect(backtestLink).toHaveAttribute(
+      'href',
+      '/zh/backtest?symbol=NVDA&source=scanner&scannerRunId=11&scannerRank=1&market=CN&scannerProfile=cn_preopen_v1&universeType=default',
+    );
+  });
+
+  it('shows backtest action as disabled when the candidate symbol is missing', async () => {
+    getRun.mockResolvedValueOnce(makeRunDetail({
+      shortlist: [
+        makeCandidate({ symbol: '', name: 'Unknown candidate', companyName: 'Unknown candidate' }),
+      ],
+    }));
+    renderUserScannerPage();
+
+    const card = await screen.findByTestId('scanner-result-card-no-symbol-1');
     const backtestButton = within(card).getByRole('button', { name: /回测|Backtest/i });
     expect(backtestButton).toBeDisabled();
-    expect(backtestButton).toHaveAttribute('title', expect.stringMatching(/not available yet|暂不可用/i));
+    expect(backtestButton).toHaveAttribute('title', expect.stringMatching(/requires a candidate symbol|候选标的代码/i));
   });
 
   it('does not expose watchlist actions when only admin or system watchlists exist', async () => {
@@ -615,6 +631,10 @@ describe('UserScannerPage', () => {
     expect(within(detail).getByRole('button', { name: /分析|Analyze/i })).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: /复制代码|Copy symbol/i })).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: /导出该候选|Export candidate/i })).toBeInTheDocument();
+    expect(within(detail).getByRole('link', { name: /回测|Backtest/i })).toHaveAttribute(
+      'href',
+      '/zh/backtest?symbol=NVDA&source=scanner&scannerRunId=11&scannerRank=1&market=CN&scannerProfile=cn_preopen_v1&universeType=default',
+    );
     expect(within(detail).getByText('Turnover')).toBeInTheDocument();
     expect(within(detail).getByText('Momentum expansion')).toBeInTheDocument();
     expect(within(detail).getByText('Backend risk: gap fade below support.')).toBeInTheDocument();

@@ -12,7 +12,7 @@ import {
   Table2,
   TestTubeDiagonal,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { scannerApi } from '../api/scanner';
@@ -53,6 +53,43 @@ type SortDirection = 'asc' | 'desc';
 type Tone = 'info' | 'success' | 'warning' | 'danger' | 'history';
 type ScanScope = 'default' | 'theme' | 'symbols';
 type ActionNotice = { tone: 'success' | 'warning' | 'danger'; message: string } | null;
+
+function normalizeCandidateSymbol(symbol?: string | null): string | null {
+  const normalized = String(symbol || '').trim().toUpperCase();
+  return normalized || null;
+}
+
+function getCandidateIdentity(candidate: ScannerCandidate): string {
+  return normalizeCandidateSymbol(candidate.symbol) || `no-symbol-${candidate.rank}`;
+}
+
+function normalizeScannerMarket(market?: string | null): string | null {
+  const normalized = String(market || '').trim().toUpperCase();
+  return normalized === 'CN' || normalized === 'US' || normalized === 'HK' ? normalized : null;
+}
+
+function buildScannerBacktestPath(
+  candidate: ScannerCandidate,
+  runDetail: ScannerRunDetail | null,
+  language: 'zh' | 'en',
+): string | null {
+  const symbol = normalizeCandidateSymbol(candidate.symbol);
+  if (!symbol || !runDetail) return null;
+
+  const params = new URLSearchParams({
+    symbol,
+    source: 'scanner',
+    scannerRunId: String(runDetail.id),
+    scannerRank: String(candidate.rank),
+  });
+  const market = normalizeScannerMarket(runDetail.market);
+  if (market) params.set('market', market);
+  if (runDetail.profile) params.set('scannerProfile', runDetail.profile);
+  if (runDetail.themeId) params.set('themeId', runDetail.themeId);
+  if (runDetail.universeType) params.set('universeType', runDetail.universeType);
+
+  return buildLocalizedPath(`/backtest?${params.toString()}`, language);
+}
 
 function ScannerEmptyState({
   title,
@@ -462,6 +499,7 @@ function ActionButton({
   label,
   icon,
   onClick,
+  href,
   disabled = false,
   title,
   variant = 'default',
@@ -469,12 +507,41 @@ function ActionButton({
 }: {
   label: string;
   icon?: React.ReactNode;
-  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onClick?: (event: React.MouseEvent<HTMLElement>) => void;
+  href?: string;
   disabled?: boolean;
   title?: string;
   variant?: 'default' | 'primary';
   testId?: string;
 }) {
+  const className = [
+    'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors',
+    variant === 'primary'
+      ? 'border-indigo-500/25 bg-indigo-500/10 text-indigo-100 hover:border-indigo-500/45 hover:bg-indigo-500/15'
+      : 'border-white/8 bg-white/[0.04] text-white/70 hover:bg-white/[0.08] hover:text-white',
+    disabled ? 'cursor-not-allowed border-white/5 bg-white/[0.02] text-white/28 hover:bg-white/[0.02] hover:text-white/28' : '',
+  ].join(' ');
+  const content = (
+    <>
+      {icon}
+      <span>{label}</span>
+    </>
+  );
+
+  if (href && !disabled) {
+    return (
+      <Link
+        to={href}
+        data-testid={testId}
+        onClick={onClick}
+        title={title}
+        className={className}
+      >
+        {content}
+      </Link>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -482,16 +549,9 @@ function ActionButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={[
-        'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors',
-        variant === 'primary'
-          ? 'border-indigo-500/25 bg-indigo-500/10 text-indigo-100 hover:border-indigo-500/45 hover:bg-indigo-500/15'
-          : 'border-white/8 bg-white/[0.04] text-white/70 hover:bg-white/[0.08] hover:text-white',
-        disabled ? 'cursor-not-allowed border-white/5 bg-white/[0.02] text-white/28 hover:bg-white/[0.02] hover:text-white/28' : '',
-      ].join(' ')}
+      className={className}
     >
-      {icon}
-      <span>{label}</span>
+      {content}
     </button>
   );
 }
@@ -614,7 +674,8 @@ function CandidateDetailPanel({
   onExport,
   isAnalyzing,
   isCopied,
-  backtestUnavailableLabel,
+  backtestActionLabel,
+  backtestHref,
 }: {
   candidate: ScannerCandidate;
   runDetail: ScannerRunDetail;
@@ -624,7 +685,8 @@ function CandidateDetailPanel({
   onExport: (candidate: ScannerCandidate) => void;
   isAnalyzing: boolean;
   isCopied: boolean;
-  backtestUnavailableLabel: string;
+  backtestActionLabel: string;
+  backtestHref: string | null;
 }) {
   const candidateProvider = getProviderDiagnostics(candidate.diagnostics);
   const ai = candidate.aiInterpretation;
@@ -634,7 +696,7 @@ function CandidateDetailPanel({
 
   return (
     <div
-      data-testid={`scanner-result-detail-${candidate.symbol}`}
+      data-testid={`scanner-result-detail-${getCandidateIdentity(candidate)}`}
       className="mt-4 grid gap-3 rounded-2xl border border-white/8 bg-black/25 p-4 md:grid-cols-2"
     >
       <div className="md:col-span-2 flex flex-wrap gap-2">
@@ -658,8 +720,9 @@ function CandidateDetailPanel({
         <ActionButton
           label={language === 'en' ? 'Backtest' : '回测'}
           icon={<TestTubeDiagonal className="h-3.5 w-3.5" />}
-          disabled
-          title={backtestUnavailableLabel}
+          href={backtestHref || undefined}
+          disabled={!backtestHref}
+          title={!backtestHref ? backtestActionLabel : undefined}
         />
       </div>
       <DetailSection title={language === 'en' ? 'Key metrics' : '关键指标'}>
@@ -1079,8 +1142,8 @@ const UserScannerPage: React.FC = () => {
   const emptyStateTitle = language === 'en' ? 'No matching scanner results' : '当前无匹配的扫描结果';
   const emptyStateBody = language === 'en' ? 'Adjust the filters on the left or try again later' : '请调整左侧参数或稍后再试';
   const backtestUnavailableLabel = language === 'en'
-    ? 'Backtest handoff not available yet.'
-    : '回测交接暂不可用。';
+    ? 'Backtest handoff requires a candidate symbol.'
+    : '回测交接需要候选标的代码。';
 
   const handleAnalyzeCandidate = useCallback(async (candidate: ScannerCandidate) => {
     setPendingAnalyzeSymbol(candidate.symbol);
@@ -1391,14 +1454,16 @@ const UserScannerPage: React.FC = () => {
                   <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                     {sortedCandidates.map((candidate) => {
                       const isExpanded = expandedSymbol === candidate.symbol;
+                      const candidateIdentity = getCandidateIdentity(candidate);
+                      const backtestHref = buildScannerBacktestPath(candidate, runDetail, language);
                       const entryRange = getEntryRange(candidate);
                       const targetPrice = getTargetPrice(candidate);
                       const stopLoss = getStopLoss(candidate);
                       const sourceBadge = getSourceBadge(candidate, runDetail, language);
                       return (
                         <article
-                          key={`watchlist-${candidate.symbol}`}
-                          data-testid={`scanner-result-card-${candidate.symbol}`}
+                          key={`watchlist-${candidateIdentity}`}
+                          data-testid={`scanner-result-card-${candidateIdentity}`}
                           className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 transition-colors hover:border-white/16 hover:bg-white/[0.04]"
                         >
                           <div className="flex justify-between items-start gap-4">
@@ -1504,8 +1569,9 @@ const UserScannerPage: React.FC = () => {
                               <ActionButton
                                 label={language === 'en' ? 'Backtest' : '回测'}
                                 icon={<TestTubeDiagonal className="h-3.5 w-3.5" />}
-                                disabled
-                                title={backtestUnavailableLabel}
+                                href={backtestHref || undefined}
+                                disabled={!backtestHref}
+                                title={!backtestHref ? backtestUnavailableLabel : undefined}
                               />
                             </div>
                           </div>
@@ -1523,7 +1589,8 @@ const UserScannerPage: React.FC = () => {
                               )}
                               isAnalyzing={pendingAnalyzeSymbol === candidate.symbol}
                               isCopied={copiedKey === `candidate:${candidate.symbol}`}
-                              backtestUnavailableLabel={backtestUnavailableLabel}
+                              backtestActionLabel={backtestUnavailableLabel}
+                              backtestHref={backtestHref}
                             />
                           ) : null}
                         </article>
@@ -1551,10 +1618,12 @@ const UserScannerPage: React.FC = () => {
                       <tbody>
                         {sortedCandidates.map((candidate) => {
                           const isExpanded = expandedSymbol === candidate.symbol;
+                          const candidateIdentity = getCandidateIdentity(candidate);
+                          const backtestHref = buildScannerBacktestPath(candidate, runDetail, language);
                           return (
-                            <React.Fragment key={`table-${candidate.symbol}`}>
+                            <React.Fragment key={`table-${candidateIdentity}`}>
                               <tr
-                                data-testid={`scanner-result-row-${candidate.symbol}`}
+                                data-testid={`scanner-result-row-${candidateIdentity}`}
                                 className="cursor-pointer border-b border-white/5 text-white/72 hover:bg-white/[0.035]"
                                 onClick={() => setExpandedSymbol(isExpanded ? null : candidate.symbol)}
                               >
@@ -1597,6 +1666,15 @@ const UserScannerPage: React.FC = () => {
                                         setExpandedSymbol(isExpanded ? null : candidate.symbol);
                                       }}
                                     />
+                                    <ActionButton
+                                      label={language === 'en' ? 'Backtest' : '回测'}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                      }}
+                                      href={backtestHref || undefined}
+                                      disabled={!backtestHref}
+                                      title={!backtestHref ? backtestUnavailableLabel : undefined}
+                                    />
                                   </div>
                                 </td>
                               </tr>
@@ -1615,7 +1693,8 @@ const UserScannerPage: React.FC = () => {
                                       )}
                                       isAnalyzing={pendingAnalyzeSymbol === candidate.symbol}
                                       isCopied={copiedKey === `candidate:${candidate.symbol}`}
-                                      backtestUnavailableLabel={backtestUnavailableLabel}
+                                      backtestActionLabel={backtestUnavailableLabel}
+                                      backtestHref={backtestHref}
                                     />
                                   </td>
                                 </tr>

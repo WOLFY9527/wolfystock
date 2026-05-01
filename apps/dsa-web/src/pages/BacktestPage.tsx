@@ -54,6 +54,16 @@ type BacktestPageLocationState = {
   prefillName?: string;
 };
 
+type ScannerBacktestHandoff = {
+  symbol: string;
+  market: 'CN' | 'US' | 'HK' | null;
+  scannerRunId: number | null;
+  scannerRank: number | null;
+  scannerProfile: string | null;
+  themeId: string | null;
+  universeType: string | null;
+};
+
 type PerformanceNotice = {
   tone: 'warning' | 'danger';
   message: string;
@@ -84,6 +94,42 @@ function buildRuleParseSignature(payload: {
   });
 }
 
+function normalizeBacktestSymbol(value?: string | null): string | null {
+  const normalized = String(value || '').trim().toUpperCase();
+  return normalized || null;
+}
+
+function normalizeBacktestMarket(value?: string | null): ScannerBacktestHandoff['market'] {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (normalized === 'CN' || normalized === 'US' || normalized === 'HK') {
+    return normalized;
+  }
+  return null;
+}
+
+function parsePositiveInteger(value?: string | null): number | null {
+  const parsed = Number.parseInt(String(value || '').trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseScannerBacktestHandoff(search: string): ScannerBacktestHandoff | null {
+  const params = new URLSearchParams(search);
+  if (params.get('source') !== 'scanner') return null;
+
+  const symbol = normalizeBacktestSymbol(params.get('symbol'));
+  if (!symbol) return null;
+
+  return {
+    symbol,
+    market: normalizeBacktestMarket(params.get('market')),
+    scannerRunId: parsePositiveInteger(params.get('scannerRunId')),
+    scannerRank: parsePositiveInteger(params.get('scannerRank')),
+    scannerProfile: params.get('scannerProfile')?.trim() || null,
+    themeId: params.get('themeId')?.trim() || null,
+    universeType: params.get('universeType')?.trim() || null,
+  };
+}
+
 const WORKBENCH_PANEL_TRANSITION = {
   duration: 0.26,
   ease: [0.22, 1, 0.36, 1] as const,
@@ -95,6 +141,7 @@ const BacktestPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { language } = useI18n();
+  const scannerHandoff = useMemo(() => parseScannerBacktestHandoff(location.search), [location.search]);
 
   useEffect(() => {
     document.title = bt(language, 'page.documentTitle');
@@ -509,12 +556,19 @@ const BacktestPage: React.FC = () => {
       return;
     }
 
+    if (scannerHandoff?.symbol) {
+      setActiveModule('rule');
+      setControlPanelMode('normal');
+      setCodeFilter(scannerHandoff.symbol);
+      return;
+    }
+
     const prefillCode = state?.prefillCode?.trim().toUpperCase();
     if (!prefillCode) return;
 
     setActiveModule('rule');
     setCodeFilter(prefillCode);
-  }, [applyRuleRunDraft, location.state]);
+  }, [applyRuleRunDraft, location.state, scannerHandoff]);
 
   const fetchPerformance = useCallback(async (code?: string, windowBars?: number, options: { showNotice?: boolean } = {}) => {
     const { showNotice = true } = options;
@@ -1190,6 +1244,18 @@ const BacktestPage: React.FC = () => {
         data-testid="backtest-v1-page"
         className="w-full flex-1 min-w-0 flex flex-col gap-6 bg-transparent"
       >
+        {scannerHandoff ? (
+          <section className="rounded-[24px] border border-sky-400/15 bg-sky-400/10 px-4 py-3 text-sm text-sky-50">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold">{language === 'en' ? 'From scanner' : '来自扫描器'}</span>
+              <span>{scannerHandoff.symbol}</span>
+              {scannerHandoff.market ? <span className="text-sky-100/75">· {scannerHandoff.market}</span> : null}
+              {scannerHandoff.scannerRunId ? <span className="text-sky-100/75">· Run #{scannerHandoff.scannerRunId}</span> : null}
+              {scannerHandoff.scannerRank ? <span className="text-sky-100/75">· Rank #{scannerHandoff.scannerRank}</span> : null}
+              {scannerHandoff.scannerProfile ? <span className="text-sky-100/75">· {scannerHandoff.scannerProfile}</span> : null}
+            </div>
+          </section>
+        ) : null}
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={activeModule === 'rule' ? `${activeModule}-${controlPanelMode}` : activeModule}
