@@ -1,5 +1,7 @@
 ## 2026-05-01
 
+- 📌 **观察列表新增候选追踪工作台** — `apps/dsa-web` 新增 `/watchlist` / `/:locale/watchlist` 页面与主导航入口，登录用户可集中查看 scanner 保存的候选，按代码/名称搜索，按市场、来源、主题或候选范围筛选，并按最新、扫描分数、代码或市场排序。页面展示总数、覆盖市场、scanner 来源和近期新增摘要，保留 run id、rank、score、theme、universe type 等扫描上下文，并复用既有分析触发、scanner-to-backtest query handoff、复制代码和 watchlist remove API。游客访问时继续显示登录保护，不开放持久观察名单。
+
 - 📝 **Scanner 候选加入用户观察名单** — Scanner 结果页新增用户级 `Track / 已追踪` 动作，支持把候选保存到当前登录用户自己的观察名单，并在卡片/表格/详情里同步显示已追踪状态；后端新增独立的 `/api/v1/watchlist/items` 读写接口与 `user_watchlist_items` 持久化表，继续与现有 scanner admin/system watchlist endpoints 分离。该能力仅面向已认证用户，按 `owner_id + symbol + market` 做用户内幂等保存，并在 execution logs 中记录 watchlist add/remove 审计事件。
 
 - 🧭 **Market Scanner 主题与自定义标的池** — Scanner 新增 `/api/v1/scanner/themes` 主题池接口，手动扫描请求支持 `universe_type=theme|symbols`、`theme_id` 与自定义 `symbols`，并在运行详情/历史中返回主题、自定义代码数量与无效代码等 universe metadata。首批美股主题提供 crypto miners、memory/storage、AI semiconductors 的人工 seed list；A 股光模块/CPO、液冷、算力租赁、存储、半导体设备、机器人主题先作为未配置占位池暴露，明确要求人工维护，不冒充完整权威成分。

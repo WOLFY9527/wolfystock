@@ -14,6 +14,7 @@ import {
   LogOut,
   MessageSquareText,
   Radar,
+  ListChecks,
   Settings2,
   ShieldCheck,
   TestTubeDiagonal,
@@ -68,6 +69,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'chat', labelKey: 'nav.chat', to: '/chat', icon: MessageSquareText, badge: 'completion' },
   { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', icon: BriefcaseBusiness },
   { key: 'market-overview', labelKey: 'nav.marketOverview', to: '/market-overview', icon: Activity },
+  { key: 'watchlist', labelKey: 'nav.watchlist', to: '/watchlist', icon: ListChecks },
   { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', icon: TestTubeDiagonal },
 ];
 

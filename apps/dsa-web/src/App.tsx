@@ -34,6 +34,7 @@ const PreviewFullReportDrawerPage = lazy(() => import('./pages/PreviewFullReport
 const ChatPage = lazy(() => import('./pages/ChatPage'));
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage'));
 const MarketOverviewPage = lazy(() => import('./pages/MarketOverviewPage'));
+const WatchlistPage = lazy(() => import('./pages/WatchlistPage'));
 const BacktestPage = lazy(() => import('./pages/BacktestPage'));
 const RuleBacktestComparePage = lazy(() => import('./pages/RuleBacktestComparePage'));
 const DeterministicBacktestResultPage = lazy(() => import('./pages/DeterministicBacktestResultPage'));
@@ -171,6 +172,8 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
     moduleName = language === 'en' ? 'Ask Stock' : '问股';
   } else if (routePathname.startsWith('/portfolio')) {
     moduleName = language === 'en' ? 'Portfolio' : '持仓管理';
+  } else if (routePathname.startsWith('/watchlist')) {
+    moduleName = language === 'en' ? 'Watchlist' : '观察列表';
   } else if (routePathname.startsWith('/backtest')) {
     moduleName = language === 'en' ? 'Backtest' : '回测';
   }
@@ -338,6 +341,7 @@ export const AppContent: React.FC = () => {
               <Route path="/chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
               <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
               <Route path="/market-overview" element={<RegisteredSurfaceRoute><MarketOverviewPage /></RegisteredSurfaceRoute>} />
+              <Route path="/watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
               <Route path="/backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
               <Route path="/backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
               <Route path="/backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
@@ -353,6 +357,7 @@ export const AppContent: React.FC = () => {
               <Route path="chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
               <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
               <Route path="market-overview" element={<RegisteredSurfaceRoute><MarketOverviewPage /></RegisteredSurfaceRoute>} />
+              <Route path="watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
               <Route path="backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
               <Route path="backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
               <Route path="backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
