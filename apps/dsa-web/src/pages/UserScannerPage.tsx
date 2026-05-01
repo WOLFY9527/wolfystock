@@ -11,6 +11,7 @@ import {
   LayoutGrid,
   PanelRightOpen,
   Play,
+  Sparkles,
   Table2,
   TestTubeDiagonal,
 } from 'lucide-react';
@@ -36,6 +37,7 @@ import type {
   ScannerReviewSummary,
   ScannerRunDetail,
   ScannerRunHistoryItem,
+  ScannerThemeSuggestion,
   ScannerTheme,
   ScannerWatchlistComparison,
 } from '../types/scanner';
@@ -327,6 +329,16 @@ function parseCustomSymbols(value: string): string[] {
 
 function getThemeLabel(theme: ScannerTheme, language: 'zh' | 'en'): string {
   return language === 'en' ? theme.labelEn : theme.labelZh;
+}
+
+function buildCustomThemeId(label: string): string {
+  const slug = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 48);
+  return `custom_${slug || 'scanner_theme'}`;
 }
 
 function hasReviewSummary(review?: ScannerReviewSummary | null): boolean {
@@ -900,6 +912,11 @@ const UserScannerPage: React.FC = () => {
   const [scanScope, setScanScope] = useState<ScanScope>('default');
   const [themes, setThemes] = useState<ScannerTheme[]>([]);
   const [themeId, setThemeId] = useState('');
+  const [customThemeLabel, setCustomThemeLabel] = useState('');
+  const [customThemePrompt, setCustomThemePrompt] = useState('');
+  const [customThemeManualSymbols, setCustomThemeManualSymbols] = useState('');
+  const [themeSuggestions, setThemeSuggestions] = useState<ScannerThemeSuggestion[]>([]);
+  const [isGeneratingTheme, setIsGeneratingTheme] = useState(false);
   const [customSymbols, setCustomSymbols] = useState('');
   const [runDetail, setRunDetail] = useState<ScannerRunDetail | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
@@ -946,6 +963,7 @@ const UserScannerPage: React.FC = () => {
     [marketThemes, themeId],
   );
   const parsedCustomSymbols = useMemo(() => parseCustomSymbols(customSymbols), [customSymbols]);
+  const parsedThemeManualSymbols = useMemo(() => parseCustomSymbols(customThemeManualSymbols), [customThemeManualSymbols]);
 
   const handleMarketChange = useCallback((nextMarket: string) => {
     const normalizedMarket = nextMarket === 'us' ? 'us' : nextMarket === 'hk' ? 'hk' : 'cn';
@@ -1082,6 +1100,37 @@ const UserScannerPage: React.FC = () => {
     }
   }, [detailLimit, fetchHistory, market, parsedCustomSymbols, profile, scanScope, shortlistSize, themeId, universeLimit]);
 
+  const handleGenerateTheme = useCallback(async () => {
+    setIsGeneratingTheme(true);
+    try {
+      const label = customThemeLabel.trim();
+      const response = await scannerApi.createTheme({
+        id: buildCustomThemeId(label),
+        label,
+        market,
+        prompt: customThemePrompt,
+        manualSymbols: parsedThemeManualSymbols,
+      });
+      setThemes((current) => [
+        ...current.filter((theme) => theme.id !== response.theme.id),
+        response.theme,
+      ]);
+      setThemeId(response.theme.id);
+      setThemeSuggestions(response.suggestions || []);
+      setActionNotice({
+        tone: 'success',
+        message: language === 'en'
+          ? `Generated ${response.theme.symbols.length} symbols for ${getThemeLabel(response.theme, language)}.`
+          : `已为 ${getThemeLabel(response.theme, language)} 生成 ${response.theme.symbols.length} 个标的。`,
+      });
+      setPageError(null);
+    } catch (error) {
+      setPageError(getParsedApiError(error));
+    } finally {
+      setIsGeneratingTheme(false);
+    }
+  }, [customThemeLabel, customThemePrompt, language, market, parsedThemeManualSymbols]);
+
   const handleSortChange = useCallback((nextSortKey: SortKey) => {
     if (sortKey === nextSortKey) {
       setSortDirection((current) => current === 'asc' ? 'desc' : 'asc');
@@ -1102,12 +1151,18 @@ const UserScannerPage: React.FC = () => {
   const runScannerButton = useSafariWarmActivation<HTMLButtonElement>(() => {
     void handleRun();
   });
+  const generateThemeButton = useSafariWarmActivation<HTMLButtonElement>(() => {
+    void handleGenerateTheme();
+  });
   const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setIsHistoryDrawerOpen(true));
   const shortlistCount = runDetail?.shortlist?.length ?? 0;
   const generatedAt = runDetail?.completedAt || runDetail?.runAt || null;
   const runDisabled = isRunning
     || (scanScope === 'theme' && (!selectedTheme || selectedTheme.symbols.length === 0))
     || (scanScope === 'symbols' && parsedCustomSymbols.length === 0);
+  const generateThemeDisabled = isGeneratingTheme
+    || customThemeLabel.trim().length < 2
+    || customThemePrompt.trim().length < 12;
 
   const sortedCandidates = useMemo(() => {
     const candidates = [...(runDetail?.shortlist || [])];
@@ -1353,6 +1408,58 @@ const UserScannerPage: React.FC = () => {
                           {language === 'en' ? 'This theme is not configured yet.' : '该主题尚未配置成分股。'}
                         </p>
                       ) : null}
+                      <div className="mt-2 flex flex-col gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-2.5" data-testid="scanner-ai-theme-builder">
+                        <div className="flex items-center gap-2 text-[11px] font-medium text-white/70">
+                          <Sparkles className="h-3.5 w-3.5 text-indigo-200/80" aria-hidden="true" />
+                          <span>{language === 'en' ? 'AI custom theme' : 'AI 自定义主题'}</span>
+                        </div>
+                        <input
+                          data-testid="scanner-ai-theme-label-input"
+                          value={customThemeLabel}
+                          onChange={(event) => setCustomThemeLabel(event.target.value)}
+                          placeholder={language === 'en' ? 'White House Stocks' : 'White House Stocks'}
+                          className="w-full rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
+                        />
+                        <textarea
+                          data-testid="scanner-ai-theme-prompt-input"
+                          value={customThemePrompt}
+                          onChange={(event) => setCustomThemePrompt(event.target.value)}
+                          rows={3}
+                          placeholder={language === 'en' ? 'Stocks associated with White House policy, federal contracts, and government decisions.' : '例如：与白宫政策、联邦合同和政府决策相关的股票。'}
+                          className="w-full resize-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
+                        />
+                        <input
+                          data-testid="scanner-ai-theme-manual-symbols-input"
+                          value={customThemeManualSymbols}
+                          onChange={(event) => setCustomThemeManualSymbols(event.target.value)}
+                          placeholder={language === 'en' ? 'Optional: add symbols, e.g. NVDA PLTR' : '可选：手动补充代码，例如 NVDA PLTR'}
+                          className="w-full rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
+                        />
+                        <button
+                          ref={generateThemeButton.ref}
+                          type="button"
+                          disabled={generateThemeDisabled}
+                          onPointerUp={generateThemeButton.onPointerUp}
+                          onClick={generateThemeButton.onClick}
+                          className="inline-flex h-8 items-center justify-center gap-2 rounded-lg border border-indigo-300/20 bg-indigo-300/10 px-3 text-xs font-medium text-indigo-100 transition hover:border-indigo-200/35 hover:bg-indigo-300/15 disabled:cursor-not-allowed disabled:opacity-45"
+                        >
+                          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>{isGeneratingTheme ? (language === 'en' ? 'Generating...' : '生成中...') : (language === 'en' ? 'Generate theme' : '生成主题')}</span>
+                        </button>
+                        {themeSuggestions.length ? (
+                          <div className="flex flex-col gap-1.5" data-testid="scanner-ai-theme-suggestions">
+                            {themeSuggestions.slice(0, 6).map((suggestion) => (
+                              <div key={suggestion.symbol} className="rounded-lg border border-white/5 bg-black/20 px-2.5 py-1.5">
+                                <div className="flex items-center justify-between gap-2 text-[11px] text-white/75">
+                                  <span className="font-semibold text-white">{suggestion.symbol}</span>
+                                  <span>{Math.round(suggestion.confidence * 100)}%</span>
+                                </div>
+                                <p className="mt-1 text-[10px] leading-snug text-white/45">{suggestion.reason}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
                   {scanScope === 'symbols' ? (

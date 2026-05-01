@@ -205,6 +205,18 @@ AI is additive rather than mandatory:
 
 The recommended default is still a small bounded top-N coverage to keep latency and cost predictable.
 
+### AI Custom Theme Expansion
+
+`/scanner` can now generate a runtime custom theme from user criteria. The user enters a label, prompt, and optional manual symbols in the Theme universe panel, for example:
+
+- `White House Stocks`: stocks associated with White House policy, federal contracts, or government decisions
+- `AI Semiconductor Stocks`: AI accelerator and semiconductor supply-chain exposure
+- `Green Energy Stocks`: solar, renewables, and clean-energy policy exposure
+
+The API endpoint is `POST /api/v1/scanner/themes`. It returns the generated theme, symbol suggestions, confidence values, and evidence labels. Generated themes are marked with `source=ai_generated`, `is_seed_list=false`, `requires_manual_maintenance=true`, and `refresh_policy=on_demand`.
+
+This is an expansion layer for building a theme universe. It does not replace deterministic scanner ranking, and users should review or manually adjust the generated symbols before running the scanner.
+
 ## Run Diagnostics And Admin Observability
 
 `/scanner` now exposes a compact run-diagnostics block so the page is not just a final-result view:

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 from fastapi import HTTPException
 
 from api.v1.endpoints.scanner import (
+    create_scanner_theme,
     get_scanner_themes,
     get_recent_watchlists,
     get_market_scan_run,
@@ -17,7 +18,7 @@ from api.v1.endpoints.scanner import (
     get_today_watchlist,
     run_market_scan,
 )
-from api.v1.schemas.scanner import ScannerRunRequest
+from api.v1.schemas.scanner import ScannerRunRequest, ScannerThemeGenerateRequest
 
 
 def _make_candidate(symbol: str, rank: int, *, benchmark_code: str = "000300") -> dict:
@@ -347,6 +348,42 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
         self.assertEqual(cpo_cn.market, "cn")
         self.assertEqual(cpo_cn.symbols, [])
         self.assertTrue(cpo_cn.requires_manual_maintenance)
+
+    def test_create_scanner_theme_generates_ai_backed_custom_universe(self) -> None:
+        response = create_scanner_theme(
+            ScannerThemeGenerateRequest(
+                id="white_house_stocks_test",
+                label="White House Stocks",
+                market="us",
+                prompt="Stocks associated with White House policy, federal contracts, and government decisions.",
+            )
+        )
+
+        self.assertEqual(response.theme.id, "white_house_stocks_test")
+        self.assertEqual(response.theme.market, "us")
+        self.assertFalse(response.theme.is_seed_list)
+        self.assertEqual(response.theme.source, "ai_generated")
+        self.assertIn("PLTR", response.theme.symbols)
+        self.assertGreaterEqual(len(response.suggestions), 1)
+        self.assertIn("federal", response.message.lower())
+
+        themes = get_scanner_themes(market="us")
+        generated = next(item for item in themes.items if item.id == "white_house_stocks_test")
+        self.assertIn("PLTR", generated.symbols)
+
+    def test_create_scanner_theme_rejects_invalid_theme_id(self) -> None:
+        with self.assertRaises(HTTPException) as context:
+            create_scanner_theme(
+                ScannerThemeGenerateRequest(
+                    id="White House!",
+                    label="White House Stocks",
+                    market="us",
+                    prompt="Stocks associated with White House policy and government decisions.",
+                )
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn("theme id", str(context.exception.detail).lower())
 
     def test_run_market_scan_passes_theme_universe_request_to_service(self) -> None:
         service = MagicMock()

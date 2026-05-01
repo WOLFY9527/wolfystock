@@ -22,9 +22,11 @@ from api.v1.schemas.scanner import (
     ScannerRunDetailResponse,
     ScannerRunHistoryResponse,
     ScannerRunRequest,
+    ScannerThemeGenerateRequest,
+    ScannerThemeGenerationResponse,
     ScannerThemesResponse,
 )
-from src.core.scanner_theme_registry import list_scanner_themes
+from src.core.scanner_theme_registry import create_ai_scanner_theme, list_scanner_themes
 from src.services.market_scanner_ops_service import MarketScannerOperationsService
 from src.services.market_scanner_service import MarketScannerService
 from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER
@@ -163,6 +165,40 @@ def get_scanner_themes(
     return ScannerThemesResponse(
         items=[theme.to_dict() for theme in list_scanner_themes(market=normalized_market)]
     )
+
+
+@router.post(
+    "/themes",
+    response_model=ScannerThemeGenerationResponse,
+    responses={
+        200: {"description": "AI-generated custom scanner theme"},
+        400: {"description": "请求参数错误", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="创建 AI Scanner 自定义主题",
+    description="根据用户输入的主题 criteria 生成一个可复核的自定义 scanner 标的池，并注册到当前运行时 theme registry。",
+)
+def create_scanner_theme(
+    request: ScannerThemeGenerateRequest,
+) -> ScannerThemeGenerationResponse:
+    def _operation() -> ScannerThemeGenerationResponse:
+        theme, suggestions = create_ai_scanner_theme(
+            theme_id=request.id,
+            label=request.label,
+            market=request.market,
+            prompt=request.prompt,
+            manual_symbols=request.manual_symbols,
+        )
+        return ScannerThemeGenerationResponse(
+            theme=theme.to_dict(),
+            suggestions=[suggestion.to_dict() for suggestion in suggestions],
+            message=(
+                f"Generated {len(suggestions)} symbols from AI theme criteria and federal/sector "
+                "matching heuristics. Review selections before running scanner."
+            ),
+        )
+
+    return _run_endpoint("创建 AI scanner theme 失败", _operation)
 
 
 @router.get(

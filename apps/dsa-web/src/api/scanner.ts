@@ -2,6 +2,8 @@ import apiClient from './index';
 import { toCamelCase } from './utils';
 import type {
   ScannerOperationalStatus,
+  ScannerThemeGenerateRequest,
+  ScannerThemeGenerationResponse,
   ScannerRunDetail,
   ScannerRunHistoryResponse,
   ScannerRunRequest,
@@ -37,6 +39,21 @@ export const scannerApi = {
       },
     );
     return toCamelCase<ScannerThemesResponse>(response.data);
+  },
+
+  createTheme: async (params: ScannerThemeGenerateRequest): Promise<ScannerThemeGenerationResponse> => {
+    const response = await apiClient.post<Record<string, unknown>>(
+      '/api/v1/scanner/themes',
+      {
+        id: params.id,
+        label: params.label,
+        market: params.market,
+        prompt: params.prompt,
+        manual_symbols: params.manualSymbols || [],
+      },
+      { timeout: 120000 },
+    );
+    return toCamelCase<ScannerThemeGenerationResponse>(response.data);
   },
 
   getRuns: async (params: {

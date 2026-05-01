@@ -16,6 +16,7 @@ import pandas as pd
 from data_provider.base import BaseFetcher, DataFetchError, DataFetcherManager, normalize_stock_code
 from src.repositories.stock_repo import StockRepository
 from src.core.scanner_profile import get_scanner_profile
+from src.core.scanner_theme_registry import create_ai_scanner_theme
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
 from src.storage import DatabaseManager, MarketScannerRun
 
@@ -823,6 +824,37 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["universe_type"], "symbols")
         self.assertEqual(detail["requested_symbols_count"], 3)
         self.assertEqual(detail["accepted_symbols_count"], 2)
+
+    def test_run_scan_uses_ai_generated_custom_theme_universe(self) -> None:
+        seed_us_local_history(self.stock_repo)
+        create_ai_scanner_theme(
+            theme_id="white_house_service_test",
+            label="White House Stocks",
+            market="us",
+            prompt="Stocks associated with White House policy, federal contracts, and government decisions.",
+            manual_symbols=["NVDA"],
+        )
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeUsScannerDataManager(),
+        )
+
+        result = service.run_scan(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=2,
+            universe_limit=50,
+            detail_limit=10,
+            universe_type="theme",
+            theme_id="white_house_service_test",
+        )
+
+        universe = result["diagnostics"]["universe_selection"]
+        self.assertEqual(universe["universe_type"], "theme")
+        self.assertEqual(universe["theme_id"], "white_house_service_test")
+        self.assertIn("NVDA", universe["accepted_symbols"])
+        self.assertIn("PLTR", universe["accepted_symbols"])
+        self.assertLessEqual({item["symbol"] for item in result["shortlist"]}, set(universe["accepted_symbols"]))
 
     def test_run_scan_rejects_invalid_or_empty_theme_universe(self) -> None:
         service = MarketScannerService(

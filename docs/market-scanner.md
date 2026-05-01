@@ -223,6 +223,18 @@ AI 只是附加层，不是 Scanner 成功运行的前提：
 - 若 AI provider/model 暂时不可用，候选会显示明确 fallback 文案，而不是模糊失败
 - Web `/scanner` 的运行时诊断会显示 AI 是否启用、运行状态、覆盖候选数、使用的模型以及是否发生 fallback
 
+### AI 自定义主题扩展
+
+`/scanner` 现在支持根据用户 criteria 生成运行时自定义主题。用户可以在 Theme universe 面板输入主题名称、prompt 和可选手动补充代码，例如：
+
+- `White House Stocks`：与白宫政策、联邦合同或政府决策相关的股票
+- `AI Semiconductor Stocks`：AI 加速器与半导体供应链标的
+- `Green Energy Stocks`：太阳能、可再生能源和清洁能源政策相关标的
+
+后端接口为 `POST /api/v1/scanner/themes`，返回生成后的 theme、symbol suggestions、confidence 与 evidence 标签。生成主题会标记为 `source=ai_generated`、`is_seed_list=false`、`requires_manual_maintenance=true` 与 `refresh_policy=on_demand`。
+
+该能力只用于扩展 theme universe，不替代 deterministic scanner 排名。用户应先复核或手动调整 AI 生成的代码，再运行 scanner。
+
 ## Run 诊断与 Admin Observability
 
 当前 `/scanner` 会为每次 run 额外展示一组紧凑的 explainability 诊断，而不是只展示最终 shortlist：

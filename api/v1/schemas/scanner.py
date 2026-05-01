@@ -54,10 +54,46 @@ class ScannerThemeResponse(BaseModel):
     version: str
     is_seed_list: bool = True
     requires_manual_maintenance: bool = False
+    criteria_prompt: Optional[str] = None
+    generated_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    refresh_policy: Optional[str] = None
+    ai_metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ScannerThemesResponse(BaseModel):
     items: List[ScannerThemeResponse] = Field(default_factory=list)
+
+
+class ScannerThemeGenerateRequest(BaseModel):
+    id: str = Field(..., min_length=3, max_length=64, description="Custom theme id, lowercase snake_case")
+    label: str = Field(..., min_length=2, max_length=80, description="User-facing custom theme label")
+    market: Literal["cn", "us", "hk"] = Field("us", description="Target market for generated symbols")
+    prompt: str = Field(..., min_length=12, max_length=600, description="Theme criteria prompt")
+    manual_symbols: List[str] = Field(default_factory=list, max_length=200, description="Optional manually added symbols")
+
+    @field_validator("id")
+    @classmethod
+    def _normalize_id(cls, value: str) -> str:
+        return str(value or "").strip().lower()
+
+    @field_validator("manual_symbols", mode="before")
+    @classmethod
+    def _normalize_manual_symbols(cls, value: Any) -> List[str]:
+        return ScannerRunRequest._normalize_symbols(value)
+
+
+class ScannerThemeSuggestionResponse(BaseModel):
+    symbol: str
+    reason: str
+    confidence: float
+    evidence: List[str] = Field(default_factory=list)
+
+
+class ScannerThemeGenerationResponse(BaseModel):
+    theme: ScannerThemeResponse
+    suggestions: List[ScannerThemeSuggestionResponse] = Field(default_factory=list)
+    message: str
 
 
 class ScannerLabeledValue(BaseModel):

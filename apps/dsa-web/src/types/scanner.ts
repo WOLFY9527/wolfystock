@@ -22,10 +22,36 @@ export interface ScannerTheme {
   version: string;
   isSeedList: boolean;
   requiresManualMaintenance: boolean;
+  criteriaPrompt?: string | null;
+  generatedAt?: string | null;
+  updatedAt?: string | null;
+  refreshPolicy?: string | null;
+  aiMetadata?: Record<string, unknown>;
 }
 
 export interface ScannerThemesResponse {
   items: ScannerTheme[];
+}
+
+export interface ScannerThemeSuggestion {
+  symbol: string;
+  reason: string;
+  confidence: number;
+  evidence: string[];
+}
+
+export interface ScannerThemeGenerateRequest {
+  id: string;
+  label: string;
+  market: 'cn' | 'us' | 'hk';
+  prompt: string;
+  manualSymbols?: string[];
+}
+
+export interface ScannerThemeGenerationResponse {
+  theme: ScannerTheme;
+  suggestions: ScannerThemeSuggestion[];
+  message: string;
 }
 
 export interface ScannerLabeledValue {

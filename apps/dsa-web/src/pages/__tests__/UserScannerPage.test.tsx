@@ -12,10 +12,11 @@ import type {
 } from '../../types/scanner';
 import type { WatchlistItem } from '../../types/watchlist';
 
-const { getRuns, getRun, getThemes, runScan, analyzeAsync, listWatchlistItems, addWatchlistItem, removeWatchlistItem } = vi.hoisted(() => ({
+const { getRuns, getRun, getThemes, createTheme, runScan, analyzeAsync, listWatchlistItems, addWatchlistItem, removeWatchlistItem } = vi.hoisted(() => ({
   getRuns: vi.fn(),
   getRun: vi.fn(),
   getThemes: vi.fn(),
+  createTheme: vi.fn(),
   runScan: vi.fn(),
   analyzeAsync: vi.fn(),
   listWatchlistItems: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('../../api/scanner', () => ({
     getRuns,
     getRun,
     getThemes,
+    createTheme,
     run: runScan,
   },
 }));
@@ -425,6 +427,7 @@ describe('UserScannerPage', () => {
     getRuns.mockReset();
     getRun.mockReset();
     getThemes.mockReset();
+    createTheme.mockReset();
     runScan.mockReset();
     analyzeAsync.mockReset();
     listWatchlistItems.mockReset();
@@ -493,6 +496,36 @@ describe('UserScannerPage', () => {
     });
     getRuns.mockResolvedValue(makeHistoryResponse());
     getRun.mockResolvedValue(makeRunDetail());
+    createTheme.mockResolvedValue({
+      theme: {
+        id: 'custom_white_house_stocks',
+        labelZh: 'White House Stocks',
+        labelEn: 'White House Stocks',
+        market: 'us',
+        description: 'AI-generated custom scanner theme.',
+        symbols: ['PLTR', 'LMT', 'RTX'],
+        aliases: ['White House Stocks'],
+        tags: ['custom', 'ai-generated', 'us'],
+        source: 'ai_generated',
+        version: '2026-05-02',
+        isSeedList: false,
+        requiresManualMaintenance: true,
+        criteriaPrompt: 'Stocks associated with White House policy, federal contracts, and government decisions.',
+        generatedAt: '2026-05-02T00:00:00Z',
+        updatedAt: '2026-05-02T00:00:00Z',
+        refreshPolicy: 'on_demand',
+        aiMetadata: { status: 'generated' },
+      },
+      suggestions: [
+        {
+          symbol: 'PLTR',
+          reason: 'Federal analytics and defense contracts.',
+          confidence: 0.86,
+          evidence: ['federal contracts'],
+        },
+      ],
+      message: 'Generated 3 symbols.',
+    });
     runScan.mockResolvedValue(makeRunDetail());
     analyzeAsync.mockResolvedValue({ taskId: 'task-1' });
     listWatchlistItems.mockResolvedValue({ items: [] });
@@ -890,6 +923,58 @@ describe('UserScannerPage', () => {
     });
     expect((await screen.findAllByText(/加密矿企/)).length).toBeGreaterThan(0);
     expect(screen.getByText(/入选 3|3 selected/)).toBeInTheDocument();
+  });
+
+  it('creates an AI custom theme, displays suggestions, and runs it as a theme universe', async () => {
+    const themedRun = makeRunDetail({
+      market: 'us',
+      profile: 'us_preopen_v1',
+      universeType: 'theme',
+      themeId: 'custom_white_house_stocks',
+      themeLabel: 'White House Stocks',
+      diagnostics: {
+        universeSelection: {
+          universeType: 'theme',
+          themeId: 'custom_white_house_stocks',
+          themeLabel: 'White House Stocks',
+          requestedSymbolsCount: 3,
+          acceptedSymbolsCount: 3,
+          acceptedSymbols: ['PLTR', 'LMT', 'RTX'],
+          rejectedSymbols: [],
+          universeNotes: [],
+        },
+      },
+    });
+    runScan.mockResolvedValueOnce(themedRun);
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'US' }));
+    fireEvent.click(screen.getByRole('button', { name: /Theme universe|主题标的池/i }));
+    fireEvent.change(screen.getByTestId('scanner-ai-theme-label-input'), { target: { value: 'White House Stocks' } });
+    fireEvent.change(screen.getByTestId('scanner-ai-theme-prompt-input'), {
+      target: { value: 'Stocks associated with White House policy, federal contracts, and government decisions.' },
+    });
+    fireEvent.change(screen.getByTestId('scanner-ai-theme-manual-symbols-input'), { target: { value: 'PLTR' } });
+    fireEvent.click(screen.getByRole('button', { name: /Generate theme|生成主题/i }));
+
+    expect(await screen.findByTestId('scanner-ai-theme-suggestions')).toHaveTextContent('PLTR');
+    expect(createTheme).toHaveBeenCalledWith({
+      id: 'custom_white_house_stocks',
+      label: 'White House Stocks',
+      market: 'us',
+      prompt: 'Stocks associated with White House policy, federal contracts, and government decisions.',
+      manualSymbols: ['PLTR'],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /运行扫描|Run scanner/i }));
+    await waitFor(() => {
+      expect(runScan).toHaveBeenCalledWith(expect.objectContaining({
+        market: 'us',
+        universeType: 'theme',
+        themeId: 'custom_white_house_stocks',
+      }));
+    });
   });
 
   it('shows disabled unconfigured themes and sends custom symbol universes', async () => {
