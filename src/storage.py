@@ -1123,6 +1123,12 @@ class UserWatchlistItem(Base):
     scanner_run_id = Column(Integer, index=True)
     scanner_rank = Column(Integer)
     scanner_score = Column(Float)
+    last_scored_at = Column(DateTime, index=True)
+    score_source = Column(String(32))
+    score_profile = Column(String(64))
+    score_reason = Column(Text)
+    score_status = Column(String(16), default='stale', index=True)
+    score_error = Column(Text)
     theme_id = Column(String(64), index=True)
     universe_type = Column(String(32), index=True)
     notes = Column(Text)
@@ -1419,6 +1425,12 @@ class DatabaseManager:
             self._add_column_if_missing(conn, "backtest_runs", "owner_id", "VARCHAR(64)")
             self._add_column_if_missing(conn, "rule_backtest_runs", "owner_id", "VARCHAR(64)")
             self._add_column_if_missing(conn, "market_scanner_runs", "owner_id", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "user_watchlist_items", "last_scored_at", "DATETIME")
+            self._add_column_if_missing(conn, "user_watchlist_items", "score_source", "VARCHAR(32)")
+            self._add_column_if_missing(conn, "user_watchlist_items", "score_profile", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "user_watchlist_items", "score_reason", "TEXT")
+            self._add_column_if_missing(conn, "user_watchlist_items", "score_status", "VARCHAR(16) DEFAULT 'stale'")
+            self._add_column_if_missing(conn, "user_watchlist_items", "score_error", "TEXT")
             self._add_column_if_missing(
                 conn,
                 "market_scanner_runs",

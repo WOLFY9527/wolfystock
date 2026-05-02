@@ -1,5 +1,7 @@
 ## 2026-05-02
 
+- 📌 **观察列表评分刷新与分析交接修复** — `/watchlist` 的分析按钮现在会把异步分析返回的 `task_id`、`symbol`、`source=watchlist` 和市场写入 Home query handoff，Home 决策页收到 watchlist 任务后以 `task_id` 为权威对象显示对应代码的 Wolfy AI 分析中骨架，不再把旧 ORCL 报告当作当前内容；任务完成后优先用该 task 的 final result 更新 WULF 等目标报告。观察列表新增轻量评分刷新接口 `/api/v1/watchlist/refresh-scores` 与状态接口，刷新只复用已持久化 Scanner 候选评分更新 score/rank/last_scored_at/stale 状态，不为每个候选启动完整 AI 报告。
+
 - 🧭 **Scanner 主题候选诊断透明化** — `/api/v1/scanner/run` 在保留既有 `shortlist` 的基础上新增 `theme`、`summary`、`selected` 与 `candidates` 诊断载荷，主题扫描会返回完整候选池、已评估/入选/淘汰/数据失败/跳过计数、每个非入选候选的原因、失败规则、缺失字段、provider 与关键指标。主题/自定义标的扫描不再让 `detail_limit` 截断已提交的完整主题候选池；`/scanner` 结果区新增紧凑计数条和“入选 / 候选池 / 淘汰 / 数据失败 / 全部”过滤表，让 `加密矿企 · 11` 这类主题能直接解释为什么只有少数标的入选。
 
 - ⚡ **单股分析新增配额感知数据源规划** — 分析流程为行情、基本面、财报、历史价格、技术指标、新闻与情绪建立按类别的首选 provider + lazy fallback 计划，独立类别可并发加载，同一类别不再默认并发打多个重叠 API；新增 in-process TTL cache、singleflight 请求合并、超时 fallback 与 provider/category 级临时熔断，减少 ORCL 等美股分析的重复外部调用。明显美股代码的名称解析不再回落到 Tushare / pytdx / Baostock 等 A 股名称源；Home 加载态同步展示市场识别、行情、基本面、技术、新闻与 AI 分析等紧凑阶段进度。

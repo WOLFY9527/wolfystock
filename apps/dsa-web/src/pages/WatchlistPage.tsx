@@ -6,6 +6,7 @@ import {
   Copy,
   ExternalLink,
   Play,
+  RefreshCw,
   Search,
   Trash2,
 } from 'lucide-react';
@@ -88,6 +89,24 @@ function buildBacktestPath(item: WatchlistItem, language: 'zh' | 'en'): string {
   return buildLocalizedPath(`/backtest?${params.toString()}`, language);
 }
 
+function extractAcceptedTaskId(response: Awaited<ReturnType<typeof analysisApi.analyzeAsync>>): string | null {
+  if ('taskId' in response) {
+    return response.taskId;
+  }
+  return response.accepted?.[0]?.taskId || response.duplicates?.[0]?.existingTaskId || null;
+}
+
+function buildWatchlistAnalysisPath(item: WatchlistItem, taskId: string, language: 'zh' | 'en'): string {
+  const params = new URLSearchParams({
+    symbol: item.symbol,
+    task_id: taskId,
+    source: 'watchlist',
+  });
+  const market = normalizeMarket(item.market);
+  if (market) params.set('market', market);
+  return buildLocalizedPath(`/?${params.toString()}`, language);
+}
+
 function getCopy(language: 'zh' | 'en') {
   if (language === 'en') {
     return {
@@ -110,6 +129,14 @@ function getCopy(language: 'zh' | 'en') {
       name: 'Name',
       score: 'Score',
       rank: 'Rank',
+      lastScored: 'Last scored',
+      scoreFreshness: 'Score freshness',
+      refreshScores: 'Refresh scores',
+      refreshingScores: 'Refreshing...',
+      autoRefresh: 'Pre-open auto update',
+      enabled: 'Enabled',
+      stale: 'Stale',
+      fresh: 'Fresh',
       added: 'Added',
       actions: 'Actions',
       analyze: 'Analyze',
@@ -129,6 +156,7 @@ function getCopy(language: 'zh' | 'en') {
       copyFailed: 'Copy failed.',
       clipboardUnavailable: 'Clipboard is not available in this browser.',
       analyzeStarted: 'Analysis started.',
+      scoreRefreshComplete: 'Scores refreshed.',
       signInModule: 'Watchlist',
       themePrefix: 'Theme',
       universePrefix: 'Universe',
@@ -154,6 +182,14 @@ function getCopy(language: 'zh' | 'en') {
     name: '名称',
     score: '分数',
     rank: '排名',
+    lastScored: '评分时间',
+    scoreFreshness: '评分状态',
+    refreshScores: '刷新评分',
+    refreshingScores: '刷新中...',
+    autoRefresh: '开盘前自动更新',
+    enabled: '已启用',
+    stale: '过期',
+    fresh: '最新',
     added: '加入时间',
     actions: '操作',
     analyze: '分析',
@@ -173,6 +209,7 @@ function getCopy(language: 'zh' | 'en') {
     copyFailed: '复制失败。',
     clipboardUnavailable: '当前浏览器不支持剪贴板。',
     analyzeStarted: '已启动分析。',
+    scoreRefreshComplete: '评分已刷新。',
     signInModule: '观察列表',
     themePrefix: '主题',
     universePrefix: '候选范围',
@@ -195,6 +232,8 @@ const WatchlistPage: React.FC = () => {
   const [sortKey, setSortKey] = useState<SortKey>('newest');
   const [pendingAnalyzeId, setPendingAnalyzeId] = useState<number | null>(null);
   const [pendingRemoveId, setPendingRemoveId] = useState<number | null>(null);
+  const [isRefreshingScores, setRefreshingScores] = useState(false);
+  const [refreshStatus, setRefreshStatus] = useState<{ enabled: boolean; usTime: string; cnTime: string; hkTime: string } | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -217,6 +256,23 @@ const WatchlistPage: React.FC = () => {
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [isGuest]);
+
+  useEffect(() => {
+    if (isGuest) return;
+    let isMounted = true;
+    watchlistApi.getRefreshStatus()
+      .then((response) => {
+        if (!isMounted) return;
+        setRefreshStatus(response);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setRefreshStatus(null);
       });
     return () => {
       isMounted = false;
@@ -295,18 +351,19 @@ const WatchlistPage: React.FC = () => {
     setPendingAnalyzeId(item.id);
     setNotice(null);
     try {
-      await analysisApi.analyzeAsync({
+      const response = await analysisApi.analyzeAsync({
         stockCode: item.symbol,
         reportType: 'detailed',
         stockName: item.name || undefined,
         originalQuery: item.symbol,
         selectionSource: 'manual',
       });
+      const taskId = extractAcceptedTaskId(response);
       setNotice({ tone: 'success', message: copy.analyzeStarted });
-      navigate(buildLocalizedPath('/', language));
+      navigate(taskId ? buildWatchlistAnalysisPath(item, taskId, language) : buildLocalizedPath('/', language));
     } catch (err) {
       if (err instanceof DuplicateTaskError) {
-        navigate(buildLocalizedPath('/', language));
+        navigate(buildWatchlistAnalysisPath(item, err.existingTaskId, language));
         return;
       }
       setNotice({ tone: 'danger', message: getParsedApiError(err).message });
@@ -341,6 +398,24 @@ const WatchlistPage: React.FC = () => {
       setNotice({ tone: 'danger', message: err instanceof Error ? err.message : copy.copyFailed });
     }
   }, [copy.clipboardUnavailable, copy.copied, copy.copyFailed]);
+
+  const handleRefreshScores = useCallback(async () => {
+    setRefreshingScores(true);
+    setNotice(null);
+    try {
+      const response = await watchlistApi.refreshScores({ force: true });
+      const listResponse = await watchlistApi.listWatchlistItems();
+      setItems(listResponse.items || []);
+      setNotice({
+        tone: response.failedCount > 0 ? 'warning' : 'success',
+        message: `${copy.scoreRefreshComplete} ${response.updatedCount}/${response.updatedCount + response.skippedCount + response.failedCount}`,
+      });
+    } catch (err) {
+      setNotice({ tone: 'danger', message: getParsedApiError(err).message });
+    } finally {
+      setRefreshingScores(false);
+    }
+  }, [copy.scoreRefreshComplete]);
 
   if (isGuest) {
     return (
@@ -401,6 +476,26 @@ const WatchlistPage: React.FC = () => {
           description={copy.tableDescription}
           contentClassName="space-y-4"
         >
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-sm backdrop-blur-md">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.autoRefresh}</span>
+              <span className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 font-mono text-[11px] text-emerald-100">
+                {refreshStatus?.enabled ? copy.enabled : '--'}
+              </span>
+              <span className="truncate font-mono text-[11px] text-white/45">
+                US {refreshStatus?.usTime || '08:45'} / CN {refreshStatus?.cnTime || '09:00'} / HK {refreshStatus?.hkTime || '09:00'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleRefreshScores()}
+              disabled={isRefreshingScores}
+              className="inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 text-xs font-semibold text-cyan-100 transition hover:border-cyan-200/40 hover:bg-cyan-300/15 disabled:cursor-wait disabled:opacity-45"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingScores ? 'animate-spin' : ''}`} />
+              {isRefreshingScores ? copy.refreshingScores : copy.refreshScores}
+            </button>
+          </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
             <Input
               label={copy.search}
@@ -425,8 +520,8 @@ const WatchlistPage: React.FC = () => {
             />
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-white/5">
-            <table className="min-w-[1040px] w-full text-left text-sm">
+          <div className="overflow-x-auto no-scrollbar rounded-2xl border border-white/5">
+            <table className="min-w-[1180px] w-full text-left text-sm">
               <thead className="bg-white/[0.03] text-[11px] uppercase tracking-[0.16em] text-white/35">
                 <tr>
                   <th className="px-4 py-3 font-semibold">{copy.symbol}</th>
@@ -434,6 +529,7 @@ const WatchlistPage: React.FC = () => {
                   <th className="px-4 py-3 font-semibold">{copy.name}</th>
                   <th className="px-4 py-3 font-semibold">{copy.score}</th>
                   <th className="px-4 py-3 font-semibold">{copy.rank}</th>
+                  <th className="px-4 py-3 font-semibold">{copy.lastScored}</th>
                   <th className="px-4 py-3 font-semibold">{copy.source}</th>
                   <th className="px-4 py-3 font-semibold">{copy.context}</th>
                   <th className="px-4 py-3 font-semibold">{copy.added}</th>
@@ -457,6 +553,20 @@ const WatchlistPage: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3">{item.scannerRank ? `#${item.scannerRank}` : '--'}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex max-w-[180px] flex-col gap-1">
+                        <span className="truncate font-mono text-xs text-white/60">{formatDateTime(item.lastScoredAt, language)}</span>
+                        <span className={`w-fit rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
+                          item.scoreStatus === 'fresh'
+                            ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+                            : item.scoreStatus === 'stale'
+                              ? 'border-amber-400/20 bg-amber-400/10 text-amber-100'
+                              : 'border-white/10 bg-white/[0.04] text-white/40'
+                        }`} title={item.scoreError || item.scoreReason || undefined}>
+                          {item.scoreStatus === 'fresh' ? copy.fresh : item.scoreStatus === 'stale' ? copy.stale : '--'}
+                        </span>
+                      </div>
+                    </td>
                     <td className="px-4 py-3">{item.source || '--'}</td>
                     <td className="px-4 py-3">
                       <div className="flex max-w-[220px] flex-wrap gap-1.5">

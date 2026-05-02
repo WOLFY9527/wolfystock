@@ -199,6 +199,35 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         )
         self.assertFalse(any("model" in module or "source" in module or "error" in module for module in payload["modules"]))
 
+    def test_get_task_progress_backfills_completed_result_created_at(self) -> None:
+        task = SimpleNamespace(
+            task_id="task-completed",
+            stock_code="WULF",
+            stock_name="WULF",
+            status=SimpleNamespace(value="completed"),
+            progress=100,
+            message="Analysis completed",
+            result={
+                "query_id": "task-completed",
+                "stock_code": "WULF",
+                "stock_name": "WULF",
+                "report": {"summary": {"operation_advice": "buy"}},
+            },
+            execution=None,
+            execution_session_id=None,
+            created_at=datetime(2026, 5, 3, 9, 0, 0),
+            started_at=datetime(2026, 5, 3, 9, 1, 0),
+            completed_at=datetime(2026, 5, 3, 9, 2, 0),
+        )
+        queue = MagicMock()
+        queue.get_task.return_value = task
+
+        with patch("src.services.task_queue.get_task_queue", return_value=queue):
+            payload = self.service.get_task_progress("task-completed", owner_id="user-1")
+
+        self.assertEqual(payload["final_result"]["created_at"], "2026-05-03T09:02:00")
+        self.assertNotIn("created_at", task.result)
+
     def test_update_preserves_masked_secret(self) -> None:
         old_version = self.manager.get_config_version()
         response = self.service.update(

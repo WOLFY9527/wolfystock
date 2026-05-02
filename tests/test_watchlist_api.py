@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -14,7 +15,7 @@ from api.app import create_app
 from api.deps import CurrentUser, get_current_user
 import src.auth as auth
 from src.config import Config
-from src.storage import DatabaseManager
+from src.storage import DatabaseManager, MarketScannerCandidate, MarketScannerRun
 
 
 def _reset_auth_globals() -> None:
@@ -213,3 +214,50 @@ class WatchlistApiTestCase(unittest.TestCase):
             json={"symbol": "NVDA", "market": "EU", "source": "scanner"},
         )
         self.assertEqual(bad_market.status_code, 422)
+
+    def test_watchlist_refresh_scores_endpoint_updates_scanner_score(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+        add_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={"symbol": "WULF", "market": "us", "source": "scanner", "scanner_score": 60},
+        )
+        self.assertEqual(add_resp.status_code, 200)
+
+        now = datetime.now()
+        run = MarketScannerRun(
+            market="us",
+            profile="us_preopen_v1",
+            universe_name="us_preopen_watchlist_v1",
+            status="completed",
+            run_at=now,
+            completed_at=now,
+            shortlist_size=1,
+        )
+        candidate = MarketScannerCandidate(
+            symbol="WULF",
+            name="WULF",
+            rank=2,
+            score=71.5,
+            reason_summary="Scanner score refreshed.",
+            created_at=now,
+        )
+        with self.db.get_session() as session:
+            session.add(run)
+            session.flush()
+            candidate.run_id = run.id
+            session.add(candidate)
+            session.commit()
+
+        refresh_resp = self.client.post("/api/v1/watchlist/refresh-scores", json={"market": "us"})
+        self.assertEqual(refresh_resp.status_code, 200)
+        payload = refresh_resp.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["updated_count"], 1)
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        item = list_resp.json()["items"][0]
+        self.assertEqual(item["scanner_score"], 71.5)
+        self.assertEqual(item["scanner_rank"], 2)
+        self.assertEqual(item["score_status"], "fresh")
+        self.assertTrue(item["last_scored_at"])

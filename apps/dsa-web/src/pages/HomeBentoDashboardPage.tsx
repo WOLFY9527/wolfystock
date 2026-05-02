@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Lock, Search } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { publicAnalysisApi } from '../api/publicAnalysis';
@@ -1775,6 +1775,7 @@ function GuestPaywallOverlay({ registrationPath }: { registrationPath: string })
 
 const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest = false }) => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
+  const [searchParams] = useSearchParams();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
@@ -1789,6 +1790,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [guestError, setGuestError] = useState<ParsedApiError | null>(null);
   const [guestFallbackNotice, setGuestFallbackNotice] = useState<string | null>(null);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
+  const [hydratedRouteTaskId, setHydratedRouteTaskId] = useState<string | null>(null);
+  const routeTaskId = searchParams.get('task_id') || searchParams.get('taskId') || null;
+  const routeSymbol = normalizeTickerQuery(searchParams.get('symbol') || undefined);
+  const routeSource = searchParams.get('source') || null;
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
   const historyItems = useStockPoolStore((state) => state.historyItems);
   const selectedReport = useStockPoolStore((state) => state.selectedReport);
@@ -1820,6 +1825,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   );
   const selectedTicker = normalizeTickerQuery(selectedReport?.meta.stockCode);
   const completedTaskReport = useMemo(() => {
+    if (routeTaskId) {
+      return activeTasks.find(
+        (task) => task.taskId === routeTaskId && task.status === 'completed' && task.result?.report,
+      )?.result?.report || null;
+    }
     const taskTicker = pendingAnalysisTicker || activeTicker;
     if (!taskTicker) {
       return null;
@@ -1827,8 +1837,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     return activeTasks.find(
       (task) => normalizeTickerQuery(task.stockCode) === taskTicker && task.status === 'completed' && task.result?.report,
     )?.result?.report || null;
-  }, [activeTasks, activeTicker, pendingAnalysisTicker]);
+  }, [activeTasks, activeTicker, pendingAnalysisTicker, routeTaskId]);
   const focusedTask = useMemo(() => {
+    if (routeTaskId) {
+      const matchedById = activeTasks.find((task) => task.taskId === routeTaskId);
+      if (matchedById) {
+        return matchedById;
+      }
+    }
     const taskTicker = pendingAnalysisTicker || activeTicker;
     if (taskTicker) {
       const matched = activeTasks.find((task) => normalizeTickerQuery(task.stockCode) === taskTicker);
@@ -1837,9 +1853,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       }
     }
     return activeTasks[0] || null;
-  }, [activeTasks, activeTicker, pendingAnalysisTicker]);
+  }, [activeTasks, activeTicker, pendingAnalysisTicker, routeTaskId]);
   const isTaskAnalyzing = Boolean(
-    pendingAnalysisTicker
+    (pendingAnalysisTicker || routeTaskId)
     && focusedTask
     && (focusedTask.status === 'pending' || focusedTask.status === 'processing'),
   );
@@ -1853,9 +1869,13 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         : buildInPlacePlaceholderDashboard(locale, activeTicker);
     }
 
-    const effectiveTicker = activeTicker || selectedTicker || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || null;
+    const effectiveTicker = routeSymbol || activeTicker || selectedTicker || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || null;
 
-    if (completedTaskReport && effectiveTicker && normalizeTickerQuery(completedTaskReport.meta.stockCode) === effectiveTicker) {
+    if (
+      completedTaskReport
+      && effectiveTicker
+      && normalizeTickerQuery(completedTaskReport.meta.stockCode) === effectiveTicker
+    ) {
       return buildDashboardFromReport(locale, completedTaskReport);
     }
 
@@ -1868,7 +1888,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
 
     return buildInPlacePlaceholderDashboard(locale, effectiveTicker);
-  }, [activeTicker, completedTaskReport, guestPreview, isGuest, locale, pendingAnalysisTicker, recentHistoryItems, selectedReport, selectedTicker]);
+  }, [activeTicker, completedTaskReport, guestPreview, isGuest, locale, pendingAnalysisTicker, recentHistoryItems, routeSymbol, selectedReport, selectedTicker]);
   const copy = dashboardData;
   const standbyCopy = useMemo(() => (
     locale === 'en'
@@ -1914,6 +1934,33 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     enabled: !isGuest,
     hasRunningTasks: !isGuest && hasRunningTasks,
   });
+
+  useEffect(() => {
+    if (isGuest || !routeTaskId || !routeSymbol || routeSource !== 'watchlist') {
+      return;
+    }
+    if (hydratedRouteTaskId === routeTaskId) {
+      return;
+    }
+    setActiveTicker(routeSymbol);
+    setPendingAnalysisTicker(routeSymbol);
+    setDashboardLoading(true);
+    setHasHydratedInitialTicker(true);
+    setHydratedRouteTaskId(routeTaskId);
+    syncTaskCreated({
+      taskId: routeTaskId,
+      stockCode: routeSymbol,
+      status: 'pending',
+      progress: 0,
+      message: locale === 'en' ? `WOLFY AI analyzing ${routeSymbol}...` : `WOLFY AI 正在分析 ${routeSymbol}...`,
+      reportType: 'detailed',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      originalQuery: routeSymbol,
+      selectionSource: 'manual',
+    });
+    void refreshTaskProgress(routeTaskId);
+  }, [hydratedRouteTaskId, isGuest, locale, refreshTaskProgress, routeSource, routeSymbol, routeTaskId, syncTaskCreated]);
 
   const focusedTaskId = focusedTask?.taskId;
   const focusedTaskStatus = focusedTask?.status;
@@ -1974,11 +2021,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   }, [activeTicker, isGuest, pendingAnalysisTicker, selectedTicker]);
 
   useEffect(() => {
-    if (pendingAnalysisTicker && selectedTicker === pendingAnalysisTicker) {
+    if (!routeTaskId && pendingAnalysisTicker && selectedTicker === pendingAnalysisTicker) {
       setPendingAnalysisTicker(null);
       setDashboardLoading(false);
     }
-  }, [pendingAnalysisTicker, selectedTicker]);
+  }, [pendingAnalysisTicker, routeTaskId, selectedTicker]);
 
   useEffect(() => {
     if (!statusToast) {
@@ -1993,23 +2040,28 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   }, [statusToast]);
 
   useEffect(() => {
-    if (!pendingAnalysisTicker) {
+    if (!pendingAnalysisTicker && !routeTaskId) {
       return;
     }
 
-    const completedTask = activeTasks.find(
-      (task) => normalizeTickerQuery(task.stockCode) === pendingAnalysisTicker && task.status === 'completed' && task.result?.report,
-    );
+    const completedTask = routeTaskId
+      ? activeTasks.find((task) => task.taskId === routeTaskId && task.status === 'completed' && task.result?.report)
+      : activeTasks.find(
+        (task) => normalizeTickerQuery(task.stockCode) === pendingAnalysisTicker && task.status === 'completed' && task.result?.report,
+      );
     if (!completedTask) {
       return;
     }
 
-    setActiveTicker(pendingAnalysisTicker);
+    const completedTicker = normalizeTickerQuery(completedTask.stockCode) || pendingAnalysisTicker || routeSymbol;
+    setActiveTicker(completedTicker);
     setPendingAnalysisTicker(null);
     setDashboardLoading(false);
     void refreshHistory(true);
-    void focusLatestHistoryForStock(pendingAnalysisTicker);
-  }, [activeTasks, focusLatestHistoryForStock, pendingAnalysisTicker, refreshHistory]);
+    if (completedTicker) {
+      void focusLatestHistoryForStock(completedTicker);
+    }
+  }, [activeTasks, focusLatestHistoryForStock, pendingAnalysisTicker, refreshHistory, routeSymbol, routeTaskId]);
 
   const handleAnalyze = async (tickerOverride?: string) => {
     const rawQuery = (tickerOverride ?? searchQuery).trim();

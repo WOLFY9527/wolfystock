@@ -14,7 +14,11 @@ from api.v1.schemas.watchlist import (
     WatchlistItemCreateRequest,
     WatchlistItemListResponse,
     WatchlistItemResponse,
+    WatchlistScoreRefreshRequest,
+    WatchlistScoreRefreshResponse,
+    WatchlistScoreRefreshStatusResponse,
 )
+from src.config import get_config
 from src.services.execution_log_service import ExecutionLogService
 from src.services.watchlist_service import WatchlistService
 
@@ -24,6 +28,10 @@ router = APIRouter()
 
 def _get_watchlist_service() -> WatchlistService:
     return WatchlistService()
+
+
+def service_refresh_running() -> bool:
+    return WatchlistService.is_refresh_running()
 
 
 def _actor(current_user: CurrentUser) -> dict:
@@ -107,6 +115,57 @@ def list_watchlist_items(
         )
     except Exception as exc:
         raise _internal_error("List watchlist items failed", exc) from exc
+
+
+@router.post(
+    "/refresh-scores",
+    response_model=WatchlistScoreRefreshResponse,
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Refresh user watchlist scores",
+)
+def refresh_watchlist_scores(
+    request: WatchlistScoreRefreshRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> WatchlistScoreRefreshResponse:
+    service = _get_watchlist_service()
+    try:
+        result = service.refresh_scores(
+            owner_id=current_user.user_id,
+            market=request.market,
+            symbols=request.symbols,
+            source=request.source,
+            theme=request.theme,
+            force=request.force,
+        )
+        return WatchlistScoreRefreshResponse(**result)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
+    except Exception as exc:
+        raise _internal_error("Refresh watchlist scores failed", exc) from exc
+
+
+@router.get(
+    "/refresh-status",
+    response_model=WatchlistScoreRefreshStatusResponse,
+    responses={500: {"model": ErrorResponse}},
+    summary="Get watchlist score refresh status",
+)
+def get_watchlist_refresh_status(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> WatchlistScoreRefreshStatusResponse:
+    del current_user
+    try:
+        config = get_config()
+        return WatchlistScoreRefreshStatusResponse(
+            enabled=bool(getattr(config, "watchlist_score_refresh_enabled", True)),
+            us_time=str(getattr(config, "watchlist_score_refresh_us_time", "08:45")),
+            cn_time=str(getattr(config, "watchlist_score_refresh_cn_time", "09:00")),
+            hk_time=str(getattr(config, "watchlist_score_refresh_hk_time", "09:00")),
+            max_symbols=int(getattr(config, "watchlist_score_refresh_max_symbols", 250)),
+            running=service_refresh_running(),
+        )
+    except Exception as exc:
+        raise _internal_error("Get watchlist refresh status failed", exc) from exc
 
 
 @router.post(

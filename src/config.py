@@ -769,6 +769,11 @@ class Config:
     scanner_schedule_time: str = "08:40"      # Scanner 盘前执行时间（HH:MM）
     scanner_schedule_run_immediately: bool = False  # 启动时是否立即执行一次 Scanner
     scanner_notification_enabled: bool = True  # Scanner 定时运行后是否发送通知
+    watchlist_score_refresh_enabled: bool = True
+    watchlist_score_refresh_us_time: str = "08:45"
+    watchlist_score_refresh_cn_time: str = "09:00"
+    watchlist_score_refresh_hk_time: str = "09:00"
+    watchlist_score_refresh_max_symbols: int = 250
     run_immediately: bool = True              # 启动时是否立即执行一次（非定时模式）
     market_review_enabled: bool = True        # 是否启用大盘复盘
     # 大盘复盘市场区域：cn(A股)、us(美股)、both(两者)，us 适合仅关注美股的用户
@@ -1537,6 +1542,16 @@ class Config:
             scanner_schedule_time=os.getenv('SCANNER_SCHEDULE_TIME', '08:40'),
             scanner_schedule_run_immediately=os.getenv('SCANNER_SCHEDULE_RUN_IMMEDIATELY', 'false').lower() == 'true',
             scanner_notification_enabled=os.getenv('SCANNER_NOTIFICATION_ENABLED', 'true').lower() == 'true',
+            watchlist_score_refresh_enabled=os.getenv('WATCHLIST_SCORE_REFRESH_ENABLED', 'true').lower() == 'true',
+            watchlist_score_refresh_us_time=os.getenv('WATCHLIST_SCORE_REFRESH_US_TIME', '08:45'),
+            watchlist_score_refresh_cn_time=os.getenv('WATCHLIST_SCORE_REFRESH_CN_TIME', '09:00'),
+            watchlist_score_refresh_hk_time=os.getenv('WATCHLIST_SCORE_REFRESH_HK_TIME', '09:00'),
+            watchlist_score_refresh_max_symbols=parse_env_int(
+                os.getenv('WATCHLIST_SCORE_REFRESH_MAX_SYMBOLS'),
+                250,
+                field_name='WATCHLIST_SCORE_REFRESH_MAX_SYMBOLS',
+                minimum=1,
+            ),
             run_immediately=legacy_run_immediately,
             market_review_enabled=os.getenv('MARKET_REVIEW_ENABLED', 'true').lower() == 'true',
             market_review_region=cls._parse_market_review_region(

@@ -58,6 +58,12 @@ class WatchlistItemResponse(BaseModel):
     scanner_run_id: Optional[int] = None
     scanner_rank: Optional[int] = None
     scanner_score: Optional[float] = None
+    last_scored_at: Optional[str] = None
+    score_source: Optional[str] = None
+    score_profile: Optional[str] = None
+    score_reason: Optional[str] = None
+    score_status: Optional[str] = None
+    score_error: Optional[str] = None
     theme_id: Optional[str] = None
     universe_type: Optional[str] = None
     notes: Optional[str] = None
@@ -71,3 +77,67 @@ class WatchlistItemListResponse(BaseModel):
 
 class WatchlistDeleteResponse(BaseModel):
     deleted: int
+
+
+class WatchlistScoreRefreshRequest(BaseModel):
+    market: Optional[Literal["cn", "hk", "us"]] = None
+    source: Optional[Literal["scanner"]] = None
+    theme: Optional[str] = Field(None, max_length=64)
+    symbols: Optional[List[str]] = None
+    force: bool = False
+
+    @field_validator("symbols")
+    @classmethod
+    def _normalize_symbols(cls, value: Optional[List[str]]) -> Optional[List[str]]:
+        if value is None:
+            return None
+        normalized: List[str] = []
+        seen = set()
+        for item in value:
+            symbol = canonical_stock_code(item).strip().upper()
+            if not symbol:
+                continue
+            if len(symbol) > 16:
+                raise ValueError("symbol must be at most 16 characters")
+            if not re.fullmatch(r"[A-Z0-9][A-Z0-9.\-]*", symbol):
+                raise ValueError("symbol contains invalid characters")
+            if symbol not in seen:
+                seen.add(symbol)
+                normalized.append(symbol)
+        return normalized
+
+    @field_validator("theme")
+    @classmethod
+    def _normalize_theme(cls, value: Optional[str]) -> Optional[str]:
+        normalized = str(value or "").strip()
+        return normalized or None
+
+
+class WatchlistScoreRefreshResult(BaseModel):
+    symbol: str
+    market: str
+    status: str
+    message: Optional[str] = None
+    score: Optional[float] = None
+    rank: Optional[int] = None
+    scanner_run_id: Optional[int] = None
+
+
+class WatchlistScoreRefreshResponse(BaseModel):
+    ok: bool
+    updated_count: int = 0
+    failed_count: int = 0
+    skipped_count: int = 0
+    started_at: str
+    completed_at: str
+    markets: List[str] = Field(default_factory=list)
+    results: List[WatchlistScoreRefreshResult] = Field(default_factory=list)
+
+
+class WatchlistScoreRefreshStatusResponse(BaseModel):
+    enabled: bool
+    us_time: str
+    cn_time: str
+    hk_time: str
+    max_symbols: int
+    running: bool = False

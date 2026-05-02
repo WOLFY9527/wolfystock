@@ -153,8 +153,8 @@ describe('HomeSurfacePage', () => {
     });
   });
 
-  const renderSurface = () => render(
-    <MemoryRouter>
+  const renderSurface = (initialPath = '/') => render(
+    <MemoryRouter initialEntries={[initialPath]}>
       <UiPreferencesProvider>
         <UiLanguageProvider>
           <HomeSurfacePage />
@@ -1751,6 +1751,77 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-progress-stages')).toHaveTextContent('基本面');
     expect(screen.queryByTestId('home-bento-progress-summary')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
+    expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
+  });
+
+  it('uses watchlist task query params as the active analysis instead of stale history', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(analysisApi.getTaskProgress).mockResolvedValue({
+      taskId: 'task-wulf',
+      stockCode: 'WULF',
+      stockName: 'WULF',
+      status: 'processing',
+      progress: 42,
+      message: 'Running AI analysis',
+      modules: [
+        { key: 'market', name: 'Detecting market', status: 'completed' },
+        { key: 'ai', name: 'Running AI analysis', status: 'running' },
+      ],
+    });
+
+    renderSurface('/?symbol=WULF&task_id=task-wulf&source=watchlist&market=US');
+
+    expect(await screen.findByTestId('home-bento-inplace-loading-decision')).toHaveTextContent('WULF');
+    await waitFor(() => expect(screen.getByTestId('home-bento-progress-stages')).toHaveTextContent('Running AI analysis'));
+    expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
+  });
+
+  it('loads the completed watchlist task report for the routed task id', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(analysisApi.getTaskProgress).mockResolvedValue({
+      taskId: 'task-wulf',
+      stockCode: 'WULF',
+      stockName: 'WULF',
+      status: 'completed',
+      progress: 100,
+      message: 'completed',
+      modules: [],
+      finalResult: {
+        queryId: 'q-wulf',
+        stockCode: 'WULF',
+        stockName: 'WULF',
+        createdAt: '2026-05-02T12:00:00Z',
+        report: {
+          ...defaultHistoryReport,
+          meta: {
+            ...defaultHistoryReport.meta,
+            id: 11,
+            queryId: 'q-wulf',
+            stockCode: 'WULF',
+            stockName: 'WULF',
+          },
+          summary: {
+            ...defaultHistoryReport.summary,
+            analysisSummary: 'WULF completed from watchlist task handoff.',
+            sentimentScore: 60,
+          },
+          details: {
+            standardReport: {
+              ...defaultHistoryReport.details.standardReport,
+              summaryPanel: {
+                stock: 'WULF',
+                ticker: 'WULF',
+                oneSentence: 'WULF completed from watchlist task handoff.',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    renderSurface('/?symbol=WULF&task_id=task-wulf&source=watchlist&market=US');
+
+    await waitFor(() => expect(screen.getByTestId('home-bento-analysis-result-card')).toHaveTextContent('WULF completed from watchlist task handoff.'));
     expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();
   });
 });

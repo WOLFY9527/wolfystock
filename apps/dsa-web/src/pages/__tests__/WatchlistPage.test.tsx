@@ -5,9 +5,11 @@ import WatchlistPage from '../WatchlistPage';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import type { WatchlistItem } from '../../types/watchlist';
 
-const { listWatchlistItems, removeWatchlistItem, analyzeAsync, useProductSurfaceMock } = vi.hoisted(() => ({
+const { listWatchlistItems, removeWatchlistItem, refreshScores, getRefreshStatus, analyzeAsync, useProductSurfaceMock } = vi.hoisted(() => ({
   listWatchlistItems: vi.fn(),
   removeWatchlistItem: vi.fn(),
+  refreshScores: vi.fn(),
+  getRefreshStatus: vi.fn(),
   analyzeAsync: vi.fn(),
   useProductSurfaceMock: vi.fn(),
 }));
@@ -17,6 +19,8 @@ vi.mock('../../api/watchlist', () => ({
     listWatchlistItems,
     addWatchlistItem: vi.fn(),
     removeWatchlistItem,
+    refreshScores,
+    getRefreshStatus,
   },
 }));
 
@@ -47,6 +51,12 @@ function makeItem(overrides: Partial<WatchlistItem>): WatchlistItem {
     scannerRunId: 42,
     scannerRank: 1,
     scannerScore: 94,
+    lastScoredAt: '2026-05-01T12:30:00',
+    scoreSource: 'scanner_run',
+    scoreProfile: 'us_preopen_v1',
+    scoreReason: 'Latest scanner score.',
+    scoreStatus: 'fresh',
+    scoreError: null,
     themeId: 'ai-momentum',
     universeType: 'theme',
     notes: null,
@@ -109,7 +119,7 @@ function renderWatchlist(path = '/watchlist') {
       <UiLanguageProvider>
         <Routes>
           <Route path="/watchlist" element={<><WatchlistPage /><LocationProbe /></>} />
-          <Route path="/zh" element={<div>home</div>} />
+          <Route path="/zh" element={<><div>home</div><LocationProbe /></>} />
           <Route path="/zh/scanner" element={<div>scanner</div>} />
           <Route path="/zh/backtest" element={<div>backtest</div>} />
           <Route path="/zh/login" element={<div>login</div>} />
@@ -126,6 +136,24 @@ describe('WatchlistPage', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     listWatchlistItems.mockResolvedValue({ items: watchlistItems });
     removeWatchlistItem.mockResolvedValue({ deleted: 1 });
+    refreshScores.mockResolvedValue({
+      ok: true,
+      updatedCount: 3,
+      failedCount: 0,
+      skippedCount: 0,
+      startedAt: '2026-05-01T12:00:00Z',
+      completedAt: '2026-05-01T12:00:01Z',
+      markets: ['cn', 'hk', 'us'],
+      results: [],
+    });
+    getRefreshStatus.mockResolvedValue({
+      enabled: true,
+      usTime: '08:45',
+      cnTime: '09:00',
+      hkTime: '09:00',
+      maxSymbols: 250,
+      running: false,
+    });
     analyzeAsync.mockResolvedValue({ taskId: 'task-1' });
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -215,7 +243,36 @@ describe('WatchlistPage', () => {
       originalQuery: 'NVDA',
       selectionSource: 'manual',
     })));
-    await waitFor(() => expect(screen.getByText('home')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/zh?symbol=NVDA&task_id=task-1&source=watchlist&market=US'));
+    expect(screen.getByText('home')).toBeInTheDocument();
+  });
+
+  it('renders score freshness and manually refreshes scores', async () => {
+    const refreshedItems = [
+      makeItem({
+        id: 1,
+        symbol: 'NVDA',
+        scannerScore: 96,
+        scannerRank: 1,
+        lastScoredAt: '2026-05-01T13:00:00',
+        scoreStatus: 'fresh',
+      }),
+    ];
+    listWatchlistItems
+      .mockResolvedValueOnce({ items: watchlistItems })
+      .mockResolvedValueOnce({ items: refreshedItems });
+
+    renderWatchlist();
+    await screen.findByTestId('watchlist-row-NVDA');
+
+    expect(screen.getByText('开盘前自动更新')).toBeInTheDocument();
+    expect(screen.getAllByText('最新').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /刷新评分/ }));
+
+    await waitFor(() => expect(refreshScores).toHaveBeenCalledWith({ force: true }));
+    expect(await screen.findByText(/评分已刷新/)).toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-row-NVDA')).toHaveTextContent('96.0');
   });
 
   it('links backtest with scanner and watchlist metadata', async () => {

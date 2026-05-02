@@ -4,18 +4,21 @@
 from __future__ import annotations
 
 import re
+import threading
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, desc, select
 
 from data_provider.base import canonical_stock_code
-from src.storage import DatabaseManager, UserWatchlistItem
+from src.storage import AppUser, DatabaseManager, MarketScannerCandidate, MarketScannerRun, UserWatchlistItem
 
 class WatchlistService:
     """Business logic for user-owned candidate tracking."""
 
     _symbol_pattern = re.compile(r"[A-Z0-9][A-Z0-9.\-]*")
+    _refresh_lock = threading.Lock()
+    _refresh_running = False
 
     def __init__(self, db_manager: Optional[DatabaseManager] = None) -> None:
         self.db = db_manager or DatabaseManager.get_instance()
@@ -54,6 +57,12 @@ class WatchlistService:
             "scanner_run_id": int(row.scanner_run_id) if row.scanner_run_id is not None else None,
             "scanner_rank": int(row.scanner_rank) if row.scanner_rank is not None else None,
             "scanner_score": float(row.scanner_score) if row.scanner_score is not None else None,
+            "last_scored_at": row.last_scored_at.isoformat() if row.last_scored_at else None,
+            "score_source": str(row.score_source) if row.score_source else None,
+            "score_profile": str(row.score_profile) if row.score_profile else None,
+            "score_reason": str(row.score_reason) if row.score_reason else None,
+            "score_status": str(row.score_status) if row.score_status else None,
+            "score_error": str(row.score_error) if row.score_error else None,
             "theme_id": str(row.theme_id) if row.theme_id else None,
             "universe_type": str(row.universe_type) if row.universe_type else None,
             "notes": str(row.notes) if row.notes else None,
@@ -172,6 +181,195 @@ class WatchlistService:
             session.commit()
             session.refresh(row)
             return self._row_to_dict(row)
+
+    def refresh_scores(
+        self,
+        *,
+        owner_id: str,
+        market: Optional[str] = None,
+        symbols: Optional[List[str]] = None,
+        source: Optional[str] = None,
+        theme: Optional[str] = None,
+        force: bool = False,
+    ) -> Dict[str, Any]:
+        """Refresh saved candidate scores from persisted scanner candidate rows.
+
+        This intentionally does not run full AI analysis. It reuses the latest
+        scanner scoring already persisted for each symbol/market and marks rows
+        stale when no scanner score is available.
+        """
+        del force
+        normalized_source = str(source or "").strip().lower() or None
+        if normalized_source and normalized_source != "scanner":
+            raise ValueError("source must be scanner")
+        resolved_owner_id = self.db.require_user_id(owner_id)
+        normalized_market = self._normalize_market(market) if market else None
+        normalized_theme = self._normalize_optional_text(theme)
+        normalized_symbols = {
+            self._normalize_symbol(symbol)
+            for symbol in (symbols or [])
+            if str(symbol or "").strip()
+        }
+        started_at = datetime.now()
+        results: List[Dict[str, Any]] = []
+        markets: set[str] = set()
+        updated_count = 0
+        failed_count = 0
+        skipped_count = 0
+
+        if not self.__class__._refresh_lock.acquire(blocking=False):
+            return {
+                "ok": False,
+                "updated_count": 0,
+                "failed_count": 1,
+                "skipped_count": 0,
+                "started_at": started_at.isoformat(),
+                "completed_at": datetime.now().isoformat(),
+                "markets": [],
+                "results": [{"symbol": "*", "market": normalized_market or "all", "status": "running", "message": "Watchlist score refresh is already running."}],
+            }
+
+        self.__class__._refresh_running = True
+        try:
+            with self.db.get_session() as session:
+                conditions = [UserWatchlistItem.owner_id == resolved_owner_id]
+                if normalized_market:
+                    conditions.append(UserWatchlistItem.market == normalized_market)
+                if normalized_source:
+                    conditions.append(UserWatchlistItem.source == normalized_source)
+                if normalized_theme:
+                    conditions.append(UserWatchlistItem.theme_id == normalized_theme)
+                if normalized_symbols:
+                    conditions.append(UserWatchlistItem.symbol.in_(sorted(normalized_symbols)))
+
+                rows = session.execute(
+                    select(UserWatchlistItem)
+                    .where(and_(*conditions))
+                    .order_by(UserWatchlistItem.market.asc(), UserWatchlistItem.symbol.asc())
+                ).scalars().all()
+
+                for row in rows:
+                    markets.add(str(row.market))
+                    latest = session.execute(
+                        select(MarketScannerCandidate, MarketScannerRun)
+                        .join(MarketScannerRun, MarketScannerRun.id == MarketScannerCandidate.run_id)
+                        .where(
+                            and_(
+                                MarketScannerCandidate.symbol == row.symbol,
+                                MarketScannerRun.market == row.market,
+                                MarketScannerRun.status == "completed",
+                            )
+                        )
+                        .order_by(desc(MarketScannerRun.completed_at), desc(MarketScannerRun.run_at), desc(MarketScannerRun.id))
+                        .limit(1)
+                    ).first()
+
+                    if latest is None:
+                        row.score_status = "stale"
+                        row.score_error = "No scanner candidate score is available for this symbol."
+                        row.last_scored_at = started_at
+                        skipped_count += 1
+                        results.append({
+                            "symbol": row.symbol,
+                            "market": row.market,
+                            "status": "stale",
+                            "message": row.score_error,
+                        })
+                        continue
+
+                    candidate, run = latest
+                    row.scanner_run_id = int(run.id)
+                    row.scanner_rank = int(candidate.rank)
+                    row.scanner_score = float(candidate.score)
+                    row.score_source = "scanner_run"
+                    row.score_profile = str(run.profile or "")
+                    row.score_reason = str(candidate.reason_summary or "")
+                    row.score_status = "fresh"
+                    row.score_error = None
+                    row.last_scored_at = started_at
+                    row.updated_at = started_at
+                    updated_count += 1
+                    results.append({
+                        "symbol": row.symbol,
+                        "market": row.market,
+                        "status": "fresh",
+                        "score": row.scanner_score,
+                        "rank": row.scanner_rank,
+                        "scanner_run_id": row.scanner_run_id,
+                    })
+
+                session.commit()
+        finally:
+            self.__class__._refresh_running = False
+            self.__class__._refresh_lock.release()
+
+        completed_at = datetime.now()
+        return {
+            "ok": failed_count == 0,
+            "updated_count": updated_count,
+            "failed_count": failed_count,
+            "skipped_count": skipped_count,
+            "started_at": started_at.isoformat(),
+            "completed_at": completed_at.isoformat(),
+            "markets": sorted(markets),
+            "results": results,
+        }
+
+    @classmethod
+    def is_refresh_running(cls) -> bool:
+        return bool(cls._refresh_running)
+
+    def refresh_scores_for_all_users(
+        self,
+        *,
+        market: Optional[str] = None,
+        max_symbols: int = 250,
+    ) -> Dict[str, Any]:
+        normalized_market = self._normalize_market(market) if market else None
+        started_at = datetime.now()
+        summaries: List[Dict[str, Any]] = []
+        with self.db.get_session() as session:
+            owner_rows = session.execute(
+                select(UserWatchlistItem.owner_id)
+                .join(AppUser, AppUser.id == UserWatchlistItem.owner_id)
+                .where(
+                    and_(
+                        AppUser.is_active.is_(True),
+                        *( [UserWatchlistItem.market == normalized_market] if normalized_market else [] ),
+                    )
+                )
+                .group_by(UserWatchlistItem.owner_id)
+                .limit(max(1, int(max_symbols)))
+            ).scalars().all()
+
+        updated_count = 0
+        failed_count = 0
+        skipped_count = 0
+        for owner_id in owner_rows:
+            try:
+                result = self.refresh_scores(owner_id=str(owner_id), market=normalized_market)
+                summaries.append(result)
+                updated_count += int(result.get("updated_count") or 0)
+                failed_count += int(result.get("failed_count") or 0)
+                skipped_count += int(result.get("skipped_count") or 0)
+            except Exception as exc:
+                failed_count += 1
+                summaries.append({
+                    "ok": False,
+                    "owner_id": str(owner_id),
+                    "message": str(exc),
+                })
+
+        return {
+            "ok": failed_count == 0,
+            "updated_count": updated_count,
+            "failed_count": failed_count,
+            "skipped_count": skipped_count,
+            "started_at": started_at.isoformat(),
+            "completed_at": datetime.now().isoformat(),
+            "markets": [normalized_market] if normalized_market else sorted({market for item in summaries for market in item.get("markets", [])}),
+            "results": summaries,
+        }
 
     def remove_item(self, *, owner_id: str, item_id: int) -> bool:
         resolved_owner_id = self.db.require_user_id(owner_id)

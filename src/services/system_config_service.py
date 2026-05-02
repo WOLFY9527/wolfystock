@@ -221,6 +221,17 @@ class SystemConfigService:
             or getattr(task, "created_at", None)
         )
         task_status_value = getattr(getattr(task, "status", None), "value", getattr(task, "status", "pending"))
+        final_result = None
+        if task_status_value == "completed" and task_result is not None:
+            final_result = dict(task_result)
+            if not final_result.get("created_at"):
+                completed_at = getattr(task, "completed_at", None) or updated_at
+                final_result["created_at"] = (
+                    completed_at.isoformat()
+                    if hasattr(completed_at, "isoformat")
+                    else str(completed_at or "")
+                )
+
         return {
             "task_id": getattr(task, "task_id", task_id),
             "stock_code": getattr(task, "stock_code", ""),
@@ -231,7 +242,7 @@ class SystemConfigService:
             "updated_at": updated_at.isoformat() if hasattr(updated_at, "isoformat") else None,
             "execution_session_id": getattr(task, "execution_session_id", None),
             "modules": self._build_task_progress_modules(task),
-            "final_result": task_result if task_status_value == "completed" else None,
+            "final_result": final_result,
         }
 
     @staticmethod

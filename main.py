@@ -691,6 +691,7 @@ def main() -> int:
         # 模式3: 定时任务模式（分析 / Scanner 可并存）
         analysis_schedule_enabled = args.schedule or config.schedule_enabled
         scanner_schedule_enabled = args.scanner_schedule or getattr(config, 'scanner_schedule_enabled', False)
+        watchlist_score_refresh_enabled = getattr(config, 'watchlist_score_refresh_enabled', True)
         if analysis_schedule_enabled or scanner_schedule_enabled:
             logger.info("模式: 定时任务")
 
@@ -741,6 +742,56 @@ def main() -> int:
                     run_immediately=scanner_run_immediately,
                     label="market-scanner",
                 )
+
+            if watchlist_score_refresh_enabled:
+                from src.services.watchlist_service import WatchlistService
+
+                watchlist_refresh = WatchlistService()
+                watchlist_max_symbols = int(getattr(config, 'watchlist_score_refresh_max_symbols', 250) or 250)
+
+                def make_watchlist_score_task(market: str):
+                    def scheduled_watchlist_score_task():
+                        if not getattr(args, 'force_run', False) and datetime.now().weekday() >= 5:
+                            logger.info(
+                                "WatchlistScoreRefreshSkipped market=%s reason=weekend",
+                                market.upper(),
+                            )
+                            return
+                        logger.info("WatchlistScoreRefreshStarted market=%s", market.upper())
+                        result = watchlist_refresh.refresh_scores_for_all_users(
+                            market=market,
+                            max_symbols=watchlist_max_symbols,
+                        )
+                        if result.get("ok"):
+                            logger.info(
+                                "WatchlistScoreRefreshCompleted market=%s updated=%s skipped=%s failed=%s",
+                                market.upper(),
+                                result.get("updated_count"),
+                                result.get("skipped_count"),
+                                result.get("failed_count"),
+                            )
+                        else:
+                            logger.warning(
+                                "WatchlistScoreRefreshFailed market=%s updated=%s skipped=%s failed=%s",
+                                market.upper(),
+                                result.get("updated_count"),
+                                result.get("skipped_count"),
+                                result.get("failed_count"),
+                            )
+
+                    return scheduled_watchlist_score_task
+
+                for refresh_market, refresh_time in (
+                    ("us", getattr(config, 'watchlist_score_refresh_us_time', '08:45')),
+                    ("cn", getattr(config, 'watchlist_score_refresh_cn_time', '09:00')),
+                    ("hk", getattr(config, 'watchlist_score_refresh_hk_time', '09:00')),
+                ):
+                    scheduler.add_daily_task(
+                        task=make_watchlist_score_task(refresh_market),
+                        schedule_time=str(refresh_time),
+                        run_immediately=False,
+                        label=f"watchlist-score-refresh-{refresh_market}",
+                    )
 
             scheduler.run()
             return 0
