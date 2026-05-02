@@ -721,6 +721,10 @@ class Config:
     database_path: str = "./data/stock_analysis.db"
     postgres_phase_a_url: Optional[str] = None
     postgres_phase_a_apply_schema: bool = True
+    admin_logs_retention_days: int = 90
+    admin_logs_warning_threshold_count: int = 50000
+    admin_logs_critical_threshold_count: int = 100000
+    admin_logs_warning_threshold_storage_bytes: Optional[int] = None
     enable_phase_f_trades_list_comparison: bool = False
     phase_f_trades_list_comparison_account_ids: List[int] = field(default_factory=list)
     enable_phase_f_cash_ledger_comparison: bool = False
@@ -1414,6 +1418,33 @@ class Config:
             database_path=os.getenv('DATABASE_PATH', './data/stock_analysis.db'),
             postgres_phase_a_url=(os.getenv('POSTGRES_PHASE_A_URL') or '').strip() or None,
             postgres_phase_a_apply_schema=os.getenv('POSTGRES_PHASE_A_APPLY_SCHEMA', 'true').lower() == 'true',
+            admin_logs_retention_days=parse_env_int(
+                os.getenv('ADMIN_LOGS_RETENTION_DAYS'),
+                90,
+                field_name='ADMIN_LOGS_RETENTION_DAYS',
+                minimum=1,
+            ),
+            admin_logs_warning_threshold_count=parse_env_int(
+                os.getenv('ADMIN_LOGS_WARNING_THRESHOLD_COUNT'),
+                50000,
+                field_name='ADMIN_LOGS_WARNING_THRESHOLD_COUNT',
+                minimum=1,
+            ),
+            admin_logs_critical_threshold_count=parse_env_int(
+                os.getenv('ADMIN_LOGS_CRITICAL_THRESHOLD_COUNT'),
+                100000,
+                field_name='ADMIN_LOGS_CRITICAL_THRESHOLD_COUNT',
+                minimum=1,
+            ),
+            admin_logs_warning_threshold_storage_bytes=(
+                parse_env_int(
+                    os.getenv('ADMIN_LOGS_WARNING_THRESHOLD_STORAGE_BYTES'),
+                    0,
+                    field_name='ADMIN_LOGS_WARNING_THRESHOLD_STORAGE_BYTES',
+                    minimum=0,
+                )
+                or None
+            ),
             enable_phase_f_trades_list_comparison=parse_env_bool(
                 os.getenv('ENABLE_PHASE_F_TRADES_LIST_COMPARISON'),
                 False,

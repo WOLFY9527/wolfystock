@@ -229,6 +229,35 @@ export interface BusinessEventListResponse {
   healthSummary?: AdminLogHealthSummary | null;
 }
 
+export interface AdminLogStorageSummary {
+  totalLogCount: number;
+  totalEventCount: number;
+  oldestLogTimestamp?: string | null;
+  newestLogTimestamp?: string | null;
+  retentionDays: number;
+  retentionCutoff?: string | null;
+  logsOlderThanRetentionCount: number;
+  estimatedStorageBytes?: number | null;
+  warningThresholdCount: number;
+  criticalThresholdCount: number;
+  warningThresholdStorageBytes?: number | null;
+  status: 'ok' | 'warning' | 'critical' | string;
+  statusReasons: string[];
+  recommendedCleanupAction: string;
+  lastCleanupTimestamp?: string | null;
+}
+
+export interface AdminLogCleanupResponse {
+  dryRun: boolean;
+  cutoff?: string | null;
+  matchedLogCount: number;
+  matchedEventCount: number;
+  deletedLogCount: number;
+  deletedEventCount: number;
+  statusFilter?: string | null;
+  categoryFilter?: string | null;
+}
+
 function normalizeSessionSummary(payload: Record<string, unknown>): ExecutionLogSessionSummary {
   const normalized = toCamelCase<ExecutionLogSessionSummary>(payload);
   return {
@@ -306,6 +335,52 @@ export const adminLogsApi = {
     return {
       ...normalized,
       steps: Array.isArray(normalized.steps) ? normalized.steps : [],
+    };
+  },
+
+  getStorageSummary: async (): Promise<AdminLogStorageSummary> => {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/logs/storage/summary');
+    const normalized = toCamelCase<AdminLogStorageSummary>(response.data);
+    return {
+      totalLogCount: Number(normalized.totalLogCount || 0),
+      totalEventCount: Number(normalized.totalEventCount || 0),
+      oldestLogTimestamp: normalized.oldestLogTimestamp || null,
+      newestLogTimestamp: normalized.newestLogTimestamp || null,
+      retentionDays: Number(normalized.retentionDays || 90),
+      retentionCutoff: normalized.retentionCutoff || null,
+      logsOlderThanRetentionCount: Number(normalized.logsOlderThanRetentionCount || 0),
+      estimatedStorageBytes: typeof normalized.estimatedStorageBytes === 'number' ? normalized.estimatedStorageBytes : null,
+      warningThresholdCount: Number(normalized.warningThresholdCount || 50000),
+      criticalThresholdCount: Number(normalized.criticalThresholdCount || 100000),
+      warningThresholdStorageBytes: typeof normalized.warningThresholdStorageBytes === 'number' ? normalized.warningThresholdStorageBytes : null,
+      status: normalized.status || 'ok',
+      statusReasons: Array.isArray(normalized.statusReasons) ? normalized.statusReasons : [],
+      recommendedCleanupAction: normalized.recommendedCleanupAction || '',
+      lastCleanupTimestamp: normalized.lastCleanupTimestamp || null,
+    };
+  },
+
+  cleanupLogs: async (
+    params: {
+      useRetention?: boolean;
+      olderThan?: string;
+      dryRun?: boolean;
+      status?: string;
+      category?: string;
+      batchSize?: number;
+    },
+  ): Promise<AdminLogCleanupResponse> => {
+    const response = await apiClient.post<Record<string, unknown>>('/api/v1/admin/logs/cleanup', params);
+    const normalized = toCamelCase<AdminLogCleanupResponse>(response.data);
+    return {
+      dryRun: Boolean(normalized.dryRun),
+      cutoff: normalized.cutoff || null,
+      matchedLogCount: Number(normalized.matchedLogCount || 0),
+      matchedEventCount: Number(normalized.matchedEventCount || 0),
+      deletedLogCount: Number(normalized.deletedLogCount || 0),
+      deletedEventCount: Number(normalized.deletedEventCount || 0),
+      statusFilter: normalized.statusFilter || null,
+      categoryFilter: normalized.categoryFilter || null,
     };
   },
 

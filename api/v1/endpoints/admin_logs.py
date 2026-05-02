@@ -10,11 +10,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.deps import CurrentUser, require_admin_user
 from api.v1.schemas.admin_logs import (
+    AdminLogCleanupRequest,
+    AdminLogCleanupResponse,
+    AdminLogStorageSummaryModel,
     BusinessEventDetailModel,
     BusinessEventListResponse,
     ExecutionLogSessionDetailModel,
     ExecutionLogSessionListResponse,
 )
+from src.services.admin_logs_service import AdminLogsRetentionService
 from src.services.execution_log_service import ExecutionLogService
 
 router = APIRouter()
@@ -149,6 +153,48 @@ def _list_execution_logs(
         items=items,
         summary=service.summarize_items(items),
     )
+
+
+@router.get(
+    "/storage/summary",
+    response_model=AdminLogStorageSummaryModel,
+    summary="Summarize admin log storage health",
+)
+def get_log_storage_summary(
+    _: CurrentUser = Depends(require_admin_user),
+):
+    service = AdminLogsRetentionService()
+    return AdminLogStorageSummaryModel(**service.storage_summary())
+
+
+@router.post(
+    "/cleanup",
+    response_model=AdminLogCleanupResponse,
+    summary="Preview or clean old admin logs",
+)
+def cleanup_admin_logs(
+    request: AdminLogCleanupRequest,
+    _: CurrentUser = Depends(require_admin_user),
+):
+    service = AdminLogsRetentionService()
+    try:
+        result = service.cleanup(
+            use_retention=request.use_retention,
+            older_than=request.older_than,
+            dry_run=request.dry_run,
+            status=request.status,
+            category=request.category,
+            batch_size=request.batch_size,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "validation_error",
+                "message": str(exc),
+            },
+        ) from exc
+    return AdminLogCleanupResponse(**result)
 
 
 @router.get(

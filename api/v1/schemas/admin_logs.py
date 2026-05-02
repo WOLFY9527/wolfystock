@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class ExecutionLogEventModel(BaseModel):
@@ -171,3 +171,59 @@ class BusinessEventListResponse(BaseModel):
     offset: int
     hasMore: bool = False
     health_summary: Optional[AdminLogHealthSummaryModel] = None
+
+
+class AdminLogStorageSummaryModel(BaseModel):
+    total_log_count: int = 0
+    total_event_count: int = 0
+    oldest_log_timestamp: Optional[str] = None
+    newest_log_timestamp: Optional[str] = None
+    retention_days: int = 90
+    retention_cutoff: Optional[str] = None
+    logs_older_than_retention_count: int = 0
+    estimated_storage_bytes: Optional[int] = None
+    warning_threshold_count: int = 50000
+    critical_threshold_count: int = 100000
+    warning_threshold_storage_bytes: Optional[int] = None
+    status: str = "ok"
+    status_reasons: List[str] = Field(default_factory=list)
+    recommended_cleanup_action: str = "No cleanup needed."
+    last_cleanup_timestamp: Optional[str] = None
+
+
+class AdminLogCleanupRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    use_retention: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("use_retention", "useRetention"),
+        serialization_alias="useRetention",
+    )
+    older_than: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("older_than", "olderThan"),
+        serialization_alias="olderThan",
+    )
+    dry_run: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("dry_run", "dryRun"),
+        serialization_alias="dryRun",
+    )
+    status: Optional[str] = None
+    category: Optional[str] = None
+    batch_size: int = Field(
+        default=1000,
+        validation_alias=AliasChoices("batch_size", "batchSize"),
+        serialization_alias="batchSize",
+    )
+
+
+class AdminLogCleanupResponse(BaseModel):
+    dry_run: bool = True
+    cutoff: Optional[str] = None
+    matched_log_count: int = 0
+    matched_event_count: int = 0
+    deleted_log_count: int = 0
+    deleted_event_count: int = 0
+    status_filter: Optional[str] = None
+    category_filter: Optional[str] = None

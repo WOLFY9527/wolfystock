@@ -7,10 +7,12 @@ import unittest
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
-from api.deps import CurrentUser
+from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import admin_logs
 from src.services.execution_log_service import ExecutionLogService
 from src.storage import DatabaseManager
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 
 def _admin_user() -> CurrentUser:
@@ -20,6 +22,19 @@ def _admin_user() -> CurrentUser:
         display_name="Admin",
         role="admin",
         is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
+
+
+def _regular_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="user-1",
+        username="alice",
+        display_name="Alice",
+        role="user",
+        is_admin=False,
         is_authenticated=True,
         transitional=False,
         auth_enabled=True,
@@ -514,6 +529,129 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.health_summary.failed_events, 0)
         self.assertEqual(payload.health_summary.status, "healthy")
         self.assertEqual(payload.health_summary.failures_by_category, [])
+
+    def test_storage_summary_returns_retention_and_volume_counts(self) -> None:
+        now = datetime.now()
+        self._record_event(
+            session_id="old-error",
+            event_name="AnalysisFailed",
+            level="ERROR",
+            category="analysis",
+            message="old failure",
+            status="failed",
+            event_at=now - timedelta(days=120),
+        )
+        self._record_event(
+            session_id="recent-success",
+            event_name="AnalysisCompleted",
+            level="INFO",
+            category="analysis",
+            message="recent success",
+            status="completed",
+            event_at=now - timedelta(days=1),
+        )
+
+        with patch("src.services.admin_logs_service.get_db", return_value=self.db):
+            payload = admin_logs.get_log_storage_summary(_=_admin_user())
+
+        self.assertEqual(payload.total_log_count, 2)
+        self.assertEqual(payload.total_event_count, 2)
+        self.assertEqual(payload.retention_days, 90)
+        self.assertEqual(payload.logs_older_than_retention_count, 1)
+        self.assertIsNotNone(payload.oldest_log_timestamp)
+        self.assertIsNotNone(payload.newest_log_timestamp)
+        self.assertEqual(payload.status, "warning")
+        self.assertIn("cleanup", payload.recommended_cleanup_action)
+
+    def test_storage_summary_handles_empty_logs_table(self) -> None:
+        with patch("src.services.admin_logs_service.get_db", return_value=self.db):
+            payload = admin_logs.get_log_storage_summary(_=_admin_user())
+
+        self.assertEqual(payload.total_log_count, 0)
+        self.assertEqual(payload.total_event_count, 0)
+        self.assertIsNone(payload.oldest_log_timestamp)
+        self.assertIsNone(payload.newest_log_timestamp)
+        self.assertEqual(payload.logs_older_than_retention_count, 0)
+        self.assertEqual(payload.status, "ok")
+
+    def test_cleanup_dry_run_does_not_delete_logs(self) -> None:
+        old_at = datetime.now() - timedelta(days=120)
+        self._record_event(
+            session_id="old-error",
+            event_name="AnalysisFailed",
+            level="ERROR",
+            category="analysis",
+            message="old failure",
+            status="failed",
+            event_at=old_at,
+        )
+
+        with patch("src.services.admin_logs_service.get_db", return_value=self.db):
+            payload = admin_logs.cleanup_admin_logs(
+                admin_logs.AdminLogCleanupRequest(use_retention=True, dry_run=True),
+                _=_admin_user(),
+            )
+            remaining = admin_logs.get_log_storage_summary(_=_admin_user())
+
+        self.assertTrue(payload.dry_run)
+        self.assertEqual(payload.matched_log_count, 1)
+        self.assertEqual(payload.deleted_log_count, 0)
+        self.assertEqual(remaining.total_log_count, 1)
+
+    def test_cleanup_actual_run_deletes_only_logs_older_than_cutoff(self) -> None:
+        now = datetime.now()
+        self._record_event(
+            session_id="old-error",
+            event_name="AnalysisFailed",
+            level="ERROR",
+            category="analysis",
+            message="old failure",
+            status="failed",
+            event_at=now - timedelta(days=120),
+        )
+        self._record_event(
+            session_id="recent-success",
+            event_name="AnalysisCompleted",
+            level="INFO",
+            category="analysis",
+            message="recent success",
+            status="completed",
+            event_at=now - timedelta(days=2),
+        )
+
+        with patch("src.services.admin_logs_service.get_db", return_value=self.db):
+            payload = admin_logs.cleanup_admin_logs(
+                admin_logs.AdminLogCleanupRequest(older_than=(now - timedelta(days=30)).isoformat(), dry_run=False),
+                _=_admin_user(),
+            )
+            remaining = admin_logs.get_log_storage_summary(_=_admin_user())
+            list_payload = admin_logs.list_execution_log_sessions(min_level="INFO", since="", _=_admin_user())
+
+        self.assertFalse(payload.dry_run)
+        self.assertEqual(payload.deleted_log_count, 1)
+        self.assertEqual(remaining.total_log_count, 1)
+        self.assertEqual([item.session_id for item in list_payload.items], ["recent-success"])
+
+    def test_cleanup_refuses_unsafe_request_without_cutoff_or_retention(self) -> None:
+        with patch("src.services.admin_logs_service.get_db", return_value=self.db):
+            with self.assertRaises(Exception) as raised:
+                admin_logs.cleanup_admin_logs(
+                    admin_logs.AdminLogCleanupRequest(dry_run=False),
+                    _=_admin_user(),
+                )
+
+        self.assertEqual(getattr(raised.exception, "status_code", None), 400)
+
+    def test_cleanup_requires_admin_authorization(self) -> None:
+        app = FastAPI()
+        app.include_router(admin_logs.router, prefix="/api/v1/admin/logs")
+        app.dependency_overrides[get_current_user] = lambda: _regular_user()
+        client = TestClient(app)
+
+        response = client.post("/api/v1/admin/logs/cleanup", json={"use_retention": True, "dry_run": True})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"]["error"], "admin_required")
 
 
 if __name__ == "__main__":

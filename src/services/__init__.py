@@ -24,10 +24,13 @@ def __getattr__(name: str):
         "StockService": "src.services.stock_service",
         "TaskService": "src.services.task_service",
         "get_task_service": "src.services.task_service",
+        "admin_logs_service": "src.services.admin_logs_service",
     }
     if name in _lazy_map:
         import importlib
         module = importlib.import_module(_lazy_map[name])
+        if name == "admin_logs_service":
+            return module
         return getattr(module, name)
     raise AttributeError(f"module 'src.services' has no attribute {name!r}")
 
@@ -41,4 +44,5 @@ __all__ = [
     "StockService",
     "TaskService",
     "get_task_service",
+    "admin_logs_service",
 ]

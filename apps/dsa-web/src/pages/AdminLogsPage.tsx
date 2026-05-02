@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { adminLogsApi, type AdminLogHealthSummary, type BusinessEvent, type BusinessEventDetail, type BusinessEventListResponse, type ExecutionLogSessionDetail, type ExecutionLogSessionListResponse, type ExecutionLogSessionSummary, type ExecutionStep } from '../api/adminLogs';
+import { adminLogsApi, type AdminLogCleanupResponse, type AdminLogHealthSummary, type AdminLogStorageSummary, type BusinessEvent, type BusinessEventDetail, type BusinessEventListResponse, type ExecutionLogSessionDetail, type ExecutionLogSessionListResponse, type ExecutionLogSessionSummary, type ExecutionStep } from '../api/adminLogs';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Drawer, GlassCard } from '../components/common';
@@ -382,6 +382,29 @@ function formatDuration(value: unknown): string {
   return formatDurationMs(value);
 }
 
+function formatStorageBytes(value: unknown): string {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) return '--';
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${Math.round(bytes)} B`;
+}
+
+function storageStatusLabel(value: string | undefined, locale: AdminLogsLanguage): string {
+  const normalized = String(value || 'ok').toLowerCase();
+  if (normalized === 'critical') return locale === 'zh' ? 'Critical' : 'Critical';
+  if (normalized === 'warning') return locale === 'zh' ? 'Warning' : 'Warning';
+  return locale === 'zh' ? 'OK' : 'OK';
+}
+
+function storageStatusTone(value: string | undefined): string {
+  const normalized = String(value || 'ok').toLowerCase();
+  if (normalized === 'critical') return 'border-rose-300/35 bg-rose-500/14 text-rose-100';
+  if (normalized === 'warning') return 'border-amber-300/30 bg-amber-400/12 text-amber-100';
+  return 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100';
+}
+
 function statusFilterLabel(value: (typeof STATUS_FILTER_OPTIONS)[number], locale: AdminLogsLanguage): string {
   const labels: Record<(typeof STATUS_FILTER_OPTIONS)[number], { zh: string; en: string }> = {
     all: { zh: '全部状态', en: 'All status' },
@@ -742,6 +765,10 @@ const AdminLogsPage: React.FC = () => {
   const [pageOffset, setPageOffset] = useState(0);
   const [sessions, setSessions] = useState<ExecutionLogSessionSummary[]>([]);
   const [summary, setSummary] = useState<NonNullable<ExecutionLogSessionListResponse['summary']> | null>(null);
+  const [storageSummary, setStorageSummary] = useState<AdminLogStorageSummary | null>(null);
+  const [cleanupPreview, setCleanupPreview] = useState<AdminLogCleanupResponse | null>(null);
+  const [cleanupMessage, setCleanupMessage] = useState<string | null>(null);
+  const [isCleanupBusy, setIsCleanupBusy] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState<ExecutionLogSessionDetail | null>(null);
   const [selectedBusinessDetail, setSelectedBusinessDetail] = useState<BusinessEventDetail | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -750,6 +777,15 @@ const AdminLogsPage: React.FC = () => {
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [detailError, setDetailError] = useState<ParsedApiError | null>(null);
   const skipDebugClickRef = useRef(false);
+
+  const loadStorageSummary = useCallback(async () => {
+    try {
+      const response = await adminLogsApi.getStorageSummary();
+      setStorageSummary(response);
+    } catch {
+      setStorageSummary(null);
+    }
+  }, []);
 
   const loadSessions = useCallback(async () => {
     setIsLoadingList(true);
@@ -807,6 +843,41 @@ const AdminLogsPage: React.FC = () => {
     }
   }, [activeTab, categoryFilter, levelFilter, pageOffset, searchQuery, showDebugLogs, sinceFilter, statusFilter]);
 
+  const previewCleanup = useCallback(async () => {
+    setIsCleanupBusy(true);
+    setCleanupMessage(null);
+    try {
+      const response = await adminLogsApi.cleanupLogs({ useRetention: true, dryRun: true });
+      setCleanupPreview(response);
+      setCleanupMessage(`${response.matchedLogCount} logs would be deleted before ${formatDateTime(response.cutoff, locale)}.`);
+    } catch (err) {
+      setError(getParsedApiError(err));
+    } finally {
+      setIsCleanupBusy(false);
+    }
+  }, [locale]);
+
+  const confirmCleanup = useCallback(async () => {
+    const expectedCount = cleanupPreview?.matchedLogCount ?? storageSummary?.logsOlderThanRetentionCount ?? 0;
+    const cutoff = cleanupPreview?.cutoff || storageSummary?.retentionCutoff || '';
+    const confirmed = window.confirm(
+      `Delete ${expectedCount} admin logs older than cutoff date ${formatDateTime(cutoff, locale)}? This action cannot be undone.`,
+    );
+    if (!confirmed) return;
+    setIsCleanupBusy(true);
+    setCleanupMessage(null);
+    try {
+      const response = await adminLogsApi.cleanupLogs({ useRetention: true, dryRun: false });
+      setCleanupPreview(response);
+      setCleanupMessage(`Deleted ${response.deletedLogCount} logs and ${response.deletedEventCount} events.`);
+      await Promise.all([loadStorageSummary(), loadSessions()]);
+    } catch (err) {
+      setError(getParsedApiError(err));
+    } finally {
+      setIsCleanupBusy(false);
+    }
+  }, [cleanupPreview, loadSessions, loadStorageSummary, locale, storageSummary]);
+
   useEffect(() => {
     document.title = t('adminLogs.documentTitle');
   }, [t]);
@@ -818,6 +889,10 @@ const AdminLogsPage: React.FC = () => {
   useEffect(() => {
     void loadSessions();
   }, [loadSessions]);
+
+  useEffect(() => {
+    void loadStorageSummary();
+  }, [loadStorageSummary]);
 
   const filteredSessions = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -1108,6 +1183,56 @@ const AdminLogsPage: React.FC = () => {
       </GlassCard>
 
       {error ? <ApiErrorAlert error={error} /> : null}
+
+      <section
+        data-testid="admin-logs-storage-summary"
+        className="grid grid-cols-1 gap-2 rounded-xl border border-white/8 bg-black/20 p-2.5 sm:grid-cols-2 lg:grid-cols-[8rem_9rem_10rem_10rem_minmax(12rem,1fr)_auto]"
+      >
+        <div className={`rounded-lg border px-3 py-2 ${storageStatusTone(storageSummary?.status)}`}>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? 'Storage' : 'Storage'}</p>
+          <p className="mt-1 text-base font-semibold">{storageStatusLabel(storageSummary?.status, locale)}</p>
+        </div>
+        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Log count' : 'Log count'}</p>
+          <p className="mt-1 text-base font-semibold text-foreground">{storageSummary?.totalLogCount ?? '--'}</p>
+          <p className="text-[11px] text-muted-text">{storageSummary?.totalEventCount ?? '--'} events</p>
+        </div>
+        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Retention' : 'Retention'}</p>
+          <p className="mt-1 text-base font-semibold text-foreground">{storageSummary?.retentionDays ?? '--'} days</p>
+          <p className="text-[11px] text-muted-text">{storageSummary?.logsOlderThanRetentionCount ?? 0} older</p>
+        </div>
+        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Oldest' : 'Oldest'}</p>
+          <p className="mt-1 truncate text-sm font-semibold text-foreground">{formatDateTime(storageSummary?.oldestLogTimestamp, locale)}</p>
+          <p className="text-[11px] text-muted-text">{formatStorageBytes(storageSummary?.estimatedStorageBytes)}</p>
+        </div>
+        <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Cleanup guidance' : 'Cleanup guidance'}</p>
+          <p className="mt-1 truncate text-sm text-foreground" title={storageSummary?.recommendedCleanupAction || ''}>
+            {storageSummary?.recommendedCleanupAction || (locale === 'zh' ? 'Storage summary unavailable' : 'Storage summary unavailable')}
+          </p>
+          {cleanupMessage ? <p className="mt-1 text-[11px] text-emerald-100">{cleanupMessage}</p> : null}
+        </div>
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row lg:flex-col">
+          <button
+            type="button"
+            className="btn-secondary h-9 rounded-lg px-3 text-xs"
+            onClick={() => void previewCleanup()}
+            disabled={isCleanupBusy || !storageSummary}
+          >
+            {isCleanupBusy ? t('adminLogs.loading') : 'Preview cleanup'}
+          </button>
+          <button
+            type="button"
+            className="rounded-lg border border-rose-300/25 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/16 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => void confirmCleanup()}
+            disabled={isCleanupBusy || !storageSummary || (cleanupPreview?.matchedLogCount ?? storageSummary.logsOlderThanRetentionCount) <= 0}
+          >
+            Clean logs older than retention
+          </button>
+        </div>
+      </section>
 
       <section
         data-testid="admin-logs-health-summary"

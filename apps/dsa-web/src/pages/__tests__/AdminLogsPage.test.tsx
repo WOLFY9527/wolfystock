@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
 import AdminLogsPage from '../AdminLogsPage';
 
-const { listBusinessEvents, getBusinessEventDetail, listSessions, getSessionDetail } = vi.hoisted(() => ({
+const { listBusinessEvents, getBusinessEventDetail, listSessions, getSessionDetail, getStorageSummary, cleanupLogs } = vi.hoisted(() => ({
   listBusinessEvents: vi.fn(),
   getBusinessEventDetail: vi.fn(),
   listSessions: vi.fn(),
   getSessionDetail: vi.fn(),
+  getStorageSummary: vi.fn(),
+  cleanupLogs: vi.fn(),
 }));
 
 vi.mock('../../api/adminLogs', () => ({
@@ -16,6 +18,8 @@ vi.mock('../../api/adminLogs', () => ({
     getBusinessEventDetail,
     listSessions,
     getSessionDetail,
+    getStorageSummary,
+    cleanupLogs,
   },
 }));
 
@@ -368,6 +372,32 @@ describe('AdminLogsPage', () => {
       },
     });
     getSessionDetail.mockResolvedValue({ ...rawSessions[0], events: [], operationDetail: {} });
+    getStorageSummary.mockResolvedValue({
+      totalLogCount: 120000,
+      totalEventCount: 180000,
+      oldestLogTimestamp: '2026-01-01T00:00:00Z',
+      newestLogTimestamp: '2026-04-30T13:21:00Z',
+      retentionDays: 90,
+      retentionCutoff: '2026-01-30T00:00:00Z',
+      logsOlderThanRetentionCount: 120,
+      estimatedStorageBytes: 10485760,
+      warningThresholdCount: 50000,
+      criticalThresholdCount: 100000,
+      status: 'critical',
+      recommendedCleanupAction: 'Preview cleanup, then delete logs older than retention.',
+      lastCleanupTimestamp: null,
+    });
+    cleanupLogs.mockResolvedValue({
+      dryRun: true,
+      cutoff: '2026-01-30T00:00:00Z',
+      matchedLogCount: 120,
+      matchedEventCount: 180,
+      deletedLogCount: 0,
+      deletedEventCount: 0,
+      statusFilter: null,
+      categoryFilter: null,
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
   it('defaults to business events and does not show raw step names as the main list', async () => {
@@ -383,6 +413,10 @@ describe('AdminLogsPage', () => {
     expect(screen.getByRole('tab', { name: '原始日志' })).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-filter-bar')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-health-summary')).toBeInTheDocument();
+    expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('120000');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('90');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('120 older');
+    expect(screen.getByText('Critical')).toBeInTheDocument();
     expect(screen.getAllByText('Degraded').length).toBeGreaterThan(0);
     expect(screen.getByText('1 / 6')).toBeInTheDocument();
     expect(screen.getByText('finnhub')).toBeInTheDocument();
@@ -420,6 +454,54 @@ describe('AdminLogsPage', () => {
     expect(screen.getByRole('button', { name: '下一页' })).toBeInTheDocument();
     expect(screen.queryByText('fetch_news')).not.toBeInTheDocument();
     await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ since: '24h', limit: 20, offset: 0 })));
+  });
+
+  it('previews and confirms retention cleanup, then refreshes logs and storage summary', async () => {
+    cleanupLogs
+      .mockResolvedValueOnce({
+        dryRun: true,
+        cutoff: '2026-01-30T00:00:00Z',
+        matchedLogCount: 120,
+        matchedEventCount: 180,
+        deletedLogCount: 0,
+        deletedEventCount: 0,
+        statusFilter: null,
+        categoryFilter: null,
+      })
+      .mockResolvedValueOnce({
+        dryRun: false,
+        cutoff: '2026-01-30T00:00:00Z',
+        matchedLogCount: 120,
+        matchedEventCount: 180,
+        deletedLogCount: 120,
+        deletedEventCount: 180,
+        statusFilter: null,
+        categoryFilter: null,
+      });
+
+    render(<AdminLogsPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview cleanup' }));
+    await waitFor(() => expect(cleanupLogs).toHaveBeenCalledWith({ useRetention: true, dryRun: true }));
+    expect(await screen.findByText(/120 logs would be deleted/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clean logs older than retention' }));
+    await waitFor(() => expect(window.confirm).toHaveBeenCalled());
+    await waitFor(() => expect(cleanupLogs).toHaveBeenLastCalledWith({ useRetention: true, dryRun: false }));
+    expect(await screen.findByText(/Deleted 120 logs/)).toBeInTheDocument();
+    expect(getStorageSummary).toHaveBeenCalledTimes(2);
+    expect(listBusinessEvents).toHaveBeenCalled();
+  });
+
+  it('does not run destructive cleanup when confirmation is declined', async () => {
+    (window.confirm as ReturnType<typeof vi.fn>).mockReturnValueOnce(false);
+
+    render(<AdminLogsPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Clean logs older than retention' }));
+
+    await waitFor(() => expect(window.confirm).toHaveBeenCalled());
+    expect(cleanupLogs).not.toHaveBeenCalled();
   });
 
   it('filters the stock-analysis view by symbol, status, time range, and pagination', async () => {

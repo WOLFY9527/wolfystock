@@ -1,5 +1,7 @@
 ## 2026-05-01
 
+- 🧾 **Admin Logs 新增保留策略与清理能力** — `/api/v1/admin/logs/storage/summary` 提供日志总量、事件数、最早/最新时间、保留天数、超过保留期数量、PostgreSQL 存储估算与健康状态，`/api/v1/admin/logs/cleanup` 支持按保留策略或显式截止时间 dry-run / 分批清理，并拒绝无截止条件的危险删除。`/admin/logs` 顶部新增紧凑 Retention / Storage 面板，展示容量与清理建议，支持预览清理和带确认的手动清理，同时保留既有日志列表、筛选与详情行为。
+
 - 🧠 **Scanner AI 自定义主题扩展** — `/scanner` 的 Theme universe 面板新增 AI custom theme builder，用户可输入主题名称、criteria prompt 与可选手动补充代码，生成如 White House Stocks、AI Semiconductor Stocks、Green Energy Stocks 等运行时自定义主题，并立即查看 symbol suggestions、confidence 与 evidence。后端新增 `POST /api/v1/scanner/themes`，生成主题以 `source=ai_generated`、`is_seed_list=false`、`requires_manual_maintenance=true`、`refresh_policy=on_demand` 暴露，并继续复用既有 `universe_type=theme` 扫描路径；AI 只扩展 theme universe，不替代 deterministic scanner 排名。
 
 - 🧾 **Admin Logs Health Summary Phase 2** — `/api/v1/admin/logs` 与原始 `/sessions` 列表在保持兼容的基础上新增可选 `health_summary`，按当前查询窗口派生 total/failed/warning/slow、failure rate、overall status、失败 category/provider/reason Top N、actor breakdown 与最近错误摘要，继续复用现有 execution log/business event 读取结果并保持错误摘要脱敏。`/admin/logs` 顶部新增紧凑健康摘要区，展示 healthy/degraded/failing、失败数量/比例、最常失败功能、provider/source 与 reason 聚合，以及最近严重错误。
