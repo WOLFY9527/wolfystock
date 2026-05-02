@@ -179,6 +179,7 @@ def cleanup_admin_logs(
     service = AdminLogsRetentionService()
     try:
         result = service.cleanup(
+            mode=request.mode,
             use_retention=request.use_retention,
             older_than=request.older_than,
             dry_run=request.dry_run,

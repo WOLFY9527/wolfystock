@@ -378,16 +378,33 @@ describe('AdminLogsPage', () => {
       oldestLogTimestamp: '2026-01-01T00:00:00Z',
       newestLogTimestamp: '2026-04-30T13:21:00Z',
       retentionDays: 90,
+      minimumRetentionDays: 7,
       retentionCutoff: '2026-01-30T00:00:00Z',
       logsOlderThanRetentionCount: 120,
-      estimatedStorageBytes: 10485760,
+      estimatedStorageBytes: 690 * 1024 * 1024,
+      storageSizeBytes: 690 * 1024 * 1024,
+      storageSizeLabel: '690.0 MB',
+      storageSizeAvailable: true,
+      storageSoftLimitBytes: 512 * 1024 * 1024,
+      storageHardLimitBytes: 1024 * 1024 * 1024,
+      usedPercentageOfSoftLimit: 134.77,
+      usedPercentageOfHardLimit: 67.38,
+      capacityCleanupRecommended: true,
+      autoCleanupEnabled: true,
+      autoCleanupPerformed: false,
+      autoCleanupMessage: null,
+      capacityCleanupPlan: {},
+      postgresVacuumNote: 'Deleted rows may require PostgreSQL autovacuum to reclaim physical disk space.',
       warningThresholdCount: 50000,
       criticalThresholdCount: 100000,
-      status: 'critical',
-      recommendedCleanupAction: 'Preview cleanup, then delete logs older than retention.',
+      warningThresholdStorageBytes: null,
+      statusReasons: ['storage_soft_limit_exceeded'],
+      status: 'warning',
+      recommendedCleanupAction: 'Storage is over the soft limit. Preview retention cleanup or capacity cleanup.',
       lastCleanupTimestamp: null,
     });
     cleanupLogs.mockResolvedValue({
+      mode: 'retention',
       dryRun: true,
       cutoff: '2026-01-30T00:00:00Z',
       matchedLogCount: 120,
@@ -396,6 +413,9 @@ describe('AdminLogsPage', () => {
       deletedEventCount: 0,
       statusFilter: null,
       categoryFilter: null,
+      additionalCleanupNeeded: false,
+      message: null,
+      postgresVacuumNote: null,
     });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
@@ -413,10 +433,13 @@ describe('AdminLogsPage', () => {
     expect(screen.getByRole('tab', { name: '原始日志' })).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-filter-bar')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-health-summary')).toBeInTheDocument();
-    expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('120000');
+    expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('120,000 sessions');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('180,000 events');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('690.0 MB / 512.0 MB soft');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('1.0 GB hard limit');
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('90');
-    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('120 older');
-    expect(screen.getByText('Critical')).toBeInTheDocument();
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('min 7 days · 120 older');
+    expect(screen.getByText('Warning')).toBeInTheDocument();
     expect(screen.getAllByText('Degraded').length).toBeGreaterThan(0);
     expect(screen.getByText('1 / 6')).toBeInTheDocument();
     expect(screen.getByText('finnhub')).toBeInTheDocument();
@@ -459,6 +482,7 @@ describe('AdminLogsPage', () => {
   it('previews and confirms retention cleanup, then refreshes logs and storage summary', async () => {
     cleanupLogs
       .mockResolvedValueOnce({
+        mode: 'retention',
         dryRun: true,
         cutoff: '2026-01-30T00:00:00Z',
         matchedLogCount: 120,
@@ -467,8 +491,12 @@ describe('AdminLogsPage', () => {
         deletedEventCount: 0,
         statusFilter: null,
         categoryFilter: null,
+        additionalCleanupNeeded: false,
+        message: null,
+        postgresVacuumNote: null,
       })
       .mockResolvedValueOnce({
+        mode: 'retention',
         dryRun: false,
         cutoff: '2026-01-30T00:00:00Z',
         matchedLogCount: 120,
@@ -477,20 +505,141 @@ describe('AdminLogsPage', () => {
         deletedEventCount: 180,
         statusFilter: null,
         categoryFilter: null,
+        additionalCleanupNeeded: false,
+        message: null,
+        postgresVacuumNote: null,
       });
 
     render(<AdminLogsPage />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Preview cleanup' }));
-    await waitFor(() => expect(cleanupLogs).toHaveBeenCalledWith({ useRetention: true, dryRun: true }));
-    expect(await screen.findByText(/120 logs would be deleted/)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview retention cleanup' }));
+    await waitFor(() => expect(cleanupLogs).toHaveBeenCalledWith({ mode: 'retention', useRetention: true, dryRun: true }));
+    expect(await screen.findByText(/Retention preview: 120 sessions and 180 events would be deleted/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Clean logs older than retention' }));
     await waitFor(() => expect(window.confirm).toHaveBeenCalled());
-    await waitFor(() => expect(cleanupLogs).toHaveBeenLastCalledWith({ useRetention: true, dryRun: false }));
-    expect(await screen.findByText(/Deleted 120 logs/)).toBeInTheDocument();
+    await waitFor(() => expect(cleanupLogs).toHaveBeenLastCalledWith({ mode: 'retention', useRetention: true, dryRun: false }));
+    expect(await screen.findByText(/Deleted 120 sessions/)).toBeInTheDocument();
     expect(getStorageSummary).toHaveBeenCalledTimes(2);
     expect(listBusinessEvents).toHaveBeenCalled();
+  });
+
+  it('shows size unavailable state when database storage size is unavailable', async () => {
+    getStorageSummary.mockResolvedValueOnce({
+      totalLogCount: 7441,
+      totalEventCount: 10326,
+      oldestLogTimestamp: '2026-04-17T18:27:00Z',
+      newestLogTimestamp: '2026-04-30T13:21:00Z',
+      retentionDays: 90,
+      minimumRetentionDays: 7,
+      retentionCutoff: '2026-01-30T00:00:00Z',
+      logsOlderThanRetentionCount: 0,
+      estimatedStorageBytes: null,
+      storageSizeBytes: null,
+      storageSizeLabel: null,
+      storageSizeAvailable: false,
+      storageSoftLimitBytes: 512 * 1024 * 1024,
+      storageHardLimitBytes: 1024 * 1024 * 1024,
+      usedPercentageOfSoftLimit: null,
+      usedPercentageOfHardLimit: null,
+      capacityCleanupRecommended: false,
+      autoCleanupEnabled: true,
+      autoCleanupPerformed: false,
+      autoCleanupMessage: null,
+      capacityCleanupPlan: {},
+      postgresVacuumNote: null,
+      warningThresholdCount: 50000,
+      criticalThresholdCount: 100000,
+      warningThresholdStorageBytes: null,
+      statusReasons: [],
+      status: 'ok',
+      recommendedCleanupAction: 'Storage size unavailable; retention and row-count checks are active.',
+      lastCleanupTimestamp: null,
+    });
+
+    render(<AdminLogsPage />);
+
+    expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('Size unavailable');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('Retention checks active');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('7,441 sessions');
+    expect(screen.getByRole('button', { name: 'Preview capacity cleanup' })).toBeDisabled();
+  });
+
+  it('renders critical quota state and runs confirmed capacity cleanup', async () => {
+    getStorageSummary.mockResolvedValue({
+      totalLogCount: 120000,
+      totalEventCount: 180000,
+      oldestLogTimestamp: '2026-01-01T00:00:00Z',
+      newestLogTimestamp: '2026-04-30T13:21:00Z',
+      retentionDays: 90,
+      minimumRetentionDays: 7,
+      retentionCutoff: '2026-01-30T00:00:00Z',
+      logsOlderThanRetentionCount: 120,
+      estimatedStorageBytes: 1200 * 1024 * 1024,
+      storageSizeBytes: 1200 * 1024 * 1024,
+      storageSizeLabel: '1.2 GB',
+      storageSizeAvailable: true,
+      storageSoftLimitBytes: 512 * 1024 * 1024,
+      storageHardLimitBytes: 1024 * 1024 * 1024,
+      usedPercentageOfSoftLimit: 234.38,
+      usedPercentageOfHardLimit: 117.19,
+      capacityCleanupRecommended: true,
+      autoCleanupEnabled: true,
+      autoCleanupPerformed: false,
+      autoCleanupMessage: null,
+      capacityCleanupPlan: {},
+      postgresVacuumNote: 'Deleted rows may require PostgreSQL autovacuum to reclaim physical disk space.',
+      warningThresholdCount: 50000,
+      criticalThresholdCount: 100000,
+      warningThresholdStorageBytes: null,
+      statusReasons: ['storage_hard_limit_exceeded'],
+      status: 'critical',
+      recommendedCleanupAction: 'Storage is over the hard limit. Run capacity cleanup.',
+      lastCleanupTimestamp: null,
+    });
+    cleanupLogs
+      .mockResolvedValueOnce({
+        mode: 'capacity',
+        dryRun: true,
+        cutoff: '2026-04-23T00:00:00Z',
+        matchedLogCount: 80,
+        matchedEventCount: 160,
+        deletedLogCount: 0,
+        deletedEventCount: 0,
+        statusFilter: null,
+        categoryFilter: null,
+        additionalCleanupNeeded: true,
+        message: null,
+        postgresVacuumNote: 'Deleted rows may require PostgreSQL autovacuum to reclaim physical disk space.',
+      })
+      .mockResolvedValueOnce({
+        mode: 'capacity',
+        dryRun: false,
+        cutoff: '2026-04-23T00:00:00Z',
+        matchedLogCount: 80,
+        matchedEventCount: 160,
+        deletedLogCount: 80,
+        deletedEventCount: 160,
+        statusFilter: null,
+        categoryFilter: null,
+        additionalCleanupNeeded: false,
+        message: 'Deleted rows may require PostgreSQL autovacuum to reclaim physical disk space.',
+        postgresVacuumNote: 'Deleted rows may require PostgreSQL autovacuum to reclaim physical disk space.',
+      });
+
+    render(<AdminLogsPage />);
+
+    expect(await screen.findByText('Critical')).toBeInTheDocument();
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('1.2 GB / 512.0 MB soft');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('Auto cleanup required');
+    fireEvent.click(screen.getByRole('button', { name: 'Preview capacity cleanup' }));
+    await waitFor(() => expect(cleanupLogs).toHaveBeenCalledWith({ mode: 'capacity', dryRun: true }));
+    expect(await screen.findByText(/Capacity preview: 80 sessions and 160 events/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run capacity cleanup' }));
+    await waitFor(() => expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Run capacity cleanup')));
+    await waitFor(() => expect(cleanupLogs).toHaveBeenLastCalledWith({ mode: 'capacity', dryRun: false }));
+    expect(await screen.findByText(/Deleted 80 sessions/)).toBeInTheDocument();
   });
 
   it('does not run destructive cleanup when confirmation is declined', async () => {

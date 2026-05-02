@@ -722,6 +722,11 @@ class Config:
     postgres_phase_a_url: Optional[str] = None
     postgres_phase_a_apply_schema: bool = True
     admin_logs_retention_days: int = 90
+    admin_logs_min_retention_days: int = 7
+    admin_logs_storage_soft_limit_mb: int = 512
+    admin_logs_storage_hard_limit_mb: int = 1024
+    admin_logs_cleanup_batch_size: int = 1000
+    admin_logs_auto_cleanup_enabled: bool = True
     admin_logs_warning_threshold_count: int = 50000
     admin_logs_critical_threshold_count: int = 100000
     admin_logs_warning_threshold_storage_bytes: Optional[int] = None
@@ -1419,10 +1424,38 @@ class Config:
             postgres_phase_a_url=(os.getenv('POSTGRES_PHASE_A_URL') or '').strip() or None,
             postgres_phase_a_apply_schema=os.getenv('POSTGRES_PHASE_A_APPLY_SCHEMA', 'true').lower() == 'true',
             admin_logs_retention_days=parse_env_int(
-                os.getenv('ADMIN_LOGS_RETENTION_DAYS'),
+                os.getenv('ADMIN_LOG_RETENTION_DAYS') or os.getenv('ADMIN_LOGS_RETENTION_DAYS'),
                 90,
-                field_name='ADMIN_LOGS_RETENTION_DAYS',
+                field_name='ADMIN_LOG_RETENTION_DAYS',
                 minimum=1,
+            ),
+            admin_logs_min_retention_days=parse_env_int(
+                os.getenv('ADMIN_LOG_MIN_RETENTION_DAYS') or os.getenv('ADMIN_LOGS_MIN_RETENTION_DAYS'),
+                7,
+                field_name='ADMIN_LOG_MIN_RETENTION_DAYS',
+                minimum=0,
+            ),
+            admin_logs_storage_soft_limit_mb=parse_env_int(
+                os.getenv('ADMIN_LOG_STORAGE_SOFT_LIMIT_MB') or os.getenv('ADMIN_LOGS_STORAGE_SOFT_LIMIT_MB'),
+                512,
+                field_name='ADMIN_LOG_STORAGE_SOFT_LIMIT_MB',
+                minimum=1,
+            ),
+            admin_logs_storage_hard_limit_mb=parse_env_int(
+                os.getenv('ADMIN_LOG_STORAGE_HARD_LIMIT_MB') or os.getenv('ADMIN_LOGS_STORAGE_HARD_LIMIT_MB'),
+                1024,
+                field_name='ADMIN_LOG_STORAGE_HARD_LIMIT_MB',
+                minimum=1,
+            ),
+            admin_logs_cleanup_batch_size=parse_env_int(
+                os.getenv('ADMIN_LOG_CLEANUP_BATCH_SIZE') or os.getenv('ADMIN_LOGS_CLEANUP_BATCH_SIZE'),
+                1000,
+                field_name='ADMIN_LOG_CLEANUP_BATCH_SIZE',
+                minimum=1,
+            ),
+            admin_logs_auto_cleanup_enabled=parse_env_bool(
+                os.getenv('ADMIN_LOG_AUTO_CLEANUP_ENABLED') or os.getenv('ADMIN_LOGS_AUTO_CLEANUP_ENABLED'),
+                True,
             ),
             admin_logs_warning_threshold_count=parse_env_int(
                 os.getenv('ADMIN_LOGS_WARNING_THRESHOLD_COUNT'),

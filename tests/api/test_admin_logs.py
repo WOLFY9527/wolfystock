@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from api.deps import CurrentUser, get_current_user
@@ -13,6 +14,22 @@ from src.services.execution_log_service import ExecutionLogService
 from src.storage import DatabaseManager
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+
+def _admin_logs_config(**overrides):
+    values = {
+        "admin_logs_retention_days": 90,
+        "admin_logs_min_retention_days": 7,
+        "admin_logs_storage_soft_limit_mb": 512,
+        "admin_logs_storage_hard_limit_mb": 1024,
+        "admin_logs_cleanup_batch_size": 1000,
+        "admin_logs_auto_cleanup_enabled": False,
+        "admin_logs_warning_threshold_count": 50000,
+        "admin_logs_critical_threshold_count": 100000,
+        "admin_logs_warning_threshold_storage_bytes": None,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
 
 
 def _admin_user() -> CurrentUser:
@@ -557,11 +574,52 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.total_log_count, 2)
         self.assertEqual(payload.total_event_count, 2)
         self.assertEqual(payload.retention_days, 90)
+        self.assertEqual(payload.minimum_retention_days, 7)
         self.assertEqual(payload.logs_older_than_retention_count, 1)
+        self.assertFalse(payload.storage_size_available)
+        self.assertEqual(payload.storage_soft_limit_bytes, 512 * 1024 * 1024)
+        self.assertEqual(payload.storage_hard_limit_bytes, 1024 * 1024 * 1024)
         self.assertIsNotNone(payload.oldest_log_timestamp)
         self.assertIsNotNone(payload.newest_log_timestamp)
         self.assertEqual(payload.status, "warning")
         self.assertIn("cleanup", payload.recommended_cleanup_action)
+
+    def test_storage_summary_marks_ok_warning_and_critical_by_quota(self) -> None:
+        self._record_event(
+            session_id="recent-success",
+            event_name="AnalysisCompleted",
+            level="INFO",
+            category="analysis",
+            message="recent success",
+            status="completed",
+            event_at=datetime.now() - timedelta(days=1),
+        )
+
+        with (
+            patch("src.services.admin_logs_service.get_db", return_value=self.db),
+            patch("src.services.admin_logs_service.get_config", return_value=_admin_logs_config()),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_bytes", return_value=128 * 1024 * 1024),
+        ):
+            ok_payload = admin_logs.get_log_storage_summary(_=_admin_user())
+        with (
+            patch("src.services.admin_logs_service.get_db", return_value=self.db),
+            patch("src.services.admin_logs_service.get_config", return_value=_admin_logs_config()),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_bytes", return_value=690 * 1024 * 1024),
+        ):
+            warning_payload = admin_logs.get_log_storage_summary(_=_admin_user())
+        with (
+            patch("src.services.admin_logs_service.get_db", return_value=self.db),
+            patch("src.services.admin_logs_service.get_config", return_value=_admin_logs_config()),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_bytes", return_value=1200 * 1024 * 1024),
+        ):
+            critical_payload = admin_logs.get_log_storage_summary(_=_admin_user())
+
+        self.assertTrue(ok_payload.storage_size_available)
+        self.assertEqual(ok_payload.status, "ok")
+        self.assertEqual(warning_payload.status, "warning")
+        self.assertTrue(warning_payload.capacity_cleanup_recommended)
+        self.assertEqual(critical_payload.status, "critical")
+        self.assertIn("storage_hard_limit_exceeded", critical_payload.status_reasons)
 
     def test_storage_summary_handles_empty_logs_table(self) -> None:
         with patch("src.services.admin_logs_service.get_db", return_value=self.db):
@@ -573,6 +631,7 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertIsNone(payload.newest_log_timestamp)
         self.assertEqual(payload.logs_older_than_retention_count, 0)
         self.assertEqual(payload.status, "ok")
+        self.assertFalse(payload.storage_size_available)
 
     def test_cleanup_dry_run_does_not_delete_logs(self) -> None:
         old_at = datetime.now() - timedelta(days=120)
@@ -594,6 +653,7 @@ class AdminLogsApiTestCase(unittest.TestCase):
             remaining = admin_logs.get_log_storage_summary(_=_admin_user())
 
         self.assertTrue(payload.dry_run)
+        self.assertEqual(payload.mode, "retention")
         self.assertEqual(payload.matched_log_count, 1)
         self.assertEqual(payload.deleted_log_count, 0)
         self.assertEqual(remaining.total_log_count, 1)
@@ -631,6 +691,103 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.deleted_log_count, 1)
         self.assertEqual(remaining.total_log_count, 1)
         self.assertEqual([item.session_id for item in list_payload.items], ["recent-success"])
+
+    def test_capacity_cleanup_dry_run_does_not_delete_logs(self) -> None:
+        now = datetime.now()
+        self._record_event(
+            session_id="old-error",
+            event_name="AnalysisFailed",
+            level="ERROR",
+            category="analysis",
+            message="old failure",
+            status="failed",
+            event_at=now - timedelta(days=120),
+        )
+
+        with (
+            patch("src.services.admin_logs_service.get_db", return_value=self.db),
+            patch("src.services.admin_logs_service.get_config", return_value=_admin_logs_config(admin_logs_storage_soft_limit_mb=1, admin_logs_storage_hard_limit_mb=2)),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_bytes", return_value=3 * 1024 * 1024),
+        ):
+            payload = admin_logs.cleanup_admin_logs(
+                admin_logs.AdminLogCleanupRequest(mode="capacity", dry_run=True),
+                _=_admin_user(),
+            )
+            remaining = admin_logs.get_log_storage_summary(_=_admin_user())
+
+        self.assertTrue(payload.dry_run)
+        self.assertEqual(payload.mode, "capacity")
+        self.assertEqual(payload.matched_log_count, 1)
+        self.assertEqual(payload.deleted_log_count, 0)
+        self.assertEqual(remaining.total_log_count, 1)
+
+    def test_capacity_cleanup_actual_run_preserves_min_retention(self) -> None:
+        now = datetime.now()
+        self._record_event(
+            session_id="old-error",
+            event_name="AnalysisFailed",
+            level="ERROR",
+            category="analysis",
+            message="old failure",
+            status="failed",
+            event_at=now - timedelta(days=120),
+        )
+        self._record_event(
+            session_id="recent-error",
+            event_name="RecentFailure",
+            level="ERROR",
+            category="analysis",
+            message="recent failure",
+            status="failed",
+            event_at=now - timedelta(days=2),
+        )
+
+        with (
+            patch("src.services.admin_logs_service.get_db", return_value=self.db),
+            patch("src.services.admin_logs_service.get_config", return_value=_admin_logs_config(admin_logs_storage_soft_limit_mb=1, admin_logs_storage_hard_limit_mb=2, admin_logs_min_retention_days=7)),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_bytes", return_value=3 * 1024 * 1024),
+        ):
+            payload = admin_logs.cleanup_admin_logs(
+                admin_logs.AdminLogCleanupRequest(mode="capacity", dry_run=False),
+                _=_admin_user(),
+            )
+            list_payload = admin_logs.list_execution_log_sessions(min_level="INFO", since="", _=_admin_user())
+
+        self.assertFalse(payload.dry_run)
+        self.assertEqual(payload.mode, "capacity")
+        self.assertEqual(payload.deleted_log_count, 1)
+        self.assertEqual([item.session_id for item in list_payload.items], ["recent-error"])
+
+    def test_capacity_cleanup_refuses_when_storage_size_unavailable(self) -> None:
+        with patch("src.services.admin_logs_service.get_db", return_value=self.db):
+            with self.assertRaises(Exception) as raised:
+                admin_logs.cleanup_admin_logs(
+                    admin_logs.AdminLogCleanupRequest(mode="capacity", dry_run=True),
+                    _=_admin_user(),
+                )
+
+        self.assertEqual(getattr(raised.exception, "status_code", None), 400)
+        self.assertIn("storage size is unavailable", str(getattr(raised.exception, "detail", {})))
+
+    def test_invalid_config_is_safely_adjusted(self) -> None:
+        with (
+            patch("src.services.admin_logs_service.get_db", return_value=self.db),
+            patch(
+                "src.services.admin_logs_service.get_config",
+                return_value=_admin_logs_config(
+                    admin_logs_retention_days=5,
+                    admin_logs_min_retention_days=9,
+                    admin_logs_storage_soft_limit_mb=10,
+                    admin_logs_storage_hard_limit_mb=5,
+                ),
+            ),
+        ):
+            payload = admin_logs.get_log_storage_summary(_=_admin_user())
+
+        self.assertEqual(payload.minimum_retention_days, 5)
+        self.assertGreater(payload.storage_hard_limit_bytes, payload.storage_soft_limit_bytes)
+        self.assertIn("min_retention_days_clamped_to_retention_days", payload.status_reasons)
+        self.assertIn("hard_limit_adjusted_above_soft_limit", payload.status_reasons)
 
     def test_cleanup_refuses_unsafe_request_without_cutoff_or_retention(self) -> None:
         with patch("src.services.admin_logs_service.get_db", return_value=self.db):

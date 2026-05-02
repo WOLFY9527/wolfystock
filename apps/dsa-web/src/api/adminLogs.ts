@@ -235,9 +235,23 @@ export interface AdminLogStorageSummary {
   oldestLogTimestamp?: string | null;
   newestLogTimestamp?: string | null;
   retentionDays: number;
+  minimumRetentionDays: number;
   retentionCutoff?: string | null;
   logsOlderThanRetentionCount: number;
   estimatedStorageBytes?: number | null;
+  storageSizeBytes?: number | null;
+  storageSizeLabel?: string | null;
+  storageSizeAvailable: boolean;
+  storageSoftLimitBytes: number;
+  storageHardLimitBytes: number;
+  usedPercentageOfSoftLimit?: number | null;
+  usedPercentageOfHardLimit?: number | null;
+  capacityCleanupRecommended: boolean;
+  autoCleanupEnabled: boolean;
+  autoCleanupPerformed: boolean;
+  autoCleanupMessage?: string | null;
+  capacityCleanupPlan?: Record<string, unknown>;
+  postgresVacuumNote?: string | null;
   warningThresholdCount: number;
   criticalThresholdCount: number;
   warningThresholdStorageBytes?: number | null;
@@ -248,6 +262,7 @@ export interface AdminLogStorageSummary {
 }
 
 export interface AdminLogCleanupResponse {
+  mode: string;
   dryRun: boolean;
   cutoff?: string | null;
   matchedLogCount: number;
@@ -256,6 +271,9 @@ export interface AdminLogCleanupResponse {
   deletedEventCount: number;
   statusFilter?: string | null;
   categoryFilter?: string | null;
+  additionalCleanupNeeded: boolean;
+  message?: string | null;
+  postgresVacuumNote?: string | null;
 }
 
 function normalizeSessionSummary(payload: Record<string, unknown>): ExecutionLogSessionSummary {
@@ -347,9 +365,25 @@ export const adminLogsApi = {
       oldestLogTimestamp: normalized.oldestLogTimestamp || null,
       newestLogTimestamp: normalized.newestLogTimestamp || null,
       retentionDays: Number(normalized.retentionDays || 90),
+      minimumRetentionDays: Number(normalized.minimumRetentionDays || 7),
       retentionCutoff: normalized.retentionCutoff || null,
       logsOlderThanRetentionCount: Number(normalized.logsOlderThanRetentionCount || 0),
       estimatedStorageBytes: typeof normalized.estimatedStorageBytes === 'number' ? normalized.estimatedStorageBytes : null,
+      storageSizeBytes: typeof normalized.storageSizeBytes === 'number' ? normalized.storageSizeBytes : null,
+      storageSizeLabel: normalized.storageSizeLabel || null,
+      storageSizeAvailable: Boolean(normalized.storageSizeAvailable),
+      storageSoftLimitBytes: Number(normalized.storageSoftLimitBytes || 512 * 1024 * 1024),
+      storageHardLimitBytes: Number(normalized.storageHardLimitBytes || 1024 * 1024 * 1024),
+      usedPercentageOfSoftLimit: typeof normalized.usedPercentageOfSoftLimit === 'number' ? normalized.usedPercentageOfSoftLimit : null,
+      usedPercentageOfHardLimit: typeof normalized.usedPercentageOfHardLimit === 'number' ? normalized.usedPercentageOfHardLimit : null,
+      capacityCleanupRecommended: Boolean(normalized.capacityCleanupRecommended),
+      autoCleanupEnabled: Boolean(normalized.autoCleanupEnabled),
+      autoCleanupPerformed: Boolean(normalized.autoCleanupPerformed),
+      autoCleanupMessage: normalized.autoCleanupMessage || null,
+      capacityCleanupPlan: normalized.capacityCleanupPlan && typeof normalized.capacityCleanupPlan === 'object'
+        ? normalized.capacityCleanupPlan as Record<string, unknown>
+        : {},
+      postgresVacuumNote: normalized.postgresVacuumNote || null,
       warningThresholdCount: Number(normalized.warningThresholdCount || 50000),
       criticalThresholdCount: Number(normalized.criticalThresholdCount || 100000),
       warningThresholdStorageBytes: typeof normalized.warningThresholdStorageBytes === 'number' ? normalized.warningThresholdStorageBytes : null,
@@ -362,6 +396,7 @@ export const adminLogsApi = {
 
   cleanupLogs: async (
     params: {
+      mode?: 'retention' | 'before_date' | 'capacity' | string;
       useRetention?: boolean;
       olderThan?: string;
       dryRun?: boolean;
@@ -373,6 +408,7 @@ export const adminLogsApi = {
     const response = await apiClient.post<Record<string, unknown>>('/api/v1/admin/logs/cleanup', params);
     const normalized = toCamelCase<AdminLogCleanupResponse>(response.data);
     return {
+      mode: normalized.mode || params.mode || 'retention',
       dryRun: Boolean(normalized.dryRun),
       cutoff: normalized.cutoff || null,
       matchedLogCount: Number(normalized.matchedLogCount || 0),
@@ -381,6 +417,9 @@ export const adminLogsApi = {
       deletedEventCount: Number(normalized.deletedEventCount || 0),
       statusFilter: normalized.statusFilter || null,
       categoryFilter: normalized.categoryFilter || null,
+      additionalCleanupNeeded: Boolean(normalized.additionalCleanupNeeded),
+      message: normalized.message || null,
+      postgresVacuumNote: normalized.postgresVacuumNote || null,
     };
   },
 

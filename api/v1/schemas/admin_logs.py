@@ -179,9 +179,23 @@ class AdminLogStorageSummaryModel(BaseModel):
     oldest_log_timestamp: Optional[str] = None
     newest_log_timestamp: Optional[str] = None
     retention_days: int = 90
+    minimum_retention_days: int = 7
     retention_cutoff: Optional[str] = None
     logs_older_than_retention_count: int = 0
     estimated_storage_bytes: Optional[int] = None
+    storage_size_bytes: Optional[int] = None
+    storage_size_label: Optional[str] = None
+    storage_size_available: bool = False
+    storage_soft_limit_bytes: int = 512 * 1024 * 1024
+    storage_hard_limit_bytes: int = 1024 * 1024 * 1024
+    used_percentage_of_soft_limit: Optional[float] = None
+    used_percentage_of_hard_limit: Optional[float] = None
+    capacity_cleanup_recommended: bool = False
+    auto_cleanup_enabled: bool = True
+    auto_cleanup_performed: bool = False
+    auto_cleanup_message: Optional[str] = None
+    capacity_cleanup_plan: Dict[str, Any] = Field(default_factory=dict)
+    postgres_vacuum_note: Optional[str] = None
     warning_threshold_count: int = 50000
     critical_threshold_count: int = 100000
     warning_threshold_storage_bytes: Optional[int] = None
@@ -194,6 +208,7 @@ class AdminLogStorageSummaryModel(BaseModel):
 class AdminLogCleanupRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
+    mode: Optional[str] = None
     use_retention: bool = Field(
         default=False,
         validation_alias=AliasChoices("use_retention", "useRetention"),
@@ -219,6 +234,7 @@ class AdminLogCleanupRequest(BaseModel):
 
 
 class AdminLogCleanupResponse(BaseModel):
+    mode: str = "retention"
     dry_run: bool = True
     cutoff: Optional[str] = None
     matched_log_count: int = 0
@@ -227,3 +243,6 @@ class AdminLogCleanupResponse(BaseModel):
     deleted_event_count: int = 0
     status_filter: Optional[str] = None
     category_filter: Optional[str] = None
+    additional_cleanup_needed: bool = False
+    message: Optional[str] = None
+    postgres_vacuum_note: Optional[str] = None

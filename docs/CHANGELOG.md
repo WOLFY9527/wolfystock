@@ -1,5 +1,7 @@
 ## 2026-05-01
 
+- 🧾 **Admin Logs 增加容量配额与容量清理** — Admin Logs storage summary 现在返回 PostgreSQL 表总占用、soft/hard limit、使用率、minimum retention、capacity cleanup guidance 与 autovacuum 提示；容量清理模式会在 PostgreSQL size 可用且超过 hard limit 时按最旧可删日志分批删除，并始终保留 `ADMIN_LOG_MIN_RETENTION_DAYS` 内的近期日志。`/admin/logs` 顶部容量条改为明确展示 “当前占用 / soft limit / hard limit”、日志 sessions/events 体量、最早日志、retention/min-retention 与 retention/capacity cleanup 预览及确认操作。SQLite/非 PostgreSQL 环境继续返回 size unavailable 并保留 retention/row-count 健康检查。
+
 - 🧾 **Admin Logs 新增保留策略与清理能力** — `/api/v1/admin/logs/storage/summary` 提供日志总量、事件数、最早/最新时间、保留天数、超过保留期数量、PostgreSQL 存储估算与健康状态，`/api/v1/admin/logs/cleanup` 支持按保留策略或显式截止时间 dry-run / 分批清理，并拒绝无截止条件的危险删除。`/admin/logs` 顶部新增紧凑 Retention / Storage 面板，展示容量与清理建议，支持预览清理和带确认的手动清理，同时保留既有日志列表、筛选与详情行为。
 
 - 🧠 **Scanner AI 自定义主题扩展** — `/scanner` 的 Theme universe 面板新增 AI custom theme builder，用户可输入主题名称、criteria prompt 与可选手动补充代码，生成如 White House Stocks、AI Semiconductor Stocks、Green Energy Stocks 等运行时自定义主题，并立即查看 symbol suggestions、confidence 与 evidence。后端新增 `POST /api/v1/scanner/themes`，生成主题以 `source=ai_generated`、`is_seed_list=false`、`requires_manual_maintenance=true`、`refresh_policy=on_demand` 暴露，并继续复用既有 `universe_type=theme` 扫描路径；AI 只扩展 theme universe，不替代 deterministic scanner 排名。

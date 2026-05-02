@@ -391,6 +391,18 @@ function formatStorageBytes(value: unknown): string {
   return `${Math.round(bytes)} B`;
 }
 
+function storageBytes(summary: AdminLogStorageSummary | null): number | null {
+  if (!summary?.storageSizeAvailable) return null;
+  const value = typeof summary.storageSizeBytes === 'number' ? summary.storageSizeBytes : summary.estimatedStorageBytes;
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function clampPercent(value: unknown): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(100, numeric));
+}
+
 function storageStatusLabel(value: string | undefined, locale: AdminLogsLanguage): string {
   const normalized = String(value || 'ok').toLowerCase();
   if (normalized === 'critical') return locale === 'zh' ? 'Critical' : 'Critical';
@@ -847,9 +859,26 @@ const AdminLogsPage: React.FC = () => {
     setIsCleanupBusy(true);
     setCleanupMessage(null);
     try {
-      const response = await adminLogsApi.cleanupLogs({ useRetention: true, dryRun: true });
+      const response = await adminLogsApi.cleanupLogs({ mode: 'retention', useRetention: true, dryRun: true });
       setCleanupPreview(response);
-      setCleanupMessage(`${response.matchedLogCount} logs would be deleted before ${formatDateTime(response.cutoff, locale)}.`);
+      setCleanupMessage(`Retention preview: ${response.matchedLogCount} sessions and ${response.matchedEventCount} events would be deleted before ${formatDateTime(response.cutoff, locale)}.`);
+    } catch (err) {
+      setError(getParsedApiError(err));
+    } finally {
+      setIsCleanupBusy(false);
+    }
+  }, [locale]);
+
+  const previewCapacityCleanup = useCallback(async () => {
+    setIsCleanupBusy(true);
+    setCleanupMessage(null);
+    try {
+      const response = await adminLogsApi.cleanupLogs({ mode: 'capacity', dryRun: true });
+      setCleanupPreview(response);
+      setCleanupMessage(
+        response.message
+          || `Capacity preview: ${response.matchedLogCount} sessions and ${response.matchedEventCount} events would be deleted. Minimum retention cutoff: ${formatDateTime(response.cutoff, locale)}.`,
+      );
     } catch (err) {
       setError(getParsedApiError(err));
     } finally {
@@ -860,16 +889,27 @@ const AdminLogsPage: React.FC = () => {
   const confirmCleanup = useCallback(async () => {
     const expectedCount = cleanupPreview?.matchedLogCount ?? storageSummary?.logsOlderThanRetentionCount ?? 0;
     const cutoff = cleanupPreview?.cutoff || storageSummary?.retentionCutoff || '';
+    const mode = cleanupPreview?.mode === 'capacity' ? 'capacity' : 'retention';
     const confirmed = window.confirm(
-      `Delete ${expectedCount} admin logs older than cutoff date ${formatDateTime(cutoff, locale)}? This action cannot be undone.`,
+      [
+        `Run ${mode} cleanup for ${expectedCount} admin log sessions?`,
+        `Estimated events: ${cleanupPreview?.matchedEventCount ?? 0}.`,
+        `Cutoff/minimum retention protection: ${formatDateTime(cutoff, locale)}.`,
+        'This deletion cannot be undone.',
+        'Deleted rows may require PostgreSQL autovacuum to reclaim physical disk space.',
+      ].join('\n'),
     );
     if (!confirmed) return;
     setIsCleanupBusy(true);
     setCleanupMessage(null);
     try {
-      const response = await adminLogsApi.cleanupLogs({ useRetention: true, dryRun: false });
+      const response = await adminLogsApi.cleanupLogs(
+        mode === 'capacity'
+          ? { mode: 'capacity', dryRun: false }
+          : { mode: 'retention', useRetention: true, dryRun: false },
+      );
       setCleanupPreview(response);
-      setCleanupMessage(`Deleted ${response.deletedLogCount} logs and ${response.deletedEventCount} events.`);
+      setCleanupMessage(`Deleted ${response.deletedLogCount} sessions and ${response.deletedEventCount} events.${response.additionalCleanupNeeded ? ' Additional cleanup may still be needed.' : ''}`);
       await Promise.all([loadStorageSummary(), loadSessions()]);
     } catch (err) {
       setError(getParsedApiError(err));
@@ -1055,6 +1095,12 @@ const AdminLogsPage: React.FC = () => {
   }, [activeTab, businessHealth, businessTotal, computedSummary, filteredSessions.length, summary]);
   const topCategory = healthSummary.failuresByCategory?.[0];
   const latestCriticalError = healthSummary.latestCriticalError || healthSummary.topRecentErrors?.[0] || null;
+  const currentStorageBytes = storageBytes(storageSummary);
+  const softLimitBytes = storageSummary?.storageSoftLimitBytes ?? 512 * 1024 * 1024;
+  const hardLimitBytes = storageSummary?.storageHardLimitBytes ?? 1024 * 1024 * 1024;
+  const softPercent = clampPercent(storageSummary?.usedPercentageOfSoftLimit);
+  const hardPercent = clampPercent(storageSummary?.usedPercentageOfHardLimit);
+  const canRunCapacityCleanup = Boolean(storageSummary?.storageSizeAvailable && storageSummary.status === 'critical');
 
   return (
     <section data-testid="admin-logs-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-x-hidden">
@@ -1186,32 +1232,61 @@ const AdminLogsPage: React.FC = () => {
 
       <section
         data-testid="admin-logs-storage-summary"
-        className="grid grid-cols-1 gap-2 rounded-xl border border-white/8 bg-black/20 p-2.5 sm:grid-cols-2 lg:grid-cols-[8rem_9rem_10rem_10rem_minmax(12rem,1fr)_auto]"
+        className="grid grid-cols-1 gap-2 rounded-xl border border-white/8 bg-black/20 p-2.5 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,1.35fr)_9rem_10rem_10rem_minmax(12rem,1fr)_auto]"
       >
         <div className={`rounded-lg border px-3 py-2 ${storageStatusTone(storageSummary?.status)}`}>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? 'Storage' : 'Storage'}</p>
-          <p className="mt-1 text-base font-semibold">{storageStatusLabel(storageSummary?.status, locale)}</p>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">LOG STORAGE</p>
+              {storageSummary?.storageSizeAvailable ? (
+                <>
+                  <p className="mt-1 text-base font-semibold">
+                    {formatStorageBytes(currentStorageBytes)} / {formatStorageBytes(softLimitBytes)} soft
+                  </p>
+                  <p className="text-[11px] opacity-80">{formatStorageBytes(hardLimitBytes)} hard limit</p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-1 text-base font-semibold">Size unavailable</p>
+                  <p className="text-[11px] opacity-80">Retention checks active</p>
+                </>
+              )}
+            </div>
+            <span className="shrink-0 rounded-md border border-current/25 px-2 py-1 text-[10px] font-semibold uppercase">
+              {storageStatusLabel(storageSummary?.status, locale)}
+            </span>
+          </div>
+          {storageSummary?.storageSizeAvailable ? (
+            <div className="mt-2">
+              <div className="h-1.5 overflow-hidden rounded-full bg-black/35">
+                <div className="h-full rounded-full bg-current" style={{ width: `${Math.max(3, hardPercent)}%` }} />
+              </div>
+              <p className="mt-1 text-[10px] opacity-75">{softPercent}% soft · {hardPercent}% hard</p>
+            </div>
+          ) : null}
         </div>
         <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Log count' : 'Log count'}</p>
-          <p className="mt-1 text-base font-semibold text-foreground">{storageSummary?.totalLogCount ?? '--'}</p>
-          <p className="text-[11px] text-muted-text">{storageSummary?.totalEventCount ?? '--'} events</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">LOG VOLUME</p>
+          <p className="mt-1 text-base font-semibold text-foreground">{storageSummary?.totalLogCount?.toLocaleString() ?? '--'} sessions</p>
+          <p className="text-[11px] text-muted-text">{storageSummary?.totalEventCount?.toLocaleString() ?? '--'} events</p>
         </div>
         <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Retention' : 'Retention'}</p>
           <p className="mt-1 text-base font-semibold text-foreground">{storageSummary?.retentionDays ?? '--'} days</p>
-          <p className="text-[11px] text-muted-text">{storageSummary?.logsOlderThanRetentionCount ?? 0} older</p>
+          <p className="text-[11px] text-muted-text">min {storageSummary?.minimumRetentionDays ?? '--'} days · {storageSummary?.logsOlderThanRetentionCount ?? 0} older</p>
         </div>
         <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Oldest' : 'Oldest'}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">OLDEST LOG</p>
           <p className="mt-1 truncate text-sm font-semibold text-foreground">{formatDateTime(storageSummary?.oldestLogTimestamp, locale)}</p>
-          <p className="text-[11px] text-muted-text">{formatStorageBytes(storageSummary?.estimatedStorageBytes)}</p>
+          <p className="text-[11px] text-muted-text">oldest retained session/event</p>
         </div>
         <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Cleanup guidance' : 'Cleanup guidance'}</p>
           <p className="mt-1 truncate text-sm text-foreground" title={storageSummary?.recommendedCleanupAction || ''}>
             {storageSummary?.recommendedCleanupAction || (locale === 'zh' ? 'Storage summary unavailable' : 'Storage summary unavailable')}
           </p>
+          {storageSummary?.postgresVacuumNote ? <p className="mt-1 text-[11px] text-amber-100">{storageSummary.postgresVacuumNote}</p> : null}
+          {storageSummary?.autoCleanupEnabled && storageSummary?.status === 'critical' ? <p className="mt-1 text-[11px] text-rose-100">Auto cleanup required</p> : null}
           {cleanupMessage ? <p className="mt-1 text-[11px] text-emerald-100">{cleanupMessage}</p> : null}
         </div>
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row lg:flex-col">
@@ -1221,15 +1296,23 @@ const AdminLogsPage: React.FC = () => {
             onClick={() => void previewCleanup()}
             disabled={isCleanupBusy || !storageSummary}
           >
-            {isCleanupBusy ? t('adminLogs.loading') : 'Preview cleanup'}
+            {isCleanupBusy ? t('adminLogs.loading') : 'Preview retention cleanup'}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary h-9 rounded-lg px-3 text-xs"
+            onClick={() => void previewCapacityCleanup()}
+            disabled={isCleanupBusy || !storageSummary?.storageSizeAvailable}
+          >
+            Preview capacity cleanup
           </button>
           <button
             type="button"
             className="rounded-lg border border-rose-300/25 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/16 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => void confirmCleanup()}
-            disabled={isCleanupBusy || !storageSummary || (cleanupPreview?.matchedLogCount ?? storageSummary.logsOlderThanRetentionCount) <= 0}
+            disabled={isCleanupBusy || !storageSummary || (cleanupPreview?.matchedLogCount ?? storageSummary.logsOlderThanRetentionCount) <= 0 || (cleanupPreview?.mode === 'capacity' && !canRunCapacityCleanup)}
           >
-            Clean logs older than retention
+            {cleanupPreview?.mode === 'capacity' ? 'Run capacity cleanup' : 'Clean logs older than retention'}
           </button>
         </div>
       </section>
