@@ -697,7 +697,7 @@ describe('MarketOverviewPage', () => {
     expect(shell).toContainElement(screen.getByTestId('market-overview-main-grid'));
 
     expect(await screen.findByTestId('market-overview-main-grid')).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-12', 'gap-4', 'items-start');
-    expect(screen.getByTestId('market-overview-primary-rail')).toHaveClass('xl:col-span-9', 'lg:grid-cols-2', '2xl:grid-cols-3');
+    expect(screen.getByTestId('market-overview-primary-rail')).toHaveClass('xl:col-span-9', 'xl:grid-cols-2', '2xl:grid-cols-3');
     expect(screen.getByTestId('market-overview-side-rail')).toHaveClass('xl:col-span-3', 'flex', 'flex-col', 'gap-3');
     expect(screen.getByRole('heading', { name: /全球核心指数走势/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /A股与港股指数/i })).toBeInTheDocument();
@@ -937,6 +937,15 @@ describe('MarketOverviewPage', () => {
     expect(await screen.findByTestId('market-overview-card-cnIndices')).toHaveClass('lg:col-span-2', '2xl:col-span-3');
     expect(screen.getByTestId('market-overview-card-crypto')).toHaveClass('lg:col-span-2', '2xl:col-span-3');
     expect(screen.queryByText('实时行情')).not.toBeInTheDocument();
+  });
+
+  it('keeps the primary market cards on a stealth horizontal scroll rail below desktop', async () => {
+    render(<MarketOverviewPage />);
+
+    const primaryRail = await screen.findByTestId('market-overview-primary-rail');
+    expect(primaryRail).toHaveClass('stealth-scrollbar', 'overflow-x-auto', 'overscroll-x-contain');
+    expect(primaryRail).toHaveClass('xl:grid', 'xl:overflow-visible');
+    expect(screen.getByTestId('market-overview-card-indices')).toHaveClass('shrink-0', 'xl:w-full');
   });
 
   it('renders quote-heavy primary cards as dense responsive quote grids', async () => {

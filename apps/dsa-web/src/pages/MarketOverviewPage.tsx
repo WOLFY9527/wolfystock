@@ -1626,7 +1626,7 @@ const MarketOverviewPage: React.FC = () => {
       data-market-card-size={layoutMeta.size}
       data-market-card-density={DENSE_QUOTE_CARDS.has(cardKey) ? 'dense-quote' : 'standard'}
       className={cn(
-        'min-w-0 w-full',
+        rail === 'primary' ? 'w-[min(86vw,28rem)] shrink-0 min-w-0 xl:w-full xl:shrink' : 'min-w-0 w-full',
         shouldSpanPrimaryRail ? 'lg:col-span-2 2xl:col-span-3' : '',
       )}
     >
@@ -1664,9 +1664,12 @@ const MarketOverviewPage: React.FC = () => {
 
   const renderDeterministicGrid = () => (
     <main data-testid="market-overview-main-grid" className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
-      <section data-testid="market-overview-primary-rail" className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 xl:col-span-9 2xl:grid-cols-3">
+      <section
+        data-testid="market-overview-primary-rail"
+        className="stealth-scrollbar flex min-w-0 gap-4 overflow-x-auto overscroll-x-contain pb-1 [-webkit-overflow-scrolling:touch] xl:col-span-9 xl:grid xl:grid-cols-2 xl:overflow-visible xl:pb-0 2xl:grid-cols-3"
+      >
         {showCategoryEmptyState ? (
-          <div className="lg:col-span-2 2xl:col-span-3">
+          <div className="w-[min(86vw,28rem)] shrink-0 xl:w-full xl:shrink xl:col-span-2 2xl:col-span-3">
             <CategoryEmptyState onShowPending={() => setFallbackSectionExpanded(true)} />
           </div>
         ) : null}

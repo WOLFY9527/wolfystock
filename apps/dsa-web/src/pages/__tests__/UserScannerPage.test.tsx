@@ -977,6 +977,29 @@ describe('UserScannerPage', () => {
     });
   });
 
+  it('shows field-level validation for scanner scope inputs before sending requests', async () => {
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /自定义标的|Custom symbols/i }));
+    fireEvent.click(screen.getByRole('button', { name: /运行扫描|Run scanner/i }));
+
+    expect(await screen.findByText(/运行前请输入一个或多个标的代码|Enter one or more symbols before running/i)).toBeInTheDocument();
+    expect(runScan).not.toHaveBeenCalled();
+  });
+
+  it('shows field-level validation for AI theme generation before sending requests', async () => {
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /主题标的池|Theme universe/i }));
+    fireEvent.change(screen.getByTestId('scanner-ai-theme-label-input'), { target: { value: 'A' } });
+    fireEvent.change(screen.getByTestId('scanner-ai-theme-prompt-input'), { target: { value: 'too short' } });
+    fireEvent.click(screen.getByRole('button', { name: /Generate theme|生成主题/i }));
+
+    expect(await screen.findByText(/主题名称至少需要 2 个字符|Theme name must be at least 2 characters/i)).toBeInTheDocument();
+    expect(screen.getByText(/筛选条件至少需要 12 个字符|Criteria must be at least 12 characters/i)).toBeInTheDocument();
+    expect(createTheme).not.toHaveBeenCalled();
+  });
+
   it('shows disabled unconfigured themes and sends custom symbol universes', async () => {
     runScan.mockResolvedValueOnce(makeRunDetail({
       universeType: 'symbols',

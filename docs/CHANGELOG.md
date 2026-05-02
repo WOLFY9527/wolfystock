@@ -1,3 +1,7 @@
+## 2026-05-02
+
+- 🧭 **Scanner 输入校验与 Market Overview 隐蔽滑动** — `/scanner` 自定义标的与 AI 自定义主题生成在请求前增加字段级校验反馈，覆盖主题名称、criteria prompt、候选池与明细数量、主题选择和手动补充代码数量，避免无效参数直接落到后端错误。`/market-overview` 主市场卡片轨道在桌面以下改为可横向滑动，桌面继续保持主轨 grid；全局与 WolfyStock SpaceX 主题滚动条默认隐蔽，并在滚动容器 hover/focus 时显示深空风格细滚动条。
+
 ## 2026-05-01
 
 - 🧾 **Admin Logs 增加容量配额与容量清理** — Admin Logs storage summary 现在返回 PostgreSQL 表总占用、soft/hard limit、使用率、minimum retention、capacity cleanup guidance 与 autovacuum 提示；容量清理模式会在 PostgreSQL size 可用且超过 hard limit 时按最旧可删日志分批删除，并始终保留 `ADMIN_LOG_MIN_RETENTION_DAYS` 内的近期日志。`/admin/logs` 顶部容量条改为明确展示 “当前占用 / soft limit / hard limit”、日志 sessions/events 体量、最早日志、retention/min-retention 与 retention/capacity cleanup 预览及确认操作。SQLite/非 PostgreSQL 环境继续返回 size unavailable 并保留 retention/row-count 健康检查。

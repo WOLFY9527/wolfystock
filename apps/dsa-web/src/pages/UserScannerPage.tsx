@@ -58,6 +58,14 @@ type SortKey = 'score' | 'symbol' | 'target' | 'risk';
 type SortDirection = 'asc' | 'desc';
 type ScanScope = 'default' | 'theme' | 'symbols';
 type ActionNotice = { tone: 'success' | 'warning' | 'danger'; message: string } | null;
+type ScannerValidationErrors = {
+  run?: string;
+  customSymbols?: string;
+  theme?: string;
+  customThemeLabel?: string;
+  customThemePrompt?: string;
+  customThemeManualSymbols?: string;
+};
 
 function normalizeCandidateSymbol(symbol?: string | null): string | null {
   const normalized = String(symbol || '').trim().toUpperCase();
@@ -325,6 +333,10 @@ function parseCustomSymbols(value: string): string[] {
         .filter(Boolean),
     ),
   );
+}
+
+function getSymbolTokenCount(value: string): number {
+  return value.split(/[\s,，;；]+/).map((symbol) => symbol.trim()).filter(Boolean).length;
 }
 
 function getThemeLabel(theme: ScannerTheme, language: 'zh' | 'en'): string {
@@ -928,6 +940,7 @@ const UserScannerPage: React.FC = () => {
   const [pageError, setPageError] = useState<ParsedApiError | null>(null);
   const [historyError, setHistoryError] = useState<ParsedApiError | null>(null);
   const [actionNotice, setActionNotice] = useState<ActionNotice>(null);
+  const [validationErrors, setValidationErrors] = useState<ScannerValidationErrors>({});
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
   const [watchlistAuthBlocked, setWatchlistAuthBlocked] = useState(false);
@@ -964,6 +977,8 @@ const UserScannerPage: React.FC = () => {
   );
   const parsedCustomSymbols = useMemo(() => parseCustomSymbols(customSymbols), [customSymbols]);
   const parsedThemeManualSymbols = useMemo(() => parseCustomSymbols(customThemeManualSymbols), [customThemeManualSymbols]);
+  const customSymbolTokenCount = useMemo(() => getSymbolTokenCount(customSymbols), [customSymbols]);
+  const customThemeManualSymbolTokenCount = useMemo(() => getSymbolTokenCount(customThemeManualSymbols), [customThemeManualSymbols]);
 
   const handleMarketChange = useCallback((nextMarket: string) => {
     const normalizedMarket = nextMarket === 'us' ? 'us' : nextMarket === 'hk' ? 'hk' : 'cn';
@@ -974,6 +989,7 @@ const UserScannerPage: React.FC = () => {
     setUniverseLimit(defaults.universeLimit);
     setDetailLimit(defaults.detailLimit);
     setThemeId('');
+    setValidationErrors({});
   }, []);
 
   useEffect(() => {
@@ -1076,14 +1092,43 @@ const UserScannerPage: React.FC = () => {
   }, [fetchHistory]);
 
   const handleRun = useCallback(async () => {
+    const nextErrors: ScannerValidationErrors = {};
+    const parsedShortlistSize = Number.parseInt(shortlistSize, 10);
+    const parsedUniverseLimit = Number.parseInt(universeLimit, 10);
+    const parsedDetailLimit = Number.parseInt(detailLimit, 10);
+    if (!Number.isFinite(parsedShortlistSize) || parsedShortlistSize < 1) {
+      nextErrors.run = language === 'en' ? 'Choose a valid shortlist size.' : '请选择有效的入选数量。';
+    }
+    if (!Number.isFinite(parsedUniverseLimit) || parsedUniverseLimit < 50) {
+      nextErrors.run = language === 'en' ? 'Universe size must be at least 50.' : '候选池数量至少为 50。';
+    }
+    if (!Number.isFinite(parsedDetailLimit) || parsedDetailLimit < 10) {
+      nextErrors.run = language === 'en' ? 'Detail evaluation count must be at least 10.' : '详细评估数量至少为 10。';
+    }
+    if (scanScope === 'theme' && (!selectedTheme || selectedTheme.symbols.length === 0)) {
+      nextErrors.theme = language === 'en' ? 'Select a configured theme before running.' : '请先选择已配置成分股的主题。';
+    }
+    if (scanScope === 'symbols') {
+      if (customSymbolTokenCount > 0 && parsedCustomSymbols.length === 0) {
+        nextErrors.customSymbols = language === 'en' ? 'Enter at least one valid symbol.' : '请输入至少一个有效标的代码。';
+      } else if (parsedCustomSymbols.length === 0) {
+        nextErrors.customSymbols = language === 'en' ? 'Enter one or more symbols before running.' : '运行前请输入一个或多个标的代码。';
+      } else if (parsedCustomSymbols.length > 80) {
+        nextErrors.customSymbols = language === 'en' ? 'Use 80 symbols or fewer.' : '自定义标的最多 80 个。';
+      }
+    }
+    if (Object.keys(nextErrors).length) {
+      setValidationErrors(nextErrors);
+      return;
+    }
     setIsRunning(true);
     try {
       const response = await scannerApi.run({
         market,
         profile,
-        shortlistSize: Number.parseInt(shortlistSize, 10),
-        universeLimit: Number.parseInt(universeLimit, 10),
-        detailLimit: Number.parseInt(detailLimit, 10),
+        shortlistSize: parsedShortlistSize,
+        universeLimit: parsedUniverseLimit,
+        detailLimit: parsedDetailLimit,
         ...(scanScope !== 'default' ? { universeType: scanScope } : {}),
         ...(scanScope === 'theme' ? { themeId } : {}),
         ...(scanScope === 'symbols' ? { symbols: parsedCustomSymbols } : {}),
@@ -1091,6 +1136,7 @@ const UserScannerPage: React.FC = () => {
       setRunDetail(response);
       setSelectedRunId(response.id);
       setExpandedSymbol(null);
+      setValidationErrors({});
       setPageError(null);
       await fetchHistory(1, response.id);
     } catch (error) {
@@ -1098,17 +1144,38 @@ const UserScannerPage: React.FC = () => {
     } finally {
       setIsRunning(false);
     }
-  }, [detailLimit, fetchHistory, market, parsedCustomSymbols, profile, scanScope, shortlistSize, themeId, universeLimit]);
+  }, [customSymbolTokenCount, detailLimit, fetchHistory, language, market, parsedCustomSymbols, profile, scanScope, selectedTheme, shortlistSize, themeId, universeLimit]);
 
   const handleGenerateTheme = useCallback(async () => {
+    const label = customThemeLabel.trim();
+    const prompt = customThemePrompt.trim();
+    const nextErrors: ScannerValidationErrors = {};
+    if (label.length < 2) {
+      nextErrors.customThemeLabel = language === 'en' ? 'Theme name must be at least 2 characters.' : '主题名称至少需要 2 个字符。';
+    } else if (label.length > 80) {
+      nextErrors.customThemeLabel = language === 'en' ? 'Theme name must be 80 characters or fewer.' : '主题名称最多 80 个字符。';
+    }
+    if (prompt.length < 12) {
+      nextErrors.customThemePrompt = language === 'en' ? 'Criteria must be at least 12 characters.' : '筛选条件至少需要 12 个字符。';
+    } else if (prompt.length > 600) {
+      nextErrors.customThemePrompt = language === 'en' ? 'Criteria must be 600 characters or fewer.' : '筛选条件最多 600 个字符。';
+    }
+    if (parsedThemeManualSymbols.length > 50) {
+      nextErrors.customThemeManualSymbols = language === 'en' ? 'Manual additions are limited to 50 symbols.' : '手动补充标的最多 50 个。';
+    } else if (customThemeManualSymbolTokenCount > 0 && parsedThemeManualSymbols.length === 0) {
+      nextErrors.customThemeManualSymbols = language === 'en' ? 'Enter valid symbols or leave this field empty.' : '请输入有效标的代码，或留空。';
+    }
+    if (Object.keys(nextErrors).length) {
+      setValidationErrors(nextErrors);
+      return;
+    }
     setIsGeneratingTheme(true);
     try {
-      const label = customThemeLabel.trim();
       const response = await scannerApi.createTheme({
         id: buildCustomThemeId(label),
         label,
         market,
-        prompt: customThemePrompt,
+        prompt,
         manualSymbols: parsedThemeManualSymbols,
       });
       setThemes((current) => [
@@ -1117,6 +1184,7 @@ const UserScannerPage: React.FC = () => {
       ]);
       setThemeId(response.theme.id);
       setThemeSuggestions(response.suggestions || []);
+      setValidationErrors({});
       setActionNotice({
         tone: 'success',
         message: language === 'en'
@@ -1129,7 +1197,7 @@ const UserScannerPage: React.FC = () => {
     } finally {
       setIsGeneratingTheme(false);
     }
-  }, [customThemeLabel, customThemePrompt, language, market, parsedThemeManualSymbols]);
+  }, [customThemeLabel, customThemeManualSymbolTokenCount, customThemePrompt, language, market, parsedThemeManualSymbols]);
 
   const handleSortChange = useCallback((nextSortKey: SortKey) => {
     if (sortKey === nextSortKey) {
@@ -1157,12 +1225,8 @@ const UserScannerPage: React.FC = () => {
   const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setIsHistoryDrawerOpen(true));
   const shortlistCount = runDetail?.shortlist?.length ?? 0;
   const generatedAt = runDetail?.completedAt || runDetail?.runAt || null;
-  const runDisabled = isRunning
-    || (scanScope === 'theme' && (!selectedTheme || selectedTheme.symbols.length === 0))
-    || (scanScope === 'symbols' && parsedCustomSymbols.length === 0);
-  const generateThemeDisabled = isGeneratingTheme
-    || customThemeLabel.trim().length < 2
-    || customThemePrompt.trim().length < 12;
+  const runDisabled = isRunning;
+  const generateThemeDisabled = isGeneratingTheme;
 
   const sortedCandidates = useMemo(() => {
     const candidates = [...(runDetail?.shortlist || [])];
@@ -1381,6 +1445,8 @@ const UserScannerPage: React.FC = () => {
                         data-testid="scanner-theme-select"
                         value={themeId}
                         onChange={(event) => setThemeId(event.target.value)}
+                        aria-invalid={Boolean(validationErrors.theme)}
+                        aria-describedby={validationErrors.theme ? 'scanner-theme-error' : undefined}
                         className="w-full rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none focus:border-indigo-400/50"
                       >
                         <option value="">{language === 'en' ? 'Select a theme' : '选择主题'}</option>
@@ -1408,6 +1474,11 @@ const UserScannerPage: React.FC = () => {
                           {language === 'en' ? 'This theme is not configured yet.' : '该主题尚未配置成分股。'}
                         </p>
                       ) : null}
+                      {validationErrors.theme ? (
+                        <p id="scanner-theme-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                          {validationErrors.theme}
+                        </p>
+                      ) : null}
                       <div className="mt-2 flex flex-col gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-2.5" data-testid="scanner-ai-theme-builder">
                         <div className="flex items-center gap-2 text-[11px] font-medium text-white/70">
                           <Sparkles className="h-3.5 w-3.5 text-indigo-200/80" aria-hidden="true" />
@@ -1417,24 +1488,47 @@ const UserScannerPage: React.FC = () => {
                           data-testid="scanner-ai-theme-label-input"
                           value={customThemeLabel}
                           onChange={(event) => setCustomThemeLabel(event.target.value)}
+                          aria-invalid={Boolean(validationErrors.customThemeLabel)}
+                          aria-describedby={validationErrors.customThemeLabel ? 'scanner-ai-theme-label-error' : undefined}
+                          maxLength={80}
                           placeholder={language === 'en' ? 'White House Stocks' : 'White House Stocks'}
                           className="w-full rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
                         />
+                        {validationErrors.customThemeLabel ? (
+                          <p id="scanner-ai-theme-label-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                            {validationErrors.customThemeLabel}
+                          </p>
+                        ) : null}
                         <textarea
                           data-testid="scanner-ai-theme-prompt-input"
                           value={customThemePrompt}
                           onChange={(event) => setCustomThemePrompt(event.target.value)}
+                          aria-invalid={Boolean(validationErrors.customThemePrompt)}
+                          aria-describedby={validationErrors.customThemePrompt ? 'scanner-ai-theme-prompt-error' : undefined}
+                          maxLength={600}
                           rows={3}
                           placeholder={language === 'en' ? 'Stocks associated with White House policy, federal contracts, and government decisions.' : '例如：与白宫政策、联邦合同和政府决策相关的股票。'}
                           className="w-full resize-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
                         />
+                        {validationErrors.customThemePrompt ? (
+                          <p id="scanner-ai-theme-prompt-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                            {validationErrors.customThemePrompt}
+                          </p>
+                        ) : null}
                         <input
                           data-testid="scanner-ai-theme-manual-symbols-input"
                           value={customThemeManualSymbols}
                           onChange={(event) => setCustomThemeManualSymbols(event.target.value)}
+                          aria-invalid={Boolean(validationErrors.customThemeManualSymbols)}
+                          aria-describedby={validationErrors.customThemeManualSymbols ? 'scanner-ai-theme-manual-symbols-error' : undefined}
                           placeholder={language === 'en' ? 'Optional: add symbols, e.g. NVDA PLTR' : '可选：手动补充代码，例如 NVDA PLTR'}
                           className="w-full rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
                         />
+                        {validationErrors.customThemeManualSymbols ? (
+                          <p id="scanner-ai-theme-manual-symbols-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                            {validationErrors.customThemeManualSymbols}
+                          </p>
+                        ) : null}
                         <button
                           ref={generateThemeButton.ref}
                           type="button"
@@ -1469,6 +1563,8 @@ const UserScannerPage: React.FC = () => {
                         data-testid="scanner-custom-symbols-input"
                         value={customSymbols}
                         onChange={(event) => setCustomSymbols(event.target.value)}
+                        aria-invalid={Boolean(validationErrors.customSymbols)}
+                        aria-describedby={validationErrors.customSymbols ? 'scanner-custom-symbols-error' : undefined}
                         rows={3}
                         placeholder={language === 'en' ? 'MARA RIOT CLSK' : 'MARA RIOT CLSK'}
                         className="w-full resize-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
@@ -1476,7 +1572,17 @@ const UserScannerPage: React.FC = () => {
                       <p className="text-[11px] text-white/45">
                         {language === 'en' ? `Parsed ${parsedCustomSymbols.length}` : `已解析 ${parsedCustomSymbols.length}`}
                       </p>
+                      {validationErrors.customSymbols ? (
+                        <p id="scanner-custom-symbols-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                          {validationErrors.customSymbols}
+                        </p>
+                      ) : null}
                     </div>
+                  ) : null}
+                  {validationErrors.run ? (
+                    <p role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
+                      {validationErrors.run}
+                    </p>
                   ) : null}
                   <div className="mt-auto flex flex-col gap-2 pt-1">
                     <button

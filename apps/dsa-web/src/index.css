@@ -2469,8 +2469,8 @@ html[data-theme] :where(
 
 /* ============ Custom Scrollbar ============ */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 0;
+  height: 0;
 }
 
 ::-webkit-scrollbar-track {
@@ -6038,14 +6038,35 @@ body::after {
 }
 
 * {
-  scrollbar-color: hsl(var(--border-muted-hsl) / 0.6) transparent;
+  scrollbar-color: transparent transparent;
+  scrollbar-width: none;
 }
 
+.stealth-scrollbar,
+.custom-scrollbar {
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+}
+
+.stealth-scrollbar::-webkit-scrollbar,
 .custom-scrollbar::-webkit-scrollbar {
-  width: 9px;
-  height: 9px;
+  width: 0;
+  height: 0;
 }
 
+.stealth-scrollbar:is(:hover, :focus-within),
+.custom-scrollbar:is(:hover, :focus-within) {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border-muted-hsl) / 0.48) transparent;
+}
+
+.stealth-scrollbar:is(:hover, :focus-within)::-webkit-scrollbar,
+.custom-scrollbar:is(:hover, :focus-within)::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.stealth-scrollbar::-webkit-scrollbar-thumb,
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: hsl(var(--border-muted-hsl) / 0.5);
   border: 2px solid transparent;
@@ -6053,6 +6074,7 @@ body::after {
   background-clip: padding-box;
 }
 
+.stealth-scrollbar::-webkit-scrollbar-track,
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
@@ -16055,6 +16077,11 @@ html[data-theme='spacex'] .theme-page-transition {
   overflow-y: auto;
   padding-right: 0.2rem;
   scrollbar-gutter: stable both-edges;
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+}
+
+html[data-theme='spacex'] .theme-page-transition:is(:hover, :focus-within) {
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--border-muted-hsl) / 0.5) transparent;
 }
@@ -16074,8 +16101,13 @@ html[data-theme='spacex'] .theme-page-transition--system-control {
 }
 
 html[data-theme='spacex'] .theme-page-transition::-webkit-scrollbar {
-  width: 9px;
-  height: 9px;
+  width: 0;
+  height: 0;
+}
+
+html[data-theme='spacex'] .theme-page-transition:is(:hover, :focus-within)::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
 }
 
 html[data-theme='spacex'] .theme-page-transition::-webkit-scrollbar-thumb {
