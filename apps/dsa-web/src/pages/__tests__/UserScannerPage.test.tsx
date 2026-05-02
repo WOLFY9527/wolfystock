@@ -1052,11 +1052,49 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/EVALUATED/);
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/9/);
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/DATA FAILED/);
+    expect(screen.getByTestId('scanner-decision-summary')).toHaveTextContent(/WULF (唯一通过|is the only pass)/);
+    expect(screen.getByTestId('scanner-decision-summary')).toHaveTextContent(/10 (个候选被淘汰|candidates eliminated)/);
+    expect(screen.getByTestId('scanner-rejection-aggregate')).toHaveTextContent(/淘汰原因|Eliminated by/);
+    expect(screen.getByTestId('scanner-rejection-aggregate')).toHaveTextContent(/动量不足|Momentum weak/);
     expect(screen.getByTestId('scanner-result-card-WULF')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-candidate-preview')).toHaveTextContent(/其余 10 个候选未入选|10 other candidates were not selected/);
+    expect(screen.getByTestId('scanner-candidate-preview')).toHaveTextContent(/MARA/);
 
-    fireEvent.click(screen.getByRole('button', { name: /候选池|Candidate pool/i }));
+    fireEvent.click(screen.getByRole('button', { name: /查看全部候选|View all candidates/i }));
     expect(await screen.findByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/missing momentum threshold/);
     expect(screen.getByTestId('scanner-candidate-row-CIFR')).toHaveTextContent(/missing price history/);
+  });
+
+  it('updates the candidate inspector from selected, rejected, and data-failed rows', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    expect(await screen.findByTestId('scanner-result-card-WULF')).toBeInTheDocument();
+    const selectedInspector = await screen.findByTestId('scanner-candidate-inspector');
+    expect(selectedInspector).toHaveTextContent('WULF');
+    expect(selectedInspector).toHaveTextContent(/入选|Selected/);
+    expect(selectedInspector).toHaveTextContent('60/100');
+    expect(selectedInspector).toHaveTextContent('alpaca');
+    expect(selectedInspector).toHaveTextContent(/Trend|趋势/);
+
+    fireEvent.click(screen.getByRole('button', { name: /候选池|Candidate pool/i }));
+    fireEvent.click(await screen.findByTestId('scanner-candidate-row-MARA'));
+
+    expect(await screen.findByTestId('scanner-candidate-inspector')).toHaveTextContent('MARA');
+    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent(/淘汰|Rejected/);
+    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('42/100');
+    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('below_momentum_threshold');
+    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('missing momentum threshold');
+
+    fireEvent.click(screen.getByRole('button', { name: /数据失败|Data failed/i }));
+    fireEvent.click(await screen.findByTestId('scanner-candidate-row-CIFR'));
+
+    expect(await screen.findByTestId('scanner-candidate-inspector')).toHaveTextContent('CIFR');
+    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent(/数据失败|Data failed/);
+    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent(/DATA|N\/A/);
+    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('history');
+    expect(screen.getByTestId('scanner-mobile-candidate-inspector')).toBeInTheDocument();
   });
 
   it('filters scanner diagnostics by rejected and data-failed candidates', async () => {
@@ -1107,6 +1145,8 @@ describe('UserScannerPage', () => {
 
     expect(await screen.findByTestId('scanner-result-card-NVDA')).toBeInTheDocument();
     expect(screen.queryByTestId('scanner-candidate-filters')).not.toBeInTheDocument();
+    expect(screen.getByTestId('scanner-decision-summary')).toHaveTextContent(/扫描完成|Scan completed/);
+    expect(screen.queryByTestId('scanner-candidate-inspector')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /表格视图|Table view/i }));
     expect(screen.getByTestId('scanner-result-table')).toBeInTheDocument();
   });
