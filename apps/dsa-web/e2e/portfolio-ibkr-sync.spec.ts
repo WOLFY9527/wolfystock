@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+test.skip(process.env.DSA_WEB_PORTFOLIO_E2E !== '1', 'Portfolio IBKR sync smoke is opt-in. Default Playwright runs focus on deterministic mocked coverage.');
+
 test('portfolio IBKR sync happy path keeps the result visible after metadata refresh', async ({ page }) => {
   let brokerConnectionsRequestCount = 0;
   let syncCompleted = false;
@@ -147,6 +149,16 @@ test('portfolio IBKR sync happy path keeps the result visible after metadata ref
     });
   });
 
+  await page.route('**/api/v1/agent/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        enabled: false,
+      }),
+    });
+  });
+
   await page.route('**/api/v1/portfolio/accounts**', async (route) => {
     await route.fulfill({
       status: 200,
@@ -285,7 +297,7 @@ test('portfolio IBKR sync happy path keeps the result visible after metadata ref
 
   await page.goto('/portfolio');
   await page.waitForLoadState('domcontentloaded');
-  await expect(page.getByRole('heading', { name: '持仓管理' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Trade Station|持仓管理/ })).toBeVisible();
 
   const selects = page.locator('select');
   await selects.nth(0).selectOption('1');

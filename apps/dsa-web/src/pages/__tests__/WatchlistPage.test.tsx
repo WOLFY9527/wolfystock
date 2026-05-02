@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WatchlistPage from '../WatchlistPage';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import type { WatchlistItem } from '../../types/watchlist';
@@ -121,6 +121,7 @@ function renderWatchlist(path = '/watchlist') {
 
 describe('WatchlistPage', () => {
   beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-05-01T12:00:00Z').getTime());
     vi.clearAllMocks();
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     listWatchlistItems.mockResolvedValue({ items: watchlistItems });
@@ -133,6 +134,10 @@ describe('WatchlistPage', () => {
       },
     });
     writeTextMock.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('renders tracked candidates from the watchlist API', async () => {

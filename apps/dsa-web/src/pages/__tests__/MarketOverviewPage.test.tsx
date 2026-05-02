@@ -496,6 +496,9 @@ function renderMarketOverviewWithLanguage(language: 'zh' | 'en') {
 }
 
 describe('MarketOverviewPage', () => {
+  let originalClipboard: Navigator['clipboard'] | undefined;
+  const writeTextMock = vi.fn().mockResolvedValue(undefined);
+
   class MockEventSource {
     static instances: MockEventSource[] = [];
     onmessage: ((event: MessageEvent) => void) | null = null;
@@ -525,6 +528,14 @@ describe('MarketOverviewPage', () => {
     window.localStorage.clear();
     MockEventSource.instances = [];
     vi.stubGlobal('EventSource', MockEventSource);
+    originalClipboard = navigator.clipboard;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: writeTextMock,
+      },
+    });
+    writeTextMock.mockClear();
     vi.mocked(marketOverviewApi.getIndices).mockResolvedValue(panel('IndexTrendsCard', 'SPX'));
     vi.mocked(marketOverviewApi.getVolatility).mockResolvedValue(panel('VolatilityCard', 'VIX'));
     vi.mocked(marketOverviewApi.getFundsFlow).mockResolvedValue(panel('FundsFlowCard', 'ETF'));
@@ -606,6 +617,10 @@ describe('MarketOverviewPage', () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: originalClipboard,
+    });
   });
 
   it('renders stable main grid with primary and side rails', async () => {
@@ -727,6 +742,21 @@ describe('MarketOverviewPage', () => {
     expect(metadata).toHaveTextContent(/更新/);
     expect(valueBlock).toHaveClass('col-start-4', 'text-right');
     expect(changeBlock).toHaveClass('col-start-5', 'text-right');
+  });
+
+  it('copies a market overview summary from the current visible state', async () => {
+    render(<MarketOverviewPage />);
+
+    const exportButton = await screen.findByTestId('market-overview-export-summary');
+    fireEvent.click(exportButton);
+
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalledTimes(1));
+    const copiedText = String(writeTextMock.mock.calls[0]?.[0] || '');
+    expect(copiedText).toContain('市场总览 | 全部');
+    expect(copiedText).toContain('市场温度：偏暖（62）');
+    expect(copiedText).toContain('数据质量：部分备用');
+    expect(copiedText).toContain('市场解读：美股风险偏好偏暖');
+    expect(await screen.findByText('已复制摘要')).toBeInTheDocument();
   });
 
   it('filters China indices out of the US core index card', async () => {

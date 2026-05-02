@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "test:smoke": "bash ./scripts/run-smoke.sh",
     "preview": "vite preview"
   },

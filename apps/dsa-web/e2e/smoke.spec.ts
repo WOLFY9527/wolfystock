@@ -4,6 +4,8 @@ const backendBaseUrl = process.env.DSA_WEB_SMOKE_BACKEND_URL || 'http://127.0.0.
 const smokePassword = process.env.DSA_WEB_SMOKE_PASSWORD;
 const routeApiRequests = process.env.DSA_WEB_SMOKE_ROUTE_API === '1';
 
+test.skip(process.env.DSA_WEB_LIVE_SMOKE !== '1', 'Live deployment smoke is opt-in. Default Playwright runs use mocked E2E coverage.');
+
 type AuthStatusPayload = {
   authEnabled: boolean;
   loggedIn?: boolean;

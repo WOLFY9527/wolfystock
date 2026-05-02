@@ -193,6 +193,7 @@ export const Drawer: React.FC<DrawerProps> = ({
     <div className="fixed inset-0 overflow-hidden overscroll-contain" style={{ zIndex }} role="presentation">
       {/* Backdrop */}
       <div
+        data-testid="drawer-backdrop"
         data-state={uiState}
         className={cn(
           'absolute inset-0 bg-black/60 transition-opacity duration-200 ease-out',

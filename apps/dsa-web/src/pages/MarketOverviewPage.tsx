@@ -321,6 +321,68 @@ function heroToneClass(item: MarketOverviewItem | undefined): string {
     : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.36)]';
 }
 
+function formatCoverageSummaryLine(label: string, summary: Record<CardCoverageKind, number>, language: 'zh' | 'en'): string {
+  if (language === 'en') {
+    return `Coverage (${label}): real ${summary.real} | mixed ${summary.mixed} | fallback ${summary.fallback}`;
+  }
+  return `${label}数据覆盖：真实 ${summary.real} | 混合 ${summary.mixed} | 备用 ${summary.fallback}`;
+}
+
+function buildMarketOverviewSummaryText(params: {
+  activeCategoryLabel: string;
+  coverageSummary: Record<CardCoverageKind, number>;
+  dataQuality: DataQualitySummary;
+  heroAnchors: HeroAnchor[];
+  language: 'zh' | 'en';
+  temperature: MarketTemperatureResponse;
+  briefing: MarketBriefingResponse;
+}): string {
+  const {
+    activeCategoryLabel,
+    coverageSummary,
+    dataQuality,
+    heroAnchors,
+    language,
+    temperature,
+    briefing,
+  } = params;
+
+  const heroLine = heroAnchors
+    .slice(0, 3)
+    .map((anchor) => {
+      const displayLabel = anchor.item
+        ? resolveMarketOverviewDisplayLabel(anchor.item, language)
+        : { primary: anchor.label, secondary: anchor.key };
+      return `${displayLabel.primary} ${formatHeroValue(anchor.item?.value)} (${formatHeroChange(anchor.item?.changePct)})`;
+    })
+    .join(' | ');
+
+  const briefingLine = briefing.items
+    .slice(0, 3)
+    .map((item) => `${item.title}: ${item.message}`)
+    .join(language === 'en' ? ' | ' : '；');
+
+  const lines = language === 'en'
+    ? [
+      `Market Overview | ${activeCategoryLabel}`,
+      `Market temperature: ${temperature.scores.overall.label} (${temperature.scores.overall.value})`,
+      `Data quality: ${dataQuality.status}`,
+      formatCoverageSummaryLine(activeCategoryLabel, coverageSummary, language),
+      `Cross asset snapshot: ${heroLine}`,
+      `Briefing: ${briefingLine}`,
+    ]
+    : [
+      `市场总览 | ${activeCategoryLabel}`,
+      `市场温度：${temperature.scores.overall.label}（${temperature.scores.overall.value}）`,
+      `数据质量：${dataQuality.status}`,
+      formatCoverageSummaryLine(activeCategoryLabel, coverageSummary, language),
+      `跨资产快照：${heroLine}`,
+      `市场解读：${briefingLine}`,
+    ];
+
+  return lines.join('\n');
+}
+
 const CrossAssetHeroRibbon: React.FC<{ anchors: HeroAnchor[] }> = ({ anchors }) => {
   const { language } = useI18n();
   return (
@@ -1150,7 +1212,7 @@ function debugMarketPanel(panelKey: PanelKey, status: 'loading' | 'success' | 'f
 }
 
 const MarketOverviewPage: React.FC = () => {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [panels, setPanels] = useState<PanelState>({
     temperature: FALLBACK_TEMPERATURE,
     briefing: FALLBACK_BRIEFING,
@@ -1162,6 +1224,7 @@ const MarketOverviewPage: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<MarketOverviewTab>('all');
   const [fallbackSectionExpanded, setFallbackSectionExpanded] = useState(false);
   const [cryptoRealtimeStatus, setCryptoRealtimeStatus] = useState<CryptoRealtimeStatus>('snapshot');
+  const [exportSummaryFeedback, setExportSummaryFeedback] = useState<string | null>(null);
 
   const loadPanels = useCallback(async (cancelledRef?: { current: boolean }) => {
     setLoading(true);
@@ -1511,6 +1574,15 @@ const MarketOverviewPage: React.FC = () => {
   const dataQuality = useMemo(() => summarizeDataQuality(panels), [panels]);
   const coverageSummary = useMemo(() => summarizeCardCoverage(panels, CATEGORY_CARDS[activeCategory]), [activeCategory, panels]);
   const activeCategoryLabel = categoryTabs.find((tab) => tab.key === activeCategory)?.label || '';
+  const exportSummaryText = useMemo(() => buildMarketOverviewSummaryText({
+    activeCategoryLabel,
+    coverageSummary,
+    dataQuality,
+    heroAnchors,
+    language,
+    temperature: panels.temperature,
+    briefing: panels.briefing,
+  }), [activeCategoryLabel, coverageSummary, dataQuality, heroAnchors, language, panels.briefing, panels.temperature]);
   const activeLayout = CATEGORY_LAYOUT[activeCategory];
   const primaryCandidates = activeLayout.primary.filter((cardKey) => getCardCoverageKind(panels, cardKey) !== 'fallback');
   const secondaryOrder = activeLayout.secondary.filter((cardKey) => getCardCoverageKind(panels, cardKey) !== 'fallback');
@@ -1565,6 +1637,11 @@ const MarketOverviewPage: React.FC = () => {
       </PendingDataSourceSection>
     ) : null
   );
+
+  const handleExportSummary = useCallback(async () => {
+    await navigator.clipboard.writeText(exportSummaryText);
+    setExportSummaryFeedback(language === 'en' ? 'Summary copied' : '已复制摘要');
+  }, [exportSummaryText, language]);
 
   const renderDeterministicGrid = () => (
     <main data-testid="market-overview-main-grid" className="grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
@@ -1636,6 +1713,18 @@ const MarketOverviewPage: React.FC = () => {
             dataQuality={<DataQualityCompactSummary summary={dataQuality} />}
             briefing={<MarketBriefingCompactSummary data={panels.briefing} />}
           />
+          <div className="flex justify-end">
+            <button
+              type="button"
+              data-testid="market-overview-export-summary"
+              onClick={() => {
+                void handleExportSummary();
+              }}
+              className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/70 transition hover:bg-white/[0.06] hover:text-white"
+            >
+              {exportSummaryFeedback || (language === 'en' ? 'Export summary' : '复制摘要')}
+            </button>
+          </div>
         </div>
         {renderDeterministicGrid()}
       </div>
