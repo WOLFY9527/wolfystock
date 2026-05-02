@@ -1459,34 +1459,41 @@ class ExecutionLogService:
                 destructive=False,
             ),
         )
-        self.db.create_execution_log_session(
-            session_id=session_id,
-            task_id="market_overview_fetch",
-            code=None,
-            name=panel_name,
-            overall_status=normalized_status,
-            truth_level="actual",
-            summary=summary,
-            started_at=started_at,
-        )
-        self.db.append_execution_log_event(
-            session_id=session_id,
-            phase=category,
-            step=event_name,
-            target=panel_name,
-            status=normalized_status,
-            truth_level="actual",
-            message=_masked_message(error_message) if error_message else f"{panel_name} refreshed via {_sanitize_url(endpoint_url)}",
-            detail=detail,
-            event_at=started_at,
-        )
-        self.db.finalize_execution_log_session(
-            session_id=session_id,
-            overall_status=normalized_status,
-            truth_level="actual",
-            summary=summary,
-            ended_at=started_at,
-        )
+        emit_notification = getattr(self.db, "_emit_execution_log_notification", None)
+        if emit_notification is not None:
+            self.db._emit_execution_log_notification = lambda **_kwargs: None  # type: ignore[attr-defined]
+        try:
+            self.db.create_execution_log_session(
+                session_id=session_id,
+                task_id="market_overview_fetch",
+                code=None,
+                name=panel_name,
+                overall_status=normalized_status,
+                truth_level="actual",
+                summary=summary,
+                started_at=started_at,
+            )
+            self.db.append_execution_log_event(
+                session_id=session_id,
+                phase=category,
+                step=event_name,
+                target=panel_name,
+                status=normalized_status,
+                truth_level="actual",
+                message=_masked_message(error_message) if error_message else f"{panel_name} refreshed via {_sanitize_url(endpoint_url)}",
+                detail=detail,
+                event_at=started_at,
+            )
+            self.db.finalize_execution_log_session(
+                session_id=session_id,
+                overall_status=normalized_status,
+                truth_level="actual",
+                summary=summary,
+                ended_at=started_at,
+            )
+        finally:
+            if emit_notification is not None:
+                self.db._emit_execution_log_notification = emit_notification  # type: ignore[attr-defined]
         return session_id
 
     def record_portfolio_event(
