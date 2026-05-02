@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import and_, delete, func, select, text
 
 from src.config import get_config
+from src.postgres_control_plane_store import PhaseGExecutionEvent, PhaseGExecutionSession
 from src.storage import ExecutionLogEvent, ExecutionLogSession, get_db
 
 
@@ -86,17 +87,41 @@ class AdminLogsRetentionService:
         except Exception as exc:
             raise ValueError(f"Invalid cleanup cutoff datetime: {value}") from exc
 
-    def _storage_bytes(self) -> Optional[int]:
+    def _storage_relation_scope(self) -> tuple[Optional[Any], Optional[str], Optional[str]]:
+        phase_g_store = getattr(self.db, "_phase_g_store", None)
+        phase_g_engine = getattr(phase_g_store, "_engine", None) if phase_g_store is not None else None
+        if phase_g_engine is not None and getattr(phase_g_engine.dialect, "name", "") == "postgresql":
+            return (
+                phase_g_engine,
+                PhaseGExecutionSession.__tablename__,
+                PhaseGExecutionEvent.__tablename__,
+            )
+
         engine = getattr(self.db, "_engine", None)
-        if engine is None or getattr(engine.dialect, "name", "") != "postgresql":
+        if engine is not None and getattr(engine.dialect, "name", "") == "postgresql":
+            return (
+                engine,
+                ExecutionLogSession.__tablename__,
+                ExecutionLogEvent.__tablename__,
+            )
+
+        return None, None, None
+
+    def _storage_bytes(self) -> Optional[int]:
+        engine, session_table, event_table = self._storage_relation_scope()
+        if engine is None or not session_table or not event_table:
             return None
         with engine.connect() as conn:
             value = conn.execute(
                 text(
                     "SELECT "
-                    "pg_total_relation_size('execution_log_sessions') + "
-                    "pg_total_relation_size('execution_log_events')"
-                )
+                    "COALESCE(pg_total_relation_size(to_regclass(:session_table)), 0) + "
+                    "COALESCE(pg_total_relation_size(to_regclass(:event_table)), 0)"
+                ),
+                {
+                    "session_table": session_table,
+                    "event_table": event_table,
+                },
             ).scalar()
         return int(value) if value is not None else None
 
