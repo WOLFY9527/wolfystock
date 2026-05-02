@@ -369,6 +369,28 @@ class AuthApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
 
+    def test_protected_api_options_preflight_reaches_cors_without_session(self) -> None:
+        scope = {
+            "type": "http",
+            "method": "OPTIONS",
+            "path": "/api/v1/admin/notification-channels",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "http",
+            "client": ("127.0.0.1", 1234),
+            "server": ("testserver", 80),
+            "root_path": "",
+        }
+        request = Request(scope)
+        middleware = AuthMiddleware(app=MagicMock())
+        call_next = AsyncMock(return_value=Response(status_code=204))
+
+        with patch("api.middlewares.auth.is_auth_enabled", return_value=True):
+            response = asyncio.run(middleware.dispatch(request, call_next))
+
+        self.assertEqual(response.status_code, 204)
+        call_next.assert_awaited_once()
+
     def test_logout_requires_session_when_auth_enabled(self) -> None:
         scope = {
             "type": "http",

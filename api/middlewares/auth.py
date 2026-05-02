@@ -51,6 +51,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         current_user = resolve_current_user(request)
 
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         if not is_auth_enabled():
             return await call_next(request)
 

@@ -310,20 +310,20 @@ function levelFilterLabel(value: LevelFilter, locale: AdminLogsLanguage): string
 function categoryLabel(value: string | null | undefined, locale: AdminLogsLanguage): string {
   const key = String(value || 'system').trim();
   const labels: Record<string, { zh: string; en: string }> = {
-    system: { zh: 'system', en: 'system' },
-    auth: { zh: 'auth', en: 'auth' },
-    market: { zh: 'market', en: 'market' },
-    cache: { zh: 'cache', en: 'cache' },
-    data_source: { zh: 'data_source', en: 'data_source' },
-    analysis: { zh: 'analysis', en: 'analysis' },
-    scanner: { zh: 'scanner', en: 'scanner' },
-    backtest: { zh: 'backtest', en: 'backtest' },
-    trading: { zh: 'trading', en: 'trading' },
-    portfolio: { zh: 'portfolio', en: 'portfolio' },
-    scheduler: { zh: 'scheduler', en: 'scheduler' },
-    notification: { zh: 'notification', en: 'notification' },
-    api: { zh: 'api', en: 'api' },
-    security: { zh: 'security', en: 'security' },
+    system: { zh: '系统', en: 'system' },
+    auth: { zh: '认证', en: 'auth' },
+    market: { zh: '市场', en: 'market' },
+    cache: { zh: '缓存', en: 'cache' },
+    data_source: { zh: '数据源', en: 'data_source' },
+    analysis: { zh: '分析', en: 'analysis' },
+    scanner: { zh: '扫描器', en: 'scanner' },
+    backtest: { zh: '回测', en: 'backtest' },
+    trading: { zh: '交易', en: 'trading' },
+    portfolio: { zh: '组合', en: 'portfolio' },
+    scheduler: { zh: '调度', en: 'scheduler' },
+    notification: { zh: '通知', en: 'notification' },
+    api: { zh: 'API', en: 'api' },
+    security: { zh: '安全', en: 'security' },
   };
   return (labels[key] || { zh: key, en: key })[locale];
 }
@@ -405,8 +405,8 @@ function clampPercent(value: unknown): number {
 
 function storageStatusLabel(value: string | undefined, locale: AdminLogsLanguage): string {
   const normalized = String(value || 'ok').toLowerCase();
-  if (normalized === 'critical') return locale === 'zh' ? 'Critical' : 'Critical';
-  if (normalized === 'warning') return locale === 'zh' ? 'Warning' : 'Warning';
+  if (normalized === 'critical') return locale === 'zh' ? '严重' : 'Critical';
+  if (normalized === 'warning') return locale === 'zh' ? '警告' : 'Warning';
   return locale === 'zh' ? 'OK' : 'OK';
 }
 
@@ -525,11 +525,25 @@ function actorBadgeLabel(value: unknown): string {
   return 'unknown';
 }
 
+function actorBadgeDisplay(value: unknown, locale: AdminLogsLanguage): string {
+  const normalized = actorBadgeLabel(value);
+  if (locale !== 'zh') return normalized;
+  const labels: Record<string, string> = {
+    admin: '管理员',
+    user: '用户',
+    guest: '访客',
+    anonymous: '匿名',
+    system: '系统',
+    unknown: '未知',
+  };
+  return labels[normalized] || normalized;
+}
+
 function healthStatusLabel(status: unknown, locale: AdminLogsLanguage): string {
   const normalized = String(status || 'healthy').trim().toLowerCase();
-  if (normalized === 'failing') return locale === 'zh' ? 'Failing' : 'Failing';
-  if (normalized === 'degraded') return locale === 'zh' ? 'Degraded' : 'Degraded';
-  return locale === 'zh' ? 'Healthy' : 'Healthy';
+  if (normalized === 'failing') return locale === 'zh' ? '故障' : 'Failing';
+  if (normalized === 'degraded') return locale === 'zh' ? '降级' : 'Degraded';
+  return locale === 'zh' ? '健康' : 'Healthy';
 }
 
 function healthStatusTone(status: unknown): string {
@@ -542,6 +556,24 @@ function healthStatusTone(status: unknown): string {
 function compactHealthList(items: AdminLogHealthSummary['failuresByProvider'] | undefined): string {
   if (!items?.length) return '--';
   return items.slice(0, 3).map((item) => `${text(item.label || item.key)} ${item.count}`).join(' · ');
+}
+
+function localizedRecommendedCleanupAction(value: string | null | undefined, locale: AdminLogsLanguage): string {
+  const message = String(value || '').trim();
+  if (!message) return locale === 'zh' ? '存储摘要暂不可用' : 'Storage summary unavailable';
+  if (locale !== 'zh') return message;
+  if (/over the hard limit/i.test(message)) return '存储已超过硬限制。请运行容量清理；最早可删日志仍受最小保留天数保护。';
+  if (/over the soft limit/i.test(message)) return '存储已超过软限制。请先预览保留期清理或容量清理。';
+  if (/Storage size unavailable/i.test(message)) return '存储大小暂不可用；保留期和行数检查仍然有效。';
+  if (/No cleanup needed/i.test(message)) return '无需清理。';
+  if (/Preview cleanup/i.test(message)) return '请先预览清理，再删除超过保留期的日志。';
+  return message;
+}
+
+function countLabel(count: number | null | undefined, singular: string, plural: string, zhUnit: string, locale: AdminLogsLanguage): string {
+  const value = Number(count ?? 0).toLocaleString();
+  if (locale === 'zh') return `${value} ${zhUnit}`;
+  return `${value} ${Number(count ?? 0) === 1 ? singular : plural}`;
 }
 
 function isFailedStatus(value: unknown): boolean {
@@ -589,9 +621,9 @@ function rawEventSeverity(detail: ExecutionLogSessionDetail): EventSeverity {
 }
 
 function severityLabel(severity: EventSeverity, locale: AdminLogsLanguage): string {
-  if (severity === 'failed') return locale === 'zh' ? 'Failed' : 'Failed';
-  if (severity === 'degraded') return locale === 'zh' ? 'Degraded' : 'Degraded';
-  return locale === 'zh' ? 'Success' : 'Success';
+  if (severity === 'failed') return locale === 'zh' ? '失败' : 'Failed';
+  if (severity === 'degraded') return locale === 'zh' ? '降级' : 'Degraded';
+  return locale === 'zh' ? '成功' : 'Success';
 }
 
 function severityClass(severity: EventSeverity): string {
@@ -601,9 +633,9 @@ function severityClass(severity: EventSeverity): string {
 }
 
 function summaryTitle(severity: EventSeverity, locale: AdminLogsLanguage): string {
-  if (severity === 'failed') return locale === 'zh' ? 'Root Cause' : 'Root Cause';
-  if (severity === 'degraded') return locale === 'zh' ? 'Degradation Summary' : 'Degradation Summary';
-  return locale === 'zh' ? 'Execution Summary' : 'Execution Summary';
+  if (severity === 'failed') return locale === 'zh' ? '根因' : 'Root Cause';
+  if (severity === 'degraded') return locale === 'zh' ? '降级摘要' : 'Degradation Summary';
+  return locale === 'zh' ? '执行摘要' : 'Execution Summary';
 }
 
 function summarySectionClass(severity: EventSeverity): string {
@@ -861,7 +893,9 @@ const AdminLogsPage: React.FC = () => {
     try {
       const response = await adminLogsApi.cleanupLogs({ mode: 'retention', useRetention: true, dryRun: true });
       setCleanupPreview(response);
-      setCleanupMessage(`Retention preview: ${response.matchedLogCount} sessions and ${response.matchedEventCount} events would be deleted before ${formatDateTime(response.cutoff, locale)}.`);
+      setCleanupMessage(locale === 'zh'
+        ? `保留期清理预览：将在 ${formatDateTime(response.cutoff, locale)} 之前删除 ${response.matchedLogCount} 个会话和 ${response.matchedEventCount} 个事件。`
+        : `Retention preview: ${response.matchedLogCount} sessions and ${response.matchedEventCount} events would be deleted before ${formatDateTime(response.cutoff, locale)}.`);
     } catch (err) {
       setError(getParsedApiError(err));
     } finally {
@@ -877,7 +911,10 @@ const AdminLogsPage: React.FC = () => {
       setCleanupPreview(response);
       setCleanupMessage(
         response.message
-          || `Capacity preview: ${response.matchedLogCount} sessions and ${response.matchedEventCount} events would be deleted. Minimum retention cutoff: ${formatDateTime(response.cutoff, locale)}.`,
+          ? localizedRecommendedCleanupAction(response.message, locale)
+          : (locale === 'zh'
+            ? `容量清理预览：将删除 ${response.matchedLogCount} 个会话和 ${response.matchedEventCount} 个事件。最小保留截止时间：${formatDateTime(response.cutoff, locale)}。`
+            : `Capacity preview: ${response.matchedLogCount} sessions and ${response.matchedEventCount} events would be deleted. Minimum retention cutoff: ${formatDateTime(response.cutoff, locale)}.`),
       );
     } catch (err) {
       setError(getParsedApiError(err));
@@ -891,13 +928,21 @@ const AdminLogsPage: React.FC = () => {
     const cutoff = cleanupPreview?.cutoff || storageSummary?.retentionCutoff || '';
     const mode = cleanupPreview?.mode === 'capacity' ? 'capacity' : 'retention';
     const confirmed = window.confirm(
-      [
-        `Run ${mode} cleanup for ${expectedCount} admin log sessions?`,
-        `Estimated events: ${cleanupPreview?.matchedEventCount ?? 0}.`,
-        `Cutoff/minimum retention protection: ${formatDateTime(cutoff, locale)}.`,
-        'This deletion cannot be undone.',
-        'Deleted rows may require PostgreSQL autovacuum to reclaim physical disk space.',
-      ].join('\n'),
+      locale === 'zh'
+        ? [
+          `确认对 ${expectedCount} 个管理员日志会话运行${mode === 'capacity' ? '容量' : '保留期'}清理？`,
+          `预计事件数：${cleanupPreview?.matchedEventCount ?? 0}。`,
+          `截止时间 / 最小保留保护：${formatDateTime(cutoff, locale)}。`,
+          '此删除操作无法撤销。',
+          '删除行后可能需要 PostgreSQL autovacuum 回收物理磁盘空间。',
+        ].join('\n')
+        : [
+          `Run ${mode} cleanup for ${expectedCount} admin log sessions?`,
+          `Estimated events: ${cleanupPreview?.matchedEventCount ?? 0}.`,
+          `Cutoff/minimum retention protection: ${formatDateTime(cutoff, locale)}.`,
+          'This deletion cannot be undone.',
+          'Deleted rows may require PostgreSQL autovacuum to reclaim physical disk space.',
+        ].join('\n'),
     );
     if (!confirmed) return;
     setIsCleanupBusy(true);
@@ -909,7 +954,9 @@ const AdminLogsPage: React.FC = () => {
           : { mode: 'retention', useRetention: true, dryRun: false },
       );
       setCleanupPreview(response);
-      setCleanupMessage(`Deleted ${response.deletedLogCount} sessions and ${response.deletedEventCount} events.${response.additionalCleanupNeeded ? ' Additional cleanup may still be needed.' : ''}`);
+      setCleanupMessage(locale === 'zh'
+        ? `已删除 ${response.deletedLogCount} 个会话和 ${response.deletedEventCount} 个事件。${response.additionalCleanupNeeded ? ' 可能仍需继续清理。' : ''}`
+        : `Deleted ${response.deletedLogCount} sessions and ${response.deletedEventCount} events.${response.additionalCleanupNeeded ? ' Additional cleanup may still be needed.' : ''}`);
       await Promise.all([loadStorageSummary(), loadSessions()]);
     } catch (err) {
       setError(getParsedApiError(err));
@@ -1237,18 +1284,18 @@ const AdminLogsPage: React.FC = () => {
         <div className={`rounded-lg border px-3 py-2 ${storageStatusTone(storageSummary?.status)}`}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">LOG STORAGE</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? '日志存储' : 'LOG STORAGE'}</p>
               {storageSummary?.storageSizeAvailable ? (
                 <>
                   <p className="mt-1 text-base font-semibold">
-                    {formatStorageBytes(currentStorageBytes)} / {formatStorageBytes(softLimitBytes)} soft
+                    {formatStorageBytes(currentStorageBytes)} / {formatStorageBytes(softLimitBytes)} {locale === 'zh' ? '软限制' : 'soft'}
                   </p>
-                  <p className="text-[11px] opacity-80">{formatStorageBytes(hardLimitBytes)} hard limit</p>
+                  <p className="text-[11px] opacity-80">{formatStorageBytes(hardLimitBytes)} {locale === 'zh' ? '硬限制' : 'hard limit'}</p>
                 </>
               ) : (
                 <>
-                  <p className="mt-1 text-base font-semibold">Size unavailable</p>
-                  <p className="text-[11px] opacity-80">Retention checks active</p>
+                  <p className="mt-1 text-base font-semibold">{locale === 'zh' ? '大小暂不可用' : 'Size unavailable'}</p>
+                  <p className="text-[11px] opacity-80">{locale === 'zh' ? '保留期检查仍在生效' : 'Retention checks active'}</p>
                 </>
               )}
             </div>
@@ -1261,40 +1308,40 @@ const AdminLogsPage: React.FC = () => {
               <div className="h-1.5 overflow-hidden rounded-full bg-black/35">
                 <div className="h-full rounded-full bg-current" style={{ width: `${Math.max(3, hardPercent)}%` }} />
               </div>
-              <p className="mt-1 text-[10px] opacity-75">{softPercent}% soft · {hardPercent}% hard</p>
+              <p className="mt-1 text-[10px] opacity-75">{softPercent}% {locale === 'zh' ? '软限制' : 'soft'} · {hardPercent}% {locale === 'zh' ? '硬限制' : 'hard'}</p>
             </div>
           ) : null}
         </div>
         <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">LOG VOLUME</p>
-          <p className="mt-1 text-base font-semibold text-foreground">{storageSummary?.totalLogCount?.toLocaleString() ?? '--'} sessions</p>
-          <p className="text-[11px] text-muted-text">{storageSummary?.totalEventCount?.toLocaleString() ?? '--'} events</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '日志规模' : 'LOG VOLUME'}</p>
+          <p className="mt-1 text-base font-semibold text-foreground">{countLabel(storageSummary?.totalLogCount, 'session', 'sessions', '会话', locale)}</p>
+          <p className="text-[11px] text-muted-text">{countLabel(storageSummary?.totalEventCount, 'event', 'events', '事件', locale)}</p>
         </div>
         <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Retention' : 'Retention'}</p>
-          <p className="mt-1 text-base font-semibold text-foreground">{storageSummary?.retentionDays ?? '--'} days</p>
-          <p className="text-[11px] text-muted-text">min {storageSummary?.minimumRetentionDays ?? '--'} days · {storageSummary?.logsOlderThanRetentionCount ?? 0} older</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '保留期' : 'Retention'}</p>
+          <p className="mt-1 text-base font-semibold text-foreground">{storageSummary?.retentionDays ?? '--'} {locale === 'zh' ? '天' : 'days'}</p>
+          <p className="text-[11px] text-muted-text">{locale === 'zh' ? '最少' : 'min'} {storageSummary?.minimumRetentionDays ?? '--'} {locale === 'zh' ? '天' : 'days'} · {storageSummary?.logsOlderThanRetentionCount ?? 0} {locale === 'zh' ? '条超期' : 'older'}</p>
         </div>
         <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">OLDEST LOG</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '最早日志' : 'OLDEST LOG'}</p>
           <p className="mt-1 truncate text-sm font-semibold text-foreground">{formatDateTime(storageSummary?.oldestLogTimestamp, locale)}</p>
-          <p className="text-[11px] text-muted-text">oldest retained session/event</p>
+          <p className="text-[11px] text-muted-text">{locale === 'zh' ? '当前保留的最早会话 / 事件' : 'oldest retained session/event'}</p>
         </div>
         <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Cleanup guidance' : 'Cleanup guidance'}</p>
-          <p className="mt-1 truncate text-sm text-foreground" title={storageSummary?.recommendedCleanupAction || ''}>
-            {storageSummary?.recommendedCleanupAction || (locale === 'zh' ? 'Storage summary unavailable' : 'Storage summary unavailable')}
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '清理建议' : 'Cleanup guidance'}</p>
+          <p className="mt-1 truncate text-sm text-foreground" title={localizedRecommendedCleanupAction(storageSummary?.recommendedCleanupAction, locale)}>
+            {localizedRecommendedCleanupAction(storageSummary?.recommendedCleanupAction, locale)}
           </p>
           {storageSummary && ['warning', 'critical'].includes(String(storageSummary.status)) ? (
             <a
               href="/admin/notifications"
               className="mt-1 inline-flex text-[11px] font-semibold text-emerald-100 underline-offset-4 hover:underline"
             >
-              {locale === 'zh' ? '配置 Admin 通知通道' : 'Configure Admin notification channels'}
+              {locale === 'zh' ? '配置管理员通知通道' : 'Configure Admin notification channels'}
             </a>
           ) : null}
-          {storageSummary?.postgresVacuumNote ? <p className="mt-1 text-[11px] text-amber-100">{storageSummary.postgresVacuumNote}</p> : null}
-          {storageSummary?.autoCleanupEnabled && storageSummary?.status === 'critical' ? <p className="mt-1 text-[11px] text-rose-100">Auto cleanup required</p> : null}
+          {storageSummary?.postgresVacuumNote ? <p className="mt-1 text-[11px] text-amber-100">{locale === 'zh' ? '删除行后可能需要 PostgreSQL autovacuum 回收物理磁盘空间。' : storageSummary.postgresVacuumNote}</p> : null}
+          {storageSummary?.autoCleanupEnabled && storageSummary?.status === 'critical' ? <p className="mt-1 text-[11px] text-rose-100">{locale === 'zh' ? '需要自动清理' : 'Auto cleanup required'}</p> : null}
           {cleanupMessage ? <p className="mt-1 text-[11px] text-emerald-100">{cleanupMessage}</p> : null}
         </div>
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row lg:flex-col">
@@ -1304,7 +1351,7 @@ const AdminLogsPage: React.FC = () => {
             onClick={() => void previewCleanup()}
             disabled={isCleanupBusy || !storageSummary}
           >
-            {isCleanupBusy ? t('adminLogs.loading') : 'Preview retention cleanup'}
+            {isCleanupBusy ? t('adminLogs.loading') : (locale === 'zh' ? '预览保留期清理' : 'Preview retention cleanup')}
           </button>
           <button
             type="button"
@@ -1312,7 +1359,7 @@ const AdminLogsPage: React.FC = () => {
             onClick={() => void previewCapacityCleanup()}
             disabled={isCleanupBusy || !storageSummary?.storageSizeAvailable}
           >
-            Preview capacity cleanup
+            {locale === 'zh' ? '预览容量清理' : 'Preview capacity cleanup'}
           </button>
           <button
             type="button"
@@ -1320,7 +1367,9 @@ const AdminLogsPage: React.FC = () => {
             onClick={() => void confirmCleanup()}
             disabled={isCleanupBusy || !storageSummary || (cleanupPreview?.matchedLogCount ?? storageSummary.logsOlderThanRetentionCount) <= 0 || (cleanupPreview?.mode === 'capacity' && !canRunCapacityCleanup)}
           >
-            {cleanupPreview?.mode === 'capacity' ? 'Run capacity cleanup' : 'Clean logs older than retention'}
+            {cleanupPreview?.mode === 'capacity'
+              ? (locale === 'zh' ? '运行容量清理' : 'Run capacity cleanup')
+              : (locale === 'zh' ? '清理超过保留期的日志' : 'Clean logs older than retention')}
           </button>
         </div>
       </section>
@@ -1330,31 +1379,31 @@ const AdminLogsPage: React.FC = () => {
         className="grid grid-cols-1 gap-2 rounded-xl border border-white/8 bg-black/20 p-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[10rem_9rem_9rem_minmax(10rem,1fr)_minmax(10rem,1fr)_minmax(12rem,1.2fr)]"
       >
         <div className={`rounded-lg border px-3 py-2 ${healthStatusTone(healthSummary.status)}`}>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? 'Overall status' : 'Overall status'}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? '整体状态' : 'Overall status'}</p>
           <p className="mt-1 text-base font-semibold">{healthStatusLabel(healthSummary.status, locale)}</p>
         </div>
         <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-secondary-text">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Failures' : 'Failures'}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '失败' : 'Failures'}</p>
           <p className="mt-1 text-base font-semibold text-foreground">{healthSummary.failedEvents} / {healthSummary.totalEvents}</p>
-          <p className="text-[11px] text-muted-text">{Math.round((healthSummary.failureRate || 0) * 100)}% · {healthSummary.warningEvents} warning</p>
+          <p className="text-[11px] text-muted-text">{Math.round((healthSummary.failureRate || 0) * 100)}% · {healthSummary.warningEvents} {locale === 'zh' ? '警告' : 'warning'}</p>
         </div>
         <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-secondary-text">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Warnings' : 'Warnings'}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '警告' : 'Warnings'}</p>
           <p className="mt-1 text-base font-semibold text-foreground">{healthSummary.warningEvents}</p>
-          <p className="text-[11px] text-muted-text">{healthSummary.slowEvents} slow</p>
+          <p className="text-[11px] text-muted-text">{healthSummary.slowEvents} {locale === 'zh' ? '慢请求' : 'slow'}</p>
         </div>
         <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Top failing feature' : 'Top failing feature'}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '主要失败功能' : 'Top failing feature'}</p>
           <p className="mt-1 truncate text-sm font-semibold text-foreground" title={text(topCategory?.label || topCategory?.key)}>{text(topCategory?.label || topCategory?.key)}</p>
-          <p className="text-[11px] text-muted-text">{topCategory ? `${topCategory.count} events` : '--'}</p>
+          <p className="text-[11px] text-muted-text">{topCategory ? countLabel(topCategory.count, 'event', 'events', '事件', locale) : '--'}</p>
         </div>
         <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Provider / reason' : 'Provider / reason'}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '供应商 / 原因' : 'Provider / reason'}</p>
           <p className="mt-1 truncate text-sm text-foreground" title={compactHealthList(healthSummary.failuresByProvider)}>{compactHealthList(healthSummary.failuresByProvider)}</p>
           <p className="truncate text-[11px] text-muted-text" title={compactHealthList(healthSummary.failuresByReason)}>{compactHealthList(healthSummary.failuresByReason)}</p>
         </div>
         <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? 'Latest critical error' : 'Latest critical error'}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '最新严重错误' : 'Latest critical error'}</p>
           <p className="mt-1 truncate text-sm font-semibold text-foreground" title={text(latestCriticalError?.event || latestCriticalError?.category)}>{text(latestCriticalError?.event || latestCriticalError?.category)}</p>
           <p className="truncate text-[11px] text-muted-text" title={text(latestCriticalError?.errorSummary || latestCriticalError?.reason)}>{text(latestCriticalError?.errorSummary || latestCriticalError?.reason)}</p>
         </div>
@@ -1366,7 +1415,7 @@ const AdminLogsPage: React.FC = () => {
             <h2 className="text-sm font-semibold text-foreground">{t('adminLogs.sessionListTitle')}</h2>
             <p className="mt-1 text-xs text-muted-text">{locale === 'zh' ? '点击查看详情会打开右侧抽屉，调用链和数据源可独立折叠。' : 'View Details opens a right drawer; LLM and data-source chains collapse independently.'}</p>
           </div>
-          <p className="text-[10px] uppercase tracking-[0.22em] text-white/36">{activeTab === 'raw' ? filteredSessions.length : businessTotal} records</p>
+          <p className="text-[10px] uppercase tracking-[0.22em] text-white/36">{countLabel(activeTab === 'raw' ? filteredSessions.length : businessTotal, 'record', 'records', '记录', locale)}</p>
         </div>
         {activeTab !== 'raw' ? (
           businessEvents.length === 0 ? (
@@ -1382,16 +1431,16 @@ const AdminLogsPage: React.FC = () => {
                     <div>{locale === 'zh' ? '时间' : 'Time'}</div>
                     <div>{locale === 'zh' ? '事件' : 'Event'}</div>
                     <div>{locale === 'zh' ? '状态 / 严重度' : 'Status / Severity'}</div>
-                    <div>{locale === 'zh' ? 'Reason' : 'Reason'}</div>
-                    <div>{locale === 'zh' ? 'Actor' : 'Actor'}</div>
-                    <div>{locale === 'zh' ? 'Context' : 'Context'}</div>
-                    <div>{locale === 'zh' ? 'Source / Provider' : 'Source / Provider'}</div>
+                    <div>{locale === 'zh' ? '原因' : 'Reason'}</div>
+                    <div>{locale === 'zh' ? '操作者' : 'Actor'}</div>
+                    <div>{locale === 'zh' ? '上下文' : 'Context'}</div>
+                    <div>{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}</div>
                     <div>{locale === 'zh' ? '操作' : 'Action'}</div>
                   </div>
                   <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto">
                     {businessEvents.map((item) => {
                       const status = normalizeStatus(item.status);
-                      const actorType = actorBadgeLabel(item.actorType);
+                      const actorType = actorBadgeDisplay(item.actorType, locale);
                       const actorSecondary = text(item.actorLabel || item.userId || item.requestId, locale === 'zh' ? '未记录' : 'Not recorded');
                       const contextPrimary = text(item.contextLabel || item.symbol || item.subject || item.event, locale === 'zh' ? '未记录' : 'Not recorded');
                       const contextSecondary = [item.market, item.route || item.endpoint, item.component || item.feature]
@@ -1472,10 +1521,10 @@ const AdminLogsPage: React.FC = () => {
               <div className="min-w-[880px]">
                 <div className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
                   <div>{locale === 'zh' ? '时间' : 'Time'}</div>
-                  <div>level</div>
-                  <div>category</div>
+                  <div>{locale === 'zh' ? '级别' : 'level'}</div>
+                  <div>{locale === 'zh' ? '分类' : 'category'}</div>
                   <div>{locale === 'zh' ? '事件' : 'Event'}</div>
-                  <div>message</div>
+                  <div>{locale === 'zh' ? '消息' : 'message'}</div>
                   <div>{locale === 'zh' ? '来源 / 请求' : 'Source / request'}</div>
                   <div>{locale === 'zh' ? '操作' : 'Action'}</div>
                 </div>
@@ -1537,7 +1586,7 @@ const AdminLogsPage: React.FC = () => {
                 </div>
                 <div className="grid gap-2 text-xs text-secondary-text">
                   <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => void copyTextValue(buildBusinessDebugSummary(businessDetail))}>
-                    {locale === 'zh' ? 'Copy debug summary' : 'Copy debug summary'}
+                    {locale === 'zh' ? '复制调试摘要' : 'Copy debug summary'}
                   </button>
                   <span>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(businessDetail.durationMs)}</span></span>
                   <span>{locale === 'zh' ? '步骤统计' : 'Step stats'}: <span className="text-foreground">{stepStatsLabel(businessDetail, locale)}</span></span>
@@ -1549,21 +1598,21 @@ const AdminLogsPage: React.FC = () => {
                   <div className="mt-3 grid gap-2 text-xs text-secondary-text md:grid-cols-2">
                     <p>{locale === 'zh' ? '状态' : 'Status'}: <span className="text-foreground">{statusLabel(drawerStatus, locale)}</span></p>
                     <p>{locale === 'zh' ? '原因' : 'Reason'}: <span className="text-foreground">{text(businessDetail.reason, locale === 'zh' ? '原因未确认' : 'Reason unknown')}</span></p>
-                    <p>{locale === 'zh' ? 'Actor' : 'Actor'}: <span className="text-foreground">{actorBadgeLabel(businessDetail.actorType)} · {businessActorLabel}</span></p>
-                    <p>{locale === 'zh' ? 'Context' : 'Context'}: <span className="text-foreground">{businessContextLabel}</span></p>
-                    <p>{locale === 'zh' ? 'Source / Provider' : 'Source / Provider'}: <span className="text-foreground">{businessSourceLabel}</span></p>
-                    <p>{locale === 'zh' ? 'Route / Endpoint' : 'Route / Endpoint'}: <span className="text-foreground">{text([businessDetail.route, businessDetail.endpoint].filter(Boolean).join(' / '), locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
+                    <p>{locale === 'zh' ? '操作者' : 'Actor'}: <span className="text-foreground">{actorBadgeDisplay(businessDetail.actorType, locale)} · {businessActorLabel}</span></p>
+                    <p>{locale === 'zh' ? '上下文' : 'Context'}: <span className="text-foreground">{businessContextLabel}</span></p>
+                    <p>{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}: <span className="text-foreground">{businessSourceLabel}</span></p>
+                    <p>{locale === 'zh' ? '路由 / 端点' : 'Route / Endpoint'}: <span className="text-foreground">{text([businessDetail.route, businessDetail.endpoint].filter(Boolean).join(' / '), locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                     <p>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(businessDetail.durationMs)}</span></p>
                     <p className="md:col-span-2">{locale === 'zh' ? '错误摘要' : 'Error summary'}: <span className="text-foreground" title={text(businessDetail.errorSummary || businessDetail.rootCauseSummary)}>{text(businessDetail.errorSummary || businessDetail.rootCauseSummary, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                     <p className="md:col-span-2">
-                      request/trace id: <span className="text-foreground">{text(businessTraceValue, locale === 'zh' ? '未记录' : 'Not recorded')}</span>
+                      {locale === 'zh' ? '请求 / trace id' : 'request/trace id'}: <span className="text-foreground">{text(businessTraceValue, locale === 'zh' ? '未记录' : 'Not recorded')}</span>
                       {businessTraceValue ? (
                         <button type="button" className="ml-2 text-[11px] font-semibold text-emerald-100 underline decoration-emerald-300/30 underline-offset-2" onClick={() => void copyTextValue(businessTraceValue)}>
                           {locale === 'zh' ? '复制' : 'Copy'}
                         </button>
                       ) : null}
                     </p>
-                    <p className="md:col-span-2">{locale === 'zh' ? 'Step trace' : 'Step trace'}: <span className="text-foreground">{traceAvailabilityLabel(businessDetail, locale)}</span></p>
+                    <p className="md:col-span-2">{locale === 'zh' ? '步骤 trace' : 'Step trace'}: <span className="text-foreground">{traceAvailabilityLabel(businessDetail, locale)}</span></p>
                   </div>
                   {!businessDetail.reason ? (
                     <p className="mt-3 text-xs text-muted-text">{locale === 'zh' ? '原因未确认：该事件没有附加结构化 reason。' : 'Reason unknown: no structured reason was attached to this event.'}</p>
@@ -1571,13 +1620,13 @@ const AdminLogsPage: React.FC = () => {
                 </section>
               </div>
               <div className="mt-4">
-                <p className="text-[10px] uppercase tracking-[0.18em] text-white/36">metadata</p>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-white/36">{locale === 'zh' ? '元数据' : 'metadata'}</p>
                 <JsonBlock value={businessDetail.metadata || {}} />
               </div>
             </section>
 
             <section className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
-              <h3 className="text-sm font-semibold text-foreground">{locale === 'zh' ? '调用链 timeline' : 'Call-chain timeline'}</h3>
+              <h3 className="text-sm font-semibold text-foreground">{locale === 'zh' ? '调用链时间线' : 'Call-chain timeline'}</h3>
               <div className="mt-4 space-y-3">
                 {businessSteps.length ? businessSteps.map((step: ExecutionStep, index: number) => {
                   const status = normalizeStatus(step.status);
@@ -1599,7 +1648,7 @@ const AdminLogsPage: React.FC = () => {
                         <p>{locale === 'zh' ? '错误类型' : 'Error type'}: <span className="text-foreground">{text(step.errorType)}</span></p>
                         <p className="md:col-span-2">{locale === 'zh' ? '消息' : 'Message'}: <span className="text-foreground">{text(sanitizeDisplayValue(status === 'skipped' ? (step.message || skippedReasonLabel(step.reason, locale)) : (step.errorMessage || step.message)))}</span></p>
                         <div className="md:col-span-2">
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-white/36">metadata</p>
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-white/36">{locale === 'zh' ? '元数据' : 'metadata'}</p>
                           <JsonBlock value={step.metadata || {}} />
                         </div>
                       </div>
@@ -1630,7 +1679,7 @@ const AdminLogsPage: React.FC = () => {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => void copyTextValue(buildRawDebugSummary(drawerDetail))}>
-                    {locale === 'zh' ? 'Copy debug summary' : 'Copy debug summary'}
+                    {locale === 'zh' ? '复制调试摘要' : 'Copy debug summary'}
                   </button>
                   <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => void copyLogJson(drawerDetail)}>
                     {t('adminLogs.copyDetails')}
@@ -1653,21 +1702,21 @@ const AdminLogsPage: React.FC = () => {
               <div className="mt-4 grid gap-2 text-sm text-secondary-text md:grid-cols-2">
                 <p>{locale === 'zh' ? '状态' : 'Status'}: <span className="text-foreground">{statusLabel(drawerStatus, locale)}</span></p>
                 <p>{locale === 'zh' ? '原因' : 'Reason'}: <span className="text-foreground">{text(readable.reason || readable.topFailureReason, locale === 'zh' ? '原因未确认' : 'Reason unknown')}</span></p>
-                <p>{locale === 'zh' ? 'Actor' : 'Actor'}: <span className="text-foreground">{actorBadgeLabel(readable.actorType || readable.actorRole)} · {text(readable.actorDisplay || readable.actorUsername || readable.actorSessionId, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
-                <p>{locale === 'zh' ? 'Context' : 'Context'}: <span className="text-foreground">{text(readable.contextLabel || readable.operationTarget || drawerDetail.code || drawerDetail.name, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
-                <p>{locale === 'zh' ? 'Source / Provider' : 'Source / Provider'}: <span className="text-foreground">{text([readable.provider, readable.source].filter(Boolean).join(' / '), locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
-                <p>{locale === 'zh' ? 'Route / Endpoint' : 'Route / Endpoint'}: <span className="text-foreground">{text(readable.endpoint, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
+                <p>{locale === 'zh' ? '操作者' : 'Actor'}: <span className="text-foreground">{actorBadgeDisplay(readable.actorType || readable.actorRole, locale)} · {text(readable.actorDisplay || readable.actorUsername || readable.actorSessionId, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
+                <p>{locale === 'zh' ? '上下文' : 'Context'}: <span className="text-foreground">{text(readable.contextLabel || readable.operationTarget || drawerDetail.code || drawerDetail.name, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
+                <p>{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}: <span className="text-foreground">{text([readable.provider, readable.source].filter(Boolean).join(' / '), locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
+                <p>{locale === 'zh' ? '路由 / 端点' : 'Route / Endpoint'}: <span className="text-foreground">{text(readable.endpoint, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                 <p>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(operationDetail.durationMs || drawerDetail.summary?.durationMs)}</span></p>
                 <p className="md:col-span-2">{locale === 'zh' ? '错误摘要' : 'Error summary'}: <span className="text-foreground" title={rawRootCause}>{rawRootCause}</span></p>
                 <p className="md:col-span-2">
-                  request/trace id: <span className="text-foreground">{text(rawTraceValue, locale === 'zh' ? '未记录' : 'Not recorded')}</span>
+                  {locale === 'zh' ? '请求 / trace id' : 'request/trace id'}: <span className="text-foreground">{text(rawTraceValue, locale === 'zh' ? '未记录' : 'Not recorded')}</span>
                   {rawTraceValue ? (
                     <button type="button" className="ml-2 text-[11px] font-semibold text-emerald-100 underline decoration-emerald-300/30 underline-offset-2" onClick={() => void copyTextValue(rawTraceValue)}>
                       {locale === 'zh' ? '复制' : 'Copy'}
                     </button>
                   ) : null}
                 </p>
-                <p className="md:col-span-2">{locale === 'zh' ? 'Step trace' : 'Step trace'}: <span className="text-foreground">{drawerDetail.events.length ? (locale === 'zh' ? '已记录事件明细' : 'Event trace attached') : (locale === 'zh' ? '未附加步骤级 trace。' : 'No step-level trace was attached to this event.')}</span></p>
+                <p className="md:col-span-2">{locale === 'zh' ? '步骤 trace' : 'Step trace'}: <span className="text-foreground">{drawerDetail.events.length ? (locale === 'zh' ? '已记录事件明细' : 'Event trace attached') : (locale === 'zh' ? '未附加步骤级 trace。' : 'No step-level trace was attached to this event.')}</span></p>
               </div>
               {!(readable.reason || readable.topFailureReason) ? (
                 <p className="mt-3 text-xs text-muted-text">{locale === 'zh' ? '原因未确认：该事件没有附加结构化 reason。' : 'Reason unknown: no structured reason was attached to this event.'}</p>
@@ -1743,7 +1792,7 @@ const AdminLogsPage: React.FC = () => {
             </details>
 
             <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5" open>
-              <summary className="cursor-pointer text-sm font-semibold text-foreground">{locale === 'zh' ? 'metadata 详情' : 'Metadata detail'}</summary>
+              <summary className="cursor-pointer text-sm font-semibold text-foreground">{locale === 'zh' ? '元数据详情' : 'Metadata detail'}</summary>
               <div className="mt-4 space-y-3">
                 {drawerDetail.events.length ? drawerDetail.events.map((event) => (
                   <div key={event.id} className="rounded-2xl border border-white/6 bg-black/20 px-3 py-3 text-xs">

@@ -122,19 +122,23 @@ class AdminLogsRetentionService:
         engine, session_table, event_table = self._storage_relation_scope()
         if engine is None or not session_table or not event_table:
             return None
-        with engine.connect() as conn:
-            value = conn.execute(
-                text(
-                    "SELECT "
-                    "COALESCE(pg_total_relation_size(to_regclass(:session_table)), 0) + "
-                    "COALESCE(pg_total_relation_size(to_regclass(:event_table)), 0)"
-                ),
-                {
-                    "session_table": session_table,
-                    "event_table": event_table,
-                },
-            ).scalar()
-        return int(value) if value is not None else None
+        try:
+            with engine.connect() as conn:
+                value = conn.execute(
+                    text(
+                        "SELECT "
+                        "COALESCE(pg_total_relation_size(COALESCE(to_regclass(:session_table), to_regclass('public.' || :session_table))), 0) + "
+                        "COALESCE(pg_total_relation_size(COALESCE(to_regclass(:event_table), to_regclass('public.' || :event_table))), 0)"
+                    ),
+                    {
+                        "session_table": session_table,
+                        "event_table": event_table,
+                    },
+                ).scalar()
+            return int(value) if value is not None else None
+        except Exception as exc:
+            logger.warning("admin log PostgreSQL storage size lookup failed: %s", exc)
+            return None
 
     @staticmethod
     def _format_bytes(value: Optional[int]) -> Optional[str]:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timedelta
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -45,14 +46,15 @@ def _regular_user() -> CurrentUser:
 
 
 class FakeDeliveryClient(NotificationDeliveryClient):
-    def __init__(self, *, fail: bool = False) -> None:
+    def __init__(self, *, fail: bool = False, failure_message: str = "mock webhook failure") -> None:
         self.fail = fail
+        self.failure_message = failure_message
         self.webhook_calls: list[dict] = []
 
     def send_webhook(self, *, url: str, payload: dict, headers: dict | None = None, timeout: float = 5.0) -> None:
         self.webhook_calls.append({"url": url, "payload": payload, "headers": headers or {}, "timeout": timeout})
         if self.fail:
-            raise RuntimeError("mock webhook failure")
+            raise RuntimeError(self.failure_message)
 
 
 class FakeAdminNotificationService:
@@ -217,6 +219,51 @@ class NotificationChannelsTestCase(unittest.TestCase):
 
         self.assertEqual(event["delivery_status"], "failed")
         self.assertIn("mock webhook failure", channels[0]["last_error"])
+        self.assertEqual(channels[0]["last_error_code"], "webhook_delivery_failed")
+
+    def test_ssl_delivery_failure_is_classified_and_localized_by_request_language(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = DatabaseManager(db_url=f"sqlite:///{tmpdir}/notification_channels.sqlite?check_same_thread=False")
+            failing = NotificationService(
+                db=db,
+                delivery_client=FakeDeliveryClient(
+                    fail=True,
+                    failure_message="SSL certificate verification failed: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self signed certificate",
+                ),
+            )
+            channel = failing.create_channel(
+                name="ssl webhook",
+                type="webhook",
+                enabled=True,
+                severity_min="warning",
+                event_types=[],
+                config={"webhook_url": "https://hooks.example.test/ssl"},
+            )
+
+            with patch("api.v1.endpoints.admin_notifications.NotificationService", return_value=failing):
+                zh_payload = admin_notifications.test_notification_channel(
+                    channel_id=channel["id"],
+                    request=SimpleNamespace(headers={"accept-language": "zh-CN"}),
+                    _=_admin_user(),
+                ).model_dump()
+                en_payload = admin_notifications.test_notification_channel(
+                    channel_id=channel["id"],
+                    request=SimpleNamespace(headers={"accept-language": "en-US"}),
+                    _=_admin_user(),
+                ).model_dump()
+
+            self.assertFalse(zh_payload["success"])
+            self.assertFalse(en_payload["success"])
+            self.assertEqual(zh_payload["error_code"], "ssl_certificate_verify_failed")
+            self.assertEqual(en_payload["error_code"], "ssl_certificate_verify_failed")
+            self.assertIn("证书", zh_payload["error"])
+            self.assertIn("certificate", en_payload["error"].lower())
+            self.assertIn("troubleshooting", zh_payload["diagnostics"])
+            self.assertIn("troubleshooting", en_payload["diagnostics"])
+
+            channels = failing.list_channels()
+            self.assertEqual(channels[0]["last_error_code"], "ssl_certificate_verify_failed")
+            self.assertIn("CERTIFICATE_VERIFY_FAILED", channels[0]["last_error"])
 
     def test_notification_event_dedupe_window_returns_existing_event(self) -> None:
         first = self.service.emit_event(

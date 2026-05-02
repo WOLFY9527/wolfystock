@@ -16,6 +16,17 @@ function getErrorGuidance(
   error: ParsedApiError,
   t: (key: string, vars?: Record<string, string | number | undefined>) => string,
 ): string[] {
+  const errorText = `${error.title} ${error.message} ${error.rawMessage}`.toLowerCase();
+  const isSslFailure = /certificate verify failed|certificat.*failed|ssl certificate verification failed|ssl 证书|证书.*验证失败|证书校验失败/i.test(errorText);
+
+  if (isSslFailure) {
+    return [
+      t('common.apiError.guidance.ssl1'),
+      t('common.apiError.guidance.ssl2'),
+      t('common.apiError.guidance.ssl3'),
+    ];
+  }
+
   if (error.category === 'local_connection_failed') {
     return [
       t('common.apiError.guidance.localConnection1'),

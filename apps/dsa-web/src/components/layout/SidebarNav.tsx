@@ -130,7 +130,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const isDrawer = layout === 'drawer';
   const signInLabel = t('nav.signIn');
   const consoleLabel = t('nav.independentConsole');
-  const notificationsLabel = 'Notifications';
+  const notificationsLabel = t('nav.notifications');
   const signInPath = buildLoginPath(location.pathname + location.search);
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
   const notificationsPath = routeLocale ? buildLocalizedPath('/admin/notifications', routeLocale) : '/admin/notifications';

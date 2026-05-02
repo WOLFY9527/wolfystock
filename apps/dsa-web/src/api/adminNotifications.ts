@@ -17,6 +17,8 @@ export interface NotificationChannel {
   lastTestedAt?: string | null;
   lastSentAt?: string | null;
   lastError?: string | null;
+  lastErrorCode?: string | null;
+  lastErrorDiagnostics?: Record<string, unknown>;
 }
 
 export interface NotificationChannelPayload {
@@ -47,6 +49,14 @@ export interface NotificationEventListResponse {
   limit: number;
   offset: number;
   items: NotificationEvent[];
+}
+
+export interface NotificationChannelTestResult {
+  success: boolean;
+  error?: string | null;
+  errorCode?: string | null;
+  diagnostics?: Record<string, unknown>;
+  channel: NotificationChannel;
 }
 
 function toApiPayload(payload: Partial<NotificationChannelPayload>) {
@@ -107,14 +117,16 @@ export const adminNotificationsApi = {
     await apiClient.delete(`/api/v1/admin/notification-channels/${encodeURIComponent(String(channelId))}`);
   },
 
-  async testChannel(channelId: number): Promise<{ success: boolean; error?: string | null; channel: NotificationChannel }> {
+  async testChannel(channelId: number): Promise<NotificationChannelTestResult> {
     const response = await apiClient.post<Record<string, unknown>>(
       `/api/v1/admin/notification-channels/${encodeURIComponent(String(channelId))}/test`,
     );
-    const normalized = toCamelCase<{ success: boolean; error?: string | null; channel: Record<string, unknown> }>(response.data);
+    const normalized = toCamelCase<NotificationChannelTestResult & { channel: Record<string, unknown> }>(response.data);
     return {
       success: Boolean(normalized.success),
       error: normalized.error || null,
+      errorCode: normalized.errorCode || null,
+      diagnostics: normalized.diagnostics && typeof normalized.diagnostics === 'object' ? normalized.diagnostics : {},
       channel: normalizeChannel(normalized.channel || {}),
     };
   },

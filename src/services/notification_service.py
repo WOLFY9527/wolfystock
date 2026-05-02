@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -13,6 +15,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy import desc, select
 
+from src.config import get_config
 from src.storage import NotificationChannel, NotificationEvent, get_db
 
 logger = logging.getLogger(__name__)
@@ -21,10 +24,32 @@ SEVERITY_ORDER = {"info": 10, "warning": 20, "critical": 30}
 CHANNEL_TYPES = {"in_app", "webhook"}
 MASKED_VALUE = "********"
 SENSITIVE_KEYS = ("secret", "token", "password", "authorization", "bearer")
+SSL_CERTIFICATE_ERROR_RE = re.compile(
+    r"certificate verify failed|CERTIFICATE_VERIFY_FAILED|ssl certificate verification failed|"
+    r"ssl 证书.*失败|证书.*验证失败|证书校验失败",
+    re.IGNORECASE,
+)
+SSL_TIMEOUT_ERROR_RE = re.compile(r"timed out|timeout|超时", re.IGNORECASE)
 
 
 class NotificationDeliveryClient:
     """Outbound delivery adapter; tests replace this with a fake client."""
+
+    @staticmethod
+    def _ssl_context(url: str) -> Optional[ssl.SSLContext]:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme != "https":
+            return None
+        verify_ssl = bool(getattr(get_config(), "webhook_verify_ssl", True))
+        if not verify_ssl:
+            logger.warning("webhook SSL certificate verification is disabled by WEBHOOK_VERIFY_SSL=false")
+            return ssl._create_unverified_context()
+        try:
+            import certifi
+
+            return ssl.create_default_context(cafile=certifi.where())
+        except Exception:
+            return ssl.create_default_context()
 
     def send_webhook(
         self,
@@ -45,11 +70,20 @@ class NotificationDeliveryClient:
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with urllib.request.urlopen(request, timeout=timeout, context=self._ssl_context(url)) as response:
                 status = int(getattr(response, "status", 200) or 200)
                 if status >= 400:
                     raise RuntimeError(f"webhook returned HTTP {status}")
+        except ssl.SSLCertVerificationError as exc:
+            raise RuntimeError(f"SSL certificate verification failed: {exc}") from exc
+        except ssl.SSLError as exc:
+            if SSL_CERTIFICATE_ERROR_RE.search(str(exc)):
+                raise RuntimeError(f"SSL certificate verification failed: {exc}") from exc
+            raise RuntimeError(f"SSL error while delivering webhook: {exc}") from exc
         except urllib.error.URLError as exc:
+            reason = getattr(exc, "reason", None)
+            if isinstance(reason, ssl.SSLCertVerificationError) or SSL_CERTIFICATE_ERROR_RE.search(str(reason or exc)):
+                raise RuntimeError(f"SSL certificate verification failed: {reason or exc}") from exc
             raise RuntimeError(str(exc)) from exc
 
 
@@ -112,6 +146,43 @@ def _mask_config(config: Dict[str, Any]) -> Dict[str, Any]:
         else:
             masked[key_text] = value
     return masked
+
+
+def _classify_delivery_error(message: Any) -> Dict[str, Any]:
+    error_text = str(message or "").strip()
+    if not error_text:
+        return {"code": None, "diagnostics": {}}
+
+    if SSL_CERTIFICATE_ERROR_RE.search(error_text):
+        return {
+            "code": "ssl_certificate_verify_failed",
+            "diagnostics": {
+                "summary_en": "SSL certificate verification failed.",
+                "summary_zh": "SSL 证书校验失败。",
+                "action_en": "Check the webhook certificate chain, trusted CA, and hostname.",
+                "action_zh": "请检查 webhook 证书链、受信任 CA 和主机名是否匹配。",
+                "raw_message": error_text,
+            },
+        }
+
+    if SSL_TIMEOUT_ERROR_RE.search(error_text):
+        return {
+            "code": "webhook_timeout",
+            "diagnostics": {
+                "summary_en": "Webhook delivery timed out.",
+                "summary_zh": "Webhook 投递超时。",
+                "action_en": "Check webhook availability, DNS, proxy, and upstream latency.",
+                "action_zh": "请检查 webhook 可用性、DNS、代理和上游延迟。",
+                "raw_message": error_text,
+            },
+        }
+
+    return {
+        "code": "webhook_delivery_failed",
+        "diagnostics": {
+            "raw_message": error_text,
+        },
+    }
 
 
 class NotificationService:
@@ -227,10 +298,17 @@ class NotificationService:
                 row.last_error = None
                 return {"success": True, "channel": self._channel_payload(row)}
             except Exception as exc:
+                classification = _classify_delivery_error(exc)
                 row.last_tested_at = now
                 row.last_error = str(exc)
                 logger.warning("notification channel test failed: %s", exc)
-                return {"success": False, "error": str(exc), "channel": self._channel_payload(row)}
+                return {
+                    "success": False,
+                    "error": str(exc),
+                    "error_code": classification["code"],
+                    "diagnostics": classification["diagnostics"],
+                    "channel": self._channel_payload(row),
+                }
 
     def emit_event(
         self,
@@ -405,6 +483,7 @@ class NotificationService:
 
     def _channel_payload(self, row: NotificationChannel) -> Dict[str, Any]:
         config = _safe_json_loads(row.config_json, {})
+        error_classification = _classify_delivery_error(row.last_error)
         return {
             "id": row.id,
             "name": row.name,
@@ -418,6 +497,8 @@ class NotificationService:
             "last_tested_at": row.last_tested_at.isoformat() if row.last_tested_at else None,
             "last_sent_at": row.last_sent_at.isoformat() if row.last_sent_at else None,
             "last_error": row.last_error,
+            "last_error_code": error_classification["code"],
+            "last_error_diagnostics": error_classification["diagnostics"],
         }
 
     def _event_payload(self, row: NotificationEvent) -> Dict[str, Any]:

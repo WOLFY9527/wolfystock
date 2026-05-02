@@ -9,6 +9,7 @@ const {
   testChannel,
   listNotifications,
   acknowledgeNotification,
+  uiLanguageState,
 } = vi.hoisted(() => ({
   listChannels: vi.fn(),
   createChannel: vi.fn(),
@@ -16,6 +17,7 @@ const {
   testChannel: vi.fn(),
   listNotifications: vi.fn(),
   acknowledgeNotification: vi.fn(),
+  uiLanguageState: { current: 'en' as 'zh' | 'en' },
 }));
 
 vi.mock('../../api/adminNotifications', () => ({
@@ -31,7 +33,7 @@ vi.mock('../../api/adminNotifications', () => ({
 
 vi.mock('../../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
-    language: 'en',
+    language: uiLanguageState.current,
     t: (key: string) => key,
   }),
 }));
@@ -88,6 +90,7 @@ const notifications = [
 
 describe('AdminNotificationsPage', () => {
   beforeEach(() => {
+    uiLanguageState.current = 'en';
     vi.clearAllMocks();
     listChannels.mockResolvedValue(channels);
     listNotifications.mockResolvedValue({ total: 1, limit: 100, offset: 0, items: notifications });
@@ -105,6 +108,17 @@ describe('AdminNotificationsPage', () => {
     expect(within(webhookRow).getByText('Ops webhook')).toBeInTheDocument();
     expect(within(webhookRow).getByText('https://hooks.example.test/***')).toBeInTheDocument();
     expect(within(webhookRow).getByText('********')).toBeInTheDocument();
+  });
+
+  it('renders localized chinese page copy when the ui language is zh', async () => {
+    uiLanguageState.current = 'zh';
+    render(<AdminNotificationsPage />);
+
+    expect(await screen.findByText('管理员通知')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '刷新' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '创建通道' })).toBeInTheDocument();
+    expect(screen.getByText('通知通道')).toBeInTheDocument();
+    expect(screen.getByText('通知事件')).toBeInTheDocument();
   });
 
   it('validates required create form fields before submitting', async () => {
@@ -147,6 +161,60 @@ describe('AdminNotificationsPage', () => {
       expect(testChannel).toHaveBeenCalledWith(2);
       expect(listChannels).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('shows localized ssl delivery diagnostics when webhook verification fails', async () => {
+    uiLanguageState.current = 'zh';
+    testChannel.mockResolvedValueOnce({
+      success: false,
+      errorCode: 'ssl_certificate_verify_failed',
+      error: 'SSL certificate verification failed: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed',
+      diagnostics: {
+        summary: 'Webhook SSL 证书校验失败。',
+        troubleshooting: ['请检查证书链。'],
+      },
+      channel: channels[1],
+    });
+
+    render(<AdminNotificationsPage />);
+
+    const webhookRow = await screen.findByTestId('notification-channel-2');
+    fireEvent.click(within(webhookRow).getByRole('button', { name: '测试' }));
+
+    expect(await screen.findByText('Webhook SSL 证书校验失败。')).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        (content, element) => element?.tagName?.toLowerCase() === 'li' && (element.textContent?.includes('请检查证书链。') ?? false),
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText('查看原始诊断')).toBeInTheDocument();
+  });
+
+  it('shows localized english ssl delivery diagnostics when webhook verification fails', async () => {
+    uiLanguageState.current = 'en';
+    testChannel.mockResolvedValueOnce({
+      success: false,
+      errorCode: 'ssl_certificate_verify_failed',
+      error: 'SSL certificate verification failed: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed',
+      diagnostics: {
+        summary: 'Webhook SSL certificate verification failed.',
+        troubleshooting: ['Check the certificate chain.'],
+      },
+      channel: channels[1],
+    });
+
+    render(<AdminNotificationsPage />);
+
+    const webhookRow = await screen.findByTestId('notification-channel-2');
+    fireEvent.click(within(webhookRow).getByRole('button', { name: 'Test' }));
+
+    expect(await screen.findByText('Webhook SSL certificate verification failed.')).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        (content, element) => element?.tagName?.toLowerCase() === 'li' && (element.textContent?.includes('Check the certificate chain.') ?? false),
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText('View raw diagnostic')).toBeInTheDocument();
   });
 
   it('renders notifications with severity and acknowledge action', async () => {

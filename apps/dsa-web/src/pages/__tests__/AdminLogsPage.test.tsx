@@ -433,15 +433,15 @@ describe('AdminLogsPage', () => {
     expect(screen.getByRole('tab', { name: '原始日志' })).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-filter-bar')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-health-summary')).toBeInTheDocument();
-    expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('120,000 sessions');
-    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('180,000 events');
-    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('690.0 MB / 512.0 MB soft');
-    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('1.0 GB hard limit');
+    expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('120,000 会话');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('180,000 事件');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('690.0 MB / 512.0 MB 软限制');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('1.0 GB 硬限制');
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('90');
-    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('min 7 days · 120 older');
-    expect(screen.getByRole('link', { name: '配置 Admin 通知通道' })).toHaveAttribute('href', '/admin/notifications');
-    expect(screen.getByText('Warning')).toBeInTheDocument();
-    expect(screen.getAllByText('Degraded').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('最少 7 天 · 120 条超期');
+    expect(screen.getByRole('link', { name: '配置管理员通知通道' })).toHaveAttribute('href', '/admin/notifications');
+    expect(screen.getAllByText('警告').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('降级').length).toBeGreaterThan(0);
     expect(screen.getByText('1 / 6')).toBeInTheDocument();
     expect(screen.getByText('finnhub')).toBeInTheDocument();
     expect(screen.getAllByText('provider timeout token=***').length).toBeGreaterThan(0);
@@ -451,10 +451,10 @@ describe('AdminLogsPage', () => {
     expect(screen.getByLabelText('时间范围')).toBeInTheDocument();
     expect(screen.queryByTestId('admin-logs-summary-grid')).not.toBeInTheDocument();
     expect((await screen.findAllByText('TSLA')).length).toBeGreaterThan(0);
-    expect(screen.getByText('Actor')).toBeInTheDocument();
-    expect(screen.getByText('Context')).toBeInTheDocument();
-    expect(screen.getByText('Source / Provider')).toBeInTheDocument();
-    expect(screen.getByText('Reason')).toBeInTheDocument();
+    expect(screen.getByText('操作者')).toBeInTheDocument();
+    expect(screen.getByText('上下文')).toBeInTheDocument();
+    expect(screen.getByText('来源 / 供应商')).toBeInTheDocument();
+    expect(screen.getByText('原因')).toBeInTheDocument();
     expect(screen.queryByText('Trace')).not.toBeInTheDocument();
     expect(screen.getByText('状态 / 严重度')).toBeInTheDocument();
     expect(screen.queryByText('耗时')).not.toBeInTheDocument();
@@ -464,7 +464,7 @@ describe('AdminLogsPage', () => {
     const fallbackRowLabel = screen.getByText('ProviderFallbackServed');
     const fallbackRow = fallbackRowLabel.closest('[data-testid="business-event-row"]');
     expect(fallbackRow).not.toBeNull();
-    expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).toHaveTextContent('Degraded');
+    expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).toHaveTextContent('降级');
     expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).toHaveClass('text-amber-100');
     expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).not.toHaveClass('text-rose-100');
     expect(screen.getAllByText('MarketSentimentCard').length).toBeGreaterThan(0);
@@ -513,14 +513,14 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Preview retention cleanup' }));
+    fireEvent.click(await screen.findByRole('button', { name: '预览保留期清理' }));
     await waitFor(() => expect(cleanupLogs).toHaveBeenCalledWith({ mode: 'retention', useRetention: true, dryRun: true }));
-    expect(await screen.findByText(/Retention preview: 120 sessions and 180 events would be deleted/)).toBeInTheDocument();
+    expect(await screen.findByText(/保留期清理预览：将在/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Clean logs older than retention' }));
+    fireEvent.click(screen.getByRole('button', { name: '清理超过保留期的日志' }));
     await waitFor(() => expect(window.confirm).toHaveBeenCalled());
     await waitFor(() => expect(cleanupLogs).toHaveBeenLastCalledWith({ mode: 'retention', useRetention: true, dryRun: false }));
-    expect(await screen.findByText(/Deleted 120 sessions/)).toBeInTheDocument();
+    expect(await screen.findByText(/已删除 120 个会话/)).toBeInTheDocument();
     expect(getStorageSummary).toHaveBeenCalledTimes(2);
     expect(listBusinessEvents).toHaveBeenCalled();
   });
@@ -560,10 +560,10 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
-    expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('Size unavailable');
-    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('Retention checks active');
-    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('7,441 sessions');
-    expect(screen.getByRole('button', { name: 'Preview capacity cleanup' })).toBeDisabled();
+    expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('大小暂不可用');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('保留期检查仍在生效');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('7,441 会话');
+    expect(screen.getByRole('button', { name: '预览容量清理' })).toBeDisabled();
   });
 
   it('renders critical quota state and runs confirmed capacity cleanup', async () => {
@@ -630,17 +630,17 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
-    expect(await screen.findByText('Critical')).toBeInTheDocument();
-    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('1.2 GB / 512.0 MB soft');
-    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('Auto cleanup required');
-    fireEvent.click(screen.getByRole('button', { name: 'Preview capacity cleanup' }));
+    expect(await screen.findByText('严重')).toBeInTheDocument();
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('1.2 GB / 512.0 MB 软限制');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('需要自动清理');
+    fireEvent.click(screen.getByRole('button', { name: '预览容量清理' }));
     await waitFor(() => expect(cleanupLogs).toHaveBeenCalledWith({ mode: 'capacity', dryRun: true }));
-    expect(await screen.findByText(/Capacity preview: 80 sessions and 160 events/)).toBeInTheDocument();
+    expect(await screen.findByText(/容量清理预览：将删除 80 个会话和 160 个事件/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Run capacity cleanup' }));
-    await waitFor(() => expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Run capacity cleanup')));
+    fireEvent.click(screen.getByRole('button', { name: '运行容量清理' }));
+    await waitFor(() => expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('运行容量清理')));
     await waitFor(() => expect(cleanupLogs).toHaveBeenLastCalledWith({ mode: 'capacity', dryRun: false }));
-    expect(await screen.findByText(/Deleted 80 sessions/)).toBeInTheDocument();
+    expect(await screen.findByText(/已删除 80 个会话/)).toBeInTheDocument();
   });
 
   it('does not run destructive cleanup when confirmation is declined', async () => {
@@ -648,7 +648,7 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Clean logs older than retention' }));
+    fireEvent.click(await screen.findByRole('button', { name: '清理超过保留期的日志' }));
 
     await waitFor(() => expect(window.confirm).toHaveBeenCalled());
     expect(cleanupLogs).not.toHaveBeenCalled();
@@ -684,10 +684,10 @@ describe('AdminLogsPage', () => {
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('overflow-x-hidden');
     expect(screen.getByTestId('business-events-table-shell')).toHaveClass('overflow-x-auto');
-    expect(screen.getByText('调用链 timeline')).toBeInTheDocument();
+    expect(screen.getByText('调用链时间线')).toBeInTheDocument();
     expect(screen.getByTestId('root-cause-section')).toBeInTheDocument();
     expect(screen.queryByText('Root Cause')).not.toBeInTheDocument();
-    expect(screen.getByText('Degradation Summary')).toBeInTheDocument();
+    expect(screen.getByText('降级摘要')).toBeInTheDocument();
     expect(screen.getAllByText(/alice/).length).toBeGreaterThan(0);
     expect(screen.getByText(/trace-tsla-abcdef/)).toBeInTheDocument();
     expect(screen.getByText(/获取行情/)).toBeInTheDocument();
@@ -718,12 +718,12 @@ describe('AdminLogsPage', () => {
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.queryByText('Root Cause')).not.toBeInTheDocument();
-    expect(screen.getByText('Degradation Summary')).toBeInTheDocument();
+    expect(screen.getByText('降级摘要')).toBeInTheDocument();
     const summarySection = screen.getByTestId('root-cause-section');
     expect(summarySection).toHaveClass('border-amber-300/16');
     expect(summarySection).not.toHaveClass('border-rose-300/12');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Copy debug summary' }));
+    fireEvent.click(screen.getByRole('button', { name: '复制调试摘要' }));
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
     const copied = String((navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] || '');
     expect(copied).toContain('"event": "ProviderFallbackServed"');
@@ -748,7 +748,7 @@ describe('AdminLogsPage', () => {
 
     fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
     expect(await screen.findByTestId('root-cause-section')).toHaveTextContent('该事件在步骤级 trace 记录前已失败');
-    expect(screen.getByText('Root Cause')).toBeInTheDocument();
+    expect(screen.getByText('根因')).toBeInTheDocument();
     expect(screen.getAllByText('provider timeout token=***').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: '复制' }));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('trace-market-card-abcdef');
@@ -796,7 +796,7 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
-    expect(await screen.findByTestId('admin-logs-health-summary')).toHaveTextContent('Healthy');
+    expect(await screen.findByTestId('admin-logs-health-summary')).toHaveTextContent('健康');
     expect(screen.getByText('0 / 0')).toBeInTheDocument();
     expect(screen.getAllByText('--').length).toBeGreaterThan(0);
   });

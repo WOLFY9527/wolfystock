@@ -41,6 +41,8 @@ class NotificationChannelModel(NotificationChannelBase):
     last_tested_at: Optional[str] = None
     last_sent_at: Optional[str] = None
     last_error: Optional[str] = None
+    last_error_code: Optional[str] = None
+    last_error_diagnostics: Dict[str, Any] = Field(default_factory=dict)
 
 
 class NotificationChannelListResponse(BaseModel):
@@ -50,6 +52,8 @@ class NotificationChannelListResponse(BaseModel):
 class NotificationChannelTestResponse(BaseModel):
     success: bool
     error: Optional[str] = None
+    error_code: Optional[str] = None
+    diagnostics: Dict[str, Any] = Field(default_factory=dict)
     channel: NotificationChannelModel
 
 
