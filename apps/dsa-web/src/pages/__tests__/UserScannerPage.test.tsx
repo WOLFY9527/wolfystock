@@ -968,7 +968,9 @@ describe('UserScannerPage', () => {
 
     renderUserScannerPage();
 
-    fireEvent.click(await screen.findByTestId('user-scanner-bento-drawer-trigger'));
+    const moreActions = await screen.findByTestId('scanner-more-actions');
+    fireEvent.click(within(moreActions).getByText(/更多|More/i));
+    fireEvent.click(within(moreActions).getByTestId('user-scanner-bento-drawer-trigger'));
     fireEvent.click(await screen.findByText('历史扫描'));
 
     expect(await screen.findByText('Historical Backend Label')).toBeInTheDocument();
@@ -1052,10 +1054,10 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/EVALUATED/);
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/9/);
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/DATA FAILED/);
+    expect(screen.getByTestId('scanner-summary-counters')).toHaveTextContent(/SELECTED/);
+    expect(screen.getByTestId('scanner-summary-counters')).toHaveTextContent(/REJECTED/);
     expect(screen.getByTestId('scanner-decision-summary')).toHaveTextContent(/WULF (唯一通过|is the only pass)/);
     expect(screen.getByTestId('scanner-decision-summary')).toHaveTextContent(/10 (个候选被淘汰|candidates eliminated)/);
-    expect(screen.getByTestId('scanner-rejection-aggregate')).toHaveTextContent(/淘汰原因|Eliminated by/);
-    expect(screen.getByTestId('scanner-rejection-aggregate')).toHaveTextContent(/动量不足|Momentum weak/);
     expect(screen.getByTestId('scanner-result-card-WULF')).toBeInTheDocument();
     expect(screen.getByTestId('scanner-candidate-preview')).toHaveTextContent(/其余 10 个候选未入选|10 other candidates were not selected/);
     expect(screen.getByTestId('scanner-candidate-preview')).toHaveTextContent(/MARA/);
@@ -1065,12 +1067,37 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-candidate-row-CIFR')).toHaveTextContent(/missing price history/);
   });
 
+  it('keeps advanced scanner actions out of the default top toolbar and available in disclosure', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    const actions = await screen.findByTestId('scanner-primary-actions');
+    expect(within(actions).getByRole('button', { name: /分析 WULF|Analyze WULF/i })).toBeInTheDocument();
+    expect(within(actions).getByRole('link', { name: /回测 WULF|Backtest WULF/i })).toBeInTheDocument();
+    expect(within(actions).getByRole('button', { name: /加入观察|Save to watchlist/i })).toBeInTheDocument();
+    expect(within(actions).queryByRole('button', { name: /导出 CSV|Export CSV/i })).not.toBeInTheDocument();
+    expect(within(actions).queryByRole('button', { name: /复制全部代码|Copy all symbols/i })).not.toBeInTheDocument();
+    expect(within(actions).queryByRole('button', { name: /加入前 5 名|Add top 5/i })).not.toBeInTheDocument();
+
+    const more = screen.getByTestId('scanner-more-actions');
+    expect(more).not.toHaveAttribute('open');
+    fireEvent.click(within(more).getByText(/更多|More/i));
+    expect(within(more).getByRole('button', { name: /导出 CSV|Export CSV/i })).toBeInTheDocument();
+    expect(within(more).getByRole('button', { name: /复制全部代码|Copy all symbols/i })).toBeInTheDocument();
+    expect(within(more).getByRole('button', { name: /复制前 5|Copy top 5/i })).toBeInTheDocument();
+    expect(within(more).getByRole('button', { name: /历史扫描回放|Historical replay/i })).toBeInTheDocument();
+  });
+
   it('renders strategy preview controls and updates preview count locally without rerunning scanner', async () => {
     const themedRun = makeCryptoDiagnosticsRun();
     getRun.mockResolvedValue(themedRun);
     renderUserScannerPage();
 
-    expect(await screen.findByTestId('scanner-strategy-preview')).toHaveTextContent(/官方入选 1|Official selected 1/);
+    const strategyPreview = await screen.findByTestId('scanner-strategy-preview');
+    expect(strategyPreview).not.toHaveAttribute('open');
+    fireEvent.click(within(strategyPreview).getByText(/策略预览|Strategy preview/i));
+    expect(strategyPreview).toHaveTextContent(/官方入选 1|Official selected 1/);
     expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/预览入选 3|Preview selected 3/);
     expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/\+2/);
     const runCalls = runScan.mock.calls.length;
@@ -1152,7 +1179,8 @@ describe('UserScannerPage', () => {
     getRun.mockImplementation((runId: number) => Promise.resolve(runId === 10 ? previousRun : currentRun));
     renderUserScannerPage();
 
-    expect(await screen.findByTestId('scanner-run-comparison-strip')).toHaveTextContent(/上次对比|Compared with previous run/);
+    const comparison = await screen.findByTestId('scanner-run-comparison-strip');
+    expect(comparison).toHaveTextContent(/上次对比|Compared with previous run/);
     await waitFor(() => {
       expect(screen.getByTestId('scanner-run-comparison-strip')).toHaveTextContent(/WULF.*继续入选|WULF.*retained/i);
       expect(screen.getByTestId('scanner-run-comparison-strip')).toHaveTextContent(/MARA.*由入选转淘汰|MARA.*selected to rejected/i);
@@ -1171,7 +1199,10 @@ describe('UserScannerPage', () => {
     getRun.mockResolvedValue(themedRun);
     renderUserScannerPage();
 
-    expect(await screen.findByTestId('scanner-run-comparison-strip')).toHaveTextContent(/暂无上次扫描对比|No previous comparable run/);
+    const comparison = await screen.findByTestId('scanner-run-comparison-strip');
+    expect(comparison).not.toHaveAttribute('open');
+    fireEvent.click(within(comparison).getByText(/历史对比|History comparison/i));
+    expect(comparison).toHaveTextContent(/暂无上次扫描对比|No previous comparable run/);
   });
 
   it('adds official and preview candidates through batch watchlist actions with duplicate accounting', async () => {
@@ -1185,10 +1216,13 @@ describe('UserScannerPage', () => {
       .mockResolvedValueOnce(makeWatchlistItem({ id: 303, symbol: 'RIOT', market: 'us', scannerRank: 3, scannerScore: 52 }));
     renderUserScannerPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /加入全部入选|Add official selected/i }));
+    const batchActions = await screen.findByTestId('scanner-batch-actions');
+    expect(batchActions).not.toHaveAttribute('open');
+    fireEvent.click(within(batchActions).getByText(/批量操作|Batch actions/i));
+    fireEvent.click(within(batchActions).getByRole('button', { name: /加入全部入选|Add official selected/i }));
     expect(await screen.findByText(/已加入 0 个 · 已存在 1 个|Added 0 · already existed 1/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /加入预览入选|Add preview selected/i }));
+    fireEvent.click(within(batchActions).getByRole('button', { name: /加入预览入选|Add preview selected/i }));
     await waitFor(() => {
       expect(addWatchlistItem).toHaveBeenCalledWith(expect.objectContaining({ symbol: 'MARA', market: 'us' }));
       expect(addWatchlistItem).toHaveBeenCalledWith(expect.objectContaining({ symbol: 'RIOT', market: 'us' }));
@@ -1216,9 +1250,21 @@ describe('UserScannerPage', () => {
     getRun.mockResolvedValue(themedRun);
     renderUserScannerPage();
 
-    expect(await screen.findByTestId('scanner-strategy-preview')).toHaveClass('flex', 'flex-wrap');
-    expect(screen.getByTestId('scanner-batch-actions')).toHaveClass('overflow-x-auto', 'no-scrollbar');
+    expect(await screen.findByTestId('scanner-primary-actions')).toHaveClass('grid');
+    expect(screen.getByTestId('scanner-strategy-preview')).not.toHaveAttribute('open');
+    expect(screen.getByTestId('scanner-batch-actions')).not.toHaveAttribute('open');
+    expect(screen.getByTestId('scanner-candidate-filters').firstElementChild).toHaveClass('ui-scroll-x-quiet');
     expect(screen.getByTestId('scanner-mobile-candidate-inspector')).toBeInTheDocument();
+  });
+
+  it('keeps the theme select overflow-safe', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /主题标的池|Theme universe/i }));
+    const themeSelect = await screen.findByTestId('scanner-theme-select');
+    expect(themeSelect).toHaveClass('ui-control-value', 'pr-10', 'min-w-0', 'max-w-full');
   });
 
   it('updates the candidate inspector from selected, rejected, and data-failed rows', async () => {

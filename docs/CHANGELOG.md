@@ -1,5 +1,7 @@
 ## 2026-05-02
 
+- 🧭 **Scanner 决策工作台渐进披露** — `/scanner` 将结果区默认视图收敛为决策摘要、核心计数、入选分析/回测/观察动作、入选卡片与候选预览；导出、复制、历史回放、策略阈值预览、历史对比、批量观察与诊断详情改为紧凑展开区，移动端按配置、决策、动作、候选、进阶工具、列表与详情顺序堆叠。此次仅调整前端展示与本地阈值预览交互，不改变 scanner backend API、入选规则、排序语义或观察名单接口。
+
 - 🧭 **Scanner 策略预览与 Run 对比工作台** — `/scanner` 在不改变后端入选规则的前提下新增客户端阈值预览、官方/预览/淘汰/数据失败标签、候选池本地重排、上次同 profile/theme/market run 对比、Inspector 对比摘要，以及“加入全部入选 / 加入预览入选 / 加入前 5 名 / 加入当前筛选”批量观察动作。阈值预览只复用当前 run 已返回的 `candidates / score / status / failed_rules / reason` 诊断数据，不重新扫描、不触发额外行情或 provider 调用。
 
 - 📌 **观察列表评分刷新与分析交接修复** — `/watchlist` 的分析按钮现在会把异步分析返回的 `task_id`、`symbol`、`source=watchlist` 和市场写入 Home query handoff，Home 决策页收到 watchlist 任务后以 `task_id` 为权威对象显示对应代码的 Wolfy AI 分析中骨架，不再把旧 ORCL 报告当作当前内容；任务完成后优先用该 task 的 final result 更新 WULF 等目标报告。观察列表新增轻量评分刷新接口 `/api/v1/watchlist/refresh-scores` 与状态接口，刷新只复用已持久化 Scanner 候选评分更新 score/rank/last_scored_at/stale 状态，不为每个候选启动完整 AI 报告。
