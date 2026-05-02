@@ -30,7 +30,7 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
         </div>
       ) : null}
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto no-scrollbar">
         {categories.map((category) => {
           const isActive = category.category === activeCategory;
           const count = (itemsByCategory[category.category] || []).length;

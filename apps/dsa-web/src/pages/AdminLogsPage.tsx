@@ -1158,7 +1158,7 @@ const AdminLogsPage: React.FC = () => {
               <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-emerald-200/70">WolfyStock Ops Trace</p>
               <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{t('adminLogs.pageTitle')}</h1>
               <p className="mt-1 max-w-4xl text-xs leading-5 text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
-              <div role="tablist" aria-label={locale === 'zh' ? '日志视图' : 'Log views'} className="mt-4 flex max-w-full gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
+              <div role="tablist" aria-label={locale === 'zh' ? '日志视图' : 'Log views'} className="mt-4 flex max-w-full gap-2 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap sm:overflow-visible">
                 {(['business', 'analysis', 'scanner', 'backtest', 'data_source', 'security', 'raw'] as LogsTab[]).map((tab) => (
                   <button
                     key={tab}
@@ -1425,7 +1425,7 @@ const AdminLogsPage: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-white/6 bg-black/15">
-              <div data-testid="business-events-table-shell" className="overflow-x-auto">
+              <div data-testid="business-events-table-shell" className="overflow-x-auto no-scrollbar">
                 <div className="min-w-[1040px]">
                   <div className="grid grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
                     <div>{locale === 'zh' ? '时间' : 'Time'}</div>
@@ -1437,7 +1437,7 @@ const AdminLogsPage: React.FC = () => {
                     <div>{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}</div>
                     <div>{locale === 'zh' ? '操作' : 'Action'}</div>
                   </div>
-                  <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto">
+                  <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto no-scrollbar">
                     {businessEvents.map((item) => {
                       const status = normalizeStatus(item.status);
                       const actorType = actorBadgeDisplay(item.actorType, locale);
@@ -1517,7 +1517,7 @@ const AdminLogsPage: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-white/6 bg-black/15">
-            <div data-testid="raw-logs-table-shell" className="overflow-x-auto">
+            <div data-testid="raw-logs-table-shell" className="overflow-x-auto no-scrollbar">
               <div className="min-w-[880px]">
                 <div className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
                   <div>{locale === 'zh' ? '时间' : 'Time'}</div>
@@ -1528,7 +1528,7 @@ const AdminLogsPage: React.FC = () => {
                   <div>{locale === 'zh' ? '来源 / 请求' : 'Source / request'}</div>
                   <div>{locale === 'zh' ? '操作' : 'Action'}</div>
                 </div>
-                <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto">
+                <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto no-scrollbar">
                   {filteredSessions.map((item) => {
                     const summary = item.readableSummary || {};
                     const level = normalizeLogLevel(summary.logLevel);

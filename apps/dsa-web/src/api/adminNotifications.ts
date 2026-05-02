@@ -2,7 +2,7 @@ import apiClient from './index';
 import { toCamelCase } from './utils';
 
 export type NotificationSeverity = 'info' | 'warning' | 'critical';
-export type NotificationChannelType = 'in_app' | 'webhook';
+export type NotificationChannelType = 'in_app' | 'webhook' | 'system_channel';
 
 export interface NotificationChannel {
   id: number;
@@ -28,6 +28,11 @@ export interface NotificationChannelPayload {
   severityMin: NotificationSeverity;
   eventTypes: string[];
   config: Record<string, unknown>;
+}
+
+export interface NotificationChannelListPayload {
+  items: NotificationChannel[];
+  availableSystemChannels: string[];
 }
 
 export interface NotificationEvent {
@@ -91,10 +96,15 @@ function normalizeEvent(payload: Record<string, unknown>): NotificationEvent {
 }
 
 export const adminNotificationsApi = {
-  async listChannels(): Promise<NotificationChannel[]> {
+  async listChannels(): Promise<NotificationChannelListPayload> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/notification-channels');
-    const normalized = toCamelCase<{ items?: Record<string, unknown>[] }>(response.data);
-    return Array.isArray(normalized.items) ? normalized.items.map(normalizeChannel) : [];
+    const normalized = toCamelCase<{ items?: Record<string, unknown>[]; availableSystemChannels?: unknown[] }>(response.data);
+    return {
+      items: Array.isArray(normalized.items) ? normalized.items.map(normalizeChannel) : [],
+      availableSystemChannels: Array.isArray(normalized.availableSystemChannels)
+        ? normalized.availableSystemChannels.map((item) => String(item)).filter(Boolean)
+        : [],
+    };
   },
 
   async createChannel(payload: NotificationChannelPayload): Promise<NotificationChannel> {

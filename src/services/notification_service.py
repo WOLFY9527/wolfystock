@@ -16,12 +16,20 @@ from typing import Any, Dict, Iterable, List, Optional
 from sqlalchemy import desc, select
 
 from src.config import get_config
+from src.notification import NotificationChannel as SystemNotificationChannel
+from src.notification import NotificationService as SystemNotificationService
 from src.storage import NotificationChannel, NotificationEvent, get_db
 
 logger = logging.getLogger(__name__)
 
 SEVERITY_ORDER = {"info": 10, "warning": 20, "critical": 30}
-CHANNEL_TYPES = {"in_app", "webhook"}
+LOG_LEVEL_TO_SEVERITY = {
+    "NOTICE": "info",
+    "WARNING": "warning",
+    "ERROR": "critical",
+    "CRITICAL": "critical",
+}
+CHANNEL_TYPES = {"in_app", "webhook", "system_channel"}
 MASKED_VALUE = "********"
 SENSITIVE_KEYS = ("secret", "token", "password", "authorization", "bearer")
 SSL_CERTIFICATE_ERROR_RE = re.compile(
@@ -114,8 +122,24 @@ def _normalize_severity(value: str) -> str:
 def _normalize_channel_type(value: str) -> str:
     channel_type = str(value or "").strip().lower()
     if channel_type not in CHANNEL_TYPES:
-        raise ValueError("channel type must be in_app or webhook")
+        raise ValueError("channel type must be in_app, webhook, or system_channel")
     return channel_type
+
+
+def _normalize_system_channel(value: Any) -> str:
+    channel = str(value or "").strip().lower()
+    if not channel:
+        raise ValueError("config.channel is required for system_channel")
+    try:
+        SystemNotificationChannel(channel)
+    except ValueError as exc:
+        raise ValueError(f"unsupported system notification channel: {channel}") from exc
+    return channel
+
+
+def _severity_from_log_level(value: Any) -> Optional[str]:
+    level = str(value or "").strip().upper()
+    return LOG_LEVEL_TO_SEVERITY.get(level)
 
 
 def _validate_webhook_url(value: Any) -> str:
@@ -201,6 +225,9 @@ class NotificationService:
         with self.db.get_session() as session:
             rows = session.execute(select(NotificationChannel).order_by(NotificationChannel.created_at.desc())).scalars().all()
             return [self._channel_payload(row) for row in rows]
+
+    def list_system_channels(self) -> List[str]:
+        return [channel.value for channel in SystemNotificationService().get_available_channels()]
 
     def create_channel(
         self,
@@ -365,6 +392,40 @@ class NotificationService:
             data["deduped"] = False
             return data
 
+    def emit_log_event(
+        self,
+        *,
+        log_level: str,
+        category: str,
+        event_name: str,
+        message: Optional[str] = None,
+        session_id: Optional[str] = None,
+        payload: Optional[Dict[str, Any]] = None,
+        dedupe_window: timedelta = timedelta(minutes=30),
+    ) -> Optional[Dict[str, Any]]:
+        severity = _severity_from_log_level(log_level)
+        if severity is None:
+            return None
+        event_type = "admin_logs.event"
+        fingerprint = f"{session_id or 'unknown'}:{category or 'system'}:{event_name or log_level}:{message or ''}"[:160]
+        if not self._has_matching_channel(event_type=event_type, severity=severity):
+            return None
+        return self.emit_event(
+            event_type=event_type,
+            severity=severity,
+            title=f"Admin Log {str(log_level or '').strip().upper()}: {event_name or category or 'event'}",
+            message=str(message or "").strip(),
+            payload={
+                "log_level": str(log_level or "").strip().upper(),
+                "category": str(category or "system").strip() or "system",
+                "event_name": str(event_name or "").strip(),
+                "session_id": str(session_id or "").strip() or None,
+                **(payload or {}),
+            },
+            fingerprint=fingerprint,
+            dedupe_window=dedupe_window,
+        )
+
     def list_events(
         self,
         *,
@@ -427,6 +488,18 @@ class NotificationService:
             return "failed"
         return "delivered"
 
+    def _has_matching_channel(self, *, event_type: str, severity: str) -> bool:
+        with self.db.get_session() as session:
+            rows = session.execute(select(NotificationChannel).where(NotificationChannel.enabled.is_(True))).scalars().all()
+            probe = NotificationEvent(
+                event_type=event_type,
+                severity=_normalize_severity(severity),
+                title="probe",
+                delivery_status="pending",
+                created_at=_utcnow(),
+            )
+            return any(self._channel_matches(row, probe) for row in rows)
+
     def _deliver_to_channel(self, channel: NotificationChannel, payload: Dict[str, Any]) -> None:
         config = _safe_json_loads(channel.config_json, {})
         if channel.type == "in_app":
@@ -439,7 +512,44 @@ class NotificationService:
                 headers["Authorization"] = f"Bearer {token}"
             self.delivery_client.send_webhook(url=url, payload=payload, headers=headers, timeout=5.0)
             return
+        if channel.type == "system_channel":
+            system_channel = _normalize_system_channel(config.get("channel"))
+            content = self._format_system_channel_message(payload)
+            sent = SystemNotificationService(channel_allowlist=[system_channel]).send(
+                content,
+                email_send_to_all=True,
+            )
+            if not sent:
+                raise RuntimeError(f"system notification channel did not accept message: {system_channel}")
+            return
         raise ValueError(f"unsupported channel type: {channel.type}")
+
+    def _format_system_channel_message(self, payload: Dict[str, Any]) -> str:
+        severity = str(payload.get("severity") or "info").upper()
+        event_type = str(payload.get("event_type") or "")
+        title = str(payload.get("title") or "Admin notification")
+        message = str(payload.get("message") or "")
+        event_payload = payload.get("payload") if isinstance(payload.get("payload"), dict) else {}
+        lines = [
+            f"**[{severity}] {title}**",
+            "",
+            f"- Event: `{event_type}`",
+        ]
+        log_level = event_payload.get("log_level")
+        category = event_payload.get("category")
+        event_name = event_payload.get("event_name")
+        session_id = event_payload.get("session_id")
+        if log_level:
+            lines.append(f"- Log level: `{log_level}`")
+        if category:
+            lines.append(f"- Category: `{category}`")
+        if event_name:
+            lines.append(f"- Log event: `{event_name}`")
+        if session_id:
+            lines.append(f"- Session: `{session_id}`")
+        if message:
+            lines.extend(["", message])
+        return "\n".join(lines)
 
     def _channel_matches(self, channel: NotificationChannel, event: NotificationEvent) -> bool:
         if SEVERITY_ORDER.get(event.severity, 0) < SEVERITY_ORDER.get(channel.severity_min, 20):
@@ -467,6 +577,8 @@ class NotificationService:
         config_value = dict(config or {})
         if channel_type == "webhook":
             config_value["webhook_url"] = _validate_webhook_url(config_value.get("webhook_url"))
+        if channel_type == "system_channel":
+            config_value = {"channel": _normalize_system_channel(config_value.get("channel"))}
         return {
             "name": name_value[:80],
             "type": channel_type,

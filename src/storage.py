@@ -80,6 +80,20 @@ import src.storage_topology_report as storage_topology_report
 from src.utils.time_utils import to_beijing_iso8601
 
 logger = logging.getLogger(__name__)
+AdminNotificationService = None
+
+
+def _execution_log_level_from_status(status: Any) -> str:
+    normalized = str(status or "").strip().lower()
+    if normalized in {"critical", "fatal"}:
+        return "CRITICAL"
+    if normalized in {"failed", "error", "failed_runtime", "empty_result", "invalid_response", "insufficient_fields"}:
+        return "ERROR"
+    if normalized in {"warning", "partial", "partial_success", "timeout", "timed_out", "timeout_unknown", "switched_to_fallback"}:
+        return "WARNING"
+    if normalized in {"notice"}:
+        return "NOTICE"
+    return "INFO"
 
 _POSTGRES_PHASE_STORE_SPECS = tuple(
     (
@@ -5725,6 +5739,15 @@ class DatabaseManager:
         with self.session_scope() as session:
             session.add(row)
 
+        self._emit_execution_log_notification(
+            session_id=session_id,
+            phase=phase,
+            status=status,
+            step=step,
+            message=safe_message,
+            detail=safe_detail,
+        )
+
         if self._phase_g_enabled and self._phase_g_store is not None:
             try:
                 self._phase_g_store.append_execution_event(
@@ -5741,6 +5764,36 @@ class DatabaseManager:
                 )
             except Exception as exc:
                 logger.warning("Phase G execution event shadow sync failed during append: %s", exc)
+
+    def _emit_execution_log_notification(
+        self,
+        *,
+        session_id: str,
+        phase: str,
+        status: str,
+        step: Optional[str],
+        message: Optional[str],
+        detail: Dict[str, Any],
+    ) -> None:
+        try:
+            log_detail = detail.get("log") if isinstance(detail, dict) and isinstance(detail.get("log"), dict) else {}
+            log_level = str(log_detail.get("level") or _execution_log_level_from_status(status)).strip().upper()
+            if log_level not in {"NOTICE", "WARNING", "ERROR", "CRITICAL"}:
+                return
+            service_factory = AdminNotificationService
+            if service_factory is None:
+                from src.services.notification_service import NotificationService as service_factory
+
+            service_factory().emit_log_event(
+                log_level=log_level,
+                category=str(log_detail.get("category") or phase or "system").strip() or "system",
+                event_name=str(step or log_detail.get("event_name") or status or "ExecutionLogEvent").strip(),
+                message=str(message or "").strip(),
+                session_id=session_id,
+                payload={"status": status},
+            )
+        except Exception as exc:
+            logger.warning("execution log notification emit failed: %s", exc)
 
     def finalize_execution_log_session(
         self,

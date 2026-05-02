@@ -344,7 +344,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
               </button>
             </div>
           </div>
-          <div className="max-h-[220px] space-y-1 overflow-y-auto rounded-xl border settings-border-soft settings-surface-overlay-soft p-2">
+          <div className="max-h-[220px] space-y-1 overflow-y-auto no-scrollbar rounded-xl border settings-border-soft settings-surface-overlay-soft p-2">
             {items.map((it) => {
               const confidence = normalizeConfidence(it.confidence);
               const confidenceMeta = getConfidenceMeta(confidence);

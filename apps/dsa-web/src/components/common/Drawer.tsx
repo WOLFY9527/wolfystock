@@ -239,7 +239,7 @@ export const Drawer: React.FC<DrawerProps> = ({
           </div>
           <div
             className={cn(
-              'drawer__body flex h-full min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-5 [padding-bottom:max(1rem,env(safe-area-inset-bottom))] [-webkit-overflow-scrolling:touch]',
+              'drawer__body flex h-full min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain no-scrollbar px-4 py-4 sm:px-5 sm:py-5 [padding-bottom:max(1rem,env(safe-area-inset-bottom))] [-webkit-overflow-scrolling:touch]',
               bodyClassName,
             )}
           >

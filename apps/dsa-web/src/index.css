@@ -1,13 +1,18 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+    background: transparent;
+  }
 
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
 
 /* SpaceX live refactor: global tokens now favor Inter typography, spectral-white ghost controls, translucent panels, and a strict home workspace grid without changing application behavior. */
@@ -6050,20 +6055,10 @@ body::after {
 
 .stealth-scrollbar::-webkit-scrollbar,
 .custom-scrollbar::-webkit-scrollbar {
+  display: none;
   width: 0;
   height: 0;
-}
-
-.stealth-scrollbar:is(:hover, :focus-within),
-.custom-scrollbar:is(:hover, :focus-within) {
-  scrollbar-width: thin;
-  scrollbar-color: hsl(var(--border-muted-hsl) / 0.48) transparent;
-}
-
-.stealth-scrollbar:is(:hover, :focus-within)::-webkit-scrollbar,
-.custom-scrollbar:is(:hover, :focus-within)::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
+  background: transparent;
 }
 
 .stealth-scrollbar::-webkit-scrollbar-thumb,
@@ -16081,11 +16076,6 @@ html[data-theme='spacex'] .theme-page-transition {
   scrollbar-color: transparent transparent;
 }
 
-html[data-theme='spacex'] .theme-page-transition:is(:hover, :focus-within) {
-  scrollbar-width: thin;
-  scrollbar-color: hsl(var(--border-muted-hsl) / 0.5) transparent;
-}
-
 html[data-theme='spacex'] .theme-page-transition--page-scroll {
   height: auto;
   min-height: 100%;
@@ -16103,11 +16093,6 @@ html[data-theme='spacex'] .theme-page-transition--system-control {
 html[data-theme='spacex'] .theme-page-transition::-webkit-scrollbar {
   width: 0;
   height: 0;
-}
-
-html[data-theme='spacex'] .theme-page-transition:is(:hover, :focus-within)::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
 }
 
 html[data-theme='spacex'] .theme-page-transition::-webkit-scrollbar-thumb {

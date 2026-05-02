@@ -1666,7 +1666,7 @@ const MarketOverviewPage: React.FC = () => {
     <main data-testid="market-overview-main-grid" className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
       <section
         data-testid="market-overview-primary-rail"
-        className="stealth-scrollbar flex min-w-0 gap-4 overflow-x-auto overscroll-x-contain pb-1 [-webkit-overflow-scrolling:touch] xl:col-span-9 xl:grid xl:grid-cols-2 xl:overflow-visible xl:pb-0 2xl:grid-cols-3"
+        className="stealth-scrollbar no-scrollbar flex min-w-0 gap-4 overflow-x-auto overscroll-x-contain pb-1 [-webkit-overflow-scrolling:touch] xl:col-span-9 xl:grid xl:grid-cols-2 xl:overflow-visible xl:pb-0 2xl:grid-cols-3"
       >
         {showCategoryEmptyState ? (
           <div className="w-[min(86vw,28rem)] shrink-0 xl:w-full xl:shrink xl:col-span-2 2xl:col-span-3">
@@ -1723,7 +1723,7 @@ const MarketOverviewPage: React.FC = () => {
               <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[10px] font-semibold text-white/42">
                 Filter
               </span>
-              <div className="min-w-0 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="min-w-0 overflow-x-auto no-scrollbar [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <div className="flex w-max gap-2">
                   {categoryTabs.map((tab) => (
                     <button

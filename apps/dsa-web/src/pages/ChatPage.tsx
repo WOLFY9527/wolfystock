@@ -54,12 +54,12 @@ const assistantMarkdownComponents = {
     );
   },
   pre: ({ children }: React.PropsWithChildren) => (
-    <pre className="mb-3 overflow-x-auto rounded-xl border border-white/8 bg-black/30 p-3 text-[13px] leading-6 text-white/88 last:mb-0">
+    <pre className="mb-3 overflow-x-auto no-scrollbar rounded-xl border border-white/8 bg-black/30 p-3 text-[13px] leading-6 text-white/88 last:mb-0">
       {children}
     </pre>
   ),
   table: ({ children }: React.PropsWithChildren) => (
-    <div className="mb-4 overflow-x-auto last:mb-0">
+    <div className="mb-4 overflow-x-auto no-scrollbar last:mb-0">
       <table className="w-full min-w-max border-collapse text-sm">{children}</table>
     </div>
   ),
@@ -888,7 +888,7 @@ const ChatPage: React.FC = () => {
               >
                 <div
                   data-testid="chat-empty-state"
-                  className="flex flex-1 flex-col items-center justify-center overflow-y-auto"
+                  className="flex flex-1 flex-col items-center justify-center overflow-y-auto no-scrollbar"
                 >
                   <div className="flex w-full max-w-5xl flex-col items-center gap-12 px-6 pt-6 text-center md:px-8 xl:px-12">
                     {skillsLoadError ? (

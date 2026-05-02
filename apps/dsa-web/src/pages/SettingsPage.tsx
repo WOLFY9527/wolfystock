@@ -3200,7 +3200,7 @@ const SettingsPage: React.FC = () => {
         <section className="flex min-h-0 min-w-0 flex-1 flex-col pl-2 pr-0 md:pr-8">
           <div
             data-testid="settings-main-panel"
-            className="min-w-0 flex-1 overflow-y-auto pb-12 pr-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="min-w-0 flex-1 overflow-y-auto no-scrollbar pb-12 pr-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             <div className="mx-auto w-full max-w-5xl space-y-4">
               <div className="mb-4 flex items-center justify-end gap-4">

@@ -135,7 +135,11 @@ def _service_error(exc: Exception) -> HTTPException:
 def list_notification_channels(
     _: CurrentUser = Depends(require_admin_user),
 ):
-    return NotificationChannelListResponse(items=NotificationService().list_channels())
+    service = NotificationService()
+    return NotificationChannelListResponse(
+        items=service.list_channels(),
+        available_system_channels=service.list_system_channels(),
+    )
 
 
 @router.post(
@@ -186,7 +190,10 @@ def delete_notification_channel(
         NotificationService().delete_channel(channel_id)
     except Exception as exc:
         raise _service_error(exc) from exc
-    return {"success": True}
+    return {
+        "success": True,
+        "deleted_scope": "log_notification_association",
+    }
 
 
 @router.post(

@@ -8,6 +8,8 @@
 
 - 🧭 **Scanner 输入校验与 Market Overview 隐蔽滑动** — `/scanner` 自定义标的与 AI 自定义主题生成在请求前增加字段级校验反馈，覆盖主题名称、criteria prompt、候选池与明细数量、主题选择和手动补充代码数量，避免无效参数直接落到后端错误。`/market-overview` 主市场卡片轨道在桌面以下改为可横向滑动，桌面继续保持主轨 grid；全局与 WolfyStock SpaceX 主题滚动条默认隐蔽，并在滚动容器 hover/focus 时显示深空风格细滚动条。
 
+- 🔔 **Admin Logs 复用现有通知渠道发送重要日志** — 管理员通知规则新增 `system_channel` 类型，可引用系统设置中已经配置好的 Discord、Email、WeChat、Slack 等通知渠道，不再要求在日志中心重新保存 webhook 凭据。执行日志写入 NOTICE / WARNING / ERROR / CRITICAL 时会按规则生成 `admin_logs.event` 通知事件，ERROR / CRITICAL 映射为 critical，WARNING 映射为 warning，NOTICE 映射为 info；未配置匹配规则时不会污染通知事件表。`/admin/notifications` 创建规则时默认选择已有系统渠道，并展示当前可用的系统通知渠道；删除按钮只移除日志通知规则关联，不删除系统设置中的真实通知渠道配置。
+
 ## 2026-05-01
 
 - 🧾 **Admin Logs 增加容量配额与容量清理** — Admin Logs storage summary 现在返回 PostgreSQL 表总占用、soft/hard limit、使用率、minimum retention、capacity cleanup guidance 与 autovacuum 提示；容量清理模式会在 PostgreSQL size 可用且超过 hard limit 时按最旧可删日志分批删除，并始终保留 `ADMIN_LOG_MIN_RETENTION_DAYS` 内的近期日志。`/admin/logs` 顶部容量条改为明确展示 “当前占用 / soft limit / hard limit”、日志 sessions/events 体量、最早日志、retention/min-retention 与 retention/capacity cleanup 预览及确认操作。SQLite/非 PostgreSQL 环境继续返回 size unavailable 并保留 retention/row-count 健康检查。

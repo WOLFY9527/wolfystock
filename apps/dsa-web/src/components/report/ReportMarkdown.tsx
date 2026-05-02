@@ -274,7 +274,7 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
                     prose-ul:my-3 prose-ol:my-3 prose-li:my-1 prose-li:leading-7
                     prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
                     prose-pre:my-4 prose-pre:border prose-pre:rounded-xl prose-pre:bg-[hsl(var(--elevated)/0.92)] prose-pre:p-4 prose-pre:text-xs prose-pre:leading-6
-                    prose-table:my-4 prose-table:block prose-table:overflow-x-auto prose-table:rounded-xl prose-table:border prose-table:border-[var(--home-prose-border)]
+                    prose-table:my-4 prose-table:block prose-table:overflow-x-auto prose-table:no-scrollbar prose-table:rounded-xl prose-table:border prose-table:border-[var(--home-prose-border)]
                     prose-th:border prose-th:border-[var(--home-prose-border-strong)] prose-th:px-3 prose-th:py-2 prose-th:uppercase prose-th:tracking-[0.12em]
                     prose-td:border prose-td:border-[var(--home-prose-border-strong)] prose-td:px-3 prose-td:py-2 prose-td:align-top
                     prose-hr:my-6

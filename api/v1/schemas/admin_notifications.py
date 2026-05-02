@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
-NotificationChannelType = Literal["in_app", "webhook"]
+NotificationChannelType = Literal["in_app", "webhook", "system_channel"]
 NotificationSeverity = Literal["info", "warning", "critical"]
 
 
@@ -47,6 +47,7 @@ class NotificationChannelModel(NotificationChannelBase):
 
 class NotificationChannelListResponse(BaseModel):
     items: List[NotificationChannelModel] = Field(default_factory=list)
+    available_system_channels: List[str] = Field(default_factory=list)
 
 
 class NotificationChannelTestResponse(BaseModel):

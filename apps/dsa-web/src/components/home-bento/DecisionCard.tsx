@@ -254,7 +254,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         </div>
 
         <div
-          className="overflow-visible pr-2 pb-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:[&::-webkit-scrollbar]:hidden xl:[-ms-overflow-style:none] xl:[scrollbar-width:none]"
+          className="overflow-visible pr-2 pb-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:no-scrollbar xl:[&::-webkit-scrollbar]:hidden xl:[-ms-overflow-style:none] xl:[scrollbar-width:none]"
           data-testid="home-bento-decision-scroll-body"
         >
           <div

@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BellRing, CheckCircle2, Power, Send, Webhook } from 'lucide-react';
+import { BellRing, CheckCircle2, Power, Send, Trash2, Webhook } from 'lucide-react';
 import {
   adminNotificationsApi,
   type NotificationChannel,
@@ -21,6 +21,7 @@ type ChannelDraft = {
   enabled: boolean;
   severityMin: NotificationSeverity;
   eventTypesText: string;
+  systemChannel: string;
   webhookUrl: string;
   token: string;
 };
@@ -34,13 +35,16 @@ type StatusNotice = {
 
 const INITIAL_DRAFT: ChannelDraft = {
   name: '',
-  type: 'in_app',
+  type: 'system_channel',
   enabled: true,
   severityMin: 'warning',
   eventTypesText: '',
+  systemChannel: 'discord',
   webhookUrl: '',
   token: '',
 };
+
+const SYSTEM_CHANNEL_OPTIONS = ['wechat', 'feishu', 'telegram', 'email', 'pushover', 'pushplus', 'serverchan3', 'custom', 'discord', 'slack', 'astrbot'];
 
 const severityTone: Record<NotificationSeverity, string> = {
   info: 'border-cyan-300/25 bg-cyan-400/10 text-cyan-100',
@@ -148,6 +152,12 @@ function formatDate(value: string | null | undefined): string {
 
 function channelTarget(channel: NotificationChannel, language: 'zh' | 'en'): string {
   if (channel.type === 'in_app') return language === 'en' ? 'Admin in-app inbox' : '管理员站内收件箱';
+  if (channel.type === 'system_channel') {
+    const systemChannel = channel.config.channel;
+    return typeof systemChannel === 'string' && systemChannel
+      ? `${language === 'en' ? 'Existing system channel' : '已有系统通道'}: ${systemChannel}`
+      : (language === 'en' ? 'Existing system channel' : '已有系统通道');
+  }
   const url = channel.config.webhookUrl || channel.config.webhook_url;
   return typeof url === 'string' && url ? url : (language === 'en' ? 'Webhook target hidden' : 'Webhook 目标已隐藏');
 }
@@ -182,6 +192,7 @@ const AdminNotificationsPage: React.FC = () => {
   const isEnglish = language === 'en';
   const text = useCallback((en: string, zh: string) => (isEnglish ? en : zh), [isEnglish]);
   const [channels, setChannels] = useState<NotificationChannel[]>([]);
+  const [availableSystemChannels, setAvailableSystemChannels] = useState<string[]>([]);
   const [events, setEvents] = useState<NotificationEvent[]>([]);
   const [draft, setDraft] = useState<ChannelDraft>(INITIAL_DRAFT);
   const [isLoading, setIsLoading] = useState(false);
@@ -195,15 +206,24 @@ const AdminNotificationsPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [channelItems, eventPayload] = await Promise.all([
+      const [channelPayload, eventPayload] = await Promise.all([
         adminNotificationsApi.listChannels(),
         adminNotificationsApi.listNotifications(),
       ]);
-      setChannels(channelItems);
+      setChannels(channelPayload.items);
+      setAvailableSystemChannels(channelPayload.availableSystemChannels);
+      if (channelPayload.availableSystemChannels.length) {
+        setDraft((current) => (
+          channelPayload.availableSystemChannels.includes(current.systemChannel)
+            ? current
+            : { ...current, systemChannel: channelPayload.availableSystemChannels[0] }
+        ));
+      }
       setEvents(eventPayload.items || []);
     } catch (err) {
       setError(getParsedApiError(err));
       setChannels([]);
+      setAvailableSystemChannels([]);
       setEvents([]);
     } finally {
       setIsLoading(false);
@@ -225,6 +245,8 @@ const AdminNotificationsPage: React.FC = () => {
       if (draft.token.trim()) {
         config.token = draft.token.trim();
       }
+    } else if (draft.type === 'system_channel') {
+      config.channel = draft.systemChannel.trim();
     }
     return {
       name: draft.name.trim(),
@@ -248,6 +270,10 @@ const AdminNotificationsPage: React.FC = () => {
     }
     if (payload.type === 'webhook' && !String(payload.config.webhookUrl || '').trim()) {
       setFormError(text('Webhook URL is required.', 'Webhook URL 为必填项。'));
+      return;
+    }
+    if (payload.type === 'system_channel' && !String(payload.config.channel || '').trim()) {
+      setFormError(text('Existing channel is required.', '已有通道为必填项。'));
       return;
     }
     setIsSaving(true);
@@ -298,6 +324,20 @@ const AdminNotificationsPage: React.FC = () => {
       setBusyId(null);
     }
   }, [language, loadAll, text]);
+
+  const deleteChannel = useCallback(async (channelId: number) => {
+    setBusyId(channelId);
+    setNotice(null);
+    try {
+      await adminNotificationsApi.deleteChannel(channelId);
+      setNotice({ tone: 'success', message: text('Log notification route removed.', '日志通知关联已移除。') });
+      await loadAll();
+    } catch (err) {
+      setError(getParsedApiError(err));
+    } finally {
+      setBusyId(null);
+    }
+  }, [loadAll, text]);
 
   const acknowledge = useCallback(async (eventId: number) => {
     setBusyId(eventId);
@@ -380,6 +420,7 @@ const AdminNotificationsPage: React.FC = () => {
               value={draft.type}
               onChange={(event) => setDraft((current) => ({ ...current, type: event.target.value as NotificationChannelType }))}
             >
+              <option value="system_channel">{text('Existing channel', '已有通道')}</option>
               <option value="in_app">{text('In-app', '站内')}</option>
               <option value="webhook">Webhook</option>
             </select>
@@ -407,6 +448,24 @@ const AdminNotificationsPage: React.FC = () => {
               onChange={(event) => setDraft((current) => ({ ...current, eventTypesText: event.target.value }))}
             />
           </label>
+          {draft.type === 'system_channel' ? (
+            <label className="block space-y-1">
+              <span className="text-xs font-semibold text-secondary-text">{text('Existing notification channel', '已有通知通道')}</span>
+              <select
+                aria-label={text('Existing notification channel', '已有通知通道')}
+                className="input-surface h-9 w-full rounded-lg px-3 text-sm"
+                value={draft.systemChannel}
+                onChange={(event) => setDraft((current) => ({ ...current, systemChannel: event.target.value }))}
+              >
+                {(availableSystemChannels.length ? availableSystemChannels : SYSTEM_CHANNEL_OPTIONS).map((channel) => (
+                  <option key={channel} value={channel}>{channel}</option>
+                ))}
+              </select>
+              <p className="text-[11px] leading-4 text-muted-text">
+                {text('Uses credentials already configured in System Settings.', '使用系统设置中已经配置的凭据。')}
+              </p>
+            </label>
+          ) : null}
           {draft.type === 'webhook' ? (
             <>
               <label className="block space-y-1">
@@ -460,12 +519,16 @@ const AdminNotificationsPage: React.FC = () => {
                   const deliveryError = formatDeliveryError(language as 'zh' | 'en', channel.lastError, channel.lastErrorCode, channel.lastErrorDiagnostics);
 
                   return (
-                  <div key={channel.id} data-testid={`notification-channel-${channel.id}`} className="grid gap-3 px-3 py-3 md:grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.2fr)_8rem_9rem_10rem] md:items-center">
+                  <div key={channel.id} data-testid={`notification-channel-${channel.id}`} className="grid gap-3 px-3 py-3 md:grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.2fr)_8rem_9rem_13rem] md:items-center">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-foreground">{channel.name}</p>
                       <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-text">
                         {channel.type === 'webhook' ? <Webhook className="h-3 w-3" /> : <BellRing className="h-3 w-3" />}
-                        {channel.type === 'webhook' ? text('Webhook', 'Webhook') : text('In-app', '站内')}
+                        {channel.type === 'system_channel'
+                          ? text('Existing channel', '已有通道')
+                          : channel.type === 'webhook'
+                            ? text('Webhook', 'Webhook')
+                            : text('In-app', '站内')}
                       </p>
                     </div>
                     <div className="min-w-0">
@@ -514,6 +577,18 @@ const AdminNotificationsPage: React.FC = () => {
                         <Send className="h-3 w-3" />
                         {text('Test', '测试')}
                       </button>
+                      {channel.enabled ? (
+                        <button
+                          type="button"
+                          className="btn-secondary h-8 rounded-lg px-3 text-xs text-rose-100"
+                          onClick={() => void deleteChannel(channel.id)}
+                          disabled={busyId === channel.id}
+                          title={text('Remove this route from log notifications only', '仅从日志通知中移除此关联')}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          {text('Delete', '删除')}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 ); }) : (

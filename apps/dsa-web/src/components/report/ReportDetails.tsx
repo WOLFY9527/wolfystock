@@ -81,7 +81,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
         >
           {copiedPanels[panel] ? text.copied : text.copy}
         </button>
-        <pre className="max-h-80 w-0 min-w-full overflow-x-auto overflow-y-auto rounded-[var(--cohere-radius-small)] border border-[var(--theme-panel-subtle-border)] bg-[var(--theme-panel-subtle-bg)] p-3 text-left font-mono text-xs text-secondary-text">
+        <pre className="max-h-80 w-0 min-w-full overflow-x-auto overflow-y-auto no-scrollbar rounded-[var(--cohere-radius-small)] border border-[var(--theme-panel-subtle-border)] bg-[var(--theme-panel-subtle-bg)] p-3 text-left font-mono text-xs text-secondary-text">
           {jsonStr}
         </pre>
       </div>

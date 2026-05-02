@@ -181,6 +181,122 @@ class NotificationChannelsTestCase(unittest.TestCase):
         self.assertEqual(self.delivery.webhook_calls, [])
         self.assertEqual(event["delivery_status"], "no_channels")
 
+    def test_existing_system_channel_sends_through_configured_notifier(self) -> None:
+        sent_messages: list[str] = []
+
+        class FakeSystemNotifier:
+            def __init__(self, *, channel_allowlist=None, **_kwargs):
+                self.channel_allowlist = list(channel_allowlist or [])
+
+            def send(self, content: str, **_kwargs) -> bool:
+                sent_messages.append(content)
+                return True
+
+        self.service.create_channel(
+            name="System Discord",
+            type="system_channel",
+            enabled=True,
+            severity_min="warning",
+            event_types=["admin_logs.event"],
+            config={"channel": "discord"},
+        )
+
+        with patch("src.services.notification_service.SystemNotificationService", FakeSystemNotifier):
+            event = self.service.emit_log_event(
+                log_level="ERROR",
+                category="analysis",
+                event_name="AnalysisFailed",
+                message="analysis failed",
+                session_id="analysis-error",
+            )
+
+        self.assertIsNotNone(event)
+        self.assertEqual(event["delivery_status"], "delivered")
+        self.assertEqual(len(sent_messages), 1)
+        self.assertIn("AnalysisFailed", sent_messages[0])
+        self.assertIn("analysis failed", sent_messages[0])
+
+    def test_delete_system_channel_rule_only_unbinds_log_notification_association(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = DatabaseManager(db_url=f"sqlite:///{tmpdir}/notification_channels.sqlite?check_same_thread=False")
+            service = NotificationService(db=db, delivery_client=self.delivery)
+            channel = service.create_channel(
+                name="System Discord",
+                type="system_channel",
+                enabled=True,
+                severity_min="warning",
+                event_types=["admin_logs.event"],
+                config={"channel": "discord"},
+            )
+
+            class FakeSystemNotifier:
+                def get_available_channels(self):
+                    return [SimpleNamespace(value="discord")]
+
+            with patch("api.v1.endpoints.admin_notifications.NotificationService", return_value=service):
+                response = admin_notifications.delete_notification_channel(channel["id"], _=_admin_user())
+
+            self.assertTrue(response["success"])
+            self.assertEqual(response["deleted_scope"], "log_notification_association")
+            self.assertEqual(service.list_channels(), [])
+            with patch("src.services.notification_service.SystemNotificationService", FakeSystemNotifier):
+                self.assertEqual(service.list_system_channels(), ["discord"])
+
+    def test_execution_log_warning_triggers_matching_system_channel_once(self) -> None:
+        sent_messages: list[str] = []
+
+        class FakeSystemNotifier:
+            def __init__(self, *, channel_allowlist=None, **_kwargs):
+                self.channel_allowlist = list(channel_allowlist or [])
+
+            def send(self, content: str, **_kwargs) -> bool:
+                sent_messages.append(content)
+                return True
+
+        self.service.create_channel(
+            name="System Email",
+            type="system_channel",
+            enabled=True,
+            severity_min="warning",
+            event_types=["admin_logs.event"],
+            config={"channel": "email"},
+        )
+
+        self.db.create_execution_log_session(
+            session_id="warning-log",
+            task_id="DataSourceTimeout",
+            overall_status="partial",
+            truth_level="actual",
+            started_at=datetime.now(),
+        )
+        with (
+            patch("src.storage.AdminNotificationService", return_value=self.service),
+            patch("src.services.notification_service.SystemNotificationService", FakeSystemNotifier),
+        ):
+            self.db.append_execution_log_event(
+                session_id="warning-log",
+                phase="data_source",
+                step="ExternalSourceTimeout",
+                status="timed_out",
+                truth_level="actual",
+                message="provider timed out",
+                detail={"log": {"level": "WARNING", "category": "data_source"}},
+            )
+            self.db.append_execution_log_event(
+                session_id="warning-log",
+                phase="data_source",
+                step="ExternalSourceTimeout",
+                status="timed_out",
+                truth_level="actual",
+                message="provider timed out",
+                detail={"log": {"level": "WARNING", "category": "data_source"}},
+            )
+
+        events = self.service.list_events(event_type="admin_logs.event")["items"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(len(sent_messages), 1)
+        self.assertEqual(events[0]["severity"], "warning")
+
     def test_test_channel_uses_mock_delivery(self) -> None:
         channel = self.service.create_channel(
             name="ops webhook",

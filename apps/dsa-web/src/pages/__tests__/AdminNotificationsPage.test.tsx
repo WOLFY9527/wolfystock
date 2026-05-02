@@ -6,6 +6,7 @@ const {
   listChannels,
   createChannel,
   updateChannel,
+  deleteChannel,
   testChannel,
   listNotifications,
   acknowledgeNotification,
@@ -14,6 +15,7 @@ const {
   listChannels: vi.fn(),
   createChannel: vi.fn(),
   updateChannel: vi.fn(),
+  deleteChannel: vi.fn(),
   testChannel: vi.fn(),
   listNotifications: vi.fn(),
   acknowledgeNotification: vi.fn(),
@@ -25,6 +27,7 @@ vi.mock('../../api/adminNotifications', () => ({
     listChannels,
     createChannel,
     updateChannel,
+    deleteChannel,
     testChannel,
     listNotifications,
     acknowledgeNotification,
@@ -92,10 +95,11 @@ describe('AdminNotificationsPage', () => {
   beforeEach(() => {
     uiLanguageState.current = 'en';
     vi.clearAllMocks();
-    listChannels.mockResolvedValue(channels);
+    listChannels.mockResolvedValue({ items: channels, availableSystemChannels: ['discord', 'email'] });
     listNotifications.mockResolvedValue({ total: 1, limit: 100, offset: 0, items: notifications });
     createChannel.mockResolvedValue(channels[1]);
     updateChannel.mockResolvedValue({ ...channels[1], enabled: false });
+    deleteChannel.mockResolvedValue(undefined);
     testChannel.mockResolvedValue({ success: true, channel: channels[1] });
     acknowledgeNotification.mockResolvedValue({ ...notifications[0], acknowledgedAt: '2026-05-02T08:30:00Z' });
   });
@@ -151,6 +155,26 @@ describe('AdminNotificationsPage', () => {
     });
   });
 
+  it('creates log notification rules for existing system channels', async () => {
+    render(<AdminNotificationsPage />);
+
+    fireEvent.change(await screen.findByLabelText('Channel name'), { target: { value: 'Discord errors' } });
+    fireEvent.change(screen.getByLabelText('Existing notification channel'), { target: { value: 'email' } });
+    fireEvent.change(screen.getByLabelText('Minimum severity'), { target: { value: 'critical' } });
+    fireEvent.change(screen.getByLabelText('Event types'), { target: { value: 'admin_logs.event' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create channel' }));
+
+    await waitFor(() => {
+      expect(createChannel).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'Discord errors',
+        type: 'system_channel',
+        severityMin: 'critical',
+        eventTypes: ['admin_logs.event'],
+        config: { channel: 'email' },
+      }));
+    });
+  });
+
   it('tests a channel and refreshes status with mocked API delivery', async () => {
     render(<AdminNotificationsPage />);
 
@@ -159,6 +183,18 @@ describe('AdminNotificationsPage', () => {
 
     await waitFor(() => {
       expect(testChannel).toHaveBeenCalledWith(2);
+      expect(listChannels).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('deletes only the log notification association for a configured channel', async () => {
+    render(<AdminNotificationsPage />);
+
+    const webhookRow = await screen.findByTestId('notification-channel-2');
+    fireEvent.click(within(webhookRow).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(deleteChannel).toHaveBeenCalledWith(2);
       expect(listChannels).toHaveBeenCalledTimes(2);
     });
   });
