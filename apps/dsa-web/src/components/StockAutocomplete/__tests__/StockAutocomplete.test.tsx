@@ -212,6 +212,8 @@ describe('StockAutocomplete', () => {
     const input = screen.getByRole('combobox');
     expect(input).toHaveAttribute('aria-autocomplete', 'none');
     expect(input).toHaveAttribute('role', 'combobox');
+    expect(input).toHaveClass('pr-10');
+    expect(input).toHaveClass('truncate');
   });
 
   describe('fallback mode', () => {

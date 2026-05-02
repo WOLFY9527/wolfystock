@@ -34,10 +34,13 @@ import type {
 
 const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
 const PORTFOLIO_GLASS_CARD_CLASS = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md p-5 transition-all hover:border-white/10';
-const PORTFOLIO_FIELD_LABEL_CLASS = 'text-[10px] text-white/40 uppercase tracking-widest font-bold';
-const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-xl border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-emerald-500/50';
-const PORTFOLIO_SELECT_CLASS = 'w-full [&_select]:rounded-xl [&_select]:border-white/10 [&_select]:bg-white/[0.02] [&_select]:px-3 [&_select]:py-2.5 [&_select]:text-sm [&_select]:text-white [&_select]:focus:border-emerald-500/50';
+const PORTFOLIO_FIELD_LABEL_CLASS = '!mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40';
+const PORTFOLIO_FIELD_WRAPPER_CLASS = 'flex flex-col gap-1.5';
+const PORTFOLIO_FORM_GRID_CLASS = 'mt-6 grid grid-cols-2 gap-x-4 gap-y-6';
+const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-lg border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white placeholder:text-white/20 outline-none focus:border-emerald-500/50';
+const PORTFOLIO_SELECT_CLASS = 'w-full gap-1.5 [&_select]:rounded-lg [&_select]:border [&_select]:border-white/10 [&_select]:bg-white/[0.02] [&_select]:px-3 [&_select]:py-2.5 [&_select]:!pr-8 [&_select]:text-sm [&_select]:text-white [&_select]:outline-none [&_select]:appearance-none [&_select]:focus:border-emerald-500/50';
 const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'h-10 rounded-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 px-4 text-sm font-bold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] hover:from-blue-500 hover:to-purple-500';
+const PORTFOLIO_SUBMIT_BUTTON_CLASS = 'w-full mt-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium rounded-lg px-6 py-3 shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all';
 const PORTFOLIO_SECONDARY_BUTTON_CLASS = 'h-9 rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white';
 const PORTFOLIO_TEXT_BUTTON_CLASS = 'h-8 rounded-md border-0 bg-transparent px-2 text-xs text-white/40 hover:bg-transparent hover:text-white disabled:text-white/15';
 const PORTFOLIO_ICON_BUTTON_CLASS = 'h-9 w-9 rounded-xl border-0 bg-white/[0.04] p-0 text-white/45 hover:bg-white/10 hover:text-white';
@@ -1289,8 +1292,8 @@ const PortfolioPage: React.FC = () => {
           'w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0 bg-transparent text-white/72',
         )}
       >
-	        <section className="grid w-full grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-12">
-	          <section className="flex flex-col gap-6 lg:col-span-5 lg:h-full lg:min-h-0">
+	        <section className="mx-auto grid w-full max-w-[1600px] grid-cols-1 items-start gap-6 px-4 lg:px-8 xl:grid-cols-12 xl:gap-8">
+	          <section className="col-span-1 flex flex-col gap-6 xl:col-span-4">
 	            <div
 	              data-testid="portfolio-total-assets-card"
 	              className={`${PORTFOLIO_GLASS_CARD_CLASS} shrink-0 flex justify-between items-end gap-3`}
@@ -1367,7 +1370,7 @@ const PortfolioPage: React.FC = () => {
 	            </div>
 	          </section>
 	
-	          <section className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col overflow-visible lg:col-span-3 lg:h-full lg:overflow-hidden`}>
+	          <section className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-1 flex flex-col gap-6 overflow-visible xl:col-span-4`}>
             <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -1443,41 +1446,33 @@ const PortfolioPage: React.FC = () => {
                     />
                   </div>
                   {tradeType === 'stock' ? (
-                    <div className="space-y-1.5">
+                    <div>
                       <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualTrade}</p>
-                      <form className="space-y-1.5" onSubmit={handleTradeSubmit}>
-                        <div className="grid grid-cols-2 gap-3">
-                          <Input label="SYMBOL" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="AAPL" value={tradeForm.symbol} onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-                          <Input label="TRADE DATE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
+                      <form onSubmit={handleTradeSubmit}>
+                        <div className={PORTFOLIO_FORM_GRID_CLASS}>
+                          <Input label="SYMBOL" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="AAPL" value={tradeForm.symbol} onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                          <Input label="TRADE DATE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
                           <Select label="SIDE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side} onChange={(value) => setTradeForm((prev) => ({ ...prev, side: value as PortfolioSide }))} options={[{ value: 'buy', label: copy.buy }, { value: 'sell', label: copy.sell }]} />
-                          <Input label="REFERENCE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="text" placeholder="optional" value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
+                          <Input label="REFERENCE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="text" placeholder="optional" value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
+                          <Input label="QUANTITY" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
+                          <Input label="PRICE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
+                          <Input label="FEE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="optional" value={tradeForm.fee} onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
+                          <Input label="TAX" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="optional" value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <Input label="QUANTITY" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
-                          <Input label="PRICE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <Input label="FEE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="optional" value={tradeForm.fee} onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
-                          <Input label="TAX" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="optional" value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
-                        </div>
-                        <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        <Button type="submit" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitTrade}</Button>
+                        <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <button type="submit" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId}>{copy.submitTrade}</button>
                       </form>
                     </div>
                   ) : null}
 
                   {tradeType === 'fund' ? (
-                    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-3" contentClassName="space-y-1.5">
+                    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="">
                       <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualCash}</p>
-                      <form className="space-y-1.5" onSubmit={handleCashSubmit}>
-                        <div className="grid grid-cols-2 gap-3">
-                          <Input label="EVENT DATE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={cashForm.eventDate} onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
+                      <form onSubmit={handleCashSubmit}>
+                        <div data-testid="portfolio-cash-amount-currency-grid" className={PORTFOLIO_FORM_GRID_CLASS}>
+                          <Input label="EVENT DATE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={cashForm.eventDate} onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
                           <Select label="DIRECTION" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={cashForm.direction} onChange={(value) => setCashForm((prev) => ({ ...prev, direction: value as PortfolioCashDirection }))} options={[{ value: 'in', label: copy.cashIn }, { value: 'out', label: copy.cashOut }]} />
-                        </div>
-                        <div data-testid="portfolio-cash-amount-currency-grid" className="grid grid-cols-2 gap-3">
-                          <Input label="AMOUNT" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.01" placeholder="0.00" value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
+                          <Input label="AMOUNT" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.01" placeholder="0.00" value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
                           <Select
                             data-testid="portfolio-cash-currency-select"
                             label="CURRENCY"
@@ -1489,27 +1484,25 @@ const PortfolioPage: React.FC = () => {
                             placeholder={copy.currencyOptional(snapshotCurrency)}
                           />
                         </div>
-                        <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={cashForm.note} onChange={(e) => setCashForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        <Button type="submit" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitCash}</Button>
+                        <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={cashForm.note} onChange={(e) => setCashForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <button type="submit" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId}>{copy.submitCash}</button>
                       </form>
                     </SectionShell>
                   ) : null}
 
                   {tradeType === 'corporate' ? (
-                    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-3" contentClassName="space-y-1.5">
+                    <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="">
                       <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualCorporate}</p>
-                      <form className="space-y-1.5" onSubmit={handleCorporateSubmit}>
-                        <div className="grid grid-cols-2 gap-3">
-                          <Input label="SYMBOL" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="AAPL" value={corpForm.symbol} onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-                          <Input label="EFFECTIVE DATE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={corpForm.effectiveDate} onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
+                      <form onSubmit={handleCorporateSubmit}>
+                        <div className={PORTFOLIO_FORM_GRID_CLASS}>
+                          <Input label="SYMBOL" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="AAPL" value={corpForm.symbol} onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                          <Input label="EFFECTIVE DATE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={corpForm.effectiveDate} onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
+                          <Select label="ACTION TYPE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={corpForm.actionType} onChange={(value) => setCorpForm((prev) => ({ ...prev, actionType: value as PortfolioCorporateActionType }))} options={[{ value: 'cash_dividend', label: copy.cashDividend }, { value: 'split_adjustment', label: copy.splitAdjustment }]} />
+                          <Input label="DIVIDEND" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={corpForm.cashDividendPerShare} onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value }))} />
+                          <Input label="SPLIT RATIO" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="1.0000" value={corpForm.splitRatio} onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value }))} />
                         </div>
-                        <Select label="ACTION TYPE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={corpForm.actionType} onChange={(value) => setCorpForm((prev) => ({ ...prev, actionType: value as PortfolioCorporateActionType }))} options={[{ value: 'cash_dividend', label: copy.cashDividend }, { value: 'split_adjustment', label: copy.splitAdjustment }]} />
-                        <div className="grid grid-cols-2 gap-3">
-                          <Input label="DIVIDEND" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={corpForm.cashDividendPerShare} onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value }))} />
-                          <Input label="SPLIT RATIO" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="1.0000" value={corpForm.splitRatio} onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value }))} />
-                        </div>
-                        <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={corpForm.note} onChange={(e) => setCorpForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        <Button type="submit" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} disabled={!writableAccountId}>{copy.submitCorporate}</Button>
+                        <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={corpForm.note} onChange={(e) => setCorpForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <button type="submit" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId}>{copy.submitCorporate}</button>
                       </form>
                     </SectionShell>
                   ) : null}
@@ -1707,7 +1700,7 @@ const PortfolioPage: React.FC = () => {
           ) : null}
 
           {historyLayout === 'desktop' ? (
-            <section className="hidden lg:flex lg:col-span-4 lg:min-h-0">
+            <section className="col-span-1 hidden xl:col-span-4 xl:flex">
               <div className={`${PORTFOLIO_GLASS_CARD_CLASS} flex h-full min-h-0 w-full flex-col overflow-hidden`}>
                 {historyPanelContent}
               </div>

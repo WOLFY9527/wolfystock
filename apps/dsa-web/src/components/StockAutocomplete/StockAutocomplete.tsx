@@ -256,7 +256,7 @@ function StockAutocompleteInner({
         placeholder={placeholder}
         disabled={disabled}
         className={cn(
-          'input-surface input-focus-glow product-command-input w-full',
+          'input-surface input-focus-glow product-command-input w-full pr-10 truncate',
           "focus:outline-none",
           isOpen && "rounded-b-none",
           className

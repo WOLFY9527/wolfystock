@@ -388,11 +388,14 @@ describe('PortfolioPage FX refresh', () => {
     expect(await screen.findByText(translate('zh', 'portfolio.fxStale'))).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).not.toBeInTheDocument();
     const submitTradeButton = screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') });
-    expect(submitTradeButton).toHaveAttribute('data-variant', 'primary');
+    expect(submitTradeButton).toHaveAttribute('type', 'submit');
+    expect(submitTradeButton).not.toHaveAttribute('data-variant');
     expect(submitTradeButton.className).toContain('from-blue-600');
     expect(submitTradeButton.className).toContain('to-purple-600');
     expect(submitTradeButton.className).toContain('text-white');
-    expect(submitTradeButton.className).toContain('font-bold');
+    expect(submitTradeButton.className).toContain('font-medium');
+    expect(submitTradeButton.className).toContain('py-3');
+    expect(submitTradeButton.className).toContain('shadow-[0_0_15px_rgba(139,92,246,0.3)]');
     expect(screen.queryByText(translate('zh', 'portfolio.scopeHint'))).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '交易' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '账户' })).toBeInTheDocument();
@@ -1121,7 +1124,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.manualCash'))).not.toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.manualCorporate'))).not.toBeInTheDocument();
-    expect(screen.getByLabelText('SYMBOL')).toHaveClass('rounded-xl');
+    expect(screen.getByLabelText('SYMBOL')).toHaveClass('rounded-lg');
 
     fireEvent.click(screen.getByRole('button', { name: '资金划转' }));
     expect(screen.getByText(translate('zh', 'portfolio.manualCash'))).toBeInTheDocument();
@@ -1131,7 +1134,8 @@ describe('PortfolioPage FX refresh', () => {
     const cashAmountCurrencyGrid = screen.getByTestId('portfolio-cash-amount-currency-grid');
     expect(cashAmountCurrencyGrid.className).toContain('grid');
     expect(cashAmountCurrencyGrid.className).toContain('grid-cols-2');
-    expect(cashAmountCurrencyGrid.className).toContain('gap-3');
+    expect(cashAmountCurrencyGrid.className).toContain('gap-x-4');
+    expect(cashAmountCurrencyGrid.className).toContain('gap-y-6');
 
     const cashCurrencySelect = screen.getByTestId('portfolio-cash-currency-select');
     expect(cashCurrencySelect.tagName).toBe('SELECT');
@@ -1139,7 +1143,7 @@ describe('PortfolioPage FX refresh', () => {
 
     const amountInput = screen.getByLabelText('AMOUNT');
     expect(amountInput.className).toContain('input-surface');
-    expect(amountInput.className).toContain('rounded-xl');
+    expect(amountInput.className).toContain('rounded-lg');
 
     fireEvent.click(screen.getByRole('button', { name: '公司行为' }));
     expect(screen.getByText(translate('zh', 'portfolio.manualCorporate'))).toBeInTheDocument();
