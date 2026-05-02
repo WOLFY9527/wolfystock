@@ -5,13 +5,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+import logging
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, delete, func, select, text
 
 from src.config import get_config
 from src.postgres_control_plane_store import PhaseGExecutionEvent, PhaseGExecutionSession
+from src.services.notification_service import NotificationService
 from src.storage import ExecutionLogEvent, ExecutionLogSession, get_db
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -36,6 +40,13 @@ class AdminLogsRetentionService:
 
     def __init__(self) -> None:
         self.db = get_db()
+
+    @staticmethod
+    def _emit_notification_event(**kwargs: Any) -> None:
+        try:
+            NotificationService().emit_event(**kwargs)
+        except Exception as exc:
+            logger.warning("admin logs notification event emit failed: %s", exc)
 
     @staticmethod
     def _policy() -> AdminLogRetentionPolicy:
@@ -279,6 +290,7 @@ class AdminLogsRetentionService:
             self.__class__._last_auto_cleanup_at is not None
             and now - self.__class__._last_auto_cleanup_at < self.__class__._auto_cleanup_min_interval
         )
+        cleanup_failed_message = None
         if (
             policy.auto_cleanup_enabled
             and storage_bytes is not None
@@ -294,9 +306,10 @@ class AdminLogsRetentionService:
                 auto_cleanup_message = cleanup_result.get("message")
             except ValueError as exc:
                 auto_cleanup_message = str(exc)
+                cleanup_failed_message = str(exc)
         elif auto_cleanup_recent:
             auto_cleanup_message = "Automatic cleanup was recently attempted; waiting before the next batch."
-        return {
+        summary = {
             "total_log_count": total_logs,
             "total_event_count": total_events,
             "oldest_log_timestamp": self._iso(oldest),
@@ -331,6 +344,44 @@ class AdminLogsRetentionService:
             "recommended_cleanup_action": recommended,
             "last_cleanup_timestamp": None,
         }
+        if status in {"warning", "critical"}:
+            self._emit_notification_event(
+                event_type="admin_logs.storage",
+                severity=status,
+                title=f"Admin Logs storage {status}",
+                message=recommended,
+                payload={
+                    "status": status,
+                    "status_reasons": reasons,
+                    "total_log_count": total_logs,
+                    "total_event_count": total_events,
+                    "storage_size_bytes": storage_bytes,
+                    "capacity_cleanup_recommended": capacity_cleanup_recommended,
+                },
+                fingerprint=f"admin_logs.storage:{status}:{','.join(sorted(set(reasons))) or 'health'}",
+                dedupe_window=timedelta(minutes=30),
+            )
+        if auto_cleanup_performed:
+            self._emit_notification_event(
+                event_type="admin_logs.cleanup",
+                severity="warning",
+                title="Admin Logs capacity cleanup performed",
+                message=auto_cleanup_message or "Automatic Admin Logs capacity cleanup deleted old sessions.",
+                payload={"mode": "capacity", "status": status, "auto_cleanup_performed": True},
+                fingerprint="admin_logs.cleanup:auto",
+                dedupe_window=timedelta(minutes=30),
+            )
+        if cleanup_failed_message:
+            self._emit_notification_event(
+                event_type="admin_logs.cleanup",
+                severity="critical",
+                title="Admin Logs capacity cleanup failed",
+                message=cleanup_failed_message,
+                payload={"mode": "capacity", "status": status},
+                fingerprint=f"admin_logs.cleanup:failed:{cleanup_failed_message}",
+                dedupe_window=timedelta(minutes=30),
+            )
+        return summary
 
     def cleanup(
         self,
@@ -461,7 +512,7 @@ class AdminLogsRetentionService:
             estimated_bytes_per_session = int(storage_bytes / total_logs) if total_logs > 0 else 0
             estimated_remaining_bytes = max(0, storage_bytes - (estimated_bytes_per_session * deleted_log_count))
             additional_cleanup_needed = estimated_remaining_bytes > policy.storage_soft_limit_bytes and matched_log_count > deleted_log_count
-            return self._cleanup_payload(
+            result = self._cleanup_payload(
                 mode="capacity",
                 cutoff=min_retention_cutoff,
                 dry_run=False,
@@ -478,6 +529,21 @@ class AdminLogsRetentionService:
                     else None
                 ),
             )
+            self._emit_notification_event(
+                event_type="admin_logs.cleanup",
+                severity="warning",
+                title="Admin Logs capacity cleanup performed",
+                message=f"Capacity cleanup deleted {deleted_log_count} sessions and {deleted_event_count} events.",
+                payload={
+                    "mode": "capacity",
+                    "deleted_log_count": deleted_log_count,
+                    "deleted_event_count": deleted_event_count,
+                    "additional_cleanup_needed": additional_cleanup_needed,
+                },
+                fingerprint=f"admin_logs.cleanup:capacity:{deleted_log_count}:{deleted_event_count}:{additional_cleanup_needed}",
+                dedupe_window=timedelta(minutes=30),
+            )
+            return result
 
     def _cleanup_payload(
         self,

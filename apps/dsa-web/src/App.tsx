@@ -41,6 +41,7 @@ const DeterministicBacktestResultPage = lazy(() => import('./pages/Deterministic
 const PersonalSettingsPage = lazy(() => import('./pages/PersonalSettingsPage'));
 const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'));
 const AdminLogsPage = lazy(() => import('./pages/AdminLogsPage'));
+const AdminNotificationsPage = lazy(() => import('./pages/AdminNotificationsPage'));
 
 type GateCopy = {
   eyebrow: string;
@@ -56,15 +57,18 @@ type GateCopy = {
 function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: boolean): GateCopy {
   const isEnglish = language === 'en';
 
-  if (pathname.startsWith('/admin/logs')) {
+  if (pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/notifications')) {
+    const surfaceName = pathname.startsWith('/admin/notifications')
+      ? (isEnglish ? 'notification channels' : '通知通道')
+      : (isEnglish ? 'logs' : '日志');
     return isGuest
       ? {
         eyebrow: isEnglish ? 'Admin Only' : '仅限管理员',
         statusLabel: isEnglish ? 'Admin Sign-in Required' : '需要管理员登录',
-        title: isEnglish ? 'Sign in with an admin account to open logs' : '请使用管理员账户登录后查看日志',
+        title: isEnglish ? `Sign in with an admin account to open ${surfaceName}` : `请使用管理员账户登录后查看${surfaceName}`,
         description: isEnglish
-          ? 'Execution logs are reserved for admins and are not available in guest or regular user pages.'
-          : '执行日志只对管理员开放，不属于游客或普通用户页面的一部分。',
+          ? 'Operational admin surfaces are reserved for admins and are not available in guest or regular user pages.'
+          : '运维管理页面只对管理员开放，不属于游客或普通用户页面的一部分。',
         bullets: isEnglish
           ? [
             'Guest access never maps to setup or admin identities.',
@@ -84,7 +88,7 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
       : {
         eyebrow: isEnglish ? 'Admin Only' : '仅限管理员',
         statusLabel: isEnglish ? 'Admin Account Required' : '需要管理员账户',
-        title: isEnglish ? 'This logs route requires an admin account' : '这个日志页面需要管理员账户',
+        title: isEnglish ? `This ${surfaceName} route requires an admin account` : `这个${surfaceName}页面需要管理员账户`,
         description: isEnglish
           ? 'Your current account can keep using the regular app, but the logs page stays reserved for admins.'
           : '你当前账户仍可继续使用普通页面，但日志页只对管理员开放。',
@@ -236,6 +240,8 @@ export const AppContent: React.FC = () => {
     || routePathname.startsWith('/settings/')
     || routePathname === '/admin/logs'
     || routePathname.startsWith('/admin/logs/')
+    || routePathname === '/admin/notifications'
+    || routePathname.startsWith('/admin/notifications/')
   );
 
   useEffect(() => {
@@ -348,6 +354,7 @@ export const AppContent: React.FC = () => {
               <Route path="/settings" element={<PersonalSettingsPage />} />
               <Route path="/settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
               <Route path="/admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
+              <Route path="/admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route path="/:locale" element={<Shell />}>
@@ -364,6 +371,7 @@ export const AppContent: React.FC = () => {
               <Route path="settings" element={<PersonalSettingsPage />} />
               <Route path="settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
               <Route path="admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
+              <Route path="admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route path="/login" element={<LoginPage />} />

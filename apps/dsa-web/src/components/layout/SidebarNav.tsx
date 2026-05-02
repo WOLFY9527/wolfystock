@@ -7,6 +7,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Archive,
   Activity,
+  BellRing,
   BriefcaseBusiness,
   Globe,
   Home,
@@ -129,8 +130,10 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const isDrawer = layout === 'drawer';
   const signInLabel = t('nav.signIn');
   const consoleLabel = t('nav.independentConsole');
+  const notificationsLabel = 'Notifications';
   const signInPath = buildLoginPath(location.pathname + location.search);
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
+  const notificationsPath = routeLocale ? buildLocalizedPath('/admin/notifications', routeLocale) : '/admin/notifications';
 
   useEffect(() => {
     if (isGuest) {
@@ -296,6 +299,30 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </NavLink>
   ) : null;
 
+  const notificationAction = isAdminAccount ? (
+    <NavLink
+      to={notificationsPath}
+      onClick={onNavigate}
+      className={({ isActive }) => cn(
+        isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
+        !isDrawer && isActive ? 'text-white' : '',
+        isDrawer && isActive ? 'is-active' : '',
+      )}
+      aria-label={notificationsLabel}
+    >
+      {isDrawer ? (
+        <>
+          <span className="shell-nav-item__icon" aria-hidden="true">
+            <BellRing className="h-4 w-4" />
+          </span>
+          <DrawerUtilityLabel label={notificationsLabel} />
+        </>
+      ) : (
+        <span>{notificationsLabel}</span>
+      )}
+    </NavLink>
+  ) : null;
+
   const signInAction = authEnabled && isGuest ? (
     <NavLink
       to={signInPath}
@@ -356,6 +383,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             {languageAction}
             {settingsAction}
             {systemAction}
+            {notificationAction}
             {signInAction}
             {logoutAction}
           </div>
@@ -380,6 +408,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
               ) : null}
               {settingsAction}
               {systemAction}
+              {notificationAction}
               {signInAction}
               {logoutAction && (settingsAction || systemAction || signInAction) ? (
                 <div className="h-3 w-px bg-white/10" data-testid="shell-header-utility-divider" />

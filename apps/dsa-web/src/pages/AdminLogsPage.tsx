@@ -1285,6 +1285,14 @@ const AdminLogsPage: React.FC = () => {
           <p className="mt-1 truncate text-sm text-foreground" title={storageSummary?.recommendedCleanupAction || ''}>
             {storageSummary?.recommendedCleanupAction || (locale === 'zh' ? 'Storage summary unavailable' : 'Storage summary unavailable')}
           </p>
+          {storageSummary && ['warning', 'critical'].includes(String(storageSummary.status)) ? (
+            <a
+              href="/admin/notifications"
+              className="mt-1 inline-flex text-[11px] font-semibold text-emerald-100 underline-offset-4 hover:underline"
+            >
+              {locale === 'zh' ? '配置 Admin 通知通道' : 'Configure Admin notification channels'}
+            </a>
+          ) : null}
           {storageSummary?.postgresVacuumNote ? <p className="mt-1 text-[11px] text-amber-100">{storageSummary.postgresVacuumNote}</p> : null}
           {storageSummary?.autoCleanupEnabled && storageSummary?.status === 'critical' ? <p className="mt-1 text-[11px] text-rose-100">Auto cleanup required</p> : null}
           {cleanupMessage ? <p className="mt-1 text-[11px] text-emerald-100">{cleanupMessage}</p> : null}

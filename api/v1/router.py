@@ -11,7 +11,7 @@ API v1 路由聚合
 
 from fastapi import APIRouter
 
-from api.v1.endpoints import analysis, auth, history, stocks, backtest, system_config, agent, usage, portfolio, admin_logs, scanner, market_overview, market, watchlist
+from api.v1.endpoints import analysis, auth, history, stocks, backtest, system_config, agent, usage, portfolio, admin_logs, admin_notifications, scanner, market_overview, market, watchlist
 
 # 创建 v1 版本主路由
 router = APIRouter(prefix="/api/v1")
@@ -38,6 +38,12 @@ router.include_router(
     admin_logs.router,
     prefix="/admin/logs",
     tags=["AdminLogs"]
+)
+
+router.include_router(
+    admin_notifications.router,
+    prefix="/admin",
+    tags=["AdminNotifications"]
 )
 
 router.include_router(

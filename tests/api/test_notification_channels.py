@@ -1,0 +1,338 @@
+# -*- coding: utf-8 -*-
+"""Admin operational notification channel API and service tests."""
+
+from __future__ import annotations
+
+import unittest
+from datetime import datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from api.deps import CurrentUser, get_current_user
+from api.v1 import api_v1_router
+from api.v1.endpoints import admin_logs, admin_notifications
+from src.services.notification_service import NotificationDeliveryClient, NotificationService
+from src.storage import DatabaseManager
+
+
+def _admin_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="bootstrap-admin",
+        username="admin",
+        display_name="Admin",
+        role="admin",
+        is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
+
+
+def _regular_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="user-1",
+        username="alice",
+        display_name="Alice",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
+
+
+class FakeDeliveryClient(NotificationDeliveryClient):
+    def __init__(self, *, fail: bool = False) -> None:
+        self.fail = fail
+        self.webhook_calls: list[dict] = []
+
+    def send_webhook(self, *, url: str, payload: dict, headers: dict | None = None, timeout: float = 5.0) -> None:
+        self.webhook_calls.append({"url": url, "payload": payload, "headers": headers or {}, "timeout": timeout})
+        if self.fail:
+            raise RuntimeError("mock webhook failure")
+
+
+class FakeAdminNotificationService:
+    def __init__(self) -> None:
+        self.create_calls: list[dict] = []
+
+    def create_channel(self, **kwargs):
+        self.create_calls.append(kwargs)
+        return {
+            "id": 101,
+            "name": kwargs["name"],
+            "type": kwargs["type"],
+            "enabled": kwargs["enabled"],
+            "severity_min": kwargs["severity_min"],
+            "event_types": list(kwargs["event_types"]),
+            "config": dict(kwargs["config"]),
+            "created_at": None,
+            "updated_at": None,
+            "last_tested_at": None,
+            "last_sent_at": None,
+            "last_error": None,
+        }
+
+
+class NotificationChannelsTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        DatabaseManager.reset_instance()
+        self.db = DatabaseManager(db_url="sqlite:///:memory:")
+        self.delivery = FakeDeliveryClient()
+        self.service = NotificationService(db=self.db, delivery_client=self.delivery)
+
+    def tearDown(self) -> None:
+        DatabaseManager.reset_instance()
+
+    def _app(self, user: CurrentUser | None = None) -> TestClient:
+        app = FastAPI()
+        app.include_router(api_v1_router)
+        app.dependency_overrides[get_current_user] = lambda: user or _admin_user()
+        return TestClient(app)
+
+    def test_channel_crud_requires_admin_auth(self) -> None:
+        client = self._app(_regular_user())
+
+        response = client.get("/api/v1/admin/notification-channels")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"]["error"], "admin_required")
+
+    def test_create_channel_post_route_is_registered_on_v1_router(self) -> None:
+        client = self._app()
+        fake_service = FakeAdminNotificationService()
+
+        with patch("api.v1.endpoints.admin_notifications.NotificationService", return_value=fake_service):
+            response = client.post(
+                "/api/v1/admin/notification-channels",
+                json={
+                    "name": "Ops inbox",
+                    "type": "in_app",
+                    "enabled": True,
+                    "severity_min": "warning",
+                    "event_types": ["admin_logs.storage"],
+                    "config": {},
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["name"], "Ops inbox")
+        self.assertEqual(payload["type"], "in_app")
+        self.assertEqual(len(fake_service.create_calls), 1)
+        self.assertEqual(fake_service.create_calls[0]["name"], "Ops inbox")
+
+    def test_webhook_url_validation_rejects_non_http_targets(self) -> None:
+        with self.assertRaises(ValueError):
+            self.service.create_channel(
+                name="bad webhook",
+                type="webhook",
+                enabled=True,
+                severity_min="warning",
+                event_types=[],
+                config={"webhook_url": "file:///tmp/notify"},
+            )
+
+    def test_secrets_and_webhook_url_are_masked_in_api_output(self) -> None:
+        channel = self.service.create_channel(
+            name="ops webhook",
+            type="webhook",
+            enabled=True,
+            severity_min="warning",
+            event_types=["admin_logs.storage"],
+            config={
+                "webhook_url": "https://hooks.example.test/services/SECRET/PATH",
+                "token": "super-secret-token",
+            },
+        )
+
+        payload = self.service.list_channels()
+
+        self.assertEqual(payload[0]["id"], channel["id"])
+        self.assertNotIn("super-secret-token", str(payload))
+        self.assertNotIn("/services/SECRET/PATH", str(payload))
+        self.assertEqual(payload[0]["config"]["token"], "********")
+        self.assertEqual(payload[0]["config"]["webhook_url"], "https://hooks.example.test/***")
+
+    def test_disabled_channels_do_not_send(self) -> None:
+        self.service.create_channel(
+            name="disabled webhook",
+            type="webhook",
+            enabled=False,
+            severity_min="info",
+            event_types=[],
+            config={"webhook_url": "https://hooks.example.test/disabled"},
+        )
+
+        event = self.service.emit_event(
+            event_type="scanner.failure",
+            severity="critical",
+            title="Scanner failed",
+            message="Scanner run failed",
+            payload={"run_id": 123},
+            fingerprint="scanner:123",
+        )
+
+        self.assertEqual(self.delivery.webhook_calls, [])
+        self.assertEqual(event["delivery_status"], "no_channels")
+
+    def test_test_channel_uses_mock_delivery(self) -> None:
+        channel = self.service.create_channel(
+            name="ops webhook",
+            type="webhook",
+            enabled=True,
+            severity_min="warning",
+            event_types=[],
+            config={"webhook_url": "https://hooks.example.test/test"},
+        )
+
+        result = self.service.test_channel(channel["id"])
+
+        self.assertTrue(result["success"])
+        self.assertEqual(len(self.delivery.webhook_calls), 1)
+        self.assertEqual(self.delivery.webhook_calls[0]["url"], "https://hooks.example.test/test")
+
+    def test_delivery_failure_is_recorded_not_raised(self) -> None:
+        failing = NotificationService(db=self.db, delivery_client=FakeDeliveryClient(fail=True))
+        failing.create_channel(
+            name="failing webhook",
+            type="webhook",
+            enabled=True,
+            severity_min="warning",
+            event_types=[],
+            config={"webhook_url": "https://hooks.example.test/fail"},
+        )
+
+        event = failing.emit_event(
+            event_type="admin_logs.storage",
+            severity="critical",
+            title="Storage critical",
+            message="Admin Logs storage is critical",
+            fingerprint="storage:critical",
+        )
+        channels = failing.list_channels()
+
+        self.assertEqual(event["delivery_status"], "failed")
+        self.assertIn("mock webhook failure", channels[0]["last_error"])
+
+    def test_notification_event_dedupe_window_returns_existing_event(self) -> None:
+        first = self.service.emit_event(
+            event_type="admin_logs.storage",
+            severity="warning",
+            title="Storage warning",
+            message="Admin Logs storage is above the soft limit",
+            fingerprint="storage:warning",
+            dedupe_window=timedelta(minutes=30),
+        )
+        second = self.service.emit_event(
+            event_type="admin_logs.storage",
+            severity="warning",
+            title="Storage warning again",
+            message="Repeated page refresh",
+            fingerprint="storage:warning",
+            dedupe_window=timedelta(minutes=30),
+        )
+
+        self.assertEqual(second["id"], first["id"])
+        self.assertTrue(second["deduped"])
+        self.assertEqual(self.service.list_events()["total"], 1)
+
+    def test_admin_logs_warning_creates_notification_without_duplicates(self) -> None:
+        self.db.create_execution_log_session(
+            session_id="recent-warning",
+            task_id="AnalysisWarning",
+            overall_status="completed",
+            truth_level="actual",
+            started_at=datetime.now(),
+        )
+        with (
+            patch("src.services.admin_logs_service.get_db", return_value=self.db),
+            patch(
+                "src.services.admin_logs_service.get_config",
+                return_value=SimpleNamespace(
+                    admin_logs_retention_days=90,
+                    admin_logs_min_retention_days=7,
+                    admin_logs_storage_soft_limit_mb=1,
+                    admin_logs_storage_hard_limit_mb=2,
+                    admin_logs_cleanup_batch_size=1000,
+                    admin_logs_auto_cleanup_enabled=False,
+                    admin_logs_warning_threshold_count=1,
+                    admin_logs_critical_threshold_count=100000,
+                    admin_logs_warning_threshold_storage_bytes=None,
+                ),
+            ),
+            patch("src.services.admin_logs_service.NotificationService", return_value=self.service),
+        ):
+            admin_logs.get_log_storage_summary(_=_admin_user())
+            admin_logs.get_log_storage_summary(_=_admin_user())
+
+        events = self.service.list_events()["items"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["event_type"], "admin_logs.storage")
+        self.assertEqual(events[0]["severity"], "warning")
+
+    def test_acknowledge_notification_records_admin_actor(self) -> None:
+        event = self.service.emit_event(
+            event_type="data_provider.degraded",
+            severity="warning",
+            title="Provider degraded",
+            message="Provider fallback was used",
+            fingerprint="provider:fallback",
+        )
+
+        acknowledged = self.service.acknowledge_event(event["id"], acknowledged_by="bootstrap-admin")
+
+        self.assertIsNotNone(acknowledged["acknowledged_at"])
+        self.assertEqual(acknowledged["acknowledged_by"], "bootstrap-admin")
+
+    def test_capacity_cleanup_event_is_created_when_cleanup_runs(self) -> None:
+        old_at = datetime.now() - timedelta(days=120)
+        self.db.create_execution_log_session(
+            session_id="old-error",
+            task_id="AnalysisFailed",
+            overall_status="failed",
+            truth_level="actual",
+            started_at=old_at,
+        )
+        self.db.append_execution_log_event(
+            session_id="old-error",
+            phase="analysis",
+            step="AnalysisFailed",
+            status="failed",
+            truth_level="actual",
+            message="old failure",
+            event_at=old_at,
+        )
+
+        with (
+            patch("src.services.admin_logs_service.get_db", return_value=self.db),
+            patch(
+                "src.services.admin_logs_service.get_config",
+                return_value=SimpleNamespace(
+                    admin_logs_retention_days=90,
+                    admin_logs_min_retention_days=7,
+                    admin_logs_storage_soft_limit_mb=1,
+                    admin_logs_storage_hard_limit_mb=2,
+                    admin_logs_cleanup_batch_size=1000,
+                    admin_logs_auto_cleanup_enabled=False,
+                    admin_logs_warning_threshold_count=50000,
+                    admin_logs_critical_threshold_count=100000,
+                    admin_logs_warning_threshold_storage_bytes=None,
+                ),
+            ),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_bytes", return_value=3 * 1024 * 1024),
+            patch("src.services.admin_logs_service.NotificationService", return_value=self.service),
+        ):
+            admin_logs.cleanup_admin_logs(admin_logs.AdminLogCleanupRequest(mode="capacity", dry_run=False), _=_admin_user())
+
+        events = self.service.list_events(event_type="admin_logs.cleanup")["items"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["severity"], "warning")
+        self.assertIn("capacity cleanup", events[0]["title"].lower())
+
+
+if __name__ == "__main__":
+    unittest.main()

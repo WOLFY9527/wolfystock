@@ -61,7 +61,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isChatRoute = surfacePathname.startsWith('/chat');
   const isMarketOverviewRoute = surfacePathname.startsWith('/market-overview');
   const isScannerRoute = surfacePathname.startsWith('/scanner');
-  const isSystemControlRoute = surfacePathname.startsWith('/settings/system');
+  const isSystemControlRoute = surfacePathname.startsWith('/settings/system') || surfacePathname.startsWith('/admin/notifications');
   const shellViewportClass = 'h-full min-h-0';
   const shellFrameOverflowClass = '';
   const isWideRoute = surfacePathname === '/'

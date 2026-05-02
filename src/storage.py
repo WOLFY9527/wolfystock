@@ -423,6 +423,53 @@ class ExecutionLogEvent(Base):
     )
 
 
+class NotificationChannel(Base):
+    """Admin-managed operational notification channel."""
+
+    __tablename__ = 'notification_channels'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(80), nullable=False)
+    type = Column(String(16), nullable=False, index=True)
+    enabled = Column(Boolean, nullable=False, default=True, index=True)
+    severity_min = Column(String(16), nullable=False, default='warning', index=True)
+    event_types_json = Column(Text)
+    config_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    last_tested_at = Column(DateTime)
+    last_sent_at = Column(DateTime)
+    last_error = Column(Text)
+
+    __table_args__ = (
+        Index('ix_notification_channel_enabled_type', 'enabled', 'type'),
+    )
+
+
+class NotificationEvent(Base):
+    """In-app admin notification event and outbound delivery audit state."""
+
+    __tablename__ = 'notification_events'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_type = Column(String(80), nullable=False, index=True)
+    severity = Column(String(16), nullable=False, index=True)
+    title = Column(String(160), nullable=False)
+    message = Column(Text)
+    payload_json = Column(Text)
+    fingerprint = Column(String(160), index=True)
+    dedupe_key = Column(String(255), index=True)
+    delivery_status = Column(String(24), nullable=False, default='pending', index=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    acknowledged_at = Column(DateTime)
+    acknowledged_by = Column(String(64))
+
+    __table_args__ = (
+        Index('ix_notification_event_type_severity_time', 'event_type', 'severity', 'created_at'),
+        Index('ix_notification_event_dedupe_time', 'dedupe_key', 'created_at'),
+    )
+
+
 class BacktestResult(Base):
     """单条分析记录的回测结果。"""
 

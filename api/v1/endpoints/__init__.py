@@ -11,6 +11,7 @@ API v1 Endpoints 模块初始化
 from api.v1.endpoints import (
     analysis,
     admin_logs,
+    admin_notifications,
     history,
     stocks,
     backtest,
@@ -24,6 +25,7 @@ from api.v1.endpoints import (
 __all__ = [
     "analysis",
     "admin_logs",
+    "admin_notifications",
     "history",
     "stocks",
     "backtest",

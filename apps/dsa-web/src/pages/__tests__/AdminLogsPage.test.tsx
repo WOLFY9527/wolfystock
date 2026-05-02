@@ -439,6 +439,7 @@ describe('AdminLogsPage', () => {
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('1.0 GB hard limit');
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('90');
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('min 7 days · 120 older');
+    expect(screen.getByRole('link', { name: '配置 Admin 通知通道' })).toHaveAttribute('href', '/admin/notifications');
     expect(screen.getByText('Warning')).toBeInTheDocument();
     expect(screen.getAllByText('Degraded').length).toBeGreaterThan(0);
     expect(screen.getByText('1 / 6')).toBeInTheDocument();
