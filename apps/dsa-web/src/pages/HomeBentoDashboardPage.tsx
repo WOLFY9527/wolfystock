@@ -24,7 +24,7 @@ import {
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
-import type { AnalysisReport, HistoryItem, StandardReportField } from '../types/analysis';
+import type { AnalysisReport, HistoryItem, StandardReportField, TaskProgressModule } from '../types/analysis';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
 import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
 import { createPublicAnalysisFallbackPreview } from '../utils/publicAnalysisFallback';
@@ -1606,7 +1606,22 @@ function SkeletonLine({ className = '' }: { className?: string }) {
   return <div className={`${SKELETON_LINE_CLASS} ${className}`} />;
 }
 
-function InPlaceDecisionSkeleton({ locale, ticker }: { locale: DashboardLocale; ticker: string }) {
+function InPlaceDecisionSkeleton({
+  locale,
+  ticker,
+  progressModules = [],
+  message,
+  progress,
+}: {
+  locale: DashboardLocale;
+  ticker: string;
+  progressModules?: TaskProgressModule[];
+  message?: string;
+  progress?: number;
+}) {
+  const visibleModules = progressModules.slice(0, 5);
+  const activeModule = visibleModules.find((module) => module.status === 'running') || visibleModules[0];
+  const progressValue = typeof progress === 'number' ? Math.max(0, Math.min(progress, 99)) : 12;
   return (
     <BentoCard
       eyebrow={locale === 'en' ? 'WOLFY AI DECISION' : 'WOLFY AI 决策'}
@@ -1629,15 +1644,46 @@ function InPlaceDecisionSkeleton({ locale, ticker }: { locale: DashboardLocale; 
             className="h-9 w-9 rounded-full object-contain bg-white/[0.03] p-1 shadow-[0_0_22px_rgba(99,102,241,0.22)] [animation:spin_2.8s_linear_infinite]"
           />
           <p className="text-center text-xs font-semibold uppercase tracking-[0.22em] text-indigo-100/70">
-            {locale === 'en' ? 'Wolfy AI reasoning...' : 'Wolfy AI 引擎推理中...'}
+            {activeModule?.detail || message || (locale === 'en' ? 'Wolfy AI reasoning...' : 'Wolfy AI 引擎推理中...')}
           </p>
+          <div className="h-1 w-full max-w-[220px] overflow-hidden rounded-full bg-white/[0.07]">
+            <div
+              className="h-full rounded-full bg-indigo-200/80 shadow-[0_0_18px_rgba(165,180,252,0.38)] transition-all duration-500"
+              style={{ width: `${progressValue}%` }}
+            />
+          </div>
         </div>
 
         <div className="grid gap-3 rounded-[28px] border border-white/[0.06] bg-black/10 p-4">
-          <SkeletonLine className="h-3 w-24" />
-          <SkeletonLine className="h-3 w-full" />
-          <SkeletonLine className="h-3 w-5/6" />
-          <SkeletonLine className="h-3 w-2/3" />
+          {visibleModules.length > 0 ? (
+            <div className="grid gap-2" data-testid="home-bento-progress-stages">
+              {visibleModules.map((module) => {
+                const tone = module.status === 'completed'
+                  ? 'border-emerald-300/20 text-emerald-100/75'
+                  : module.status === 'failed'
+                    ? 'border-rose-300/25 text-rose-100/80'
+                    : module.status === 'running'
+                      ? 'border-indigo-200/35 text-indigo-100'
+                      : 'border-white/[0.07] text-white/38';
+                return (
+                  <div
+                    key={module.key}
+                    className={`flex min-w-0 items-center justify-between gap-3 rounded-full border bg-white/[0.025] px-3 py-2 text-[11px] ${tone}`}
+                  >
+                    <span className="min-w-0 truncate font-semibold">{module.name}</span>
+                    <span className="shrink-0 font-mono uppercase tracking-[0.16em]">{module.status}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <>
+              <SkeletonLine className="h-3 w-24" />
+              <SkeletonLine className="h-3 w-full" />
+              <SkeletonLine className="h-3 w-5/6" />
+              <SkeletonLine className="h-3 w-2/3" />
+            </>
+          )}
         </div>
       </div>
     </BentoCard>
@@ -2220,6 +2266,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     <InPlaceDecisionSkeleton
                       locale={locale}
                       ticker={pendingAnalysisTicker || activeTicker || readyCopy.ticker}
+                      progressModules={focusedTask?.progressModules}
+                      message={focusedTask?.message}
+                      progress={focusedTask?.progress}
                     />
                   ) : (
                     <div

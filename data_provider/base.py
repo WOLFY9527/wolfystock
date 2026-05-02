@@ -2079,6 +2079,10 @@ class DataFetcherManager:
             self._stock_name_cache[stock_code] = static_name
             return static_name
 
+        if _market_tag(stock_code) == "us":
+            logger.debug("[股票名称] %s 判定为美股，跳过 A 股名称数据源", stock_code)
+            return ""
+
         # 3. 依次尝试各个数据源
         for fetcher in self._fetchers:
             if hasattr(fetcher, 'get_stock_name'):

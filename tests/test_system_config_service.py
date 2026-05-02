@@ -193,7 +193,10 @@ class SystemConfigServiceTestCase(unittest.TestCase):
 
         self.assertIsNotNone(payload)
         self.assertEqual(payload["updated_at"], "2026-04-29T09:00:00")
-        self.assertEqual([module["key"] for module in payload["modules"]], ["llm", "technical", "fundamental", "news", "sentiment"])
+        self.assertEqual(
+            [module["key"] for module in payload["modules"]],
+            ["market", "quote", "llm", "technical", "fundamental", "news", "sentiment"],
+        )
         self.assertFalse(any("model" in module or "source" in module or "error" in module for module in payload["modules"]))
 
     def test_update_preserves_masked_secret(self) -> None:

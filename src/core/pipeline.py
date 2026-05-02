@@ -41,6 +41,12 @@ from src.report_language import (
 )
 from src.search_service import SearchService
 from src.services.social_sentiment_service import SocialSentimentService
+from src.services.analysis_provider_planner import (
+    DataCategory,
+    ProviderCategoryResult,
+    build_analysis_provider_plan,
+    get_analysis_provider_executor,
+)
 from src.enums import ReportType
 from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from src.core.trading_calendar import get_market_for_stock, is_market_open
@@ -49,7 +55,6 @@ from bot.models import BotMessage
 from data_provider.alphavantage_provider import (
     get_rsi,
     get_sma,
-    get_shares_outstanding,
     get_company_overview,
     get_income_statement_quarterly,
 )
@@ -392,6 +397,13 @@ class StockAnalysisPipeline:
 
             self._emit_progress(
                 progress_callback,
+                "detecting_market",
+                12,
+                f"已识别 {code} 的市场与数据源路线...",
+            )
+
+            self._emit_progress(
+                progress_callback,
                 "fetching_market_data",
                 18,
                 "正在获取行情、技术与基础上下文...",
@@ -400,6 +412,12 @@ class StockAnalysisPipeline:
             # Step 1: 获取实时行情（量比、换手率等）- 使用统一入口，自动故障切换
             realtime_quote = None
             try:
+                self._emit_progress(
+                    progress_callback,
+                    "loading_quote",
+                    24,
+                    "正在加载首选行情源...",
+                )
                 realtime_quote = self.fetcher_manager.get_realtime_quote(code)
                 market_source_chain = (
                     self.fetcher_manager.get_last_realtime_quote_trace()
@@ -523,6 +541,12 @@ class StockAnalysisPipeline:
             news_items: List[Dict[str, Any]] = []
             social_context = None
             if self.search_service.is_available:
+                self._emit_progress(
+                    progress_callback,
+                    "loading_news",
+                    40,
+                    "正在加载新闻与情绪线索...",
+                )
                 logger.info(f"{stock_name}({code}) 开始多维度情报搜索...")
 
                 # 使用多维度搜索（最多5次搜索）
@@ -638,54 +662,82 @@ class StockAnalysisPipeline:
             alpha_errors: List[str] = []
             yfinance_errors: List[str] = []
             if is_us_stock:
-                try:
-                    yfinance_fundamentals = get_yfinance_fundamentals(code)
-                    yfinance_quarterly_income = get_yfinance_quarterly_financials(code)
-                    logger.info(
-                        f"{stock_name}({code}) YFinance 基本面: "
-                        f"fundamental_fields={len([v for v in yfinance_fundamentals.values() if v not in (None, '', 'N/A')])}, "
-                        f"income_quarters={len(yfinance_quarterly_income)}"
-                    )
-                except Exception as e:
-                    yfinance_errors.append(str(e))
-                    diagnostics["failure_reasons"].append(f"yfinance_fundamentals_error: {e}")
-                try:
-                    finnhub_quote = get_finnhub_quote(code)
-                    finnhub_fundamentals = get_finnhub_metrics(code)
-                except Exception as e:
-                    diagnostics["failure_reasons"].append(f"finnhub_error: {e}")
-                    logger.warning(f"{stock_name}({code}) 获取 Finnhub 补数失败: {e}")
-                try:
-                    fmp_quote = get_fmp_quote(code)
-                    fmp_fundamentals = get_fmp_fundamentals(code)
-                    fmp_quarterly_income = get_fmp_quarterly_financials(code)
-                except Exception as e:
-                    diagnostics["failure_reasons"].append(f"fmp_error: {e}")
-                    logger.warning(f"{stock_name}({code}) 获取 FMP 补数失败: {e}")
-                try:
-                    external_price_history = get_fmp_historical_prices(code, days=180)
-                    api_indicators = get_fmp_technical_indicators(code)
-                except Exception as e:
-                    diagnostics["failure_reasons"].append(f"fmp_technical_error: {e}")
-                    logger.warning(f"{stock_name}({code}) 获取 FMP 技术指标失败: {e}")
-            try:
-                rsi = get_rsi(code)
-                sma20 = get_sma(code, 20)
-                sma60 = get_sma(code, 60)
-                if is_us_stock:
-                    alpha_overview = get_company_overview(code)
-                    alpha_quarterly_income = get_income_statement_quarterly(code)
-                    shares_outstanding = get_shares_outstanding(code)
-                diagnostics["alpha_vantage_status"] = "ok"
-                logger.info(
-                    f"{stock_name}({code}) AlphaVantage 指标: RSI14={rsi}, SMA20={sma20}, SMA60={sma60}, "
-                    f"SharesOutstanding={shares_outstanding}, income_quarters={len(alpha_quarterly_income)}"
+                self._emit_progress(
+                    progress_callback,
+                    "loading_fundamentals",
+                    34,
+                    "正在并行加载行情、基本面、技术与财报数据...",
                 )
-            except Exception as e:
-                logger.warning(f"{stock_name}({code}) 获取 AlphaVantage 指标失败: {e}")
-                alpha_errors.append(str(e))
-                diagnostics["alpha_vantage_status"] = "unavailable"
-                diagnostics["failure_reasons"].append(f"alpha_vantage_error: {e}")
+                supplemental = self._fetch_us_supplemental_categories(
+                    code=code,
+                    market="us",
+                    include_quote=not (
+                        realtime_quote and getattr(realtime_quote, "has_basic_data", lambda: False)()
+                    ),
+                )
+                diagnostics["provider_plan"] = supplemental.get("plan", {})
+                diagnostics["provider_results"] = supplemental.get("metadata", {})
+                for reason in supplemental.get("failure_reasons", []):
+                    diagnostics["failure_reasons"].append(reason)
+                if supplemental.get("partial"):
+                    logger.warning(
+                        "AnalysisCompletedWithPartialData symbol=%s market=us categories=%s",
+                        code,
+                        ",".join(supplemental.get("partial_categories", [])),
+                    )
+
+                quote_result = supplemental.get("quote")
+                if isinstance(quote_result, dict):
+                    source = str((quote_result.get("_provider_meta") or {}).get("source_provider") or quote_result.get("source") or "")
+                    if source == "finnhub":
+                        finnhub_quote = quote_result
+                    elif source == "fmp":
+                        fmp_quote = quote_result
+
+                fundamentals_result = supplemental.get("fundamentals")
+                if isinstance(fundamentals_result, dict):
+                    source = str((fundamentals_result.get("_provider_meta") or {}).get("source_provider") or "")
+                    if source == "fmp":
+                        fmp_fundamentals = fundamentals_result
+                    elif source == "finnhub":
+                        finnhub_fundamentals = fundamentals_result
+                    elif source == "yfinance":
+                        yfinance_fundamentals = fundamentals_result
+                    elif source == "alpha_vantage":
+                        alpha_overview = fundamentals_result
+
+                earnings_result = supplemental.get("earnings")
+                if isinstance(earnings_result, list):
+                    source = str(supplemental.get("metadata", {}).get("earnings", {}).get("source_provider") or "")
+                    if source == "fmp":
+                        fmp_quarterly_income = earnings_result
+                    elif source == "yfinance":
+                        yfinance_quarterly_income = earnings_result
+                    elif source == "alpha_vantage":
+                        alpha_quarterly_income = earnings_result
+
+                history_result = supplemental.get("historical_prices")
+                if isinstance(history_result, list):
+                    external_price_history = history_result
+
+                technical_result = supplemental.get("technical_indicators")
+                if isinstance(technical_result, dict):
+                    if technical_result.get("rsi14") and isinstance(technical_result.get("rsi14"), dict):
+                        api_indicators = technical_result
+                    else:
+                        rsi = technical_result.get("rsi14")
+                        sma20 = technical_result.get("sma20")
+                        sma60 = technical_result.get("sma60")
+                        api_indicators = self._merge_api_indicator_overrides(
+                            api_indicators={},
+                            external_price_history=external_price_history,
+                            alpha_indicators={"rsi14": rsi, "sma20": sma20, "sma60": sma60},
+                        )
+                diagnostics["alpha_vantage_status"] = (
+                    "ok" if supplemental.get("metadata", {}).get("technical_indicators", {}).get("source_provider") == "alpha_vantage"
+                    or supplemental.get("metadata", {}).get("fundamentals", {}).get("source_provider") == "alpha_vantage"
+                    else "not_used"
+                )
 
             if is_us_stock:
                 realtime_quote = self._merge_us_quote_fallbacks(
@@ -702,6 +754,7 @@ class StockAnalysisPipeline:
                     shares_outstanding
                     or yfinance_fundamentals.get("sharesOutstanding")
                     or fmp_fundamentals.get("sharesOutstanding")
+                    or (alpha_overview.get("SharesOutstanding") if isinstance(alpha_overview, dict) else None)
                 )
                 api_indicators = self._merge_api_indicator_overrides(
                     api_indicators=api_indicators,
@@ -828,6 +881,90 @@ class StockAnalysisPipeline:
             logger.error(f"{stock_name}({code}) 分析失败: {e}")
             logger.exception(f"{stock_name}({code}) 详细错误信息:")
             return None
+
+    @staticmethod
+    def _attach_provider_meta(data: Any, result: ProviderCategoryResult) -> Any:
+        metadata = result.metadata()
+        if isinstance(data, dict):
+            payload = dict(data)
+            payload["_provider_meta"] = metadata
+            return payload
+        return data
+
+    def _fetch_us_supplemental_categories(
+        self,
+        *,
+        code: str,
+        market: str,
+        include_quote: bool,
+    ) -> Dict[str, Any]:
+        categories = [
+            DataCategory.FUNDAMENTALS,
+            DataCategory.EARNINGS,
+            DataCategory.HISTORICAL_PRICES,
+            DataCategory.TECHNICAL_INDICATORS,
+        ]
+        if include_quote:
+            categories.append(DataCategory.QUOTE)
+        plan = build_analysis_provider_plan(code, market=market, categories=categories)
+        providers_by_category = {
+            DataCategory.QUOTE: {
+                "finnhub": lambda: get_finnhub_quote(code),
+                "fmp": lambda: get_fmp_quote(code),
+            },
+            DataCategory.FUNDAMENTALS: {
+                "fmp": lambda: get_fmp_fundamentals(code),
+                "finnhub": lambda: get_finnhub_metrics(code),
+                "yfinance": lambda: get_yfinance_fundamentals(code),
+                "alpha_vantage": lambda: get_company_overview(code),
+            },
+            DataCategory.EARNINGS: {
+                "fmp": lambda: get_fmp_quarterly_financials(code),
+                "yfinance": lambda: get_yfinance_quarterly_financials(code),
+                "alpha_vantage": lambda: get_income_statement_quarterly(code),
+            },
+            DataCategory.HISTORICAL_PRICES: {
+                "fmp": lambda: get_fmp_historical_prices(code, days=180),
+            },
+            DataCategory.TECHNICAL_INDICATORS: {
+                "fmp": lambda: get_fmp_technical_indicators(code),
+                "alpha_vantage": lambda: {
+                    "rsi14": get_rsi(code),
+                    "sma20": get_sma(code, 20),
+                    "sma60": get_sma(code, 60),
+                },
+            },
+        }
+        raw_results = get_analysis_provider_executor().execute_plan(
+            plan,
+            symbol=code,
+            providers_by_category=providers_by_category,
+            max_workers=min(4, max(1, len(categories))),
+        )
+        payload: Dict[str, Any] = {
+            "plan": {
+                category.value: {
+                    "primary": category_plan.primary,
+                    "fallback": category_plan.fallback,
+                    "timeout_seconds": category_plan.timeout_seconds,
+                }
+                for category, category_plan in plan.categories.items()
+            },
+            "metadata": {},
+            "failure_reasons": [],
+            "partial_categories": [],
+            "partial": False,
+        }
+        for category, result in raw_results.items():
+            category_key = category.value
+            payload["metadata"][category_key] = result.metadata()
+            if result.source_provider:
+                payload[category_key] = self._attach_provider_meta(result.data, result)
+                continue
+            payload["partial"] = True
+            payload["partial_categories"].append(category_key)
+            payload["failure_reasons"].append(f"{category_key}_unavailable")
+        return payload
 
     @staticmethod
     def _inject_structured_blocks_into_result(result: AnalysisResult, enhanced_context: Dict[str, Any]) -> None:

@@ -1714,6 +1714,19 @@ describe('HomeSurfacePage', () => {
     });
     const deferred = createDeferred<{ taskId: string; status: 'pending'; message: string }>();
     vi.mocked(analysisApi.analyzeAsync).mockImplementationOnce(() => deferred.promise);
+    vi.mocked(analysisApi.getTaskProgress).mockResolvedValue({
+      taskId: 'task-orcl',
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      status: 'processing',
+      progress: 34,
+      message: '正在并行加载行情、基本面、技术与财报数据...',
+      modules: [
+        { key: 'market', name: '市场识别', status: 'completed', detail: 'Detecting market' },
+        { key: 'quote', name: '行情', status: 'running', detail: 'Loading quote' },
+        { key: 'fundamental', name: '基本面', status: 'running', detail: 'Loading fundamentals' },
+      ],
+    });
 
     renderSurface();
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'ORCL' } });
@@ -1734,6 +1747,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('WolfyStock 已接受该股票代码，首份完整报告生成期间会继续保留当前卡片骨架。')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-inplace-loading-decision')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-inplace-loading-strategy')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('home-bento-progress-stages')).toHaveTextContent('行情'));
+    expect(screen.getByTestId('home-bento-progress-stages')).toHaveTextContent('基本面');
     expect(screen.queryByTestId('home-bento-progress-summary')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-zero-state')).not.toBeInTheDocument();
     expect(screen.queryByText('Oracle Corporation')).not.toBeInTheDocument();

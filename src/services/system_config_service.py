@@ -141,7 +141,33 @@ class SystemConfigService:
             llm_status = "running"
             technical_status = "running" if int(getattr(task, "progress", 0) or 0) >= 46 else "pending"
 
+        market = _field("market")
+        market_status = cls._progress_module_status(
+            market.get("status") or ("completed" if task_status == "completed" else None)
+        )
+        quote_status = "pending"
+        if task_status == "failed":
+            quote_status = "failed"
+        elif task_status == "completed":
+            quote_status = "completed"
+        elif task_status == "processing" and int(getattr(task, "progress", 0) or 0) >= 24:
+            quote_status = "running"
+
         return [
+            {
+                "key": "market",
+                "name": "市场识别",
+                "status": market_status,
+                "detail": task_message,
+                "updated_at": updated_at,
+            },
+            {
+                "key": "quote",
+                "name": "行情",
+                "status": quote_status,
+                "detail": task_message,
+                "updated_at": updated_at,
+            },
             {
                 "key": "llm",
                 "name": "LLM",

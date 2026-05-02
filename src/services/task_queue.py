@@ -946,7 +946,12 @@ class AnalysisTaskQueue:
             "notification": "unknown",
         }
 
-        if stage_key in {"initializing", "fetching_market_data"}:
+        if stage_key in {"initializing", "fetching_market_data", "detecting_market", "loading_quote"}:
+            stage_statuses.update({
+                "data_fetch": "partial",
+                "ai_analysis": "waiting",
+            })
+        elif stage_key in {"loading_fundamentals", "loading_technicals", "loading_news"}:
             stage_statuses.update({
                 "data_fetch": "partial",
                 "ai_analysis": "waiting",
@@ -984,7 +989,15 @@ class AnalysisTaskQueue:
         stage_statuses["notification"] = notification_status
 
         step_details = {
-            "data_fetch": detail if stage_key in {"initializing", "fetching_market_data"} else existing_step_map.get("data_fetch", {}).get("detail"),
+            "data_fetch": detail if stage_key in {
+                "initializing",
+                "fetching_market_data",
+                "detecting_market",
+                "loading_quote",
+                "loading_fundamentals",
+                "loading_technicals",
+                "loading_news",
+            } else existing_step_map.get("data_fetch", {}).get("detail"),
             "ai_analysis": detail if stage_key in {"analyzing_signals", "assembling_report"} else existing_step_map.get("ai_analysis", {}).get("detail"),
             "notification": detail if stage_key == "finalizing" else existing_step_map.get("notification", {}).get("detail"),
         }

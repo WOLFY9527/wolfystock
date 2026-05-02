@@ -1,5 +1,7 @@
 ## 2026-05-02
 
+- ⚡ **单股分析新增配额感知数据源规划** — 分析流程为行情、基本面、财报、历史价格、技术指标、新闻与情绪建立按类别的首选 provider + lazy fallback 计划，独立类别可并发加载，同一类别不再默认并发打多个重叠 API；新增 in-process TTL cache、singleflight 请求合并、超时 fallback 与 provider/category 级临时熔断，减少 ORCL 等美股分析的重复外部调用。明显美股代码的名称解析不再回落到 Tushare / pytdx / Baostock 等 A 股名称源；Home 加载态同步展示市场识别、行情、基本面、技术、新闻与 AI 分析等紧凑阶段进度。
+
 - 🧭 **Scanner 输入校验与 Market Overview 隐蔽滑动** — `/scanner` 自定义标的与 AI 自定义主题生成在请求前增加字段级校验反馈，覆盖主题名称、criteria prompt、候选池与明细数量、主题选择和手动补充代码数量，避免无效参数直接落到后端错误。`/market-overview` 主市场卡片轨道在桌面以下改为可横向滑动，桌面继续保持主轨 grid；全局与 WolfyStock SpaceX 主题滚动条默认隐蔽，并在滚动容器 hover/focus 时显示深空风格细滚动条。
 
 ## 2026-05-01
