@@ -60,23 +60,23 @@ const CATEGORY_LAYOUT: Record<MarketOverviewTab, {
   fallback: CardKey[];
 }> = {
   all: {
-    primary: ['volatility', 'fundsFlow', 'indices', 'cnIndices', 'crypto', 'rates', 'macro'],
-    secondary: ['sentiment'],
+    primary: ['volatility', 'fundsFlow', 'indices'],
+    secondary: ['cnIndices', 'crypto', 'rates', 'macro', 'sentiment'],
     fallback: ['cnBreadth', 'cnFlows', 'sectorRotation', 'cnShortSentiment', 'fxCommodities', 'futures'],
   },
   us: {
-    primary: ['volatility', 'fundsFlow', 'indices', 'rates', 'macro'],
-    secondary: ['sentiment'],
+    primary: ['volatility', 'fundsFlow', 'indices'],
+    secondary: ['rates', 'macro', 'sentiment'],
     fallback: ['fxCommodities', 'futures'],
   },
   cn: {
-    primary: ['cnIndices', 'cnBreadth', 'cnFlows', 'sectorRotation', 'cnShortSentiment'],
-    secondary: [],
+    primary: ['cnIndices', 'cnBreadth', 'cnFlows'],
+    secondary: ['sectorRotation', 'cnShortSentiment', 'fxCommodities', 'sentiment'],
     fallback: [],
   },
   global: {
-    primary: ['volatility', 'macro', 'indices', 'rates', 'fxCommodities'],
-    secondary: ['sentiment'],
+    primary: ['rates', 'fxCommodities', 'macro', 'indices'],
+    secondary: ['sentiment', 'volatility'],
     fallback: ['futures'],
   },
   crypto: {
@@ -727,24 +727,6 @@ const MarketOverviewStatusStrip: React.FC<{
   </section>
 );
 
-const SideRailDisclosure: React.FC<{
-  expanded: boolean;
-  onToggle: () => void;
-}> = ({ expanded, onToggle }) => (
-  <button
-    type="button"
-    data-testid="market-overview-signal-disclosure"
-    className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 text-left text-xs font-semibold text-white/62 transition hover:border-white/10 hover:bg-white/[0.04] hover:text-white/82"
-    aria-expanded={expanded}
-    onClick={onToggle}
-  >
-    <span>详细信号与简报</span>
-    <span className="rounded-full border border-white/[0.07] bg-white/[0.025] px-2 py-0.5 text-[10px] text-white/45">
-      {expanded ? '收起' : '展开'}
-    </span>
-  </button>
-);
-
 const PendingDataSourceSection: React.FC<{
   expanded: boolean;
   fallbackCount: number;
@@ -770,28 +752,6 @@ const PendingDataSourceSection: React.FC<{
       </span>
     </button>
     {expanded ? <div className="mt-4">{children}</div> : null}
-  </section>
-);
-
-const CategoryEmptyState: React.FC<{
-  onShowPending: () => void;
-}> = ({ onShowPending }) => (
-  <section
-    data-testid="market-overview-category-empty-state"
-    className="rounded-xl border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-md transition-all hover:border-white/10"
-  >
-    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-      <p className="text-sm leading-6 text-white/62">
-        当前分类暂无可用真实数据，备用模块已移入待接入真实数据源。
-      </p>
-      <button
-        type="button"
-        className="w-fit rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.06] hover:text-white"
-        onClick={onShowPending}
-      >
-        查看待接入模块
-      </button>
-    </div>
   </section>
 );
 
@@ -1243,7 +1203,6 @@ const MarketOverviewPage: React.FC = () => {
   const [fallbackSectionExpanded, setFallbackSectionExpanded] = useState(false);
   const [cryptoRealtimeStatus, setCryptoRealtimeStatus] = useState<CryptoRealtimeStatus>('snapshot');
   const [exportSummaryFeedback, setExportSummaryFeedback] = useState<string | null>(null);
-  const [signalDetailsExpanded, setSignalDetailsExpanded] = useState(false);
 
   const loadPanels = useCallback(async (cancelledRef?: { current: boolean }) => {
     setLoading(true);
@@ -1603,15 +1562,12 @@ const MarketOverviewPage: React.FC = () => {
     briefing: panels.briefing,
   }), [activeCategoryLabel, coverageSummary, dataQuality, heroAnchors, language, panels.briefing, panels.temperature]);
   const activeLayout = CATEGORY_LAYOUT[activeCategory];
-  const primaryCandidates = activeLayout.primary.filter((cardKey) => getCardCoverageKind(panels, cardKey) !== 'fallback');
-  const secondaryOrder = activeLayout.secondary.filter((cardKey) => getCardCoverageKind(panels, cardKey) !== 'fallback');
-  const primaryOrder = [...primaryCandidates, ...secondaryOrder];
-  const fallbackOnlyOrder = CATEGORY_CARDS[activeCategory].filter((cardKey) => (
-    getCardCoverageKind(panels, cardKey) === 'fallback' || activeLayout.fallback.includes(cardKey)
-  ));
-  const showCategoryEmptyState = activeCategory !== 'all' && primaryOrder.length === 0 && fallbackOnlyOrder.length > 0;
+  const primaryOrder = activeLayout.primary;
+  const deepPanelOrder = activeLayout.secondary;
+  const extensionOrder = activeLayout.fallback;
+  const fallbackOnlyOrder = CATEGORY_CARDS[activeCategory].filter((cardKey) => getCardCoverageKind(panels, cardKey) === 'fallback');
 
-  const renderCard = (cardKey: CardKey, rank: number, rail: 'primary' | 'side' | 'fallback' = 'primary') => {
+  const renderCard = (cardKey: CardKey, rank: number, rail: 'primary' | 'deep' | 'fallback' = 'primary') => {
     const layoutMeta = CARD_LAYOUT_META[cardKey];
     const shouldSpanPrimaryRail = rail === 'primary' && (
       layoutMeta.size === 'dense-wide'
@@ -1626,7 +1582,7 @@ const MarketOverviewPage: React.FC = () => {
       data-market-card-size={layoutMeta.size}
       data-market-card-density={DENSE_QUOTE_CARDS.has(cardKey) ? 'dense-quote' : 'standard'}
       className={cn(
-        rail === 'primary' ? 'w-[min(86vw,28rem)] shrink-0 min-w-0 xl:w-full xl:shrink' : 'min-w-0 w-full',
+        'min-w-0 w-full',
         shouldSpanPrimaryRail ? 'lg:col-span-2 2xl:col-span-3' : '',
       )}
     >
@@ -1635,10 +1591,12 @@ const MarketOverviewPage: React.FC = () => {
     );
   };
 
-  const renderCardGrid = (rankOrder: CardKey[], rail: 'primary' | 'side' | 'fallback') => (
+  const renderCardGrid = (rankOrder: CardKey[], rail: 'primary' | 'deep' | 'fallback') => (
     <div className={cn(
       'grid w-full grid-cols-1 gap-4',
       rail === 'primary' ? 'lg:grid-cols-2 2xl:grid-cols-3' : '',
+      rail === 'deep' && rankOrder.length % 3 === 0 ? 'lg:grid-cols-3' : '',
+      rail === 'deep' && rankOrder.length % 3 !== 0 ? 'lg:grid-cols-2' : '',
       rail === 'fallback' ? 'grid-cols-1' : '',
     )}>
       {rankOrder.map((cardKey, index) => renderCard(cardKey, index, rail))}
@@ -1646,13 +1604,13 @@ const MarketOverviewPage: React.FC = () => {
   );
 
   const renderFallbackSection = () => (
-    fallbackOnlyOrder.length > 0 ? (
+    fallbackOnlyOrder.length > 0 && extensionOrder.length > 0 ? (
       <PendingDataSourceSection
         expanded={fallbackSectionExpanded}
         fallbackCount={fallbackOnlyOrder.length}
         onToggle={() => setFallbackSectionExpanded((current) => !current)}
       >
-        {renderCardGrid(fallbackOnlyOrder, 'fallback')}
+        {renderCardGrid(extensionOrder, 'fallback')}
       </PendingDataSourceSection>
     ) : null
   );
@@ -1663,46 +1621,42 @@ const MarketOverviewPage: React.FC = () => {
   }, [exportSummaryText, language]);
 
   const renderDeterministicGrid = () => (
-    <main data-testid="market-overview-main-grid" className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
+    <main data-testid="market-overview-main-grid" data-workbench-split="9:3" className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
       <section
         data-testid="market-overview-primary-rail"
-        className="stealth-scrollbar no-scrollbar flex min-w-0 gap-4 overflow-x-auto overscroll-x-contain pb-1 [-webkit-overflow-scrolling:touch] xl:col-span-9 xl:grid xl:grid-cols-2 xl:overflow-visible xl:pb-0 2xl:grid-cols-3"
+        className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 xl:col-span-9 2xl:grid-cols-3"
       >
-        {showCategoryEmptyState ? (
-          <div className="w-[min(86vw,28rem)] shrink-0 xl:w-full xl:shrink xl:col-span-2 2xl:col-span-3">
-            <CategoryEmptyState onShowPending={() => setFallbackSectionExpanded(true)} />
-          </div>
-        ) : null}
         {primaryOrder.map((cardKey, index) => renderCard(cardKey, index, 'primary'))}
       </section>
       <aside data-testid="market-overview-side-rail" className="flex min-w-0 flex-col gap-3 xl:col-span-3">
         <CategoryCoverageSummary label={activeCategoryLabel} summary={coverageSummary} />
-        <SideRailDisclosure
-          expanded={signalDetailsExpanded}
-          onToggle={() => setSignalDetailsExpanded((current) => !current)}
+        <MarketTemperatureStrip
+          data={panels.temperature}
+          refreshing={refreshingPanel === 'temperature'}
+          onRefresh={() => {
+            void refreshPanel('temperature', marketApi.getTemperature);
+          }}
         />
-        {signalDetailsExpanded ? (
-          <>
-            <MarketTemperatureStrip
-              data={panels.temperature}
-              refreshing={refreshingPanel === 'temperature'}
-              onRefresh={() => {
-                void refreshPanel('temperature', marketApi.getTemperature);
-              }}
-            />
-            <DataQualityOverview summary={dataQuality} />
-            <MarketBriefingCard
-              data={panels.briefing}
-              refreshing={refreshingPanel === 'briefing'}
-              compact
-              onRefresh={() => {
-                void refreshPanel('briefing', marketApi.getMarketBriefing);
-              }}
-            />
-          </>
-        ) : null}
+        <DataQualityOverview summary={dataQuality} />
+        <MarketBriefingCard
+          data={panels.briefing}
+          refreshing={refreshingPanel === 'briefing'}
+          compact
+          onRefresh={() => {
+            void refreshPanel('briefing', marketApi.getMarketBriefing);
+          }}
+        />
         {renderFallbackSection()}
       </aside>
+      {deepPanelOrder.length > 0 ? (
+        <section
+          data-testid="market-overview-deep-panels"
+          data-panel-grouping="balanced"
+          className="min-w-0 xl:col-span-12"
+        >
+          {renderCardGrid(deepPanelOrder, 'deep')}
+        </section>
+      ) : null}
     </main>
   );
 
@@ -1713,7 +1667,8 @@ const MarketOverviewPage: React.FC = () => {
       className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 bg-[#030303] text-white"
     >
       <div data-testid="market-overview-workbench" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6">
-        <div data-testid="market-overview-top-stack" className="flex w-full min-w-0 flex-col gap-4">
+        <section data-testid="market-overview-pulse-header" className="flex w-full min-w-0 flex-col gap-4">
+          <div data-testid="market-overview-top-stack" className="flex w-full min-w-0 flex-col gap-4">
           <div
             data-testid="market-overview-category-tabs"
             data-selector-position="static-safe"
@@ -1760,7 +1715,8 @@ const MarketOverviewPage: React.FC = () => {
             dataQuality={<DataQualityCompactSummary summary={dataQuality} />}
             briefing={<MarketBriefingCompactSummary data={panels.briefing} />}
           />
-        </div>
+          </div>
+        </section>
         {renderDeterministicGrid()}
       </div>
     </div>
