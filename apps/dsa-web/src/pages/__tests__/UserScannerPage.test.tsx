@@ -188,6 +188,25 @@ function makeRunDetail(overrides: Partial<ScannerRunDetail> = {}): ScannerRunDet
         provider: 'gemini',
       },
     },
+    theme: {
+      id: null,
+      name: null,
+      universeCount: 300,
+      symbols: [],
+    },
+    summary: {
+      universeCount: 300,
+      submittedCount: 300,
+      evaluatedCount: 40,
+      selectedCount: 3,
+      rejectedCount: 37,
+      dataFailedCount: 2,
+      skippedCount: 0,
+      errorCount: 0,
+      limitedByResultCap: false,
+    },
+    selected: [],
+    candidates: [],
     notification: {
       attempted: false,
       status: 'not_attempted',
@@ -296,6 +315,118 @@ function makeRunDetail(overrides: Partial<ScannerRunDetail> = {}): ScannerRunDet
     ],
     ...overrides,
   };
+}
+
+function makeCryptoDiagnosticsRun(overrides: Partial<ScannerRunDetail> = {}): ScannerRunDetail {
+  return makeRunDetail({
+    market: 'us',
+    profile: 'us_preopen_v1',
+    profileLabel: 'US Pre-open Scanner v1',
+    universeType: 'theme',
+    themeId: 'crypto_miners',
+    themeLabel: '加密矿企',
+    requestedSymbolsCount: 11,
+    acceptedSymbolsCount: 11,
+    rejectedSymbols: [],
+    universeNotes: ['Theme universe: 加密矿企 · 11 symbols.'],
+    theme: {
+      id: 'crypto_miners',
+      name: '加密矿企',
+      universeCount: 11,
+      symbols: ['MARA', 'RIOT', 'CLSK', 'IREN', 'HUT', 'BITF', 'WULF', 'CIFR', 'BTDR', 'CORZ', 'HIVE'],
+    },
+    summary: {
+      universeCount: 11,
+      submittedCount: 11,
+      evaluatedCount: 9,
+      selectedCount: 1,
+      rejectedCount: 8,
+      dataFailedCount: 2,
+      skippedCount: 0,
+      errorCount: 0,
+      limitedByResultCap: false,
+    },
+    shortlist: [
+      makeCandidate({ symbol: 'WULF', name: 'TeraWulf', companyName: 'TeraWulf', rank: 1, score: 60 }),
+    ],
+    selected: [
+      makeCandidate({ symbol: 'WULF', name: 'TeraWulf', companyName: 'TeraWulf', rank: 1, score: 60 }),
+    ],
+    candidates: [
+      {
+        symbol: 'WULF',
+        name: 'TeraWulf',
+        rank: 1,
+        status: 'selected',
+        score: 60,
+        provider: 'alpaca',
+        reason: 'passed',
+        failedRules: [],
+        missingFields: [],
+        metrics: { return20d: 44.1, trend: 20 },
+      },
+      {
+        symbol: 'MARA',
+        name: 'MARA Holdings',
+        rank: 2,
+        status: 'rejected',
+        score: 42,
+        provider: 'alpaca',
+        reason: 'missing momentum threshold',
+        failedRules: ['below_momentum_threshold'],
+        missingFields: [],
+        metrics: { return20d: 3.1, trend: 8 },
+      },
+      {
+        symbol: 'RIOT',
+        name: 'Riot Platforms',
+        rank: 3,
+        status: 'rejected',
+        score: 39,
+        provider: 'alpaca',
+        reason: null,
+        failedRules: ['below_relative_strength'],
+        missingFields: [],
+        metrics: { return20d: -2.4, trend: 4 },
+      },
+      {
+        symbol: 'CIFR',
+        name: 'Cipher Mining',
+        rank: 10,
+        status: 'data_failed',
+        score: null,
+        provider: null,
+        reason: 'missing price history',
+        failedRules: ['not_enough_history'],
+        missingFields: ['history'],
+        metrics: {},
+      },
+      {
+        symbol: 'HIVE',
+        name: 'HIVE Digital',
+        rank: 11,
+        status: 'error',
+        score: null,
+        provider: 'alpaca',
+        reason: null,
+        failedRules: [],
+        missingFields: ['quote'],
+        metrics: {},
+      },
+    ],
+    diagnostics: {
+      universeSelection: {
+        universeType: 'theme',
+        themeId: 'crypto_miners',
+        themeLabel: '加密矿企',
+        requestedSymbolsCount: 11,
+        acceptedSymbolsCount: 11,
+        rejectedSymbols: [],
+        universeNotes: ['Theme universe: 加密矿企 · 11 symbols.'],
+      },
+    },
+    ...overrides,
+  });
 }
 
 function makeHistoryItem(overrides: Partial<ScannerRunHistoryItem> = {}): ScannerRunHistoryItem {
@@ -895,29 +1026,7 @@ describe('UserScannerPage', () => {
   });
 
   it('runs with a selected theme universe and keeps results in the compact header', async () => {
-    const themedRun = makeRunDetail({
-      market: 'us',
-      profile: 'us_preopen_v1',
-      profileLabel: 'US Pre-open Scanner v1',
-      universeType: 'theme',
-      themeId: 'crypto_miners',
-      themeLabel: '加密矿企',
-      requestedSymbolsCount: 3,
-      acceptedSymbolsCount: 3,
-      rejectedSymbols: [],
-      universeNotes: ['Theme universe: 加密矿企 · 3 symbols.'],
-      diagnostics: {
-        universeSelection: {
-          universeType: 'theme',
-          themeId: 'crypto_miners',
-          themeLabel: '加密矿企',
-          requestedSymbolsCount: 3,
-          acceptedSymbolsCount: 3,
-          rejectedSymbols: [],
-          universeNotes: ['Theme universe: 加密矿企 · 3 symbols.'],
-        },
-      },
-    });
+    const themedRun = makeCryptoDiagnosticsRun();
     runScan.mockResolvedValueOnce(themedRun);
     getRun.mockResolvedValue(themedRun);
     renderUserScannerPage();
@@ -937,7 +1046,69 @@ describe('UserScannerPage', () => {
       }));
     });
     expect((await screen.findAllByText(/加密矿企/)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/入选 3|3 selected/)).toBeInTheDocument();
+    expect(screen.getByText(/入选 1|1 selected/)).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/UNIVERSE/);
+    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/11/);
+    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/EVALUATED/);
+    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/9/);
+    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/DATA FAILED/);
+    expect(screen.getByTestId('scanner-result-card-WULF')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /候选池|Candidate pool/i }));
+    expect(await screen.findByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/missing momentum threshold/);
+    expect(screen.getByTestId('scanner-candidate-row-CIFR')).toHaveTextContent(/missing price history/);
+  });
+
+  it('filters scanner diagnostics by rejected and data-failed candidates', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    expect(await screen.findByTestId('scanner-result-card-WULF')).toBeInTheDocument();
+    expect(screen.queryByTestId('scanner-candidate-row-MARA')).not.toBeInTheDocument();
+    expect(screen.getByText(/其余 10 个候选未入选|10 other candidates were not selected/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /淘汰|Rejected/i }));
+    expect(await screen.findByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/missing momentum threshold/);
+    expect(screen.getByTestId('scanner-candidate-row-RIOT')).toHaveTextContent(/below relative strength/);
+    expect(screen.queryByTestId('scanner-candidate-row-CIFR')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /数据失败|Data failed/i }));
+    expect(await screen.findByTestId('scanner-candidate-row-CIFR')).toHaveTextContent(/missing price history/);
+    expect(screen.getByTestId('scanner-candidate-row-HIVE')).toHaveTextContent(/quote/);
+    expect(screen.queryByTestId('scanner-candidate-row-MARA')).not.toBeInTheDocument();
+  });
+
+  it('expands candidate diagnostics details with failed rules, missing fields, provider, and metrics', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /候选池|Candidate pool/i }));
+    const cifrRow = await screen.findByTestId('scanner-candidate-row-CIFR');
+    fireEvent.click(within(cifrRow).getByText('CIFR'));
+
+    const detail = await screen.findByTestId('scanner-candidate-detail-CIFR');
+    expect(within(detail).getByText('not_enough_history')).toBeInTheDocument();
+    expect(within(detail).getByText('history')).toBeInTheDocument();
+    expect(within(detail).getByText(/来源|Provider/)).toBeInTheDocument();
+  });
+
+  it('keeps old scanner responses on the selected-card workflow without diagnostics tabs', async () => {
+    const legacyRun = {
+      ...makeRunDetail(),
+      theme: undefined,
+      summary: undefined,
+      selected: undefined,
+      candidates: undefined,
+    } as ScannerRunDetail;
+    getRun.mockResolvedValue(legacyRun);
+    renderUserScannerPage();
+
+    expect(await screen.findByTestId('scanner-result-card-NVDA')).toBeInTheDocument();
+    expect(screen.queryByTestId('scanner-candidate-filters')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /表格视图|Table view/i }));
+    expect(screen.getByTestId('scanner-result-table')).toBeInTheDocument();
   });
 
   it('creates an AI custom theme, displays suggestions, and runs it as a theme universe', async () => {

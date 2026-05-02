@@ -30,6 +30,8 @@ import {
 } from '../hooks/useSafariInteractionReady';
 import type {
   ScannerCandidate,
+  ScannerCandidateDiagnostic,
+  ScannerCandidateDiagnosticStatus,
   ScannerCandidateOutcome,
   ScannerCoverageSummary,
   ScannerLabeledValue,
@@ -54,6 +56,7 @@ const HISTORY_PAGE_SIZE = 8;
 
 type PillOption = { value: string; label: string };
 type ViewMode = 'cards' | 'table';
+type CandidateFilter = 'selected' | 'pool' | 'rejected' | 'data_failed' | 'all';
 type SortKey = 'score' | 'symbol' | 'target' | 'risk';
 type SortDirection = 'asc' | 'desc';
 type ScanScope = 'default' | 'theme' | 'symbols';
@@ -300,6 +303,91 @@ function getRunProviderDiagnostics(runDetail: ScannerRunDetail): ScannerProvider
 function getAiDiagnostics(runDetail: ScannerRunDetail): Record<string, unknown> | null {
   const diagnostics = runDetail.diagnostics || {};
   return isRecord(diagnostics.aiInterpretation) ? diagnostics.aiInterpretation : null;
+}
+
+function getCandidateDiagnostics(runDetail: ScannerRunDetail | null): ScannerCandidateDiagnostic[] {
+  return Array.isArray(runDetail?.candidates) ? runDetail.candidates : [];
+}
+
+function getDiagnosticReason(candidate: ScannerCandidateDiagnostic, language: 'zh' | 'en'): string {
+  return candidate.reason
+    || candidate.failedRules?.[0]?.replace(/_/g, ' ')
+    || candidate.missingFields?.[0]
+    || (language === 'en' ? 'No diagnostic reason' : '未提供诊断原因');
+}
+
+function normalizeDiagnosticStatus(status: ScannerCandidateDiagnostic['status']): ScannerCandidateDiagnosticStatus {
+  return status || 'skipped';
+}
+
+function diagnosticStatusLabel(status: ScannerCandidateDiagnostic['status'], language: 'zh' | 'en'): string {
+  const labels: Record<ScannerCandidateDiagnosticStatus, { zh: string; en: string }> = {
+    selected: { zh: '入选', en: 'Selected' },
+    rejected: { zh: '淘汰', en: 'Rejected' },
+    data_failed: { zh: '数据失败', en: 'Data failed' },
+    skipped: { zh: '跳过', en: 'Skipped' },
+    error: { zh: '错误', en: 'Error' },
+    evaluated: { zh: '已评估', en: 'Evaluated' },
+  };
+  const normalizedStatus = normalizeDiagnosticStatus(status);
+  return labels[normalizedStatus]?.[language] || normalizedStatus;
+}
+
+function diagnosticStatusClass(status: ScannerCandidateDiagnostic['status']): string {
+  const normalizedStatus = normalizeDiagnosticStatus(status);
+  if (normalizedStatus === 'selected') return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100 shadow-[0_0_18px_rgba(16,185,129,0.12)]';
+  if (normalizedStatus === 'rejected') return 'border-white/10 bg-white/[0.035] text-white/58';
+  if (normalizedStatus === 'data_failed' || normalizedStatus === 'error') return 'border-rose-400/25 bg-rose-400/10 text-rose-100 shadow-[0_0_18px_rgba(244,63,94,0.10)]';
+  return 'border-amber-400/20 bg-amber-400/10 text-amber-100';
+}
+
+function diagnosticMetricValue(candidate: ScannerCandidateDiagnostic, key: string): string {
+  const camelKey = key.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase());
+  const value = candidate.metrics?.[key] ?? candidate.metrics?.[camelKey];
+  if (value === null || value === undefined || value === '') return '--';
+  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  return String(value);
+}
+
+function diagnosticToCandidate(candidate: ScannerCandidateDiagnostic): ScannerCandidate {
+  return {
+    symbol: candidate.symbol,
+    name: candidate.name || candidate.symbol,
+    companyName: candidate.name || candidate.symbol,
+    rank: candidate.rank || 0,
+    score: Number(candidate.score || 0),
+    qualityHint: null,
+    reasonSummary: candidate.reason || candidate.failedRules?.[0] || '',
+    reasons: [candidate.reason, ...(candidate.failedRules || [])].filter((item): item is string => Boolean(item)),
+    keyMetrics: Object.entries(candidate.metrics || {}).slice(0, 6).map(([label, value]) => ({ label, value: String(value ?? '--') })),
+    featureSignals: [],
+    riskNotes: [],
+    watchContext: [],
+    boards: [],
+    appearedInRecentRuns: 0,
+    lastTradeDate: null,
+    scanTimestamp: null,
+    aiInterpretation: {
+      available: false,
+      status: 'skipped',
+      summary: null,
+      opportunityType: null,
+      riskInterpretation: null,
+      watchPlan: null,
+      reviewCommentary: null,
+      provider: null,
+      model: null,
+      generatedAt: null,
+      message: null,
+    },
+    realizedOutcome: {
+      reviewStatus: 'pending',
+      outcomeLabel: 'pending',
+      thesisMatch: 'pending',
+      reviewWindowDays: 3,
+    },
+    diagnostics: {},
+  };
 }
 
 function formatProviderDiagnostics(provider: ScannerProviderDiagnostics | null, language: 'zh' | 'en'): string | null {
@@ -951,6 +1039,7 @@ const UserScannerPage: React.FC = () => {
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
   const [pendingAnalyzeSymbol, setPendingAnalyzeSymbol] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>('selected');
 
   useEffect(() => {
     document.title = t('scanner.documentTitle');
@@ -1250,6 +1339,30 @@ const UserScannerPage: React.FC = () => {
       return compare * directionMultiplier;
     });
   }, [runDetail?.shortlist, sortDirection, sortKey]);
+  const diagnosticCandidates = useMemo(() => getCandidateDiagnostics(runDetail), [runDetail]);
+  const hasCandidateDiagnostics = diagnosticCandidates.length > 0;
+  const filteredDiagnosticCandidates = useMemo(() => {
+    if (candidateFilter === 'selected') {
+      return diagnosticCandidates.filter((candidate) => candidate.status === 'selected');
+    }
+    if (candidateFilter === 'pool') {
+      return diagnosticCandidates;
+    }
+    if (candidateFilter === 'rejected') {
+      return diagnosticCandidates.filter((candidate) => candidate.status === 'rejected');
+    }
+    if (candidateFilter === 'data_failed') {
+      return diagnosticCandidates.filter((candidate) => candidate.status === 'data_failed' || candidate.status === 'error');
+    }
+    return diagnosticCandidates;
+  }, [candidateFilter, diagnosticCandidates]);
+  const selectedOnlyView = !hasCandidateDiagnostics || candidateFilter === 'selected';
+
+  useEffect(() => {
+    if (!hasCandidateDiagnostics && candidateFilter !== 'selected') {
+      setCandidateFilter('selected');
+    }
+  }, [candidateFilter, hasCandidateDiagnostics]);
 
   const historyCards = useMemo(() => historyItems.map((item) => {
     const fallbackTitle = item.market === 'us'
@@ -1541,7 +1654,7 @@ const UserScannerPage: React.FC = () => {
                           disabled={generateThemeDisabled}
                           onPointerUp={generateThemeButton.onPointerUp}
                           onClick={generateThemeButton.onClick}
-                          className="inline-flex h-8 items-center justify-center gap-2 rounded-lg border border-indigo-300/20 bg-indigo-300/10 px-3 text-xs font-medium text-indigo-100 transition hover:border-indigo-200/35 hover:bg-indigo-300/15 disabled:cursor-not-allowed disabled:opacity-45"
+                          className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-lg border border-indigo-300/20 bg-indigo-300/10 px-3 text-xs font-medium text-indigo-100 transition hover:border-indigo-200/35 hover:bg-indigo-300/15 disabled:cursor-not-allowed disabled:opacity-45"
                         >
                           <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                           <span>{isGeneratingTheme ? (language === 'en' ? 'Generating...' : '生成中...') : (language === 'en' ? 'Generate theme' : '生成主题')}</span>
@@ -1549,7 +1662,7 @@ const UserScannerPage: React.FC = () => {
                         {themeSuggestions.length ? (
                           <div className="flex flex-col gap-1.5" data-testid="scanner-ai-theme-suggestions">
                             {themeSuggestions.slice(0, 6).map((suggestion) => (
-                              <div key={suggestion.symbol} className="rounded-lg border border-white/5 bg-black/20 px-2.5 py-1.5">
+                              <div key={suggestion.symbol} className="shrink-0 rounded-lg border border-white/5 bg-black/20 px-2.5 py-1.5">
                                 <div className="flex items-center justify-between gap-2 text-[11px] text-white/75">
                                   <span className="font-semibold text-white">{suggestion.symbol}</span>
                                   <span>{Math.round(suggestion.confidence * 100)}%</span>
@@ -1661,12 +1774,72 @@ const UserScannerPage: React.FC = () => {
                 </div>
               </div>
 
+              {runDetail ? (
+                <div className="shrink-0 border-b border-white/5 px-3 py-2" data-testid="scanner-diagnostic-summary">
+                  <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 backdrop-blur-md">
+                    {[
+                      ['UNIVERSE', runDetail.summary?.universeCount ?? runDetail.acceptedSymbolsCount ?? runDetail.universeSize],
+                      ['EVALUATED', runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize],
+                      ['SELECTED', runDetail.summary?.selectedCount ?? shortlistCount],
+                      ['REJECTED', runDetail.summary?.rejectedCount ?? 0],
+                      ['DATA FAILED', runDetail.summary?.dataFailedCount ?? 0],
+                      ['SKIPPED', runDetail.summary?.skippedCount ?? 0],
+                    ].map(([label, value]) => (
+                      <span key={label} className="inline-flex items-baseline gap-1.5 rounded-lg border border-white/5 bg-black/20 px-2 py-1">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{label}</span>
+                        <span className="font-mono text-xs text-white/78">{value}</span>
+                      </span>
+                    ))}
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-white/36">
+                      {runDetail.summary?.limitedByResultCap
+                        ? (language === 'en' ? 'Result cap limited diagnostics' : '结果上限限制了诊断')
+                        : (language === 'en' ? 'Diagnostics cover the submitted universe' : '诊断覆盖本次提交候选池')}
+                    </span>
+                  </div>
+                  {runDetail.summary?.selectedCount === 1 && (runDetail.summary?.rejectedCount || runDetail.summary?.dataFailedCount || runDetail.summary?.skippedCount) ? (
+                    <button
+                      type="button"
+                      onClick={() => setCandidateFilter('all')}
+                      className="mt-1.5 text-[11px] text-white/45 hover:text-white/75"
+                    >
+                      {language === 'en'
+                        ? `${(runDetail.summary.universeCount || 1) - 1} other candidates were not selected. View rejection reasons.`
+                        : `其余 ${(runDetail.summary.universeCount || 1) - 1} 个候选未入选，查看淘汰原因`}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {runDetail && hasCandidateDiagnostics ? (
+                <div className="shrink-0 border-b border-white/5 px-3 py-2" data-testid="scanner-candidate-filters">
+                  <div className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-lg border border-white/5 bg-black/30 p-0.5 no-scrollbar" role="group" aria-label={language === 'en' ? 'Candidate diagnostics filter' : '候选诊断过滤'}>
+                    {([
+                      ['selected', language === 'en' ? 'Selected' : '入选'],
+                      ['pool', language === 'en' ? 'Candidate pool' : '候选池'],
+                      ['rejected', language === 'en' ? 'Rejected' : '淘汰'],
+                      ['data_failed', language === 'en' ? 'Data failed' : '数据失败'],
+                      ['all', language === 'en' ? 'All' : '全部'],
+                    ] as const).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setCandidateFilter(key)}
+                        className={`inline-flex shrink-0 items-center rounded-md px-2.5 py-1 text-xs ${candidateFilter === key ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="flex shrink-0 flex-col gap-2 border-b border-white/5 px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex w-fit rounded-lg border border-white/5 bg-black/30 p-0.5" role="group" aria-label={language === 'en' ? 'Result view mode' : '结果视图'}>
                   <button
                     type="button"
                     onClick={() => setViewMode('cards')}
-                    className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-xs ${viewMode === 'cards' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'}`}
+                    disabled={!selectedOnlyView}
+                    className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-xs ${viewMode === 'cards' && selectedOnlyView ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'} disabled:cursor-not-allowed disabled:opacity-35`}
                   >
                     <LayoutGrid className="h-3.5 w-3.5" />
                     {language === 'en' ? 'Card view' : '卡片视图'}
@@ -1702,7 +1875,136 @@ const UserScannerPage: React.FC = () => {
               </div>
 
               <div data-testid="scanner-candidate-scroll-region" className="min-h-0 flex-1 overflow-y-auto px-3 py-3 no-scrollbar">
-                {sortedCandidates.length ? (
+                {!selectedOnlyView ? (
+                  filteredDiagnosticCandidates.length ? (
+                    <div data-testid="scanner-candidate-diagnostics-table" className="space-y-1.5">
+                      {filteredDiagnosticCandidates.map((candidate) => {
+                        const activeRunDetail = runDetail as ScannerRunDetail;
+                        const diagnosticCandidate = diagnosticToCandidate(candidate);
+                        const candidateMarket = normalizeScannerMarket(activeRunDetail.market || market);
+                        const candidateIdentity = getWatchlistIdentity(candidateMarket, candidate.symbol);
+                        const isTracked = Boolean(candidateIdentity && trackedWatchlistIdentitySet.has(candidateIdentity));
+                        const isTrackPending = pendingWatchlistIdentity === candidateIdentity;
+                        const backtestHref = buildScannerBacktestPath(diagnosticCandidate, activeRunDetail, language);
+                        const isExpanded = expandedSymbol === candidate.symbol;
+                        const metricItems = Object.entries(candidate.metrics || {}).slice(0, 8);
+                        return (
+                          <article
+                            key={`diagnostic-${candidate.symbol}`}
+                            data-testid={`scanner-candidate-row-${candidate.symbol}`}
+                            className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-sm backdrop-blur-md transition-all hover:border-white/10"
+                          >
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              className="grid w-full min-w-0 grid-cols-1 items-center gap-2 text-left md:grid-cols-[minmax(150px,0.9fr)_minmax(180px,1fr)_minmax(220px,1.3fr)]"
+                              onClick={() => setExpandedSymbol(isExpanded ? null : candidate.symbol)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  setExpandedSymbol(isExpanded ? null : candidate.symbol);
+                                }
+                              }}
+                              aria-expanded={isExpanded}
+                            >
+                              <span className="min-w-0">
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <span className={`inline-flex shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${diagnosticStatusClass(candidate.status)}`}>
+                                    {diagnosticStatusLabel(candidate.status, language)}
+                                  </span>
+                                  {candidate.rank ? <span className="font-mono text-[11px] text-white/35">#{candidate.rank}</span> : null}
+                                  <span className="min-w-0 truncate font-mono text-sm font-semibold text-white">{candidate.symbol}</span>
+                                </span>
+                                <span className="mt-1 flex min-w-0 gap-1.5 text-[11px] text-white/36">
+                                  <span className="min-w-0 truncate">{candidate.name || candidate.symbol}</span>
+                                  <span className="shrink-0 text-white/20">/</span>
+                                  <span className="min-w-0 truncate">{candidate.provider || '--'}</span>
+                                </span>
+                              </span>
+                              <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                <FieldChip label={language === 'en' ? 'Score' : '评分'} value={candidate.score == null ? '--' : `${candidate.score}/100`} />
+                                <FieldChip label="20D" value={diagnosticMetricValue(candidate, 'return_20d')} />
+                                <FieldChip label={language === 'en' ? 'Trend' : '趋势'} value={diagnosticMetricValue(candidate, 'trend')} />
+                              </span>
+                              <span className="flex min-w-0 flex-col gap-1 md:items-end">
+                                <span className="w-full min-w-0 truncate text-xs text-white/58 md:text-right" title={getDiagnosticReason(candidate, language)}>
+                                  {getDiagnosticReason(candidate, language)}
+                                </span>
+                                <span className="flex max-w-full flex-wrap gap-1.5 md:justify-end">
+                                  <ActionButton
+                                    label={language === 'en' ? 'Analyze' : '分析'}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void handleAnalyzeCandidate(diagnosticCandidate);
+                                    }}
+                                    disabled={pendingAnalyzeSymbol === candidate.symbol}
+                                    variant="primary"
+                                  />
+                                  <ActionButton
+                                    label={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void handleTrackCandidate(diagnosticCandidate);
+                                    }}
+                                    disabled={isTracked || isTrackPending || watchlistAuthBlocked}
+                                    title={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
+                                  />
+                                  <ActionButton
+                                    label={copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void handleCopyText(candidate.symbol, `candidate:${candidate.symbol}`);
+                                    }}
+                                  />
+                                  <ActionButton
+                                    label={language === 'en' ? 'Backtest' : '回测'}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                    }}
+                                    href={backtestHref || undefined}
+                                    disabled={!backtestHref}
+                                    title={!backtestHref ? backtestUnavailableLabel : undefined}
+                                  />
+                                </span>
+                              </span>
+                            </div>
+                            {isExpanded ? (
+                              <div data-testid={`scanner-candidate-detail-${candidate.symbol}`} className="mt-2 grid gap-2 border-t border-white/5 pt-2 text-xs text-white/58 md:grid-cols-3">
+                                <DetailSection title={language === 'en' ? 'Rule result' : '规则结果'}>
+                                  <NotesList
+                                    notes={[
+                                      getDiagnosticReason(candidate, language),
+                                      ...(candidate.failedRules || []),
+                                    ]}
+                                    empty={language === 'en' ? 'No failed rules' : '无失败规则'}
+                                  />
+                                </DetailSection>
+                                <DetailSection title={language === 'en' ? 'Missing fields' : '缺失字段'}>
+                                  <NotesList notes={candidate.missingFields || []} empty={language === 'en' ? 'No missing fields' : '无缺失字段'} />
+                                </DetailSection>
+                                <DetailSection title={language === 'en' ? 'Diagnostics' : '诊断数据'}>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    <FieldChip label={language === 'en' ? 'Provider' : '来源'} value={candidate.provider || '--'} />
+                                    {metricItems.length
+                                      ? metricItems.map(([key, value]) => (
+                                        <FieldChip key={`${candidate.symbol}-${key}`} label={key} value={String(value ?? '--')} />
+                                      ))
+                                      : <span className="text-xs text-white/32">{language === 'en' ? 'No metrics' : '无指标'}</span>}
+                                  </div>
+                                </DetailSection>
+                              </div>
+                            ) : null}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <ScannerEmptyState
+                      title={language === 'en' ? 'No candidates in this filter' : '当前过滤无候选'}
+                      body={language === 'en' ? 'Switch to Candidate pool or All to inspect the full submitted universe.' : '切换到候选池或全部查看完整提交范围。'}
+                    />
+                  )
+                ) : sortedCandidates.length ? (
                   viewMode === 'cards' ? (
                     <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
                     {sortedCandidates.map((candidate) => {
@@ -1864,7 +2166,7 @@ const UserScannerPage: React.FC = () => {
                     })}
                   </div>
                 ) : (
-                  <div data-testid="scanner-result-table" className="overflow-x-auto rounded-xl border border-white/5 bg-white/[0.02]">
+                  <div data-testid="scanner-result-table" className="overflow-x-auto no-scrollbar rounded-xl border border-white/5 bg-white/[0.02]">
                     <table className="min-w-[980px] w-full border-collapse text-left text-xs">
                       <thead className="border-b border-white/5 bg-black/25 text-[10px] uppercase tracking-[0.16em] text-white/38">
                         <tr>
@@ -1992,8 +2294,10 @@ const UserScannerPage: React.FC = () => {
                 )
               ) : (
                 <ScannerEmptyState
-                  title={emptyStateTitle}
-                  body={pageError?.message || emptyStateBody}
+                  title={runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length ? (language === 'en' ? 'No selected candidates' : '本次无入选候选') : emptyStateTitle}
+                  body={runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length
+                    ? (language === 'en' ? 'Open Candidate pool or All to inspect rejected and data-failed candidates.' : '切换到候选池或全部查看淘汰与数据失败原因。')
+                    : pageError?.message || emptyStateBody}
                 />
               )}
 

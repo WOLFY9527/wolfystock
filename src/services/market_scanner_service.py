@@ -1672,7 +1672,6 @@ class MarketScannerService:
         rows: List[Dict[str, Any]] = []
         history_frames: Dict[str, pd.DataFrame] = {}
         history_diags: Dict[str, Dict[str, Any]] = {}
-        candidate_diagnostics: Dict[str, Dict[str, Any]] = {}
         history_rollup = {
             "local_hits": 0,
             "network_fetches": 0,
@@ -3074,6 +3073,12 @@ class MarketScannerService:
                         diagnostics_json=json.dumps(item["diagnostics"], ensure_ascii=False),
                     )
             shortlist.append(item)
+        theme_payload, summary_payload, candidate_diagnostics = self._build_candidate_diagnostics(
+            universe_selection=universe_selection,
+            ranked_candidates=shortlist,
+            shortlist=shortlist,
+            diagnostics=diagnostics if isinstance(diagnostics, dict) else {},
+        )
 
         return {
             "id": run.id,
@@ -3109,6 +3114,10 @@ class MarketScannerService:
                 previous_run=previous_watchlist_run,
             ),
             "review_summary": review_bundle.get("summary") or self._default_review_summary(),
+            "theme": theme_payload,
+            "summary": summary_payload,
+            "selected": shortlist,
+            "candidates": candidate_diagnostics,
             "shortlist": shortlist,
         }
 

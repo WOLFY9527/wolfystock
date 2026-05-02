@@ -253,6 +253,15 @@ AI 只是附加层，不是 Scanner 成功运行的前提：
 - shortlist 偏小是因为输入池本来就小、过滤过严、还是数据可用性不足
 - 当前 UI 显示的是“最终 shortlist”，不是“所有进入过扫描流程的 symbol”
 
+主题和自定义标的池运行还会返回 symbol-level 诊断：
+
+- `theme.universe_count / theme.symbols`：完整主题候选池，例如 `加密矿企` 当前为 11 个 seed symbols
+- `summary.selected_count / rejected_count / data_failed_count / skipped_count`：解释入选数量和非入选去向
+- `candidates[]`：每个提交代码的 `status`、`score`、`provider`、`reason`、`failed_rules`、`missing_fields` 与可复用的轻量 metrics
+- `limited_by_result_cap=false` 表示诊断没有被 shortlist/max result 展示上限截断
+
+这层诊断只复用同一次 scanner 评估过程中已经取得的数据；不会为了给淘汰候选补齐漂亮字段而额外重拉行情。
+
 同时，run metadata 现在会保留有界 provider attribution：
 
 - `configured primary provider`
@@ -474,11 +483,18 @@ Scanner 使用独立配置，不复用普通分析的调度语义：
 - `SCANNER_SCHEDULE_TIME`
 - `SCANNER_SCHEDULE_RUN_IMMEDIATELY`
 - `SCANNER_NOTIFICATION_ENABLED`
+- `WATCHLIST_SCORE_REFRESH_ENABLED`
+- `WATCHLIST_SCORE_REFRESH_US_TIME`
+- `WATCHLIST_SCORE_REFRESH_CN_TIME`
+- `WATCHLIST_SCORE_REFRESH_HK_TIME`
+- `WATCHLIST_SCORE_REFRESH_MAX_SYMBOLS`
 - `SCANNER_LOCAL_UNIVERSE_PATH`
 - `LOCAL_US_PARQUET_DIR`
 - `US_STOCK_PARQUET_DIR`（兼容旧变量名）
 - `TWELVE_DATA_API_KEY` / `TWELVE_DATA_API_KEYS`
 - `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` / `ALPACA_DATA_FEED`
+
+用户观察列表评分刷新是轻量任务：它复用已持久化的 Scanner 候选评分更新 `scanner_score`、排名、评分时间和 stale/error 状态，不会为每个候选触发完整 AI 分析报告。当前调度器按工作日保守执行；交易所节假日日历接入后可进一步跳过具体休市日。
 - `SCANNER_AI_ENABLED`
 - `SCANNER_AI_TOP_N`
 

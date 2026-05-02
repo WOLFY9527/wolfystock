@@ -235,6 +235,15 @@ These fields are meant to answer, directly from the product:
 - whether a small shortlist came from a small universe, filtering pressure, or missing data
 - whether the user is looking at the final shortlist rather than the broader ranked pool
 
+Theme and custom-symbol scans also return symbol-level diagnostics:
+
+- `theme.universe_count / theme.symbols`: the full submitted theme universe, for example the current Crypto miners seed list has 11 symbols
+- `summary.selected_count / rejected_count / data_failed_count / skipped_count`: where every submitted candidate ended up
+- `candidates[]`: each submitted symbol's `status`, `score`, `provider`, `reason`, `failed_rules`, `missing_fields`, and lightweight metrics reused from the same pass
+- `limited_by_result_cap=false` means diagnostics were not truncated by the shortlist or max-result display cap
+
+This layer reuses data already fetched during the scanner evaluation pass. It does not refetch rejected candidates just to fill cosmetic fields.
+
 Each run also keeps bounded provider attribution:
 
 - `configured primary provider`
@@ -436,11 +445,18 @@ Scanner uses its own config surface instead of overloading the regular analysis 
 - `SCANNER_SCHEDULE_TIME`
 - `SCANNER_SCHEDULE_RUN_IMMEDIATELY`
 - `SCANNER_NOTIFICATION_ENABLED`
+- `WATCHLIST_SCORE_REFRESH_ENABLED`
+- `WATCHLIST_SCORE_REFRESH_US_TIME`
+- `WATCHLIST_SCORE_REFRESH_CN_TIME`
+- `WATCHLIST_SCORE_REFRESH_HK_TIME`
+- `WATCHLIST_SCORE_REFRESH_MAX_SYMBOLS`
 - `SCANNER_LOCAL_UNIVERSE_PATH`
 - `LOCAL_US_PARQUET_DIR`
 - `US_STOCK_PARQUET_DIR` (legacy compatibility name)
 - `TWELVE_DATA_API_KEY` / `TWELVE_DATA_API_KEYS`
 - `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` / `ALPACA_DATA_FEED`
+
+User watchlist score refresh is lightweight: it reuses persisted Scanner candidate scores to update `scanner_score`, rank, scoring timestamp, and stale/error state. It does not launch full AI analysis reports for every saved candidate. The current scheduler uses a conservative weekday posture; exchange holiday calendars can tighten this further later.
 - `SCANNER_AI_ENABLED`
 - `SCANNER_AI_TOP_N`
 

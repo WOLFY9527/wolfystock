@@ -207,6 +207,42 @@ export interface ScannerRunDiagnostics {
   [key: string]: unknown;
 }
 
+export type ScannerCandidateDiagnosticStatus = 'selected' | 'rejected' | 'data_failed' | 'skipped' | 'error' | 'evaluated';
+
+export interface ScannerCandidateDiagnostic {
+  symbol: string;
+  name?: string | null;
+  market?: string | null;
+  rank?: number | null;
+  status?: ScannerCandidateDiagnosticStatus;
+  score?: number | null;
+  provider?: string | null;
+  reason?: string | null;
+  failedRules?: string[];
+  missingFields?: string[];
+  metrics?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ScannerThemeDiagnostics {
+  id?: string | null;
+  name?: string | null;
+  universeCount?: number;
+  symbols?: string[];
+}
+
+export interface ScannerSummaryDiagnostics {
+  universeCount?: number;
+  submittedCount?: number;
+  evaluatedCount?: number;
+  selectedCount?: number;
+  rejectedCount?: number;
+  dataFailedCount?: number;
+  skippedCount?: number;
+  errorCount?: number;
+  limitedByResultCap?: boolean;
+}
+
 export interface ScannerCandidate {
   symbol: string;
   name: string;
@@ -260,6 +296,10 @@ export interface ScannerRunDetail {
   acceptedSymbolsCount: number;
   rejectedSymbols: string[];
   diagnostics: Record<string, unknown>;
+  theme?: ScannerThemeDiagnostics;
+  summary?: ScannerSummaryDiagnostics;
+  selected?: ScannerCandidate[];
+  candidates?: ScannerCandidateDiagnostic[];
   notification: ScannerNotificationResult;
   failureReason?: string | null;
   comparisonToPrevious: ScannerWatchlistComparison;
