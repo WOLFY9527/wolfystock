@@ -60,12 +60,12 @@ const CATEGORY_LAYOUT: Record<MarketOverviewTab, {
   fallback: CardKey[];
 }> = {
   all: {
-    primary: ['indices', 'cnIndices', 'crypto', 'volatility', 'fundsFlow', 'rates', 'macro'],
+    primary: ['volatility', 'fundsFlow', 'indices', 'cnIndices', 'crypto', 'rates', 'macro'],
     secondary: ['sentiment'],
     fallback: ['cnBreadth', 'cnFlows', 'sectorRotation', 'cnShortSentiment', 'fxCommodities', 'futures'],
   },
   us: {
-    primary: ['indices', 'volatility', 'fundsFlow', 'rates', 'macro'],
+    primary: ['volatility', 'fundsFlow', 'indices', 'rates', 'macro'],
     secondary: ['sentiment'],
     fallback: ['fxCommodities', 'futures'],
   },
@@ -75,7 +75,7 @@ const CATEGORY_LAYOUT: Record<MarketOverviewTab, {
     fallback: [],
   },
   global: {
-    primary: ['macro', 'indices', 'volatility', 'rates', 'fxCommodities'],
+    primary: ['volatility', 'macro', 'indices', 'rates', 'fxCommodities'],
     secondary: ['sentiment'],
     fallback: ['futures'],
   },
@@ -719,12 +719,30 @@ const MarketOverviewStatusStrip: React.FC<{
 }> = ({ temperature, dataQuality, briefing }) => (
   <section
     data-testid="market-overview-status-strip"
-    className="grid w-full grid-cols-1 gap-3 md:grid-cols-3"
+    className="grid w-full grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-[1.15fr_1fr_1.35fr]"
   >
     {temperature}
     {dataQuality}
     {briefing}
   </section>
+);
+
+const SideRailDisclosure: React.FC<{
+  expanded: boolean;
+  onToggle: () => void;
+}> = ({ expanded, onToggle }) => (
+  <button
+    type="button"
+    data-testid="market-overview-signal-disclosure"
+    className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 text-left text-xs font-semibold text-white/62 transition hover:border-white/10 hover:bg-white/[0.04] hover:text-white/82"
+    aria-expanded={expanded}
+    onClick={onToggle}
+  >
+    <span>详细信号与简报</span>
+    <span className="rounded-full border border-white/[0.07] bg-white/[0.025] px-2 py-0.5 text-[10px] text-white/45">
+      {expanded ? '收起' : '展开'}
+    </span>
+  </button>
 );
 
 const PendingDataSourceSection: React.FC<{
@@ -1225,6 +1243,7 @@ const MarketOverviewPage: React.FC = () => {
   const [fallbackSectionExpanded, setFallbackSectionExpanded] = useState(false);
   const [cryptoRealtimeStatus, setCryptoRealtimeStatus] = useState<CryptoRealtimeStatus>('snapshot');
   const [exportSummaryFeedback, setExportSummaryFeedback] = useState<string | null>(null);
+  const [signalDetailsExpanded, setSignalDetailsExpanded] = useState(false);
 
   const loadPanels = useCallback(async (cancelledRef?: { current: boolean }) => {
     setLoading(true);
@@ -1644,8 +1663,8 @@ const MarketOverviewPage: React.FC = () => {
   }, [exportSummaryText, language]);
 
   const renderDeterministicGrid = () => (
-    <main data-testid="market-overview-main-grid" className="grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
-      <section data-testid="market-overview-primary-rail" className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2 xl:col-span-8 2xl:col-span-9 2xl:grid-cols-3">
+    <main data-testid="market-overview-main-grid" className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
+      <section data-testid="market-overview-primary-rail" className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 xl:col-span-9 2xl:grid-cols-3">
         {showCategoryEmptyState ? (
           <div className="lg:col-span-2 2xl:col-span-3">
             <CategoryEmptyState onShowPending={() => setFallbackSectionExpanded(true)} />
@@ -1653,24 +1672,32 @@ const MarketOverviewPage: React.FC = () => {
         ) : null}
         {primaryOrder.map((cardKey, index) => renderCard(cardKey, index, 'primary'))}
       </section>
-      <aside data-testid="market-overview-side-rail" className="flex min-w-0 flex-col gap-4 xl:col-span-4 2xl:col-span-3">
-        <MarketTemperatureStrip
-          data={panels.temperature}
-          refreshing={refreshingPanel === 'temperature'}
-          onRefresh={() => {
-            void refreshPanel('temperature', marketApi.getTemperature);
-          }}
-        />
-        <DataQualityOverview summary={dataQuality} />
-        <MarketBriefingCard
-          data={panels.briefing}
-          refreshing={refreshingPanel === 'briefing'}
-          compact
-          onRefresh={() => {
-            void refreshPanel('briefing', marketApi.getMarketBriefing);
-          }}
-        />
+      <aside data-testid="market-overview-side-rail" className="flex min-w-0 flex-col gap-3 xl:col-span-3">
         <CategoryCoverageSummary label={activeCategoryLabel} summary={coverageSummary} />
+        <SideRailDisclosure
+          expanded={signalDetailsExpanded}
+          onToggle={() => setSignalDetailsExpanded((current) => !current)}
+        />
+        {signalDetailsExpanded ? (
+          <>
+            <MarketTemperatureStrip
+              data={panels.temperature}
+              refreshing={refreshingPanel === 'temperature'}
+              onRefresh={() => {
+                void refreshPanel('temperature', marketApi.getTemperature);
+              }}
+            />
+            <DataQualityOverview summary={dataQuality} />
+            <MarketBriefingCard
+              data={panels.briefing}
+              refreshing={refreshingPanel === 'briefing'}
+              compact
+              onRefresh={() => {
+                void refreshPanel('briefing', marketApi.getMarketBriefing);
+              }}
+            />
+          </>
+        ) : null}
         {renderFallbackSection()}
       </aside>
     </main>
@@ -1687,25 +1714,42 @@ const MarketOverviewPage: React.FC = () => {
           <div
             data-testid="market-overview-category-tabs"
             data-selector-position="static-safe"
-            className="w-full overflow-x-auto rounded-xl border border-white/8 bg-white/[0.02] p-1 backdrop-blur-md [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex w-full flex-col gap-2 rounded-xl border border-white/8 bg-white/[0.02] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
           >
-            <div className="flex w-max min-w-full gap-2">
-              {categoryTabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  aria-pressed={activeCategory === tab.key}
-                  onClick={() => setActiveCategory(tab.key)}
-                  className={`whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
-                    activeCategory === tab.key
-                      ? 'bg-white/10 text-white shadow-sm'
-                      : 'bg-transparent text-white/45 hover:text-white/75'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[10px] font-semibold text-white/42">
+                Filter
+              </span>
+              <div className="min-w-0 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="flex w-max gap-2">
+                  {categoryTabs.map((tab) => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      aria-pressed={activeCategory === tab.key}
+                      onClick={() => setActiveCategory(tab.key)}
+                      className={`whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
+                        activeCategory === tab.key
+                          ? 'bg-white/10 text-white shadow-sm'
+                          : 'bg-transparent text-white/45 hover:text-white/75'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
+            <button
+              type="button"
+              data-testid="market-overview-export-summary"
+              className="w-fit rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition hover:bg-white/[0.06] hover:text-white"
+              onClick={() => {
+                void handleExportSummary();
+              }}
+            >
+              {exportSummaryFeedback || (language === 'en' ? 'Export' : '复制摘要')}
+            </button>
           </div>
           <CrossAssetHeroRibbon anchors={heroAnchors} />
           <MarketOverviewStatusStrip
@@ -1713,18 +1757,6 @@ const MarketOverviewPage: React.FC = () => {
             dataQuality={<DataQualityCompactSummary summary={dataQuality} />}
             briefing={<MarketBriefingCompactSummary data={panels.briefing} />}
           />
-          <div className="flex justify-end">
-            <button
-              type="button"
-              data-testid="market-overview-export-summary"
-              onClick={() => {
-                void handleExportSummary();
-              }}
-              className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/70 transition hover:bg-white/[0.06] hover:text-white"
-            >
-              {exportSummaryFeedback || (language === 'en' ? 'Export summary' : '复制摘要')}
-            </button>
-          </div>
         </div>
         {renderDeterministicGrid()}
       </div>

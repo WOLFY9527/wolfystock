@@ -28,7 +28,8 @@ export const VolatilityCard: React.FC<{
   const compactItems = [
     ...(primary ? [primary] : []),
     ...items.filter((item) => item.symbol !== primary?.symbol),
-  ];
+  ].slice(0, 4);
+  const hiddenItemCount = Math.max(items.length - compactItems.length, 0);
 
   return (
     <GlassCard as="section" data-testid="market-overview-dense-quote-card" className={`${MARKET_OVERVIEW_GHOST_CARD_CLASS} flex h-full flex-col p-3.5`}>
@@ -61,6 +62,12 @@ export const VolatilityCard: React.FC<{
             />
           ))}
         </div>
+
+        {hiddenItemCount > 0 ? (
+          <p className="text-[10px] text-white/38">
+            已优先显示关键 {compactItems.length} 项，其余 {hiddenItemCount} 项保留在数据源快照中。
+          </p>
+        ) : null}
 
         {loading ? (
           <div className="rounded-xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/60">

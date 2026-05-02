@@ -53,6 +53,8 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
   const items = (panel?.items || []).filter(isRenderableMarketOverviewItem);
   const fallbackOnly = isFallbackOnlyPanel(panel);
   const denseQuote = variant === 'denseQuote';
+  const visibleItems = denseQuote ? items.slice(0, 5) : items;
+  const hiddenItemCount = denseQuote ? Math.max(items.length - visibleItems.length, 0) : 0;
 
   return (
     <GlassCard
@@ -102,7 +104,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
             data-testid="market-overview-dense-quote-grid"
             className="flex flex-col border-y border-white/[0.045]"
           >
-            {items.map((item) => (
+            {visibleItems.map((item) => (
               <MarketOverviewDenseQuoteItem
                 key={item.symbol}
                 item={item}
@@ -112,7 +114,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
           </div>
         ) : (
           <div className="flex flex-col">
-            {items.map((item) => (
+            {visibleItems.map((item) => (
               <MarketOverviewDataRow
                 key={item.symbol}
                 item={item}
@@ -121,6 +123,12 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
             ))}
           </div>
         )}
+
+        {hiddenItemCount > 0 ? (
+          <p className="text-[10px] text-white/38">
+            已优先显示关键 {visibleItems.length} 项，其余 {hiddenItemCount} 项保留在数据源快照中。
+          </p>
+        ) : null}
 
         {loading ? (
           <div className="rounded-xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/60">
