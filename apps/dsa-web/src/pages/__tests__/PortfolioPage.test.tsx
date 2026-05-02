@@ -11,6 +11,7 @@ const {
   getSnapshot,
   getRisk,
   refreshFx,
+  refreshFxRate,
   listBrokerConnections,
   listImportBrokers,
   syncIbkrReadOnly,
@@ -26,11 +27,13 @@ const {
   parseCsvImport,
   commitCsvImport,
   createAccount,
+  deleteAccount,
 } = vi.hoisted(() => ({
   getAccounts: vi.fn(),
   getSnapshot: vi.fn(),
   getRisk: vi.fn(),
   refreshFx: vi.fn(),
+  refreshFxRate: vi.fn(),
   listBrokerConnections: vi.fn(),
   listImportBrokers: vi.fn(),
   syncIbkrReadOnly: vi.fn(),
@@ -46,6 +49,7 @@ const {
   parseCsvImport: vi.fn(),
   commitCsvImport: vi.fn(),
   createAccount: vi.fn(),
+  deleteAccount: vi.fn(),
 }));
 
 vi.mock('../../api/portfolio', () => ({
@@ -54,6 +58,7 @@ vi.mock('../../api/portfolio', () => ({
     getSnapshot,
     getRisk,
     refreshFx,
+    refreshFxRate,
     listBrokerConnections,
     listImportBrokers,
     syncIbkrReadOnly,
@@ -69,6 +74,7 @@ vi.mock('../../api/portfolio', () => ({
     parseCsvImport,
     commitCsvImport,
     createAccount,
+    deleteAccount,
   },
 }));
 
@@ -265,6 +271,7 @@ function openFxPanel(language: 'zh' | 'en' = 'zh') {
 describe('PortfolioPage FX refresh', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1024 });
 
     getAccounts.mockResolvedValue(makeAccounts());
     getSnapshot.mockImplementation(async ({ accountId }: { accountId?: number } = {}) => makeSnapshot({ accountId, fxStale: true }));
@@ -278,6 +285,16 @@ describe('PortfolioPage FX refresh', () => {
       updatedCount: 1,
       staleCount: 0,
       errorCount: 0,
+    });
+    refreshFxRate.mockResolvedValue({
+      baseCurrency: 'USD',
+      quoteCurrency: 'CNY',
+      rate: 7.2468,
+      provider: 'frankfurter',
+      fetchedAt: '2026-03-19T10:05:00',
+      cacheHit: false,
+      stale: false,
+      error: null,
     });
     listBrokerConnections.mockResolvedValue({ connections: [] });
     listImportBrokers.mockResolvedValue({
@@ -347,6 +364,12 @@ describe('PortfolioPage FX refresh', () => {
       errors: [],
     });
     createAccount.mockResolvedValue({ id: 1 });
+    deleteAccount.mockResolvedValue({
+      ok: true,
+      deletedAccountId: 1,
+      deleteMode: 'soft',
+      nextAccountId: 2,
+    });
   });
 
   it('renders stale FX status with a manual refresh button', async () => {
@@ -366,8 +389,9 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.queryByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).not.toBeInTheDocument();
     const submitTradeButton = screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') });
     expect(submitTradeButton).toHaveAttribute('data-variant', 'primary');
-    expect(submitTradeButton.className).toContain('bg-white');
-    expect(submitTradeButton.className).toContain('text-black');
+    expect(submitTradeButton.className).toContain('from-blue-600');
+    expect(submitTradeButton.className).toContain('to-purple-600');
+    expect(submitTradeButton.className).toContain('text-white');
     expect(submitTradeButton.className).toContain('font-bold');
     expect(screen.queryByText(translate('zh', 'portfolio.scopeHint'))).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '交易' })).toBeInTheDocument();
@@ -379,6 +403,29 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('button', { name: '账户' }).className).not.toContain('border-white');
     expect(screen.getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '历史记录 ↗' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: translate('zh', 'portfolio.costFutuDiluted') })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: translate('zh', 'portfolio.costThsPnl') })).toBeInTheDocument();
+    const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
+    const tradeStationSection = screen.getByRole('heading', { name: 'Trade Station' }).closest('section');
+    expect(Boolean(totalAssetsCard.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+  });
+
+  it('renders the mobile portfolio order as assets, holdings, trade station, history', async () => {
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
+    const holdingsPanel = screen.getByTestId('portfolio-current-holdings-panel');
+    const tradeStationSection = screen.getByRole('heading', { name: 'Trade Station' }).closest('section') as HTMLElement;
+    const mobileHistoryPanel = screen.getByTestId('portfolio-mobile-history-panel');
+
+    expect(Boolean(totalAssetsCard.compareDocumentPosition(holdingsPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(holdingsPanel.compareDocumentPosition(tradeStationSection) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(tradeStationSection.compareDocumentPosition(mobileHistoryPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(within(mobileHistoryPanel).getByRole('heading', { name: '历史记录' })).toBeInTheDocument();
   });
 
   it('switches left tabs between trade, account, sync, and fx surfaces', async () => {
@@ -407,9 +454,32 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-fx-rate-value')).toHaveTextContent('1 USD = 7.2450 CNY');
     const refreshFxButton = openFxPanel();
     expect(refreshFxButton).toHaveAttribute('data-variant', 'primary');
-    expect(refreshFxButton.className).toContain('bg-white');
-    expect(refreshFxButton.className).toContain('text-black');
-    expect(refreshFxButton).toHaveTextContent('获取实时汇率');
+    expect(refreshFxButton.className).toContain('from-blue-600');
+    expect(refreshFxButton.className).toContain('to-purple-600');
+    expect(refreshFxButton).toHaveTextContent(translate('zh', 'portfolio.refreshFx'));
+    expect(screen.getByText('manual')).toBeInTheDocument();
+  });
+
+  it('confirms account deletion and falls back to the next active account', async () => {
+    getAccounts
+      .mockResolvedValueOnce(makeAccounts([{ id: 1, name: 'Main' }, { id: 2, name: 'Alt' }]))
+      .mockResolvedValueOnce(makeAccounts([{ id: 2, name: 'Alt' }]));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const accountSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+    fireEvent.change(accountSelect, { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: '账户' }));
+    fireEvent.click(screen.getByRole('button', { name: '删除 Main' }));
+
+    expect(await screen.findByText(translate('zh', 'portfolio.accountDeleteMessage'))).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.deleteConfirm') }));
+
+    await waitFor(() => expect(deleteAccount).toHaveBeenCalledWith(1));
+    await waitFor(() => expect((screen.getAllByRole('combobox')[0] as HTMLSelectElement).value).toBe('2'));
+    expect(await screen.findByText(translate('zh', 'portfolio.accountArchived'))).toBeInTheDocument();
   });
 
   it('shows IBKR as a broker import option and surfaces account-linked connection context', async () => {
@@ -438,9 +508,9 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getAllByRole('combobox')[0];
+    const accountSelect = screen.getByLabelText('ACCOUNT');
     fireEvent.change(accountSelect, { target: { value: '1' } });
-
+    await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 1, costMethod: 'fifo' }));
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(screen.getByRole('button', { name: '同步' }));
 
@@ -675,7 +745,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitFor(() => expect(refreshFxButton).not.toBeDisabled());
     fireEvent.click(refreshFxButton);
 
-    await waitFor(() => expect(refreshFx).toHaveBeenCalledWith({ accountId: 1 }));
+    await waitFor(() => expect(refreshFxRate).toHaveBeenCalledWith({ base: 'USD', quote: 'CNY' }));
     expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshUpdated', { count: 1 }))).toBeInTheDocument();
     await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(snapshotCallsBeforeRefresh + 1));
     await waitFor(() => expect(getRisk).toHaveBeenCalledTimes(riskCallsBeforeRefresh + 1));
@@ -685,78 +755,16 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByText(translate('zh', 'portfolio.fxFresh'))).toBeInTheDocument();
   });
 
-  it('refreshes FX for the full portfolio without sending accountId and shows neutral feedback when no pair exists', async () => {
-    refreshFx.mockResolvedValueOnce({
-      asOf: '2026-03-19',
-      accountCount: 1,
-      refreshEnabled: true,
-      disabledReason: null,
-      pairCount: 0,
-      updatedCount: 0,
-      staleCount: 0,
-      errorCount: 0,
-    });
-
-    render(<PortfolioPage />);
-
-    await waitForInitialLoad();
-
-    fireEvent.click(openFxPanel());
-
-    await waitFor(() => expect(refreshFx).toHaveBeenCalledWith({ accountId: undefined }));
-    expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshNoPairs'))).toBeInTheDocument();
-  });
-
-  it('shows disabled feedback when FX online refresh is disabled even without a disabled reason', async () => {
-    refreshFx.mockResolvedValueOnce({
-      asOf: '2026-03-19',
-      accountCount: 1,
-      refreshEnabled: false,
-      pairCount: 1,
-      updatedCount: 0,
-      staleCount: 0,
-      errorCount: 0,
-    });
-
-    render(<PortfolioPage />);
-
-    await waitForInitialLoad();
-
-    fireEvent.click(openFxPanel());
-
-    expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshDisabled'))).toBeInTheDocument();
-  });
-
-  it('prefers disabled feedback over empty-pair feedback when refresh is disabled', async () => {
-    refreshFx.mockResolvedValueOnce({
-      asOf: '2026-03-19',
-      accountCount: 1,
-      refreshEnabled: false,
-      disabledReason: 'portfolio_fx_update_disabled',
-      pairCount: 0,
-      updatedCount: 0,
-      staleCount: 0,
-      errorCount: 0,
-    });
-
-    render(<PortfolioPage />);
-
-    await waitForInitialLoad();
-
-    fireEvent.click(openFxPanel());
-
-    expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshDisabled'))).toBeInTheDocument();
-    expect(screen.queryByText(translate('zh', 'portfolio.fxRefreshNoPairs'))).not.toBeInTheDocument();
-  });
-
-  it('shows warning feedback when FX refresh still falls back to stale rates', async () => {
-    refreshFx.mockResolvedValueOnce({
-      asOf: '2026-03-19',
-      accountCount: 1,
-      pairCount: 2,
-      updatedCount: 1,
-      staleCount: 1,
-      errorCount: 0,
+  it('shows warning feedback when live FX refresh falls back to stale cache', async () => {
+    refreshFxRate.mockResolvedValueOnce({
+      baseCurrency: 'USD',
+      quoteCurrency: 'CNY',
+      rate: 7.2,
+      provider: 'frankfurter',
+      fetchedAt: '2026-03-19T10:05:00',
+      cacheHit: true,
+      stale: true,
+      error: 'network down',
     });
 
     render(<PortfolioPage />);
@@ -766,46 +774,15 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(openFxPanel());
 
     expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshFallbackWarning', {
-      updatedCount: 1,
+      updatedCount: 0,
       staleCount: 1,
-      errorCount: 0,
-    }))).toBeInTheDocument();
-  });
-
-  it('shows warning feedback when FX refresh returns online errors without stale pairs', async () => {
-    refreshFx.mockResolvedValueOnce({
-      asOf: '2026-03-19',
-      accountCount: 1,
-      pairCount: 1,
-      updatedCount: 0,
-      staleCount: 0,
-      errorCount: 1,
-    });
-
-    render(<PortfolioPage />);
-
-    await waitForInitialLoad();
-
-    const snapshotCallsBeforeRefresh = getSnapshot.mock.calls.length;
-    const riskCallsBeforeRefresh = getRisk.mock.calls.length;
-    const tradeCallsBeforeRefresh = listTrades.mock.calls.length;
-
-    fireEvent.click(openFxPanel());
-
-    expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshPartialFailure', {
-      updatedCount: 0,
-      staleCount: 0,
       errorCount: 1,
     }))).toBeInTheDocument();
-    await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(snapshotCallsBeforeRefresh + 1));
-    await waitFor(() => expect(getRisk).toHaveBeenCalledTimes(riskCallsBeforeRefresh + 1));
-    expect(listTrades).toHaveBeenCalledTimes(tradeCallsBeforeRefresh);
-    expect(listCashLedger).not.toHaveBeenCalled();
-    expect(listCorporateActions).not.toHaveBeenCalled();
+    expect(screen.getByText('CACHE')).toBeInTheDocument();
   });
 
   it('restores the button state and shows the existing error alert when FX refresh fails', async () => {
-    refreshFx.mockRejectedValueOnce(
+    refreshFxRate.mockRejectedValueOnce(
       createApiError(
         createParsedApiError({
           title: '刷新失败',
@@ -867,7 +844,7 @@ describe('PortfolioPage FX refresh', () => {
       staleCount: number;
       errorCount: number;
     }>();
-    refreshFx.mockImplementationOnce(() => pendingRefresh.promise);
+    refreshFxRate.mockImplementationOnce(() => pendingRefresh.promise);
 
     render(<PortfolioPage />);
 
@@ -879,7 +856,7 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.click(openFxPanel());
     await waitFor(() => {
-      expect(refreshFx).toHaveBeenCalledWith({ accountId: 1 });
+      expect(refreshFxRate).toHaveBeenCalledWith({ base: 'USD', quote: 'CNY' });
     });
 
     fireEvent.change(accountSelect, { target: { value: '2' } });
@@ -915,7 +892,7 @@ describe('PortfolioPage FX refresh', () => {
       staleCount: number;
       errorCount: number;
     }>();
-    refreshFx.mockImplementationOnce(() => pendingRefresh.promise);
+    refreshFxRate.mockImplementationOnce(() => pendingRefresh.promise);
 
     render(<PortfolioPage />);
 
@@ -1129,7 +1106,7 @@ describe('PortfolioPage FX refresh', () => {
 
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
     expect(totalAssetsCard.className).toContain('shrink-0');
-    expect(totalAssetsCard.className).toContain('rounded-[24px]');
+    expect(totalAssetsCard.className).toContain('rounded-xl');
     expect(totalAssetsCard.className).toContain('border-white/5');
 
     const summaryBlock = screen.getByTestId('portfolio-trade-station-summary');

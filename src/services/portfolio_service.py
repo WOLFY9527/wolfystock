@@ -8,7 +8,7 @@ import logging
 import re
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from data_provider.base import canonical_stock_code
@@ -20,21 +20,17 @@ from src.repositories.portfolio_repo import (
     PortfolioBusyError as RepoPortfolioBusyError,
     PortfolioRepository,
 )
+from src.services.fx_rate_service import default_fx_rate_service
 
 logger = logging.getLogger(__name__)
 
 PortfolioBusyError = RepoPortfolioBusyError
 _PHASE_F_CORPORATE_ACTIONS_SOURCE_UNAVAILABLE = "phase_f_corporate_actions_pg_source_unavailable"
 
-try:
-    import yfinance as yf
-except Exception:  # pragma: no cover - optional dependency path
-    yf = None
-
 EPS = 1e-8
 VALID_ACCOUNT_MARKETS = {"cn", "hk", "us", "global"}
 VALID_EVENT_MARKETS = {"cn", "hk", "us"}
-VALID_COST_METHODS = {"fifo", "avg"}
+VALID_COST_METHODS = {"fifo", "avg", "futu_diluted", "ths_pnl"}
 VALID_SIDES = {"buy", "sell"}
 VALID_CASH_DIRECTIONS = {"in", "out"}
 VALID_CORPORATE_ACTIONS = {"cash_dividend", "split_adjustment"}
@@ -219,6 +215,18 @@ class PortfolioService:
 
     def deactivate_account(self, account_id: int) -> bool:
         return self.repo.deactivate_account(account_id, **self._owner_kwargs())
+
+    def delete_account(self, account_id: int) -> Optional[Dict[str, Any]]:
+        deleted = self.deactivate_account(account_id)
+        if not deleted:
+            return None
+        active_accounts = self.list_accounts(include_inactive=False)
+        return {
+            "ok": True,
+            "deleted_account_id": int(account_id),
+            "delete_mode": "soft",
+            "next_account_id": active_accounts[0]["id"] if active_accounts else None,
+        }
 
     # ------------------------------------------------------------------
     # Broker connection CRUD
@@ -2744,7 +2752,15 @@ class PortfolioService:
                                 "source_trade_id": event.id,
                             }
                         )
-                    else:
+                    elif cost_method == "avg":
+                        state = avg_state[key]
+                        state.quantity += qty
+                        state.total_cost += (gross + fee + tax)
+                    elif cost_method == "futu_diluted":
+                        state = avg_state[key]
+                        state.quantity += qty
+                        state.total_cost += gross
+                    elif cost_method == "ths_pnl":
                         state = avg_state[key]
                         state.quantity += qty
                         state.total_cost += (gross + fee + tax)
@@ -2758,13 +2774,25 @@ class PortfolioService:
                             key[0],
                             event_date,
                         )
-                    else:
+                    elif cost_method == "avg":
                         cost_basis = self._consume_avg_position(
                             avg_state[key],
                             qty,
                             key[0],
                             event_date,
                         )
+                    else:
+                        state = avg_state[key]
+                        cost_basis = self._consume_avg_position(
+                            state,
+                            qty,
+                            key[0],
+                            event_date,
+                        )
+                        if state.quantity > EPS and cost_method == "futu_diluted":
+                            state.total_cost -= gross - cost_basis
+                        elif state.quantity > EPS and cost_method == "ths_pnl":
+                            state.total_cost -= proceeds_net - cost_basis
                     realized_local = proceeds_net - cost_basis
                     realized_base, stale_realized, _ = self._convert_amount(
                         amount=realized_local,
@@ -2817,6 +2845,8 @@ class PortfolioService:
                     )
                     if qty_held > EPS:
                         cash_balances[key[2]] += qty_held * per_share
+                        if cost_method in {"futu_diluted", "ths_pnl"}:
+                            avg_state[key].total_cost -= qty_held * per_share
                 elif action_type == "split_adjustment":
                     split_ratio = float(event.split_ratio or 0.0)
                     if split_ratio <= 0:
@@ -3353,7 +3383,7 @@ class PortfolioService:
                         to_currency=base_currency,
                         rate_date=as_of_date,
                         rate=rate,
-                        source="yfinance",
+                        source="frankfurter",
                         is_stale=False,
                     )
                     summary["updated_count"] += 1
@@ -3393,26 +3423,14 @@ class PortfolioService:
         to_currency: str,
         as_of_date: date,
     ) -> Optional[float]:
-        """Fetch latest available FX close rate around as_of date."""
-        if yf is None:
-            return None
-        symbol = f"{from_currency}{to_currency}=X"
-        ticker = yf.Ticker(symbol)
-        history = ticker.history(
-            start=(as_of_date - timedelta(days=7)).isoformat(),
-            end=(as_of_date + timedelta(days=1)).isoformat(),
-            interval="1d",
-            auto_adjust=False,
-        )
-        if history is None or history.empty or "Close" not in history:
-            return None
-        close = history["Close"].dropna()
-        if close.empty:
-            return None
-        value = float(close.iloc[-1])
-        if value <= 0:
-            return None
-        return value
+        """Fetch latest public FX rate.
+
+        The method name is kept for older tests and patches; the provider is now
+        Frankfurter rather than yfinance.
+        """
+        result = default_fx_rate_service.fetch_rate(from_currency, to_currency, force_refresh=True)
+        value = float(result.get("rate") or 0.0)
+        return value if value > 0 else None
 
     def _require_active_account(self, account_id: int) -> Any:
         account = self.repo.get_account(account_id, include_inactive=False, **self._owner_kwargs())
@@ -3905,7 +3923,7 @@ class PortfolioService:
     def _normalize_cost_method(value: str) -> str:
         method = (value or "").strip().lower()
         if method not in VALID_COST_METHODS:
-            raise ValueError("cost_method must be fifo or avg")
+            raise ValueError("cost_method must be fifo, avg, futu_diluted, or ths_pnl")
         return method
 
     @staticmethod

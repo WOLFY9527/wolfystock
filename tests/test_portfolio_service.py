@@ -500,6 +500,147 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertAlmostEqual(pos["quantity"], 200.0, places=6)
         self.assertAlmostEqual(pos["avg_cost"], 5.0, places=6)
 
+    def test_futu_diluted_cost_examples_allow_negative_and_dividend_adjustment(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="us", base_currency="USD")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=100,
+            price=10,
+            fee=0,
+            tax=0,
+            market="us",
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 3),
+            side="sell",
+            quantity=50,
+            price=25,
+            fee=0,
+            tax=0,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("AAPL", date(2026, 1, 4), 25)
+
+        snapshot = self.service.get_portfolio_snapshot(
+            account_id=aid,
+            as_of=date(2026, 1, 4),
+            cost_method="futu_diluted",
+        )
+        pos = snapshot["accounts"][0]["positions"][0]
+        self.assertAlmostEqual(pos["quantity"], 50.0, places=6)
+        self.assertAlmostEqual(pos["avg_cost"], -5.0, places=6)
+
+        dividend_account = self.service.create_account(name="Dividend", broker="Demo", market="us", base_currency="USD")
+        did = dividend_account["id"]
+        self.service.record_cash_ledger(
+            account_id=did,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=did,
+            symbol="MSFT",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=100,
+            price=10,
+            fee=0,
+            tax=0,
+            market="us",
+            currency="USD",
+        )
+        self.service.record_corporate_action(
+            account_id=did,
+            symbol="MSFT",
+            effective_date=date(2026, 1, 3),
+            action_type="cash_dividend",
+            market="us",
+            currency="USD",
+            cash_dividend_per_share=1.0,
+        )
+        self._save_close("MSFT", date(2026, 1, 4), 10)
+
+        dividend_snapshot = self.service.get_portfolio_snapshot(
+            account_id=did,
+            as_of=date(2026, 1, 4),
+            cost_method="futu_diluted",
+        )
+        self.assertAlmostEqual(dividend_snapshot["accounts"][0]["positions"][0]["avg_cost"], 9.0, places=6)
+
+    def test_ths_pnl_cost_uses_net_cashflows_and_resets_after_flat(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="us", base_currency="USD")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=100,
+            price=10,
+            fee=10,
+            tax=0,
+            market="us",
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 3),
+            side="sell",
+            quantity=100,
+            price=12,
+            fee=5,
+            tax=0,
+            market="us",
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 4),
+            side="buy",
+            quantity=50,
+            price=20,
+            fee=0,
+            tax=0,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("AAPL", date(2026, 1, 5), 20)
+
+        snapshot = self.service.get_portfolio_snapshot(
+            account_id=aid,
+            as_of=date(2026, 1, 5),
+            cost_method="ths_pnl",
+        )
+        pos = snapshot["accounts"][0]["positions"][0]
+        self.assertAlmostEqual(pos["quantity"], 50.0, places=6)
+        self.assertAlmostEqual(pos["avg_cost"], 20.0, places=6)
+
     def test_same_day_dividend_processed_before_trade(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
         aid = account["id"]

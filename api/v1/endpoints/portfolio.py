@@ -13,6 +13,7 @@ from api.deps import CurrentUser, get_current_user
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.portfolio import (
     PortfolioAccountCreateRequest,
+    PortfolioAccountDeleteResponse,
     PortfolioAccountItem,
     PortfolioAccountListResponse,
     PortfolioAccountUpdateRequest,
@@ -27,6 +28,7 @@ from api.v1.schemas.portfolio import (
     PortfolioDeleteResponse,
     PortfolioEventCreatedResponse,
     PortfolioFxRefreshResponse,
+    PortfolioLiveFxRateResponse,
     PortfolioImportBrokerListResponse,
     PortfolioImportCommitResponse,
     PortfolioImportParseResponse,
@@ -38,6 +40,7 @@ from api.v1.schemas.portfolio import (
     PortfolioTradeListResponse,
     PortfolioTradeCreateRequest,
 )
+from src.services.fx_rate_service import default_fx_rate_service
 from src.services.portfolio_import_service import PortfolioImportService
 from src.services.portfolio_ibkr_sync_service import PortfolioIbkrSyncError, PortfolioIbkrSyncService
 from src.services.portfolio_risk_service import PortfolioRiskService
@@ -263,23 +266,71 @@ def update_account(
 
 @router.delete(
     "/accounts/{account_id}",
+    response_model=PortfolioAccountDeleteResponse,
     responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
     summary="Deactivate portfolio account",
 )
-def delete_account(account_id: int, current_user: CurrentUser = Depends(get_current_user)):
+def delete_account(account_id: int, current_user: CurrentUser = Depends(get_current_user)) -> PortfolioAccountDeleteResponse:
     service = _get_portfolio_service(current_user)
     try:
-        ok = service.deactivate_account(account_id)
-        if not ok:
+        data = service.delete_account(account_id)
+        if data is None:
             raise HTTPException(
                 status_code=404,
                 detail={"error": "not_found", "message": f"Account not found: {account_id}"},
             )
-        return {"deleted": 1}
+        _record_portfolio_audit(
+            action="account_archive",
+            message="Portfolio account archived",
+            current_user=current_user,
+            account_id=account_id,
+            detail={"delete_mode": data["delete_mode"], "next_account_id": data["next_account_id"]},
+        )
+        return PortfolioAccountDeleteResponse(**data)
     except HTTPException:
         raise
     except Exception as exc:
         raise _internal_error("Deactivate account failed", exc)
+
+
+@router.get(
+    "/fx-rate",
+    response_model=PortfolioLiveFxRateResponse,
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Fetch cached live FX rate",
+)
+def get_fx_rate(
+    base: str = Query(..., min_length=3, max_length=8),
+    quote: str = Query(..., min_length=3, max_length=8),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioLiveFxRateResponse:
+    try:
+        return PortfolioLiveFxRateResponse(**default_fx_rate_service.fetch_rate(base, quote))
+    except ValueError as exc:
+        raise _bad_request(exc)
+    except Exception as exc:
+        raise _internal_error("Fetch FX rate failed", exc)
+
+
+@router.post(
+    "/fx-rate/refresh",
+    response_model=PortfolioLiveFxRateResponse,
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Refresh one live FX pair",
+)
+def refresh_fx_rate(
+    base: str = Query(..., min_length=3, max_length=8),
+    quote: str = Query(..., min_length=3, max_length=8),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioLiveFxRateResponse:
+    try:
+        return PortfolioLiveFxRateResponse(
+            **default_fx_rate_service.fetch_rate(base, quote, force_refresh=True)
+        )
+    except ValueError as exc:
+        raise _bad_request(exc)
+    except Exception as exc:
+        raise _internal_error("Refresh FX rate failed", exc)
 
 
 @router.post(

@@ -23,9 +23,9 @@ import type {
   PortfolioCorporateActionType,
   PortfolioCostMethod,
   PortfolioFxRateItem,
-  PortfolioFxRefreshResponse,
   PortfolioImportBrokerItem,
   PortfolioIbkrSyncResponse,
+  PortfolioLiveFxRateResponse,
   PortfolioPositionItem,
   PortfolioSide,
   PortfolioSnapshotResponse,
@@ -33,12 +33,12 @@ import type {
 } from '../types/portfolio';
 
 const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
-const PORTFOLIO_GLASS_CARD_CLASS = 'bg-white/[0.02] border border-white/5 rounded-[24px] p-6';
+const PORTFOLIO_GLASS_CARD_CLASS = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md p-5 transition-all hover:border-white/10';
 const PORTFOLIO_FIELD_LABEL_CLASS = 'text-[10px] text-white/40 uppercase tracking-widest font-bold';
-const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/20';
-const PORTFOLIO_SELECT_CLASS = 'w-full [&_select]:rounded-xl [&_select]:border-white/10 [&_select]:bg-white/[0.04] [&_select]:text-white';
-const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'h-12 w-full rounded-2xl !border-transparent !bg-white px-5 !font-bold !text-black shadow-[0_20px_60px_rgba(255,255,255,0.12)] hover:!bg-white hover:brightness-110 hover:scale-[1.01]';
-const PORTFOLIO_SECONDARY_BUTTON_CLASS = 'h-9 rounded-xl border-0 bg-white/[0.04] px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white';
+const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-xl border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:border-emerald-500/50';
+const PORTFOLIO_SELECT_CLASS = 'w-full [&_select]:rounded-xl [&_select]:border-white/10 [&_select]:bg-white/[0.02] [&_select]:px-3 [&_select]:py-2.5 [&_select]:text-sm [&_select]:text-white [&_select]:focus:border-emerald-500/50';
+const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'h-10 rounded-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 px-4 text-sm font-bold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] hover:from-blue-500 hover:to-purple-500';
+const PORTFOLIO_SECONDARY_BUTTON_CLASS = 'h-9 rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white';
 const PORTFOLIO_TEXT_BUTTON_CLASS = 'h-8 rounded-md border-0 bg-transparent px-2 text-xs text-white/40 hover:bg-transparent hover:text-white disabled:text-white/15';
 const PORTFOLIO_ICON_BUTTON_CLASS = 'h-9 w-9 rounded-xl border-0 bg-white/[0.04] p-0 text-white/45 hover:bg-white/10 hover:text-white';
 const PORTFOLIO_DANGER_GHOST_CLASS = 'h-8 w-8 rounded-lg border-0 bg-transparent p-0 text-white/30 hover:bg-red-500/10 hover:text-red-400';
@@ -70,6 +70,8 @@ type SeamlessSegmentOption = {
 type DisplayFxRate = {
   rate: number;
   timestamp?: string;
+  provider?: string;
+  cacheHit?: boolean;
   isStale?: boolean;
 };
 
@@ -146,6 +148,8 @@ function getPortfolioCopy(
     costMethod: t('portfolio.costMethod'),
     costFifo: t('portfolio.costFifo'),
     costAvg: t('portfolio.costAvg'),
+    costFutuDiluted: t('portfolio.costFutuDiluted'),
+    costThsPnl: t('portfolio.costThsPnl'),
     scopeHint: t('portfolio.scopeHint'),
     fxState: t('portfolio.fxState'),
     refreshFx: t('portfolio.refreshFx'),
@@ -164,6 +168,9 @@ function getPortfolioCopy(
     cancel: t('portfolio.cancel'),
     accountNameRequired: t('portfolio.accountNameRequired'),
     accountCreated: t('portfolio.accountCreated'),
+    accountArchived: t('portfolio.accountArchived'),
+    accountDeleteTitle: t('portfolio.accountDeleteTitle'),
+    accountDeleteMessage: t('portfolio.accountDeleteMessage'),
     accountCreateFailed: t('portfolio.accountCreateFailed'),
     riskFallback: t('portfolio.riskFallback'),
     writeRequiresAccount: t('portfolio.writeRequiresAccount'),
@@ -417,49 +424,6 @@ function extractIbkrSyncConfig(connection?: PortfolioBrokerConnectionItem | null
   };
 }
 
-function buildFxRefreshFeedback(data: PortfolioFxRefreshResponse, language: PortfolioLanguage): FxRefreshFeedback {
-  if (data.refreshEnabled === false) {
-    return {
-      tone: 'neutral',
-      text: translate(language, 'portfolio.fxRefreshDisabled'),
-    };
-  }
-
-  if (data.pairCount === 0) {
-    return {
-      tone: 'neutral',
-      text: translate(language, 'portfolio.fxRefreshNoPairs'),
-    };
-  }
-
-  if (data.updatedCount > 0 && data.staleCount === 0 && data.errorCount === 0) {
-    return {
-      tone: 'success',
-      text: translate(language, 'portfolio.fxRefreshUpdated', { count: data.updatedCount }),
-    };
-  }
-
-  if (data.staleCount > 0) {
-    return {
-      tone: 'warning',
-      text: translate(language, 'portfolio.fxRefreshFallbackWarning', {
-        updatedCount: data.updatedCount,
-        staleCount: data.staleCount,
-        errorCount: data.errorCount,
-      }),
-    };
-  }
-
-  return {
-    tone: 'warning',
-    text: translate(language, 'portfolio.fxRefreshPartialFailure', {
-      updatedCount: data.updatedCount,
-      staleCount: data.staleCount,
-      errorCount: data.errorCount,
-    }),
-  };
-}
-
 const PortfolioPage: React.FC = () => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
@@ -503,7 +467,12 @@ const PortfolioPage: React.FC = () => {
 
   const [leftTab, setLeftTab] = useState<'trade' | 'account' | 'sync' | 'fx'>('trade');
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
-  const [isXlViewport, setIsXlViewport] = useState(() => (typeof window === 'undefined' ? true : window.innerWidth >= 1280));
+  const [historyLayout, setHistoryLayout] = useState<'mobile' | 'desktop' | 'drawer'>(() => {
+    if (typeof window === 'undefined') return 'desktop';
+    if (window.innerWidth < 1024) return 'mobile';
+    if (window.innerWidth >= 1280) return 'desktop';
+    return 'drawer';
+  });
   const [eventType, setEventType] = useState<EventType>('trade');
   const [eventDateFrom] = useState('');
   const [eventDateTo] = useState('');
@@ -547,6 +516,8 @@ const PortfolioPage: React.FC = () => {
   const [tradeType, setTradeType] = useState<TradeFormType>('stock');
   const [fxBaseCurrency, setFxBaseCurrency] = useState('USD');
   const [fxQuoteCurrency, setFxQuoteCurrency] = useState('CNY');
+  const [liveFxRate, setLiveFxRate] = useState<PortfolioLiveFxRateResponse | null>(null);
+  const [pendingAccountDelete, setPendingAccountDelete] = useState<{ id: number; name: string } | null>(null);
   const queryAccountId = selectedAccount === 'all' ? undefined : selectedAccount;
   const refreshViewKey = `${selectedAccount === 'all' ? 'all' : `account:${selectedAccount}`}:cost:${costMethod}`;
   const refreshContextRef = useRef<FxRefreshContext>({ viewKey: refreshViewKey, requestId: 0 });
@@ -917,6 +888,27 @@ const PortfolioPage: React.FC = () => {
     }
   };
 
+  const handleConfirmAccountDelete = async () => {
+    if (!pendingAccountDelete || deleteLoading) return;
+    try {
+      setDeleteLoading(true);
+      setWriteWarning(null);
+      const result = await portfolioApi.deleteAccount(pendingAccountDelete.id);
+      const accountsResponse = await portfolioApi.getAccounts(false);
+      const activeAccounts = accountsResponse.accounts || [];
+      setAccounts(activeAccounts);
+      const fallbackId = result.nextAccountId ?? activeAccounts[0]?.id;
+      setSelectedAccount(fallbackId ?? 'all');
+      setPendingAccountDelete(null);
+      setAccountCreateSuccess(copy.accountArchived);
+      setAccountCreateError(null);
+    } catch (err) {
+      setError(getParsedApiError(err));
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = accountForm.name.trim();
@@ -1010,7 +1002,7 @@ const PortfolioPage: React.FC = () => {
   }, [copy.riskFallback]);
 
   const handleRefreshFx = async () => {
-    if (!hasAccounts || isLoading || fxRefreshing) {
+    if (isLoading || fxRefreshing) {
       return;
     }
 
@@ -1026,22 +1018,31 @@ const PortfolioPage: React.FC = () => {
     try {
       setFxRefreshing(true);
       setFxRefreshFeedback(null);
-      const result = await portfolioApi.refreshFx({
-        accountId: requestedAccountId,
+      const result = await portfolioApi.refreshFxRate({
+        base: fxBaseCurrency,
+        quote: fxQuoteCurrency,
       });
+      setLiveFxRate(result);
       if (!isActiveRefreshContext(requestedViewKey, requestedRequestId)) {
         return;
       }
-      const reloaded = await reloadSnapshotAndRiskForScope(
-        requestedViewKey,
-        requestedRequestId,
-        requestedAccountId,
-        requestedCostMethod,
-      );
-      if (!reloaded || !isActiveRefreshContext(requestedViewKey, requestedRequestId)) {
-        return;
+      if (hasAccounts) {
+        const reloaded = await reloadSnapshotAndRiskForScope(
+          requestedViewKey,
+          requestedRequestId,
+          requestedAccountId,
+          requestedCostMethod,
+        );
+        if (!reloaded || !isActiveRefreshContext(requestedViewKey, requestedRequestId)) {
+          return;
+        }
       }
-      setFxRefreshFeedback(buildFxRefreshFeedback(result, language));
+      setFxRefreshFeedback({
+        tone: result.stale ? 'warning' : 'success',
+        text: result.stale
+          ? translate(language, 'portfolio.fxRefreshFallbackWarning', { updatedCount: 0, staleCount: 1, errorCount: result.error ? 1 : 0 })
+          : translate(language, 'portfolio.fxRefreshUpdated', { count: 1 }),
+      });
     } catch (err) {
       if (!isActiveRefreshContext(requestedViewKey, requestedRequestId)) {
         return;
@@ -1065,8 +1066,22 @@ const PortfolioPage: React.FC = () => {
     return formatFxTimestamp(sorted[sorted.length - 1]);
   }, [fxRateRows]);
   const selectedFxRate = useMemo<DisplayFxRate | null>(() => {
+    if (
+      liveFxRate
+      && liveFxRate.baseCurrency === fxBaseCurrency
+      && liveFxRate.quoteCurrency === fxQuoteCurrency
+    ) {
+      return {
+        rate: liveFxRate.rate,
+        timestamp: liveFxRate.fetchedAt,
+        provider: liveFxRate.provider,
+        cacheHit: liveFxRate.cacheHit,
+        isStale: liveFxRate.stale,
+      };
+    }
+
     if (fxBaseCurrency === fxQuoteCurrency) {
-      return { rate: 1, timestamp: fxLastUpdated === '--' ? undefined : fxLastUpdated, isStale: false };
+      return { rate: 1, timestamp: fxLastUpdated === '--' ? undefined : fxLastUpdated, provider: 'identity', isStale: false };
     }
 
     const direct = fxRateRows.find((item) => item.fromCurrency === fxBaseCurrency && item.toCurrency === fxQuoteCurrency);
@@ -1074,6 +1089,7 @@ const PortfolioPage: React.FC = () => {
       return {
         rate: direct.rate,
         timestamp: direct.updatedAt || direct.rateDate || undefined,
+        provider: direct.source,
         isStale: direct.isStale,
       };
     }
@@ -1083,12 +1099,13 @@ const PortfolioPage: React.FC = () => {
       return {
         rate: 1 / reverse.rate,
         timestamp: reverse.updatedAt || reverse.rateDate || undefined,
+        provider: reverse.source,
         isStale: reverse.isStale,
       };
     }
 
     return null;
-  }, [fxBaseCurrency, fxQuoteCurrency, fxLastUpdated, fxRateRows]);
+  }, [fxBaseCurrency, fxQuoteCurrency, fxLastUpdated, fxRateRows, liveFxRate]);
   const totalEquity = snapshot?.totalEquity ?? 0;
   const totalCash = snapshot?.totalCash ?? 0;
   const totalMarketValue = snapshot?.totalMarketValue ?? 0;
@@ -1113,13 +1130,19 @@ const PortfolioPage: React.FC = () => {
   }, [isHistoryDrawerOpen]);
 
   useEffect(() => {
-    const syncViewport = () => {
-      setIsXlViewport(window.innerWidth >= 1280);
+    const syncHistoryLayout = () => {
+      if (window.innerWidth < 1024) {
+        setHistoryLayout('mobile');
+      } else if (window.innerWidth >= 1280) {
+        setHistoryLayout('desktop');
+      } else {
+        setHistoryLayout('drawer');
+      }
     };
 
-    syncViewport();
-    window.addEventListener('resize', syncViewport);
-    return () => window.removeEventListener('resize', syncViewport);
+    syncHistoryLayout();
+    window.addEventListener('resize', syncHistoryLayout);
+    return () => window.removeEventListener('resize', syncHistoryLayout);
   }, []);
 
   const historyPanelContent = (
@@ -1266,8 +1289,85 @@ const PortfolioPage: React.FC = () => {
           'w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0 bg-transparent text-white/72',
         )}
       >
-        <section className="grid w-full grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-12">
-          <section className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col overflow-visible lg:col-span-3 lg:h-full lg:overflow-hidden`}>
+	        <section className="grid w-full grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-12">
+	          <section className="flex flex-col gap-6 lg:col-span-5 lg:h-full lg:min-h-0">
+	            <div
+	              data-testid="portfolio-total-assets-card"
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} shrink-0 flex justify-between items-end gap-3`}
+	            >
+	              <div className="min-w-0">
+	                <h1 className="mb-2 text-xs uppercase tracking-widest text-muted-text">{totalAssetsTitle}</h1>
+	                <div
+	                  data-testid="portfolio-total-assets-value"
+	                  className="font-mono text-[2.4rem] font-bold leading-none text-foreground tabular-nums md:text-[3.6rem]"
+	                  style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
+	                >
+	                  {formatMoney(totalEquity, snapshotCurrency)}
+	                </div>
+	              </div>
+	              <div
+	                className={`pb-2 font-mono text-xl tabular-nums ${
+	                  totalUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
+	                }`}
+	              >
+	                {totalUnrealizedPnl >= 0 ? '+ ' : '- '}
+	                {formatMoney(Math.abs(totalUnrealizedPnl), snapshotCurrency)}
+	              </div>
+	            </div>
+	
+	            <div
+	              data-testid="portfolio-current-holdings-panel"
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col overflow-visible lg:min-h-0 lg:flex-1 lg:overflow-hidden`}
+	            >
+	              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 pb-4">
+	                <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
+	                  Current Holdings ({positionRows.length === 0 ? '共 0 项' : `共 ${positionRows.length} 项`})
+	                </h2>
+	                <Button
+	                  ref={openHistoryDrawerButton.ref}
+	                  type="button"
+	                  variant="ghost"
+	                  onClick={openHistoryDrawerButton.onClick}
+	                  onPointerUp={openHistoryDrawerButton.onPointerUp}
+	                  data-testid="portfolio-history-drawer-trigger"
+	                  className="shrink-0 rounded-xl border-0 bg-white/[0.04] px-3 py-1.5 text-xs text-white/55 hover:bg-white/10 hover:text-white lg:hidden"
+	                >
+	                  {historyDrawerLabel}
+	                </Button>
+	              </div>
+	
+	              <div className="pt-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
+	                <div className="flex flex-col">
+	                  {positionRows.length === 0 ? (
+	                    <div className="rounded-xl border border-white/5 bg-white/[0.02] px-6 py-5 text-sm text-secondary-text">{copy.noPositions}</div>
+	                  ) : (
+	                    positionRows.map((row) => (
+	                      <div
+	                        key={`${row.accountId}-${row.symbol}-${row.market}`}
+	                        className="flex items-center justify-between gap-4 border-b border-white/5 px-1 py-3 transition-colors hover:bg-white/[0.03]"
+	                      >
+	                        <div className="min-w-0">
+	                          <div className="truncate text-lg font-medium text-foreground">{row.symbol}</div>
+	                          <div className="truncate text-xs text-muted-text">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</div>
+	                        </div>
+	                        <div className="flex shrink-0 items-center gap-6">
+	                          <div className="text-right">
+	                            <div className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{copy.positionMarketValue}</div>
+	                            <div className="font-mono text-foreground tabular-nums">{formatMoney(row.marketValueBase, row.valuationCurrency)}</div>
+	                          </div>
+	                          <div className={`font-mono text-lg tabular-nums ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+	                            {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
+	                          </div>
+	                        </div>
+	                      </div>
+	                    ))
+	                  )}
+	                </div>
+	              </div>
+	            </div>
+	          </section>
+	
+	          <section className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col overflow-visible lg:col-span-3 lg:h-full lg:overflow-hidden`}>
             <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -1294,6 +1394,8 @@ const PortfolioPage: React.FC = () => {
                   options={[
                     { value: 'fifo', label: copy.costFifo },
                     { value: 'avg', label: copy.costAvg },
+                    { value: 'futu_diluted', label: copy.costFutuDiluted },
+                    { value: 'ths_pnl', label: copy.costThsPnl },
                   ]}
                   className={PORTFOLIO_SELECT_CLASS}
                 />
@@ -1436,21 +1538,33 @@ const PortfolioPage: React.FC = () => {
                       </Button>
                     </div>
                   </div>
+                  {accountCreateError ? <div className="text-xs text-danger">{accountCreateError}</div> : null}
+                  {accountCreateSuccess ? <div className="text-xs text-success">{accountCreateSuccess}</div> : null}
                   <div className="space-y-2">
-                    {accounts.map((account) => (
-                      <div key={account.id} className="theme-panel-subtle rounded-[16px] px-4 py-3 text-sm text-secondary-text">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-foreground">{account.name}</span>
-                          <span className="text-muted-text">#{account.id}</span>
-                        </div>
+	                    {accounts.map((account) => (
+	                      <div key={account.id} className="theme-panel-subtle rounded-[16px] px-4 py-3 text-sm text-secondary-text">
+	                        <div className="flex items-center justify-between gap-3">
+	                          <span className="min-w-0 truncate text-foreground">{account.name}</span>
+	                          <div className="flex shrink-0 items-center gap-2">
+	                            <span className="font-mono text-muted-text">#{account.id}</span>
+	                            <Button
+	                              type="button"
+	                              variant="ghost"
+	                              className={PORTFOLIO_DANGER_GHOST_CLASS}
+	                              onClick={() => setPendingAccountDelete({ id: account.id, name: account.name })}
+	                              aria-label={language === 'en' ? `Delete ${account.name}` : `删除 ${account.name}`}
+	                              title={copy.accountDeleteTitle}
+	                            >
+	                              <Trash2 className="h-4 w-4" aria-hidden="true" />
+	                            </Button>
+	                          </div>
+	                        </div>
                         <div className="mt-1 text-xs text-muted-text">{formatAccountMarketLabel(account.market, language)} · {account.baseCurrency} · {account.broker || '--'}</div>
                       </div>
                     ))}
                   </div>
                   {(showCreateAccount || !hasAccounts) ? (
                     <form className="space-y-3 rounded-2xl border border-white/5 bg-white/[0.02] p-4" onSubmit={handleCreateAccount}>
-                      {accountCreateError ? <div className="text-xs text-danger">{accountCreateError}</div> : null}
-                      {accountCreateSuccess ? <div className="text-xs text-success">{accountCreateSuccess}</div> : null}
                       <Input label="ACCOUNT NAME" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="Core Portfolio" value={accountForm.name} onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))} />
                       <div className="grid grid-cols-2 gap-4">
                         <Input label="BROKER" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="Demo" value={accountForm.broker} onChange={(e) => setAccountForm((prev) => ({ ...prev, broker: e.target.value }))} />
@@ -1540,31 +1654,36 @@ const PortfolioPage: React.FC = () => {
                       options={FX_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
                     />
                   </div>
-                  <div className="rounded-2xl bg-white/[0.025] px-4 py-5">
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">
-                      {fxBaseCurrency}/{fxQuoteCurrency}
-                    </div>
-                    <div data-testid="portfolio-fx-rate-value" className="mt-2 flex items-baseline gap-1.5 whitespace-nowrap">
-                      <span className="text-sm text-white/60">1 {fxBaseCurrency} =</span>
-                      {' '}
-                      <span className="font-mono text-xl text-indigo-400">{selectedFxRate ? formatFxRate(selectedFxRate.rate) : '--'}</span>
-                      {' '}
-                      <span className="text-sm text-white/60">{fxQuoteCurrency}</span>
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    className="h-12 w-full rounded-xl !border-transparent !bg-white px-4 !font-bold !text-black hover:!bg-white hover:brightness-105"
-                    onClick={() => void handleRefreshFx()}
-                    disabled={!hasAccounts || isLoading || fxRefreshing}
+	                  <div className="rounded-2xl bg-white/[0.025] px-4 py-5">
+	                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">
+	                      {fxBaseCurrency}/{fxQuoteCurrency}
+	                    </div>
+	                    <div data-testid="portfolio-fx-rate-value" className="mt-2 flex items-baseline gap-1.5 whitespace-nowrap">
+	                      <span className="text-sm text-white/60">1 {fxBaseCurrency} =</span>
+	                      {' '}
+	                      <span className="font-mono text-xl text-indigo-400">{selectedFxRate ? formatFxRate(selectedFxRate.rate) : '--'}</span>
+	                      {' '}
+	                      <span className="text-sm text-white/60">{fxQuoteCurrency}</span>
+	                    </div>
+	                    <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+	                      <span className="truncate">{selectedFxRate?.provider || 'frankfurter'}</span>
+	                      <span>{selectedFxRate?.cacheHit ? 'CACHE' : 'LIVE'}</span>
+	                      {selectedFxRate?.isStale ? <span className="text-amber-300">{copy.fxStale}</span> : null}
+	                    </div>
+	                  </div>
+	                  <Button
+	                    type="button"
+	                    variant="primary"
+	                    className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`}
+	                    onClick={() => void handleRefreshFx()}
+	                    disabled={isLoading || fxRefreshing}
                     aria-label={fxRefreshing ? copy.refreshingFx : copy.refreshFx}
                     title={fxRefreshing ? copy.refreshingFx : copy.refreshFx}
                     isLoading={fxRefreshing}
                     loadingText={copy.refreshingFx}
-                  >
-                    获取实时汇率 <span className="text-black/60">(Fetch Live Rate)</span>
-                  </Button>
+	                  >
+	                    {copy.refreshFx}
+	                  </Button>
                   {fxRefreshFeedback ? (
                     <p className={`text-xs ${
                       fxRefreshFeedback.tone === 'success'
@@ -1581,88 +1700,17 @@ const PortfolioPage: React.FC = () => {
             </div>
           </section>
 
-          <section className="flex flex-col gap-6 lg:col-span-5 lg:h-full lg:min-h-0">
-            <div
-              data-testid="portfolio-total-assets-card"
-              className={`${PORTFOLIO_GLASS_CARD_CLASS} shrink-0 flex justify-between items-end gap-3`}
-            >
-              <div className="min-w-0">
-                <h1 className="text-xs text-muted-text uppercase tracking-widest mb-2">{totalAssetsTitle}</h1>
-                <div
-                  data-testid="portfolio-total-assets-value"
-                  className="text-[3rem] md:text-[4rem] font-bold text-foreground leading-none tracking-tight tabular-nums"
-                  style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
-                >
-                  {formatMoney(totalEquity, snapshotCurrency)}
-                </div>
-              </div>
-              <div
-                className={`text-2xl tabular-nums pb-2 ${
-                  totalUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                }`}
-              >
-                {totalUnrealizedPnl >= 0 ? '+ ' : '- '}
-                {formatMoney(Math.abs(totalUnrealizedPnl), snapshotCurrency)}
-              </div>
-            </div>
-
-            <div
-              data-testid="portfolio-current-holdings-panel"
-              className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col overflow-visible lg:min-h-0 lg:flex-1 lg:overflow-hidden`}
-            >
-              <div className="shrink-0 border-b border-white/5 pb-4 flex justify-between items-center gap-3">
-                <h2 className="min-w-0 text-xs text-muted-text uppercase tracking-widest">
-                  Current Holdings ({positionRows.length === 0 ? '共 0 项' : `共 ${positionRows.length} 项`})
-                </h2>
-                <Button
-                  ref={openHistoryDrawerButton.ref}
-                  type="button"
-                  variant="ghost"
-                  onClick={openHistoryDrawerButton.onClick}
-                  onPointerUp={openHistoryDrawerButton.onPointerUp}
-                  data-testid="portfolio-history-drawer-trigger"
-                  className="shrink-0 rounded-xl border-0 bg-white/[0.04] px-3 py-1.5 text-xs text-white/55 hover:bg-white/10 hover:text-white lg:hidden"
-                >
-                  {historyDrawerLabel}
-                </Button>
-              </div>
-
-              <div className="pt-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
-                <div className="flex flex-col">
-                  {positionRows.length === 0 ? (
-                    <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-6 py-5 text-sm text-secondary-text">{copy.noPositions}</div>
-                  ) : (
-                    positionRows.map((row) => (
-                      <div
-                        key={`${row.accountId}-${row.symbol}-${row.market}`}
-                        className="flex items-center justify-between gap-4 border-b border-white/5 px-1 py-3 transition-colors hover:bg-white/[0.03]"
-                      >
-                        <div className="min-w-0">
-                          <div className="text-lg text-foreground font-medium truncate">{row.symbol}</div>
-                          <div className="text-xs text-muted-text">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</div>
-                        </div>
-                        <div className="flex items-center gap-6">
-                          <div className="text-right">
-                            <div className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{copy.positionMarketValue}</div>
-                            <div className="text-foreground tabular-nums">{formatMoney(row.marketValueBase, row.valuationCurrency)}</div>
-                          </div>
-                          <div className={`text-lg tabular-nums ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {isXlViewport ? (
-            <section className="hidden lg:flex lg:col-span-4 lg:min-h-0">
-            <div className={`${PORTFOLIO_GLASS_CARD_CLASS} flex h-full min-h-0 w-full flex-col overflow-hidden`}>
+          {historyLayout === 'mobile' ? (
+            <section data-testid="portfolio-mobile-history-panel" className={`${PORTFOLIO_GLASS_CARD_CLASS} flex min-h-[360px] max-h-[520px] flex-col overflow-hidden lg:hidden`}>
               {historyPanelContent}
-            </div>
+            </section>
+          ) : null}
+
+          {historyLayout === 'desktop' ? (
+            <section className="hidden lg:flex lg:col-span-4 lg:min-h-0">
+              <div className={`${PORTFOLIO_GLASS_CARD_CLASS} flex h-full min-h-0 w-full flex-col overflow-hidden`}>
+                {historyPanelContent}
+              </div>
             </section>
           ) : null}
         </section>
@@ -1701,6 +1749,20 @@ const PortfolioPage: React.FC = () => {
         onCancel={() => {
           if (!deleteLoading) {
             setPendingDelete(null);
+          }
+        }}
+      />
+      <ConfirmDialog
+        isOpen={Boolean(pendingAccountDelete)}
+        title={copy.accountDeleteTitle}
+        message={copy.accountDeleteMessage}
+        confirmText={deleteLoading ? copy.deleteInProgress : copy.deleteConfirm}
+        cancelText={copy.cancel}
+        isDanger
+        onConfirm={() => void handleConfirmAccountDelete()}
+        onCancel={() => {
+          if (!deleteLoading) {
+            setPendingAccountDelete(null);
           }
         }}
       />

@@ -3,6 +3,7 @@ import { toCamelCase } from './utils';
 import type {
   PortfolioAccountItem,
   PortfolioAccountCreateRequest,
+  PortfolioAccountDeleteResponse,
   PortfolioAccountListResponse,
   PortfolioBrokerConnectionListResponse,
   PortfolioCashLedgerCreateRequest,
@@ -13,6 +14,7 @@ import type {
   PortfolioDeleteResponse,
   PortfolioEventCreatedResponse,
   PortfolioFxRefreshResponse,
+  PortfolioLiveFxRateResponse,
   PortfolioImportBrokerListResponse,
   PortfolioImportCommitResponse,
   PortfolioImportParseResponse,
@@ -33,6 +35,11 @@ type SnapshotQuery = {
 type FxRefreshQuery = {
   accountId?: number;
   asOf?: string;
+};
+
+type FxRateQuery = {
+  base: string;
+  quote: string;
 };
 
 type EventQuery = {
@@ -121,6 +128,11 @@ export const portfolioApi = {
     return toCamelCase<PortfolioAccountItem>(response.data);
   },
 
+  async deleteAccount(accountId: number): Promise<PortfolioAccountDeleteResponse> {
+    const response = await apiClient.delete<Record<string, unknown>>(`/api/v1/portfolio/accounts/${accountId}`);
+    return toCamelCase<PortfolioAccountDeleteResponse>(response.data);
+  },
+
   async listBrokerConnections(portfolioAccountId?: number): Promise<PortfolioBrokerConnectionListResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/broker-connections', {
       params: portfolioAccountId != null ? { portfolio_account_id: portfolioAccountId } : undefined,
@@ -147,6 +159,20 @@ export const portfolioApi = {
       params: buildFxRefreshParams(query),
     });
     return toCamelCase<PortfolioFxRefreshResponse>(response.data);
+  },
+
+  async getFxRate(query: FxRateQuery): Promise<PortfolioLiveFxRateResponse> {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/fx-rate', {
+      params: { base: query.base, quote: query.quote },
+    });
+    return toCamelCase<PortfolioLiveFxRateResponse>(response.data);
+  },
+
+  async refreshFxRate(query: FxRateQuery): Promise<PortfolioLiveFxRateResponse> {
+    const response = await apiClient.post<Record<string, unknown>>('/api/v1/portfolio/fx-rate/refresh', undefined, {
+      params: { base: query.base, quote: query.quote },
+    });
+    return toCamelCase<PortfolioLiveFxRateResponse>(response.data);
   },
 
   async createTrade(payload: PortfolioTradeCreateRequest): Promise<PortfolioEventCreatedResponse> {

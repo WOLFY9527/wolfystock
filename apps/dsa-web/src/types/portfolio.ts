@@ -1,4 +1,4 @@
-export type PortfolioCostMethod = 'fifo' | 'avg';
+export type PortfolioCostMethod = 'fifo' | 'avg' | 'futu_diluted' | 'ths_pnl';
 export type PortfolioSide = 'buy' | 'sell';
 export type PortfolioCashDirection = 'in' | 'out';
 export type PortfolioCorporateActionType = 'cash_dividend' | 'split_adjustment';
@@ -17,6 +17,13 @@ export interface PortfolioAccountItem {
 
 export interface PortfolioAccountListResponse {
   accounts: PortfolioAccountItem[];
+}
+
+export interface PortfolioAccountDeleteResponse {
+  ok: boolean;
+  deletedAccountId: number;
+  deleteMode: 'soft' | 'hard';
+  nextAccountId?: number | null;
 }
 
 export interface PortfolioAccountCreateRequest {
@@ -124,6 +131,17 @@ export interface PortfolioFxRateItem {
   isStale: boolean;
   updatedAt?: string | null;
   sourceDirection: string;
+}
+
+export interface PortfolioLiveFxRateResponse {
+  baseCurrency: string;
+  quoteCurrency: string;
+  rate: number;
+  provider: string;
+  fetchedAt: string;
+  cacheHit: boolean;
+  stale: boolean;
+  error?: string | null;
 }
 
 export interface PortfolioSnapshotResponse {

@@ -171,6 +171,69 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(total_cash_logs, 1)
         self.assertEqual(cash_logs[0]["summary"]["portfolio_event"]["currency"], "CNY")
 
+    def test_delete_empty_account_archives_and_returns_next_account(self) -> None:
+        first_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Main", "broker": "Demo", "market": "cn", "base_currency": "CNY"},
+        )
+        second_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Spare", "broker": "Demo", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(first_resp.status_code, 200)
+        self.assertEqual(second_resp.status_code, 200)
+        first_id = first_resp.json()["id"]
+        second_id = second_resp.json()["id"]
+
+        delete_resp = self.client.delete(f"/api/v1/portfolio/accounts/{first_id}")
+        self.assertEqual(delete_resp.status_code, 200)
+        payload = delete_resp.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["deleted_account_id"], first_id)
+        self.assertEqual(payload["delete_mode"], "soft")
+        self.assertEqual(payload["next_account_id"], second_id)
+
+        list_resp = self.client.get("/api/v1/portfolio/accounts")
+        self.assertEqual([item["id"] for item in list_resp.json()["accounts"]], [second_id])
+        inactive_resp = self.client.get("/api/v1/portfolio/accounts", params={"include_inactive": True})
+        archived = [item for item in inactive_resp.json()["accounts"] if item["id"] == first_id][0]
+        self.assertFalse(archived["is_active"])
+
+    def test_delete_account_with_history_preserves_ledger_records(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "History", "broker": "Demo", "market": "cn", "base_currency": "CNY"},
+        )
+        keep_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Keep", "broker": "Demo", "market": "cn", "base_currency": "CNY"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+        self.assertEqual(keep_resp.status_code, 200)
+        trade_resp = self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "600519",
+                "trade_date": "2026-01-02",
+                "side": "buy",
+                "quantity": 1,
+                "price": 100,
+                "market": "cn",
+                "currency": "CNY",
+            },
+        )
+        self.assertEqual(trade_resp.status_code, 200)
+
+        delete_resp = self.client.delete(f"/api/v1/portfolio/accounts/{account_id}")
+        self.assertEqual(delete_resp.status_code, 200)
+        self.assertEqual(delete_resp.json()["delete_mode"], "soft")
+
+        rows = PortfolioService().repo.list_trades(account_id, as_of=date(2026, 1, 3))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].symbol, "600519")
+
     def test_snapshot_api_returns_market_breakdown_for_multi_account_portfolio(self) -> None:
         cn_account = self.client.post(
             "/api/v1/portfolio/accounts",

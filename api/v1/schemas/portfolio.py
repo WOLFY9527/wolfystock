@@ -162,6 +162,13 @@ class PortfolioDeleteResponse(BaseModel):
     deleted: int
 
 
+class PortfolioAccountDeleteResponse(BaseModel):
+    ok: bool
+    deleted_account_id: int
+    delete_mode: Literal["soft", "hard"]
+    next_account_id: Optional[int] = None
+
+
 class PortfolioTradeListItem(BaseModel):
     id: int
     account_id: int
@@ -384,6 +391,17 @@ class PortfolioFxRefreshResponse(BaseModel):
     updated_count: int
     stale_count: int
     error_count: int
+
+
+class PortfolioLiveFxRateResponse(BaseModel):
+    base_currency: str
+    quote_currency: str
+    rate: float
+    provider: str
+    fetched_at: str
+    cache_hit: bool
+    stale: bool
+    error: Optional[str] = None
 
 
 class PortfolioRiskResponse(BaseModel):
