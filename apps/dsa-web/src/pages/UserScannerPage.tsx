@@ -1416,10 +1416,16 @@ const UserScannerPage: React.FC = () => {
           <div className="flex w-full flex-1 min-h-0 min-w-0 flex-col gap-3 xl:flex-row xl:overflow-hidden">
             <section
               data-testid="scanner-sidebar"
-              className="w-full xl:w-[268px] 2xl:w-[288px] shrink-0 flex flex-col bg-white/[0.015] border border-white/5 rounded-[16px] p-3 xl:max-h-full xl:overflow-hidden"
+              className="flex w-full shrink-0 flex-col overflow-hidden rounded-[16px] border border-white/5 bg-white/[0.015] p-3 max-h-[calc(100vh-120px)] xl:h-full xl:w-[268px] xl:max-h-[calc(100vh-120px)] 2xl:w-[288px]"
             >
-              <SectionShell className="rounded-[24px] p-0 bg-transparent shadow-none">
-                <div className="flex min-h-0 flex-col gap-2.5">
+              <SectionShell
+                className="h-full flex flex-1 flex-col min-h-0 rounded-[24px] p-0 bg-transparent shadow-none"
+                contentClassName="h-full flex flex-1 flex-col min-h-0 space-y-0"
+              >
+                <div
+                  data-testid="scanner-sidebar-scroll-region"
+                  className="flex flex-1 flex-col min-h-0 gap-2.5 overflow-y-auto no-scrollbar"
+                >
                   <PillTagGroup label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
                   <PillTagGroup label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
                   <div className="grid gap-2.5 sm:grid-cols-3 xl:grid-cols-1">
@@ -1584,7 +1590,7 @@ const UserScannerPage: React.FC = () => {
                       {validationErrors.run}
                     </p>
                   ) : null}
-                  <div className="mt-auto flex flex-col gap-2 pt-1">
+                  <div className="mt-auto flex shrink-0 flex-col gap-2 pt-4 pb-4">
                     <button
                       ref={runScannerButton.ref}
                       type="button"

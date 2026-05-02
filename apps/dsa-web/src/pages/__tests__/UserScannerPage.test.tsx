@@ -553,6 +553,21 @@ describe('UserScannerPage', () => {
     expect(screen.queryByRole('heading', { name: /MARKET SCANNER|市场扫描/ })).not.toBeInTheDocument();
   });
 
+  it('keeps the scanner controls and result panes on always-on stealth scroll containers', async () => {
+    renderUserScannerPage();
+
+    await screen.findByTestId('scanner-run-button');
+
+    const sidebar = screen.getByTestId('scanner-sidebar');
+    expect(sidebar).toHaveClass('xl:max-h-[calc(100vh-120px)]');
+    expect(sidebar.querySelector('section')).toHaveClass('h-full', 'flex', 'flex-1', 'flex-col', 'min-h-0');
+    expect(screen.getByTestId('scanner-sidebar-scroll-region')).toHaveClass('overflow-y-auto', 'no-scrollbar');
+    expect(screen.getByTestId('scanner-candidate-scroll-region')).toHaveClass('overflow-y-auto', 'no-scrollbar');
+
+    fireEvent.click(screen.getByRole('button', { name: /表格视图|Table view/i }));
+    expect(screen.getByTestId('scanner-result-table')).toHaveClass('overflow-x-auto', 'no-scrollbar');
+  });
+
   it('keeps diagnostics collapsed so results stay primary', async () => {
     renderUserScannerPage();
 
