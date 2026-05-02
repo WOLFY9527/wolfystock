@@ -48,7 +48,7 @@ export const Select: React.FC<SelectProps> = ({
   return (
     <div className={cn('select-field flex flex-col', className)}>
       {label ? <label htmlFor={resolvedId} className={cn('theme-field-label mb-2', labelClassName)}>{label}</label> : null}
-      <div className="select-field__control relative">
+      <div className="select-field__control relative min-w-0">
         <select
           id={resolvedId}
           value={value}
@@ -56,7 +56,7 @@ export const Select: React.FC<SelectProps> = ({
           disabled={disabled}
           {...props}
           className={cn(
-            'select-surface input-surface theme-focus-ring h-10 w-full appearance-none rounded-xl border px-4 py-2 pr-9 text-sm text-foreground',
+            'select-surface input-surface theme-focus-ring h-10 w-full max-w-full truncate appearance-none rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 pr-10 text-sm text-white outline-none focus:border-emerald-500/50',
             'theme-focus-ring transition-all duration-200',
             disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
             controlClassName,
