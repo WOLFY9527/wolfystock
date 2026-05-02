@@ -46,9 +46,9 @@ export const Select: React.FC<SelectProps> = ({
   const resolvedPlaceholder = placeholder ?? t('common.selectPlaceholder');
 
   return (
-    <div className={cn('select-field flex flex-col', className)}>
+    <div className={cn('select-field flex min-w-0 w-full max-w-full flex-col', className)}>
       {label ? <label htmlFor={resolvedId} className={cn('theme-field-label mb-2', labelClassName)}>{label}</label> : null}
-      <div className="select-field__control relative min-w-0">
+      <div className="select-field__control ui-control-shell relative flex min-w-0 w-full max-w-full items-center">
         <select
           id={resolvedId}
           value={value}
@@ -56,7 +56,7 @@ export const Select: React.FC<SelectProps> = ({
           disabled={disabled}
           {...props}
           className={cn(
-            'select-surface input-surface theme-focus-ring h-10 w-full max-w-full truncate appearance-none rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 pr-10 text-sm text-white outline-none focus:border-emerald-500/50',
+            'select-surface input-surface theme-focus-ring ui-control-value h-10 w-full min-w-0 max-w-full appearance-none rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 pr-10 text-sm text-white outline-none focus:border-emerald-500/50',
             'theme-focus-ring transition-all duration-200',
             disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
             controlClassName,
@@ -75,7 +75,7 @@ export const Select: React.FC<SelectProps> = ({
         </select>
 
         {/* Dropdown arrow */}
-        <div className="select-field__icon absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none">
+        <div className="select-field__icon ui-control-icon absolute inset-y-0 right-0 flex items-center pr-2.5">
           <svg
             className="h-4 w-4 text-secondary-text"
             fill="none"

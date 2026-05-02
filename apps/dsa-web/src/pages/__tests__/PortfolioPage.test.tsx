@@ -408,6 +408,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('button', { name: '历史记录 ↗' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: translate('zh', 'portfolio.costFutuDiluted') })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: translate('zh', 'portfolio.costThsPnl') })).toBeInTheDocument();
+    expect(screen.getByLabelText('ACCOUNT')).toHaveClass('pr-10', 'ui-control-value');
+    expect(screen.getByLabelText('COST METHOD')).toHaveClass('pr-10', 'ui-control-value');
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
     const tradeStationSection = screen.getByRole('heading', { name: 'Trade Station' }).closest('section');
     expect(Boolean(totalAssetsCard.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
@@ -1133,7 +1135,8 @@ describe('PortfolioPage FX refresh', () => {
 
     const cashAmountCurrencyGrid = screen.getByTestId('portfolio-cash-amount-currency-grid');
     expect(cashAmountCurrencyGrid.className).toContain('grid');
-    expect(cashAmountCurrencyGrid.className).toContain('grid-cols-2');
+    expect(cashAmountCurrencyGrid.className).toContain('grid-cols-1');
+    expect(cashAmountCurrencyGrid.className).toContain('sm:grid-cols-2');
     expect(cashAmountCurrencyGrid.className).toContain('gap-x-4');
     expect(cashAmountCurrencyGrid.className).toContain('gap-y-6');
 

@@ -476,7 +476,7 @@ const WatchlistPage: React.FC = () => {
           description={copy.tableDescription}
           contentClassName="space-y-4"
         >
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-sm backdrop-blur-md">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-sm backdrop-blur-md">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.autoRefresh}</span>
               <span className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 font-mono text-[11px] text-emerald-100">
@@ -496,21 +496,26 @@ const WatchlistPage: React.FC = () => {
               {isRefreshingScores ? copy.refreshingScores : copy.refreshScores}
             </button>
           </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div
+            data-testid="watchlist-filter-grid"
+            className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5"
+          >
             <Input
               label={copy.search}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={copy.searchPlaceholder}
+              containerClassName="min-w-0"
               trailingAction={<Search className="h-4 w-4 text-white/35" />}
             />
-            <Select label={copy.market} value={marketFilter} onChange={setMarketFilter} options={marketOptions} />
-            <Select label={copy.source} value={sourceFilter} onChange={setSourceFilter} options={sourceOptions} />
-            <Select label={copy.context} value={contextFilter} onChange={setContextFilter} options={contextOptions} />
+            <Select label={copy.market} value={marketFilter} onChange={setMarketFilter} options={marketOptions} className="min-w-0" />
+            <Select label={copy.source} value={sourceFilter} onChange={setSourceFilter} options={sourceOptions} className="min-w-0" />
+            <Select label={copy.context} value={contextFilter} onChange={setContextFilter} options={contextOptions} className="min-w-0" />
             <Select
               label={copy.sort}
               value={sortKey}
               onChange={(value) => setSortKey(value as SortKey)}
+              className="min-w-0"
               options={[
                 { value: 'newest', label: copy.newest },
                 { value: 'scannerScore', label: copy.scannerScore },

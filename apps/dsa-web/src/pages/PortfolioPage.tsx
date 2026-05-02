@@ -36,9 +36,9 @@ const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
 const PORTFOLIO_GLASS_CARD_CLASS = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md p-5 transition-all hover:border-white/10';
 const PORTFOLIO_FIELD_LABEL_CLASS = '!mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40';
 const PORTFOLIO_FIELD_WRAPPER_CLASS = 'flex flex-col gap-1.5';
-const PORTFOLIO_FORM_GRID_CLASS = 'mt-6 grid grid-cols-2 gap-x-4 gap-y-6';
+const PORTFOLIO_FORM_GRID_CLASS = 'mt-6 grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2';
 const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-lg border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white placeholder:text-white/20 outline-none focus:border-emerald-500/50';
-const PORTFOLIO_SELECT_CLASS = 'w-full gap-1.5 [&_select]:rounded-lg [&_select]:border [&_select]:border-white/10 [&_select]:bg-white/[0.02] [&_select]:px-3 [&_select]:py-2.5 [&_select]:text-sm [&_select]:text-white [&_select]:outline-none [&_select]:appearance-none [&_select]:focus:border-emerald-500/50';
+const PORTFOLIO_SELECT_CLASS = 'min-w-0';
 const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'h-10 rounded-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 px-4 text-sm font-bold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] hover:from-blue-500 hover:to-purple-500';
 const PORTFOLIO_SUBMIT_BUTTON_CLASS = 'w-full mt-8 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium rounded-lg px-6 py-3 shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed';
 const PORTFOLIO_SECONDARY_BUTTON_CLASS = 'h-9 rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white';
@@ -113,7 +113,7 @@ function SeamlessSegmentedControl({
   dataTestId?: string;
 }) {
   return (
-    <div data-testid={dataTestId} className={`flex p-1 bg-white/[0.05] rounded-xl w-full ${className}`}>
+    <div data-testid={dataTestId} className={`ui-scroll-x-quiet flex min-w-0 w-full max-w-full rounded-xl bg-white/[0.05] p-1 ${className}`}>
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -122,9 +122,9 @@ function SeamlessSegmentedControl({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(option.value)}
-            className={`appearance-none border-0 flex-1 py-1.5 text-center text-sm font-medium transition-all duration-200 rounded-lg cursor-pointer ${active ? 'text-white bg-white/10 shadow-sm' : 'text-white/40 hover:text-white/70 bg-transparent'} ${itemClassName}`}
+            className={`min-w-0 appearance-none border-0 flex-1 shrink-0 rounded-lg px-2 py-1.5 text-center text-sm font-medium transition-all duration-200 cursor-pointer ${active ? 'bg-white/10 text-white shadow-sm' : 'bg-transparent text-white/40 hover:text-white/70'} ${itemClassName}`}
           >
-            {option.label}
+            <span className="ui-truncate block w-full">{option.label}</span>
           </button>
         );
       })}
@@ -1377,7 +1377,7 @@ const PortfolioPage: React.FC = () => {
                   <h2 className="text-sm text-muted-text uppercase tracking-widest">Trade Station</h2>
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2.5">
+              <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <Select
                   label="ACCOUNT"
                   labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
@@ -1388,6 +1388,7 @@ const PortfolioPage: React.FC = () => {
                     ...accounts.map((account) => ({ value: String(account.id), label: account.name })),
                   ]}
                   className={PORTFOLIO_SELECT_CLASS}
+                  controlClassName="rounded-lg"
                 />
                 <Select
                   label="COST METHOD"
@@ -1401,6 +1402,7 @@ const PortfolioPage: React.FC = () => {
                     { value: 'ths_pnl', label: copy.costThsPnl },
                   ]}
                   className={PORTFOLIO_SELECT_CLASS}
+                  controlClassName="rounded-lg"
                 />
               </div>
               <div data-testid="portfolio-trade-station-summary" className="mt-3 flex flex-col gap-1 border-y border-white/5 py-2">

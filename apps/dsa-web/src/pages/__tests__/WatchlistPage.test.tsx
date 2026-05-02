@@ -174,6 +174,9 @@ describe('WatchlistPage', () => {
     expect(await screen.findByTestId('watchlist-row-NVDA')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-TSM')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-600519')).toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-filter-grid')).toHaveClass('min-w-0', 'grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-5');
+    expect(screen.getByLabelText('市场')).toHaveClass('pr-10', 'ui-control-value');
+    expect(screen.getByLabelText('主题 / 候选范围')).toHaveClass('pr-10', 'ui-control-value');
     expect(listWatchlistItems).toHaveBeenCalledTimes(1);
   });
 
@@ -228,6 +231,15 @@ describe('WatchlistPage', () => {
     expect(within(rows[0] as HTMLElement).getByText('NVDA')).toBeInTheDocument();
     expect(within(rows[1] as HTMLElement).getByText('TSM')).toBeInTheDocument();
     expect(within(rows[2] as HTMLElement).getByText('600519')).toBeInTheDocument();
+  });
+
+  it('keeps the filter controls overflow-safe with long labels', async () => {
+    renderWatchlist();
+    await screen.findByTestId('watchlist-row-NVDA');
+
+    const searchInput = screen.getByLabelText('搜索');
+    expect(searchInput).toHaveClass('pr-12');
+    expect(screen.getByTestId('watchlist-filter-grid').className).not.toContain('overflow-hidden');
   });
 
   it('starts analysis for a candidate and navigates to the workspace', async () => {

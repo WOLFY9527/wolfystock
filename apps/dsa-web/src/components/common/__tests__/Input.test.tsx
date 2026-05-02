@@ -31,6 +31,7 @@ describe('Input', () => {
     );
 
     expect(screen.getByRole('button', { name: '显示' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toHaveClass('pr-12');
   });
 
   it('renders a key icon and applies leading padding on the input element', () => {
@@ -38,6 +39,14 @@ describe('Input', () => {
 
     expect(container.querySelector('svg')).not.toBeNull();
     expect(screen.getByLabelText('API Key')).toHaveClass('pl-12');
+    expect(container.querySelector('.input-field__icon')).toHaveClass('ui-control-icon');
+  });
+
+  it('keeps the wrapper overflow-safe when containerClassName is provided', () => {
+    const { container } = render(<Input label="Search" containerClassName="custom-shell" trailingAction={<span>go</span>} />);
+
+    expect(container.firstElementChild).toHaveClass('input-field', 'min-w-0', 'w-full', 'max-w-full', 'custom-shell');
+    expect(container.querySelector('.input-field__control')).toHaveClass('ui-control-shell', 'min-w-0', 'w-full', 'max-w-full');
   });
 
   it('toggles password visibility in uncontrolled mode', () => {

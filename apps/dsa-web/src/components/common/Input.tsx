@@ -13,6 +13,7 @@ import { EyeToggleIcon } from './EyeToggleIcon';
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   labelClassName?: string;
+  containerClassName?: string;
   hint?: string;
   error?: string;
   trailingAction?: React.ReactNode;
@@ -29,6 +30,7 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 export const Input = ({ 
   label, 
   labelClassName,
+  containerClassName = '',
   hint, 
   error, 
   className = '', 
@@ -100,11 +102,11 @@ export const Input = ({
   const finalTrailingAction = trailingAction || defaultTrailingAction;
 
   return (
-    <div className="input-field flex flex-col">
+    <div className={cn('input-field flex min-w-0 w-full max-w-full flex-col', containerClassName)}>
       {label ? <label htmlFor={inputId} className={cn('theme-field-label mb-2', labelClassName)}>{label}</label> : null}
-      <div className="input-field__control relative flex items-center">
+      <div className="input-field__control ui-control-shell relative flex min-w-0 w-full max-w-full items-center">
         {leadingIcon && (
-          <div className="input-field__icon absolute left-3 z-10 pointer-events-none">
+          <div className="input-field__icon ui-control-icon absolute left-3 z-10">
             {leadingIcon}
           </div>
         )}
@@ -114,11 +116,11 @@ export const Input = ({
           aria-invalid={ariaInvalid}
           style={inputStyle}
           className={cn(
-            'input-surface input-focus-glow h-10 w-full rounded-xl border px-4 text-sm text-foreground transition-all placeholder:text-muted-text',
+            'input-surface input-focus-glow h-10 w-full min-w-0 max-w-full rounded-xl border px-4 text-sm text-foreground transition-all placeholder:text-muted-text',
             'focus:outline-none',
             error ? 'border-danger/30' : '',
             leadingIcon ? 'pl-12' : '',
-            finalTrailingAction ? 'pr-11' : '',
+            finalTrailingAction ? 'pr-12' : '',
             'disabled:cursor-not-allowed disabled:opacity-60',
             className,
           )}
@@ -126,7 +128,7 @@ export const Input = ({
           type={effectiveType}
         />
         {finalTrailingAction ? (
-          <div className="input-field__trailing absolute inset-y-0 right-1.5 flex items-center">
+          <div className="input-field__trailing ui-control-icon absolute inset-y-0 right-1.5 flex items-center">
             {finalTrailingAction}
           </div>
         ) : null}

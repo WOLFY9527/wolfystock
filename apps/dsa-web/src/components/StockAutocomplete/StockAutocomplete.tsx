@@ -54,7 +54,7 @@ function FallbackInput({
       }}
       placeholder={placeholder}
       disabled={disabled}
-      className={cn('input-surface input-focus-glow product-command-input w-full', className)}
+      className={cn('input-surface input-focus-glow product-command-input w-full min-w-0 max-w-full', className)}
       data-autocomplete-mode="fallback"
     />
   );
@@ -238,7 +238,7 @@ function StockAutocompleteInner({
   }
 
   return (
-    <div className="relative stock-autocomplete">
+    <div className="relative stock-autocomplete min-w-0 w-full max-w-full">
       <input
         ref={inputRef}
         type="text"
@@ -256,7 +256,7 @@ function StockAutocompleteInner({
         placeholder={placeholder}
         disabled={disabled}
         className={cn(
-          'input-surface input-focus-glow product-command-input w-full pr-10 truncate',
+          'input-surface input-focus-glow product-command-input w-full min-w-0 max-w-full pr-10 truncate',
           "focus:outline-none",
           isOpen && "rounded-b-none",
           className
@@ -270,7 +270,7 @@ function StockAutocompleteInner({
 
       {/* Loading indicator */}
       {loading && (
-        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+        <div className="ui-control-icon absolute right-3 top-1/2 -translate-y-1/2">
           <div className="w-4 h-4 border-2 border-[hsl(var(--accent-primary-hsl)/0.2)] border-t-[hsl(var(--accent-primary-hsl))] rounded-full animate-spin" />
         </div>
       )}

@@ -32,9 +32,9 @@ export const SegmentedControl: React.FC<SegmentedControlProps> = ({
   inactiveButtonClassName,
   size = 'sm',
 }) => (
-  <div className={cn('space-y-2', className)}>
+  <div className={cn('space-y-2 min-w-0', className)}>
     {label ? <p className="label-uppercase text-secondary-text">{label}</p> : null}
-    <div className={cn('theme-panel-subtle inline-flex w-full flex-wrap items-center gap-1 rounded-[var(--theme-panel-radius-md)] p-1', listClassName)}>
+    <div className={cn('theme-panel-subtle ui-scroll-x-quiet flex min-w-0 max-w-full items-center gap-1 rounded-[var(--theme-panel-radius-md)] p-1', listClassName)}>
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -46,7 +46,7 @@ export const SegmentedControl: React.FC<SegmentedControlProps> = ({
             aria-pressed={active}
             onClick={() => onChange(option.value)}
             className={cn(
-              'min-w-0 flex-1 text-secondary-text',
+              'min-w-0 shrink-0 flex-1 text-secondary-text',
               active
                 ? 'bg-[var(--pill-active-bg)] text-foreground shadow-soft-card'
                 : 'border-transparent hover:bg-[var(--overlay-hover)] hover:text-foreground',
@@ -54,7 +54,7 @@ export const SegmentedControl: React.FC<SegmentedControlProps> = ({
               active ? activeButtonClassName : inactiveButtonClassName,
             )}
           >
-            {option.label}
+            <span className="ui-truncate block w-full">{option.label}</span>
           </Button>
         );
       })}

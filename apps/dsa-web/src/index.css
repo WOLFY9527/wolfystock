@@ -13,18 +13,60 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  .ui-min-w-0 {
+    min-width: 0;
+  }
+
+  .ui-truncate {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ui-flex-truncate {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .ui-scroll-x-quiet {
+    overflow-x: auto;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .ui-scroll-x-quiet::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ui-control-shell {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .ui-control-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ui-control-icon {
+    flex-shrink: 0;
+    pointer-events: none;
+  }
 }
 
 @layer base {
   select {
-    -webkit-appearance: none !important;
-    -moz-appearance: none !important;
-    appearance: none !important;
-    padding-right: 2.5rem !important;
-    padding-right: max(2.5rem, 40px) !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    max-width: 100%;
   }
 }
 

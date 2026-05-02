@@ -212,8 +212,21 @@ describe('StockAutocomplete', () => {
     const input = screen.getByRole('combobox');
     expect(input).toHaveAttribute('aria-autocomplete', 'none');
     expect(input).toHaveAttribute('role', 'combobox');
+    expect(input).toHaveClass('min-w-0', 'max-w-full');
     expect(input).toHaveClass('pr-10');
     expect(input).toHaveClass('truncate');
+  });
+
+  it('keeps the autocomplete shell overflow-safe', () => {
+    const { container } = render(
+      <StockAutocomplete
+        value=""
+        onChange={mockOnChange}
+        onSubmit={mockOnSubmit}
+      />
+    );
+
+    expect(container.querySelector('.stock-autocomplete')).toHaveClass('min-w-0', 'w-full', 'max-w-full');
   });
 
   describe('fallback mode', () => {
