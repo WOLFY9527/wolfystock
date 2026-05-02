@@ -590,6 +590,10 @@ class MarketScannerService:
             theme_id=theme_id,
             symbols=symbols,
         )
+        if universe_selection["universe_type"] != "default":
+            accepted_count = int(universe_selection.get("accepted_symbols_count") or 0)
+            resolved_universe_limit = max(resolved_universe_limit, accepted_count)
+            resolved_detail_limit = max(resolved_detail_limit, accepted_count)
 
         if profile_config.market == "us":
             return self._run_us_scan(
@@ -1029,6 +1033,144 @@ class MarketScannerService:
             "degraded_mode_used": False,
         }
 
+    def _diagnostic_metrics_from_candidate(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
+        components = dict(candidate.get("_component_scores") or {})
+        return {
+            "price": _round_optional(candidate.get("price")),
+            "day_change": _round_optional(candidate.get("change_pct")),
+            "return_20d": _round_optional(candidate.get("ret_20d")),
+            "return_60d": _round_optional(candidate.get("ret_60d")),
+            "trend": _round_optional(components.get("trend")),
+            "momentum": _round_optional(components.get("momentum")),
+            "liquidity": _round_optional(components.get("liquidity")),
+            "relative_strength": _round_optional(components.get("relative_strength")),
+        }
+
+    def _rejection_rules_for_candidate(self, candidate: Dict[str, Any], selected_cutoff: float) -> List[str]:
+        components = dict(candidate.get("_component_scores") or {})
+        failed_rules: List[str] = []
+        if _safe_float(candidate.get("score")) < selected_cutoff:
+            failed_rules.append("below_score_threshold")
+        if _safe_float(components.get("trend")) < 10.0:
+            failed_rules.append("below_trend_threshold")
+        if _safe_float(components.get("momentum")) < 8.0:
+            failed_rules.append("below_momentum_threshold")
+        if _safe_float(components.get("liquidity")) < 8.0:
+            failed_rules.append("below_liquidity_threshold")
+        price = _safe_float(candidate.get("price"))
+        ma20 = _safe_float(candidate.get("ma20"))
+        ma60 = _safe_float(candidate.get("ma60"))
+        if not (price > ma20 > 0 and price > ma60 > 0):
+            failed_rules.append("below_ma20_or_ma60")
+        if not failed_rules:
+            failed_rules.append("below_score_threshold")
+        return failed_rules
+
+    def _build_candidate_diagnostics(
+        self,
+        *,
+        universe_selection: Optional[Dict[str, Any]],
+        ranked_candidates: Sequence[Dict[str, Any]],
+        shortlist: Sequence[Dict[str, Any]],
+        diagnostics: Dict[str, Any],
+    ) -> Tuple[Dict[str, Any], Dict[str, Any], List[Dict[str, Any]]]:
+        public_universe_selection = self._public_universe_selection(universe_selection)
+        accepted_symbols = list(public_universe_selection.get("accepted_symbols") or [])
+        base_candidate_diagnostics = {}
+        history_cache = diagnostics.get("candidate_diagnostics")
+        if isinstance(history_cache, dict):
+            base_candidate_diagnostics = {
+                str(symbol).upper(): dict(payload)
+                for symbol, payload in history_cache.items()
+                if isinstance(payload, dict)
+            }
+
+        selected_symbols = {str(item.get("symbol") or "").upper() for item in shortlist}
+        selected_cutoff = min((_safe_float(item.get("score")) for item in shortlist), default=0.0)
+        ranked_by_symbol = {
+            str(item.get("symbol") or "").upper(): item
+            for item in ranked_candidates
+            if item.get("symbol")
+        }
+        ordered_symbols = accepted_symbols or list(ranked_by_symbol.keys())
+        for symbol in ranked_by_symbol:
+            if symbol and symbol not in ordered_symbols:
+                ordered_symbols.append(symbol)
+
+        candidates: List[Dict[str, Any]] = []
+        for index, symbol in enumerate(ordered_symbols, start=1):
+            ranked = ranked_by_symbol.get(symbol)
+            base = dict(base_candidate_diagnostics.get(symbol) or {})
+            if ranked is not None:
+                status = "selected" if symbol in selected_symbols else "rejected"
+                failed_rules = [] if status == "selected" else self._rejection_rules_for_candidate(ranked, selected_cutoff)
+                quote_context = dict((ranked.get("_diagnostics") or {}).get("quote_context") or {})
+                provider = quote_context.get("source") or ranked.get("snapshot_source") or ranked.get("history_source")
+                reason = "passed" if status == "selected" else str(ranked.get("reason_summary") or failed_rules[0])
+                base.update(
+                    {
+                        "symbol": symbol,
+                        "name": str(ranked.get("name") or symbol),
+                        "status": status,
+                        "score": _round_optional(ranked.get("score"), digits=1),
+                        "provider": provider,
+                        "reason": reason,
+                        "failed_rules": failed_rules,
+                        "missing_fields": [],
+                        "metrics": self._diagnostic_metrics_from_candidate(ranked),
+                    }
+                )
+            else:
+                base.setdefault("symbol", symbol)
+                base.setdefault("name", symbol)
+                base.setdefault("status", "skipped")
+                base.setdefault("score", None)
+                base.setdefault("provider", None)
+                base.setdefault("reason", "not evaluated")
+                base.setdefault("failed_rules", ["invalid_payload"] if base.get("status") == "error" else [])
+                base.setdefault("missing_fields", [])
+                base.setdefault("metrics", {})
+            base["rank"] = index
+            candidates.append(base)
+
+        counts = {
+            "selected": 0,
+            "rejected": 0,
+            "data_failed": 0,
+            "skipped": 0,
+            "error": 0,
+        }
+        for item in candidates:
+            status = str(item.get("status") or "skipped")
+            if status in counts:
+                counts[status] += 1
+            else:
+                counts["skipped"] += 1
+
+        universe_count = len(accepted_symbols) if accepted_symbols else int(
+            ((diagnostics.get("coverage_summary") or {}).get("input_universe_size") or len(candidates))
+            if isinstance(diagnostics.get("coverage_summary"), dict)
+            else len(candidates)
+        )
+        theme_payload = {
+            "id": public_universe_selection.get("theme_id"),
+            "name": public_universe_selection.get("theme_label"),
+            "universe_count": universe_count,
+            "symbols": accepted_symbols,
+        }
+        summary = {
+            "universe_count": universe_count,
+            "submitted_count": int(public_universe_selection.get("requested_symbols_count") or universe_count),
+            "evaluated_count": counts["selected"] + counts["rejected"],
+            "selected_count": counts["selected"],
+            "rejected_count": counts["rejected"],
+            "data_failed_count": counts["data_failed"],
+            "skipped_count": counts["skipped"],
+            "error_count": counts["error"],
+            "limited_by_result_cap": False,
+        }
+        return theme_payload, summary, candidates
+
     def _finalize_completed_scan(
         self,
         *,
@@ -1065,6 +1207,12 @@ class MarketScannerService:
         finalized_diagnostics["ai_interpretation"] = dict(ai_interpretation_diag or {})
         finalized_diagnostics["run_duration_seconds"] = round((run_completed_at - run_started_at).total_seconds(), 2)
         public_universe_selection = self._public_universe_selection(universe_selection)
+        theme_payload, summary_payload, candidate_diagnostics = self._build_candidate_diagnostics(
+            universe_selection=universe_selection,
+            ranked_candidates=ranked_candidates_list,
+            shortlist=shortlist_list,
+            diagnostics=finalized_diagnostics,
+        )
 
         run_model = MarketScannerRun(
             owner_id=owner_id,
@@ -1137,6 +1285,10 @@ class MarketScannerService:
             "accepted_symbols_count": public_universe_selection["accepted_symbols_count"],
             "rejected_symbols": public_universe_selection["rejected_symbols"],
             "diagnostics": finalized_diagnostics,
+            "theme": theme_payload,
+            "summary": summary_payload,
+            "selected": response_shortlist,
+            "candidates": candidate_diagnostics,
             "shortlist": response_shortlist,
         }
 
@@ -1314,6 +1466,7 @@ class MarketScannerService:
                 "degraded_mode_used": False,
             },
             "universe_selection": self._public_universe_selection(universe_selection),
+            "candidate_diagnostics": history_cache.get("candidate_diagnostics") or {},
         }
         source_summary = self._build_source_summary(
             universe_source=universe_source,
@@ -1519,6 +1672,7 @@ class MarketScannerService:
         rows: List[Dict[str, Any]] = []
         history_frames: Dict[str, pd.DataFrame] = {}
         history_diags: Dict[str, Dict[str, Any]] = {}
+        candidate_diagnostics: Dict[str, Dict[str, Any]] = {}
         history_rollup = {
             "local_hits": 0,
             "network_fetches": 0,
@@ -1871,6 +2025,7 @@ class MarketScannerService:
         rows: List[Dict[str, Any]] = []
         history_frames: Dict[str, pd.DataFrame] = {}
         history_diags: Dict[str, Dict[str, Any]] = {}
+        candidate_diagnostics: Dict[str, Dict[str, Any]] = {}
         history_rollup = {
             "local_hits": 0,
             "network_fetches": 0,
@@ -1891,15 +2046,48 @@ class MarketScannerService:
         for raw_symbol in symbols:
             symbol = str(raw_symbol or "").strip().upper()
             if not is_us_stock_code(symbol):
+                candidate_diagnostics[symbol] = {
+                    "symbol": symbol,
+                    "name": symbol,
+                    "status": "skipped",
+                    "score": None,
+                    "provider": None,
+                    "reason": "unsupported_market",
+                    "failed_rules": ["unsupported_market"],
+                    "missing_fields": [],
+                    "metrics": {},
+                }
                 continue
             if benchmark_code and symbol == benchmark_code:
+                candidate_diagnostics[symbol] = {
+                    "symbol": symbol,
+                    "name": symbol,
+                    "status": "skipped",
+                    "score": None,
+                    "provider": None,
+                    "reason": "benchmark_symbol_skipped",
+                    "failed_rules": ["duplicate_symbol"],
+                    "missing_fields": [],
+                    "metrics": {},
+                }
                 continue
 
             history_df, history_diag = self._load_history_local_first(code=symbol, profile=profile)
             history_frames[symbol] = history_df
             history_diags[symbol] = history_diag
-
             history_source = str(history_diag.get("source") or "")
+            candidate_diagnostics[symbol] = {
+                "symbol": symbol,
+                "name": symbol,
+                "status": "skipped",
+                "score": None,
+                "provider": history_source or None,
+                "reason": "not_evaluated",
+                "failed_rules": [],
+                "missing_fields": [],
+                "metrics": {},
+            }
+
             if history_source == "local_db":
                 history_rollup["local_hits"] += 1
             elif history_diag.get("network_used"):
@@ -1913,19 +2101,59 @@ class MarketScannerService:
             if not features:
                 history_rollup["skipped_for_history"] += 1
                 exclusion_stats["insufficient_history"] += 1
+                candidate_diagnostics[symbol].update(
+                    {
+                        "status": "data_failed",
+                        "reason": "missing price history",
+                        "failed_rules": ["not_enough_history"],
+                        "missing_fields": ["history"],
+                    }
+                )
                 continue
 
             avg_amount_20 = _safe_float(features.get("avg_amount_20"))
             avg_volume_20 = _safe_float(features.get("avg_volume_20"))
             close = _safe_float(features.get("close"))
+            base_metrics = {
+                "price": _round_optional(close),
+                "day_change": _round_optional(features.get("latest_pct_chg")),
+                "return_20d": _round_optional(features.get("ret_20d")),
+                "return_60d": _round_optional(features.get("ret_60d")),
+                "avg_amount_20": _round_optional(avg_amount_20),
+                "avg_volume_20": _round_optional(avg_volume_20),
+            }
             if close < profile.min_price:
                 exclusion_stats["low_price"] += 1
+                candidate_diagnostics[symbol].update(
+                    {
+                        "status": "rejected",
+                        "reason": "below price threshold",
+                        "failed_rules": ["below_price_threshold"],
+                        "metrics": base_metrics,
+                    }
+                )
                 continue
             if avg_amount_20 < profile.min_avg_amount_20:
                 exclusion_stats["low_avg_amount_20"] += 1
+                candidate_diagnostics[symbol].update(
+                    {
+                        "status": "rejected",
+                        "reason": "below liquidity threshold",
+                        "failed_rules": ["below_liquidity_threshold"],
+                        "metrics": base_metrics,
+                    }
+                )
                 continue
             if avg_volume_20 < profile.min_avg_volume_20:
                 exclusion_stats["low_avg_volume_20"] += 1
+                candidate_diagnostics[symbol].update(
+                    {
+                        "status": "rejected",
+                        "reason": "below liquidity threshold",
+                        "failed_rules": ["below_liquidity_threshold"],
+                        "metrics": base_metrics,
+                    }
+                )
                 continue
 
             benchmark_relative_20d = None
@@ -1963,6 +2191,14 @@ class MarketScannerService:
                     "benchmark_relative_20d": benchmark_relative_20d,
                 }
             )
+            candidate_diagnostics[symbol].update(
+                {
+                    "status": "evaluated",
+                    "reason": "evaluated",
+                    "failed_rules": [],
+                    "metrics": base_metrics,
+                }
+            )
 
         universe_df = pd.DataFrame(rows)
         if universe_df.empty:
@@ -1977,6 +2213,7 @@ class MarketScannerService:
                 "frames": history_frames,
                 "diagnostics": history_diags,
                 "history_rollup": history_rollup,
+                "candidate_diagnostics": candidate_diagnostics,
             }
 
         universe_df = universe_df.sort_values(
@@ -1999,6 +2236,7 @@ class MarketScannerService:
             "frames": history_frames,
             "diagnostics": history_diags,
             "history_rollup": history_rollup,
+            "candidate_diagnostics": candidate_diagnostics,
         }
 
     def _compute_us_pre_rank(self, universe_df: pd.DataFrame) -> pd.DataFrame:

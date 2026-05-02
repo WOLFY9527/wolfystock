@@ -16,7 +16,7 @@ import pandas as pd
 from data_provider.base import BaseFetcher, DataFetchError, DataFetcherManager, normalize_stock_code
 from src.repositories.stock_repo import StockRepository
 from src.core.scanner_profile import get_scanner_profile
-from src.core.scanner_theme_registry import create_ai_scanner_theme
+from src.core.scanner_theme_registry import create_ai_scanner_theme, get_scanner_theme
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
 from src.storage import DatabaseManager, MarketScannerRun
 
@@ -317,6 +317,7 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
     def __init__(self):
         super().__init__()
         self._last_realtime_quote_trace: list[dict] = []
+        self.realtime_quote_calls: list[str] = []
         self.us_quotes = {
             "NVDA": SimpleNamespace(
                 price=964.0,
@@ -345,10 +346,83 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
                 name="Palantir",
                 source=SimpleNamespace(value="yfinance"),
             ),
+            "WULF": SimpleNamespace(
+                price=21.3,
+                pre_close=20.4,
+                change_pct=4.41,
+                volume=46_000_000,
+                amount=9.8e8,
+                name="TeraWulf",
+                source=SimpleNamespace(value="alpaca"),
+            ),
+            "MARA": SimpleNamespace(
+                price=27.0,
+                pre_close=27.5,
+                change_pct=-1.82,
+                volume=34_000_000,
+                amount=9.1e8,
+                name="MARA Holdings",
+                source=SimpleNamespace(value="alpaca"),
+            ),
+            "RIOT": SimpleNamespace(
+                price=12.6,
+                pre_close=12.9,
+                change_pct=-2.33,
+                volume=29_000_000,
+                amount=3.65e8,
+                name="Riot Platforms",
+                source=SimpleNamespace(value="alpaca"),
+            ),
+            "CLSK": SimpleNamespace(
+                price=16.2,
+                pre_close=16.0,
+                change_pct=1.25,
+                volume=24_000_000,
+                amount=3.88e8,
+                name="CleanSpark",
+                source=SimpleNamespace(value="alpaca"),
+            ),
+            "IREN": SimpleNamespace(
+                price=11.4,
+                pre_close=11.2,
+                change_pct=1.79,
+                volume=20_000_000,
+                amount=2.28e8,
+                name="IREN",
+                source=SimpleNamespace(value="alpaca"),
+            ),
+            "HUT": SimpleNamespace(
+                price=8.1,
+                pre_close=8.2,
+                change_pct=-1.22,
+                volume=18_000_000,
+                amount=1.46e8,
+                name="Hut 8",
+                source=SimpleNamespace(value="alpaca"),
+            ),
+            "BTDR": SimpleNamespace(
+                price=10.4,
+                pre_close=10.3,
+                change_pct=0.97,
+                volume=15_000_000,
+                amount=1.56e8,
+                name="Bitdeer",
+                source=SimpleNamespace(value="alpaca"),
+            ),
+            "CORZ": SimpleNamespace(
+                price=12.2,
+                pre_close=12.0,
+                change_pct=1.67,
+                volume=14_000_000,
+                amount=1.71e8,
+                name="Core Scientific",
+                source=SimpleNamespace(value="alpaca"),
+            ),
         }
 
     def get_realtime_quote(self, symbol: str):
         normalized = str(symbol or "").upper()
+        self.realtime_quote_calls.append(normalized)
         quote = self.us_quotes.get(normalized)
         if quote is None:
             self._last_realtime_quote_trace = [
@@ -425,6 +499,23 @@ def seed_us_local_history(stock_repo: StockRepository) -> None:
     }
     for code, dataframe in fixtures.items():
         stock_repo.save_dataframe(dataframe.copy(), code, data_source="LocalUsFixture")
+
+
+def seed_crypto_miner_local_history(stock_repo: StockRepository) -> None:
+    fixtures = {
+        "SPY": _make_history(start_price=485.0, slope=0.35, amount_base=3.4e10, volume_base=78_000_000, bars=130),
+        "WULF": _make_history(start_price=5.0, slope=0.12, amount_base=8.0e8, volume_base=42_000_000, bars=130),
+        "MARA": _make_history(start_price=25.0, slope=0.02, amount_base=5.5e8, volume_base=36_000_000, bars=130),
+        "RIOT": _make_history(start_price=12.0, slope=0.01, amount_base=3.5e8, volume_base=31_000_000, bars=130),
+        "CLSK": _make_history(start_price=14.0, slope=0.04, amount_base=3.2e8, volume_base=24_000_000, bars=130),
+        "IREN": _make_history(start_price=9.0, slope=0.03, amount_base=2.9e8, volume_base=22_000_000, bars=130),
+        "HUT": _make_history(start_price=8.0, slope=-0.01, amount_base=2.6e8, volume_base=20_000_000, bars=130),
+        "BTDR": _make_history(start_price=10.0, slope=0.015, amount_base=2.5e8, volume_base=18_000_000, bars=130),
+        "CORZ": _make_history(start_price=11.0, slope=0.02, amount_base=2.4e8, volume_base=17_000_000, bars=130),
+        "HIVE": _make_history(start_price=4.5, slope=0.008, amount_base=2.2e8, volume_base=16_000_000, bars=130),
+    }
+    for code, dataframe in fixtures.items():
+        stock_repo.save_dataframe(dataframe.copy(), code, data_source="CryptoMinerFixture")
 
 
 def seed_hk_local_history(stock_repo: StockRepository) -> None:
@@ -855,6 +946,67 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertIn("NVDA", universe["accepted_symbols"])
         self.assertIn("PLTR", universe["accepted_symbols"])
         self.assertLessEqual({item["symbol"] for item in result["shortlist"]}, set(universe["accepted_symbols"]))
+
+    def test_crypto_mining_theme_diagnostics_return_full_candidate_universe(self) -> None:
+        seed_crypto_miner_local_history(self.stock_repo)
+        data_manager = FakeUsScannerDataManager()
+        service = MarketScannerService(self.db, data_manager=data_manager)
+        theme = get_scanner_theme("crypto_miners")
+        assert theme is not None
+
+        result = service.run_scan(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=1,
+            universe_limit=50,
+            detail_limit=10,
+            universe_type="theme",
+            theme_id="crypto_miners",
+        )
+
+        self.assertEqual(list(theme.symbols), ["MARA", "RIOT", "CLSK", "IREN", "CIFR", "HUT", "BTDR", "WULF", "CORZ", "BITF", "HIVE"])
+        self.assertEqual(result["theme"]["universe_count"], 11)
+        self.assertEqual(result["summary"]["universe_count"], 11)
+        self.assertEqual(result["summary"]["submitted_count"], 11)
+        self.assertEqual(result["summary"]["selected_count"], 1)
+        self.assertEqual(result["summary"]["data_failed_count"], 2)
+        self.assertFalse(result["summary"]["limited_by_result_cap"])
+        self.assertEqual(len(result["candidates"]), 11)
+        self.assertEqual(result["selected"], result["shortlist"])
+
+        candidate_map = {item["symbol"]: item for item in result["candidates"]}
+        self.assertEqual(candidate_map["WULF"]["status"], "selected")
+        self.assertEqual(candidate_map["WULF"]["provider"], "alpaca")
+        self.assertEqual(candidate_map["CIFR"]["status"], "data_failed")
+        self.assertIn("history", candidate_map["CIFR"]["missing_fields"])
+        self.assertEqual(candidate_map["BITF"]["status"], "data_failed")
+        rejected = [item for item in result["candidates"] if item["status"] == "rejected"]
+        self.assertGreaterEqual(len(rejected), 1)
+        self.assertTrue(all(item["reason"] or item["failed_rules"] for item in rejected))
+        self.assertEqual(len(data_manager.daily_history_calls), 0)
+        self.assertEqual(len(data_manager.realtime_quote_calls), 9)
+
+    def test_theme_diagnostics_are_not_hidden_by_detail_limit(self) -> None:
+        seed_crypto_miner_local_history(self.stock_repo)
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeUsScannerDataManager(),
+        )
+
+        result = service.run_scan(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=1,
+            universe_limit=50,
+            detail_limit=10,
+            universe_type="theme",
+            theme_id="crypto_miners",
+        )
+
+        self.assertEqual(result["summary"]["universe_count"], 11)
+        self.assertEqual(result["summary"]["evaluated_count"], 9)
+        self.assertEqual(result["summary"]["skipped_count"], 0)
+        self.assertEqual({item["symbol"] for item in result["candidates"]}, set(get_scanner_theme("crypto_miners").symbols))
 
     def test_run_scan_rejects_invalid_or_empty_theme_universe(self) -> None:
         service = MarketScannerService(

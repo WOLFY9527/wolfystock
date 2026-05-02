@@ -222,6 +222,38 @@ class ScannerCandidateResponse(BaseModel):
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
 
 
+class ScannerThemeDiagnosticsResponse(BaseModel):
+    id: Optional[str] = None
+    name: Optional[str] = None
+    universe_count: int = 0
+    symbols: List[str] = Field(default_factory=list)
+
+
+class ScannerSummaryDiagnosticsResponse(BaseModel):
+    universe_count: int = 0
+    submitted_count: int = 0
+    evaluated_count: int = 0
+    selected_count: int = 0
+    rejected_count: int = 0
+    data_failed_count: int = 0
+    skipped_count: int = 0
+    error_count: int = 0
+    limited_by_result_cap: bool = False
+
+
+class ScannerCandidateDiagnosticsResponse(BaseModel):
+    symbol: str
+    name: Optional[str] = None
+    rank: int = 0
+    status: Literal["selected", "rejected", "data_failed", "skipped", "error", "evaluated"] = "skipped"
+    score: Optional[float] = None
+    provider: Optional[str] = None
+    reason: Optional[str] = None
+    failed_rules: List[str] = Field(default_factory=list)
+    missing_fields: List[str] = Field(default_factory=list)
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+
+
 class ScannerRunDetailResponse(BaseModel):
     id: int
     market: str
@@ -252,6 +284,10 @@ class ScannerRunDetailResponse(BaseModel):
     failure_reason: Optional[str] = None
     comparison_to_previous: ScannerWatchlistComparisonResponse = Field(default_factory=ScannerWatchlistComparisonResponse)
     review_summary: ScannerReviewSummaryResponse = Field(default_factory=ScannerReviewSummaryResponse)
+    theme: ScannerThemeDiagnosticsResponse = Field(default_factory=ScannerThemeDiagnosticsResponse)
+    summary: ScannerSummaryDiagnosticsResponse = Field(default_factory=ScannerSummaryDiagnosticsResponse)
+    selected: List[ScannerCandidateResponse] = Field(default_factory=list)
+    candidates: List[ScannerCandidateDiagnosticsResponse] = Field(default_factory=list)
     shortlist: List[ScannerCandidateResponse] = Field(default_factory=list)
 
 
