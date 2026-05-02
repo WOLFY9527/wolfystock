@@ -1,5 +1,7 @@
 ## 2026-05-02
 
+- 🧭 **Scanner 策略预览与 Run 对比工作台** — `/scanner` 在不改变后端入选规则的前提下新增客户端阈值预览、官方/预览/淘汰/数据失败标签、候选池本地重排、上次同 profile/theme/market run 对比、Inspector 对比摘要，以及“加入全部入选 / 加入预览入选 / 加入前 5 名 / 加入当前筛选”批量观察动作。阈值预览只复用当前 run 已返回的 `candidates / score / status / failed_rules / reason` 诊断数据，不重新扫描、不触发额外行情或 provider 调用。
+
 - 📌 **观察列表评分刷新与分析交接修复** — `/watchlist` 的分析按钮现在会把异步分析返回的 `task_id`、`symbol`、`source=watchlist` 和市场写入 Home query handoff，Home 决策页收到 watchlist 任务后以 `task_id` 为权威对象显示对应代码的 Wolfy AI 分析中骨架，不再把旧 ORCL 报告当作当前内容；任务完成后优先用该 task 的 final result 更新 WULF 等目标报告。观察列表新增轻量评分刷新接口 `/api/v1/watchlist/refresh-scores` 与状态接口，刷新只复用已持久化 Scanner 候选评分更新 score/rank/last_scored_at/stale 状态，不为每个候选启动完整 AI 报告。
 
 - 🧭 **Scanner 主题候选诊断透明化** — `/api/v1/scanner/run` 在保留既有 `shortlist` 的基础上新增 `theme`、`summary`、`selected` 与 `candidates` 诊断载荷，主题扫描会返回完整候选池、已评估/入选/淘汰/数据失败/跳过计数、每个非入选候选的原因、失败规则、缺失字段、provider 与关键指标。主题/自定义标的扫描不再让 `detail_limit` 截断已提交的完整主题候选池；`/scanner` 结果区新增紧凑计数条和“入选 / 候选池 / 淘汰 / 数据失败 / 全部”过滤表，让 `加密矿企 · 11` 这类主题能直接解释为什么只有少数标的入选。

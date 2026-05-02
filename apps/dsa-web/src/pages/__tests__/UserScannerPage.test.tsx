@@ -370,7 +370,7 @@ function makeCryptoDiagnosticsRun(overrides: Partial<ScannerRunDetail> = {}): Sc
         name: 'MARA Holdings',
         rank: 2,
         status: 'rejected',
-        score: 42,
+        score: 55,
         provider: 'alpaca',
         reason: 'missing momentum threshold',
         failedRules: ['below_momentum_threshold'],
@@ -382,7 +382,7 @@ function makeCryptoDiagnosticsRun(overrides: Partial<ScannerRunDetail> = {}): Sc
         name: 'Riot Platforms',
         rank: 3,
         status: 'rejected',
-        score: 39,
+        score: 52,
         provider: 'alpaca',
         reason: null,
         failedRules: ['below_relative_strength'],
@@ -1065,6 +1065,162 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-candidate-row-CIFR')).toHaveTextContent(/missing price history/);
   });
 
+  it('renders strategy preview controls and updates preview count locally without rerunning scanner', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    expect(await screen.findByTestId('scanner-strategy-preview')).toHaveTextContent(/官方入选 1|Official selected 1/);
+    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/预览入选 3|Preview selected 3/);
+    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/\+2/);
+    const runCalls = runScan.mock.calls.length;
+    const getRunCalls = getRun.mock.calls.length;
+
+    fireEvent.click(within(screen.getByTestId('scanner-strategy-preview')).getByRole('button', { name: /60/ }));
+    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/预览入选 1|Preview selected 1/);
+    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/0 vs|0/);
+
+    fireEvent.click(within(screen.getByTestId('scanner-strategy-preview')).getByRole('button', { name: /50/ }));
+    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/阈值 50|Threshold 50/);
+    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/预览可入选 3 个|preview can select 3/i);
+    expect(runScan).toHaveBeenCalledTimes(runCalls);
+    expect(getRun).toHaveBeenCalledTimes(getRunCalls);
+  });
+
+  it('marks preview-selected candidates and keeps WULF as the official selected card', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    const wulfCard = await screen.findByTestId('scanner-result-card-WULF');
+    expect(wulfCard).toHaveTextContent(/官方|Official/);
+    expect(wulfCard).toHaveTextContent('WULF');
+    expect(screen.getByTestId('scanner-preview-added-list')).toHaveTextContent('MARA');
+    expect(screen.getByTestId('scanner-preview-added-list')).toHaveTextContent('RIOT');
+
+    fireEvent.click(screen.getByRole('button', { name: /候选池|Candidate pool/i }));
+    expect(await screen.findByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/预览|Preview/);
+    expect(screen.getByTestId('scanner-candidate-row-CIFR')).toHaveTextContent(/数据失败|Data failed/);
+  });
+
+  it('sorts candidate pool by official selected, preview selected, score, and original rank', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /候选池|Candidate pool/i }));
+
+    const rows = screen.getAllByTestId(/^scanner-candidate-row-/).map((row) => row.getAttribute('data-testid'));
+    expect(rows.slice(0, 4)).toEqual([
+      'scanner-candidate-row-WULF',
+      'scanner-candidate-row-MARA',
+      'scanner-candidate-row-RIOT',
+      'scanner-candidate-row-CIFR',
+    ]);
+  });
+
+  it('updates inspector from preview rows and shows official versus preview status', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByTestId('scanner-preview-added-MARA'));
+
+    await waitFor(() => {
+      const inspector = screen.getByTestId('scanner-candidate-inspector');
+      expect(inspector).toHaveTextContent('MARA');
+      expect(inspector).toHaveTextContent(/官方淘汰|Official rejected/);
+      expect(inspector).toHaveTextContent(/阈值 50 预览入选|Threshold 50 preview selected/);
+    });
+  });
+
+  it('renders previous comparable run comparison and candidate deltas', async () => {
+    const currentRun = makeCryptoDiagnosticsRun();
+    const previousRun = makeCryptoDiagnosticsRun({
+      id: 10,
+      completedAt: '2026-04-21T08:31:00',
+      candidates: [
+        { symbol: 'WULF', name: 'TeraWulf', rank: 1, status: 'selected', score: 56, provider: 'alpaca', reason: 'passed', failedRules: [], missingFields: [], metrics: {} },
+        { symbol: 'MARA', name: 'MARA Holdings', rank: 2, status: 'selected', score: 61, provider: 'alpaca', reason: 'passed', failedRules: [], missingFields: [], metrics: {} },
+        { symbol: 'HUT', name: 'Hut 8', rank: 5, status: 'rejected', score: 41, provider: 'alpaca', reason: 'weak', failedRules: ['weak'], missingFields: [], metrics: {} },
+      ],
+    });
+    getRuns.mockResolvedValue(makeHistoryResponse([
+      makeHistoryItem({ id: 11, market: 'us', profile: 'us_preopen_v1', universeType: 'theme', themeId: 'crypto_miners', themeLabel: '加密矿企', topSymbols: ['WULF'] }),
+      makeHistoryItem({ id: 10, market: 'us', profile: 'us_preopen_v1', universeType: 'theme', themeId: 'crypto_miners', themeLabel: '加密矿企', topSymbols: ['WULF', 'MARA'] }),
+    ]));
+    getRun.mockImplementation((runId: number) => Promise.resolve(runId === 10 ? previousRun : currentRun));
+    renderUserScannerPage();
+
+    expect(await screen.findByTestId('scanner-run-comparison-strip')).toHaveTextContent(/上次对比|Compared with previous run/);
+    await waitFor(() => {
+      expect(screen.getByTestId('scanner-run-comparison-strip')).toHaveTextContent(/WULF.*继续入选|WULF.*retained/i);
+      expect(screen.getByTestId('scanner-run-comparison-strip')).toHaveTextContent(/MARA.*由入选转淘汰|MARA.*selected to rejected/i);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /候选池|Candidate pool/i }));
+    expect(await screen.findByTestId('scanner-candidate-row-WULF')).toHaveTextContent(/\+4/);
+    expect(screen.getByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/-6/);
+  });
+
+  it('shows compact empty comparison state when no previous comparable run exists', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRuns.mockResolvedValue(makeHistoryResponse([
+      makeHistoryItem({ id: 11, market: 'us', profile: 'us_preopen_v1', universeType: 'theme', themeId: 'crypto_miners', themeLabel: '加密矿企', topSymbols: ['WULF'] }),
+    ]));
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    expect(await screen.findByTestId('scanner-run-comparison-strip')).toHaveTextContent(/暂无上次扫描对比|No previous comparable run/);
+  });
+
+  it('adds official and preview candidates through batch watchlist actions with duplicate accounting', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    listWatchlistItems.mockResolvedValueOnce({
+      items: [makeWatchlistItem({ id: 301, symbol: 'WULF', market: 'us', scannerRunId: 9, scannerRank: 1, scannerScore: 60 })],
+    });
+    addWatchlistItem
+      .mockResolvedValueOnce(makeWatchlistItem({ id: 302, symbol: 'MARA', market: 'us', scannerRank: 2, scannerScore: 55 }))
+      .mockResolvedValueOnce(makeWatchlistItem({ id: 303, symbol: 'RIOT', market: 'us', scannerRank: 3, scannerScore: 52 }));
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /加入全部入选|Add official selected/i }));
+    expect(await screen.findByText(/已加入 0 个 · 已存在 1 个|Added 0 · already existed 1/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /加入预览入选|Add preview selected/i }));
+    await waitFor(() => {
+      expect(addWatchlistItem).toHaveBeenCalledWith(expect.objectContaining({ symbol: 'MARA', market: 'us' }));
+      expect(addWatchlistItem).toHaveBeenCalledWith(expect.objectContaining({ symbol: 'RIOT', market: 'us' }));
+    });
+    expect(await screen.findByText(/已加入 2 个 · 已存在 1 个|Added 2 · already existed 1/i)).toBeInTheDocument();
+  });
+
+  it('keeps action buttons from changing row inspector selection', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /候选池|Candidate pool/i }));
+    fireEvent.click(await screen.findByTestId('scanner-candidate-row-MARA'));
+    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('MARA');
+
+    const riotRow = screen.getByTestId('scanner-candidate-row-RIOT');
+    fireEvent.click(within(riotRow).getByRole('button', { name: /复制|Copy/i }));
+
+    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('MARA');
+  });
+
+  it('keeps strategy controls and batch actions available in the narrow/mobile structure', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    expect(await screen.findByTestId('scanner-strategy-preview')).toHaveClass('flex', 'flex-wrap');
+    expect(screen.getByTestId('scanner-batch-actions')).toHaveClass('overflow-x-auto', 'no-scrollbar');
+    expect(screen.getByTestId('scanner-mobile-candidate-inspector')).toBeInTheDocument();
+  });
+
   it('updates the candidate inspector from selected, rejected, and data-failed rows', async () => {
     const themedRun = makeCryptoDiagnosticsRun();
     getRun.mockResolvedValue(themedRun);
@@ -1083,7 +1239,7 @@ describe('UserScannerPage', () => {
 
     expect(await screen.findByTestId('scanner-candidate-inspector')).toHaveTextContent('MARA');
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent(/淘汰|Rejected/);
-    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('42/100');
+    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('55/100');
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('below_momentum_threshold');
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('missing momentum threshold');
 

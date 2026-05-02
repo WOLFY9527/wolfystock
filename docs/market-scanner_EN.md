@@ -43,12 +43,17 @@ Shared behavior remains intentionally stable:
 - shortlist-first UI instead of a raw backend table
 - candidate detail drawer with reasons, feature signals, risks, and watch context
 - recent scan history
+- client-side strategy threshold preview that re-ranks the current run diagnostics without changing official selections
+- previous comparable run comparison for the same theme/profile/market, including status changes and score deltas
+- batch watchlist actions for official selections, preview selections, top 5 names, or the current filter
 - hand-off actions into:
   - deeper analysis
   - stock Q&A
   - backtest with prefilled symbol
 
 A-share remains the default A-share-first experience, while the US and Hong Kong profiles are added as clearly separate scanner profiles without changing A-share ranking behavior.
+
+Strategy threshold preview is a frontend workstation feature. It only reads the current scanner result's existing `candidates`, `score`, `status`, `failed_rules`, and `reason` diagnostics. It does not call the scanner again and does not fetch extra market/provider data. The official shortlist remains the backend-selected result; changing the preview threshold only affects the local “preview selected” labels and candidate-pool ordering.
 
 ## A-share Universe Definition
 

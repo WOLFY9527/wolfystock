@@ -61,6 +61,17 @@ type SortKey = 'score' | 'symbol' | 'target' | 'risk';
 type SortDirection = 'asc' | 'desc';
 type ScanScope = 'default' | 'theme' | 'symbols';
 type ActionNotice = { tone: 'success' | 'warning' | 'danger'; message: string } | null;
+type ScannerComparisonState = {
+  previousRun: ScannerRunDetail | null;
+  bySymbol: Map<string, CandidateComparison>;
+  chips: string[];
+};
+type CandidateComparison = {
+  scoreDelta: number | null;
+  previousStatus: ScannerCandidateDiagnosticStatus | null;
+  currentStatus: ScannerCandidateDiagnosticStatus;
+  label: string;
+};
 type ScannerValidationErrors = {
   run?: string;
   customSymbols?: string;
@@ -353,6 +364,73 @@ function diagnosticScoreValue(candidate: ScannerCandidateDiagnostic): string {
   return candidate.score == null ? 'DATA' : `${candidate.score}/100`;
 }
 
+function isOfficialSelected(candidate: ScannerCandidateDiagnostic): boolean {
+  return normalizeDiagnosticStatus(candidate.status) === 'selected';
+}
+
+function isDataUnavailable(candidate: ScannerCandidateDiagnostic): boolean {
+  const status = normalizeDiagnosticStatus(candidate.status);
+  return status === 'data_failed' || status === 'error' || status === 'skipped';
+}
+
+function isPreviewSelected(candidate: ScannerCandidateDiagnostic, threshold: number): boolean {
+  return candidate.score != null && Number.isFinite(candidate.score) && candidate.score >= threshold && !isDataUnavailable(candidate);
+}
+
+function inferPreviewThreshold(runDetail: ScannerRunDetail | null, diagnostics: ScannerCandidateDiagnostic[]): number {
+  const selectedScores = diagnostics
+    .filter(isOfficialSelected)
+    .map((candidate) => candidate.score)
+    .filter((score): score is number => score != null && Number.isFinite(score));
+  if (selectedScores.length) {
+    const floor = Math.floor(Math.min(...selectedScores) / 10) * 10 - 10;
+    return Math.max(40, Math.min(60, floor || 50));
+  }
+  const summarySelected = runDetail?.summary?.selectedCount ?? runDetail?.shortlist?.length ?? 0;
+  return summarySelected > 0 ? 50 : 60;
+}
+
+function previewDecisionLabel(
+  candidate: ScannerCandidateDiagnostic,
+  threshold: number,
+  language: 'zh' | 'en',
+): string {
+  if (isOfficialSelected(candidate)) return language === 'en' ? 'Official' : '官方';
+  if (isDataUnavailable(candidate)) return language === 'en' ? 'Data failed' : '数据失败';
+  if (isPreviewSelected(candidate, threshold)) return language === 'en' ? 'Preview' : '预览';
+  return language === 'en' ? 'Rejected' : '淘汰';
+}
+
+function previewDecisionClass(candidate: ScannerCandidateDiagnostic, threshold: number): string {
+  if (isOfficialSelected(candidate)) return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100';
+  if (isDataUnavailable(candidate)) return 'border-rose-400/25 bg-rose-400/10 text-rose-100';
+  if (isPreviewSelected(candidate, threshold)) return 'border-blue-400/25 bg-blue-400/10 text-blue-100 shadow-[0_0_14px_rgba(59,130,246,0.12)]';
+  return 'border-white/10 bg-white/[0.035] text-white/58';
+}
+
+function sortDiagnosticsForDecision(
+  candidates: ScannerCandidateDiagnostic[],
+  threshold: number,
+): ScannerCandidateDiagnostic[] {
+  return [...candidates].sort((left, right) => {
+    const leftOfficial = isOfficialSelected(left) ? 1 : 0;
+    const rightOfficial = isOfficialSelected(right) ? 1 : 0;
+    if (leftOfficial !== rightOfficial) return rightOfficial - leftOfficial;
+    const leftPreview = isPreviewSelected(left, threshold) ? 1 : 0;
+    const rightPreview = isPreviewSelected(right, threshold) ? 1 : 0;
+    if (leftPreview !== rightPreview) return rightPreview - leftPreview;
+    const scoreCompare = (right.score ?? Number.NEGATIVE_INFINITY) - (left.score ?? Number.NEGATIVE_INFINITY);
+    if (scoreCompare !== 0) return scoreCompare;
+    return (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER);
+  });
+}
+
+function formatScoreDelta(delta: number | null): string | null {
+  if (delta == null || !Number.isFinite(delta)) return null;
+  if (delta === 0) return '0';
+  return `${delta > 0 ? '+' : ''}${delta}`;
+}
+
 function getMetricValue(candidate: ScannerCandidateDiagnostic, keys: string[]): string | null {
   for (const key of keys) {
     const value = diagnosticMetricValue(candidate, key);
@@ -514,6 +592,88 @@ function diagnosticToCandidate(candidate: ScannerCandidateDiagnostic): ScannerCa
     },
     diagnostics: {},
   };
+}
+
+function buildRunComparison(
+  currentRun: ScannerRunDetail | null,
+  previousRun: ScannerRunDetail | null,
+  threshold: number,
+  language: 'zh' | 'en',
+): ScannerComparisonState {
+  if (!currentRun || !previousRun) {
+    return { previousRun: previousRun || null, bySymbol: new Map(), chips: [] };
+  }
+  const previousBySymbol = new Map(
+    getCandidateDiagnostics(previousRun).map((candidate) => [normalizeCandidateSymbol(candidate.symbol), candidate] as const),
+  );
+  const currentCandidates = getCandidateDiagnostics(currentRun);
+  const bySymbol = new Map<string, CandidateComparison>();
+  const chips: string[] = [];
+
+  currentCandidates.forEach((candidate) => {
+    const symbol = normalizeCandidateSymbol(candidate.symbol);
+    if (!symbol) return;
+    const previous = previousBySymbol.get(symbol);
+    const currentStatus = normalizeDiagnosticStatus(candidate.status);
+    const previousStatus = previous ? normalizeDiagnosticStatus(previous.status) : null;
+    const scoreDelta = previous?.score != null && candidate.score != null ? Math.round(candidate.score - previous.score) : null;
+    let label = previous
+      ? (language === 'en' ? 'Still in candidates' : '继续候选')
+      : (language === 'en' ? 'New candidate' : '新增候选');
+    if (!previous) {
+      label = isOfficialSelected(candidate)
+        ? (language === 'en' ? 'New selected' : '新入选')
+        : (language === 'en' ? 'New candidate' : '新增候选');
+    } else if (previousStatus === 'selected' && currentStatus === 'selected') {
+      label = language === 'en' ? 'retained selected' : '继续入选';
+    } else if (previousStatus === 'selected' && currentStatus !== 'selected') {
+      label = language === 'en' ? 'selected to rejected' : '由入选转淘汰';
+    } else if (previousStatus !== 'selected' && currentStatus === 'selected') {
+      label = language === 'en' ? 'New selected' : '新入选';
+    } else if (scoreDelta != null && scoreDelta > 0) {
+      label = language === 'en' ? 'score up' : '评分上升';
+    } else if (scoreDelta != null && scoreDelta < 0) {
+      label = language === 'en' ? 'score down' : '评分下降';
+    } else if (isPreviewSelected(candidate, threshold) && !isPreviewSelected(previous, threshold)) {
+      label = language === 'en' ? 'New preview selected' : '新预览入选';
+    } else if (!isPreviewSelected(candidate, threshold) && isPreviewSelected(previous, threshold)) {
+      label = language === 'en' ? 'preview to rejected' : '由预览入选转淘汰';
+    }
+    bySymbol.set(symbol, { scoreDelta, previousStatus, currentStatus, label });
+  });
+
+  currentCandidates.slice(0, 8).forEach((candidate) => {
+    const symbol = normalizeCandidateSymbol(candidate.symbol);
+    const comparison = symbol ? bySymbol.get(symbol) : null;
+    if (!symbol || !comparison) return;
+    const delta = formatScoreDelta(comparison.scoreDelta);
+    chips.push([symbol, comparison.label, delta ? `score ${delta}` : null].filter(Boolean).join(' · '));
+  });
+  previousBySymbol.forEach((_previous, symbol) => {
+    if (!symbol || currentCandidates.some((candidate) => normalizeCandidateSymbol(candidate.symbol) === symbol)) return;
+    chips.push(`${symbol} · ${language === 'en' ? 'removed candidate' : '移出候选'}`);
+  });
+
+  return { previousRun, bySymbol, chips: chips.slice(0, 8) };
+}
+
+function findPreviousComparableRunId(
+  currentRun: ScannerRunDetail | null,
+  historyItems: ScannerRunHistoryItem[],
+): number | null {
+  if (!currentRun) return null;
+  const currentMarket = String(currentRun.market || '').toLowerCase();
+  const currentProfile = currentRun.profile || '';
+  const currentThemeId = currentRun.themeId || null;
+  const currentUniverseType = currentRun.universeType || '';
+  const match = historyItems.find((item) => {
+    if (item.id === currentRun.id) return false;
+    if (String(item.market || '').toLowerCase() !== currentMarket) return false;
+    if ((item.profile || '') !== currentProfile) return false;
+    if ((item.universeType || '') !== currentUniverseType) return false;
+    return (item.themeId || null) === currentThemeId;
+  });
+  return match?.id || null;
 }
 
 function formatProviderDiagnostics(provider: ScannerProviderDiagnostics | null, language: 'zh' | 'en'): string | null {
@@ -756,7 +916,10 @@ function ActionButton({
       <Link
         to={href}
         data-testid={testId}
-        onClick={onClick}
+        onClick={(event) => {
+          event.stopPropagation();
+          onClick?.(event);
+        }}
         title={title}
         className={className}
       >
@@ -769,7 +932,10 @@ function ActionButton({
     <button
       type="button"
       data-testid={testId}
-      onClick={onClick}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick?.(event);
+      }}
       disabled={disabled}
       title={title}
       className={className}
@@ -1037,6 +1203,8 @@ function CandidateDetailPanel({
 function CandidateInspector({
   candidate,
   language,
+  previewThreshold,
+  comparison,
   onAnalyze,
   onCopy,
   onExport,
@@ -1052,6 +1220,8 @@ function CandidateInspector({
 }: {
   candidate: ScannerCandidateDiagnostic;
   language: 'zh' | 'en';
+  previewThreshold: number;
+  comparison?: CandidateComparison | null;
   onAnalyze: (candidate: ScannerCandidate) => void;
   onCopy: (candidate: ScannerCandidate) => void;
   onExport: (candidate: ScannerCandidate) => void;
@@ -1070,6 +1240,14 @@ function CandidateInspector({
   const rawMetrics = Object.entries(candidate.metrics || {}).slice(0, 8);
   const status = normalizeDiagnosticStatus(candidate.status);
   const missingCount = candidate.missingFields?.length || 0;
+  const previewSelected = isPreviewSelected(candidate, previewThreshold);
+  const delta = formatScoreDelta(comparison?.scoreDelta ?? null);
+  const officialStatusCopy = isOfficialSelected(candidate)
+    ? (language === 'en' ? 'Official selected' : '官方入选')
+    : (language === 'en' ? 'Official rejected' : '官方淘汰');
+  const previewStatusCopy = previewSelected
+    ? (language === 'en' ? `Threshold ${previewThreshold} preview selected` : `阈值 ${previewThreshold} 预览入选`)
+    : (language === 'en' ? `Threshold ${previewThreshold} preview rejected` : `阈值 ${previewThreshold} 预览淘汰`);
 
   return (
     <aside
@@ -1096,6 +1274,10 @@ function CandidateInspector({
           <FieldChip label={language === 'en' ? 'Provider' : '来源'} value={candidate.provider || '--'} />
           {candidate.rank ? <FieldChip label={language === 'en' ? 'Rank' : '排名'} value={`#${candidate.rank}`} /> : null}
           <FieldChip label={language === 'en' ? 'Missing' : '缺失'} value={String(missingCount)} />
+          <FieldChip label={language === 'en' ? 'Official' : '官方'} value={officialStatusCopy} />
+          <FieldChip label={language === 'en' ? 'Preview' : '预览'} value={previewStatusCopy} />
+          {delta ? <FieldChip label={language === 'en' ? 'Prev' : '较上次'} value={delta} /> : null}
+          {comparison?.label ? <FieldChip label={language === 'en' ? 'Change' : '变化'} value={comparison.label} /> : null}
         </div>
       </div>
 
@@ -1299,6 +1481,9 @@ const UserScannerPage: React.FC = () => {
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
   const [watchlistAuthBlocked, setWatchlistAuthBlocked] = useState(false);
   const [pendingWatchlistIdentity, setPendingWatchlistIdentity] = useState<string | null>(null);
+  const [pendingBatchWatchlistAction, setPendingBatchWatchlistAction] = useState<string | null>(null);
+  const [previousRunDetail, setPreviousRunDetail] = useState<ScannerRunDetail | null>(null);
+  const [previewThreshold, setPreviewThreshold] = useState(50);
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -1608,6 +1793,26 @@ const UserScannerPage: React.FC = () => {
   }, [runDetail?.shortlist, sortDirection, sortKey]);
   const diagnosticCandidates = useMemo(() => getCandidateDiagnostics(runDetail), [runDetail]);
   const hasCandidateDiagnostics = diagnosticCandidates.length > 0;
+  const inferredPreviewThreshold = useMemo(
+    () => inferPreviewThreshold(runDetail, diagnosticCandidates),
+    [diagnosticCandidates, runDetail],
+  );
+  useEffect(() => {
+    if (!runDetail) return;
+    setPreviewThreshold(inferredPreviewThreshold);
+  }, [inferredPreviewThreshold, runDetail]);
+  const previewSelectedDiagnostics = useMemo(
+    () => diagnosticCandidates.filter((candidate) => isPreviewSelected(candidate, previewThreshold)),
+    [diagnosticCandidates, previewThreshold],
+  );
+  const previewAddedDiagnostics = useMemo(
+    () => previewSelectedDiagnostics.filter((candidate) => !isOfficialSelected(candidate)),
+    [previewSelectedDiagnostics],
+  );
+  const officialSelectedDiagnostics = useMemo(
+    () => diagnosticCandidates.filter(isOfficialSelected),
+    [diagnosticCandidates],
+  );
   const decisionSummary = useMemo(
     () => runDetail ? buildDecisionSummary(runDetail, sortedCandidates, diagnosticCandidates, language) : null,
     [diagnosticCandidates, language, runDetail, sortedCandidates],
@@ -1619,6 +1824,10 @@ const UserScannerPage: React.FC = () => {
   const previewCandidates = useMemo(
     () => diagnosticCandidates.filter((candidate) => candidate.status !== 'selected').slice(0, 5),
     [diagnosticCandidates],
+  );
+  const comparisonState = useMemo(
+    () => buildRunComparison(runDetail, previousRunDetail, previewThreshold, language),
+    [language, previewThreshold, previousRunDetail, runDetail],
   );
   const inspectorCandidate = useMemo(
     () => getSelectedDiagnosticCandidate(diagnosticCandidates, sortedCandidates, inspectorSymbol),
@@ -1639,6 +1848,10 @@ const UserScannerPage: React.FC = () => {
     }
     return diagnosticCandidates;
   }, [candidateFilter, diagnosticCandidates]);
+  const decisionSortedDiagnosticCandidates = useMemo(
+    () => sortDiagnosticsForDecision(filteredDiagnosticCandidates, previewThreshold),
+    [filteredDiagnosticCandidates, previewThreshold],
+  );
   const selectedOnlyView = !hasCandidateDiagnostics || candidateFilter === 'selected';
 
   useEffect(() => {
@@ -1653,10 +1866,33 @@ const UserScannerPage: React.FC = () => {
       return;
     }
     const current = getSelectedDiagnosticCandidate(diagnosticCandidates, sortedCandidates, inspectorSymbol);
-    if (current) {
+    if (current && (!inspectorSymbol || normalizeCandidateSymbol(current.symbol) !== normalizeCandidateSymbol(inspectorSymbol))) {
       setInspectorSymbol(current.symbol);
     }
   }, [diagnosticCandidates, hasCandidateDiagnostics, inspectorSymbol, sortedCandidates]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const previousRunId = findPreviousComparableRunId(runDetail, historyItems);
+    if (!runDetail || !previousRunId) {
+      setPreviousRunDetail(null);
+      return () => {
+        isMounted = false;
+      };
+    }
+    scannerApi.getRun(previousRunId)
+      .then((response) => {
+        if (!isMounted) return;
+        setPreviousRunDetail(response);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setPreviousRunDetail(null);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [historyItems, runDetail]);
 
   const historyCards = useMemo(() => historyItems.map((item) => {
     const fallbackTitle = item.market === 'us'
@@ -1784,6 +2020,75 @@ const UserScannerPage: React.FC = () => {
       }
     } finally {
       setPendingWatchlistIdentity((current) => (current === candidateIdentity ? null : current));
+    }
+  }, [language, market, runDetail, trackedWatchlistIdentitySet]);
+
+  const handleBatchTrackCandidates = useCallback(async (batchKey: string, candidates: ScannerCandidate[]) => {
+    const candidateMarket = normalizeScannerMarket(runDetail?.market || market);
+    if (!candidateMarket || !candidates.length) return;
+    const uniqueCandidates = candidates.reduce<ScannerCandidate[]>((items, candidate) => {
+      const identity = getWatchlistIdentity(candidateMarket, candidate.symbol);
+      if (!identity || items.some((item) => getWatchlistIdentity(candidateMarket, item.symbol) === identity)) return items;
+      return [...items, candidate];
+    }, []);
+    let alreadyExists = 0;
+    let added = 0;
+    const toAdd = uniqueCandidates.filter((candidate) => {
+      const identity = getWatchlistIdentity(candidateMarket, candidate.symbol);
+      if (trackedWatchlistIdentitySet.has(identity)) {
+        alreadyExists += 1;
+        return false;
+      }
+      return true;
+    });
+    setPendingBatchWatchlistAction(batchKey);
+    setActionNotice(null);
+    try {
+      const savedItems: WatchlistItem[] = [];
+      for (const candidate of toAdd) {
+        const savedItem = await watchlistApi.addWatchlistItem({
+          symbol: candidate.symbol,
+          market: candidateMarket.toLowerCase(),
+          name: candidate.companyName || candidate.name,
+          source: 'scanner',
+          scannerRunId: runDetail?.id,
+          scannerRank: candidate.rank,
+          scannerScore: candidate.score,
+          themeId: runDetail?.themeId || undefined,
+          universeType: runDetail?.universeType || undefined,
+          notes: buildWatchlistNotes(candidate, runDetail, language) || undefined,
+        });
+        savedItems.push(savedItem);
+        added += 1;
+      }
+      if (savedItems.length) {
+        setWatchlistItems((current) => {
+          const savedIdentities = new Set(savedItems.map((item) => getWatchlistIdentity(item.market, item.symbol)));
+          return [...savedItems, ...current.filter((item) => !savedIdentities.has(getWatchlistIdentity(item.market, item.symbol)))];
+        });
+      }
+      setWatchlistAuthBlocked(false);
+      setActionNotice({
+        tone: 'success',
+        message: language === 'en'
+          ? `Added ${added} · already existed ${alreadyExists}`
+          : `已加入 ${added} 个 · 已存在 ${alreadyExists} 个`,
+      });
+    } catch (error) {
+      const parsedError = getParsedApiError(error);
+      if (parsedError.isAuthError || parsedError.status === 401 || parsedError.status === 403 || parsedError.status === 405) {
+        setWatchlistAuthBlocked(true);
+        setActionNotice({
+          tone: 'warning',
+          message: language === 'en'
+            ? 'Sign in to save candidates to your watchlist.'
+            : '请登录后再保存候选到你的观察名单。',
+        });
+      } else {
+        setActionNotice({ tone: 'danger', message: parsedError.message });
+      }
+    } finally {
+      setPendingBatchWatchlistAction((current) => (current === batchKey ? null : current));
     }
   }, [language, market, runDetail, trackedWatchlistIdentitySet]);
 
@@ -2053,6 +2358,37 @@ const UserScannerPage: React.FC = () => {
                         />
                       </>
                     ) : null}
+                    {runDetail && hasCandidateDiagnostics ? (
+                      <div
+                        data-testid="scanner-batch-actions"
+                        className="flex max-w-full gap-1.5 overflow-x-auto no-scrollbar"
+                      >
+                        <ActionButton
+                          label={language === 'en' ? 'Add official selected' : '加入全部入选'}
+                          icon={<BookmarkPlus className="h-3.5 w-3.5" />}
+                          onClick={() => void handleBatchTrackCandidates('official', sortedCandidates)}
+                          disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !sortedCandidates.length}
+                        />
+                        <ActionButton
+                          label={language === 'en' ? 'Add preview selected' : '加入预览入选'}
+                          icon={<BookmarkPlus className="h-3.5 w-3.5" />}
+                          onClick={() => void handleBatchTrackCandidates('preview', previewSelectedDiagnostics.map(diagnosticToCandidate))}
+                          disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !previewSelectedDiagnostics.length}
+                        />
+                        <ActionButton
+                          label={language === 'en' ? 'Add top 5' : '加入前 5 名'}
+                          icon={<BookmarkPlus className="h-3.5 w-3.5" />}
+                          onClick={() => void handleBatchTrackCandidates('top5', sortDiagnosticsForDecision(diagnosticCandidates, previewThreshold).slice(0, 5).map(diagnosticToCandidate))}
+                          disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !diagnosticCandidates.length}
+                        />
+                        <ActionButton
+                          label={language === 'en' ? 'Add filtered' : '加入当前筛选'}
+                          icon={<BookmarkPlus className="h-3.5 w-3.5" />}
+                          onClick={() => void handleBatchTrackCandidates('filtered', decisionSortedDiagnosticCandidates.map(diagnosticToCandidate))}
+                          disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !decisionSortedDiagnosticCandidates.length}
+                        />
+                      </div>
+                    ) : null}
                     <button
                       ref={openHistoryDrawerButton.ref}
                       type="button"
@@ -2122,6 +2458,64 @@ const UserScannerPage: React.FC = () => {
                           <span className="font-mono text-white/82">{bucket.value}</span>
                         </button>
                       ))}
+                    </div>
+                  ) : null}
+                  {hasCandidateDiagnostics ? (
+                    <div
+                      data-testid="scanner-strategy-preview"
+                      className="mt-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 text-xs backdrop-blur-md transition-all hover:border-white/10"
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+                        {language === 'en' ? 'Threshold' : '阈值'}
+                      </span>
+                      {[40, 50, 60].map((threshold) => (
+                        <button
+                          key={threshold}
+                          type="button"
+                          aria-pressed={previewThreshold === threshold}
+                          onClick={() => setPreviewThreshold(threshold)}
+                          className={`rounded-md border px-2 py-0.5 font-mono text-[11px] ${previewThreshold === threshold ? 'border-blue-400/30 bg-blue-400/12 text-blue-100' : 'border-white/10 bg-white/5 text-white/58 hover:bg-white/10'}`}
+                        >
+                          {threshold}
+                        </button>
+                      ))}
+                      <span className="inline-flex items-baseline gap-1 rounded-md border border-white/8 bg-black/20 px-2 py-0.5">
+                        <span className="text-white/40">{language === 'en' ? 'Official selected ' : '官方入选 '}</span>
+                        <span className="font-mono text-white/82">{runDetail.summary?.selectedCount ?? officialSelectedDiagnostics.length}</span>
+                      </span>
+                      <span className="inline-flex items-baseline gap-1 rounded-md border border-blue-400/20 bg-blue-400/10 px-2 py-0.5">
+                        <span className="text-blue-100/70">{language === 'en' ? 'Preview selected ' : '预览入选 '}</span>
+                        <span className="font-mono text-blue-100">{previewSelectedDiagnostics.length}</span>
+                      </span>
+                      <span className="font-mono text-[11px] text-white/62">
+                        {`${previewSelectedDiagnostics.length - (runDetail.summary?.selectedCount ?? officialSelectedDiagnostics.length) >= 0 ? '+' : ''}${previewSelectedDiagnostics.length - (runDetail.summary?.selectedCount ?? officialSelectedDiagnostics.length)} vs ${language === 'en' ? 'current rules' : '当前规则'}`}
+                      </span>
+                      <span className="min-w-0 truncate text-[11px] text-white/38">
+                        {language === 'en'
+                          ? `Threshold ${previewThreshold} preview can select ${previewSelectedDiagnostics.length}`
+                          : `阈值 ${previewThreshold} 预览可入选 ${previewSelectedDiagnostics.length} 个`}
+                      </span>
+                    </div>
+                  ) : null}
+                  {hasCandidateDiagnostics ? (
+                    <div
+                      data-testid="scanner-run-comparison-strip"
+                      className="mt-2 flex max-w-full items-center gap-1.5 overflow-x-auto rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 text-xs backdrop-blur-md no-scrollbar"
+                    >
+                      <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                        {language === 'en' ? 'Compared with previous run' : '上次对比'}
+                      </span>
+                      {comparisonState.previousRun && comparisonState.chips.length ? (
+                        comparisonState.chips.map((chip) => (
+                          <span key={chip} className="shrink-0 rounded-md border border-white/8 bg-black/20 px-2 py-0.5 text-white/62">
+                            {chip}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="shrink-0 rounded-md border border-white/8 bg-black/20 px-2 py-0.5 text-white/42">
+                          {language === 'en' ? 'No previous comparable run' : '暂无上次扫描对比'}
+                        </span>
+                      )}
                     </div>
                   ) : null}
                 </div>
@@ -2195,9 +2589,9 @@ const UserScannerPage: React.FC = () => {
                 <div className="grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
                   <div className="min-w-0">
                 {!selectedOnlyView ? (
-                  filteredDiagnosticCandidates.length ? (
+                  decisionSortedDiagnosticCandidates.length ? (
                     <div data-testid="scanner-candidate-diagnostics-table" className="space-y-1.5">
-                      {filteredDiagnosticCandidates.map((candidate) => {
+                      {decisionSortedDiagnosticCandidates.map((candidate) => {
                         const activeRunDetail = runDetail as ScannerRunDetail;
                         const diagnosticCandidate = diagnosticToCandidate(candidate);
                         const candidateMarket = normalizeScannerMarket(activeRunDetail.market || market);
@@ -2207,6 +2601,8 @@ const UserScannerPage: React.FC = () => {
                         const backtestHref = buildScannerBacktestPath(diagnosticCandidate, activeRunDetail, language);
                         const isExpanded = expandedSymbol === candidate.symbol;
                         const metricItems = Object.entries(candidate.metrics || {}).slice(0, 8);
+                        const comparison = comparisonState.bySymbol.get(normalizeCandidateSymbol(candidate.symbol) || '');
+                        const scoreDelta = formatScoreDelta(comparison?.scoreDelta ?? null);
                         return (
                           <article
                             key={`diagnostic-${candidate.symbol}`}
@@ -2226,11 +2622,12 @@ const UserScannerPage: React.FC = () => {
                             >
                               <span className="min-w-0">
                                 <span className="flex min-w-0 items-center gap-2">
-                                  <span className={`inline-flex shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${diagnosticStatusClass(candidate.status)}`}>
-                                    {diagnosticStatusLabel(candidate.status, language)}
+                                  <span className={`inline-flex shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${previewDecisionClass(candidate, previewThreshold)}`}>
+                                    {previewDecisionLabel(candidate, previewThreshold, language)}
                                   </span>
                                   {candidate.rank ? <span className="font-mono text-[11px] text-white/35">#{candidate.rank}</span> : null}
                                   <span className="min-w-0 truncate font-mono text-sm font-semibold text-white">{candidate.symbol}</span>
+                                  {scoreDelta ? <span className="shrink-0 font-mono text-[11px] text-white/48">{scoreDelta}</span> : null}
                                 </span>
                                 <span className="mt-1 flex min-w-0 gap-1.5 text-[11px] text-white/36">
                                   <span className="min-w-0 truncate">{candidate.name || candidate.symbol}</span>
@@ -2353,6 +2750,9 @@ const UserScannerPage: React.FC = () => {
                                 </span>
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
+                                <span className="inline-flex rounded border border-emerald-400/25 bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-100">
+                                  {language === 'en' ? 'Official' : '官方'}
+                                </span>
                                 <span className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold ${scoreBadgeClass(candidate.score)}`}>
                                   {language === 'en' ? `scanner score ${candidate.score}/100` : `扫描评分 ${candidate.score}/100`}
                                 </span>
@@ -2429,6 +2829,13 @@ const UserScannerPage: React.FC = () => {
                                 variant="primary"
                               />
                               <ActionButton
+                                label={language === 'en' ? 'Backtest' : '回测'}
+                                icon={<TestTubeDiagonal className="h-3.5 w-3.5" />}
+                                href={backtestHref || undefined}
+                                disabled={!backtestHref}
+                                title={!backtestHref ? backtestUnavailableLabel : undefined}
+                              />
+                              <ActionButton
                                 label={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
                                 icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
                                 onClick={() => void handleTrackCandidate(candidate)}
@@ -2451,13 +2858,6 @@ const UserScannerPage: React.FC = () => {
                                     buildScannerExportFilename(runDetail, `candidate-${candidate.symbol}`),
                                   );
                                 }}
-                              />
-                              <ActionButton
-                                label={language === 'en' ? 'Backtest' : '回测'}
-                                icon={<TestTubeDiagonal className="h-3.5 w-3.5" />}
-                                href={backtestHref || undefined}
-                                disabled={!backtestHref}
-                                title={!backtestHref ? backtestUnavailableLabel : undefined}
                               />
                             </div>
                           </div>
@@ -2492,6 +2892,13 @@ const UserScannerPage: React.FC = () => {
                         data-testid="scanner-candidate-preview"
                         className="mt-3 rounded-xl border border-white/5 bg-white/[0.02] p-3 text-sm backdrop-blur-md transition-all hover:border-white/10"
                       >
+                        <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/45">
+                          <span className="rounded-md border border-blue-400/20 bg-blue-400/10 px-2 py-0.5 text-blue-100/80">
+                            {language === 'en'
+                              ? `Threshold ${previewThreshold} preview can select ${previewSelectedDiagnostics.length}`
+                              : `阈值 ${previewThreshold} 预览可入选 ${previewSelectedDiagnostics.length} 个`}
+                          </span>
+                        </div>
                         <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
                           <span className="min-w-0 truncate text-xs text-white/58">
                             {language === 'en'
@@ -2506,6 +2913,28 @@ const UserScannerPage: React.FC = () => {
                             {language === 'en' ? 'View all candidates' : '查看全部候选'}
                           </button>
                         </div>
+                        {previewAddedDiagnostics.length ? (
+                          <div data-testid="scanner-preview-added-list" className="mb-2 grid gap-1.5">
+                            {previewAddedDiagnostics.slice(0, 4).map((candidate) => (
+                              <button
+                                key={`preview-added-${candidate.symbol}`}
+                                type="button"
+                                data-testid={`scanner-preview-added-${candidate.symbol}`}
+                                onClick={() => {
+                                  setInspectorSymbol(candidate.symbol);
+                                  setCandidateFilter('pool');
+                                }}
+                                className="grid min-w-0 grid-cols-[minmax(54px,0.45fr)_minmax(72px,0.55fr)_minmax(0,1fr)] items-center gap-2 rounded-lg border border-blue-400/15 bg-blue-400/[0.06] px-2 py-1.5 text-left text-xs hover:bg-blue-400/10"
+                              >
+                                <span className="truncate font-mono font-semibold text-blue-100">{candidate.symbol}</span>
+                                <span className="truncate font-mono text-blue-100/58">{diagnosticScoreValue(candidate)}</span>
+                                <span className="truncate text-white/50" title={getDiagnosticReason(candidate, language)}>
+                                  {getDiagnosticReason(candidate, language)}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
                         <div className="grid gap-1.5">
                           {previewCandidates.map((candidate) => (
                             <button
@@ -2678,6 +3107,8 @@ const UserScannerPage: React.FC = () => {
                           <CandidateInspector
                             candidate={inspectorCandidate}
                             language={language}
+                            previewThreshold={previewThreshold}
+                            comparison={comparisonState.bySymbol.get(normalizeCandidateSymbol(inspectorCandidate.symbol) || '')}
                             onAnalyze={(nextCandidate) => void handleAnalyzeCandidate(nextCandidate)}
                             onCopy={(nextCandidate) => void handleCopyText(nextCandidate.symbol, `candidate:${nextCandidate.symbol}`)}
                             onExport={(nextCandidate) => handleExportRows(
@@ -2712,6 +3143,8 @@ const UserScannerPage: React.FC = () => {
                           <CandidateInspector
                             candidate={inspectorCandidate}
                             language={language}
+                            previewThreshold={previewThreshold}
+                            comparison={comparisonState.bySymbol.get(normalizeCandidateSymbol(inspectorCandidate.symbol) || '')}
                             onAnalyze={(nextCandidate) => void handleAnalyzeCandidate(nextCandidate)}
                             onCopy={(nextCandidate) => void handleCopyText(nextCandidate.symbol, `candidate:${nextCandidate.symbol}`)}
                             onExport={(nextCandidate) => handleExportRows(

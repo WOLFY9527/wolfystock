@@ -44,12 +44,17 @@ Market Scanner 是 WolfyStock 的独立产品能力，用于在盘前回答：
 - 提供 shortlist 视图，而不是原始表格 dump
 - 提供候选详情抽屉，展示原因、特征分项、风险与观察触发条件
 - 提供最近扫描历史，便于回看近期 shortlist
+- 提供客户端策略阈值预览，用当前 run 已返回的候选诊断做 what-if 重排，不改变官方入选结果
+- 提供同主题 / profile / market 的上次 run 对比，展示新入选、继续入选、状态变化与 score delta
+- 提供批量加入观察列表动作，可按官方入选、预览入选、前 5 名或当前筛选批量处理
 - 提供继续动作：
   - 进入首页深度分析
   - 跳转问股
   - 跳转回测并预填代码
 
 A 股仍然保持 A-share-first 的默认体验；美股和港股则作为新增但清晰分离的 Scanner profile 接入，不改变已有 A 股 deterministic ranking 的主导地位。
+
+策略阈值预览是纯前端工作台能力：它只读取当前 scanner result 中已有的 `candidates`、`score`、`status`、`failed_rules` 和 `reason`，不会重新调用扫描接口，也不会额外拉行情或 provider 数据。官方 shortlist 仍以后端返回的入选结果为准，用户调整预览阈值只影响页面上的“预览入选”和候选池排序提示。
 
 ## A 股 universe 定义
 
