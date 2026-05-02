@@ -1,11 +1,9 @@
 import type React from 'react';
 import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
 import { useI18n } from '../../contexts/UiLanguageContext';
-import { GlassCard } from '../common';
 import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
 import {
-  MARKET_OVERVIEW_CARD_TITLE_CLASS,
-  MARKET_OVERVIEW_GHOST_CARD_CLASS,
+  MarketOverviewCardFrame,
   MarketOverviewDenseQuoteItem,
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
@@ -32,12 +30,12 @@ export const VolatilityCard: React.FC<{
   const hiddenItemCount = Math.max(items.length - compactItems.length, 0);
 
   return (
-    <GlassCard as="section" data-testid="market-overview-dense-quote-card" className={`${MARKET_OVERVIEW_GHOST_CARD_CLASS} flex h-full flex-col p-3.5`}>
-      <div className="flex h-full flex-col gap-3">
-        <div className="mb-1 flex items-center justify-between gap-3">
-          <div>
+    <MarketOverviewCardFrame testId="market-overview-dense-quote-card" size="list" className="h-full">
+      <div className="flex min-h-0 h-full flex-col gap-3">
+        <div className="flex shrink-0 items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.volatility.eyebrow')}</p>
-            <h2 className={`${MARKET_OVERVIEW_CARD_TITLE_CLASS} mt-2 mb-1 text-sm normal-case tracking-normal text-white/82`}>{title}</h2>
+            <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2>
           </div>
           <MarketOverviewRefreshButton
             label={t('marketOverviewPage.refreshCard', { title })}
@@ -52,7 +50,7 @@ export const VolatilityCard: React.FC<{
           </div>
         ) : null}
 
-        <div data-testid="market-overview-dense-quote-grid" className="flex flex-col border-y border-white/[0.045]">
+        <div data-testid="market-overview-dense-quote-grid" className="flex min-h-0 flex-col overflow-y-auto border-y border-white/[0.045] ui-scroll-y-quiet">
           {compactItems.map((item) => (
             <MarketOverviewDenseQuoteItem
               key={item.symbol}
@@ -77,6 +75,6 @@ export const VolatilityCard: React.FC<{
 
         <MarketOverviewPanelFooter panel={panel} sourceLabel={t('marketOverviewPage.cards.volatility.source')} />
       </div>
-    </GlassCard>
+    </MarketOverviewCardFrame>
   );
 };

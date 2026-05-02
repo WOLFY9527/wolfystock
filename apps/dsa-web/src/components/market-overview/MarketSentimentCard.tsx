@@ -1,7 +1,6 @@
 import type React from 'react';
 import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
 import { useI18n } from '../../contexts/UiLanguageContext';
-import { GlassCard } from '../common';
 import { cn } from '../../utils/cn';
 import {
   formatChangeSummary,
@@ -9,8 +8,7 @@ import {
   getDirectionTone,
 } from './marketOverviewUtils';
 import {
-  MARKET_OVERVIEW_CARD_TITLE_CLASS,
-  MARKET_OVERVIEW_GHOST_CARD_CLASS,
+  MarketOverviewCardFrame,
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
@@ -58,12 +56,12 @@ export const MarketSentimentCard: React.FC<{
   const title = t('marketOverviewPage.cards.sentiment.title');
 
   return (
-    <GlassCard as="section" className={`${MARKET_OVERVIEW_GHOST_CARD_CLASS} flex h-full flex-col`}>
-      <div className="flex h-full flex-col gap-5">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <div>
+    <MarketOverviewCardFrame size="standard" className="h-full">
+      <div className="flex min-h-0 h-full flex-col gap-3">
+        <div className="flex shrink-0 items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.sentiment.eyebrow')}</p>
-            <h2 className={`${MARKET_OVERVIEW_CARD_TITLE_CLASS} mt-2`}>{title}</h2>
+            <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2>
           </div>
           <MarketOverviewRefreshButton
             label={t('marketOverviewPage.refreshCard', { title })}
@@ -79,53 +77,34 @@ export const MarketSentimentCard: React.FC<{
         ) : null}
 
         {primary ? (
-          <div className={MARKET_OVERVIEW_GHOST_CARD_CLASS}>
-            <div className="flex items-start justify-between gap-4">
-              <div>
+          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.sentiment.primaryLabel')}</p>
-                <p className="mt-2 text-3xl font-bold font-mono text-white">{formatMetricValue(primary, 0)}</p>
+                <p className="mt-1 truncate text-2xl font-bold font-mono text-white">{formatMetricValue(primary, 0)}</p>
                 <p className="mt-1 text-xs uppercase tracking-widest text-white/28">{describeSentiment(primary.value, t)}</p>
               </div>
-              <span className={cn('pt-1 text-[11px] font-bold', getDirectionTone(primary.riskDirection))}>
+              <span className={cn('shrink-0 pt-1 text-right text-[11px] font-bold', getDirectionTone(primary.riskDirection))}>
                 {formatChangeSummary(primary, t('marketOverviewPage.direction.neutral'))}
               </span>
             </div>
 
-            <div className="mt-5 flex items-center justify-center">
-              <svg viewBox="0 0 160 96" className="h-32 w-full max-w-[15rem]" aria-hidden="true">
-                <path d="M 16 80 A 64 64 0 0 1 144 80" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" strokeLinecap="round" />
-                <path
-                  d="M 16 80 A 64 64 0 0 1 144 80"
-                  fill="none"
-                  stroke="url(#sentimentGauge)"
-                  strokeWidth="10"
-                  strokeLinecap="round"
-                  strokeDasharray={`${gaugeRatio * 201} 201`}
+            <div className="mt-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 text-[9px] uppercase tracking-widest text-white/30">
+              <span>{t('marketOverviewPage.cards.sentiment.gaugeLeft')}</span>
+              <div className="h-1.5 min-w-0 overflow-hidden rounded-full bg-white/[0.06]">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-rose-400 via-sky-400 to-emerald-400"
+                  style={{ width: `${gaugeRatio * 100}%` }}
                 />
-                <defs>
-                  <linearGradient id="sentimentGauge" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#fb7185" />
-                    <stop offset="50%" stopColor="#6366f1" />
-                    <stop offset="100%" stopColor="#34d399" />
-                  </linearGradient>
-                </defs>
-                <circle cx="80" cy="80" r="3" fill="rgba(255,255,255,0.9)" />
-                <path
-                  d={`M 80 80 L ${(80 - 58 * Math.cos(Math.PI * gaugeRatio)).toFixed(2)} ${(80 - 58 * Math.sin(Math.PI * gaugeRatio)).toFixed(2)}`}
-                  stroke="rgba(255,255,255,0.92)"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-                <text x="16" y="94" fill="rgba(255,255,255,0.34)" fontSize="9" letterSpacing="1.6">{t('marketOverviewPage.cards.sentiment.gaugeLeft')}</text>
-                <text x="111" y="94" fill="rgba(255,255,255,0.34)" fontSize="9" letterSpacing="1.6">{t('marketOverviewPage.cards.sentiment.gaugeRight')}</text>
-              </svg>
+              </div>
+              <span>{t('marketOverviewPage.cards.sentiment.gaugeRight')}</span>
             </div>
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid min-h-0 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-3 ui-scroll-y-quiet">
           {supporting.map((item) => (
-            <div key={item.symbol} className={MARKET_OVERVIEW_GHOST_CARD_CLASS}>
+            <div key={item.symbol} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2">
               <div className="flex items-start justify-between gap-3">
                 <p className="min-w-0 text-[10px] font-semibold uppercase tracking-widest text-white/40">
                   {sentimentLabels[item.symbol] || item.label}
@@ -158,6 +137,6 @@ export const MarketSentimentCard: React.FC<{
 
         <MarketOverviewPanelFooter panel={panel} sourceLabel={t('marketOverviewPage.cards.sentiment.source')} />
       </div>
-    </GlassCard>
+    </MarketOverviewCardFrame>
   );
 };

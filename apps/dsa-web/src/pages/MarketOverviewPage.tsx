@@ -19,8 +19,8 @@ import { VolatilityCard } from '../components/market-overview/VolatilityCard';
 import { resolveMarketOverviewDisplayLabel } from '../components/market-overview/marketOverviewLabels';
 import {
   DataFreshnessBadge,
-  MARKET_OVERVIEW_CARD_TITLE_CLASS,
   MARKET_OVERVIEW_GHOST_CARD_CLASS,
+  MarketOverviewCardFrame,
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
   MarketOverviewSparkline,
@@ -53,6 +53,7 @@ type CardKey = Exclude<PanelKey, 'temperature' | 'briefing'>;
 type MarketOverviewTab = 'all' | 'us' | 'cn' | 'global' | 'crypto';
 type CardCoverageKind = 'real' | 'mixed' | 'fallback';
 type CryptoRealtimeStatus = 'live' | 'reconnecting' | 'snapshot';
+type WorkbenchRail = 'hero' | 'secondary' | 'deep' | 'fallback';
 
 const CATEGORY_LAYOUT: Record<MarketOverviewTab, {
   primary: CardKey[];
@@ -65,24 +66,24 @@ const CATEGORY_LAYOUT: Record<MarketOverviewTab, {
     fallback: ['cnBreadth', 'cnFlows', 'sectorRotation', 'cnShortSentiment', 'fxCommodities', 'futures'],
   },
   us: {
-    primary: ['volatility', 'fundsFlow', 'indices'],
-    secondary: ['rates', 'macro', 'sentiment'],
-    fallback: ['fxCommodities', 'futures'],
+    primary: ['indices'],
+    secondary: ['volatility', 'fundsFlow'],
+    fallback: ['rates', 'macro', 'sentiment', 'futures'],
   },
   cn: {
-    primary: ['cnIndices', 'cnBreadth', 'cnFlows'],
-    secondary: ['sectorRotation', 'cnShortSentiment', 'fxCommodities', 'sentiment'],
-    fallback: [],
+    primary: ['cnIndices'],
+    secondary: ['cnBreadth', 'cnFlows'],
+    fallback: ['sectorRotation', 'cnShortSentiment', 'fxCommodities', 'sentiment'],
   },
   global: {
-    primary: ['rates', 'fxCommodities', 'macro', 'indices'],
-    secondary: ['sentiment', 'volatility'],
-    fallback: ['futures'],
+    primary: ['rates', 'fxCommodities', 'macro'],
+    secondary: ['indices', 'volatility'],
+    fallback: ['sentiment', 'futures'],
   },
   crypto: {
-    primary: ['crypto', 'volatility', 'macro'],
-    secondary: ['fxCommodities', 'sentiment'],
-    fallback: [],
+    primary: ['crypto'],
+    secondary: ['volatility', 'macro'],
+    fallback: ['fxCommodities', 'sentiment'],
   },
 };
 
@@ -94,22 +95,22 @@ const CATEGORY_CARDS: Record<MarketOverviewTab, CardKey[]> = Object.fromEntries(
 ) as Record<MarketOverviewTab, CardKey[]>;
 
 const CARD_LAYOUT_META: Record<CardKey, {
-  size: 'dense-wide' | 'wide' | 'normal' | 'compact';
+  size: 'compact' | 'standard' | 'list' | 'large' | 'rail';
   priority: 'primary' | 'secondary' | 'fallback';
 }> = {
-  indices: { size: 'dense-wide', priority: 'primary' },
-  cnIndices: { size: 'dense-wide', priority: 'primary' },
-  crypto: { size: 'dense-wide', priority: 'primary' },
-  volatility: { size: 'normal', priority: 'primary' },
-  fundsFlow: { size: 'normal', priority: 'primary' },
-  macro: { size: 'normal', priority: 'primary' },
-  rates: { size: 'normal', priority: 'secondary' },
-  fxCommodities: { size: 'normal', priority: 'secondary' },
+  indices: { size: 'large', priority: 'primary' },
+  cnIndices: { size: 'large', priority: 'primary' },
+  crypto: { size: 'large', priority: 'primary' },
+  volatility: { size: 'standard', priority: 'primary' },
+  fundsFlow: { size: 'standard', priority: 'primary' },
+  macro: { size: 'standard', priority: 'primary' },
+  rates: { size: 'list', priority: 'secondary' },
+  fxCommodities: { size: 'list', priority: 'secondary' },
   sentiment: { size: 'compact', priority: 'secondary' },
   futures: { size: 'compact', priority: 'secondary' },
-  cnBreadth: { size: 'normal', priority: 'fallback' },
-  cnFlows: { size: 'normal', priority: 'fallback' },
-  sectorRotation: { size: 'normal', priority: 'fallback' },
+  cnBreadth: { size: 'standard', priority: 'fallback' },
+  cnFlows: { size: 'standard', priority: 'fallback' },
+  sectorRotation: { size: 'standard', priority: 'fallback' },
   cnShortSentiment: { size: 'compact', priority: 'fallback' },
 };
 const DENSE_QUOTE_CARDS = new Set<CardKey>(['indices', 'cnIndices', 'crypto', 'volatility', 'fundsFlow', 'macro', 'rates', 'fxCommodities']);
@@ -389,6 +390,7 @@ const CrossAssetHeroRibbon: React.FC<{ anchors: HeroAnchor[] }> = ({ anchors }) 
     <GlassCard
       as="section"
       data-testid="market-overview-hero-ribbon"
+      data-mobile-order="pulse"
       className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'overflow-hidden p-0')}
       aria-label="Cross asset hero ribbon"
     >
@@ -586,51 +588,52 @@ function summarizeDataQuality(panels: PanelState): DataQualitySummary {
   };
 }
 
-const DataQualityOverview: React.FC<{ summary: DataQualitySummary }> = ({ summary }) => {
-  const countItems: Array<[FreshnessCountKey, string]> = [
-    ['live', '实时'],
-    ['delayed', '延迟'],
-    ['cached', '快照'],
-    ['fallback', '备用'],
-    ['stale', '旧数据'],
-    ['mock', '模拟'],
-    ['error', '异常'],
-  ];
-  return (
-    <GlassCard as="section" data-testid="market-data-quality" className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'p-3.5')}>
-      <div className="flex flex-col gap-3">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">DATA QUALITY</p>
-          <h2 className="mt-1 text-base font-semibold text-white">当前数据质量：{summary.status}</h2>
-          {summary.hasConcern ? (
-            <p className="mt-1 text-xs leading-5 text-amber-200/75">部分数据为备用或旧快照，请以交易所/券商行情为准。</p>
-          ) : null}
+const CompactRailCard: React.FC<{
+  railKey: string;
+  testId: string;
+  eyebrow: string;
+  title: string;
+  value?: string;
+  tone?: string;
+  lines: React.ReactNode[];
+}> = ({ railKey, testId, eyebrow, title, value, tone = 'text-white', lines }) => (
+  <MarketOverviewCardFrame
+    size="rail"
+    testId="market-overview-compact-rail-card"
+    railKey={railKey}
+    className="min-w-0 overflow-hidden"
+  >
+    <div data-testid={testId} className="flex h-full min-w-0 flex-col gap-2">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{eyebrow}</p>
+          <p className="mt-1 truncate text-sm font-semibold text-white/80">{title}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {countItems.filter(([key]) => summary.counts[key] > 0).map(([key, label]) => (
-            <div key={key} className="flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.025] px-1.5 py-1">
-              <DataFreshnessBadge freshness={key} />
-              <span className="font-mono text-xs text-white/70">{summary.counts[key]}</span>
-              <span className="sr-only">{label}</span>
-            </div>
-          ))}
-        </div>
+        {value ? <p className={cn('shrink-0 text-right font-mono text-lg font-semibold leading-none tabular-nums', tone)}>{value}</p> : null}
       </div>
-    </GlassCard>
-  );
-};
+      <div className="min-w-0 space-y-1 text-[11px] leading-4 text-white/46">
+        {lines.slice(0, 4).map((line, index) => (
+          <div key={index} className="truncate">{line}</div>
+        ))}
+      </div>
+    </div>
+  </MarketOverviewCardFrame>
+);
 
 const CategoryCoverageSummary: React.FC<{
   label: string;
   summary: Record<CardCoverageKind, number>;
 }> = ({ label, summary }) => (
-  <div
-    data-testid="market-overview-coverage-summary"
-    className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-4 py-3 text-sm text-white/70"
-  >
-    <span className="font-semibold text-white/82">{label}数据覆盖：</span>
-    <span className="font-mono">真实 {summary.real} · 混合 {summary.mixed} · 备用 {summary.fallback}</span>
-  </div>
+  <CompactRailCard
+    railKey="coverage"
+    testId="market-overview-rail-coverage"
+    eyebrow="COVERAGE"
+    title={`${label}数据覆盖`}
+    value={`${summary.real}/${summary.real + summary.mixed + summary.fallback}`}
+    lines={[
+      <span key="coverage" data-testid="market-overview-coverage-summary"><span className="text-white/62">{label}数据覆盖：</span><span className="font-mono">真实 {summary.real} · 混合 {summary.mixed} · 备用 {summary.fallback}</span></span>,
+    ]}
+  />
 );
 
 const CompactStatusTile: React.FC<{
@@ -727,190 +730,73 @@ const MarketOverviewStatusStrip: React.FC<{
   </section>
 );
 
-const PendingDataSourceSection: React.FC<{
-  expanded: boolean;
-  fallbackCount: number;
-  onToggle: () => void;
-  children: React.ReactNode;
-}> = ({ expanded, fallbackCount, onToggle, children }) => (
-  <section
-    data-testid="market-overview-fallback-section"
-    className="w-full rounded-xl border border-white/5 bg-white/[0.02] p-3 backdrop-blur-md transition-all hover:border-white/10"
-  >
-    <button
-      type="button"
-      className="flex w-full items-center justify-between gap-4 text-left"
-      aria-expanded={expanded}
-      onClick={onToggle}
-    >
-      <div>
-        <h2 className="text-sm font-semibold text-white/78">待接入真实数据源</h2>
-        <p className="mt-1 text-xs leading-5 text-white/45">以下模块当前使用备用示例数据，不参与市场温度评分。</p>
-      </div>
-      <span className="shrink-0 rounded-full border border-white/[0.07] bg-white/[0.025] px-2.5 py-1 text-xs font-semibold text-white/55">
-        {expanded ? '收起' : `展开 ${fallbackCount}`}
-      </span>
-    </button>
-    {expanded ? <div className="mt-4">{children}</div> : null}
-  </section>
+const MarketStateCompactRailCard: React.FC<{ data: MarketTemperatureResponse }> = ({ data }) => {
+  const score = data.scores.overall;
+  const reliable = isTemperatureReliable(data);
+  return (
+    <CompactRailCard
+      railKey="state"
+      testId="market-overview-rail-state"
+      eyebrow="STATE"
+      title={reliable ? score.label : '数据不足'}
+      value={reliable ? formatNumber(score.value, 0) : 'N/A'}
+      tone={reliable ? scoreTone(score) : 'text-white/45'}
+      lines={[
+        <span key="temperature" data-testid="market-temperature-strip">市场温度总览 · 可信度：{confidenceLabel(data.confidence)}</span>,
+        <span key="inputs" className="font-mono">真实 {data.reliableInputCount ?? 0} · 备用 {data.fallbackInputCount ?? 0} · 排除 {data.excludedInputCount ?? 0} · confidence {formatNumber(data.confidence, 2)}</span>,
+        !reliable ? <span key="unreliable" data-testid="market-temperature-unreliable-summary">市场温度：数据不足 · 真实输入不足，暂不生成综合判断</span> : null,
+      ].filter(Boolean)}
+    />
+  );
+};
+
+const DataQualityCompactRailCard: React.FC<{ summary: DataQualitySummary }> = ({ summary }) => (
+  <CompactRailCard
+    railKey="quality"
+    testId="market-overview-rail-quality"
+    eyebrow="QUALITY"
+    title={`数据质量：${summary.status}`}
+    value={`${summary.counts.live + summary.counts.delayed + summary.counts.cached}`}
+    tone={summary.hasConcern ? 'text-amber-200' : 'text-emerald-300'}
+    lines={[
+      <span key="quality" data-testid="market-data-quality">可用快照 · 备用 {summary.counts.fallback}</span>,
+      <span key="risk" className="font-mono">旧 {summary.counts.stale} · 缺失 {summary.counts.error}</span>,
+    ]}
+  />
 );
 
-const MarketTemperatureStrip: React.FC<{
-  data: MarketTemperatureResponse;
-  refreshing: boolean;
-  onRefresh: () => void;
-}> = ({ data, refreshing, onRefresh }) => {
-  const { t } = useI18n();
-  const [showPlaceholderScores, setShowPlaceholderScores] = useState(false);
-  const [showScoreDetails, setShowScoreDetails] = useState(false);
-  const scores: Array<{ key: keyof MarketTemperatureResponse['scores']; label: string; pressure?: boolean }> = [
-    { key: 'overall', label: t('marketOverviewPage.temperature.overall') },
-    { key: 'usRiskAppetite', label: t('marketOverviewPage.temperature.usRiskAppetite') },
-    { key: 'cnMoneyEffect', label: t('marketOverviewPage.temperature.cnMoneyEffect') },
-    { key: 'macroPressure', label: t('marketOverviewPage.temperature.macroPressure'), pressure: true },
-    { key: 'liquidity', label: t('marketOverviewPage.temperature.liquidity') },
-  ];
-  const isReliable = isTemperatureReliable(data);
-  const confidenceText = confidenceLabel(data.confidence);
-  const shouldShowScores = isReliable ? showScoreDetails : showPlaceholderScores;
-  return (
-    <GlassCard as="section" data-testid="market-temperature-strip" className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'p-3.5')}>
-      <div className="mb-3 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.temperature.eyebrow')}</p>
-          <h2 className="mt-1 text-base font-semibold text-white">{t('marketOverviewPage.temperature.title')}</h2>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            <span className={cn(
-              'rounded-full border px-2 py-0.5 font-semibold',
-              isReliable ? 'border-emerald-300/20 bg-emerald-400/8 text-emerald-100' : 'border-orange-300/25 bg-orange-400/10 text-orange-100',
-            )}>
-              可信度：{confidenceText}
-            </span>
-            {data.reliableInputCount != null || data.excludedInputCount != null ? (
-              <span className="text-white/38">
-                真实输入 {data.reliableInputCount ?? 0} · 备用 {data.fallbackInputCount ?? 0} · 排除 {data.excludedInputCount ?? 0} · confidence {formatNumber(data.confidence, 2)}
-              </span>
-            ) : null}
-          </div>
-        </div>
-        <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title: t('marketOverviewPage.temperature.title') })} refreshing={refreshing} onRefresh={onRefresh} />
-      </div>
-      {!isReliable ? (
-        <div className="mb-3 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3" data-testid="market-temperature-unreliable-summary">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-white">市场温度：数据不足</p>
-              <p className="mt-1 text-xs leading-5 text-white/55">
-                {(data.reliableInputCount ?? 0) > 0 ? '真实输入不足，暂不生成综合判断。' : '当前真实数据源不足，暂不生成综合判断。'}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 text-[11px] text-white/55">
-              <span className="rounded-full border border-white/[0.06] bg-white/[0.025] px-2 py-1">真实 {data.reliableInputCount ?? 0}</span>
-              <span className="rounded-full border border-white/[0.06] bg-white/[0.025] px-2 py-1">备用 {data.fallbackInputCount ?? 0}</span>
-              <span className="rounded-full border border-white/[0.06] bg-white/[0.025] px-2 py-1">排除 {data.excludedInputCount ?? 0}</span>
-              <span className="rounded-full border border-white/[0.06] bg-white/[0.025] px-2 py-1">confidence {formatNumber(data.confidence, 2)}</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="mt-3 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/65 transition hover:bg-white/[0.06] hover:text-white"
-            aria-expanded={showPlaceholderScores}
-            onClick={() => setShowPlaceholderScores((current) => !current)}
-          >
-            {showPlaceholderScores ? '收起占位评分' : '查看占位评分'}
-          </button>
-        </div>
-      ) : null}
-      {isReliable ? (
-        <button
-          type="button"
-          className="mb-3 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-left text-xs font-semibold text-white/65 transition hover:bg-white/[0.06] hover:text-white"
-          aria-expanded={showScoreDetails}
-          onClick={() => setShowScoreDetails((current) => !current)}
-        >
-          {showScoreDetails ? '收起分项评分' : '查看分项评分'}
-        </button>
-      ) : null}
-      {shouldShowScores ? (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
-          {scores.map(({ key, label, pressure }) => {
-            const score = data.scores[key];
-            return (
-              <div key={key} className={cn('min-w-0 rounded-lg border px-3 py-2.5', isReliable ? 'border-white/[0.06] bg-white/[0.025]' : 'border-white/[0.045] bg-white/[0.015]')} title={score.description}>
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-[11px] font-semibold text-white/60">{label}</p>
-                  <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold text-white/55">{score.label}</span>
-                </div>
-                <div className="mt-2 flex items-end gap-2">
-                  <span className={cn('font-mono text-3xl font-semibold leading-none', isReliable ? scoreTone(score, pressure) : 'text-white/55')}>{score.value}</span>
-                  <span className="pb-0.5 text-[10px] uppercase tracking-widest text-white/30">{score.trend}</span>
-                </div>
-                <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/45">{score.description}</p>
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-      <MarketOverviewPanelFooter
-        meta={data}
-        sourceLabel={data.sourceLabel || data.source}
-      />
-    </GlassCard>
-  );
-};
+const BriefingCompactRailCard: React.FC<{ data: MarketBriefingResponse }> = ({ data }) => (
+  <CompactRailCard
+    railKey="briefing"
+    testId="market-overview-rail-briefing"
+    eyebrow="BRIEFING"
+    title="今日市场解读"
+    value={confidenceLabel(data.confidence)}
+    tone={data.isReliable === false || data.isFallback ? 'text-amber-200' : 'text-white'}
+    lines={[
+      data.warning ? <span key="warning" data-testid="market-briefing-warning">{data.warning}</span> : null,
+      ...(data.items.length ? data.items : [{ title: '暂无简报', message: data.warning || '等待市场信号' }]).slice(0, data.warning ? 2 : 3).map((item, index) => (
+        <span key={`${item.title}-${index}`} data-testid={index === 0 ? 'market-briefing-card' : undefined}>{item.title} · {item.message}</span>
+      )),
+    ].filter(Boolean)}
+  />
+);
 
-const severityClass: Record<string, string> = {
-  positive: 'border-emerald-300/20 bg-emerald-400/8 text-emerald-100',
-  neutral: 'border-white/8 bg-white/[0.025] text-white/70',
-  warning: 'border-amber-300/20 bg-amber-400/8 text-amber-100',
-  risk: 'border-rose-300/20 bg-rose-400/8 text-rose-100',
-};
+const PendingSourcesCompactRailCard: React.FC<{ fallbackCount: number }> = ({ fallbackCount }) => (
+  <CompactRailCard
+    railKey="pending"
+    testId="market-overview-rail-pending"
+    eyebrow="PENDING"
+    title="待接入真实数据源"
+    value={String(fallbackCount)}
+    tone={fallbackCount > 0 ? 'text-amber-200' : 'text-white/45'}
+    lines={[
+      fallbackCount > 0 ? '备用模块保留在下方深层网格' : '暂无待接入模块',
+      '不参与市场温度评分',
+    ]}
+  />
+);
 
-const MarketBriefingCard: React.FC<{
-  data: MarketBriefingResponse;
-  refreshing: boolean;
-  onRefresh: () => void;
-  compact?: boolean;
-}> = ({ data, refreshing, onRefresh, compact = false }) => {
-  const { t } = useI18n();
-  const title = t('marketOverviewPage.briefing.title');
-  const hasWarning = Boolean(data.warning);
-  const isReliable = !hasWarning && data.isReliable !== false && (data.confidence == null || data.confidence >= 0.45);
-  return (
-    <GlassCard as="section" data-testid="market-briefing-card" className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, compact ? 'p-3.5' : '')}>
-      <div className="mb-3 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.briefing.eyebrow')}</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">{title}</h2>
-        </div>
-        <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title })} refreshing={refreshing} onRefresh={onRefresh} />
-      </div>
-      {data.warning ? (
-        <div className="mb-3 rounded-lg border border-amber-300/25 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100/85" data-testid="market-briefing-warning">
-          {data.warning}
-        </div>
-      ) : null}
-      <div className={cn('grid gap-2', compact ? 'grid-cols-1' : 'md:grid-cols-2 xl:grid-cols-3')}>
-        {data.items.slice(0, compact ? 2 : hasWarning || !isReliable ? 3 : 5).map((item) => {
-          const lowConfidence = !isReliable || (item.confidence != null && item.confidence < 0.45);
-          return (
-          <article key={`${item.category}-${item.title}`} className={cn('rounded-lg border px-3 py-2.5', lowConfidence ? severityClass.neutral : severityClass[item.severity] || severityClass.neutral)}>
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-xs font-semibold">{item.title}</p>
-              {item.confidence != null ? <span className="shrink-0 text-[10px] text-white/35">{confidenceLabel(item.confidence)}</span> : null}
-            </div>
-            <p className="mt-1 text-xs leading-5 opacity-75">{item.message}</p>
-          </article>
-          );
-        })}
-      </div>
-      <MarketOverviewPanelFooter
-        meta={data}
-        sourceLabel={data.sourceLabel || data.source}
-      />
-    </GlassCard>
-  );
-};
 
 const FuturesPremarketCard: React.FC<{
   data: MarketFuturesResponse;
@@ -936,40 +822,43 @@ const FuturesPremarketCard: React.FC<{
     items: [],
   };
   const fallbackOnly = isFallbackOnlyMeta({ ...data, items: data.items });
+  const visibleItems = data.items.slice(0, 4);
+  const hiddenItemCount = Math.max(data.items.length - visibleItems.length, 0);
   return (
-    <GlassCard as="section" className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'flex h-full flex-col', fallbackOnly ? 'border-orange-300/12' : '')}>
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.futures.eyebrow')}</p>
-          <h2 className={cn(MARKET_OVERVIEW_CARD_TITLE_CLASS, 'mt-2')}>{title}</h2>
-          <p className="mt-1 text-sm text-white/55">{t('marketOverviewPage.cards.futures.description')}</p>
+    <MarketOverviewCardFrame size="compact" className={cn('h-full', fallbackOnly ? 'border-orange-300/12' : '')}>
+      <div className="flex min-h-0 h-full flex-col gap-3">
+        <div className="flex shrink-0 items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.futures.eyebrow')}</p>
+            <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2>
+            <p className="mt-1 truncate text-[11px] text-white/42">{t('marketOverviewPage.cards.futures.description')}</p>
+          </div>
+          <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title })} refreshing={refreshing} onRefresh={onRefresh} />
         </div>
-        <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title })} refreshing={refreshing} onRefresh={onRefresh} />
-      </div>
       {fallbackOnly ? (
         <div className="mb-3 rounded-lg border border-orange-300/20 bg-orange-400/8 px-3 py-2 text-xs leading-5 text-orange-100/85" data-testid="market-overview-fallback-only-notice">
           <p className="font-semibold">暂未接入真实数据源</p>
           <p className="text-orange-100/70">当前为备用示例数据，不参与市场温度评分</p>
         </div>
       ) : null}
-      <div className="flex flex-col">
-        {data.items.map((item: MarketFutureItem) => {
+      <div className="min-h-0 overflow-y-auto border-y border-white/[0.045] ui-scroll-y-quiet">
+        {visibleItems.map((item: MarketFutureItem) => {
           const positive = (item.changePercent || 0) >= 0;
           const mutedTone = item.isFallback || item.freshness === 'fallback' || item.source === 'fallback';
           return (
-            <article key={item.symbol} className="flex min-h-12 items-center gap-3 border-b border-white/[0.045] py-2.5 last:border-b-0">
-              <div className="w-32 shrink-0 min-w-0">
-                <p className="truncate text-[10px] font-semibold tracking-widest text-white/65">{item.name}</p>
-                <p className="mt-0.5 truncate text-[9px] font-semibold uppercase tracking-widest text-white/25">{item.symbol} / {item.market}</p>
-                <div className="mt-1">
-                  <DataFreshnessBadge freshness={item.freshness || data.freshness || (item.source === 'fallback' ? 'fallback' : 'cached')} className="px-1.5 text-[9px]" />
+            <article key={item.symbol} className="grid min-h-[46px] min-w-0 grid-cols-[minmax(0,1fr)_64px_minmax(86px,max-content)] items-center gap-2 overflow-hidden border-b border-white/[0.045] py-2 last:border-b-0 max-[640px]:grid-cols-[minmax(0,1fr)_minmax(82px,max-content)]">
+              <div className="min-w-0">
+                <p className="truncate text-xs font-semibold text-white/78">{item.name}</p>
+                <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                  <span className="truncate font-mono text-[10px] font-semibold uppercase text-white/32">{item.symbol} / {item.market}</span>
+                  <DataFreshnessBadge freshness={item.freshness || data.freshness || (item.source === 'fallback' ? 'fallback' : 'cached')} className="shrink-0 px-1.5 text-[9px]" />
                 </div>
               </div>
-              <div className="w-24 shrink-0">
-                <MarketOverviewSparkline values={item.sparkline} tone={mutedTone ? 'text-white/30' : positive ? 'text-emerald-400' : 'text-rose-400'} className="h-8" />
+              <div className="w-[64px] shrink-0 max-[640px]:hidden">
+                <MarketOverviewSparkline values={item.sparkline} tone={mutedTone ? 'text-white/30' : positive ? 'text-emerald-400' : 'text-rose-400'} className="h-7" />
               </div>
-              <div className="min-w-0 flex-1 text-right font-mono">
-                <p className="truncate text-lg font-semibold leading-none text-white">{formatNumber(item.value)}</p>
+              <div className="min-w-[86px] text-right font-mono">
+                <p className="truncate text-base font-semibold leading-none text-white">{formatNumber(item.value)}</p>
                 <p className={cn('mt-1 text-[11px] font-bold leading-none', mutedTone ? 'text-white/45' : positive ? 'text-emerald-400' : 'text-rose-400')}>
                   {item.changePercent == null ? 'N/A' : `${item.changePercent >= 0 ? '+' : ''}${item.changePercent.toFixed(2)}%`}
                 </p>
@@ -978,9 +867,11 @@ const FuturesPremarketCard: React.FC<{
           );
         })}
       </div>
+      {hiddenItemCount > 0 ? <p className="text-[10px] text-white/38">+{hiddenItemCount} 项保留在数据源快照中</p> : null}
       {loading ? <div className="mt-3 rounded-lg border border-white/8 bg-white/[0.03] p-3 text-sm text-white/60">{t('marketOverviewPage.loading')}</div> : null}
       <MarketOverviewPanelFooter panel={panel} sourceLabel={data.sourceLabel || `${t('marketOverviewPage.cards.futures.source')}: ${data.source.toUpperCase()}`} />
-    </GlassCard>
+      </div>
+    </MarketOverviewCardFrame>
   );
 };
 
@@ -1012,40 +903,43 @@ const CnShortSentimentCard: React.FC<{
   ] as const;
   const fallbackOnly = isFallbackOnlyMeta(data);
   return (
-    <GlassCard as="section" className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'flex h-full flex-col', fallbackOnly ? 'border-orange-300/12' : '')}>
-      <div className="mb-5 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.cnShortSentiment.eyebrow')}</p>
-          <h2 className={cn(MARKET_OVERVIEW_CARD_TITLE_CLASS, 'mt-2')}>{title}</h2>
+    <MarketOverviewCardFrame size="compact" className={cn('h-full', fallbackOnly ? 'border-orange-300/12' : '')}>
+      <div className="flex min-h-0 h-full flex-col gap-3">
+        <div className="flex shrink-0 items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.cnShortSentiment.eyebrow')}</p>
+            <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2>
+          </div>
+          <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title })} refreshing={refreshing} onRefresh={onRefresh} />
         </div>
-        <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title })} refreshing={refreshing} onRefresh={onRefresh} />
-      </div>
       {fallbackOnly ? (
         <div className="mb-3 rounded-lg border border-orange-300/20 bg-orange-400/8 px-3 py-2 text-xs leading-5 text-orange-100/85" data-testid="market-overview-fallback-only-notice">
           <p className="font-semibold">暂未接入真实数据源</p>
           <p className="text-orange-100/70">当前为备用示例数据，不参与市场温度评分</p>
         </div>
       ) : null}
-      <div className={MARKET_OVERVIEW_GHOST_CARD_CLASS}>
-        <div className="flex items-end justify-between gap-4">
-          <div>
+      <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
             <p className="text-xs text-white/45">{t('marketOverviewPage.cards.cnShortSentiment.score')}</p>
-            <p className={cn('mt-1 font-mono text-4xl font-semibold', fallbackOnly ? 'text-white/55' : 'text-emerald-400')}>{data.sentimentScore}</p>
+            <p className={cn('mt-1 font-mono text-2xl font-semibold', fallbackOnly ? 'text-white/55' : 'text-emerald-400')}>{data.sentimentScore}</p>
           </div>
-          <p className="max-w-[220px] text-right text-xs leading-5 text-white/55">{data.summary}</p>
+          <p className="min-w-0 max-w-[220px] truncate text-right text-xs leading-5 text-white/55">{data.summary}</p>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        {metrics.map(([key, label, value]) => (
-          <div key={key} className={MARKET_OVERVIEW_GHOST_CARD_CLASS}>
+      <div className="grid min-h-0 grid-cols-2 gap-2 overflow-y-auto ui-scroll-y-quiet">
+        {metrics.slice(0, 6).map(([key, label, value]) => (
+          <div key={key} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2">
             <p className="truncate text-[10px] text-white/38">{label}</p>
             <p className="mt-1 font-mono text-sm font-semibold text-white">{value}</p>
           </div>
         ))}
       </div>
+      {metrics.length > 6 ? <p className="text-[10px] text-white/38">+{metrics.length - 6} 项保留在数据源快照中</p> : null}
       {loading ? <div className="mt-3 rounded-lg border border-white/8 bg-white/[0.03] p-3 text-sm text-white/60">{t('marketOverviewPage.loading')}</div> : null}
       <MarketOverviewPanelFooter panel={panel} sourceLabel={data.sourceLabel || `${t('marketOverviewPage.cards.cnShortSentiment.source')}: ${data.source.toUpperCase()}`} />
-    </GlassCard>
+      </div>
+    </MarketOverviewCardFrame>
   );
 };
 
@@ -1200,7 +1094,6 @@ const MarketOverviewPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshingPanel, setRefreshingPanel] = useState<PanelKey | null>(null);
   const [activeCategory, setActiveCategory] = useState<MarketOverviewTab>('all');
-  const [fallbackSectionExpanded, setFallbackSectionExpanded] = useState(false);
   const [cryptoRealtimeStatus, setCryptoRealtimeStatus] = useState<CryptoRealtimeStatus>('snapshot');
   const [exportSummaryFeedback, setExportSummaryFeedback] = useState<string | null>(null);
 
@@ -1343,10 +1236,6 @@ const MarketOverviewPage: React.FC = () => {
       eventSource.close();
     };
   }, []);
-
-  useEffect(() => {
-    setFallbackSectionExpanded(false);
-  }, [activeCategory]);
 
   const categoryTabs = useMemo<Array<{ key: MarketOverviewTab; label: string }>>(() => [
     { key: 'all', label: t('marketOverviewPage.categories.all') },
@@ -1562,18 +1451,14 @@ const MarketOverviewPage: React.FC = () => {
     briefing: panels.briefing,
   }), [activeCategoryLabel, coverageSummary, dataQuality, heroAnchors, language, panels.briefing, panels.temperature]);
   const activeLayout = CATEGORY_LAYOUT[activeCategory];
-  const primaryOrder = activeLayout.primary;
-  const deepPanelOrder = activeLayout.secondary;
-  const extensionOrder = activeLayout.fallback;
+  const heroOrder = activeLayout.primary;
+  const secondaryOrder = activeLayout.secondary;
+  const deepPanelOrder = activeLayout.fallback;
   const fallbackOnlyOrder = CATEGORY_CARDS[activeCategory].filter((cardKey) => getCardCoverageKind(panels, cardKey) === 'fallback');
 
-  const renderCard = (cardKey: CardKey, rank: number, rail: 'primary' | 'deep' | 'fallback' = 'primary') => {
+  const renderCard = (cardKey: CardKey, rank: number, rail: WorkbenchRail = 'hero') => {
     const layoutMeta = CARD_LAYOUT_META[cardKey];
-    const shouldSpanPrimaryRail = rail === 'primary' && (
-      layoutMeta.size === 'dense-wide'
-      || layoutMeta.size === 'wide'
-      || (activeCategory === 'global' && cardKey === 'macro')
-    );
+    const shouldSpanPrimaryRail = rail === 'hero' && layoutMeta.size === 'large';
     return (
     <div
       key={cardKey}
@@ -1582,8 +1467,8 @@ const MarketOverviewPage: React.FC = () => {
       data-market-card-size={layoutMeta.size}
       data-market-card-density={DENSE_QUOTE_CARDS.has(cardKey) ? 'dense-quote' : 'standard'}
       className={cn(
-        'min-w-0 w-full',
-        shouldSpanPrimaryRail ? 'lg:col-span-2 2xl:col-span-3' : '',
+        'min-w-0 w-full overflow-hidden',
+        shouldSpanPrimaryRail ? 'lg:col-span-2' : '',
       )}
     >
       {cardNodes[cardKey]}
@@ -1591,28 +1476,17 @@ const MarketOverviewPage: React.FC = () => {
     );
   };
 
-  const renderCardGrid = (rankOrder: CardKey[], rail: 'primary' | 'deep' | 'fallback') => (
+  const renderCardGrid = (rankOrder: CardKey[], rail: WorkbenchRail) => (
     <div className={cn(
       'grid w-full grid-cols-1 gap-4',
-      rail === 'primary' ? 'lg:grid-cols-2 2xl:grid-cols-3' : '',
+      rail === 'hero' ? 'lg:grid-cols-2' : '',
+      rail === 'secondary' ? 'lg:grid-cols-2' : '',
       rail === 'deep' && rankOrder.length % 3 === 0 ? 'lg:grid-cols-3' : '',
       rail === 'deep' && rankOrder.length % 3 !== 0 ? 'lg:grid-cols-2' : '',
       rail === 'fallback' ? 'grid-cols-1' : '',
     )}>
       {rankOrder.map((cardKey, index) => renderCard(cardKey, index, rail))}
     </div>
-  );
-
-  const renderFallbackSection = () => (
-    fallbackOnlyOrder.length > 0 && extensionOrder.length > 0 ? (
-      <PendingDataSourceSection
-        expanded={fallbackSectionExpanded}
-        fallbackCount={fallbackOnlyOrder.length}
-        onToggle={() => setFallbackSectionExpanded((current) => !current)}
-      >
-        {renderCardGrid(extensionOrder, 'fallback')}
-      </PendingDataSourceSection>
-    ) : null
   );
 
   const handleExportSummary = useCallback(async () => {
@@ -1624,34 +1498,29 @@ const MarketOverviewPage: React.FC = () => {
     <main data-testid="market-overview-main-grid" data-workbench-split="9:3" className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
       <section
         data-testid="market-overview-primary-rail"
-        className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 xl:col-span-9 2xl:grid-cols-3"
+        data-mobile-order="main"
+        className="flex min-w-0 flex-col gap-4 xl:col-span-9"
       >
-        {primaryOrder.map((cardKey, index) => renderCard(cardKey, index, 'primary'))}
+        <section data-testid="market-overview-hero-lane" data-card-tier="hero" className="min-w-0">
+          {renderCardGrid(heroOrder, 'hero')}
+        </section>
+        <section data-testid="market-overview-secondary-grid" data-card-tier="secondary" className="min-w-0">
+          {renderCardGrid(secondaryOrder, 'secondary')}
+        </section>
       </section>
-      <aside data-testid="market-overview-side-rail" className="flex min-w-0 flex-col gap-3 xl:col-span-3">
+      <aside data-testid="market-overview-side-rail" data-mobile-order="rail" className="flex min-w-0 flex-col gap-3 xl:col-span-3">
         <CategoryCoverageSummary label={activeCategoryLabel} summary={coverageSummary} />
-        <MarketTemperatureStrip
-          data={panels.temperature}
-          refreshing={refreshingPanel === 'temperature'}
-          onRefresh={() => {
-            void refreshPanel('temperature', marketApi.getTemperature);
-          }}
-        />
-        <DataQualityOverview summary={dataQuality} />
-        <MarketBriefingCard
-          data={panels.briefing}
-          refreshing={refreshingPanel === 'briefing'}
-          compact
-          onRefresh={() => {
-            void refreshPanel('briefing', marketApi.getMarketBriefing);
-          }}
-        />
-        {renderFallbackSection()}
+        <MarketStateCompactRailCard data={panels.temperature} />
+        <DataQualityCompactRailCard summary={dataQuality} />
+        <BriefingCompactRailCard data={panels.briefing} />
+        <PendingSourcesCompactRailCard fallbackCount={fallbackOnlyOrder.length} />
       </aside>
       {deepPanelOrder.length > 0 ? (
         <section
           data-testid="market-overview-deep-panels"
           data-panel-grouping="balanced"
+          data-card-tier="deep"
+          data-mobile-order="deep"
           className="min-w-0 xl:col-span-12"
         >
           {renderCardGrid(deepPanelOrder, 'deep')}
@@ -1672,13 +1541,14 @@ const MarketOverviewPage: React.FC = () => {
           <div
             data-testid="market-overview-category-tabs"
             data-selector-position="static-safe"
-            className="flex w-full flex-col gap-2 rounded-xl border border-white/8 bg-white/[0.02] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
+            data-mobile-order="controls"
+            className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-white/8 bg-white/[0.02] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
           >
             <div className="flex min-w-0 items-center gap-2">
               <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[10px] font-semibold text-white/42">
                 Filter
               </span>
-              <div className="min-w-0 overflow-x-auto no-scrollbar [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="ui-scroll-x-quiet min-w-0">
                 <div className="flex w-max gap-2">
                   {categoryTabs.map((tab) => (
                     <button
@@ -1686,7 +1556,7 @@ const MarketOverviewPage: React.FC = () => {
                       type="button"
                       aria-pressed={activeCategory === tab.key}
                       onClick={() => setActiveCategory(tab.key)}
-                      className={`whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
+                      className={`ui-truncate shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
                         activeCategory === tab.key
                           ? 'bg-white/10 text-white shadow-sm'
                           : 'bg-transparent text-white/45 hover:text-white/75'
@@ -1710,11 +1580,13 @@ const MarketOverviewPage: React.FC = () => {
             </button>
           </div>
           <CrossAssetHeroRibbon anchors={heroAnchors} />
-          <MarketOverviewStatusStrip
-            temperature={<MarketTemperatureCompactSummary data={panels.temperature} />}
-            dataQuality={<DataQualityCompactSummary summary={dataQuality} />}
-            briefing={<MarketBriefingCompactSummary data={panels.briefing} />}
-          />
+          <section data-testid="market-overview-summary-band" data-mobile-order="summary" className="min-w-0">
+            <MarketOverviewStatusStrip
+              temperature={<MarketTemperatureCompactSummary data={panels.temperature} />}
+              dataQuality={<DataQualityCompactSummary summary={dataQuality} />}
+              briefing={<MarketBriefingCompactSummary data={panels.briefing} />}
+            />
+          </section>
           </div>
         </section>
         {renderDeterministicGrid()}

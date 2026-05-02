@@ -1,12 +1,10 @@
 import type React from 'react';
 import type { MarketOverviewPanel } from '../../api/marketOverview';
 import { useI18n } from '../../contexts/UiLanguageContext';
-import { GlassCard } from '../common';
 import { cn } from '../../utils/cn';
 import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
 import {
-  MARKET_OVERVIEW_CARD_TITLE_CLASS,
-  MARKET_OVERVIEW_GHOST_CARD_CLASS,
+  MarketOverviewCardFrame,
   MarketOverviewDataRow,
   MarketOverviewDenseQuoteItem,
   MarketOverviewPanelFooter,
@@ -57,26 +55,16 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
   const hiddenItemCount = denseQuote ? Math.max(items.length - visibleItems.length, 0) : 0;
 
   return (
-    <GlassCard
-      as="section"
-      data-testid={denseQuote ? 'market-overview-dense-quote-card' : undefined}
-      className={cn(
-        MARKET_OVERVIEW_GHOST_CARD_CLASS,
-        'flex h-full flex-col',
-        denseQuote ? 'p-3.5' : '',
-        fallbackOnly ? 'border-orange-300/12' : '',
-        className || '',
-      )}
+    <MarketOverviewCardFrame
+      testId={denseQuote ? 'market-overview-dense-quote-card' : undefined}
+      size={denseQuote ? 'list' : 'standard'}
+      className={cn('h-full', fallbackOnly ? 'border-orange-300/12' : '', className)}
     >
-      <div className={cn('flex h-full flex-col', denseQuote ? 'gap-3' : 'gap-5')}>
-        <div className={cn('flex items-start justify-between gap-3', denseQuote ? 'mb-1' : 'mb-6')}>
-          <div className="min-w-0">
+      <div className={cn('flex min-h-0 h-full flex-col', denseQuote ? 'gap-3' : 'gap-4')}>
+        <div className="flex shrink-0 items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{eyebrow}</p>
-            <h2 className={cn(
-              MARKET_OVERVIEW_CARD_TITLE_CLASS,
-              'mt-2',
-              denseQuote ? 'mb-1 text-sm normal-case tracking-normal text-white/82' : '',
-            )}>{title}</h2>
+            <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2>
             <p className={cn('mt-1 max-w-xl text-white/55', denseQuote ? 'line-clamp-1 text-[11px] leading-4' : 'text-sm')}>{description}</p>
           </div>
           <MarketOverviewRefreshButton
@@ -102,7 +90,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
         {denseQuote ? (
           <div
             data-testid="market-overview-dense-quote-grid"
-            className="flex flex-col border-y border-white/[0.045]"
+            className="flex min-h-0 flex-col overflow-y-auto border-y border-white/[0.045] ui-scroll-y-quiet"
           >
             {visibleItems.map((item) => (
               <MarketOverviewDenseQuoteItem
@@ -113,7 +101,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
             ))}
           </div>
         ) : (
-          <div className="flex flex-col">
+          <div className="min-h-0 overflow-y-auto ui-scroll-y-quiet">
             {visibleItems.map((item) => (
               <MarketOverviewDataRow
                 key={item.symbol}
@@ -138,6 +126,6 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
 
         <MarketOverviewPanelFooter panel={panel} sourceLabel={sourceLabel} />
       </div>
-    </GlassCard>
+    </MarketOverviewCardFrame>
   );
 };

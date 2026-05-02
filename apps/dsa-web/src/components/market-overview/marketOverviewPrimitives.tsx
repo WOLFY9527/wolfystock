@@ -3,6 +3,7 @@ import { RefreshCcw } from 'lucide-react';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import type { MarketDataFreshness, MarketDataMeta, MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
 import { cn } from '../../utils/cn';
+import { GlassCard } from '../common';
 import { formatMarketOverviewTimestamp } from './marketOverviewFormat';
 import {
   formatChangeSummary,
@@ -33,6 +34,60 @@ const FRESHNESS_CLASSES: Record<MarketDataFreshness, string> = {
 
 export const MARKET_OVERVIEW_GHOST_CARD_CLASS = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md p-5 transition-all hover:border-white/10';
 export const MARKET_OVERVIEW_CARD_TITLE_CLASS = 'text-[10px] font-bold uppercase tracking-widest text-white/40 mb-5 block';
+export type MarketOverviewCardSize = 'compact' | 'standard' | 'list' | 'large' | 'rail';
+
+const MARKET_OVERVIEW_CARD_SIZE_CLASS: Record<MarketOverviewCardSize, string> = {
+  compact: 'min-h-[90px] p-3',
+  standard: 'min-h-[180px] p-3.5',
+  list: 'min-h-[260px] max-h-[340px] p-3.5',
+  large: 'min-h-[320px] max-h-[420px] p-4',
+  rail: 'min-h-[88px] max-h-[132px] p-3',
+};
+
+export const MarketOverviewCardFrame: React.FC<{
+  title?: React.ReactNode;
+  eyebrow?: React.ReactNode;
+  subtitle?: React.ReactNode;
+  size?: MarketOverviewCardSize;
+  className?: string;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  testId?: string;
+  railKey?: string;
+}> = ({
+  title,
+  eyebrow,
+  subtitle,
+  size = 'standard',
+  className,
+  children,
+  footer,
+  testId,
+  railKey,
+}) => (
+  <GlassCard
+    as="section"
+    data-testid={testId}
+    data-market-card-size={size}
+    data-rail-card={railKey}
+    className={cn(
+      MARKET_OVERVIEW_GHOST_CARD_CLASS,
+      MARKET_OVERVIEW_CARD_SIZE_CLASS[size],
+      'flex min-w-0 flex-col overflow-hidden',
+      className,
+    )}
+  >
+    {title || eyebrow || subtitle ? (
+      <div className="mb-3 min-w-0 shrink-0">
+        {eyebrow ? <p className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{eyebrow}</p> : null}
+        {title ? <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2> : null}
+        {subtitle ? <p className="mt-1 truncate text-[11px] leading-4 text-white/42">{subtitle}</p> : null}
+      </div>
+    ) : null}
+    <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
+    {footer ? <div className="mt-3 shrink-0 border-t border-white/5 pt-2 text-[10px] leading-4 text-white/34">{footer}</div> : null}
+  </GlassCard>
+);
 
 function resolveFreshness(meta?: Partial<MarketDataMeta>): MarketDataFreshness {
   if (meta?.freshness) {
@@ -98,7 +153,7 @@ export const MarketOverviewSparkline: React.FC<{ values?: number[]; tone?: strin
   return (
     <svg
       viewBox="0 0 100 34"
-      className={cn('w-full overflow-visible', tone, className)}
+      className={cn('w-full overflow-hidden', tone, className)}
       preserveAspectRatio="none"
       data-testid="market-overview-sparkline"
       aria-hidden="true"
@@ -156,7 +211,7 @@ export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; 
   );
 };
 
-export const MarketOverviewDataRow: React.FC<{
+export const MarketDataRow: React.FC<{
   item: MarketOverviewItem;
   neutralLabel: string;
   valueClassName?: string;
@@ -175,22 +230,28 @@ export const MarketOverviewDataRow: React.FC<{
       : 'text-white/35';
 
   return (
-    <article className="group grid min-h-12 grid-cols-[minmax(0,1fr)_92px_minmax(92px,max-content)] items-center gap-x-3 gap-y-1 border-b border-white/[0.045] py-2.5 last:border-b-0">
-      <div className="col-start-1 row-start-1 flex min-w-0 items-start gap-2">
-        <span className={cn('mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-current shadow-[0_0_12px_currentColor]', tone)} aria-hidden="true" />
-        <div className="min-w-0">
-          <p className="truncate text-[10px] font-semibold tracking-widest text-white/65">{displayLabel.primary}</p>
+    <article
+      data-testid="market-overview-data-row"
+      data-row-layout="bounded-market-row"
+      className="grid min-h-[48px] min-w-0 grid-cols-[minmax(0,1fr)_minmax(84px,0.65fr)_64px_minmax(88px,max-content)] items-center gap-x-2 overflow-hidden border-b border-white/[0.045] py-2 last:border-b-0 max-[640px]:grid-cols-[minmax(0,1fr)_minmax(82px,max-content)] max-[640px]:gap-y-0.5"
+    >
+      <div className="col-start-1 min-w-0 max-[640px]:row-start-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={cn('size-1.5 shrink-0 rounded-full bg-current shadow-[0_0_12px_currentColor]', tone)} aria-hidden="true" />
+          <p className="min-w-0 truncate text-xs font-semibold text-white/78">{displayLabel.primary}</p>
+        </div>
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 pl-3.5">
           {displayLabel.secondary ? (
-            <p className="mt-0.5 truncate text-[9px] font-semibold uppercase tracking-widest text-white/25">{displayLabel.secondary}</p>
+            <span className="min-w-0 truncate font-mono text-[10px] font-semibold uppercase text-white/32">{displayLabel.secondary}</span>
           ) : null}
         </div>
       </div>
       {(item.freshness || item.sourceLabel || item.warning || item.hoverDetails?.length) ? (
         <div
           data-testid="market-overview-quote-metadata"
-          data-metadata-position="under-label"
+          data-metadata-position="middle-left"
           title={metadataTitle(itemDetails, item.warning, item.hoverDetails)}
-          className="col-start-1 row-start-2 flex min-w-0 max-w-full items-center gap-x-2 overflow-hidden whitespace-nowrap pl-3.5 text-[9px] text-white/32"
+          className="col-start-2 flex min-w-0 max-w-full items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-[9px] text-white/32 max-[640px]:col-start-1 max-[640px]:row-start-2 max-[640px]:pl-3.5"
         >
           <DataFreshnessBadge freshness={freshness} className="shrink-0 px-1.5 text-[9px]" />
           {itemDetails.length ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{itemDetails.join(' · ')}</span> : null}
@@ -199,18 +260,26 @@ export const MarketOverviewDataRow: React.FC<{
           ))}
         </div>
       ) : null}
-      <div className="col-start-2 row-span-2 row-start-1 w-[92px] shrink-0 self-center">
-        <MarketOverviewSparkline values={item.trend} tone={sparklineTone} className="h-8" />
+      <div data-testid="market-overview-dense-quote-sparkline" className="col-start-3 w-[64px] shrink-0 self-center max-[640px]:hidden">
+        <MarketOverviewSparkline values={item.trend} tone={sparklineTone} className="h-7" />
       </div>
-      <div data-testid="market-overview-quote-value" className="col-start-3 row-span-2 row-start-1 min-w-[92px] text-right font-mono tabular-nums">
-        <p className={cn('truncate text-lg font-semibold leading-none text-white', valueClassName)}>{formatMetricValue(item, valueDigitsBelowHundred)}</p>
+      <div data-testid="market-overview-quote-value" className="col-start-4 row-start-1 min-w-[88px] text-right font-mono tabular-nums max-[640px]:col-start-2">
+        <p className={cn('truncate text-base font-semibold leading-none text-white', valueClassName)}>{formatMetricValue(item, valueDigitsBelowHundred)}</p>
         <p className={cn('mt-1 truncate text-[11px] font-bold leading-none', tone)}>
           {formatChangeSummary(item, neutralLabel)}
         </p>
       </div>
+      <div
+        data-testid="market-overview-quote-change"
+        className={cn('sr-only text-right font-mono', tone)}
+      >
+        {formatChangeSummary(item, neutralLabel)}
+      </div>
     </article>
   );
 };
+
+export const MarketOverviewDataRow = MarketDataRow;
 
 export const MarketOverviewDenseQuoteItem: React.FC<{
   item: MarketOverviewItem;
