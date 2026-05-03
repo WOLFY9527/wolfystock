@@ -124,6 +124,27 @@ describe('Shell', () => {
     expect(document.querySelector('.theme-page-transition')).toHaveClass('theme-page-transition--chat', 'h-full', 'min-h-0');
   });
 
+  it('renders the complete primary navigation on desktop', async () => {
+    render(
+      <MemoryRouter initialEntries={['/watchlist']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.home') })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.scanner') })).toBeInTheDocument();
+    expect(await within(primaryNav).findByRole('link', { name: translate('zh', 'nav.chat') })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
+  });
+
   it('shows the guest navigation routes without member-only account controls', () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
@@ -176,7 +197,7 @@ describe('Shell', () => {
     expect(screen.getByRole('link', { name: '扫描器' })).toBeInTheDocument();
   });
 
-  it('hides the Ask Stock navigation entry when the agent runtime is unavailable', async () => {
+  it('keeps the Ask Stock navigation entry accessible when the agent runtime is unavailable', async () => {
     mockGetAgentStatus.mockResolvedValueOnce({ enabled: false });
 
     render(
@@ -189,9 +210,7 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    await waitFor(() => {
-      expect(screen.queryByRole('link', { name: '问股' })).not.toBeInTheDocument();
-    });
+    expect(screen.getByRole('link', { name: '问股' })).toBeInTheDocument();
   });
 
   it('shows a confirmation dialog before logout', async () => {
@@ -234,6 +253,67 @@ describe('Shell', () => {
 
     expect(await screen.findByRole('button', { name: '切换语言' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
+  });
+
+  it('renders a compact mobile header with the active route label', () => {
+    window.innerWidth = 390;
+
+    render(
+      <MemoryRouter initialEntries={['/watchlist']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('button', { name: '打开导航菜单' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'WolfyStock' })).toBeInTheDocument();
+    expect(screen.getByTestId('shell-mobile-active-route')).toHaveTextContent(translate('zh', 'nav.watchlist'));
+    expect(screen.queryByRole('navigation', { name: translate('zh', 'shell.drawerTitle') })).not.toBeInTheDocument();
+  });
+
+  it('opens a mobile admin menu with all primary routes and account actions', async () => {
+    window.innerWidth = 390;
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: { isAdmin: true },
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/watchlist']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
+
+    expect(await screen.findByRole('heading', { name: translate('zh', 'shell.drawerTitle') })).toBeInTheDocument();
+    const drawerNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
+    expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.home') })).toBeInTheDocument();
+    expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.scanner') })).toBeInTheDocument();
+    expect(await within(drawerNav).findByRole('link', { name: translate('zh', 'nav.chat') })).toBeInTheDocument();
+    expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
+    expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toBeInTheDocument();
+    expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
+    expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('zh', 'language.toggle') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.notifications') })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('zh', 'nav.logout') })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await act(async () => {
+      await settleDrawerMotion();
+    });
   });
 
   it('keeps the mobile navigation drawer open until the user closes it or navigates away', async () => {

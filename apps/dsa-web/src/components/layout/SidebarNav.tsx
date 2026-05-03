@@ -3,7 +3,7 @@
  * toggling, completion badge, and logout confirmation while aligning nav
  * controls to the shared glass tokens.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Archive,
   Activity,
@@ -21,7 +21,6 @@ import {
   TestTubeDiagonal,
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { agentApi } from '../../api/agent';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { buildLoginPath, useProductSurface } from '../../hooks/useProductSurface';
@@ -125,7 +124,6 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const { language, t, toggleLanguage } = useI18n();
   const completionBadge = useAgentChatStore((state) => state.completionBadge);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [agentRuntimeEnabled, setAgentRuntimeEnabled] = useState<boolean>(location.pathname.startsWith('/chat'));
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const isDrawer = layout === 'drawer';
   const signInLabel = t('nav.signIn');
@@ -135,43 +133,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
   const notificationsPath = routeLocale ? buildLocalizedPath('/admin/notifications', routeLocale) : '/admin/notifications';
 
-  useEffect(() => {
-    if (isGuest) {
-      return;
-    }
-
-    let cancelled = false;
-
-    void agentApi.getStatus()
-      .then((payload) => {
-        if (!cancelled) {
-          setAgentRuntimeEnabled(payload.enabled);
-        }
-      })
-      .catch(() => {
-        if (!cancelled && location.pathname.startsWith('/chat')) {
-          setAgentRuntimeEnabled(true);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isGuest, location.pathname]);
-
-  const agentEnabled = !isGuest && agentRuntimeEnabled;
-
-  const visibleNavItems = useMemo(
-    () => NAV_ITEMS.filter((item) => {
-      if (item.key === 'chat') {
-        return isGuest || agentEnabled;
-      }
-      return true;
-    }),
-    [agentEnabled, isGuest],
-  );
-
-  const navLinks = visibleNavItems.map(({ key, labelKey, to, icon: Icon, badge }) => {
+  const navLinks = NAV_ITEMS.map(({ key, labelKey, to, icon: Icon, badge }) => {
     const label = t(labelKey);
     return (
       <NavLink

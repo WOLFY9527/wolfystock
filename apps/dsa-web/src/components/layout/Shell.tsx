@@ -33,6 +33,37 @@ function resolveRailDescription(pathname: string, t: (key: string) => string): s
   return t('shell.archiveDesc');
 }
 
+function resolveMobileRouteLabel(pathname: string, t: (key: string) => string): string {
+  if (pathname === '/' || pathname === '') {
+    return t('nav.home');
+  }
+  if (pathname.startsWith('/scanner')) {
+    return t('nav.scanner');
+  }
+  if (pathname.startsWith('/chat')) {
+    return t('nav.chat');
+  }
+  if (pathname.startsWith('/portfolio')) {
+    return t('nav.portfolio');
+  }
+  if (pathname.startsWith('/market-overview')) {
+    return t('nav.marketOverview');
+  }
+  if (pathname.startsWith('/watchlist')) {
+    return t('nav.watchlist');
+  }
+  if (pathname.startsWith('/backtest')) {
+    return t('nav.backtest');
+  }
+  if (pathname.startsWith('/settings')) {
+    return t('nav.settings');
+  }
+  if (pathname.startsWith('/admin/notifications')) {
+    return t('nav.notifications');
+  }
+  return t('nav.terminal');
+}
+
 const ShellRailPanel: React.FC<{
   pathname: string;
   railContent: React.ReactNode;
@@ -79,24 +110,25 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const hasRailContent = Boolean(railContent);
   const isMobileNavVisible = mobileNavOpen;
   const isRailVisible = hasRailContent && railOpen;
+  const mobileRouteLabel = resolveMobileRouteLabel(surfacePathname, t);
 
   const closeMobileNav = useCallback(() => {
     setMobileNavOpen(false);
-  }, []);
+  }, [setMobileNavOpen]);
 
   const openMobileNav = useCallback(() => {
     setRailOpen(false);
     setMobileNavOpen(true);
-  }, []);
+  }, [setMobileNavOpen, setRailOpen]);
 
   const closeRail = useCallback(() => {
     setRailOpen(false);
-  }, []);
+  }, [setRailOpen]);
 
   const openRail = useCallback(() => {
     setMobileNavOpen(false);
     setRailOpen(true);
-  }, []);
+  }, [setMobileNavOpen, setRailOpen]);
 
   const railContextValue = useMemo(
     () => ({
@@ -105,7 +137,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       openRail,
       isConnected: true,
     }),
-    [closeRail, openRail],
+    [closeRail, openRail, setRailContent],
   );
 
   useEffect(() => {
@@ -187,22 +219,24 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
               />
             ) : (
               <div className="shell-mobile-strip">
-                <button
-                  type="button"
-                  onClick={openMobileNav}
-                  className="shell-mobile-button"
-                  aria-label={t('shell.openMenu')}
-                >
-                  <Menu className="h-4 w-4" />
-                </button>
                 <NavLink to="/" end className="shell-mobile-brand shell-brand-link" aria-label="WolfyStock">
                   <span className="inline-flex min-w-0 items-center gap-3">
                     <BrandLogo className="h-8 w-8" />
                     <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>WolfyStock</span>
                   </span>
-                  <span className="shell-mobile-brand__note">{t('nav.terminal')}</span>
                 </NavLink>
-                <span className="shell-mobile-placeholder" aria-hidden="true" />
+                <span className="shell-mobile-active-route" data-testid="shell-mobile-active-route">
+                  {mobileRouteLabel}
+                </span>
+                <button
+                  type="button"
+                  onClick={openMobileNav}
+                  className="shell-mobile-button"
+                  aria-label={t('shell.openMenu')}
+                  title={t('shell.openMenu')}
+                >
+                  <Menu className="h-4 w-4" />
+                </button>
               </div>
             )}
           </div>
