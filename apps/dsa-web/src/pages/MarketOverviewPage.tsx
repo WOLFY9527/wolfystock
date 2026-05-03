@@ -67,9 +67,9 @@ type WorkbenchRail = MarketOverviewRowTier;
 const CATEGORY_LAYOUT: Record<MarketOverviewTab, MarketOverviewLayoutRow[]> = {
   all: [
     { id: 'all-core-trend', tier: 'hero', columns: 1, cards: ['indices'], allowSingleFullWidth: true },
-    { id: 'all-risk-flow', tier: 'secondary', columns: 3, cards: ['volatility', 'fundsFlow', 'sentiment'] },
-    { id: 'all-macro-cross', tier: 'secondary', columns: 2, cards: ['rates', 'fxCommodities'] },
-    { id: 'all-crypto-cn', tier: 'secondary', columns: 2, cards: ['crypto', 'cnIndices'] },
+    { id: 'all-risk-liquidity', tier: 'secondary', columns: 2, cards: ['volatility', 'fundsFlow'] },
+    { id: 'all-sentiment-rates', tier: 'secondary', columns: 2, cards: ['sentiment', 'rates'] },
+    { id: 'all-cross-asset', tier: 'secondary', columns: 2, cards: ['fxCommodities', 'crypto'] },
   ],
   us: [
     { id: 'us-core-trend', tier: 'hero', columns: 1, cards: ['indices'], allowSingleFullWidth: true },
@@ -647,10 +647,12 @@ function buildMarketDecision(params: {
   });
   if (!reliable && !hasLoadedSignals) {
     return {
-      text: '市场状态：数据不足 · 等待更多实时源',
+      text: '数据不足 · 等待更多实时源',
       chips: [
-        { label: 'RISK', value: 'N/A', tone: 'border-white/10 text-white/45' },
-        { label: 'WATCH', value: '等待实时源', tone: 'border-amber-300/20 text-amber-200' },
+        { label: 'RISK', value: '数据不足', tone: 'border-amber-300/20 text-amber-200' },
+        { label: 'LIQUIDITY', value: 'N/A', tone: 'border-white/10 text-white/45' },
+        { label: 'BREADTH', value: 'N/A', tone: 'border-white/10 text-white/45' },
+        { label: 'WATCH', value: 'VIX / US10Y / DXY', tone: 'border-white/10 text-white/60' },
       ],
     };
   }
@@ -681,7 +683,7 @@ function buildMarketDecision(params: {
 
   if (!reliable) {
     return {
-      text: '市场状态：数据不足 · 等待更多实时源',
+      text: '数据不足 · 等待更多实时源',
       chips,
     };
   }
@@ -710,28 +712,41 @@ const MarketDecisionStrip: React.FC<{
   dataQuality: DataQualitySummary;
 }> = ({ activeCategory, panels, dataQuality }) => {
   const decision = buildMarketDecision({ activeCategory, panels, dataQuality });
+  const reliable = isTemperatureReliable(panels.temperature);
   return (
     <section
       data-testid="market-decision-strip"
+      data-command-bar="market-state"
       data-mobile-order="decision"
-      className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'flex min-w-0 flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between')}
+      className={cn(
+        MARKET_OVERVIEW_GHOST_CARD_CLASS,
+        'relative overflow-hidden p-0 shadow-[0_0_24px_rgba(59,130,246,0.10)]',
+      )}
     >
-      <div className="min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">DECISION</p>
-        <p data-testid="market-decision-text" className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-white/82 md:truncate">
-          {decision.text}
-        </p>
-      </div>
-      <div className="ui-scroll-x-quiet -mx-1 flex min-w-0 max-w-full gap-2 px-1 md:mx-0 md:shrink-0 md:px-0">
-        {decision.chips.map((chip) => (
-          <span
-            key={`${chip.label}-${chip.value}`}
-            className={cn('inline-flex shrink-0 items-center gap-1 rounded-full border bg-white/[0.025] px-2 py-1 text-[10px] font-bold uppercase tracking-widest', chip.tone)}
-          >
-            <span className="text-white/36">{chip.label}</span>
-            <span className="max-w-[140px] truncate font-mono normal-case tracking-normal">{chip.value}</span>
-          </span>
-        ))}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-blue-500/0 via-blue-400/45 to-purple-500/0" aria-hidden="true" />
+      <div className="flex min-w-0 flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">MARKET STATE</p>
+          <p data-testid="market-decision-text" className="mt-1 line-clamp-2 font-mono text-base font-semibold leading-6 text-white/88 md:truncate">
+            {decision.text}
+          </p>
+          {!reliable ? (
+            <p data-testid="market-command-safe-state" className="mt-1 truncate text-[11px] font-semibold text-amber-200/78">
+              当前不生成强判断，只显示可验证信号
+            </p>
+          ) : null}
+        </div>
+        <div data-testid="market-command-chips" className="ui-scroll-x-quiet -mx-1 flex min-w-0 max-w-full gap-2 px-1 md:mx-0 md:shrink-0 md:px-0">
+          {decision.chips.map((chip) => (
+            <span
+              key={`${chip.label}-${chip.value}`}
+              className={cn('inline-flex shrink-0 items-center gap-1 rounded-md border bg-white/[0.025] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest', chip.tone)}
+            >
+              <span className="text-white/36">{chip.label}</span>
+              <span className="max-w-[150px] truncate font-mono normal-case tracking-normal">{chip.value}</span>
+            </span>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -785,6 +800,83 @@ const CategoryCoverageSummary: React.FC<{
   />
 );
 
+const SignalWatchRailCard: React.FC<{ panels: PanelState; activeCategory: MarketOverviewTab }> = ({ panels, activeCategory }) => {
+  const watchByTab: Record<MarketOverviewTab, Array<[string, MarketOverviewItem | undefined]>> = {
+    all: [
+      ['VIX', findPanelItem(panels.volatility, ['VIX'])],
+      ['US10Y', findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.macro, ['US10Y'])],
+      ['DXY', findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY'])],
+      ['BTC', findPanelItem(panels.crypto, ['BTC'])],
+    ],
+    us: [
+      ['SPX', findPanelItem(panels.indices, ['SPX'])],
+      ['VIX', findPanelItem(panels.volatility, ['VIX'])],
+      ['US10Y', findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.macro, ['US10Y'])],
+      ['DXY', findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY'])],
+    ],
+    cn: [
+      ['CSI300', findPanelItem(panels.cnIndices, ['CSI300', '000300.SH'])],
+      ['HSI', findPanelItem(panels.cnIndices, ['HSI'])],
+      ['CN10Y', findPanelItem(panels.rates, ['CN10Y'])],
+      ['USDCNH', findPanelItem(panels.fxCommodities, ['USDCNH'])],
+    ],
+    global: [
+      ['US10Y', findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.macro, ['US10Y'])],
+      ['DXY', findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY'])],
+      ['GOLD', findPanelItem(panels.fxCommodities, ['GOLD'])],
+      ['VIX', findPanelItem(panels.volatility, ['VIX'])],
+    ],
+    crypto: [
+      ['BTC', findPanelItem(panels.crypto, ['BTC'])],
+      ['ETH', findPanelItem(panels.crypto, ['ETH'])],
+      ['DXY', findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY'])],
+      ['US10Y', findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.macro, ['US10Y'])],
+    ],
+  };
+  const chips = watchByTab[activeCategory];
+
+  return (
+    <MarketOverviewCardFrame
+      size="rail"
+      testId="market-overview-compact-rail-card"
+      railKey="signal-watch"
+      className="min-w-0 overflow-hidden"
+    >
+      <div data-testid="market-overview-rail-signal-watch" className="flex h-full min-w-0 flex-col gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">SIGNAL WATCH</p>
+          <p className="mt-1 truncate text-sm font-semibold text-white/80">关键观测</p>
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-1.5 overflow-hidden">
+          {chips.map(([label, item]) => (
+            <span key={label} className="inline-flex max-w-full items-center gap-1 rounded-md border border-white/10 bg-white/[0.025] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/48">
+              <span className="shrink-0">{label}</span>
+              <span className={cn('min-w-0 truncate font-mono tracking-normal', heroToneClass(item))}>
+                {formatHeroChange(item?.changePct)}
+              </span>
+            </span>
+          ))}
+        </div>
+      </div>
+    </MarketOverviewCardFrame>
+  );
+};
+
+const ActionHintRailCard: React.FC<{ temperature: MarketTemperatureResponse }> = ({ temperature }) => {
+  const reliable = isTemperatureReliable(temperature);
+  return (
+    <CompactRailCard
+      railKey="action-hint"
+      testId="market-overview-rail-action-hint"
+      eyebrow="ACTION HINT"
+      title={reliable ? '同步观察' : '安全状态'}
+      lines={[
+        reliable ? '关注风险/流动性/宽度的同步变化' : '等待实时源补齐后再生成强判断',
+      ]}
+    />
+  );
+};
+
 const CompactStatusTile: React.FC<{
   testId: string;
   eyebrow: string;
@@ -820,10 +912,11 @@ const MarketTemperatureCompactSummary: React.FC<{ data: MarketTemperatureRespons
       value={reliable ? formatNumber(score.value, 0) : 'N/A'}
       tone={reliable ? scoreTone(score) : 'text-white/45'}
       meta={(
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div data-testid="market-temperature-strip" className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="font-semibold text-white/68">{reliable ? score.label : '数据不足'}</span>
           <span>信号可信：{confidenceLabel(data.confidence)}</span>
-          <span className="font-mono tabular-nums">真实 {data.reliableInputCount ?? 0} · 备用 {data.fallbackInputCount ?? 0}</span>
+          <span className="font-mono tabular-nums">真实 {data.reliableInputCount ?? 0} · 备用 {data.fallbackInputCount ?? 0} · 排除 {data.excludedInputCount ?? 0}</span>
+          {!reliable ? <span data-testid="market-temperature-unreliable-summary">真实输入不足，暂不生成综合判断</span> : null}
         </div>
       )}
     />
@@ -857,7 +950,8 @@ const MarketBriefingCompactSummary: React.FC<{ data: MarketBriefingResponse }> =
       tone={data.isReliable === false || data.isFallback ? 'text-amber-200' : 'text-white'}
       meta={(
         <div className="min-w-0">
-          <p className="truncate text-white/55">{lead?.message || data.warning || '暂无简报'}</p>
+          <p data-testid="market-briefing-card" className="truncate text-white/55">{lead?.message || data.warning || '暂无简报'}</p>
+          {data.warning ? <p data-testid="market-briefing-warning" className="truncate text-amber-200/70">{data.warning}</p> : null}
         </div>
       )}
     />
@@ -931,26 +1025,64 @@ const MarketOverviewMainStack: React.FC<{ children: React.ReactNode }> = ({ chil
   </div>
 );
 
-const MarketStateCompactRailCard: React.FC<{ data: MarketTemperatureResponse }> = ({ data }) => {
-  const score = data.scores.overall;
-  const reliable = isTemperatureReliable(data);
-  const stateValue = reliable
-    ? score.value >= 70 ? 'HIGH' : score.value >= 45 ? 'MED' : 'LOW'
-    : 'N/A';
+const ExecutiveSecondaryGroups: React.FC<{
+  panels: PanelState;
+}> = ({ panels }) => {
+  const groups: Array<{
+    id: string;
+    label: string;
+    cardKey: CardKey;
+    focus: string;
+    item?: MarketOverviewItem;
+  }> = [
+    { id: 'us', label: 'US', cardKey: 'indices', focus: 'SPX / VIX', item: findPanelItem(panels.indices, ['SPX']) },
+    { id: 'cn', label: 'CN/HK', cardKey: 'cnIndices', focus: 'CSI300 / HSI', item: findPanelItem(panels.cnIndices, ['CSI300', '000300.SH']) || findPanelItem(panels.cnIndices, ['HSI']) },
+    { id: 'macro', label: 'MACRO', cardKey: 'rates', focus: 'US10Y / DXY', item: findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.fxCommodities, ['DXY']) },
+    { id: 'crypto', label: 'CRYPTO', cardKey: 'crypto', focus: 'BTC / ETH', item: findPanelItem(panels.crypto, ['BTC']) },
+  ];
+
   return (
-    <CompactRailCard
-      railKey="state"
-      testId="market-overview-rail-state"
-      eyebrow="STATE"
-      title={reliable ? score.label : '数据不足'}
-      value={stateValue}
-      tone={reliable ? scoreTone(score) : 'text-white/45'}
-      lines={[
-        <span key="temperature" data-testid="market-temperature-strip">温度 {reliable ? formatNumber(score.value, 0) : 'N/A'} · 可信 {confidenceLabel(data.confidence)}</span>,
-        <span key="inputs" className="font-mono">R {data.reliableInputCount ?? 0} · F {data.fallbackInputCount ?? 0} · X {data.excludedInputCount ?? 0} · C {formatNumber(data.confidence, 2)}</span>,
-        !reliable ? <span key="unreliable" data-testid="market-temperature-unreliable-summary">市场温度：数据不足 · 真实输入不足，暂不生成综合判断</span> : null,
-      ].filter(Boolean)}
-    />
+    <section
+      data-testid="market-overview-executive-secondary-groups"
+      className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+    >
+      {groups.map((group) => {
+        const coverage = getCardCoverageKind(panels, group.cardKey);
+        const freshness = getCardMeta(panels, group.cardKey).freshness;
+        return (
+          <MarketOverviewCardFrame
+            key={group.id}
+            size="compact"
+            testId={`market-overview-secondary-group-${group.id}`}
+            className="h-full"
+          >
+            <div className="flex h-full min-w-0 flex-col justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{group.label}</p>
+                <p className="mt-1 truncate text-sm font-semibold text-white/80">{group.focus}</p>
+              </div>
+              <div className="flex min-w-0 items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-lg font-semibold leading-none text-white">
+                    {formatHeroValue(group.item?.value)}
+                  </p>
+                  <p className={cn('mt-1 truncate font-mono text-[11px] font-bold', heroToneClass(group.item))}>
+                    {formatHeroChange(group.item?.changePct)}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <DataFreshnessBadge
+                    freshness={(freshness || (coverage === 'fallback' ? 'fallback' : 'cached')) as MarketOverviewPanel['freshness']}
+                    className="px-1.5 text-[9px]"
+                  />
+                  <span className="font-mono text-[10px] uppercase text-white/32">{coverage}</span>
+                </div>
+              </div>
+            </div>
+          </MarketOverviewCardFrame>
+        );
+      })}
+    </section>
   );
 };
 
@@ -965,38 +1097,6 @@ const DataQualityCompactRailCard: React.FC<{ summary: DataQualitySummary }> = ({
     lines={[
       <span key="quality" data-testid="market-data-quality">可用快照 · 备用 {summary.counts.fallback}</span>,
       <span key="risk" className="font-mono">旧 {summary.counts.stale} · 缺失 {summary.counts.error}</span>,
-    ]}
-  />
-);
-
-const BriefingCompactRailCard: React.FC<{ data: MarketBriefingResponse }> = ({ data }) => (
-  <CompactRailCard
-    railKey="briefing"
-    testId="market-overview-rail-briefing"
-    eyebrow="BRIEFING"
-    title="今日市场解读"
-    value={confidenceLabel(data.confidence)}
-    tone={data.isReliable === false || data.isFallback ? 'text-amber-200' : 'text-white'}
-    lines={[
-      <span key="lead" data-testid="market-briefing-card">
-        {(data.items[0]?.title || '暂无简报')} · {(data.items[0]?.message || data.warning || '等待市场信号')}
-      </span>,
-      data.warning ? <span key="warning" data-testid="market-briefing-warning">{data.warning}</span> : null,
-    ].filter(Boolean)}
-  />
-);
-
-const PendingSourcesCompactRailCard: React.FC<{ fallbackCount: number }> = ({ fallbackCount }) => (
-  <CompactRailCard
-    railKey="pending"
-    testId="market-overview-rail-pending"
-    eyebrow="PENDING"
-    title="待接入真实数据源"
-    value={String(fallbackCount)}
-    tone={fallbackCount > 0 ? 'text-amber-200' : 'text-white/45'}
-    lines={[
-      fallbackCount > 0 ? '备用源集中显示' : '暂无待接入模块',
-      '卡片内仅保留状态徽标',
     ]}
   />
 );
@@ -1645,7 +1745,6 @@ const MarketOverviewPage: React.FC = () => {
     briefing: panels.briefing,
   }), [activeCategoryLabel, coverageSummary, dataQuality, heroAnchors, language, panels.briefing, panels.temperature]);
   const activeRows = CATEGORY_LAYOUT[activeCategory];
-  const fallbackOnlyOrder = CATEGORY_CARDS[activeCategory].filter((cardKey) => getCardCoverageKind(panels, cardKey) === 'fallback');
 
   const hasRenderableCard = (cardKey: CardKey): boolean => {
     if (loading) {
@@ -1716,27 +1815,28 @@ const MarketOverviewPage: React.FC = () => {
           <section data-testid="market-overview-secondary-grid" data-card-tier="secondary" className="flex min-w-0 flex-col gap-4">
             {activeRows.filter((row) => row.tier === 'secondary').map(renderPlannedRow)}
           </section>
-          {activeRows.some((row) => row.tier === 'deep') ? (
-            <section
-              data-testid="market-overview-deep-panels"
-              data-panel-grouping="deterministic-rows"
-              data-card-tier="deep"
-              className="flex min-w-0 flex-col gap-4"
-            >
-              {activeRows.filter((row) => row.tier === 'deep').map(renderPlannedRow)}
-            </section>
-          ) : null}
         </MarketOverviewMainStack>
       </section>
       <aside data-testid="market-overview-side-rail" data-mobile-order="rail" className="flex min-w-0 flex-col gap-3 xl:col-span-3">
         <div data-testid="market-overview-rail" className="flex min-w-0 flex-col gap-3">
           <CategoryCoverageSummary label={activeCategoryLabel} summary={coverageSummary} />
-          <MarketStateCompactRailCard data={panels.temperature} />
           <DataQualityCompactRailCard summary={dataQuality} />
-          <BriefingCompactRailCard data={panels.briefing} />
-          <PendingSourcesCompactRailCard fallbackCount={fallbackOnlyOrder.length} />
+          <SignalWatchRailCard panels={panels} activeCategory={activeCategory} />
+          <ActionHintRailCard temperature={panels.temperature} />
         </div>
       </aside>
+      {activeRows.some((row) => row.tier === 'deep') || activeCategory === 'all' ? (
+        <section
+          data-testid="market-overview-deep-panels"
+          data-panel-grouping="deterministic-rows"
+          data-mobile-order="deep"
+          data-card-tier="deep"
+          className="flex min-w-0 flex-col gap-4 xl:col-span-9"
+        >
+          {activeRows.filter((row) => row.tier === 'deep').map(renderPlannedRow)}
+          {activeCategory === 'all' ? <ExecutiveSecondaryGroups panels={panels} /> : null}
+        </section>
+      ) : null}
     </main>
   );
 

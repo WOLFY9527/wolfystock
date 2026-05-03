@@ -37,11 +37,11 @@ export const MARKET_OVERVIEW_CARD_TITLE_CLASS = 'text-[10px] font-bold uppercase
 export type MarketOverviewCardSize = 'compact' | 'standard' | 'list' | 'large' | 'rail';
 
 const MARKET_OVERVIEW_CARD_SIZE_CLASS: Record<MarketOverviewCardSize, string> = {
-  compact: 'min-h-[90px] p-3',
-  standard: 'min-h-[180px] p-3.5',
-  list: 'min-h-[260px] max-h-[340px] p-3.5',
-  large: 'min-h-[320px] max-h-[420px] p-4',
-  rail: 'min-h-[88px] max-h-[132px] p-3',
+  compact: 'min-h-[130px] p-3',
+  standard: 'min-h-[200px] p-3.5',
+  list: 'min-h-[200px] max-h-[320px] p-3.5',
+  large: 'min-h-[220px] max-h-[340px] p-4',
+  rail: 'min-h-[96px] max-h-[130px] p-3',
 };
 
 export const MarketOverviewCardFrame: React.FC<{
@@ -128,6 +128,12 @@ function metaText(meta?: Partial<MarketDataMeta>): string[] {
   return parts;
 }
 
+function compactMetaText(meta?: Partial<MarketDataMeta>): string {
+  return formatMarketOverviewTimestamp(meta?.asOf)
+    || formatMarketOverviewTimestamp(meta?.updatedAt)
+    || '';
+}
+
 function metadataTitle(parts: string[], warning?: string | null, hoverDetails?: string[] | null): string | undefined {
   return [...parts, warning, ...(hoverDetails || [])].filter(Boolean).join(' · ') || undefined;
 }
@@ -204,6 +210,7 @@ export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; 
   if (resolvedMeta?.isRefreshing) {
     details.push(t('marketOverviewPage.footer.refreshingSnapshot'));
   }
+  const compactDetails = compactMetaText(resolvedMeta) || fallbackUpdatedAt || sourceLabel || '';
   const freshness = resolveFreshness(resolvedMeta);
 
   return (
@@ -215,7 +222,7 @@ export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; 
           className="min-w-0 truncate text-[10px] uppercase tracking-widest text-white/34"
           title={details.join(' · ') || fallbackUpdatedAt || sourceLabel}
         >
-          {details.join(' · ') || fallbackUpdatedAt || sourceLabel}
+          {compactDetails}
         </span>
       </div>
       {shouldShowInlineWarning(resolvedMeta) ? (
@@ -237,6 +244,7 @@ export const MarketDataRow: React.FC<{
   const displayLabel = resolveMarketOverviewDisplayLabel(item, language);
   const freshness = resolveFreshness(item);
   const itemDetails = metaText(item);
+  const compactDetails = compactMetaText(item);
   const sparklineTone = direction === 'increasing'
     ? 'text-rose-400'
     : direction === 'decreasing'
@@ -268,7 +276,7 @@ export const MarketDataRow: React.FC<{
           className="col-start-2 flex min-w-0 max-w-full items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-[9px] text-white/32 max-[640px]:col-start-1 max-[640px]:row-start-2 max-[640px]:pl-3.5"
         >
           <DataFreshnessBadge freshness={freshness} className="shrink-0 px-1.5 text-[9px]" />
-          {itemDetails.length ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{itemDetails.join(' · ')}</span> : null}
+          {compactDetails ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{compactDetails}</span> : null}
           {item.hoverDetails?.map((detail, index) => (
             <span key={`${detail}-${index}`} className="shrink-0 leading-4 text-white/28">{detail}</span>
           ))}
@@ -306,6 +314,7 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
   const displayLabel = resolveMarketOverviewDisplayLabel(item, language);
   const freshness = resolveFreshness(item);
   const itemDetails = metaText(item);
+  const compactDetails = compactMetaText(item);
   const sparklineTone = direction === 'increasing'
     ? 'text-rose-400'
     : direction === 'decreasing'
@@ -335,7 +344,7 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
         className="col-start-2 flex min-w-0 max-w-full items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-[9px] text-white/32 max-[720px]:col-start-1 max-[720px]:row-start-2 max-[720px]:pl-3.5"
       >
         <DataFreshnessBadge freshness={freshness} className="shrink-0 px-1.5 text-[9px]" />
-        {itemDetails.length ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{itemDetails.join(' · ')}</span> : null}
+        {compactDetails ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{compactDetails}</span> : null}
         {item.hoverDetails?.map((detail, index) => (
           <span key={`${detail}-${index}`} className="shrink-0 leading-4 text-white/28">{detail}</span>
         ))}

@@ -56,7 +56,7 @@ export const MarketSentimentCard: React.FC<{
   const title = t('marketOverviewPage.cards.sentiment.title');
 
   return (
-    <MarketOverviewCardFrame size="compact" className="h-full min-h-[180px]">
+    <MarketOverviewCardFrame size="standard" className="h-full">
       <div data-testid="market-sentiment-compact-card" className="flex min-h-0 h-full flex-col gap-2.5">
         <div className="flex shrink-0 items-center justify-between gap-4">
           <div className="min-w-0 flex-1">
