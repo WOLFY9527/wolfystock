@@ -983,7 +983,7 @@ const BacktestPage: React.FC = () => {
       });
       setSelectedRuleRunId(response.id);
       void fetchRuleHistory(1, resolvedCode);
-      navigate(`/backtest/results/${response.id}`, { state: { initialRun: response } });
+      navigate(`/backtest/results/${response.id}`, { state: { initialRun: response, resultMode: 'professional' } });
     } catch (error) {
       setRuleRunError(getParsedApiError(error));
     } finally {
@@ -1113,7 +1113,7 @@ const BacktestPage: React.FC = () => {
         });
         setSelectedRuleRunId(response.id);
         void fetchRuleHistory(1, normalizedCode);
-        navigate(`/backtest/results/${response.id}`, { state: { initialRun: response } });
+        navigate(`/backtest/results/${response.id}`, { state: { initialRun: response, resultMode: 'simple' } });
       } catch (error) {
         setRuleRunError(getParsedApiError(error));
       } finally {

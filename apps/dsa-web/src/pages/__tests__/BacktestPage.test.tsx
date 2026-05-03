@@ -1225,6 +1225,13 @@ describe('BacktestPage', () => {
   });
 
   it('launches deterministic backtests into the dedicated result page flow', async () => {
+    runRuleBacktest.mockResolvedValueOnce(makeRuleRunResponse({
+      status: 'completed',
+      completedAt: '2026-04-07T08:02:00Z',
+      statusMessage: '规则回测已完成。',
+      tradeCount: 1,
+    }));
+
     renderBacktestRoutes();
 
     await parseDeterministicStrategy();
@@ -1246,6 +1253,10 @@ describe('BacktestPage', () => {
 
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
     expect(screen.getByTestId('deterministic-result-page-hero')).toHaveTextContent('ORCL');
+    expect(screen.getByTestId('backtest-result-report')).toHaveAttribute('data-report-mode', 'professional');
+    expect(screen.getByTestId('backtest-report-summary')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-report-key-metrics')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-report-trade-table')).toBeInTheDocument();
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
     expect(screen.getByText('已完成')).toHaveAttribute('data-status', 'success');
     expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toBeInTheDocument();
@@ -1255,6 +1266,33 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.trades') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.parameters') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.history') })).toBeInTheDocument();
+  }, 10000);
+
+  it('launches point-and-shoot normal mode into the shared simple result report', async () => {
+    runRuleBacktest.mockResolvedValueOnce(makeRuleRunResponse({
+      status: 'completed',
+      completedAt: '2026-04-07T08:02:00Z',
+      statusMessage: '规则回测已完成。',
+      tradeCount: 1,
+    }));
+
+    renderBacktestRoutes();
+
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+
+    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: 'ORCL' } });
+    fireEvent.click(screen.getByRole('button', { name: '执行回测任务' }));
+
+    await waitFor(() => expect(parseRuleStrategy).toHaveBeenCalledTimes(1));
+    expect(runRuleBacktest).toHaveBeenCalledTimes(1);
+
+    expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-result-report')).toHaveAttribute('data-report-mode', 'simple');
+    expect(screen.getByTestId('backtest-report-summary')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-report-key-metrics')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-report-chart')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-report-advanced-details')).toBeInTheDocument();
+    expect(screen.queryByTestId('backtest-report-ledger-table')).not.toBeInTheDocument();
   }, 10000);
 
   it('reveals the right-side KPI console after a historical run starts', async () => {

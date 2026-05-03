@@ -6,6 +6,7 @@ import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Card } from '../components/common';
 import BacktestAuditTables from '../components/backtest/BacktestAuditTables';
+import BacktestResultReport, { type BacktestResultReportMode } from '../components/backtest/BacktestResultReport';
 import BacktestChartWorkspace, {
   type CoverageTrackItem,
   type RiskControlVisualRow,
@@ -70,6 +71,7 @@ const RESULT_HISTORY_PAGE_SIZE = 10;
 
 type ResultPageLocationState = {
   initialRun?: RuleBacktestRunResponse;
+  resultMode?: BacktestResultReportMode;
 };
 
 type ScenarioRunState = {
@@ -107,6 +109,11 @@ function formatWarningText(warning: Record<string, unknown>, index: number): str
 
   const serialized = JSON.stringify(warning);
   return serialized && serialized !== '{}' ? serialized : `warning #${index + 1}`;
+}
+
+function pctDrawdown(value?: number | null): string {
+  if (value == null || !Number.isFinite(value)) return pct(value);
+  return pct(value > 0 ? -value : value);
 }
 
 function escapeHtml(value: string): string {
@@ -226,6 +233,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const { runId } = useParams<{ runId: string }>();
   const locationState = location.state as ResultPageLocationState | null;
   const initialRun = locationState?.initialRun || null;
+  const resultMode: BacktestResultReportMode = locationState?.resultMode === 'simple' ? 'simple' : 'professional';
   const parsedRunId = useMemo(() => Number.parseInt(runId || '', 10), [runId]);
   const hasValidRunId = Number.isFinite(parsedRunId) && parsedRunId > 0;
 
@@ -706,7 +714,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     },
     {
       label: resultPage('resultView.maxDrawdown'),
-      value: pct(normalized.metrics.maxDrawdownPct),
+      value: pctDrawdown(normalized.metrics.maxDrawdownPct),
       tone: 'negative' as const,
       note: resultPage('resultView.drawdownFeel'),
     },
@@ -1164,17 +1172,25 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
       {run?.status === 'completed' && normalized ? (
         <>
-          <BacktestChartWorkspace
+          <BacktestResultReport
             run={run}
+            mode={resultMode}
             normalized={normalized}
             densityConfig={density}
-            hasRobustnessAnalysis={hasRobustnessAnalysis}
-            robustnessLensRows={robustnessLensRows}
-            riskControlRows={riskControlRows}
-            activeRobustnessKey={activeRobustnessKey}
-            activeRiskControlKey={activeRiskControlKey}
-            onActiveRobustnessChange={setActiveRobustnessKey}
-            onActiveRiskControlChange={setActiveRiskControlKey}
+            chartNode={(
+              <BacktestChartWorkspace
+                run={run}
+                normalized={normalized}
+                densityConfig={density}
+                hasRobustnessAnalysis={hasRobustnessAnalysis}
+                robustnessLensRows={robustnessLensRows}
+                riskControlRows={riskControlRows}
+                activeRobustnessKey={activeRobustnessKey}
+                activeRiskControlKey={activeRiskControlKey}
+                onActiveRobustnessChange={setActiveRobustnessKey}
+                onActiveRiskControlChange={setActiveRiskControlKey}
+              />
+            )}
           />
 
           <section className="backtest-display-section backtest-result-page__tabs-stage" data-testid="deterministic-result-page-tabs">
