@@ -446,7 +446,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.queryByRole('heading', { name: /Current Holdings/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-start-card')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '历史记录 ↗' })).not.toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-history-panel')).toHaveClass('col-span-12');
+    expect(screen.getByTestId('portfolio-recent-activity')).toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
     expect(screen.getByRole('option', { name: translate('zh', 'portfolio.costFutuDiluted') })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: translate('zh', 'portfolio.costThsPnl') })).toBeInTheDocument();
     const accountSelect = screen.getByLabelText('TRADE ACCOUNT') as HTMLSelectElement;
@@ -463,14 +464,14 @@ describe('PortfolioPage FX refresh', () => {
     expect(costMethodSelect.closest('.select-field__control')?.querySelector('.select-field__value')).toHaveTextContent(translate('zh', 'portfolio.costFifo'));
     expect(within(costMethodSelect).getByRole('option', { name: translate('zh', 'portfolio.costFifo') })).toBeInTheDocument();
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
-    const holdingsPanel = screen.getByTestId('portfolio-start-card');
+    const holdingsPanel = screen.getByTestId('portfolio-empty-workflow-column');
     const tradeStationSection = screen.getByRole('heading', { name: 'Trade Station' }).closest('section');
     expect(Boolean(totalAssetsCard.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(totalAssetsCard.compareDocumentPosition(holdingsPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(holdingsPanel.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
-  it('renders the mobile portfolio order as hero, start or holdings, trade station, history', async () => {
+  it('renders the mobile empty portfolio order as hero, start, recent activity, trade station', async () => {
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
 
     render(<PortfolioPage />);
@@ -478,17 +479,17 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
-    const holdingsPanel = screen.getByTestId('portfolio-start-card');
+    const startCard = screen.getByTestId('portfolio-start-card');
+    const recentActivity = screen.getByTestId('portfolio-recent-activity');
     const tradeStationSection = screen.getByRole('heading', { name: 'Trade Station' }).closest('section') as HTMLElement;
-    const mobileHistoryPanel = screen.getByTestId('portfolio-history-panel');
 
-    expect(Boolean(totalAssetsCard.compareDocumentPosition(holdingsPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(holdingsPanel.compareDocumentPosition(tradeStationSection) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(tradeStationSection.compareDocumentPosition(mobileHistoryPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(within(mobileHistoryPanel).getByRole('heading', { name: '历史记录' })).toBeInTheDocument();
+    expect(Boolean(totalAssetsCard.compareDocumentPosition(startCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(startCard.compareDocumentPosition(recentActivity) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(recentActivity.compareDocumentPosition(tradeStationSection) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
   });
 
-  it('renders a compact no-holdings onboarding card instead of a holdings analysis panel', async () => {
+  it('renders empty portfolio start card and recent activity in the same workflow column for small history', async () => {
     listTrades.mockResolvedValueOnce({
       items: [
         { id: 7, accountId: 1, symbol: 'AAPL', market: 'us', tradeDate: '2026-03-18', side: 'buy', quantity: 1, price: 100, fee: 0, tax: 0, currency: 'USD', createdAt: '2026-03-18T00:00:00Z' },
@@ -503,7 +504,14 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(screen.queryByTestId('portfolio-current-holdings-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-history-panel')).not.toBeInTheDocument();
+    const workflowColumn = screen.getByTestId('portfolio-empty-workflow-column');
     const startCard = screen.getByTestId('portfolio-start-card');
+    const recentActivity = screen.getByTestId('portfolio-recent-activity');
+    expect(workflowColumn).toContainElement(startCard);
+    expect(workflowColumn).toContainElement(recentActivity);
+    expect(workflowColumn).toHaveClass('space-y-4');
     expect(startCard).toHaveClass('xl:col-span-7');
     expect(startCard).not.toHaveClass('xl:min-h-[300px]', 'min-h-[520px]');
     expect(within(startCard).getByText('当前无持仓')).toBeInTheDocument();
@@ -512,11 +520,25 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(startCard).getByText(/active accounts/i)).toBeInTheDocument();
     expect(within(startCard).getByText(/writable accounts/i)).toBeInTheDocument();
     expect(within(startCard).getByText(/Main/)).toBeInTheDocument();
+    expect(within(recentActivity).getByText('历史记录存在，当前无持仓')).toBeInTheDocument();
+    expect(within(recentActivity).getByText('AAPL')).toBeInTheDocument();
+    expect(within(recentActivity).getByText(/2026-03-18/)).toBeInTheDocument();
 
     const tradeStation = screen.getByTestId('portfolio-trade-station-card');
     expect(within(tradeStation).getByRole('button', { name: '交易' }).className).toContain('bg-white/10');
     expect(screen.getByLabelText('TRADE ACCOUNT')).toHaveValue('1');
     expect(within(tradeStation).getByRole('button', { name: translate('zh', 'portfolio.submitTrade') })).not.toBeDisabled();
+  });
+
+  it('renders compact empty recent activity when the empty portfolio has no history', async () => {
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const recentActivity = screen.getByTestId('portfolio-recent-activity');
+    expect(within(recentActivity).getByText('暂无历史记录')).toBeInTheDocument();
+    expect(recentActivity).not.toHaveClass('min-h-[300px]', 'min-h-[520px]');
+    expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
   });
 
   it('shows the disabled trade reason if the trade account is all accounts', async () => {
@@ -1380,11 +1402,13 @@ describe('PortfolioPage FX refresh', () => {
   });
 
   it('renders the full-width order history panel and shows event filters', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true }));
+
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
 
-    const historyPanel = screen.getByTestId('portfolio-history-panel');
+    const historyPanel = screen.getByTestId('portfolio-history-full');
     expect(historyPanel).toHaveClass('col-span-12');
     expect(within(historyPanel).getByRole('heading', { name: '历史记录' })).toBeInTheDocument();
     expect(within(historyPanel).getByRole('button', { name: translate('zh', 'portfolio.tradeLedger') })).toBeInTheDocument();
@@ -1394,11 +1418,13 @@ describe('PortfolioPage FX refresh', () => {
   });
 
   it('switches order-history event type filters inside the drawer without restoring the old attribution surface', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true }));
+
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
 
-    const historyPanel = screen.getByTestId('portfolio-history-panel');
+    const historyPanel = screen.getByTestId('portfolio-history-full');
     expect(historyPanel).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: translate('zh', 'portfolio.cashLedger') })[0]);
     await waitFor(() => expect(listCashLedger).toHaveBeenCalled());
@@ -1419,7 +1445,7 @@ describe('PortfolioPage FX refresh', () => {
 
     const holdingsPanel = screen.getByTestId('portfolio-current-holdings-panel');
     expect(within(holdingsPanel).getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
-    const historyPanel = screen.getByTestId('portfolio-history-panel');
+    const historyPanel = screen.getByTestId('portfolio-history-full');
     expect(historyPanel).toBeInTheDocument();
     expect(screen.queryByTestId('portfolio-history-drawer')).not.toBeInTheDocument();
     expect(Boolean(holdingsPanel.compareDocumentPosition(historyPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);

@@ -532,6 +532,7 @@ const PortfolioPage: React.FC = () => {
   const [tradeEvents, setTradeEvents] = useState<PortfolioTradeListItem[]>([]);
   const [cashEvents, setCashEvents] = useState<PortfolioCashLedgerListItem[]>([]);
   const [corporateEvents, setCorporateEvents] = useState<PortfolioCorporateActionListItem[]>([]);
+  const [showEmptyFullHistory, setShowEmptyFullHistory] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -1237,6 +1238,10 @@ const PortfolioPage: React.FC = () => {
   const totalUnrealizedDisplay = convertMoney(totalUnrealizedPnl, snapshotCurrency);
   const hasHoldings = positionRows.length > 0;
   const hasHistory = tradeEvents.length > 0 || cashEvents.length > 0 || corporateEvents.length > 0;
+  const isEmptyPortfolio = !hasHoldings;
+  const totalHistoryRows = tradeEvents.length + cashEvents.length + corporateEvents.length;
+  const hasSmallHistory = totalHistoryRows <= 5;
+  const shouldRenderFullHistory = hasHoldings || (isEmptyPortfolio && hasHistory && (!hasSmallHistory || showEmptyFullHistory));
   const formatDisplayMoney = (value: number, converted: ConvertedMoney, fromCurrency: string) => {
     if (converted) return formatMoney(converted.value, displayCurrency);
     if (value === 0) return formatMoney(0, displayCurrency);
@@ -1256,6 +1261,10 @@ const PortfolioPage: React.FC = () => {
   const historyDrawerTitle = language === 'en' ? 'Order History' : '历史记录';
   const zeroAssetStatus = language === 'zh' ? '等待交易录入' : 'Awaiting trade entry';
   const noHoldingsHistoryNote = language === 'zh' ? '历史记录存在，当前无持仓' : 'History exists while current holdings are empty';
+  const recentActivityTitle = language === 'zh' ? '近期活动' : 'Recent Activity';
+  const emptyRecentActivityLabel = language === 'zh' ? '暂无历史记录' : 'No history yet';
+  const viewFullHistoryLabel = language === 'zh' ? '查看全部历史' : 'View full history';
+  const hideFullHistoryLabel = language === 'zh' ? '收起完整历史' : 'Hide full history';
 
   const historyPanelContent = (
     <div className="flex h-full min-h-0 flex-col bg-[var(--surface-1)] lg:bg-transparent">
@@ -1377,6 +1386,69 @@ const PortfolioPage: React.FC = () => {
         </div>
       </div>
     </div>
+  );
+
+  const recentActivityContent = (
+    <section
+      data-testid="portfolio-recent-activity"
+      className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col gap-3`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xs uppercase tracking-widest text-muted-text">{recentActivityTitle}</h2>
+          {!hasHoldings && hasHistory ? (
+            <p className="mt-1 text-xs text-amber-200/80">{noHoldingsHistoryNote}</p>
+          ) : null}
+        </div>
+        {hasHistory && hasSmallHistory ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className={PORTFOLIO_TEXT_BUTTON_CLASS}
+            onClick={() => setShowEmptyFullHistory((prev) => !prev)}
+          >
+            {showEmptyFullHistory ? hideFullHistoryLabel : viewFullHistoryLabel}
+          </Button>
+        ) : hasHistory ? (
+          <span className="text-[10px] font-bold uppercase tracking-widest text-white/35">{viewFullHistoryLabel}</span>
+        ) : null}
+      </div>
+      {hasHistory ? (
+        <div className="flex flex-col gap-2">
+          {tradeEvents.slice(0, 5).map((item) => (
+            <div key={`recent-trade-${item.id}`} className="flex items-start justify-between gap-3 border-b border-white/5 px-1 py-2.5 last:border-b-0">
+              <div className="min-w-0">
+                <div className="truncate text-sm text-foreground">{item.symbol} <span className="text-xs text-muted-text">{formatSideLabel(item.side, language)}</span></div>
+                <div className="mt-1 truncate text-xs text-muted-text">{item.tradeDate} · {item.quantity} @ {item.price}</div>
+              </div>
+              <span className="shrink-0 font-mono text-xs text-white/45">{item.currency}</span>
+            </div>
+          ))}
+          {cashEvents.slice(0, Math.max(0, 5 - tradeEvents.length)).map((item) => (
+            <div key={`recent-cash-${item.id}`} className="flex items-start justify-between gap-3 border-b border-white/5 px-1 py-2.5 last:border-b-0">
+              <div className="min-w-0">
+                <div className="truncate text-sm text-foreground">{formatCashDirectionLabel(item.direction, language)}</div>
+                <div className="mt-1 truncate text-xs text-muted-text">{item.eventDate} · {formatMoney(item.amount, item.currency)}</div>
+              </div>
+              <span className="shrink-0 font-mono text-xs text-white/45">{item.currency}</span>
+            </div>
+          ))}
+          {corporateEvents.slice(0, Math.max(0, 5 - tradeEvents.length - cashEvents.length)).map((item) => (
+            <div key={`recent-corporate-${item.id}`} className="flex items-start justify-between gap-3 border-b border-white/5 px-1 py-2.5 last:border-b-0">
+              <div className="min-w-0">
+                <div className="truncate text-sm text-foreground">{item.symbol} <span className="text-xs text-muted-text">{formatCorporateActionLabel(item.actionType, language)}</span></div>
+                <div className="mt-1 truncate text-xs text-muted-text">{item.effectiveDate}</div>
+              </div>
+              <span className="shrink-0 font-mono text-xs text-white/45">ACT</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-xl bg-white/[0.025] px-4 py-3 text-sm text-white/40">
+          {emptyRecentActivityLabel}
+        </div>
+      )}
+    </section>
   );
 
   return (
@@ -1558,44 +1630,50 @@ const PortfolioPage: React.FC = () => {
 	              </div>
 	            ) : (
 	              <div
-	                data-testid="portfolio-start-card"
-	                className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-4 xl:col-span-7 2xl:col-span-8`}
+	                data-testid="portfolio-empty-workflow-column"
+	                className="col-span-12 space-y-4 xl:col-span-7 2xl:col-span-8"
 	              >
-	                <div className="flex flex-wrap items-start justify-between gap-3">
-	                  <div>
-	                    <h2 className="text-sm font-semibold text-white">{language === 'zh' ? '当前无持仓' : 'No current holdings'}</h2>
-	                    <p className="mt-1 text-sm text-white/45">{language === 'zh' ? '录入第一笔买入交易后自动生成持仓' : 'Enter the first buy trade to generate holdings automatically.'}</p>
+	                <div
+	                  data-testid="portfolio-start-card"
+	                  className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col gap-4 xl:col-span-7 2xl:col-span-8`}
+	                >
+	                  <div className="flex flex-wrap items-start justify-between gap-3">
+	                    <div>
+	                      <h2 className="text-sm font-semibold text-white">{language === 'zh' ? '当前无持仓' : 'No current holdings'}</h2>
+	                      <p className="mt-1 text-sm text-white/45">{language === 'zh' ? '录入第一笔买入交易后自动生成持仓' : 'Enter the first buy trade to generate holdings automatically.'}</p>
+	                    </div>
+	                    {hasHistory ? (
+	                      <span className="rounded-full border border-amber-300/15 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-200">{noHoldingsHistoryNote}</span>
+	                    ) : null}
 	                  </div>
-	                  {hasHistory ? (
-	                    <span className="rounded-full border border-amber-300/15 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-200">{noHoldingsHistoryNote}</span>
+	                  <div className="grid gap-2 sm:grid-cols-3">
+	                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">active accounts</div>
+	                      <div className="mt-1 font-mono text-lg text-white">{activeAccounts.length}</div>
+	                    </div>
+	                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">writable accounts</div>
+	                      <div className="mt-1 font-mono text-lg text-white">{writableAccounts.length}</div>
+	                    </div>
+	                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">selected trade account</div>
+	                      <div className="mt-1 truncate text-sm text-white">{writableAccount?.name || copy.allAccounts}</div>
+	                    </div>
+	                  </div>
+	                  <div className="grid gap-2 text-xs text-white/45 sm:grid-cols-3">
+	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '1. 选择账户' : '1. Select account'}</div>
+	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '2. 输入标的' : '2. Enter symbol'}</div>
+	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '3. 提交交易' : '3. Submit trade'}</div>
+	                  </div>
+	                  {!hasWritableAccounts ? (
+	                    <div className="rounded-lg border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-xs text-amber-200">
+	                      {hasActiveAccounts
+	                        ? (language === 'zh' ? '当前账户不可写，请选择具体可写账户。' : 'Current accounts are not writable. Select a writable account.')
+	                        : (language === 'zh' ? '暂无可写账户，请先创建账户。' : 'No writable account yet. Create an account first.')}
+	                    </div>
 	                  ) : null}
 	                </div>
-	                <div className="grid gap-2 sm:grid-cols-3">
-	                  <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">active accounts</div>
-	                    <div className="mt-1 font-mono text-lg text-white">{activeAccounts.length}</div>
-	                  </div>
-	                  <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">writable accounts</div>
-	                    <div className="mt-1 font-mono text-lg text-white">{writableAccounts.length}</div>
-	                  </div>
-	                  <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">selected trade account</div>
-	                    <div className="mt-1 truncate text-sm text-white">{writableAccount?.name || copy.allAccounts}</div>
-	                  </div>
-	                </div>
-	                <div className="grid gap-2 text-xs text-white/45 sm:grid-cols-3">
-	                  <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '1. 选择账户' : '1. Select account'}</div>
-	                  <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '2. 输入标的' : '2. Enter symbol'}</div>
-	                  <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '3. 提交交易' : '3. Submit trade'}</div>
-	                </div>
-	                {!hasWritableAccounts ? (
-	                  <div className="rounded-lg border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-xs text-amber-200">
-	                    {hasActiveAccounts
-	                      ? (language === 'zh' ? '当前账户不可写，请选择具体可写账户。' : 'Current accounts are not writable. Select a writable account.')
-	                      : (language === 'zh' ? '暂无可写账户，请先创建账户。' : 'No writable account yet. Create an account first.')}
-	                  </div>
-	                ) : null}
+	                {recentActivityContent}
 	              </div>
 	            )}
 	
@@ -1941,9 +2019,11 @@ const PortfolioPage: React.FC = () => {
             </div>
           </section>
 
-            <section data-testid="portfolio-history-panel" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col overflow-hidden ${currentEventCount > 5 ? 'max-h-[560px]' : 'max-h-none'}`}>
-              {historyPanelContent}
-            </section>
+            {shouldRenderFullHistory ? (
+              <section data-testid="portfolio-history-full" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col overflow-hidden ${currentEventCount > 5 ? 'max-h-[560px]' : 'max-h-none'}`}>
+                {historyPanelContent}
+              </section>
+            ) : null}
           </div>
         </section>
       </div>
