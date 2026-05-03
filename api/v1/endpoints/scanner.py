@@ -22,6 +22,7 @@ from api.v1.schemas.scanner import (
     ScannerRunDetailResponse,
     ScannerRunHistoryResponse,
     ScannerRunRequest,
+    ScannerStrategySimulationResponse,
     ScannerThemeGenerateRequest,
     ScannerThemeGenerationResponse,
     ScannerThemesResponse,
@@ -230,6 +231,43 @@ def get_market_scan_runs(
         return ScannerRunHistoryResponse(**payload)
 
     return _run_endpoint("查询扫描历史失败", _operation)
+
+
+@router.get(
+    "/strategy-simulation",
+    response_model=ScannerStrategySimulationResponse,
+    responses={
+        200: {"description": "Scanner strategy historical simulation"},
+        400: {"description": "请求参数错误", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="Scanner 策略历史模拟",
+    description="基于已持久化 scanner runs 评估同一 theme/profile/market 的历史入选候选 forward return；Phase 1 不主动生成历史扫描。",
+)
+def get_scanner_strategy_simulation(
+    theme: Optional[str] = Query(None, description="Scanner theme id；为空时按 default universe 匹配"),
+    profile: str = Query(..., description="扫描配置 key"),
+    market: str = Query(..., description="市场"),
+    lookback_days: int = Query(90, ge=1, le=365, description="历史扫描回看天数"),
+    forward_days: int = Query(5, description="Forward holding days: 1 / 5 / 10 / 20"),
+    limit: int = Query(50, ge=1, le=100, description="最多读取的历史 runs"),
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ScannerStrategySimulationResponse:
+    def _operation() -> ScannerStrategySimulationResponse:
+        service = _build_scanner_service(db_manager, current_user)
+        payload = service.build_strategy_simulation(
+            theme=theme,
+            profile=profile,
+            market=market,
+            lookback_days=lookback_days,
+            forward_days=forward_days,
+            limit=limit,
+            scope=OWNERSHIP_SCOPE_USER,
+        )
+        return ScannerStrategySimulationResponse(**payload)
+
+    return _run_endpoint("查询 Scanner 策略历史模拟失败", _operation)
 
 
 @router.get(

@@ -74,6 +74,7 @@ from api.v1.schemas.scanner import (
     ScannerRunDetailResponse,
     ScannerRunHistoryItem,
     ScannerRunHistoryResponse,
+    ScannerStrategySimulationResponse,
     ScannerOperationRunSummary,
     ScannerOperationalStatusResponse,
 )
@@ -183,6 +184,7 @@ __all__ = [
     "ScannerRunDetailResponse",
     "ScannerRunHistoryItem",
     "ScannerRunHistoryResponse",
+    "ScannerStrategySimulationResponse",
     "ScannerOperationRunSummary",
     "ScannerOperationalStatusResponse",
     # system config

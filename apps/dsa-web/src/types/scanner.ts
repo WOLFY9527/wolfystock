@@ -344,6 +344,60 @@ export interface ScannerRunHistoryResponse {
   items: ScannerRunHistoryItem[];
 }
 
+export interface ScannerStrategySimulationWindow {
+  lookbackDays: number;
+  forwardDays: number;
+  runCount: number;
+}
+
+export interface ScannerStrategySimulationSummary {
+  historicalRuns: number;
+  selectionEvents: number;
+  avgSelectedPerRun?: number | null;
+  hitRate?: number | null;
+  avgForwardReturnPct?: number | null;
+  medianForwardReturnPct?: number | null;
+  avgBenchmarkReturnPct?: number | null;
+  avgExcessReturnPct?: number | null;
+  positiveSelectionRate?: number | null;
+  bestSymbol?: string | null;
+  worstSymbol?: string | null;
+  dataCoverage?: number | null;
+}
+
+export interface ScannerStrategySimulationRun {
+  runId: number;
+  runAt?: string | null;
+  selectedCount: number;
+  rejectedCount: number;
+  selectedSymbols: string[];
+  avgForwardReturnPct?: number | null;
+  benchmarkReturnPct?: number | null;
+  excessReturnPct?: number | null;
+}
+
+export interface ScannerStrategySimulationSymbol {
+  symbol: string;
+  selectionCount: number;
+  avgScore?: number | null;
+  avgForwardReturnPct?: number | null;
+  hitRate?: number | null;
+  bestForwardReturnPct?: number | null;
+  worstForwardReturnPct?: number | null;
+}
+
+export interface ScannerStrategySimulationResult {
+  theme?: string | null;
+  profile: string;
+  market: string;
+  window: ScannerStrategySimulationWindow;
+  status: 'ready' | 'insufficient_history' | 'partial' | 'failed';
+  summary: ScannerStrategySimulationSummary;
+  runs: ScannerStrategySimulationRun[];
+  symbols: ScannerStrategySimulationSymbol[];
+  warnings: string[];
+}
+
 export interface ScannerOperationalRunSummary {
   id: number;
   watchlistDate?: string | null;

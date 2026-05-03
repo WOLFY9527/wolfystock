@@ -328,6 +328,70 @@ class ScannerRunHistoryResponse(BaseModel):
     items: List[ScannerRunHistoryItem] = Field(default_factory=list)
 
 
+class ScannerStrategySimulationWindow(BaseModel):
+    lookback_days: int = Field(..., alias="lookbackDays")
+    forward_days: int = Field(..., alias="forwardDays")
+    run_count: int = Field(..., alias="runCount")
+
+    model_config = {"populate_by_name": True}
+
+
+class ScannerStrategySimulationSummary(BaseModel):
+    historical_runs: int = Field(0, alias="historicalRuns")
+    selection_events: int = Field(0, alias="selectionEvents")
+    avg_selected_per_run: Optional[float] = Field(None, alias="avgSelectedPerRun")
+    hit_rate: Optional[float] = Field(None, alias="hitRate")
+    avg_forward_return_pct: Optional[float] = Field(None, alias="avgForwardReturnPct")
+    median_forward_return_pct: Optional[float] = Field(None, alias="medianForwardReturnPct")
+    avg_benchmark_return_pct: Optional[float] = Field(None, alias="avgBenchmarkReturnPct")
+    avg_excess_return_pct: Optional[float] = Field(None, alias="avgExcessReturnPct")
+    positive_selection_rate: Optional[float] = Field(None, alias="positiveSelectionRate")
+    best_symbol: Optional[str] = Field(None, alias="bestSymbol")
+    worst_symbol: Optional[str] = Field(None, alias="worstSymbol")
+    data_coverage: Optional[float] = Field(None, alias="dataCoverage")
+
+    model_config = {"populate_by_name": True}
+
+
+class ScannerStrategySimulationRun(BaseModel):
+    run_id: int = Field(..., alias="runId")
+    run_at: Optional[str] = Field(None, alias="runAt")
+    selected_count: int = Field(0, alias="selectedCount")
+    rejected_count: int = Field(0, alias="rejectedCount")
+    selected_symbols: List[str] = Field(default_factory=list, alias="selectedSymbols")
+    avg_forward_return_pct: Optional[float] = Field(None, alias="avgForwardReturnPct")
+    benchmark_return_pct: Optional[float] = Field(None, alias="benchmarkReturnPct")
+    excess_return_pct: Optional[float] = Field(None, alias="excessReturnPct")
+
+    model_config = {"populate_by_name": True}
+
+
+class ScannerStrategySimulationSymbol(BaseModel):
+    symbol: str
+    selection_count: int = Field(0, alias="selectionCount")
+    avg_score: Optional[float] = Field(None, alias="avgScore")
+    avg_forward_return_pct: Optional[float] = Field(None, alias="avgForwardReturnPct")
+    hit_rate: Optional[float] = Field(None, alias="hitRate")
+    best_forward_return_pct: Optional[float] = Field(None, alias="bestForwardReturnPct")
+    worst_forward_return_pct: Optional[float] = Field(None, alias="worstForwardReturnPct")
+
+    model_config = {"populate_by_name": True}
+
+
+class ScannerStrategySimulationResponse(BaseModel):
+    theme: Optional[str] = None
+    profile: str
+    market: str
+    window: ScannerStrategySimulationWindow
+    status: Literal["ready", "insufficient_history", "partial", "failed"]
+    summary: ScannerStrategySimulationSummary = Field(default_factory=ScannerStrategySimulationSummary)
+    runs: List[ScannerStrategySimulationRun] = Field(default_factory=list)
+    symbols: List[ScannerStrategySimulationSymbol] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
 class ScannerOperationRunSummary(BaseModel):
     id: int
     watchlist_date: Optional[str] = None

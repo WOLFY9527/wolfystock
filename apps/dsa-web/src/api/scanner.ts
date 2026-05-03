@@ -2,6 +2,7 @@ import apiClient from './index';
 import { toCamelCase } from './utils';
 import type {
   ScannerOperationalStatus,
+  ScannerStrategySimulationResult,
   ScannerThemeGenerateRequest,
   ScannerThemeGenerationResponse,
   ScannerRunDetail,
@@ -87,6 +88,30 @@ export const scannerApi = {
       `/api/v1/scanner/runs/${encodeURIComponent(runId)}`,
     );
     return toCamelCase<ScannerRunDetail>(response.data);
+  },
+
+  getStrategySimulation: async (params: {
+    theme?: string | null;
+    profile: string;
+    market: string;
+    lookbackDays?: number;
+    forwardDays?: number;
+    limit?: number;
+  }): Promise<ScannerStrategySimulationResult> => {
+    const response = await apiClient.get<Record<string, unknown>>(
+      '/api/v1/scanner/strategy-simulation',
+      {
+        params: {
+          theme: params.theme || undefined,
+          profile: params.profile,
+          market: params.market,
+          lookback_days: params.lookbackDays ?? 90,
+          forward_days: params.forwardDays ?? 5,
+          limit: params.limit ?? 50,
+        },
+      },
+    );
+    return toCamelCase<ScannerStrategySimulationResult>(response.data);
   },
 
   getTodayWatchlist: async (params: {

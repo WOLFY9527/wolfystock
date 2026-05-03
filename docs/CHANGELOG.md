@@ -1,5 +1,7 @@
 ## 2026-05-02
 
+- 🧪 **Scanner 策略历史模拟 Phase 1** — `/api/v1/scanner/strategy-simulation` 新增基于已持久化 scanner runs 的轻量历史模拟，按 theme/profile/market 与 30/90/180D 窗口筛选历史扫描，并用本地历史价格计算 1/5/10/20 日 forward return、benchmark/excess return、命中率、覆盖率、run 摘要与 symbol 聚合；历史不足时返回 `insufficient_history`，不主动生成历史扫描、不调用 AI、不改变 scanner 入选/排序逻辑或 backtest 收益计算。`/scanner` 进阶工具新增默认折叠的“策略历史模拟”面板，复用当前扫描上下文发起查询，并以紧凑终端风格展示不足历史、汇总、run 表与 symbol 表。
+
 - 🧪 **Scanner 候选单标的回测实验室** — `/scanner` 新增紧凑的 Backtest Lab，可由用户手动对官方入选、预览入选、前 5 名、当前筛选或单个候选启动“候选单标的回测”，复用既有 rule backtest API 与共享 `/backtest/results/:id` 报告路由。批量回测由前端限并发编排并在当前会话内按 symbol/config/strategy 去重，不会在扫描运行或本地阈值预览变化时自动触发，也不改变 scanner 入选/排序规则或 backtest 计算逻辑。
 
 - 🧭 **Scanner 决策工作台渐进披露** — `/scanner` 将结果区默认视图收敛为决策摘要、核心计数、入选分析/回测/观察动作、入选卡片与候选预览；导出、复制、历史回放、策略阈值预览、历史对比、批量观察与诊断详情改为紧凑展开区，移动端按配置、决策、动作、候选、进阶工具、列表与详情顺序堆叠。此次仅调整前端展示与本地阈值预览交互，不改变 scanner backend API、入选规则、排序语义或观察名单接口。

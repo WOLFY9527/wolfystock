@@ -2675,6 +2675,295 @@ class MarketScannerService:
         self._benchmark_review_cache[cache_key] = dict(result)
         return result
 
+    def _calculate_forward_return(
+        self,
+        *,
+        code: str,
+        selection_date: date,
+        forward_days: int,
+    ) -> Dict[str, Any]:
+        result = {
+            "status": "data_failed",
+            "anchor_date": None,
+            "window_end_date": None,
+            "forward_return_pct": None,
+        }
+        anchor_bar = self.stock_repo.get_start_daily(code=code, analysis_date=selection_date)
+        if anchor_bar is None or anchor_bar.close is None:
+            return result
+
+        result["anchor_date"] = anchor_bar.date.isoformat()
+        forward_bars = self.stock_repo.get_forward_bars(
+            code=code,
+            analysis_date=anchor_bar.date,
+            eval_window_days=forward_days,
+        )
+        valid_bars = [bar for bar in forward_bars if bar.close is not None]
+        if len(valid_bars) < forward_days:
+            return result
+
+        window_end_bar = valid_bars[forward_days - 1]
+        result.update(
+            {
+                "status": "ready",
+                "window_end_date": window_end_bar.date.isoformat(),
+                "forward_return_pct": _round_optional(_pct_change(anchor_bar.close, window_end_bar.close)),
+            }
+        )
+        return result
+
+    def _run_matches_strategy_simulation(
+        self,
+        run: MarketScannerRun,
+        *,
+        theme: Optional[str],
+        cutoff_at: datetime,
+    ) -> bool:
+        if run.status != "completed" or run.run_at is None or run.run_at < cutoff_at:
+            return False
+        summary, diagnostics, _ = self._extract_run_metadata(run)
+        universe_selection = self._public_universe_selection(
+            summary.get("universe_selection")
+            if isinstance(summary.get("universe_selection"), dict)
+            else diagnostics.get("universe_selection")
+            if isinstance(diagnostics, dict)
+            else None
+        )
+        normalized_theme = (theme or "").strip().lower()
+        if normalized_theme:
+            return (
+                str(universe_selection.get("universe_type") or "").strip().lower() == "theme"
+                and str(universe_selection.get("theme_id") or "").strip().lower() == normalized_theme
+            )
+        return str(universe_selection.get("universe_type") or "default").strip().lower() == "default"
+
+    def build_strategy_simulation(
+        self,
+        *,
+        market: str,
+        profile: str,
+        theme: Optional[str] = None,
+        lookback_days: int = 90,
+        forward_days: int = 5,
+        limit: int = 50,
+        scope: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """Evaluate persisted scanner selections over historical runs.
+
+        Phase 1 intentionally reads only stored scanner runs and local StockDaily
+        prices. It does not create scanner runs, call AI, or fan out providers.
+        """
+
+        normalized_market = (market or "").strip().lower()
+        if normalized_market not in {"cn", "us", "hk"}:
+            raise ValueError("market 仅支持 cn / us / hk")
+        normalized_profile = (profile or "").strip().lower()
+        if not normalized_profile:
+            raise ValueError("profile 不能为空")
+        resolved_lookback_days = self._resolve_positive_int(lookback_days, 90, 1, 365)
+        if int(forward_days) not in {1, 5, 10, 20}:
+            raise ValueError("forward_days 仅支持 1 / 5 / 10 / 20")
+        resolved_forward_days = int(forward_days)
+        resolved_limit = self._resolve_positive_int(limit, 50, 1, 100)
+        normalized_theme = (theme or "").strip().lower() or None
+
+        profile_config = get_scanner_profile(market=normalized_market, profile=normalized_profile)
+        benchmark_code = str(
+            profile_config.benchmark_code
+            or (
+                DEFAULT_US_SCANNER_BENCHMARK_CODE
+                if normalized_market == "us"
+                else DEFAULT_HK_SCANNER_BENCHMARK_CODE
+                if normalized_market == "hk"
+                else DEFAULT_SCANNER_BENCHMARK_CODE
+            )
+        )
+        cutoff_at = datetime.now() - timedelta(days=resolved_lookback_days)
+        candidate_runs = self.repo.get_recent_runs(
+            market=normalized_market,
+            profile=profile_config.key,
+            limit=resolved_limit,
+            **self._visibility_kwargs(
+                scope=scope,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
+            ),
+        )
+        comparable_runs = [
+            run
+            for run in candidate_runs
+            if self._run_matches_strategy_simulation(
+                run,
+                theme=normalized_theme,
+                cutoff_at=cutoff_at,
+            )
+        ]
+        comparable_runs = comparable_runs[:resolved_limit]
+
+        warnings: List[str] = []
+        base_payload: Dict[str, Any] = {
+            "theme": normalized_theme,
+            "profile": profile_config.key,
+            "market": normalized_market,
+            "window": {
+                "lookbackDays": resolved_lookback_days,
+                "forwardDays": resolved_forward_days,
+                "runCount": len(comparable_runs),
+            },
+            "status": "insufficient_history",
+            "summary": {
+                "historicalRuns": len(comparable_runs),
+                "selectionEvents": 0,
+                "avgSelectedPerRun": None,
+                "hitRate": None,
+                "avgForwardReturnPct": None,
+                "medianForwardReturnPct": None,
+                "avgBenchmarkReturnPct": None,
+                "avgExcessReturnPct": None,
+                "positiveSelectionRate": None,
+                "bestSymbol": None,
+                "worstSymbol": None,
+                "dataCoverage": None,
+            },
+            "runs": [],
+            "symbols": [],
+            "warnings": warnings,
+        }
+
+        if len(comparable_runs) < 2:
+            warnings.append(f"历史扫描不足 · 当前只有 {len(comparable_runs)} 次可比较运行")
+            return base_payload
+
+        run_rows: List[Dict[str, Any]] = []
+        selection_rows: List[Dict[str, Any]] = []
+        data_failed_count = 0
+        for run in comparable_runs:
+            _, _, metadata = self._extract_run_metadata(run)
+            selection_date = _parse_iso_date(metadata.get("watchlist_date")) or (run.run_at.date() if run.run_at else None)
+            candidates = self.repo.get_candidates_for_run(run.id)
+            run_returns: List[float] = []
+            benchmark_return: Optional[float] = None
+            excess_returns: List[float] = []
+            if selection_date is not None:
+                benchmark_result = self._calculate_forward_return(
+                    code=benchmark_code,
+                    selection_date=selection_date,
+                    forward_days=resolved_forward_days,
+                )
+                benchmark_return = benchmark_result.get("forward_return_pct")
+
+            for candidate in candidates:
+                forward_result = (
+                    self._calculate_forward_return(
+                        code=candidate.symbol,
+                        selection_date=selection_date,
+                        forward_days=resolved_forward_days,
+                    )
+                    if selection_date is not None
+                    else {"status": "data_failed", "forward_return_pct": None}
+                )
+                forward_return = forward_result.get("forward_return_pct")
+                if forward_return is None:
+                    data_failed_count += 1
+                else:
+                    run_returns.append(float(forward_return))
+                    if benchmark_return is not None:
+                        excess_returns.append(float(forward_return) - float(benchmark_return))
+                selection_rows.append(
+                    {
+                        "run_id": int(run.id),
+                        "symbol": candidate.symbol,
+                        "score": _round_optional(candidate.score),
+                        "forward_return_pct": forward_return,
+                        "benchmark_return_pct": benchmark_return,
+                        "excess_return_pct": (
+                            _round_optional(float(forward_return) - float(benchmark_return))
+                            if forward_return is not None and benchmark_return is not None
+                            else None
+                        ),
+                    }
+                )
+
+            run_rows.append(
+                {
+                    "runId": int(run.id),
+                    "runAt": run.run_at.isoformat() if run.run_at else None,
+                    "selectedCount": len(candidates),
+                    "rejectedCount": max(0, int(run.evaluated_size or 0) - len(candidates)),
+                    "selectedSymbols": [candidate.symbol for candidate in candidates],
+                    "avgForwardReturnPct": _mean_or_none(run_returns),
+                    "benchmarkReturnPct": benchmark_return,
+                    "excessReturnPct": _mean_or_none(excess_returns),
+                }
+            )
+
+        valid_rows = [row for row in selection_rows if row.get("forward_return_pct") is not None]
+        benchmark_rows = [row for row in valid_rows if row.get("benchmark_return_pct") is not None]
+        excess_rows = [row for row in valid_rows if row.get("excess_return_pct") is not None]
+        total_events = len(selection_rows)
+        valid_returns = [float(row["forward_return_pct"]) for row in valid_rows]
+        symbol_rows: List[Dict[str, Any]] = []
+        for symbol in sorted({str(row.get("symbol")) for row in selection_rows if row.get("symbol")}):
+            rows = [row for row in selection_rows if row.get("symbol") == symbol]
+            symbol_returns = [float(row["forward_return_pct"]) for row in rows if row.get("forward_return_pct") is not None]
+            symbol_rows.append(
+                {
+                    "symbol": symbol,
+                    "selectionCount": len(rows),
+                    "avgScore": _mean_or_none([row.get("score") for row in rows]),
+                    "avgForwardReturnPct": _mean_or_none(symbol_returns),
+                    "hitRate": _round_optional(
+                        sum(1 for value in symbol_returns if value > 0.0) / len(symbol_returns),
+                        2,
+                    ) if symbol_returns else None,
+                    "bestForwardReturnPct": _round_optional(max(symbol_returns)) if symbol_returns else None,
+                    "worstForwardReturnPct": _round_optional(min(symbol_returns)) if symbol_returns else None,
+                }
+            )
+        symbol_rows.sort(
+            key=lambda row: (
+                -(row.get("selectionCount") or 0),
+                -(row.get("avgForwardReturnPct") if row.get("avgForwardReturnPct") is not None else -9999.0),
+                str(row.get("symbol") or ""),
+            )
+        )
+
+        if data_failed_count:
+            warnings.append(f"{data_failed_count} selection events missing forward price data")
+
+        best_row = max(valid_rows, key=lambda row: float(row.get("forward_return_pct") or -9999.0), default=None)
+        worst_row = min(valid_rows, key=lambda row: float(row.get("forward_return_pct") or 9999.0), default=None)
+        base_payload.update(
+            {
+                "status": "ready" if valid_rows and data_failed_count == 0 else "partial",
+                "summary": {
+                    "historicalRuns": len(comparable_runs),
+                    "selectionEvents": total_events,
+                    "avgSelectedPerRun": _round_optional(total_events / len(comparable_runs), 2) if comparable_runs else None,
+                    "hitRate": _round_optional(
+                        sum(1 for value in valid_returns if value > 0.0) / len(valid_returns),
+                        2,
+                    ) if valid_returns else None,
+                    "avgForwardReturnPct": _mean_or_none(valid_returns),
+                    "medianForwardReturnPct": _round_optional(float(np.median(valid_returns))) if valid_returns else None,
+                    "avgBenchmarkReturnPct": _mean_or_none([row.get("benchmark_return_pct") for row in benchmark_rows]),
+                    "avgExcessReturnPct": _mean_or_none([row.get("excess_return_pct") for row in excess_rows]),
+                    "positiveSelectionRate": _round_optional(
+                        sum(1 for value in valid_returns if value > 0.0) / len(valid_returns),
+                        2,
+                    ) if valid_returns else None,
+                    "bestSymbol": best_row.get("symbol") if best_row else None,
+                    "worstSymbol": worst_row.get("symbol") if worst_row else None,
+                    "dataCoverage": _round_optional(len(valid_rows) / total_events, 2) if total_events else None,
+                },
+                "runs": run_rows,
+                "symbols": symbol_rows,
+            }
+        )
+        return base_payload
+
     def _build_candidate_realized_outcome(
         self,
         *,

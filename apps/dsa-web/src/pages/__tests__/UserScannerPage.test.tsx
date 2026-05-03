@@ -17,6 +17,7 @@ const {
   getRuns,
   getRun,
   getThemes,
+  getStrategySimulation,
   createTheme,
   runScan,
   analyzeAsync,
@@ -28,6 +29,7 @@ const {
   getRuns: vi.fn(),
   getRun: vi.fn(),
   getThemes: vi.fn(),
+  getStrategySimulation: vi.fn(),
   createTheme: vi.fn(),
   runScan: vi.fn(),
   analyzeAsync: vi.fn(),
@@ -48,6 +50,7 @@ vi.mock('../../api/scanner', () => ({
     getRun,
     getThemes,
     createTheme,
+    getStrategySimulation,
     run: runScan,
   },
 }));
@@ -622,6 +625,7 @@ describe('UserScannerPage', () => {
     getRuns.mockReset();
     getRun.mockReset();
     getThemes.mockReset();
+    getStrategySimulation.mockReset();
     createTheme.mockReset();
     runScan.mockReset();
     analyzeAsync.mockReset();
@@ -692,6 +696,51 @@ describe('UserScannerPage', () => {
     });
     getRuns.mockResolvedValue(makeHistoryResponse());
     getRun.mockResolvedValue(makeRunDetail());
+    getStrategySimulation.mockResolvedValue({
+      theme: 'crypto_miners',
+      profile: 'us_preopen_v1',
+      market: 'us',
+      window: { lookbackDays: 90, forwardDays: 5, runCount: 2 },
+      status: 'ready',
+      summary: {
+        historicalRuns: 2,
+        selectionEvents: 3,
+        avgSelectedPerRun: 1.5,
+        hitRate: 0.67,
+        avgForwardReturnPct: 3.2,
+        medianForwardReturnPct: 1.8,
+        avgBenchmarkReturnPct: 1.1,
+        avgExcessReturnPct: 2.1,
+        positiveSelectionRate: 0.67,
+        bestSymbol: 'WULF',
+        worstSymbol: 'MARA',
+        dataCoverage: 0.83,
+      },
+      runs: [
+        {
+          runId: 11,
+          runAt: '2026-05-01T08:45:00',
+          selectedCount: 1,
+          rejectedCount: 8,
+          selectedSymbols: ['WULF'],
+          avgForwardReturnPct: 2.5,
+          benchmarkReturnPct: 0.8,
+          excessReturnPct: 1.7,
+        },
+      ],
+      symbols: [
+        {
+          symbol: 'WULF',
+          selectionCount: 2,
+          avgScore: 62,
+          avgForwardReturnPct: 4.4,
+          hitRate: 0.5,
+          bestForwardReturnPct: 12.1,
+          worstForwardReturnPct: -6.2,
+        },
+      ],
+      warnings: ['1 selection events missing forward price data'],
+    });
     createTheme.mockResolvedValue({
       theme: {
         id: 'custom_white_house_stocks',
@@ -1169,6 +1218,114 @@ describe('UserScannerPage', () => {
     expect(lab).toHaveTextContent(/100000/);
     expect(lab).toHaveTextContent(/auto/i);
     expect(lab).toHaveTextContent(/fee\/slip|费用\/滑点/i);
+  });
+
+  it('keeps strategy historical simulation collapsed by default and exposes controls on expand', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+
+    const panel = await screen.findByTestId('scanner-strategy-simulation');
+    expect(panel).not.toHaveAttribute('open');
+    fireEvent.click(within(panel).getByText(/历史模拟|History sim/i));
+
+    expect(within(panel).getByRole('button', { name: '30D' })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '90D' })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '180D' })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '1D' })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '5D' })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '10D' })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '20D' })).toBeInTheDocument();
+  });
+
+  it('runs strategy historical simulation with current scanner theme profile and market', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+
+    const panel = await screen.findByTestId('scanner-strategy-simulation');
+    fireEvent.click(within(panel).getByText(/历史模拟|History sim/i));
+    fireEvent.click(within(panel).getByRole('button', { name: '30D' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '10D' }));
+    fireEvent.click(within(panel).getByRole('button', { name: /运行模拟|Run sim/i }));
+
+    await waitFor(() => {
+      expect(getStrategySimulation).toHaveBeenCalledWith({
+        theme: 'crypto_miners',
+        profile: 'us_preopen_v1',
+        market: 'us',
+        lookbackDays: 30,
+        forwardDays: 10,
+        limit: 50,
+      });
+    });
+  });
+
+  it('renders strategy historical simulation loading insufficient ready tables and warnings compactly', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    getStrategySimulation.mockImplementationOnce(() => new Promise(() => {}));
+    const loadingRender = renderUserScannerPage();
+
+    const loadingPanel = await screen.findByTestId('scanner-strategy-simulation');
+    fireEvent.click(within(loadingPanel).getByText(/历史模拟|History sim/i));
+    fireEvent.click(within(loadingPanel).getByRole('button', { name: /运行模拟|Run sim/i }));
+    expect(await within(loadingPanel).findByRole('button', { name: /运行中|Running/i })).toBeDisabled();
+
+    loadingRender.unmount();
+    getStrategySimulation.mockResolvedValueOnce({
+      theme: 'crypto_miners',
+      profile: 'us_preopen_v1',
+      market: 'us',
+      window: { lookbackDays: 90, forwardDays: 5, runCount: 1 },
+      status: 'insufficient_history',
+      summary: {
+        historicalRuns: 1,
+        selectionEvents: 0,
+        avgSelectedPerRun: null,
+        hitRate: null,
+        avgForwardReturnPct: null,
+        medianForwardReturnPct: null,
+        avgBenchmarkReturnPct: null,
+        avgExcessReturnPct: null,
+        positiveSelectionRate: null,
+        bestSymbol: null,
+        worstSymbol: null,
+        dataCoverage: null,
+      },
+      runs: [],
+      symbols: [],
+      warnings: ['历史扫描不足 · 当前只有 1 次可比较运行'],
+    });
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    const insufficientRender = renderUserScannerPage();
+    const insufficientPanel = await screen.findByTestId('scanner-strategy-simulation');
+    fireEvent.click(within(insufficientPanel).getByText(/历史模拟|History sim/i));
+    fireEvent.click(within(insufficientPanel).getByRole('button', { name: /运行模拟|Run sim/i }));
+    expect(await within(insufficientPanel).findByTestId('scanner-strategy-simulation-compact-message')).toHaveTextContent(/历史扫描不足/);
+    expect(within(insufficientPanel).queryByTestId('scanner-strategy-simulation-runs')).not.toBeInTheDocument();
+
+    insufficientRender.unmount();
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+    const readyPanel = await screen.findByTestId('scanner-strategy-simulation');
+    fireEvent.click(within(readyPanel).getByText(/历史模拟|History sim/i));
+    fireEvent.click(within(readyPanel).getByRole('button', { name: /运行模拟|Run sim/i }));
+
+    expect(await within(readyPanel).findByTestId('scanner-strategy-simulation-summary')).toHaveTextContent(/\+3\.2%/);
+    expect(within(readyPanel).getByTestId('scanner-strategy-simulation-runs')).toHaveTextContent('WULF');
+    expect(within(readyPanel).getByTestId('scanner-strategy-simulation-symbols')).toHaveTextContent('12.1%');
+    expect(within(readyPanel).getByTestId('scanner-strategy-simulation-warnings')).toHaveTextContent(/missing forward price data/);
+  });
+
+  it('keeps strategy historical simulation mobile-safe with quiet horizontal tables', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+
+    const panel = await screen.findByTestId('scanner-strategy-simulation');
+    fireEvent.click(within(panel).getByText(/历史模拟|History sim/i));
+    fireEvent.click(within(panel).getByRole('button', { name: /运行模拟|Run sim/i }));
+
+    const runsTable = await within(panel).findByTestId('scanner-strategy-simulation-runs');
+    expect(runsTable).toHaveClass('overflow-x-auto', 'no-scrollbar');
+    expect(screen.getByTestId('scanner-candidate-filters').firstElementChild).toHaveClass('ui-scroll-x-quiet');
   });
 
   it('runs an individual scanner candidate backtest and links to the shared result report', async () => {

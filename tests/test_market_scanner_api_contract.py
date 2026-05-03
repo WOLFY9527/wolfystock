@@ -14,6 +14,7 @@ from api.v1.endpoints.scanner import (
     get_recent_watchlists,
     get_market_scan_run,
     get_market_scan_runs,
+    get_scanner_strategy_simulation,
     get_scanner_operational_status,
     get_today_watchlist,
     run_market_scan,
@@ -502,6 +503,72 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.items[0].notification_status, "success")
         self.assertEqual(response.items[0].change_summary.new_count, 1)
         service.list_runs.assert_called_once()
+
+    def test_get_scanner_strategy_simulation_uses_persisted_history_service(self) -> None:
+        service = MagicMock()
+        service.build_strategy_simulation.return_value = {
+            "theme": "crypto_miners",
+            "profile": "us_preopen_v1",
+            "market": "us",
+            "window": {"lookbackDays": 90, "forwardDays": 5, "runCount": 2},
+            "status": "ready",
+            "summary": {
+                "historicalRuns": 2,
+                "selectionEvents": 3,
+                "avgSelectedPerRun": 1.5,
+                "hitRate": 0.67,
+                "avgForwardReturnPct": 3.2,
+                "medianForwardReturnPct": 1.8,
+                "avgBenchmarkReturnPct": 1.1,
+                "avgExcessReturnPct": 2.1,
+                "positiveSelectionRate": 0.67,
+                "bestSymbol": "WULF",
+                "worstSymbol": "MARA",
+                "dataCoverage": 1.0,
+            },
+            "runs": [
+                {
+                    "runId": 12,
+                    "runAt": "2026-05-01T08:45:00",
+                    "selectedCount": 1,
+                    "rejectedCount": 10,
+                    "selectedSymbols": ["WULF"],
+                    "avgForwardReturnPct": 2.5,
+                    "benchmarkReturnPct": 0.8,
+                    "excessReturnPct": 1.7,
+                }
+            ],
+            "symbols": [
+                {
+                    "symbol": "WULF",
+                    "selectionCount": 2,
+                    "avgScore": 62.0,
+                    "avgForwardReturnPct": 4.4,
+                    "hitRate": 0.5,
+                    "bestForwardReturnPct": 12.1,
+                    "worstForwardReturnPct": -6.2,
+                }
+            ],
+            "warnings": [],
+        }
+
+        with patch("api.v1.endpoints.scanner.MarketScannerService", return_value=service):
+            response = get_scanner_strategy_simulation(
+                theme="crypto_miners",
+                profile="us_preopen_v1",
+                market="us",
+                lookback_days=90,
+                forward_days=5,
+                limit=50,
+                db_manager=MagicMock(),
+            )
+
+        self.assertEqual(response.status, "ready")
+        self.assertEqual(response.window.run_count, 2)
+        self.assertEqual(response.summary.avg_forward_return_pct, 3.2)
+        self.assertEqual(response.runs[0].selected_symbols, ["WULF"])
+        self.assertEqual(response.symbols[0].best_forward_return_pct, 12.1)
+        service.build_strategy_simulation.assert_called_once()
 
     def test_get_market_scan_run_returns_404_when_missing(self) -> None:
         service = MagicMock()
