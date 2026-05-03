@@ -5,6 +5,47 @@
 
 export type AssumptionMap = Record<string, unknown>;
 
+export interface BacktestDiagnosticWarning {
+  code?: string | null;
+  severity?: string | null;
+  message?: string | null;
+}
+
+export interface BacktestDataQualityAnomaly {
+  date?: string | null;
+  type?: string | null;
+  field?: string | null;
+  value?: number | null;
+  [key: string]: unknown;
+}
+
+export interface BacktestDataQuality {
+  symbol?: string | null;
+  benchmarkSymbol?: string | null;
+  provider?: string | null;
+  source?: string | null;
+  frequency?: string | null;
+  requestedStart?: string | null;
+  requestedEnd?: string | null;
+  actualStart?: string | null;
+  actualEnd?: string | null;
+  barCount?: number | null;
+  expectedBarCount?: number | null;
+  missingBarCount?: number | null;
+  missingDates?: string[];
+  anomalyCount?: number | null;
+  anomalies?: BacktestDataQualityAnomaly[];
+  adjustmentMode?: string | null;
+  dividendsHandled?: string | null;
+  splitsHandled?: string | null;
+  timezone?: string | null;
+  currency?: string | null;
+  market?: string | null;
+  isComplete?: boolean | null;
+  qualityScore?: number | null;
+  warnings?: BacktestDiagnosticWarning[];
+}
+
 export interface RuleBacktestExecutionMarketRules {
   tradingDayExecution?: string | null;
   terminalBarFillFallback?: string | null;
@@ -954,6 +995,7 @@ export interface RuleBacktestRunResponse {
   avgHoldingCalendarDays?: number | null;
   finalEquity?: number | null;
   summary: Record<string, unknown>;
+  dataQuality?: BacktestDataQuality;
   robustnessAnalysis?: Record<string, unknown>;
   executionModel?: RuleBacktestExecutionModel;
   executionAssumptions: AssumptionMap;
@@ -1029,6 +1071,7 @@ export interface BacktestResultItem {
   simulatedExitReason?: string | null;
   simulatedReturnPct?: number | null;
   marketDataSources: string[];
+  dataQuality?: BacktestDataQuality;
   executionAssumptions: AssumptionMap;
 }
 

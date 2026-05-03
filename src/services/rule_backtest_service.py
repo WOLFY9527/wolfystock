@@ -1063,6 +1063,17 @@ class RuleBacktestService:
                     end_date=normalized_end_date,
                 ),
             )
+            setattr(
+                result,
+                "data_quality",
+                self._build_data_quality_payload(
+                    code=code,
+                    bars=bars,
+                    requested_start=normalized_start_date,
+                    requested_end=normalized_end_date,
+                    benchmark_summary=dict(getattr(result, "benchmark_summary", {}) or {}),
+                ),
+            )
             return result
 
         result = self.engine.run(
@@ -1111,6 +1122,17 @@ class RuleBacktestService:
         if not result.no_result_reason and result.metrics.get("trade_count", 0) <= 0:
             result.no_result_reason = "no_trades"
             result.no_result_message = "规则已解析并执行，但未产生任何交易。"
+        setattr(
+            result,
+            "data_quality",
+            self._build_data_quality_payload(
+                code=code,
+                bars=bars,
+                requested_start=normalized_start_date,
+                requested_end=normalized_end_date,
+                benchmark_summary=dict(getattr(result, "benchmark_summary", {}) or {}),
+            ),
+        )
         return result
 
     def _build_robustness_analysis(
@@ -1656,6 +1678,196 @@ class RuleBacktestService:
             return 0
 
     @staticmethod
+    def _bar_date(bar: Any) -> Optional[date]:
+        value = getattr(bar, "date", None)
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        if isinstance(value, datetime):
+            return value.date()
+        if value:
+            try:
+                return datetime.fromisoformat(str(value)[:10]).date()
+            except Exception:
+                return None
+        return None
+
+    @staticmethod
+    def _business_dates(start: date, end: date) -> List[date]:
+        if end < start:
+            return []
+        dates: List[date] = []
+        current = start
+        while current <= end:
+            if current.weekday() < 5:
+                dates.append(current)
+            current += timedelta(days=1)
+        return dates
+
+    @staticmethod
+    def _provider_label(source: str) -> str:
+        normalized = str(source or "").strip().lower()
+        if normalized in {"local_us_parquet", "localparquet"}:
+            return "Local US Parquet"
+        if normalized in {"yfinance", "yfinancefetcher", "yahoo finance"}:
+            return "Yahoo Finance"
+        if normalized in {"akshare", "aksharefetcher"}:
+            return "AkShare"
+        if normalized in {"databasecache", "database_cache", "stored_database"}:
+            return "Database Cache"
+        return source or "unknown"
+
+    @classmethod
+    def _market_metadata(cls, code: str) -> Dict[str, Optional[str]]:
+        normalized = normalize_stock_code(str(code or "").strip()).upper()
+        if is_us_stock_code(normalized) or is_us_index_code(normalized):
+            return {"market": "US", "currency": "USD", "timezone": "America/New_York"}
+        if cls._is_a_share_like_code(normalized):
+            return {"market": "CN", "currency": "CNY", "timezone": "Asia/Shanghai"}
+        return {"market": "unknown", "currency": "unknown", "timezone": "unknown"}
+
+    @staticmethod
+    def _quality_warning(code: str, message: str, severity: str = "info") -> Dict[str, str]:
+        return {"code": code, "severity": severity, "message": message}
+
+    def _detect_data_quality_anomalies(self, bars: List[Any]) -> List[Dict[str, Any]]:
+        anomalies: List[Dict[str, Any]] = []
+        previous_close: Optional[float] = None
+        for bar in bars:
+            bar_date = self._bar_date(bar)
+            date_text = bar_date.isoformat() if bar_date else None
+            open_price = _safe_float(getattr(bar, "open", None))
+            high_price = _safe_float(getattr(bar, "high", None))
+            low_price = _safe_float(getattr(bar, "low", None))
+            close_price = _safe_float(getattr(bar, "close", None))
+            volume = _safe_float(getattr(bar, "volume", None))
+
+            for field_name, value in (
+                ("open", open_price),
+                ("high", high_price),
+                ("low", low_price),
+                ("close", close_price),
+            ):
+                if value is None or value <= 0:
+                    anomalies.append({"date": date_text, "type": "non_positive_price", "field": field_name, "value": value})
+                    break
+            if high_price is not None and low_price is not None and high_price < low_price:
+                anomalies.append({"date": date_text, "type": "high_below_low", "high": high_price, "low": low_price})
+            if (
+                close_price is not None
+                and high_price is not None
+                and low_price is not None
+                and (close_price > high_price or close_price < low_price)
+            ):
+                anomalies.append({"date": date_text, "type": "close_outside_high_low", "close": close_price, "high": high_price, "low": low_price})
+            if previous_close is not None and previous_close > 0 and close_price is not None:
+                daily_return = (close_price / previous_close) - 1.0
+                if abs(daily_return) > 0.5:
+                    anomalies.append({"date": date_text, "type": "extreme_daily_return", "return_pct": round(daily_return * 100.0, 4)})
+            if volume is None:
+                anomalies.append({"date": date_text, "type": "missing_volume"})
+            if close_price is not None and close_price > 0:
+                previous_close = close_price
+        return anomalies
+
+    def _build_data_quality_payload(
+        self,
+        *,
+        code: str,
+        bars: List[Any],
+        requested_start: Optional[date],
+        requested_end: Optional[date],
+        benchmark_summary: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        ordered_bars = sorted(list(bars or []), key=lambda item: self._bar_date(item) or date.min)
+        all_bar_dates = [self._bar_date(bar) for bar in ordered_bars]
+        all_resolved_dates = [item for item in all_bar_dates if item is not None]
+        requested_start = requested_start or (min(all_resolved_dates) if all_resolved_dates else None)
+        requested_end = requested_end or (max(all_resolved_dates) if all_resolved_dates else None)
+        window_bars = [
+            bar
+            for bar in ordered_bars
+            if (bar_date := self._bar_date(bar)) is not None
+            and (requested_start is None or bar_date >= requested_start)
+            and (requested_end is None or bar_date <= requested_end)
+        ]
+        window_dates = [self._bar_date(bar) for bar in window_bars]
+        resolved_dates = [item for item in window_dates if item is not None]
+        actual_start = min(resolved_dates) if resolved_dates else None
+        actual_end = max(resolved_dates) if resolved_dates else None
+        source_values: List[str] = []
+        for bar in window_bars or ordered_bars:
+            source = str(getattr(bar, "data_source", "") or "").strip()
+            if source and source not in source_values:
+                source_values.append(source)
+        source = source_values[0] if source_values else "database_cache"
+        expected_dates = (
+            self._business_dates(requested_start, requested_end)
+            if requested_start is not None and requested_end is not None
+            else []
+        )
+        actual_date_set = {item for item in resolved_dates}
+        missing_dates = [item for item in expected_dates if item not in actual_date_set]
+        expected_bar_count: Optional[int] = len(expected_dates) if expected_dates else None
+        missing_bar_count = max((expected_bar_count or 0) - len(window_bars), 0) if expected_bar_count is not None else 0
+        anomalies = self._detect_data_quality_anomalies(window_bars)
+        benchmark_payload = dict(benchmark_summary or {})
+        warnings: List[Dict[str, str]] = []
+        if not window_bars:
+            warnings.append(self._quality_warning("no_bars", "No market bars were available for the requested window.", "warning"))
+        if requested_start and actual_start and actual_start > requested_start:
+            warnings.append(self._quality_warning("actual_range_shorter_than_requested", "Actual data starts after the requested start.", "warning"))
+        if requested_end and actual_end and actual_end < requested_end:
+            warnings.append(self._quality_warning("actual_range_shorter_than_requested", "Actual data ends before the requested end.", "warning"))
+        if missing_bar_count > 0:
+            warnings.append(self._quality_warning("missing_bars_detected", f"{missing_bar_count} business-day bars are missing from the requested window.", "warning"))
+        if anomalies:
+            warnings.append(self._quality_warning("ohlcv_anomalies_detected", f"{len(anomalies)} OHLCV anomalies detected.", "warning"))
+        if benchmark_payload.get("unavailable_reason") or (
+            benchmark_payload.get("resolved_mode") not in {None, "", "none"}
+            and benchmark_payload.get("return_pct") is None
+            and benchmark_payload.get("start_date") is None
+        ):
+            warnings.append(self._quality_warning("benchmark_data_missing", str(benchmark_payload.get("unavailable_reason") or "Benchmark data unavailable."), "warning"))
+        warnings.append(self._quality_warning("adjustment_status_unknown", "Adjustment status is unknown; raw versus adjusted handling is not asserted."))
+        warnings.append(self._quality_warning("dividends_splits_unknown", "Dividend and split handling is unknown for this result."))
+        if source in {"database_cache", "Unknown"}:
+            warnings.append(self._quality_warning("source_metadata_incomplete", "Stored bars do not expose a concrete upstream provider.", "info"))
+
+        quality_score = 1.0
+        quality_score -= min(missing_bar_count, 10) * 0.03
+        quality_score -= min(len(anomalies), 10) * 0.04
+        if any(item["code"] == "benchmark_data_missing" for item in warnings):
+            quality_score -= 0.08
+        quality_score -= 0.05  # adjustment uncertainty
+        market_meta = self._market_metadata(code)
+        return {
+            "symbol": normalize_stock_code(str(code or "").strip()).upper(),
+            "benchmark_symbol": benchmark_payload.get("code"),
+            "provider": self._provider_label(source),
+            "source": source,
+            "frequency": "1d",
+            "requested_start": requested_start.isoformat() if requested_start else None,
+            "requested_end": requested_end.isoformat() if requested_end else None,
+            "actual_start": actual_start.isoformat() if actual_start else None,
+            "actual_end": actual_end.isoformat() if actual_end else None,
+            "bar_count": len(window_bars),
+            "expected_bar_count": expected_bar_count,
+            "missing_bar_count": missing_bar_count,
+            "missing_dates": [item.isoformat() for item in missing_dates[:10]],
+            "anomaly_count": len(anomalies),
+            "anomalies": anomalies[:10],
+            "adjustment_mode": "unknown",
+            "dividends_handled": "unknown",
+            "splits_handled": "unknown",
+            "timezone": market_meta["timezone"],
+            "currency": market_meta["currency"],
+            "market": market_meta["market"],
+            "is_complete": bool(window_bars) and missing_bar_count == 0 and not anomalies,
+            "quality_score": round(max(0.0, min(1.0, quality_score)), 4),
+            "warnings": warnings,
+        }
+
+    @staticmethod
     def _is_a_share_like_code(code: str) -> bool:
         normalized = normalize_stock_code(str(code or ""))
         return normalized.isdigit() and len(normalized) == 6
@@ -2001,7 +2213,11 @@ class RuleBacktestService:
             buy_and_hold_summary=getattr(result, "buy_and_hold_summary", {}) or {},
         )
         execution_model_payload = result.execution_model.to_dict()
-        execution_assumptions_payload = result.execution_assumptions.to_dict()
+        execution_assumptions_payload = self._enrich_execution_assumptions_payload(
+            base_payload=result.execution_assumptions.to_dict(),
+            execution_model=execution_model_payload,
+        )
+        data_quality_payload = dict(getattr(result, "data_quality", {}) or {})
         visualization_payload = {
             "benchmark_curve": comparison_payload.get("benchmark_curve") or [],
             "benchmark_summary": comparison_payload.get("benchmark_summary") or {},
@@ -2040,6 +2256,7 @@ class RuleBacktestService:
             parsed_strategy=result.parsed_strategy,
             execution_model=execution_model_payload,
             execution_assumptions=execution_assumptions_payload,
+            data_quality=data_quality_payload,
             visualization=visualization_payload,
             execution_trace=execution_trace_payload,
             robustness_analysis=robustness_analysis_payload,
@@ -2095,6 +2312,7 @@ class RuleBacktestService:
                 parsed_strategy=result.parsed_strategy,
                 execution_model=summary_patch.get("execution_model"),
                 execution_assumptions=summary_patch.get("execution_assumptions"),
+                data_quality=summary_patch.get("data_quality"),
                 visualization=summary_patch.get("visualization"),
                 execution_trace=summary_patch.get("execution_trace"),
                 robustness_analysis=summary_patch.get("robustness_analysis"),
@@ -4145,9 +4363,74 @@ class RuleBacktestService:
         resolved_model = ExecutionModelConfig.from_dict(execution_model)
         if resolved_model is None:
             return {}
-        return self.engine._build_execution_assumptions(
+        base_payload = self.engine._build_execution_assumptions(
             execution_model=resolved_model,
         ).to_dict()
+        return self._enrich_execution_assumptions_payload(
+            base_payload=base_payload,
+            execution_model=resolved_model.to_dict(),
+        )
+
+    @staticmethod
+    def _canonical_assumption_value(value: Any) -> str:
+        text = str(value or "").strip()
+        return text or "unknown"
+
+    def _enrich_execution_assumptions_payload(
+        self,
+        *,
+        base_payload: Dict[str, Any],
+        execution_model: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        payload = dict(base_payload or {})
+        entry_timing = self._canonical_assumption_value(
+            execution_model.get("entry_timing") or payload.get("entry_fill_timing")
+        )
+        exit_timing = self._canonical_assumption_value(
+            execution_model.get("exit_timing") or payload.get("exit_fill_timing")
+        )
+        signal_timing = self._canonical_assumption_value(
+            execution_model.get("signal_evaluation_timing") or payload.get("signal_evaluation_timing")
+        )
+        fill_price = self._canonical_assumption_value(
+            execution_model.get("entry_fill_price_basis") or payload.get("default_fill_price_basis")
+        )
+        fee_bps = float(_safe_float(execution_model.get("fee_bps_per_side")) or _safe_float(payload.get("fee_bps_per_side")) or 0.0)
+        slippage_bps = float(_safe_float(execution_model.get("slippage_bps_per_side")) or _safe_float(payload.get("slippage_bps_per_side")) or 0.0)
+        market_rules = dict(execution_model.get("market_rules") or {})
+        warnings = [
+            self._quality_warning("limit_halt_not_modeled", "Limit-up/down and halt handling are not modeled."),
+            self._quality_warning("volume_limit_unknown", "Volume participation limits are not modeled."),
+        ]
+        payload.update(
+            {
+                "engine": "deterministic",
+                "signal_timing": signal_timing,
+                "fill_timing": entry_timing if entry_timing == exit_timing else f"entry:{entry_timing}; exit:{exit_timing}",
+                "fill_price": fill_price,
+                "allow_same_day_exit": "same_bar" in exit_timing,
+                "allow_fractional_shares": True,
+                "lot_size": 1,
+                "volume_participation_limit": None,
+                "limit_up_down_handling": "not_modeled",
+                "halt_handling": "not_modeled",
+                "short_selling": "disabled",
+                "fee_model": {
+                    "type": "bps" if fee_bps else "none",
+                    "commission_bps": fee_bps,
+                    "min_commission": None,
+                    "tax_bps": None,
+                    "sec_fee": None,
+                },
+                "slippage_model": {
+                    "type": "bps" if slippage_bps else "none",
+                    "slippage_bps": slippage_bps,
+                },
+                "market_rules": market_rules,
+                "warnings": warnings,
+            }
+        )
+        return payload
 
     @staticmethod
     def _build_execution_assumptions_snapshot_payload(
@@ -4181,10 +4464,30 @@ class RuleBacktestService:
         summary: Dict[str, Any],
         derived_payload: Dict[str, Any],
     ) -> Dict[str, Any]:
+        diagnostic_optional_keys = {
+            "engine",
+            "signal_timing",
+            "fill_timing",
+            "fill_price",
+            "allow_same_day_exit",
+            "allow_fractional_shares",
+            "lot_size",
+            "volume_participation_limit",
+            "limit_up_down_handling",
+            "halt_handling",
+            "short_selling",
+            "fee_model",
+            "slippage_model",
+            "market_rules",
+            "warnings",
+        }
         snapshot = RuleBacktestService._extract_execution_assumptions_snapshot_payload(summary)
         if snapshot is not None:
             stored_payload = dict(snapshot.get("payload") or {})
-            missing_keys = [key for key in derived_payload.keys() if stored_payload.get(key) is None]
+            missing_keys = [
+                key for key in derived_payload.keys()
+                if key not in diagnostic_optional_keys and stored_payload.get(key) is None
+            ]
             resolved_payload = dict(derived_payload)
             resolved_payload.update({key: value for key, value in stored_payload.items() if value is not None})
             if missing_keys:
@@ -4203,7 +4506,10 @@ class RuleBacktestService:
 
         legacy_payload = summary.get("execution_assumptions")
         if isinstance(legacy_payload, dict) and legacy_payload:
-            missing_keys = [key for key in derived_payload.keys() if legacy_payload.get(key) is None]
+            missing_keys = [
+                key for key in derived_payload.keys()
+                if key not in diagnostic_optional_keys and legacy_payload.get(key) is None
+            ]
             resolved_payload = dict(derived_payload)
             resolved_payload.update({key: value for key, value in legacy_payload.items() if value is not None})
             if missing_keys:
@@ -5351,6 +5657,7 @@ class RuleBacktestService:
         metrics: Any = _UNSET,
         execution_model: Any = _UNSET,
         execution_assumptions: Any = _UNSET,
+        data_quality: Any = _UNSET,
         visualization: Any = _UNSET,
         execution_trace: Any = _UNSET,
         robustness_analysis: Any = _UNSET,
@@ -5382,6 +5689,8 @@ class RuleBacktestService:
                 completeness="complete",
                 missing_keys=[],
             )
+        if data_quality is not _UNSET:
+            payload["data_quality"] = dict(data_quality or {})
         if visualization is not _UNSET:
             payload["visualization"] = visualization
         if execution_trace is not _UNSET:
@@ -8298,6 +8607,11 @@ class RuleBacktestService:
             or self._describe_execution_assumptions_source(stored_summary)
         )
         execution_assumptions = dict(execution_assumptions_snapshot.get("payload") or {})
+        data_quality = (
+            dict(stored_summary.get("data_quality") or {})
+            if isinstance(stored_summary.get("data_quality"), dict)
+            else {}
+        )
         (
             metrics,
             metrics_source,
@@ -8475,6 +8789,7 @@ class RuleBacktestService:
             "avg_holding_calendar_days": metrics.get("avg_holding_calendar_days"),
             "final_equity": metrics.get("final_equity"),
             "summary": summary,
+            "data_quality": data_quality,
             "robustness_analysis": dict(summary.get("robustness_analysis") or {}),
             "artifact_availability": artifact_availability,
             "readback_integrity": readback_integrity,

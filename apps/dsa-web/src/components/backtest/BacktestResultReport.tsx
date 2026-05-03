@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useMemo, useState } from 'react';
-import type { RuleBacktestRunResponse, RuleBacktestTradeItem } from '../../types/backtest';
+import type { BacktestDiagnosticWarning, RuleBacktestRunResponse, RuleBacktestTradeItem } from '../../types/backtest';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { StatusBadge } from '../ui/StatusBadge';
 import {
@@ -160,8 +160,51 @@ function downloadCsv(filename: string, headers: string[], rows: unknown[][]): vo
   URL.revokeObjectURL(url);
 }
 
+function recordValue(source: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    const value = source[key];
+    if (value != null && value !== '') return value;
+  }
+  return null;
+}
+
+function displayToken(value: unknown): string {
+  const text = typeof value === 'string' ? value.trim() : value == null ? '' : String(value);
+  return text ? text.replaceAll('_', ' ') : 'unknown';
+}
+
+function formatBps(value: unknown): string {
+  const parsed = safeNumber(value);
+  if (parsed == null) return 'unknown';
+  return Number.isInteger(parsed) ? String(parsed) : formatNumber(parsed, 2);
+}
+
+function warningText(warning: BacktestDiagnosticWarning | Record<string, unknown>): string {
+  return safeText(warning.message) || safeText(warning.code) || 'metadata warning';
+}
+
 function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]> {
-  const explicit = Object.entries(run.executionAssumptions || {})
+  const source = (run.executionAssumptions || {}) as Record<string, unknown>;
+  const feeModel = (recordValue(source, 'feeModel', 'fee_model') || {}) as Record<string, unknown>;
+  const slippageModel = (recordValue(source, 'slippageModel', 'slippage_model') || {}) as Record<string, unknown>;
+  const structured: Array<[string, string | null]> = [
+    ['Engine', safeText(recordValue(source, 'engine') as string) || null],
+    ['Signal / Fill', `${displayToken(recordValue(source, 'signalTiming', 'signal_timing', 'signalEvaluationTiming', 'signal_evaluation_timing'))} -> ${displayToken(recordValue(source, 'fillTiming', 'fill_timing', 'entryFillTiming', 'entry_fill_timing'))}`],
+    ['Fill Price', displayToken(recordValue(source, 'fillPrice', 'fill_price', 'defaultFillPriceBasis', 'default_fill_price_basis'))],
+    ['Fee / Slippage', `${formatBps(recordValue(feeModel, 'commissionBps', 'commission_bps') ?? run.feeBps)}bp / ${formatBps(recordValue(slippageModel, 'slippageBps', 'slippage_bps') ?? run.slippageBps)}bp`],
+    ['Fractional / Lot', `${recordValue(source, 'allowFractionalShares', 'allow_fractional_shares') === false ? 'whole shares' : 'fractional'} / lot ${displayToken(recordValue(source, 'lotSize', 'lot_size') ?? 1)}`],
+    ['Volume Limit', displayToken(recordValue(source, 'volumeParticipationLimit', 'volume_participation_limit'))],
+    ['Market Rules', `${displayToken(recordValue(source, 'limitUpDownHandling', 'limit_up_down_handling'))} / ${displayToken(recordValue(source, 'haltHandling', 'halt_handling'))}`],
+    ['Short Selling', displayToken(recordValue(source, 'shortSelling', 'short_selling'))],
+  ];
+  const hasStructured = Boolean(recordValue(source, 'engine', 'feeModel', 'fee_model', 'slippageModel', 'slippage_model'));
+  if (hasStructured) {
+    return structured
+      .filter(([, value]) => value != null && value !== '')
+      .map(([key, value]) => [key, String(value)]);
+  }
+
+  const explicit = Object.entries(source)
     .map(([key, value]): [string, string] | null => {
       if (value == null || value === '') return null;
       return [key, typeof value === 'object' ? JSON.stringify(value) : String(value)];
@@ -180,6 +223,24 @@ function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]
 }
 
 function dataQualityEntries(run: RuleBacktestRunResponse, normalized: DeterministicBacktestNormalizedResult): Array<[string, string]> {
+  const explicit = run.dataQuality;
+  if (explicit && Object.keys(explicit).length > 0) {
+    const barCount = safeNumber(explicit.barCount);
+    const expected = safeNumber(explicit.expectedBarCount);
+    const warnings = Array.isArray(explicit.warnings) ? explicit.warnings.length : 0;
+    const entries: Array<[string, string | number | null]> = [
+      ['Source', safeText(explicit.provider || '') || safeText(explicit.source || '')],
+      ['Frequency', safeText(explicit.frequency || '')],
+      ['Bar Coverage', `${barCount ?? '--'} / ${expected ?? '--'}`],
+      ['Actual Range', explicit.actualStart || explicit.actualEnd ? `${explicit.actualStart || '--'} -> ${explicit.actualEnd || '--'}` : null],
+      ['Adjust / Div / Split', `${displayToken(explicit.adjustmentMode)} / ${displayToken(explicit.dividendsHandled)} / ${displayToken(explicit.splitsHandled)}`],
+      ['Warnings', warnings],
+    ];
+    return entries
+      .filter(([, value]) => value != null && value !== '')
+      .map(([key, value]) => [key, String(value)]);
+  }
+
   const benchmark = run.benchmarkSummary || {};
   const source = safeText(run.executionTrace?.source) || safeText(benchmark.method);
   if (!source && normalized.viewerMeta.rowCount === 0) return [];
@@ -290,6 +351,12 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   const moreMetrics = useMemo(() => getMoreMetricItems(run, tradeSummary), [run, tradeSummary]);
   const dataQuality = useMemo(() => dataQualityEntries(run, normalized), [run, normalized]);
   const assumptions = useMemo(() => assumptionEntries(run), [run]);
+  const dataQualityWarnings = useMemo(() => (run.dataQuality?.warnings || []).map(warningText), [run.dataQuality?.warnings]);
+  const executionWarnings = useMemo(() => {
+    const assumptionsPayload = (run.executionAssumptions || {}) as Record<string, unknown>;
+    const warnings = recordValue(assumptionsPayload, 'warnings') as Array<Record<string, unknown>> | null;
+    return Array.isArray(warnings) ? warnings.map(warningText) : [];
+  }, [run.executionAssumptions]);
   const hasExplicitAssumptions = Object.keys(run.executionAssumptions || {}).length > 0;
   const visibleTrades = trades.slice(0, TRADE_ROW_LIMIT);
   const visibleLedgerRows = normalized.rows.slice(0, LEDGER_ROW_LIMIT);
@@ -480,7 +547,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           </button>
           {dataQualityOpen || mode === 'simple' ? (
             dataQuality.length ? (
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <div data-testid="backtest-data-quality-grid" className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {dataQuality.map(([key, value]) => (
                   <div key={key} className="min-w-0 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
                     <p className={LABEL_CLASS}>{key}</p>
@@ -492,6 +559,19 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
               <p className="mt-3 text-xs text-white/48">数据质量信息不足：当前结果未返回复权/分红/拆股元数据。</p>
             )
           ) : null}
+          {dataQualityOpen || mode === 'simple' ? dataQualityWarnings.length ? (
+            <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+              {dataQualityWarnings.map((warning, index) => (
+                <span
+                  key={`${warning}-${index}`}
+                  data-testid={`backtest-data-quality-warning-${index}`}
+                  className="max-w-full truncate rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-white/58"
+                >
+                  {warning}
+                </span>
+              ))}
+            </div>
+          ) : null : null}
         </div>
 
         <div id="backtest-report-执行假设" data-testid="backtest-report-execution-assumptions" className={GHOST_SECTION_CLASS}>
@@ -505,12 +585,25 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                 <p className="mt-3 text-xs text-white/48">执行假设信息不足：当前结果未返回成交时点/撮合规则。</p>
               ) : null}
               {assumptions.length ? (
-                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <div data-testid="backtest-execution-assumptions-grid" className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {assumptions.map(([key, value]) => (
                     <div key={key} className="min-w-0 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
                       <p className={LABEL_CLASS}>{key}</p>
                       <p className="mt-1 truncate font-mono text-xs text-white/70">{value}</p>
                     </div>
+                  ))}
+                </div>
+              ) : null}
+              {executionWarnings.length ? (
+                <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+                  {executionWarnings.map((warning, index) => (
+                    <span
+                      key={`${warning}-${index}`}
+                      data-testid={`backtest-execution-warning-${index}`}
+                      className="max-w-full truncate rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-white/58"
+                    >
+                      {warning}
+                    </span>
                   ))}
                 </div>
               ) : null}

@@ -763,6 +763,116 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("execution_assumptions", response)
         self.assertIn("total_return_pct", response)
 
+    def test_rule_backtest_result_includes_data_quality_and_execution_metadata(self) -> None:
+        service = RuleBacktestService(self.db)
+        with self.db.get_session() as session:
+            rows = session.query(StockDaily).filter(StockDaily.code == "600519").all()
+            for row in rows:
+                row.data_source = "local_us_parquet"
+            session.commit()
+
+        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                start_date="2024-01-05",
+                end_date="2024-01-20",
+                lookback_bars=20,
+                fee_bps=2.5,
+                slippage_bps=1.25,
+                benchmark_mode="same_symbol_buy_and_hold",
+                confirmed=True,
+            )
+
+        data_quality = response["data_quality"]
+        self.assertEqual(data_quality["symbol"], "600519")
+        self.assertEqual(data_quality["source"], "local_us_parquet")
+        self.assertEqual(data_quality["frequency"], "1d")
+        self.assertEqual(data_quality["requested_start"], "2024-01-05")
+        self.assertEqual(data_quality["requested_end"], "2024-01-20")
+        self.assertGreater(data_quality["bar_count"], 0)
+        self.assertIn("actual_start", data_quality)
+        self.assertIn("actual_end", data_quality)
+        self.assertEqual(data_quality["adjustment_mode"], "unknown")
+        self.assertEqual(data_quality["dividends_handled"], "unknown")
+        self.assertEqual(data_quality["splits_handled"], "unknown")
+        self.assertTrue(any(warning["code"] == "adjustment_status_unknown" for warning in data_quality["warnings"]))
+
+        assumptions = response["execution_assumptions"]
+        self.assertEqual(assumptions["engine"], "deterministic")
+        self.assertEqual(assumptions["fee_model"]["commission_bps"], 2.5)
+        self.assertEqual(assumptions["slippage_model"]["slippage_bps"], 1.25)
+        self.assertEqual(assumptions["fill_price"], "open")
+        self.assertTrue(assumptions["allow_fractional_shares"])
+        self.assertEqual(response["summary"]["data_quality"], data_quality)
+
+    def test_rule_backtest_data_quality_reports_missing_bars_and_anomalies(self) -> None:
+        service = RuleBacktestService(self.db)
+        self._seed_history(
+            "MISS",
+            [100, 101, 102, 103, 104, 105, 106, 170, 108, 109, 110],
+            start=date(2024, 1, 1),
+        )
+        with self.db.get_session() as session:
+            skipped = session.query(StockDaily).filter(StockDaily.code == "MISS", StockDaily.date == date(2024, 1, 8)).one()
+            session.delete(skipped)
+            anomalous = session.query(StockDaily).filter(StockDaily.code == "MISS", StockDaily.date == date(2024, 1, 9)).one()
+            anomalous.high = 120.0
+            anomalous.low = 121.0
+            session.commit()
+
+        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="MISS",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                start_date="2024-01-01",
+                end_date="2024-01-16",
+                lookback_bars=20,
+                benchmark_mode="same_symbol_buy_and_hold",
+                confirmed=True,
+            )
+
+        data_quality = response["data_quality"]
+        warning_codes = {warning["code"] for warning in data_quality["warnings"]}
+        self.assertGreater(data_quality["missing_bar_count"], 0)
+        self.assertIn("missing_bars_detected", warning_codes)
+        self.assertGreater(data_quality["anomaly_count"], 0)
+        self.assertIn("ohlcv_anomalies_detected", warning_codes)
+        self.assertTrue(any(anomaly["type"] == "high_below_low" for anomaly in data_quality["anomalies"]))
+
+    def test_rule_backtest_data_quality_reports_missing_benchmark_without_changing_returns(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
+            baseline = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                benchmark_mode="none",
+                confirmed=True,
+            )
+
+        with (
+            patch.object(service, "_ensure_market_history", return_value=0),
+            patch.object(service, "_get_llm_adapter", return_value=None),
+            patch.object(
+                service,
+                "_load_external_benchmark_context",
+                return_value=([], {"label": "SPY", "resolved_mode": "custom_code", "return_pct": None}, "SPY 在当前窗口没有可用行情。"),
+            ),
+        ):
+            response = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                benchmark_mode="custom_code",
+                benchmark_code="SPY",
+                confirmed=True,
+            )
+
+        self.assertEqual(response["total_return_pct"], baseline["total_return_pct"])
+        self.assertTrue(any(warning["code"] == "benchmark_data_missing" for warning in response["data_quality"]["warnings"]))
+
     def test_service_run_backtest_fetches_missing_us_history_via_shared_local_first_helper(self) -> None:
         service = RuleBacktestService(self.db)
         frame = pd.DataFrame(

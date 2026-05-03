@@ -867,6 +867,7 @@ class RuleBacktestHistoryItem(BaseModel):
     avg_holding_calendar_days: Optional[float] = None
     final_equity: Optional[float] = None
     summary: Dict[str, Any] = Field(default_factory=dict)
+    data_quality: Dict[str, Any] = Field(default_factory=dict)
     robustness_analysis: Dict[str, Any] = Field(default_factory=dict)
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)
     readback_integrity: Dict[str, Any] = Field(default_factory=dict)
@@ -939,6 +940,7 @@ class RuleBacktestRunResponse(BaseModel):
     avg_holding_calendar_days: Optional[float] = None
     final_equity: Optional[float] = None
     summary: Dict[str, Any] = Field(default_factory=dict)
+    data_quality: Dict[str, Any] = Field(default_factory=dict)
     robustness_analysis: Dict[str, Any] = Field(default_factory=dict)
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)
     readback_integrity: Dict[str, Any] = Field(default_factory=dict)
@@ -1071,6 +1073,7 @@ class BacktestResultItem(BaseModel):
     simulated_exit_reason: Optional[str] = None
     simulated_return_pct: Optional[float] = None
     market_data_sources: List[str] = Field(default_factory=list)
+    data_quality: Dict[str, Any] = Field(default_factory=dict)
     execution_assumptions: Dict[str, Any] = Field(default_factory=dict)
 
 

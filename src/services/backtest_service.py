@@ -792,6 +792,52 @@ class BacktestService:
                 deduped.append(item)
         return deduped
 
+    @staticmethod
+    def _standard_result_data_quality(
+        *,
+        code: str,
+        analysis_date: Optional[date],
+        eval_window_days: int,
+        market_data_sources: List[str],
+    ) -> Dict[str, Any]:
+        source = market_data_sources[0] if market_data_sources else "database_cache"
+        requested_end = analysis_date + timedelta(days=max(eval_window_days * 2, eval_window_days)) if analysis_date else None
+        warnings = [
+            {
+                "code": "adjustment_status_unknown",
+                "severity": "info",
+                "message": "Adjustment status is unknown for historical analysis evaluation results.",
+            },
+            {
+                "code": "dividends_splits_unknown",
+                "severity": "info",
+                "message": "Dividend and split handling is unknown for historical analysis evaluation results.",
+            },
+        ]
+        if not market_data_sources:
+            warnings.append(
+                {
+                    "code": "source_metadata_incomplete",
+                    "severity": "info",
+                    "message": "Stored bars do not expose a concrete upstream provider.",
+                }
+            )
+        return {
+            "symbol": code,
+            "provider": source,
+            "source": source,
+            "frequency": "1d",
+            "requested_start": analysis_date.isoformat() if analysis_date else None,
+            "requested_end": requested_end.isoformat() if requested_end else None,
+            "bar_count": None,
+            "expected_bar_count": eval_window_days,
+            "missing_bar_count": None,
+            "adjustment_mode": "unknown",
+            "dividends_handled": "unknown",
+            "splits_handled": "unknown",
+            "warnings": warnings,
+        }
+
     def _try_fill_daily_data(self, *, code: str, analysis_date: date, eval_window_days: int) -> Optional[BacktestSourceMetadata]:
         try:
             # Fetch a window that covers the analysis bar plus the forward evaluation bars.
@@ -1248,6 +1294,12 @@ class BacktestService:
             "simulated_exit_reason": row.simulated_exit_reason,
             "simulated_return_pct": row.simulated_return_pct,
             "market_data_sources": market_data_sources,
+            "data_quality": self._standard_result_data_quality(
+                code=row.code,
+                analysis_date=row.analysis_date,
+                eval_window_days=row.eval_window_days,
+                market_data_sources=market_data_sources,
+            ),
             "execution_assumptions": assumptions,
         }
 

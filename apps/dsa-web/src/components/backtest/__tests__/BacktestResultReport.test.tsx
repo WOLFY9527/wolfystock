@@ -90,9 +90,59 @@ function makeRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBacktest
     avgHoldingCalendarDays: 20,
     finalEquity: 124600,
     summary: {},
+    dataQuality: {
+      symbol: 'ORCL',
+      benchmarkSymbol: 'QQQ',
+      provider: 'Local US Parquet',
+      source: 'local_us_parquet',
+      frequency: '1d',
+      requestedStart: '2026-03-01',
+      requestedEnd: '2026-05-03',
+      actualStart: '2026-03-01',
+      actualEnd: '2026-05-03',
+      barCount: 64,
+      expectedBarCount: 64,
+      missingBarCount: 0,
+      missingDates: [],
+      anomalyCount: 0,
+      anomalies: [],
+      adjustmentMode: 'unknown',
+      dividendsHandled: 'unknown',
+      splitsHandled: 'unknown',
+      timezone: 'America/New_York',
+      currency: 'USD',
+      market: 'US',
+      isComplete: false,
+      qualityScore: 0.92,
+      warnings: [
+        { code: 'adjustment_status_unknown', severity: 'info', message: 'Adjustment status unknown.' },
+      ],
+    },
     executionAssumptions: {
-      signalTiming: 'bar close',
-      fillTiming: 'next bar open',
+      engine: 'deterministic',
+      signalTiming: 'bar_close',
+      fillTiming: 'next_bar_open',
+      fillPrice: 'open',
+      allowFractionalShares: true,
+      lotSize: 1,
+      volumeParticipationLimit: null,
+      limitUpDownHandling: 'not_modeled',
+      haltHandling: 'not_modeled',
+      shortSelling: 'disabled',
+      feeModel: {
+        type: 'bps',
+        commissionBps: 2,
+        minCommission: null,
+      },
+      slippageModel: {
+        type: 'bps',
+        slippageBps: 1,
+      },
+      market: 'US',
+      currency: 'USD',
+      warnings: [
+        { code: 'market_rules_not_modeled', severity: 'info', message: 'Limit and halt handling are not modeled.' },
+      ],
       priceBasis: 'open',
       feeBps: 2,
       slippageBps: 1,
@@ -176,6 +226,7 @@ describe('BacktestResultReport', () => {
       benchmarkSummary: { resolvedMode: 'none', unavailableReason: 'missing benchmark' },
       auditRows: [],
       trades: [],
+      dataQuality: undefined,
       executionAssumptions: {},
     })} mode="simple" />);
 
@@ -184,6 +235,35 @@ describe('BacktestResultReport', () => {
     expect(screen.getByText('基准数据不足，无法计算超额收益。')).toBeInTheDocument();
     expect(screen.getByText('数据质量信息不足：当前结果未返回复权/分红/拆股元数据。')).toBeInTheDocument();
     expect(screen.getByText('执行假设信息不足：当前结果未返回成交时点/撮合规则。')).toBeInTheDocument();
+  });
+
+  it('renders enriched data quality metadata and compact warnings', () => {
+    render(<BacktestResultReport run={makeRun()} mode="simple" />);
+
+    const panel = screen.getByTestId('backtest-report-data-quality');
+    expect(within(panel).getByText('Local US Parquet')).toBeInTheDocument();
+    expect(within(panel).getByText('1d')).toBeInTheDocument();
+    expect(within(panel).getByText('64 / 64')).toBeInTheDocument();
+    expect(within(panel).getByText('unknown / unknown / unknown')).toBeInTheDocument();
+    expect(within(panel).getByTestId('backtest-data-quality-warning-0')).toHaveTextContent('Adjustment status unknown.');
+  });
+
+  it('renders enriched execution assumptions and compact warnings', () => {
+    render(<BacktestResultReport run={makeRun()} mode="professional" />);
+
+    const panel = screen.getByTestId('backtest-report-execution-assumptions');
+    expect(within(panel).getByText('deterministic')).toBeInTheDocument();
+    expect(within(panel).getByText('bar close -> next bar open')).toBeInTheDocument();
+    expect(within(panel).getByText('2bp / 1bp')).toBeInTheDocument();
+    expect(within(panel).getByText('fractional / lot 1')).toBeInTheDocument();
+    expect(within(panel).getByTestId('backtest-execution-warning-0')).toHaveTextContent('Limit and halt handling are not modeled.');
+  });
+
+  it('marks report diagnostic panels as narrow-safe stacked grids', () => {
+    render(<BacktestResultReport run={makeRun()} mode="simple" />);
+
+    expect(screen.getByTestId('backtest-data-quality-grid')).toHaveClass('grid-cols-1', 'sm:grid-cols-2');
+    expect(screen.getByTestId('backtest-execution-assumptions-grid')).toHaveClass('grid-cols-1', 'sm:grid-cols-2');
   });
 
   it('keeps daily ledger collapsed and bounded until expanded', () => {
