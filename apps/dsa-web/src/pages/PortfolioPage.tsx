@@ -487,6 +487,7 @@ const PortfolioPage: React.FC = () => {
 
   const [accounts, setAccounts] = useState<PortfolioAccountItem[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<AccountOption>('all');
+  const [selectedTradeAccount, setSelectedTradeAccount] = useState<AccountOption>('all');
   const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [accountCreating, setAccountCreating] = useState(false);
   const [accountCreateError, setAccountCreateError] = useState<string | null>(null);
@@ -568,8 +569,13 @@ const PortfolioPage: React.FC = () => {
   const queryAccountId = selectedAccount === 'all' ? undefined : selectedAccount;
   const refreshViewKey = `${selectedAccount === 'all' ? 'all' : `account:${selectedAccount}`}:cost:${costMethod}`;
   const refreshContextRef = useRef<FxRefreshContext>({ viewKey: refreshViewKey, requestId: 0 });
+  const activeAccounts = useMemo(() => accounts.filter((item) => item.isActive !== false), [accounts]);
+  const writableAccounts = activeAccounts;
   const hasAccounts = accounts.length > 0;
-  const writableAccount = selectedAccount === 'all' ? undefined : accounts.find((item) => item.id === selectedAccount);
+  const hasActiveAccounts = activeAccounts.length > 0;
+  const hasWritableAccounts = writableAccounts.length > 0;
+  const scopedAccount = selectedAccount === 'all' ? undefined : accounts.find((item) => item.id === selectedAccount);
+  const writableAccount = selectedTradeAccount === 'all' ? undefined : writableAccounts.find((item) => item.id === selectedTradeAccount);
   const writableAccountId = writableAccount?.id;
   const writeBlocked = !writableAccountId;
   const ibkrConnection = useMemo(
@@ -599,10 +605,17 @@ const PortfolioPage: React.FC = () => {
     try {
       const response = await portfolioApi.getAccounts(false);
       const items = response.accounts || [];
+      const nextActiveAccounts = items.filter((item) => item.isActive !== false);
+      const nextWritableAccounts = nextActiveAccounts;
       setAccounts(items);
       setSelectedAccount((prev) => {
         if (items.length === 0) return 'all';
         if (prev !== 'all' && !items.some((item) => item.id === prev)) return items[0].id;
+        return prev;
+      });
+      setSelectedTradeAccount((prev) => {
+        if (nextWritableAccounts.length === 0) return 'all';
+        if (prev === 'all' || !nextWritableAccounts.some((item) => item.id === prev)) return nextWritableAccounts[0].id;
         return prev;
       });
       if (items.length === 0) setShowCreateAccount(true);
@@ -967,6 +980,7 @@ const PortfolioPage: React.FC = () => {
       setAccounts(activeAccounts);
       const fallbackId = result.nextAccountId ?? activeAccounts[0]?.id;
       setSelectedAccount(fallbackId ?? 'all');
+      setSelectedTradeAccount(fallbackId ?? 'all');
       setPendingAccountDelete(null);
       setAccountCreateSuccess(copy.accountArchived);
       setAccountCreateError(null);
@@ -997,6 +1011,7 @@ const PortfolioPage: React.FC = () => {
       });
       await loadAccounts();
       setSelectedAccount(created.id);
+      setSelectedTradeAccount(created.id);
       setShowCreateAccount(false);
       setWriteWarning(null);
       setAccountForm({
@@ -1220,14 +1235,27 @@ const PortfolioPage: React.FC = () => {
   const totalCashDisplay = convertMoney(totalCash, snapshotCurrency);
   const totalMarketValueDisplay = convertMoney(totalMarketValue, snapshotCurrency);
   const totalUnrealizedDisplay = convertMoney(totalUnrealizedPnl, snapshotCurrency);
+  const hasHoldings = positionRows.length > 0;
+  const hasHistory = tradeEvents.length > 0 || cashEvents.length > 0 || corporateEvents.length > 0;
+  const formatDisplayMoney = (value: number, converted: ConvertedMoney, fromCurrency: string) => {
+    if (converted) return formatMoney(converted.value, displayCurrency);
+    if (value === 0) return formatMoney(0, displayCurrency);
+    return formatMoney(value, fromCurrency);
+  };
+  const hasFxUnavailable = fxRateRows.some((item) => item.source === 'missing' || item.rate == null)
+    || (!totalEquityDisplay && totalEquity !== 0)
+    || (!totalCashDisplay && totalCash !== 0)
+    || (!totalMarketValueDisplay && totalMarketValue !== 0)
+    || (!totalUnrealizedDisplay && totalUnrealizedPnl !== 0);
   const fxFreshnessLabel = fxRateRows.some((item) => item.isStale || item.source === 'missing')
     ? copy.fxStale
     : copy.fxFresh;
   const fxProviderLabel = fxRateRows.find((item) => item.source && item.source !== 'missing')?.source || 'frankfurter';
   const historyHasNextPage = currentEventCount >= DEFAULT_PAGE_SIZE;
-  const hasAnyHistoryRecords = tradeEvents.length > 0 || cashEvents.length > 0 || corporateEvents.length > 0;
   const totalAssetsTitle = '总资产 Total Assets';
   const historyDrawerTitle = language === 'en' ? 'Order History' : '历史记录';
+  const zeroAssetStatus = language === 'zh' ? '等待交易录入' : 'Awaiting trade entry';
+  const noHoldingsHistoryNote = language === 'zh' ? '历史记录存在，当前无持仓' : 'History exists while current holdings are empty';
 
   const historyPanelContent = (
     <div className="flex h-full min-h-0 flex-col bg-[var(--surface-1)] lg:bg-transparent">
@@ -1274,8 +1302,8 @@ const PortfolioPage: React.FC = () => {
           {eventType === 'trade' ? (
             tradeEvents.length === 0 ? (
               <div className="theme-panel-subtle rounded-xl px-5 py-4 text-sm text-secondary-text">
-                {positionRows.length === 0 && hasAnyHistoryRecords
-                  ? (language === 'zh' ? '历史记录存在，当前无持仓' : 'History exists while current holdings are empty')
+                {!hasHoldings && hasHistory
+                  ? noHoldingsHistoryNote
                   : copy.emptyEventsBody}
               </div>
             ) : (
@@ -1298,8 +1326,8 @@ const PortfolioPage: React.FC = () => {
           {eventType === 'cash' ? (
             cashEvents.length === 0 ? (
               <div className="theme-panel-subtle rounded-xl px-5 py-4 text-sm text-secondary-text">
-                {positionRows.length === 0 && hasAnyHistoryRecords
-                  ? (language === 'zh' ? '历史记录存在，当前无持仓' : 'History exists while current holdings are empty')
+                {!hasHoldings && hasHistory
+                  ? noHoldingsHistoryNote
                   : copy.emptyEventsBody}
               </div>
             ) : (
@@ -1322,8 +1350,8 @@ const PortfolioPage: React.FC = () => {
           {eventType === 'corporate' ? (
             corporateEvents.length === 0 ? (
               <div className="theme-panel-subtle rounded-xl px-5 py-4 text-sm text-secondary-text">
-                {positionRows.length === 0 && hasAnyHistoryRecords
-                  ? (language === 'zh' ? '历史记录存在，当前无持仓' : 'History exists while current holdings are empty')
+                {!hasHoldings && hasHistory
+                  ? noHoldingsHistoryNote
                   : copy.emptyEventsBody}
               </div>
             ) : (
@@ -1377,42 +1405,76 @@ const PortfolioPage: React.FC = () => {
         )}
       >
         <section className="mx-auto w-full max-w-[1880px] px-4 sm:px-6 lg:px-8 2xl:px-10">
-          <div data-testid="portfolio-workspace-grid" className="grid grid-cols-12 items-start gap-5 xl:gap-6">
+          <div data-testid="portfolio-workspace-grid" className="grid grid-cols-12 items-start gap-4 xl:gap-5">
 	            <div
 	              data-testid="portfolio-total-assets-card"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex shrink-0 flex-col gap-5 lg:flex-row lg:items-stretch lg:justify-between`}
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 grid shrink-0 gap-4 lg:grid-cols-[minmax(260px,1.1fr)_minmax(360px,1.7fr)_minmax(220px,0.8fr)] lg:items-stretch`}
 	            >
-	              <div className="flex min-w-0 flex-1 flex-col justify-between gap-5">
+	              <div className="flex min-w-0 flex-col justify-between gap-4">
                   <div className="min-w-0">
 	                <div className="mb-3 flex min-w-0 flex-wrap items-center gap-3">
 	                  <h1 className="text-xs uppercase tracking-widest text-muted-text">{totalAssetsTitle}</h1>
 	                  {selectedAccount === 'all' ? (
 	                    <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">{copy.allAccounts}</span>
-	                  ) : writableAccount ? (
-	                    <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">{writableAccount.name}</span>
+	                  ) : scopedAccount ? (
+	                    <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">{scopedAccount.name}</span>
 	                  ) : null}
 	                </div>
 	                <div
 	                  data-testid="portfolio-total-assets-value"
-	                  className="font-mono text-[2.4rem] font-bold leading-none text-foreground tabular-nums md:text-[3.6rem]"
+	                  className="font-mono text-[2rem] font-bold leading-none text-foreground tabular-nums md:text-[2.8rem]"
 	                  style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
 	                >
-	                  {totalEquityDisplay ? formatMoney(totalEquityDisplay.value, displayCurrency) : formatMoney(totalEquity, snapshotCurrency)}
+	                  {formatDisplayMoney(totalEquity, totalEquityDisplay, snapshotCurrency)}
 	                </div>
+	                {totalEquity === 0 ? (
+	                  <div className="mt-2 text-xs text-white/35">{zeroAssetStatus}</div>
+	                ) : null}
 	                {snapshotCurrency !== displayCurrency ? (
 	                  <div className="mt-2 font-mono text-xs text-white/35">{formatMoney(totalEquity, snapshotCurrency)}</div>
 	                ) : null}
                   </div>
                   <div className="flex min-w-0 flex-wrap gap-2">
                     <span className="rounded-full border border-white/5 bg-white/[0.025] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white/40">
-                      {copy.accountCount} {snapshot?.accountCount ?? accounts.length}
-                    </span>
-                    <span className="rounded-full border border-white/5 bg-white/[0.025] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white/40">
                       {copy.costMethodLabel} {costMethod.toUpperCase()}
                     </span>
+                    {hasFxUnavailable ? (
+                      <span className="rounded-full border border-amber-300/15 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-200">FX unavailable</span>
+                    ) : null}
                   </div>
 	              </div>
-	              <div className="grid w-full min-w-0 gap-3 sm:grid-cols-2 lg:w-[680px] xl:grid-cols-4">
+	              <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
+	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.totalCash}</div>
+	                  <div className="mt-1 font-mono text-sm text-white tabular-nums">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</div>
+	                </div>
+	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.totalMarketValue}</div>
+	                  <div className="mt-1 font-mono text-sm text-white tabular-nums">{formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}</div>
+	                </div>
+	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.positionUnrealized}</div>
+	                  <div className={`mt-1 font-mono text-sm tabular-nums ${totalUnrealizedPnl >= 0 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]' : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'}`}>
+	                    {totalUnrealizedDisplay ? formatSignedMoney(totalUnrealizedDisplay.value, displayCurrency) : formatSignedMoney(0, displayCurrency)}
+	                  </div>
+	                </div>
+	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.accountCount}</div>
+	                  <div className="mt-1 font-mono text-sm text-white tabular-nums">{snapshot?.accountCount ?? activeAccounts.length}</div>
+	                </div>
+	              </div>
+	              <div className="flex min-w-0 flex-col justify-between gap-3">
+	                <Select
+	                  label="ASSET SCOPE"
+	                  labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+	                  value={String(selectedAccount)}
+	                  onChange={(value) => setSelectedAccount(value === 'all' ? 'all' : Number(value))}
+	                  options={[
+	                    { value: 'all', label: copy.allAccounts },
+	                    ...activeAccounts.map((account) => ({ value: String(account.id), label: account.name })),
+	                  ]}
+	                  className={PORTFOLIO_SELECT_CLASS}
+	                />
 	                <Select
 	                  label="DISPLAY CURRENCY"
 	                  labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
@@ -1421,67 +1483,46 @@ const PortfolioPage: React.FC = () => {
 	                  options={DISPLAY_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
 	                  className={PORTFOLIO_SELECT_CLASS}
 	                />
-	                <div className="flex flex-col justify-end gap-2 xl:col-span-2">
-	                  <Button
-	                    type="button"
-	                    variant="ghost"
-	                    className={`${PORTFOLIO_SECONDARY_BUTTON_CLASS} w-full`}
-	                    onClick={() => void handleRefreshDisplayFx()}
-	                    disabled={isLoading || fxRefreshing}
-	                  >
-	                    {copy.refreshFx}
-	                  </Button>
-	                  <div className="min-w-0 text-[10px] font-bold uppercase tracking-widest text-white/35">
-	                    {fxProviderLabel.toUpperCase()} · {fxFreshnessLabel} · {fxLastUpdated}
+	                <Button
+	                  type="button"
+	                  variant="ghost"
+	                  className={`${PORTFOLIO_SECONDARY_BUTTON_CLASS} w-full`}
+	                  onClick={() => void handleRefreshDisplayFx()}
+	                  disabled={isLoading || fxRefreshing}
+	                >
+	                  {copy.refreshFx}
+	                </Button>
+	                <div className="min-w-0 text-[10px] font-bold uppercase tracking-widest text-white/35">
+	                  {fxProviderLabel.toUpperCase()} · {fxFreshnessLabel} · {fxLastUpdated}
+	                </div>
+	                {fxRefreshFeedback && leftTab !== 'fx' ? (
+	                  <div className={`text-xs ${
+	                    fxRefreshFeedback.tone === 'success'
+	                      ? 'text-emerald-300'
+	                      : fxRefreshFeedback.tone === 'warning'
+	                        ? 'text-amber-200'
+	                        : 'text-secondary-text'
+	                  }`}>
+	                    {fxRefreshFeedback.text}
 	                  </div>
-	                  {fxRefreshFeedback && leftTab !== 'fx' ? (
-	                    <div className={`text-xs ${
-	                      fxRefreshFeedback.tone === 'success'
-	                        ? 'text-emerald-300'
-	                        : fxRefreshFeedback.tone === 'warning'
-	                          ? 'text-amber-200'
-	                          : 'text-secondary-text'
-	                    }`}>
-	                      {fxRefreshFeedback.text}
-	                    </div>
-	                  ) : null}
-	                </div>
-	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.totalCash}</div>
-	                  <div className="mt-1 font-mono text-sm text-white tabular-nums">{totalCashDisplay ? formatMoney(totalCashDisplay.value, displayCurrency) : 'FX unavailable'}</div>
-	                </div>
-	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.totalMarketValue}</div>
-	                  <div className="mt-1 font-mono text-sm text-white tabular-nums">{totalMarketValueDisplay ? formatMoney(totalMarketValueDisplay.value, displayCurrency) : 'FX unavailable'}</div>
-	                </div>
-	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.positionUnrealized}</div>
-	                  <div className={`mt-1 font-mono text-sm tabular-nums ${totalUnrealizedPnl >= 0 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]' : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'}`}>
-	                    {totalUnrealizedDisplay ? formatSignedMoney(totalUnrealizedDisplay.value, displayCurrency) : 'FX unavailable'}
-	                  </div>
-	                </div>
+	                ) : null}
 	              </div>
 	            </div>
 	
-	            <div
-	              data-testid="portfolio-current-holdings-panel"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col overflow-visible xl:col-span-7 xl:min-h-[300px] 2xl:col-span-8`}
-	            >
-	              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 pb-4">
-	                <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
-	                  Current Holdings ({positionRows.length === 0 ? '共 0 项' : `共 ${positionRows.length} 项`})
-	                </h2>
-	              </div>
+	            {hasHoldings ? (
+	              <div
+	                data-testid="portfolio-current-holdings-panel"
+	                className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col overflow-visible xl:col-span-7 2xl:col-span-8`}
+	              >
+	                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 pb-4">
+	                  <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
+	                    Current Holdings ({`共 ${positionRows.length} 项`})
+	                  </h2>
+	                </div>
 	
-	              <div className="pt-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
-	                <div className="flex flex-col">
-	                  {positionRows.length === 0 ? (
-	                    <div data-testid="portfolio-empty-holdings" className="rounded-xl border border-white/5 bg-white/[0.02] px-5 py-4 text-sm text-secondary-text">
-	                      <div className="text-foreground">{language === 'zh' ? '当前无持仓' : 'No current holdings'}</div>
-	                      <div className="mt-1 text-xs text-muted-text">{language === 'zh' ? '录入交易后自动生成持仓' : 'New trades generate positions automatically.'}</div>
-	                    </div>
-	                  ) : (
-	                    positionRows.map((row) => (
+	                <div className="pt-3 lg:max-h-[420px] lg:min-h-0 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
+	                  <div className="flex flex-col">
+	                    {positionRows.map((row) => (
 	                      <div
 	                        key={`${row.accountId}-${row.symbol}-${row.market}`}
 	                        className="flex flex-col gap-3 border-b border-white/5 px-1 py-3 transition-colors hover:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between"
@@ -1511,11 +1552,52 @@ const PortfolioPage: React.FC = () => {
 	                          </div>
 	                        </div>
 	                      </div>
-	                    ))
-	                  )}
+	                    ))}
+	                  </div>
 	                </div>
 	              </div>
-	            </div>
+	            ) : (
+	              <div
+	                data-testid="portfolio-start-card"
+	                className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-4 xl:col-span-7 2xl:col-span-8`}
+	              >
+	                <div className="flex flex-wrap items-start justify-between gap-3">
+	                  <div>
+	                    <h2 className="text-sm font-semibold text-white">{language === 'zh' ? '当前无持仓' : 'No current holdings'}</h2>
+	                    <p className="mt-1 text-sm text-white/45">{language === 'zh' ? '录入第一笔买入交易后自动生成持仓' : 'Enter the first buy trade to generate holdings automatically.'}</p>
+	                  </div>
+	                  {hasHistory ? (
+	                    <span className="rounded-full border border-amber-300/15 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-200">{noHoldingsHistoryNote}</span>
+	                  ) : null}
+	                </div>
+	                <div className="grid gap-2 sm:grid-cols-3">
+	                  <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">active accounts</div>
+	                    <div className="mt-1 font-mono text-lg text-white">{activeAccounts.length}</div>
+	                  </div>
+	                  <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">writable accounts</div>
+	                    <div className="mt-1 font-mono text-lg text-white">{writableAccounts.length}</div>
+	                  </div>
+	                  <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">selected trade account</div>
+	                    <div className="mt-1 truncate text-sm text-white">{writableAccount?.name || copy.allAccounts}</div>
+	                  </div>
+	                </div>
+	                <div className="grid gap-2 text-xs text-white/45 sm:grid-cols-3">
+	                  <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '1. 选择账户' : '1. Select account'}</div>
+	                  <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '2. 输入标的' : '2. Enter symbol'}</div>
+	                  <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '3. 提交交易' : '3. Submit trade'}</div>
+	                </div>
+	                {!hasWritableAccounts ? (
+	                  <div className="rounded-lg border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-xs text-amber-200">
+	                    {hasActiveAccounts
+	                      ? (language === 'zh' ? '当前账户不可写，请选择具体可写账户。' : 'Current accounts are not writable. Select a writable account.')
+	                      : (language === 'zh' ? '暂无可写账户，请先创建账户。' : 'No writable account yet. Create an account first.')}
+	                  </div>
+	                ) : null}
+	              </div>
+	            )}
 	
 	          <section data-testid="portfolio-trade-station-card" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-5 overflow-visible xl:col-span-5 xl:min-h-[300px] 2xl:col-span-4`}>
             <div className="shrink-0">
@@ -1526,13 +1608,13 @@ const PortfolioPage: React.FC = () => {
               </div>
               <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <Select
-                  label="ACCOUNT"
+                  label="TRADE ACCOUNT"
                   labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
-                  value={String(selectedAccount)}
-                  onChange={(value) => setSelectedAccount(value === 'all' ? 'all' : Number(value))}
+                  value={String(selectedTradeAccount)}
+                  onChange={(value) => setSelectedTradeAccount(value === 'all' ? 'all' : Number(value))}
                   options={[
                     { value: 'all', label: copy.allAccounts },
-                    ...accounts.map((account) => ({ value: String(account.id), label: account.name })),
+                    ...writableAccounts.map((account) => ({ value: String(account.id), label: account.name })),
                   ]}
                   className={PORTFOLIO_SELECT_CLASS}
                   controlClassName="rounded-lg"
@@ -1553,8 +1635,8 @@ const PortfolioPage: React.FC = () => {
                 />
               </div>
               <div data-testid="portfolio-trade-station-summary" className="mt-3 flex flex-col gap-1 border-y border-white/5 py-2">
-                <div className="flex justify-between gap-3 text-xs"><span className="text-muted-text">{copy.totalCash}</span><span className="font-mono text-foreground">{totalCashDisplay ? formatMoney(totalCashDisplay.value, displayCurrency) : 'FX unavailable'}</span></div>
-                <div className="flex justify-between gap-3 text-xs"><span className="text-muted-text">{copy.totalMarketValue}</span><span className="font-mono text-foreground">{totalMarketValueDisplay ? formatMoney(totalMarketValueDisplay.value, displayCurrency) : 'FX unavailable'}</span></div>
+                <div className="flex justify-between gap-3 text-xs"><span className="text-muted-text">{copy.totalCash}</span><span className="font-mono text-foreground">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</span></div>
+                <div className="flex justify-between gap-3 text-xs"><span className="text-muted-text">{copy.totalMarketValue}</span><span className="font-mono text-foreground">{formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}</span></div>
                 <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className={snapshot?.fxStale ? 'text-amber-300' : 'text-emerald-400'}>{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
               </div>
               {tradeFeedback ? (
@@ -1859,7 +1941,7 @@ const PortfolioPage: React.FC = () => {
             </div>
           </section>
 
-            <section data-testid="portfolio-history-panel" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex max-h-[560px] min-h-[300px] flex-col overflow-hidden`}>
+            <section data-testid="portfolio-history-panel" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col overflow-hidden ${currentEventCount > 5 ? 'max-h-[560px]' : 'max-h-none'}`}>
               {historyPanelContent}
             </section>
           </div>

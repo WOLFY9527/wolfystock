@@ -92,6 +92,7 @@ type AccountItem = {
   name: string;
   market?: 'cn' | 'hk' | 'us' | 'global';
   baseCurrency?: string;
+  isActive?: boolean;
 };
 
 function makeAccounts(items: AccountItem[] = [{ id: 1, name: 'Main' }]) {
@@ -102,7 +103,7 @@ function makeAccounts(items: AccountItem[] = [{ id: 1, name: 'Main' }]) {
       broker: 'Demo',
       market: item.market ?? 'us',
       baseCurrency: item.baseCurrency ?? 'CNY',
-      isActive: true,
+      isActive: item.isActive ?? true,
       ownerId: null,
       createdAt: '2026-03-19T00:00:00Z',
       updatedAt: '2026-03-19T00:00:00Z',
@@ -146,9 +147,9 @@ function makeSnapshot(options: {
     costMethod: 'fifo' as const,
     currency: 'CNY',
     accountCount: options.accountCount ?? 1,
-    totalCash: 1000,
-    totalMarketValue: 2000,
-    totalEquity: 3000,
+    totalCash: options.includePosition ? 1000 : 0,
+    totalMarketValue: options.includePosition ? 2000 : 0,
+    totalEquity: options.includePosition ? 3000 : 0,
     realizedPnl: 0,
     unrealizedPnl: 0,
     feeTotal: 0,
@@ -206,9 +207,9 @@ function makeSnapshot(options: {
         baseCurrency: 'CNY',
         asOf: '2026-03-19',
         costMethod: 'fifo' as const,
-        totalCash: 1000,
-        totalMarketValue: 2000,
-        totalEquity: 3000,
+        totalCash: options.includePosition ? 1000 : 0,
+        totalMarketValue: options.includePosition ? 2000 : 0,
+        totalEquity: options.includePosition ? 3000 : 0,
         realizedPnl: 0,
         unrealizedPnl: 0,
         feeTotal: 0,
@@ -409,7 +410,7 @@ describe('PortfolioPage FX refresh', () => {
 
     const workspace = screen.getByTestId('portfolio-workspace-grid');
     expect(workspace.parentElement).toHaveClass('max-w-[1880px]', 'px-4', 'sm:px-6', 'lg:px-8', '2xl:px-10');
-    expect(workspace).toHaveClass('grid', 'grid-cols-12', 'items-start', 'gap-5', 'xl:gap-6');
+    expect(workspace).toHaveClass('grid', 'grid-cols-12', 'items-start', 'gap-4', 'xl:gap-5');
     expect(screen.getByTestId('portfolio-bento-page')).toHaveAttribute('data-bento-surface', 'true');
     expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6', 'min-h-0');
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar');
@@ -442,17 +443,18 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-left-tab-switcher').className).toContain('bg-white/[0.05]');
     expect(screen.getByRole('button', { name: '交易' }).className).toContain('bg-white/10');
     expect(screen.getByRole('button', { name: '账户' }).className).not.toContain('border-white');
-    expect(screen.getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Current Holdings/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-start-card')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '历史记录 ↗' })).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-history-panel')).toHaveClass('col-span-12');
     expect(screen.getByRole('option', { name: translate('zh', 'portfolio.costFutuDiluted') })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: translate('zh', 'portfolio.costThsPnl') })).toBeInTheDocument();
-    const accountSelect = screen.getByLabelText('ACCOUNT') as HTMLSelectElement;
+    const accountSelect = screen.getByLabelText('TRADE ACCOUNT') as HTMLSelectElement;
     const costMethodSelect = screen.getByLabelText('COST METHOD') as HTMLSelectElement;
     expect(accountSelect).toHaveClass('select-surface', 'absolute', 'inset-0', 'opacity-0');
     expect(accountSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
     expect(accountSelect.closest('.select-field__control')?.querySelector('.select-field__overlay')).toHaveAttribute('aria-hidden', 'true');
-    expect(accountSelect.closest('.select-field__control')?.querySelector('.select-field__value')).toHaveTextContent(translate('zh', 'portfolio.allAccounts'));
+    expect(accountSelect.closest('.select-field__control')?.querySelector('.select-field__value')).toHaveTextContent('Main');
     expect(accountSelect.closest('.select-field__control')?.querySelector('.select-field__icon')).toHaveClass('ml-2', 'shrink-0');
     expect(within(accountSelect).getByRole('option', { name: translate('zh', 'portfolio.allAccounts') })).toBeInTheDocument();
     expect(costMethodSelect).toHaveClass('select-surface', 'absolute', 'inset-0', 'opacity-0');
@@ -461,14 +463,14 @@ describe('PortfolioPage FX refresh', () => {
     expect(costMethodSelect.closest('.select-field__control')?.querySelector('.select-field__value')).toHaveTextContent(translate('zh', 'portfolio.costFifo'));
     expect(within(costMethodSelect).getByRole('option', { name: translate('zh', 'portfolio.costFifo') })).toBeInTheDocument();
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
-    const holdingsPanel = screen.getByTestId('portfolio-current-holdings-panel');
+    const holdingsPanel = screen.getByTestId('portfolio-start-card');
     const tradeStationSection = screen.getByRole('heading', { name: 'Trade Station' }).closest('section');
     expect(Boolean(totalAssetsCard.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(totalAssetsCard.compareDocumentPosition(holdingsPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(holdingsPanel.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
-  it('renders the mobile portfolio order as assets, holdings, trade station, history', async () => {
+  it('renders the mobile portfolio order as hero, start or holdings, trade station, history', async () => {
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
 
     render(<PortfolioPage />);
@@ -476,7 +478,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
-    const holdingsPanel = screen.getByTestId('portfolio-current-holdings-panel');
+    const holdingsPanel = screen.getByTestId('portfolio-start-card');
     const tradeStationSection = screen.getByRole('heading', { name: 'Trade Station' }).closest('section') as HTMLElement;
     const mobileHistoryPanel = screen.getByTestId('portfolio-history-panel');
 
@@ -486,16 +488,43 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(mobileHistoryPanel).getByRole('heading', { name: '历史记录' })).toBeInTheDocument();
   });
 
-  it('keeps empty holdings compact and explains disabled trade submit for all-account scope', async () => {
+  it('renders a compact no-holdings onboarding card instead of a holdings analysis panel', async () => {
+    listTrades.mockResolvedValueOnce({
+      items: [
+        { id: 7, accountId: 1, symbol: 'AAPL', market: 'us', tradeDate: '2026-03-18', side: 'buy', quantity: 1, price: 100, fee: 0, tax: 0, currency: 'USD', createdAt: '2026-03-18T00:00:00Z' },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
 
-    const holdingsPanel = screen.getByTestId('portfolio-current-holdings-panel');
-    expect(holdingsPanel).toHaveClass('xl:min-h-[300px]');
-    expect(within(holdingsPanel).getByText('当前无持仓')).toBeInTheDocument();
-    expect(within(holdingsPanel).getByText('录入交易后自动生成持仓')).toBeInTheDocument();
-    expect(within(holdingsPanel).getByTestId('portfolio-empty-holdings')).toHaveClass('py-4');
+    expect(screen.queryByTestId('portfolio-current-holdings-panel')).not.toBeInTheDocument();
+    const startCard = screen.getByTestId('portfolio-start-card');
+    expect(startCard).toHaveClass('xl:col-span-7');
+    expect(startCard).not.toHaveClass('xl:min-h-[300px]', 'min-h-[520px]');
+    expect(within(startCard).getByText('当前无持仓')).toBeInTheDocument();
+    expect(within(startCard).getByText('录入第一笔买入交易后自动生成持仓')).toBeInTheDocument();
+    expect(within(startCard).getByText('历史记录存在，当前无持仓')).toBeInTheDocument();
+    expect(within(startCard).getByText(/active accounts/i)).toBeInTheDocument();
+    expect(within(startCard).getByText(/writable accounts/i)).toBeInTheDocument();
+    expect(within(startCard).getByText(/Main/)).toBeInTheDocument();
+
+    const tradeStation = screen.getByTestId('portfolio-trade-station-card');
+    expect(within(tradeStation).getByRole('button', { name: '交易' }).className).toContain('bg-white/10');
+    expect(screen.getByLabelText('TRADE ACCOUNT')).toHaveValue('1');
+    expect(within(tradeStation).getByRole('button', { name: translate('zh', 'portfolio.submitTrade') })).not.toBeDisabled();
+  });
+
+  it('shows the disabled trade reason if the trade account is all accounts', async () => {
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.change(screen.getByLabelText('TRADE ACCOUNT'), { target: { value: 'all' } });
 
     const tradeStation = screen.getByTestId('portfolio-trade-station-card');
     expect(within(tradeStation).getByText('请选择具体账户后录入交易')).toBeInTheDocument();
@@ -554,7 +583,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(screen.getByText('USD 1,600.00')).toBeInTheDocument();
-    expect(screen.getAllByText('FX unavailable').length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId('portfolio-total-assets-card')).getAllByText('FX unavailable')).toHaveLength(1);
     expect(screen.queryByText(/≈ CNY/)).not.toBeInTheDocument();
   });
 
@@ -581,11 +610,12 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.change(screen.getByLabelText('ACCOUNT'), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText('SYMBOL'), { target: { value: 'AAPL' } });
     fireEvent.change(screen.getByLabelText('QUANTITY'), { target: { value: '10' } });
     fireEvent.change(screen.getByLabelText('PRICE'), { target: { value: '160' } });
 
+    const snapshotCallsBeforeSubmit = getSnapshot.mock.calls.length;
+    const tradeCallsBeforeSubmit = listTrades.mock.calls.length;
     const submitButton = screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') });
     fireEvent.click(submitButton);
 
@@ -597,8 +627,8 @@ describe('PortfolioPage FX refresh', () => {
     });
 
     await waitFor(() => expect(createTrade).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(3));
-    await waitFor(() => expect(listTrades).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(getSnapshot.mock.calls.length).toBeGreaterThan(snapshotCallsBeforeSubmit));
+    await waitFor(() => expect(listTrades.mock.calls.length).toBeGreaterThan(tradeCallsBeforeSubmit));
     expect(await screen.findByTestId('portfolio-trade-feedback')).toHaveTextContent('AAPL 买入已记录 · 已刷新持仓');
     expect(screen.getByLabelText('SYMBOL')).toHaveValue('');
   });
@@ -617,7 +647,6 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.change(screen.getByLabelText('ACCOUNT'), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText('SYMBOL'), { target: { value: 'AAPL' } });
     fireEvent.change(screen.getByLabelText('QUANTITY'), { target: { value: '10' } });
     fireEvent.change(screen.getByLabelText('PRICE'), { target: { value: '160' } });
@@ -668,7 +697,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText('ACCOUNT') as HTMLSelectElement;
+    const accountSelect = screen.getByLabelText('TRADE ACCOUNT') as HTMLSelectElement;
     fireEvent.change(accountSelect, { target: { value: '1' } });
     fireEvent.click(screen.getByRole('button', { name: '账户' }));
     fireEvent.click(screen.getByRole('button', { name: '删除 Main' }));
@@ -677,7 +706,7 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.deleteConfirm') }));
 
     await waitFor(() => expect(deleteAccount).toHaveBeenCalledWith(1));
-    await waitFor(() => expect((screen.getByLabelText('ACCOUNT') as HTMLSelectElement).value).toBe('2'));
+    await waitFor(() => expect((screen.getByLabelText('TRADE ACCOUNT') as HTMLSelectElement).value).toBe('2'));
     expect(await screen.findByText(translate('zh', 'portfolio.accountArchived'))).toBeInTheDocument();
   });
 
@@ -707,7 +736,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText('ACCOUNT');
+    const accountSelect = screen.getByLabelText('ASSET SCOPE');
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 1, costMethod: 'fifo' }));
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
@@ -756,7 +785,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText('ACCOUNT');
+    const accountSelect = screen.getByLabelText('ASSET SCOPE');
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(screen.getByRole('button', { name: '同步' }));
@@ -887,7 +916,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText('ACCOUNT');
+    const accountSelect = screen.getByLabelText('ASSET SCOPE');
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(screen.getByRole('button', { name: '同步' }));
@@ -929,7 +958,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText('ACCOUNT');
+    const accountSelect = screen.getByLabelText('ASSET SCOPE');
     fireEvent.change(accountSelect, { target: { value: '1' } });
 
     await waitFor(() => {
@@ -1049,7 +1078,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText('ACCOUNT');
+    const accountSelect = screen.getByLabelText('ASSET SCOPE');
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 1, costMethod: 'fifo' }));
 
@@ -1203,7 +1232,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.change(screen.getByLabelText('ACCOUNT'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('TRADE ACCOUNT'), { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(screen.getByRole('button', { name: 'Sync' }));
     fireEvent.change(
@@ -1215,6 +1244,7 @@ describe('PortfolioPage FX refresh', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: translate('en', 'portfolio.syncIbkr') }));
 
+    await waitFor(() => expect(syncIbkrReadOnly).toHaveBeenCalled());
     expect(await screen.findByText(translate('en', 'portfolio.readOnlyBadge'))).toBeInTheDocument();
     expect(screen.getByText(translate('en', 'portfolio.ibkrImportHint'))).toBeInTheDocument();
     expect(screen.getByText(translate('en', 'portfolio.syncResult'))).toBeInTheDocument();
@@ -1253,7 +1283,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.change(screen.getByLabelText('ACCOUNT'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('TRADE ACCOUNT'), { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(screen.getByRole('button', { name: '同步' }));
     fireEvent.change(
@@ -1280,7 +1310,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(screen.queryByTestId('portfolio-attribution-dashboard')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Trade Station' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Current Holdings/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-start-card')).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
     expect(screen.getByText('当前无持仓')).toBeInTheDocument();
   });
@@ -1380,6 +1411,8 @@ describe('PortfolioPage FX refresh', () => {
   });
 
   it('keeps current holdings and history in the same workspace', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true }));
+
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
