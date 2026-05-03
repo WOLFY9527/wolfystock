@@ -61,6 +61,191 @@ type HomeBentoDashboardPageProps = {
   isGuest?: boolean;
 };
 
+function buildDecisionTraceFixtureReport(): AnalysisReport {
+  return {
+    meta: {
+      queryId: 'fixture-analysis-trace-orcl',
+      stockCode: 'ORCL',
+      stockName: 'Oracle Trace Fixture',
+      companyName: 'Oracle Trace Fixture',
+      reportType: 'detailed',
+      reportLanguage: 'zh',
+      createdAt: '2026-05-04T09:00:00Z',
+      reportGeneratedAt: '2026-05-04T09:00:00Z',
+      currentPrice: 130.2,
+      changePct: -0.4,
+      modelUsed: 'fixture-model',
+      isTest: true,
+    },
+    summary: {
+      analysisSummary: 'Fixture result only; not investment advice. ORCL is waiting for a controlled pullback before any add.',
+      operationAdvice: '等待回踩',
+      trendPrediction: '短线震荡，等待量能确认。',
+      sentimentScore: 58,
+      sentimentLabel: 'Neutral',
+    },
+    strategy: {
+      idealBuy: '128.50',
+      secondaryBuy: '126.20',
+      stopLoss: '121.00',
+      takeProfit: '136.00-138.00',
+    },
+    details: {
+      standardReport: {
+        summaryPanel: {
+          stock: 'Oracle Trace Fixture',
+          ticker: 'ORCL',
+          score: 5.8,
+          currentPrice: '130.20',
+          changePct: '-0.40%',
+          operationAdvice: '等待回踩',
+          trendPrediction: '短线震荡',
+          oneSentence: 'Fixture result only; not investment advice.',
+          tags: [
+            { label: 'Fixture', value: 'Decision Trace' },
+            { label: 'Mode', value: 'Hybrid' },
+          ],
+        },
+        decisionContext: {
+          shortTermView: 'Momentum is mixed while price holds above the stop band.',
+          compositeView: 'Rule-stabilized wait/pullback state with incomplete fundamentals.',
+          adjustmentReason: 'Fixture keeps deterministic browser smoke independent from live providers.',
+        },
+        decisionPanel: {
+          setupType: 'Wait for pullback',
+          confidence: '0.64',
+          keyAction: 'wait_pullback',
+          analysisPrice: 130.2,
+          idealEntry: '128.50',
+          idealEntryCenter: 128.5,
+          backupEntry: '126.20',
+          backupEntryCenter: 126.2,
+          stopLoss: '121.00',
+          stopLossLevel: 121,
+          target: '136.00-138.00',
+          targetZone: '136.00-138.00',
+          buildStrategy: 'Use fixture data only to verify Home rendering and trace drawer behavior.',
+          riskControlStrategy: 'Stop required if the fixture support band fails.',
+          executionReminders: ['Do not treat fixture data as live analysis.'],
+        },
+        reasonLayer: {
+          coreReasons: [
+            'Rule-stabilized action for fixture verification.',
+            'Fundamental data intentionally incomplete.',
+          ],
+          topRisk: 'Fixture warning: action and plan require position-context separation.',
+          checklistSummary: 'Data source states include used, missing, and unknown.',
+        },
+        technicalFields: [
+          { label: 'MA alignment', value: 'mixed', source: 'technical_rule' },
+          { label: 'Risk control', value: 'stop required', source: 'rule' },
+        ],
+        fundamentalFields: [
+          { label: 'Revenue Growth', value: 'N/A', status: 'missing' },
+          { label: 'Free Cash Flow', value: '-', status: 'missing' },
+        ],
+        coverageNotes: {
+          dataSources: ['quote: used', 'fundamental: missing', 'scanner: unknown'],
+          coverageGaps: ['Fundamental data intentionally incomplete.'],
+          conflictNotes: ['Fixture warning: action and plan require position-context separation.'],
+          methodNotes: ['No live LLM/provider call is required for this fixture.'],
+        },
+      },
+    },
+    decisionTrace: {
+      engineVersion: 'analysis_decision_trace_v1',
+      mode: 'hybrid',
+      endpoint: '/fixture/home-analysis-trace',
+      taskId: 'fixture-analysis-trace-orcl',
+      symbol: 'ORCL',
+      market: 'US',
+      generatedAt: '2026-05-04T09:00:00Z',
+      decisionFields: {
+        action: {
+          value: 'wait_pullback',
+          source: 'rule',
+          confidence: 0.64,
+          notes: 'Rule-stabilized action for fixture verification.',
+        },
+        score: {
+          value: 5.8,
+          source: 'rule',
+          scale: '0-10',
+        },
+        confidence: {
+          value: 0.64,
+          source: 'blended',
+        },
+        entry: {
+          value: 128.5,
+          source: 'technical_rule',
+        },
+        target: {
+          value: '136.00-138.00',
+          source: 'llm',
+        },
+        stop: {
+          value: 121.0,
+          source: 'technical_rule',
+        },
+      },
+      dataSources: [
+        {
+          name: 'quote',
+          status: 'used',
+          provider: 'fixture',
+          notes: 'Fixture quote context.',
+        },
+        {
+          name: 'fundamental',
+          status: 'missing',
+          provider: 'fixture',
+          notes: 'Fundamental fields intentionally incomplete.',
+        },
+        {
+          name: 'scanner',
+          status: 'unknown',
+          provider: 'fixture',
+        },
+      ],
+      signals: [
+        {
+          name: 'MA alignment',
+          value: 'mixed',
+          impact: 'neutral',
+          source: 'technical_rule',
+        },
+        {
+          name: 'Risk control',
+          value: 'stop required',
+          impact: 'warning',
+          source: 'rule',
+        },
+      ],
+      llm: {
+        used: true,
+        provider: 'fixture-provider',
+        model: 'fixture-model',
+        template: 'stock_analysis_trace_fixture_v1',
+        structuredOutput: true,
+        schemaValidated: true,
+        promptExposed: false,
+      },
+      conflicts: [
+        {
+          type: 'action_plan_mismatch',
+          severity: 'warning',
+          message: 'Fixture warning: action and plan require position-context separation.',
+        },
+      ],
+      limitations: [
+        'Fixture result only; not investment advice.',
+        'Fundamental data intentionally incomplete.',
+      ],
+    },
+  };
+}
+
 function formatTraceValue(value: unknown): string {
   if (value === null || value === undefined || value === '') {
     return '-';
@@ -1945,6 +2130,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const routeTaskId = searchParams.get('task_id') || searchParams.get('taskId') || null;
   const routeSymbol = normalizeTickerQuery(searchParams.get('symbol') || undefined);
   const routeSource = searchParams.get('source') || null;
+  const traceFixtureReport = useMemo(
+    () => (!isGuest && (import.meta.env.DEV || import.meta.env.MODE === 'test') && searchParams.get('fixture') === 'analysis-trace')
+      ? buildDecisionTraceFixtureReport()
+      : null,
+    [isGuest, searchParams],
+  );
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
   const historyItems = useStockPoolStore((state) => state.historyItems);
   const selectedReport = useStockPoolStore((state) => state.selectedReport);
@@ -2014,6 +2205,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const isHomeAnalyzing = isGuestAnalyzing || (!isGuest && (isAnalyzing || isTaskAnalyzing || Boolean(pendingAnalysisTicker && isDashboardLoading)));
   const isBusy = isHomeAnalyzing || isDashboardLoading;
   const dashboardData = useMemo<DashboardPayload>(() => {
+    if (traceFixtureReport) {
+      return buildDashboardFromReport(locale, traceFixtureReport);
+    }
+
     if (isGuest) {
       return guestPreview
         ? buildGuestDashboardFromPreview(locale, guestPreview)
@@ -2039,8 +2234,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
 
     return buildInPlacePlaceholderDashboard(locale, effectiveTicker);
-  }, [activeTicker, completedTaskReport, guestPreview, isGuest, locale, pendingAnalysisTicker, recentHistoryItems, routeSymbol, selectedReport, selectedTicker]);
+  }, [activeTicker, completedTaskReport, guestPreview, isGuest, locale, pendingAnalysisTicker, recentHistoryItems, routeSymbol, selectedReport, selectedTicker, traceFixtureReport]);
   const activeTraceReport = useMemo<AnalysisReport | null>(() => {
+    if (traceFixtureReport) {
+      return traceFixtureReport;
+    }
+
     const effectiveTicker = routeSymbol || activeTicker || selectedTicker || null;
     if (
       completedTaskReport
@@ -2053,7 +2252,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       return selectedReport;
     }
     return completedTaskReport || selectedReport || null;
-  }, [activeTicker, completedTaskReport, routeSymbol, selectedReport, selectedTicker]);
+  }, [activeTicker, completedTaskReport, routeSymbol, selectedReport, selectedTicker, traceFixtureReport]);
   const copy = dashboardData;
   const standbyCopy = useMemo(() => (
     locale === 'en'
@@ -2084,6 +2283,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   useEffect(() => {
     document.title = copy.documentTitle;
   }, [copy.documentTitle]);
+
+  useEffect(() => {
+    if (traceFixtureReport && searchParams.get('trace') === 'open' && !isTraceDrawerOpen) {
+      setTraceDrawerOpen(true);
+    }
+  }, [isTraceDrawerOpen, searchParams, traceFixtureReport]);
 
   useEffect(() => {
     purgeZombieDashboardStorage();

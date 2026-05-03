@@ -409,6 +409,87 @@ describe('HomeSurfacePage', () => {
     expect(panel).not.toHaveTextContent('SYSTEM_PROMPT');
   });
 
+  it('loads the dev/test decision trace fixture without submitting analysis', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValueOnce({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+
+    renderSurface('/zh?fixture=analysis-trace');
+
+    expect(await screen.findByText(/Fixture result only; not investment advice/i)).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('Fixture result only; not investment advice.');
+    expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('128.50');
+    expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('136.00-138.00');
+
+    fireEvent.click(screen.getByRole('button', { name: '查看决策来源' }));
+
+    const panel = await screen.findByTestId('home-bento-decision-trace-panel');
+    expect(within(panel).getByText('Decision Fields')).toBeInTheDocument();
+    expect(within(panel).getByText('wait_pullback')).toBeInTheDocument();
+    expect(within(panel).getAllByText('technical_rule').length).toBeGreaterThan(0);
+    expect(within(panel).getByText('Data Sources')).toBeInTheDocument();
+    expect(within(panel).getByText('used')).toBeInTheDocument();
+    expect(within(panel).getByText('missing')).toBeInTheDocument();
+    expect(within(panel).getByText('unknown')).toBeInTheDocument();
+    expect(within(panel).getByText('fixture-provider')).toBeInTheDocument();
+    expect(within(panel).getByText('fixture-model')).toBeInTheDocument();
+    expect(within(panel).getByText('stock_analysis_trace_fixture_v1')).toBeInTheDocument();
+    expect(within(panel).getByText('Fixture warning: action and plan require position-context separation.')).toBeInTheDocument();
+    expect(within(panel).getByText('Fundamental data intentionally incomplete.')).toBeInTheDocument();
+    expect(panel).not.toHaveTextContent('当前分析未包含决策溯源');
+    expect(document.body.textContent).not.toContain('raw_prompt');
+    expect(document.body.textContent).not.toContain('SYSTEM_PROMPT');
+    expect(document.body.textContent).not.toContain('api_key');
+    expect(document.body.textContent).not.toContain('sk-');
+    expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
+  });
+
+  it('opens the decision trace fixture drawer in a narrow viewport', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValueOnce({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+    window.innerWidth = 390;
+    window.innerHeight = 844;
+    window.dispatchEvent(new Event('resize'));
+
+    renderSurface('/zh?fixture=analysis-trace');
+
+    fireEvent.click(await screen.findByRole('button', { name: '查看决策来源' }));
+    const panel = await screen.findByTestId('home-bento-decision-trace-panel');
+    expect(panel).toHaveClass('min-w-0');
+    expect(within(panel).getByText('Decision Fields')).toBeInTheDocument();
+    expect(within(panel).getByText('Conflicts & Limitations')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveTextContent('决策来源');
+
+    fireEvent.click(screen.getByRole('button', { name: /关闭|Close/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('can auto-open the dev/test decision trace fixture drawer for browser smoke', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValueOnce({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+
+    renderSurface('/zh?fixture=analysis-trace&trace=open');
+
+    const panel = await screen.findByTestId('home-bento-decision-trace-panel');
+    expect(screen.getByRole('dialog')).toHaveTextContent('决策来源');
+    expect(within(panel).getByText('fixture-provider')).toBeInTheDocument();
+    expect(within(panel).getByText('Fixture result only; not investment advice.')).toBeInTheDocument();
+  });
+
   it('shows a safe unavailable trace state for old analysis reports without trace metadata', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getDetail).mockResolvedValueOnce({

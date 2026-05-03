@@ -43,6 +43,25 @@ The first phase is deterministic and non-blocking. It adds warning entries when:
 
 These warnings do not change the final decision. They are surfaced only in the optional Home trace drawer.
 
+## Local Trace Fixture
+
+For browser smoke verification without a live provider, start the web app in local dev mode and open:
+
+```text
+/zh?fixture=analysis-trace
+```
+
+Use `/zh?fixture=analysis-trace&trace=open` when the smoke needs to land directly on the trace drawer.
+
+The fixture is frontend-only and is enabled only in Vite dev/test mode. It renders a deterministic ORCL Home analysis result with `decisionTrace`, execution plan fields, data-source statuses, sanitized LLM metadata, one conflict warning, and limitations.
+
+Safety notes:
+
+- It does not call LiteLLM or any external provider.
+- It does not contain raw prompts, system prompts, API keys, or secrets.
+- It is fixture data only and not investment advice.
+- Production builds do not enable the query-parameter fixture.
+
 ## Limitations
 
 - The trace is generated from existing metadata and does not make an extra LLM call.
