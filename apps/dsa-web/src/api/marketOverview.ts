@@ -15,6 +15,10 @@ export interface MarketDataMeta {
   isFallback?: boolean;
   isStale?: boolean;
   isRefreshing?: boolean;
+  isFromSnapshot?: boolean;
+  lastSuccessfulAt?: string;
+  refreshError?: string | null;
+  lastError?: string | null;
   delayMinutes?: number;
   warning?: string | null;
 }
@@ -58,6 +62,10 @@ function normalizePanel(payload: Record<string, unknown>): MarketOverviewPanel {
     isFallback: normalized.isFallback,
     isStale: normalized.isStale,
     isRefreshing: normalized.isRefreshing,
+    isFromSnapshot: normalized.isFromSnapshot,
+    lastSuccessfulAt: normalized.lastSuccessfulAt,
+    refreshError: normalized.refreshError,
+    lastError: normalized.lastError,
     delayMinutes: normalized.delayMinutes,
     warning: normalized.warning,
     items: Array.isArray(normalized.items) ? normalized.items : [],

@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import copy
 import math
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
@@ -11,6 +13,7 @@ import requests
 
 from src.services.execution_log_service import ExecutionLogService
 from src.services.market_cache import MARKET_CACHE_TTLS, REFRESH_WARNING, market_cache
+from src.storage import DatabaseManager
 
 PanelPayload = Dict[str, Any]
 CN_TZ = timezone(timedelta(hours=8))
@@ -629,15 +632,21 @@ class MarketOverviewService:
 
         def store_success() -> Dict[str, Any]:
             payload = fetcher()
-            self._market_data_cache[cache_key] = dict(payload)
+            if self._is_storable_market_snapshot(payload):
+                snapshot_payload = copy.deepcopy(payload)
+                self._market_data_cache[cache_key] = snapshot_payload
+                self._save_persistent_snapshot(cache_key, snapshot_payload)
             return payload
 
         def fallback() -> Dict[str, Any]:
             cached = self._market_data_cache.get(cache_key)
             if cached:
-                payload = dict(cached)
+                payload = copy.deepcopy(cached)
                 payload["fallbackUsed"] = True
                 return payload
+            persistent = self._load_persistent_snapshot(cache_key)
+            if persistent:
+                return persistent
             return fallback_factory()
 
         return self._market_cache.get_or_refresh(
@@ -649,6 +658,91 @@ class MarketOverviewService:
             background_refresh=True,
             cold_start_timeout_seconds=self.MARKET_COLD_START_TIMEOUT_SECONDS,
         )
+
+    def _snapshot_key(self, cache_key: str) -> str:
+        return f"market_overview:{cache_key}"
+
+    def _is_storable_market_snapshot(self, payload: Dict[str, Any]) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        if payload.get("error") and not payload.get("items"):
+            return False
+        if str(payload.get("source") or "").lower() == "error":
+            return False
+        if str(payload.get("freshness") or "").lower() == "error":
+            return False
+        items = payload.get("items")
+        has_items = isinstance(items, list) and len(items) > 0
+        has_value = any(payload.get(key) is not None for key in ("value", "price", "sentimentScore", "scores", "metrics"))
+        return bool(has_items or has_value)
+
+    def _save_persistent_snapshot(self, cache_key: str, payload: Dict[str, Any]) -> None:
+        try:
+            if os.environ.get("PYTEST_CURRENT_TEST") and os.environ.get("MARKET_OVERVIEW_SNAPSHOT_TEST_DB") != "1":
+                return
+            DatabaseManager.get_instance().save_market_overview_snapshot(
+                key=self._snapshot_key(cache_key),
+                payload=payload,
+            )
+        except Exception:
+            return
+
+    def _load_persistent_snapshot(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        try:
+            if os.environ.get("PYTEST_CURRENT_TEST") and os.environ.get("MARKET_OVERVIEW_SNAPSHOT_TEST_DB") != "1":
+                return None
+            row = DatabaseManager.get_instance().get_market_overview_snapshot(self._snapshot_key(cache_key))
+        except Exception:
+            return None
+        if not row or not isinstance(row.get("payload"), dict):
+            return None
+        payload = copy.deepcopy(row["payload"])
+        if not self._is_storable_market_snapshot(payload):
+            return None
+        last_successful_at = (
+            payload.get("asOf")
+            or payload.get("updatedAt")
+            or payload.get("last_update")
+            or payload.get("last_refresh_at")
+            or row.get("as_of")
+            or row.get("updated_at")
+        )
+        snapshot_was_fallback = bool(
+            payload.get("isFallback")
+            or payload.get("fallbackUsed")
+            or payload.get("fallback_used")
+            or str(payload.get("source") or "").lower() in {"fallback", "mock"}
+            or str(row.get("source") or "").lower() in {"fallback", "mock"}
+        )
+        payload["isFromSnapshot"] = True
+        payload["isStale"] = True
+        payload["lastSuccessfulAt"] = last_successful_at
+        payload["updatedAt"] = payload.get("updatedAt") or row.get("updated_at") or _now_iso()
+        payload["asOf"] = payload.get("asOf") or last_successful_at
+        payload["sourceLabel"] = payload.get("sourceLabel") or "Snapshot"
+        payload["source"] = payload.get("source") or "cached"
+        payload["freshness"] = "fallback" if snapshot_was_fallback else "stale"
+        payload["isFallback"] = snapshot_was_fallback
+        payload["fallbackUsed"] = bool(payload.get("fallbackUsed") or snapshot_was_fallback)
+        payload["warning"] = "数据源刷新失败，当前显示最近成功快照"
+        items = payload.get("items")
+        if isinstance(items, list):
+            payload["items"] = [
+                {
+                    **item,
+                    "isFromSnapshot": True,
+                    "isStale": True,
+                    "freshness": "fallback" if (
+                        item.get("isFallback")
+                        or item.get("fallbackUsed")
+                        or str(item.get("source") or "").lower() in {"fallback", "mock"}
+                    ) else "stale",
+                }
+                if isinstance(item, dict)
+                else item
+                for item in items
+            ]
+        return payload
 
     def _fallback_market_snapshot(self, cache_key: str, source: str) -> Dict[str, Any]:
         cached = self._market_data_cache.get(cache_key)
@@ -758,6 +852,16 @@ class MarketOverviewService:
         updated_at = payload.get("updatedAt") or payload.get("last_update") or payload.get("last_refresh_at") or _now_iso()
         as_of = payload.get("asOf") or payload.get("last_update") or payload.get("last_refresh_at") or updated_at
         freshness = get_freshness_status(as_of, category, source, is_fallback)
+        if payload.get("isFromSnapshot"):
+            snapshot_freshness = str(payload.get("freshness") or "").lower()
+            if snapshot_freshness in {"stale", "fallback", "mock", "error"}:
+                freshness = {
+                    **freshness,
+                    "freshness": snapshot_freshness,
+                    "isStale": True,
+                    "isFallback": bool(is_fallback or snapshot_freshness in {"fallback", "mock"}),
+                    "warning": payload.get("warning") or "数据源刷新失败，当前显示最近成功快照",
+                }
         reliability = classify_market_payload_reliability({**payload, "source": source, "freshness": freshness["freshness"], "isFallback": freshness["isFallback"]}, category)
         return {
             **payload,
@@ -774,6 +878,9 @@ class MarketOverviewService:
             "fallbackUsed": bool(payload.get("fallbackUsed") or freshness["isFallback"]),
             "isRefreshing": bool(payload.get("isRefreshing")),
             "lastError": payload.get("lastError"),
+            "refreshError": payload.get("refreshError") or payload.get("lastError"),
+            "isFromSnapshot": bool(payload.get("isFromSnapshot")),
+            "lastSuccessfulAt": payload.get("lastSuccessfulAt"),
         }
 
     def _with_item_meta(self, item: Dict[str, Any], category: str, panel: Dict[str, Any]) -> Dict[str, Any]:
@@ -782,6 +889,16 @@ class MarketOverviewService:
         as_of = item.get("asOf") or item.get("last_update") or item.get("updatedAt") or panel.get("asOf") or panel.get("updatedAt")
         updated_at = item.get("updatedAt") or panel.get("updatedAt") or _now_iso()
         freshness = get_freshness_status(as_of, category, source, is_fallback)
+        if item.get("isFromSnapshot") or panel.get("isFromSnapshot"):
+            snapshot_freshness = str(item.get("freshness") or panel.get("freshness") or "").lower()
+            if snapshot_freshness in {"stale", "fallback", "mock", "error"}:
+                freshness = {
+                    **freshness,
+                    "freshness": snapshot_freshness,
+                    "isStale": True,
+                    "isFallback": bool(is_fallback or snapshot_freshness in {"fallback", "mock"}),
+                    "warning": item.get("warning") or panel.get("warning") or "数据源刷新失败，当前显示最近成功快照",
+                }
         reliability = classify_market_payload_reliability({**item, "source": source, "freshness": freshness["freshness"], "isFallback": freshness["isFallback"]}, category)
         return {
             **item,
@@ -795,6 +912,7 @@ class MarketOverviewService:
             "isStale": freshness["isStale"],
             "delayMinutes": freshness["delayMinutes"],
             "warning": item.get("warning") or freshness["warning"],
+            "isFromSnapshot": bool(item.get("isFromSnapshot") or panel.get("isFromSnapshot")),
         }
 
     def _fetch_indices(self) -> PanelPayload:

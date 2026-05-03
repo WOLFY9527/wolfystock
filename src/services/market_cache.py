@@ -252,6 +252,7 @@ class MarketCache:
             payload.setdefault("isStale", True)
         if entry.last_error:
             payload["lastError"] = entry.last_error
+            payload["refreshError"] = entry.last_error
             payload["warning"] = payload.get("warning") or REFRESH_WARNING
         return payload
 

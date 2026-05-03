@@ -38,8 +38,11 @@ export const IndexTrendsCard: React.FC<{
         </div>
 
         {panel?.errorMessage ? (
-          <div className="rounded-xl border border-rose-300/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
-            {panel.errorMessage}
+          <div className="flex min-w-0 items-center gap-2" title={panel.errorMessage}>
+            <span data-testid="market-overview-compact-error-badge" className="rounded-md border border-amber-300/20 bg-amber-400/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-100/78">
+              {panel.isStale || panel.isFromSnapshot ? 'STALE' : 'ERROR'}
+            </span>
+            <span className="min-w-0 truncate text-[10px] text-white/38">刷新异常，保留最近快照</span>
           </div>
         ) : null}
 

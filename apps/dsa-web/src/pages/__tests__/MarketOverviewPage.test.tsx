@@ -469,6 +469,47 @@ const cnShortSentimentPayload = () => ({
   },
 });
 
+const MARKET_OVERVIEW_LKG_STORAGE_KEY = 'wolfystock.marketOverview.lastKnownGood.v1';
+
+function localSnapshotPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 1,
+    savedAt: '2026-05-04T10:15:00.000Z',
+    payload: {
+      indices: {
+        ...panel('IndexTrendsCard', 'SPX', 'S&P 500'),
+        source: 'local-cache',
+        sourceLabel: 'Local Cache',
+        freshness: 'stale' as const,
+        isStale: true,
+        isFromSnapshot: true,
+        lastSuccessfulAt: '2026-05-04T10:00:00+08:00',
+        items: [
+          {
+            ...quoteItem('SPX', 'S&P 500', 5111.11, 0.31),
+            source: 'local-cache',
+            sourceLabel: 'Local Cache',
+            freshness: 'stale' as const,
+            isStale: true,
+          },
+        ],
+      },
+      crypto: {
+        ...cryptoFullPanel(),
+        source: 'local-cache',
+        sourceLabel: 'Local Cache',
+        freshness: 'stale' as const,
+        isStale: true,
+      },
+      temperature: temperaturePayload(),
+      briefing: briefingPayload(),
+      futures: futuresPayload(),
+      cnShortSentiment: cnShortSentimentPayload(),
+      ...overrides,
+    },
+  };
+}
+
 function expandPendingDataSourceSection() {
   const button = screen.queryByRole('button', { name: /待接入真实数据源/i });
   if (!button) {
@@ -732,6 +773,49 @@ describe('MarketOverviewPage', () => {
     expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('data-freshness-badge-delayed').length).toBeGreaterThan(0);
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
+  });
+
+  it('hydrates market overview from localStorage before backend responses settle', async () => {
+    window.localStorage.setItem(MARKET_OVERVIEW_LKG_STORAGE_KEY, JSON.stringify(localSnapshotPayload()));
+    vi.mocked(marketOverviewApi.getIndices).mockReturnValueOnce(new Promise(() => {}));
+
+    render(<MarketOverviewPage />);
+
+    expect((await screen.findAllByText('5,111.11')).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/LOCAL CACHE/i);
+    expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/正在刷新|缓存/i);
+    expect(screen.queryByText(/indices request timed out/i)).not.toBeInTheDocument();
+  });
+
+  it('persists latest usable backend data to the market overview local snapshot', async () => {
+    vi.mocked(marketOverviewApi.getIndices).mockResolvedValueOnce(denseQuotePanel('IndexTrendsCard', [
+      quoteItem('SPX', 'S&P 500', 5222.22, 0.52),
+    ]));
+
+    render(<MarketOverviewPage />);
+
+    await waitFor(() => {
+      const saved = JSON.parse(window.localStorage.getItem(MARKET_OVERVIEW_LKG_STORAGE_KEY) || '{}');
+      expect(saved.payload?.indices?.items?.[0]?.value).toBe(5222.22);
+    });
+    const saved = JSON.parse(window.localStorage.getItem(MARKET_OVERVIEW_LKG_STORAGE_KEY) || '{}');
+    expect(saved.schemaVersion).toBe(1);
+    expect(saved.payload.indices.items[0].value).toBe(5222.22);
+    expect(JSON.stringify(saved)).not.toContain('request timed out');
+  });
+
+  it('keeps local snapshot visible when backend refresh fails and keeps errors compact', async () => {
+    window.localStorage.setItem(MARKET_OVERVIEW_LKG_STORAGE_KEY, JSON.stringify(localSnapshotPayload()));
+    vi.mocked(marketOverviewApi.getIndices).mockRejectedValueOnce(new Error('indices request timed out'));
+    vi.mocked(marketApi.getRates).mockRejectedValueOnce(new Error('rates request timed out'));
+
+    render(<MarketOverviewPage />);
+
+    expect((await screen.findAllByText('5,111.11')).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/REFRESH FAILED|CACHE|STALE/i));
+    expect(screen.getAllByText('标普500').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/更新失败：indices request timed out/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-refresh-error-count')).toHaveTextContent(/[1-9]/);
   });
 
   it('renders a stable workstation skeleton with grouped deep panels and an always-visible signal rail', async () => {

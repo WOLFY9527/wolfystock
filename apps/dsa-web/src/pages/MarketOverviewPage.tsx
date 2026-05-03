@@ -17,6 +17,7 @@ import { MarketSentimentCard } from '../components/market-overview/MarketSentime
 import { MarketOverviewCard } from '../components/market-overview/MarketOverviewCard';
 import { VolatilityCard } from '../components/market-overview/VolatilityCard';
 import { resolveMarketOverviewDisplayLabel } from '../components/market-overview/marketOverviewLabels';
+import { formatMarketOverviewTimestamp } from '../components/market-overview/marketOverviewFormat';
 import {
   DataFreshnessBadge,
   MARKET_OVERVIEW_GHOST_CARD_CLASS,
@@ -63,6 +64,13 @@ type MarketOverviewLayoutRow = {
   allowSingleFullWidth?: boolean;
 };
 type WorkbenchRail = MarketOverviewRowTier;
+type LocalSnapshotEnvelope = {
+  schemaVersion: 1;
+  savedAt: string;
+  payload: Partial<PanelState>;
+};
+
+const MARKET_OVERVIEW_LKG_STORAGE_KEY = 'wolfystock.marketOverview.lastKnownGood.v1';
 
 const CATEGORY_LAYOUT: Record<MarketOverviewTab, MarketOverviewLayoutRow[]> = {
   all: [
@@ -223,6 +231,100 @@ const FALLBACK_CN_SHORT_SENTIMENT: CnShortSentimentResponse = {
     stRiskLevel: 'normal',
   },
 };
+
+function readLocalMarketOverviewSnapshot(): LocalSnapshotEnvelope | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(MARKET_OVERVIEW_LKG_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as LocalSnapshotEnvelope;
+    if (!parsed || parsed.schemaVersion !== 1 || !parsed.payload || typeof parsed.payload !== 'object') {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function hasUsablePanelValue(value: unknown): boolean {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const payload = value as {
+    source?: string;
+    freshness?: string;
+    errorMessage?: string | null;
+    items?: unknown[];
+    scores?: unknown;
+    metrics?: unknown;
+    summary?: unknown;
+  };
+  if ((payload.source === 'error' || payload.freshness === 'error') && !payload.items?.length) {
+    return false;
+  }
+  return Boolean(
+    (Array.isArray(payload.items) && payload.items.length > 0)
+    || payload.scores
+    || payload.metrics
+    || payload.summary
+  );
+}
+
+function buildInitialPanelsFromLocalSnapshot(): { panels: PanelState; source: 'local' | 'empty'; savedAt?: string } {
+  const localSnapshot = readLocalMarketOverviewSnapshot();
+  if (!localSnapshot) {
+    return {
+      source: 'empty',
+      panels: {
+        temperature: FALLBACK_TEMPERATURE,
+        briefing: FALLBACK_BRIEFING,
+        futures: FALLBACK_FUTURES,
+        cnShortSentiment: FALLBACK_CN_SHORT_SENTIMENT,
+      },
+    };
+  }
+  return {
+    source: 'local',
+    savedAt: localSnapshot.savedAt,
+    panels: {
+      temperature: FALLBACK_TEMPERATURE,
+      briefing: FALLBACK_BRIEFING,
+      futures: FALLBACK_FUTURES,
+      cnShortSentiment: FALLBACK_CN_SHORT_SENTIMENT,
+      ...localSnapshot.payload,
+    } as PanelState,
+  };
+}
+
+function writeLocalMarketOverviewSnapshot(panels: PanelState): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const payload: Partial<PanelState> = {};
+  (Object.keys(panels) as PanelKey[]).forEach((panelKey) => {
+    const value = panels[panelKey];
+    if (hasUsablePanelValue(value)) {
+      payload[panelKey] = value as never;
+    }
+  });
+  if (Object.keys(payload).length === 0) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(MARKET_OVERVIEW_LKG_STORAGE_KEY, JSON.stringify({
+      schemaVersion: 1,
+      savedAt: new Date().toISOString(),
+      payload,
+    } satisfies LocalSnapshotEnvelope));
+  } catch {
+    // localStorage can be unavailable in private or quota-limited sessions.
+  }
+}
 
 type HeroAnchor = {
   key: string;
@@ -973,6 +1075,56 @@ const MarketOverviewStatusStrip: React.FC<{
   </section>
 );
 
+const MarketOverviewCacheStatus: React.FC<{
+  hasLocalSnapshot: boolean;
+  localSnapshotSavedAt?: string;
+  loading: boolean;
+  refreshingPanel: PanelKey | null;
+  refreshErrorCount: number;
+  dataQuality: DataQualitySummary;
+}> = ({ hasLocalSnapshot, localSnapshotSavedAt, loading, refreshingPanel, refreshErrorCount, dataQuality }) => {
+  const statusLabel = refreshErrorCount > 0
+    ? 'REFRESH FAILED'
+    : loading && hasLocalSnapshot
+      ? 'LOCAL CACHE'
+      : dataQuality.counts.stale > 0
+        ? 'STALE'
+        : dataQuality.counts.fallback > 0
+          ? 'CACHE'
+          : 'LIVE';
+  const message = refreshErrorCount > 0
+    ? '部分数据源刷新失败，当前显示最近成功快照'
+    : loading && hasLocalSnapshot
+      ? '正在刷新，当前显示本地缓存'
+      : dataQuality.hasConcern
+        ? '部分面板使用缓存或备用快照'
+        : '实时数据已更新';
+  const timestamp = formatMarketOverviewTimestamp(localSnapshotSavedAt) || '';
+  return (
+    <section
+      data-testid="market-overview-cache-status"
+      className={cn(
+        'flex min-w-0 flex-col gap-2 rounded-xl border px-3 py-2 text-xs md:flex-row md:items-center md:justify-between',
+        refreshErrorCount > 0 || dataQuality.hasConcern
+          ? 'border-amber-300/18 bg-amber-400/[0.055] text-amber-100/82'
+          : 'border-emerald-300/16 bg-emerald-400/[0.045] text-emerald-100/78',
+      )}
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="shrink-0 rounded-md border border-current/20 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest">
+          {statusLabel}
+        </span>
+        <span className="min-w-0 truncate">{message}</span>
+        {refreshingPanel ? <span className="font-mono text-[10px] uppercase text-white/45">refreshing {String(refreshingPanel)}</span> : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-white/42">
+        {timestamp ? <span>LOCAL {timestamp}</span> : null}
+        <span data-testid="market-overview-refresh-error-count">ERRORS {refreshErrorCount}</span>
+      </div>
+    </section>
+  );
+};
+
 const MarketOverviewRow: React.FC<{
   row: MarketOverviewLayoutRow;
   children: React.ReactNode;
@@ -1377,13 +1529,12 @@ function debugMarketPanel(panelKey: PanelKey, status: 'loading' | 'success' | 'f
 
 const MarketOverviewPage: React.FC = () => {
   const { language, t } = useI18n();
-  const [panels, setPanels] = useState<PanelState>({
-    temperature: FALLBACK_TEMPERATURE,
-    briefing: FALLBACK_BRIEFING,
-    futures: FALLBACK_FUTURES,
-    cnShortSentiment: FALLBACK_CN_SHORT_SENTIMENT,
-  });
-  const [loading, setLoading] = useState(true);
+  const initialLocalSnapshot = useMemo(() => buildInitialPanelsFromLocalSnapshot(), []);
+  const [panels, setPanels] = useState<PanelState>(initialLocalSnapshot.panels);
+  const [loading, setLoading] = useState(initialLocalSnapshot.source !== 'local');
+  const [hasLocalSnapshot, setHasLocalSnapshot] = useState(initialLocalSnapshot.source === 'local');
+  const [localSnapshotSavedAt, setLocalSnapshotSavedAt] = useState<string | undefined>(initialLocalSnapshot.savedAt);
+  const [refreshErrors, setRefreshErrors] = useState<Record<string, string>>({});
   const [refreshingPanel, setRefreshingPanel] = useState<PanelKey | null>(null);
   const [activeCategory, setActiveCategory] = useState<MarketOverviewTab>('all');
   const [cryptoRealtimeStatus, setCryptoRealtimeStatus] = useState<CryptoRealtimeStatus>('snapshot');
@@ -1422,6 +1573,11 @@ const MarketOverviewPage: React.FC = () => {
       try {
         const panel = await withPanelTimeout(loadPanel(), panelKey);
         if (!cancelledRef?.current) {
+          setRefreshErrors((currentErrors) => {
+            const nextErrors = { ...currentErrors };
+            delete nextErrors[String(panelKey)];
+            return nextErrors;
+          });
           setPanels((currentPanels) => {
             const nextPanels = { ...currentPanels };
             assignPanelValue(nextPanels, panelKey, panel);
@@ -1431,6 +1587,10 @@ const MarketOverviewPage: React.FC = () => {
         debugMarketPanel(panelKey, 'success');
       } catch (error) {
         if (!cancelledRef?.current) {
+          setRefreshErrors((currentErrors) => ({
+            ...currentErrors,
+            [String(panelKey)]: describePanelError(error),
+          }));
           setPanels((currentPanels) => {
             const nextPanels = { ...currentPanels };
             if (!currentPanels[panelKey]) {
@@ -1454,6 +1614,11 @@ const MarketOverviewPage: React.FC = () => {
     debugMarketPanel(panelKey, 'loading');
     try {
       const panel = await withPanelTimeout(loadPanel(), panelKey);
+      setRefreshErrors((currentErrors) => {
+        const nextErrors = { ...currentErrors };
+        delete nextErrors[String(panelKey)];
+        return nextErrors;
+      });
       setPanels((currentPanels) => {
         const nextPanels = { ...currentPanels };
         assignPanelValue(nextPanels, panelKey, panel);
@@ -1461,6 +1626,10 @@ const MarketOverviewPage: React.FC = () => {
       });
       debugMarketPanel(panelKey, 'success');
     } catch (error) {
+      setRefreshErrors((currentErrors) => ({
+        ...currentErrors,
+        [String(panelKey)]: describePanelError(error),
+      }));
       setPanels((currentPanels) => {
         if (currentPanels[panelKey]) {
           return currentPanels;
@@ -1488,6 +1657,12 @@ const MarketOverviewPage: React.FC = () => {
       cancelledRef.current = true;
     };
   }, [loadPanels]);
+
+  useEffect(() => {
+    writeLocalMarketOverviewSnapshot(panels);
+    setHasLocalSnapshot(true);
+    setLocalSnapshotSavedAt(new Date().toISOString());
+  }, [panels]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -1733,6 +1908,7 @@ const MarketOverviewPage: React.FC = () => {
 
   const heroAnchors = useMemo(() => buildHeroAnchors(panels), [panels]);
   const dataQuality = useMemo(() => summarizeDataQuality(panels), [panels]);
+  const refreshErrorCount = Object.keys(refreshErrors).length;
   const coverageSummary = useMemo(() => summarizeCardCoverage(panels, CATEGORY_CARDS[activeCategory]), [activeCategory, panels]);
   const activeCategoryLabel = categoryTabs.find((tab) => tab.key === activeCategory)?.label || '';
   const exportSummaryText = useMemo(() => buildMarketOverviewSummaryText({
@@ -1890,6 +2066,14 @@ const MarketOverviewPage: React.FC = () => {
               {exportSummaryFeedback || (language === 'en' ? 'Export' : '复制摘要')}
             </button>
           </div>
+          <MarketOverviewCacheStatus
+            hasLocalSnapshot={hasLocalSnapshot}
+            localSnapshotSavedAt={localSnapshotSavedAt}
+            loading={loading}
+            refreshingPanel={refreshingPanel}
+            refreshErrorCount={refreshErrorCount}
+            dataQuality={dataQuality}
+          />
           <CrossAssetHeroRibbon anchors={heroAnchors} />
           <section data-testid="market-overview-summary-band" data-mobile-order="summary" className="min-w-0">
             <MarketOverviewStatusStrip

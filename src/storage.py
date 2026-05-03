@@ -258,6 +258,27 @@ class FundamentalSnapshot(Base):
         return f"<FundamentalSnapshot(query_id={self.query_id}, code={self.code})>"
 
 
+class MarketOverviewSnapshot(Base):
+    """Last-known-good market overview panel payload."""
+
+    __tablename__ = 'market_overview_snapshots'
+
+    key = Column(String(128), primary_key=True)
+    payload_json = Column(Text, nullable=False)
+    as_of = Column(DateTime, index=True)
+    updated_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    source = Column(String(64))
+    freshness = Column(String(32))
+    is_fallback = Column(Boolean, nullable=False, default=False)
+    error_count = Column(Integer, nullable=False, default=0)
+    last_error = Column(Text)
+    last_error_at = Column(DateTime)
+
+    __table_args__ = (
+        Index('ix_market_overview_snapshots_updated', 'updated_at'),
+    )
+
+
 class AppUser(Base):
     """Persisted application user identity for the multi-user foundation."""
 
@@ -1426,6 +1447,92 @@ class DatabaseManager:
             raise
         finally:
             session.close()
+
+    @staticmethod
+    def _parse_optional_datetime(value: Any) -> Optional[datetime]:
+        if value is None or value == "":
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _market_overview_snapshot_payload(row: MarketOverviewSnapshot) -> Dict[str, Any]:
+        payload = DatabaseManager._safe_json_loads(getattr(row, "payload_json", None), {})
+        if not isinstance(payload, dict):
+            payload = {}
+        return {
+            "key": row.key,
+            "payload": payload,
+            "as_of": row.as_of.isoformat(timespec="seconds") if row.as_of else None,
+            "updated_at": row.updated_at.isoformat(timespec="seconds") if row.updated_at else None,
+            "source": row.source,
+            "freshness": row.freshness,
+            "is_fallback": bool(row.is_fallback),
+            "error_count": int(row.error_count or 0),
+            "last_error": row.last_error,
+            "last_error_at": row.last_error_at.isoformat(timespec="seconds") if row.last_error_at else None,
+        }
+
+    def get_market_overview_snapshot(self, key: str) -> Optional[Dict[str, Any]]:
+        normalized_key = str(key or "").strip()
+        if not normalized_key:
+            return None
+        with self.get_session() as session:
+            row = session.get(MarketOverviewSnapshot, normalized_key)
+            if row is None:
+                return None
+            return self._market_overview_snapshot_payload(row)
+
+    def save_market_overview_snapshot(self, *, key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        normalized_key = str(key or "").strip()
+        if not normalized_key:
+            raise ValueError("market overview snapshot key is required")
+        payload_dict = dict(payload or {})
+        now = datetime.now()
+        as_of = self._parse_optional_datetime(
+            payload_dict.get("asOf")
+            or payload_dict.get("as_of")
+            or payload_dict.get("last_update")
+            or payload_dict.get("last_refresh_at")
+            or payload_dict.get("updatedAt")
+        )
+        source = str(payload_dict.get("source") or "")[:64] or None
+        freshness = str(payload_dict.get("freshness") or "")[:32] or None
+        is_fallback = bool(payload_dict.get("isFallback") or payload_dict.get("fallbackUsed") or payload_dict.get("fallback_used"))
+        with self.session_scope() as session:
+            row = session.get(MarketOverviewSnapshot, normalized_key)
+            if row is None:
+                row = MarketOverviewSnapshot(key=normalized_key)
+                session.add(row)
+            row.payload_json = self._safe_json_dumps(payload_dict)
+            row.as_of = as_of
+            row.updated_at = now
+            row.source = source
+            row.freshness = freshness
+            row.is_fallback = is_fallback
+            row.last_error = None
+            row.last_error_at = None
+            session.flush()
+            return self._market_overview_snapshot_payload(row)
+
+    def record_market_overview_snapshot_error(self, *, key: str, error: str) -> None:
+        normalized_key = str(key or "").strip()
+        if not normalized_key:
+            return
+        concise_error = str(error or "").strip()[:180]
+        if not concise_error:
+            return
+        with self.session_scope() as session:
+            row = session.get(MarketOverviewSnapshot, normalized_key)
+            if row is None:
+                return
+            row.error_count = int(row.error_count or 0) + 1
+            row.last_error = concise_error
+            row.last_error_at = datetime.now()
 
     def _run_multi_user_migrations(self) -> None:
         """Apply lightweight SQLite-safe schema migrations for Phase 1 ownership."""

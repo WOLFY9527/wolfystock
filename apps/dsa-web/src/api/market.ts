@@ -24,6 +24,10 @@ type MarketSnapshotItem = {
   isFallback?: boolean;
   isStale?: boolean;
   isRefreshing?: boolean;
+  isFromSnapshot?: boolean;
+  lastSuccessfulAt?: string;
+  refreshError?: string | null;
+  lastError?: string | null;
   delayMinutes?: number;
   warning?: string | null;
   market?: string | null;
@@ -46,6 +50,10 @@ type MarketSnapshotPayload = {
   isFallback?: boolean;
   isStale?: boolean;
   isRefreshing?: boolean;
+  isFromSnapshot?: boolean;
+  lastSuccessfulAt?: string;
+  refreshError?: string | null;
+  lastError?: string | null;
   delayMinutes?: number;
   warning?: string | null;
   logSessionId?: string | null;
@@ -77,6 +85,10 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
     isFallback: item.isFallback,
     isStale: item.isStale,
     isRefreshing: item.isRefreshing,
+    isFromSnapshot: item.isFromSnapshot,
+    lastSuccessfulAt: item.lastSuccessfulAt,
+    refreshError: item.refreshError,
+    lastError: item.lastError,
     delayMinutes: item.delayMinutes,
     warning: item.warning,
     hoverDetails,
@@ -100,6 +112,10 @@ function normalizeMarketSnapshotPayload(rawPayload: Record<string, unknown>, pan
     isFallback: payload.isFallback ?? payload.fallbackUsed,
     isStale: payload.isStale,
     isRefreshing: payload.isRefreshing,
+    isFromSnapshot: payload.isFromSnapshot,
+    lastSuccessfulAt: payload.lastSuccessfulAt,
+    refreshError: payload.refreshError,
+    lastError: payload.lastError,
     delayMinutes: payload.delayMinutes,
     warning: payload.warning,
     items: Array.isArray(payload.items) ? payload.items.map(normalizeItem) : [],
