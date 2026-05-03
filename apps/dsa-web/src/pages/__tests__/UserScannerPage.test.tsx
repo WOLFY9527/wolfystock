@@ -1037,9 +1037,11 @@ describe('UserScannerPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /主题标的池|Theme universe/i }));
     const themeSelect = screen.getByTestId('scanner-theme-select');
     expect(themeSelect).toHaveTextContent(/AI 半导体|AI semiconductors/);
-    expect(themeSelect).toHaveClass('select-surface', 'appearance-none', 'pr-10', 'ui-control-value');
+    expect(themeSelect).toHaveClass('select-surface', 'absolute', 'inset-0', 'opacity-0');
     expect(themeSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
-    expect(themeSelect.closest('.select-field__control')?.querySelector('.select-field__icon')).toHaveClass('pointer-events-none', 'absolute');
+    expect(themeSelect.closest('.select-field__control')?.querySelector('.select-field__overlay')).toHaveAttribute('aria-hidden', 'true');
+    expect(themeSelect.closest('.select-field__control')?.querySelector('.select-field__value')).toHaveTextContent(/加密矿企|Crypto miners/);
+    expect(themeSelect.closest('.select-field__control')?.querySelector('.select-field__icon')).toHaveClass('ml-2', 'shrink-0');
     fireEvent.change(screen.getByTestId('scanner-theme-select'), { target: { value: 'crypto_miners' } });
     fireEvent.click(screen.getByRole('button', { name: /运行扫描|Run scanner/i }));
 
@@ -1268,7 +1270,8 @@ describe('UserScannerPage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /主题标的池|Theme universe/i }));
     const themeSelect = await screen.findByTestId('scanner-theme-select');
-    expect(themeSelect).toHaveClass('ui-control-value', 'pr-10', 'min-w-0', 'max-w-full');
+    expect(themeSelect).toHaveClass('absolute', 'inset-0', 'opacity-0');
+    expect(themeSelect.closest('.select-field__control')?.querySelector('.select-field__value')).toHaveClass('min-w-0', 'flex-1', 'truncate');
   });
 
   it('updates the candidate inspector from selected, rejected, and data-failed rows', async () => {

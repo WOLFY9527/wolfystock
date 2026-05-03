@@ -1,9 +1,5 @@
-/**
- * SpaceX live refactor: preserves the shared select API while aligning dropdown
- * controls with the same restrained input surface, uppercase field labels,
- * and minimal accessory treatment used across the updated frontend.
- */
-import React, { useId } from 'react';
+import React, { useId, useMemo, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
 
@@ -12,11 +8,22 @@ interface SelectOption {
   label: string;
 }
 
+interface FlattenedOption {
+  value: string;
+  label: string;
+}
+
+type SelectChildProps = {
+  children?: React.ReactNode;
+  label?: React.ReactNode;
+  value?: unknown;
+};
+
 interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'onChange' | 'value'> {
   id?: string;
-  value: string;
+  value?: number | string;
   onChange: (value: string) => void;
-  options: SelectOption[];
+  options?: SelectOption[];
   label?: string;
   labelClassName?: string;
   placeholder?: string;
@@ -25,6 +32,41 @@ interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>
   searchable?: boolean;
   searchPlaceholder?: string;
   emptyText?: string;
+}
+
+function normalizeSelectValue(value: unknown): string {
+  if (value == null) return '';
+  return String(value);
+}
+
+function readNodeText(node: React.ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(readNodeText).join('');
+  if (React.isValidElement<SelectChildProps>(node)) return readNodeText(node.props.children);
+  return '';
+}
+
+function flattenOptionChildren(children: React.ReactNode): FlattenedOption[] {
+  const flattened: FlattenedOption[] = [];
+
+  React.Children.forEach(children, (child) => {
+    if (!React.isValidElement(child)) {
+      return;
+    }
+
+    if (React.isValidElement<SelectChildProps>(child) && child.type === 'option') {
+      const optionValue = normalizeSelectValue(child.props.value);
+      const optionLabel = child.props.label ? String(child.props.label) : readNodeText(child.props.children);
+      flattened.push({ value: optionValue, label: optionLabel });
+      return;
+    }
+
+    if (React.isValidElement<SelectChildProps>(child) && child.type === 'optgroup') {
+      flattened.push(...flattenOptionChildren(child.props.children));
+    }
+  });
+
+  return flattened;
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -38,52 +80,87 @@ export const Select: React.FC<SelectProps> = ({
   disabled = false,
   className = '',
   controlClassName = '',
+  defaultValue,
+  children,
+  name,
   ...props
 }) => {
   const { t } = useI18n();
   const selectId = useId();
   const resolvedId = id ?? selectId;
   const resolvedPlaceholder = placeholder ?? t('common.selectPlaceholder');
+  const controlledValue = normalizeSelectValue(value);
+  const isControlled = value != null;
+  const [uncontrolledValue, setUncontrolledValue] = useState(() => normalizeSelectValue(defaultValue));
+  const displayValue = isControlled ? controlledValue : uncontrolledValue;
+  const invalid = props['aria-invalid'] === true || props['aria-invalid'] === 'true';
+  const hasCustomChildren = React.Children.count(children) > 0;
+
+  const flattenedOptions = useMemo(() => {
+    if (hasCustomChildren) {
+      return flattenOptionChildren(children);
+    }
+
+    return [
+      ...(resolvedPlaceholder ? [{ value: '', label: resolvedPlaceholder }] : []),
+      ...(options ?? []),
+    ];
+  }, [children, hasCustomChildren, options, resolvedPlaceholder]);
+
+  const selectedLabel = useMemo(() => {
+    const matched = flattenedOptions.find((option) => option.value === displayValue);
+    if (matched) return matched.label;
+    if (displayValue !== '') return displayValue;
+    return resolvedPlaceholder ?? '';
+  }, [displayValue, flattenedOptions, resolvedPlaceholder]);
 
   return (
     <div className={cn('select-field flex min-w-0 w-full max-w-full flex-col', className)}>
       {label ? <label htmlFor={resolvedId} className={cn('theme-field-label mb-2', labelClassName)}>{label}</label> : null}
-      <div className="select-field__control ui-control-shell relative flex min-w-0 w-full max-w-full items-center">
+      <div className={cn('select-field__control ui-control-shell group relative min-w-0 w-full max-w-full', controlClassName)}>
         <select
           id={resolvedId}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          name={name}
+          value={displayValue}
+          onChange={(e) => {
+            if (!isControlled) {
+              setUncontrolledValue(e.target.value);
+            }
+            onChange(e.target.value);
+          }}
           disabled={disabled}
           {...props}
           className={cn(
-            'select-surface input-surface theme-focus-ring ui-control-value h-10 w-full min-w-0 max-w-full appearance-none rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 pr-10 text-sm text-white outline-none focus:border-emerald-500/50',
-            'theme-focus-ring transition-all duration-200',
-            disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
-            controlClassName,
+            'select-surface absolute inset-0 z-10 h-full w-full min-w-0 cursor-pointer rounded-lg opacity-0 outline-none',
+            disabled ? 'cursor-not-allowed' : '',
           )}
         >
-          {resolvedPlaceholder && (
+          {!hasCustomChildren && resolvedPlaceholder ? (
             <option value="" disabled>
               {resolvedPlaceholder}
             </option>
-          )}
-          {options.map((option) => (
-            <option key={option.value} value={option.value} className="bg-[var(--surface-2)] text-foreground">
-              {option.label}
-            </option>
-          ))}
+          ) : null}
+          {!hasCustomChildren
+            ? (options ?? []).map((option) => (
+              <option key={option.value} value={option.value} className="bg-[var(--surface-2)] text-foreground">
+                {option.label}
+              </option>
+            ))
+            : children}
         </select>
 
-        {/* Dropdown arrow */}
-        <div className="select-field__icon ui-control-icon pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5">
-          <svg
-            className="h-4 w-4 text-secondary-text"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+        <div
+          aria-hidden="true"
+          className={cn(
+            'select-field__overlay pointer-events-none flex h-10 w-full min-w-0 items-center rounded-lg border bg-white/[0.02] px-3 py-2.5 text-sm text-white transition-all duration-200',
+            invalid
+              ? 'border-rose-500/50 text-rose-100'
+              : 'border-white/10 group-focus-within:border-emerald-500/50',
+            disabled ? 'opacity-50' : '',
+          )}
+        >
+          <span className="select-field__value min-w-0 flex-1 truncate">{selectedLabel}</span>
+          <ChevronDown className="select-field__icon ui-control-icon ml-2 h-4 w-4 shrink-0 text-white/40" />
         </div>
       </div>
     </div>

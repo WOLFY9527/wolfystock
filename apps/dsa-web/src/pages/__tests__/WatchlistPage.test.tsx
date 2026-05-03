@@ -177,12 +177,15 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('watchlist-filter-grid')).toHaveClass('min-w-0', 'grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-5');
     const marketSelect = screen.getByLabelText('市场');
     const contextSelect = screen.getByLabelText('主题 / 候选范围');
-    expect(marketSelect).toHaveClass('select-surface', 'appearance-none', 'pr-10', 'ui-control-value');
+    expect(marketSelect).toHaveClass('select-surface', 'absolute', 'inset-0', 'opacity-0');
     expect(marketSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
-    expect(marketSelect.closest('.select-field__control')?.querySelector('.select-field__icon')).toHaveClass('pointer-events-none', 'absolute');
-    expect(contextSelect).toHaveClass('select-surface', 'appearance-none', 'pr-10', 'ui-control-value');
+    expect(marketSelect.closest('.select-field__control')?.querySelector('.select-field__overlay')).toHaveAttribute('aria-hidden', 'true');
+    expect(marketSelect.closest('.select-field__control')?.querySelector('.select-field__value')).toHaveTextContent('全部');
+    expect(marketSelect.closest('.select-field__control')?.querySelector('.select-field__icon')).toHaveClass('ml-2', 'shrink-0');
+    expect(contextSelect).toHaveClass('select-surface', 'absolute', 'inset-0', 'opacity-0');
     expect(contextSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
-    expect(contextSelect.closest('.select-field__control')?.querySelector('.select-field__icon')).toHaveClass('pointer-events-none', 'absolute');
+    expect(contextSelect.closest('.select-field__control')?.querySelector('.select-field__overlay')).toHaveAttribute('aria-hidden', 'true');
+    expect(contextSelect.closest('.select-field__control')?.querySelector('.select-field__value')).toHaveTextContent('全部');
     expect(listWatchlistItems).toHaveBeenCalledTimes(1);
   });
 

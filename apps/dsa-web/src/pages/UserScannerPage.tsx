@@ -2201,14 +2201,14 @@ const UserScannerPage: React.FC = () => {
                   {scanScope === 'theme' ? (
                     <div className="flex min-w-0 flex-col gap-1.5" data-testid="scanner-theme-control">
                       <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{language === 'en' ? 'Theme' : '主题'}</span>
-                      <div className="select-field__control ui-control-shell relative flex min-w-0 w-full max-w-full items-center">
+                      <div className="select-field__control ui-control-shell group relative min-w-0 w-full max-w-full">
                         <select
                           data-testid="scanner-theme-select"
                           value={themeId}
                           onChange={(event) => setThemeId(event.target.value)}
                           aria-invalid={Boolean(validationErrors.theme)}
                           aria-describedby={validationErrors.theme ? 'scanner-theme-error' : undefined}
-                          className="select-surface ui-control-value w-full min-w-0 max-w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 pr-10 text-xs text-white outline-none focus:border-indigo-400/50"
+                          className="select-surface absolute inset-0 z-10 h-full w-full min-w-0 cursor-pointer rounded-lg opacity-0 outline-none"
                         >
                           <option value="">{language === 'en' ? 'Select a theme' : '选择主题'}</option>
                           {configuredMarketThemes.length ? (
@@ -2230,7 +2230,21 @@ const UserScannerPage: React.FC = () => {
                             </optgroup>
                           ) : null}
                         </select>
-                        <ChevronDown className="select-field__icon ui-control-icon pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" aria-hidden="true" />
+                        <div
+                          aria-hidden="true"
+                          className={`select-field__overlay pointer-events-none flex h-full min-h-[2.25rem] w-full min-w-0 items-center rounded-lg border bg-black/40 px-2.5 py-1.5 text-xs text-white transition-all ${
+                            validationErrors.theme
+                              ? 'border-rose-500/50 text-rose-100'
+                              : 'border-white/8 group-focus-within:border-indigo-400/50'
+                          }`}
+                        >
+                          <span className="select-field__value min-w-0 flex-1 truncate">
+                            {selectedTheme
+                              ? `${getThemeLabel(selectedTheme, language)} · ${selectedTheme.symbols.length}`
+                              : (language === 'en' ? 'Select a theme' : '选择主题')}
+                          </span>
+                          <ChevronDown className="select-field__icon ui-control-icon ml-2 h-4 w-4 shrink-0 text-white/40" aria-hidden="true" />
+                        </div>
                       </div>
                       {selectedTheme && !selectedTheme.symbols.length ? (
                         <p className="text-[11px] leading-relaxed text-amber-100/72">
