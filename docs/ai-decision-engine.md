@@ -52,6 +52,7 @@ For browser smoke verification without a live provider, start the web app in loc
 ```
 
 Use `/zh?fixture=analysis-trace&trace=open` when the smoke needs to land directly on the trace drawer.
+Use `/zh?fixture=analysis-trace&report=open` when the smoke needs to land directly on the full decision report drawer.
 
 The fixture is frontend-only and is enabled only in Vite dev/test mode. It renders a deterministic ORCL Home analysis result with `decisionTrace`, execution plan fields, data-source statuses, sanitized LLM metadata, one conflict warning, and limitations.
 
@@ -61,6 +62,17 @@ Safety notes:
 - It does not contain raw prompts, system prompts, API keys, or secrets.
 - It is fixture data only and not investment advice.
 - Production builds do not enable the query-parameter fixture.
+
+## Home Report UX
+
+- The default Home result view is an AI decision dashboard: summary action, score, confidence context, execution plan, and compact evidence/source state.
+- `查看完整判断` opens a large report drawer built from existing `standard_report` and legacy summary fields. It renders 执行摘要、重要信息速览、风险警报、利好催化、当日行情、技术透视、作战计划、检查清单 and 数据说明, with missing values shown as `--`.
+- `决策来源` opens a compact trace drawer for decision fields, data used, conflicts, and limitations. Developer details such as provider, model, template, schema status, endpoint, and signal inputs are collapsed by default.
+- The Home UI does not expose raw prompts, system prompts, API keys, or secrets in either drawer.
+- Fixture verification paths:
+  - `/zh?fixture=analysis-trace`
+  - `/zh?fixture=analysis-trace&trace=open`
+  - `/zh?fixture=analysis-trace&report=open`
 
 ## Limitations
 

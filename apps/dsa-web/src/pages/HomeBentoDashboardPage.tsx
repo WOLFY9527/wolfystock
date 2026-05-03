@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { FileSearch, Lock, Search } from 'lucide-react';
+import { Copy, FileSearch, Lock, RefreshCw, Search } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { publicAnalysisApi } from '../api/publicAnalysis';
 import { withFallback } from '../api/withFallback';
@@ -24,7 +24,7 @@ import {
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
-import type { AnalysisReport, DecisionTrace, HistoryItem, StandardReportField, TaskProgressModule } from '../types/analysis';
+import type { AnalysisReport, DecisionTrace, HistoryItem, StandardReport, StandardReportChecklistItem, StandardReportField, TaskProgressModule } from '../types/analysis';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
 import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
 import { createPublicAnalysisFallbackPreview } from '../utils/publicAnalysisFallback';
@@ -248,10 +248,10 @@ function buildDecisionTraceFixtureReport(): AnalysisReport {
 
 function formatTraceValue(value: unknown): string {
   if (value === null || value === undefined || value === '') {
-    return '-';
+    return '--';
   }
   if (typeof value === 'boolean') {
-    return value ? 'yes' : 'no';
+    return value ? 'Yes' : 'No';
   }
   return String(value);
 }
@@ -285,11 +285,298 @@ function traceStatusTone(status?: string): 'neutral' | 'used' | 'warning' | 'mis
   return 'neutral';
 }
 
+function safeReportValue(value: unknown): string {
+  const text = String(value ?? '').trim();
+  return text && text !== '-' && !/^n\/?a$/i.test(text) ? text : '--';
+}
+
+function fieldValue(fields: StandardReportField[] | undefined, aliases: string[]): string {
+  const field = findStandardField(fields, aliases);
+  return field ? safeReportValue(field.value) : '';
+}
+
+function getReportSource(report: AnalysisReport | null): StandardReport | undefined {
+  return report?.details?.standardReport;
+}
+
+function listOrMissing(items?: Array<string | undefined | null>, fallback = '暂无明确记录'): string[] {
+  const values = (items || []).map((item) => String(item || '').trim()).filter(Boolean);
+  return values.length ? values : [fallback];
+}
+
+type FullReportSection = {
+  id: string;
+  title: string;
+  rows?: Array<{ label: string; value: string }>;
+  bullets?: string[];
+  checklist?: Array<{ label: string; status: string }>;
+};
+
+function normalizeChecklistStatus(item: StandardReportChecklistItem | string): { label: string; status: string } {
+  if (typeof item === 'string') {
+    return { label: item, status: 'UNKNOWN' };
+  }
+  const status = String(item.status || '').toLowerCase();
+  const normalized = status === 'pass'
+    ? 'PASS'
+    : status === 'fail'
+      ? 'FAIL'
+      : status === 'warn'
+        ? 'WARN'
+        : status === 'na'
+          ? 'N/A'
+          : 'UNKNOWN';
+  return { label: item.text || '--', status: normalized };
+}
+
+function buildFullReportSections(report: AnalysisReport | null, dashboard: DashboardPayload): FullReportSection[] {
+  const standardReport = getReportSource(report);
+  const summaryPanel = standardReport?.summaryPanel;
+  const decisionPanel = standardReport?.decisionPanel;
+  const reasonLayer = standardReport?.reasonLayer;
+  const highlights = standardReport?.highlights;
+  const market = standardReport?.market;
+  const marketFields = [
+    ...(market?.displayFields || []),
+    ...(market?.regularFields || []),
+    ...(market?.extendedFields || []),
+  ];
+  const technicalFields = standardReport?.technicalFields || standardReport?.tableSections?.technical?.fields || [];
+  const coverageNotes = standardReport?.coverageNotes;
+  const checklistItems = (standardReport?.checklistItems || standardReport?.checklist || []).map(normalizeChecklistStatus);
+
+  return [
+    {
+      id: 'summary',
+      title: '执行摘要',
+      rows: [
+        { label: '标的', value: safeReportValue(summaryPanel?.stock || report?.meta.stockName || dashboard.decision.company) },
+        { label: '代码', value: safeReportValue(summaryPanel?.ticker || report?.meta.stockCode || dashboard.ticker) },
+        { label: '动作', value: safeReportValue(summaryPanel?.operationAdvice || report?.summary.operationAdvice || dashboard.decision.signalLabel) },
+        { label: '评分', value: safeReportValue(summaryPanel?.score ?? dashboard.decision.heroValue) },
+        { label: '趋势', value: safeReportValue(summaryPanel?.trendPrediction || report?.summary.trendPrediction || dashboard.decision.scoreValue) },
+        { label: '一句话判断', value: safeReportValue(summaryPanel?.oneSentence || report?.summary.analysisSummary || dashboard.decision.summary) },
+        { label: '有效期', value: safeReportValue(summaryPanel?.timeSensitivity || summaryPanel?.marketTime || summaryPanel?.reportGeneratedAt || report?.meta.reportGeneratedAt) },
+      ],
+    },
+    {
+      id: 'brief',
+      title: '重要信息速览',
+      bullets: listOrMissing([
+        highlights?.sentimentSummary || reasonLayer?.sentimentSummary || report?.summary.sentimentLabel,
+        highlights?.earningsOutlook,
+        ...(highlights?.latestNews || []),
+        reasonLayer?.latestKeyUpdate,
+      ], '暂无足够新闻、情绪或财报速览'),
+    },
+    {
+      id: 'risks',
+      title: '风险警报',
+      bullets: listOrMissing([
+        reasonLayer?.topRisk,
+        ...(highlights?.riskAlerts || []),
+        ...(highlights?.bearishFactors || []),
+      ], '暂无明确风险条目'),
+    },
+    {
+      id: 'catalysts',
+      title: '利好催化',
+      bullets: listOrMissing([
+        reasonLayer?.topCatalyst,
+        ...(highlights?.positiveCatalysts || []),
+        ...(highlights?.bullishFactors || []),
+      ], '暂无明确利好催化'),
+    },
+    {
+      id: 'market',
+      title: '当日行情',
+      rows: [
+        { label: '开盘', value: fieldValue(marketFields, ['open', '开盘']) || safeReportValue(market?.regularMetrics?.open) },
+        { label: '最高', value: fieldValue(marketFields, ['high', '最高']) || safeReportValue(market?.regularMetrics?.high) },
+        { label: '最低', value: fieldValue(marketFields, ['low', '最低']) || safeReportValue(market?.regularMetrics?.low) },
+        { label: '收盘', value: fieldValue(marketFields, ['close', '收盘', 'current']) || safeReportValue(summaryPanel?.currentPrice || market?.regularMetrics?.close) },
+        { label: '涨跌额', value: fieldValue(marketFields, ['change amount', '涨跌额']) || safeReportValue(summaryPanel?.changeAmount || market?.regularMetrics?.changeAmount) },
+        { label: '涨跌幅', value: fieldValue(marketFields, ['change pct', 'change%', '涨跌幅']) || safeReportValue(summaryPanel?.changePct || market?.regularMetrics?.changePct) },
+        { label: '成交量', value: fieldValue(marketFields, ['volume', '成交量']) || safeReportValue(market?.regularMetrics?.volume) },
+        { label: '成交额', value: fieldValue(marketFields, ['turnover', 'amount', '成交额']) || safeReportValue(market?.regularMetrics?.amount) },
+        { label: '来源', value: safeReportValue(coverageNotes?.dataSources?.[0] || summaryPanel?.priceBasis || summaryPanel?.priceBasisDetail) },
+      ],
+    },
+    {
+      id: 'technical',
+      title: '技术透视',
+      rows: [
+        { label: '均线排列', value: fieldValue(technicalFields, ['MA ALIGNMENT', 'Moving Averages', '均线']) },
+        { label: 'RSI', value: fieldValue(technicalFields, ['RSI-14', 'RSI14', 'RSI']) },
+        { label: 'MACD', value: fieldValue(technicalFields, ['MACD']) },
+        { label: '支撑位', value: safeReportValue(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy) },
+        { label: '压力位', value: safeReportValue(decisionPanel?.resistance || decisionPanel?.target || report?.strategy?.takeProfit) },
+        { label: '量价判断', value: fieldValue(technicalFields, ['VOLUME DYNAMICS', 'Volume', '量价', '成交量']) },
+        { label: '筹码/成本', value: fieldValue(technicalFields, ['chip', 'cost', '筹码', '成本']) },
+      ],
+    },
+    {
+      id: 'battle-plan',
+      title: '作战计划',
+      rows: [
+        { label: '理想买点', value: safeReportValue(decisionPanel?.idealEntry || report?.strategy?.idealBuy) },
+        { label: '次级买点', value: safeReportValue(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy) },
+        { label: '止损', value: safeReportValue(decisionPanel?.stopLoss || report?.strategy?.stopLoss) },
+        { label: '目标', value: safeReportValue(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit) },
+        { label: '仓位', value: safeReportValue(decisionPanel?.positionSizing) },
+        { label: '进场策略', value: safeReportValue(decisionPanel?.buildStrategy || report?.summary.operationAdvice) },
+        { label: '风控策略', value: safeReportValue(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason) },
+      ],
+      bullets: decisionPanel?.executionReminders,
+    },
+    {
+      id: 'checklist',
+      title: '检查清单',
+      checklist: checklistItems.length ? checklistItems : [
+        { label: '多头结构是否一致', status: 'UNKNOWN' },
+        { label: '背离/追高风险', status: 'UNKNOWN' },
+        { label: '量能确认', status: 'UNKNOWN' },
+        { label: '重大负面新闻', status: 'UNKNOWN' },
+        { label: '筹码健康', status: 'UNKNOWN' },
+        { label: '估值匹配', status: 'UNKNOWN' },
+      ],
+    },
+    {
+      id: 'data-notes',
+      title: '数据说明',
+      bullets: [
+        ...listOrMissing(coverageNotes?.dataSources, '数据源未完整标注'),
+        ...listOrMissing(coverageNotes?.coverageGaps || coverageNotes?.missingFieldNotes, '缺失字段会以 -- 展示'),
+        ...listOrMissing(coverageNotes?.methodNotes, '本报告为 AI 辅助分析，不构成投资建议'),
+      ],
+    },
+  ];
+}
+
+function buildReportMarkdown(sections: FullReportSection[]): string {
+  return sections.map((section) => {
+    const rows = (section.rows || []).map((row) => `- ${row.label}: ${row.value}`);
+    const bullets = (section.bullets || []).map((item) => `- ${item}`);
+    const checklist = (section.checklist || []).map((item) => `- [${item.status}] ${item.label}`);
+    return [`## ${section.title}`, ...rows, ...bullets, ...checklist].join('\n');
+  }).join('\n\n');
+}
+
+function FullDecisionReportDrawer({
+  dashboard,
+  isOpen,
+  onClose,
+  report,
+}: {
+  dashboard: DashboardPayload;
+  isOpen: boolean;
+  onClose: () => void;
+  report: AnalysisReport | null;
+}) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const sections = useMemo(() => buildFullReportSections(report, dashboard), [dashboard, report]);
+
+  const handleCopyReport = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('clipboard_unavailable');
+      }
+      await navigator.clipboard.writeText(buildReportMarkdown(sections));
+      setCopyState('copied');
+    } catch {
+      setCopyState('failed');
+    }
+  };
+
+  return (
+    <Drawer
+      isOpen={isOpen}
+      onClose={onClose}
+      title="完整判断报告"
+      width="max-w-[min(100vw,65rem)]"
+      zIndex={90}
+      bodyClassName="overflow-x-hidden"
+    >
+      <article
+        className="min-w-0 space-y-5 rounded-l-[28px] border border-white/[0.08] bg-[#080B10]/92 p-4 text-white shadow-2xl sm:p-7"
+        data-testid="home-bento-full-report-drawer"
+      >
+        <header className="flex min-w-0 flex-col gap-4 border-b border-white/8 pb-5 md:flex-row md:items-end md:justify-between">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">AI DECISION REPORT</p>
+            <h2 className="mt-2 break-words text-2xl font-semibold tracking-[0] text-white md:text-3xl">
+              {dashboard.decision.company} · {dashboard.ticker}
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/58">{dashboard.decision.summary}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { void handleCopyReport(); }}
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
+          >
+            <Copy className="h-4 w-4" />
+            {copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制报告'}
+          </button>
+        </header>
+
+        <div className="grid min-w-0 grid-cols-1 gap-4">
+          {sections.map((section) => (
+            <section key={section.id} className="min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 sm:p-5" data-testid={`home-bento-full-report-section-${section.id}`}>
+              <h3 className="text-base font-semibold tracking-[0] text-white">{section.title}</h3>
+              {section.rows ? (
+                <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                  {section.rows.map((row) => (
+                    <div key={`${section.id}-${row.label}`} className="min-w-0 rounded-xl border border-white/[0.06] bg-black/16 px-3 py-2">
+                      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">{row.label}</p>
+                      <p className="mt-1 break-words text-sm leading-6 text-white/76">{row.value}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {section.bullets ? (
+                <ul className="mt-4 space-y-2 text-sm leading-6 text-white/68">
+                  {section.bullets.map((item) => (
+                    <li key={`${section.id}-${item}`} className="break-words border-l border-white/10 pl-3">{item}</li>
+                  ))}
+                </ul>
+              ) : null}
+              {section.checklist ? (
+                <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                  {section.checklist.map((item) => (
+                    <div key={`${section.id}-${item.label}`} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-black/16 px-3 py-2 text-sm">
+                      <span className="min-w-0 break-words text-white/72">{item.label}</span>
+                      <TraceBadge tone={item.status === 'PASS' ? 'used' : item.status === 'FAIL' ? 'missing' : item.status === 'WARN' ? 'warning' : 'neutral'}>{item.status}</TraceBadge>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          ))}
+        </div>
+      </article>
+    </Drawer>
+  );
+}
+
+function buildTraceSummary(trace?: DecisionTrace): string {
+  if (!trace) {
+    return '来源：未包含决策溯源';
+  }
+  const hasRule = Object.values(trace.decisionFields || {}).some((field) => /rule/.test(String(field.source || '').toLowerCase()));
+  const hasLlm = Boolean(trace.llm?.used) || Object.values(trace.decisionFields || {}).some((field) => /llm/.test(String(field.source || '').toLowerCase()));
+  const sourceLabel = [hasRule ? '规则' : null, hasLlm ? 'LLM' : null].filter(Boolean).join(' + ') || '未知';
+  const sourceCount = trace.dataSources?.length || 0;
+  const usedCount = (trace.dataSources || []).filter((source) => String(source.status || '').toLowerCase() === 'used').length;
+  const conflictCount = trace.conflicts?.length || 0;
+  const schemaLabel = trace.llm?.schemaValidated ? 'Schema OK' : 'Schema 未确认';
+  return `来源：${sourceLabel} · 数据 ${usedCount}/${sourceCount} · 冲突 ${conflictCount} · ${schemaLabel}`;
+}
+
 function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: DashboardLocale }) {
   if (!trace) {
     return (
       <div
-        className="rounded-2xl border border-white/8 bg-white/[0.025] p-4 text-sm text-white/56"
+        className="min-w-0 rounded-2xl border border-white/8 bg-white/[0.025] p-4 text-sm text-white/56"
         data-testid="home-bento-decision-trace-panel"
       >
         当前分析未包含决策溯源
@@ -303,22 +590,13 @@ function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: 
   const conflicts = trace.conflicts || [];
   const limitations = trace.limitations || [];
   const llm = trace.llm || {};
-  const sectionTitleClass = 'text-[11px] font-semibold uppercase tracking-[0.18em] text-white/44';
+  const sectionTitleClass = 'text-[11px] font-semibold tracking-[0] text-white/70';
+  const isEnglish = locale === 'en';
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="home-bento-decision-trace-panel">
       <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
-        <p className={sectionTitleClass}>Developer Summary</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <TraceBadge>{trace.mode || 'unknown'}</TraceBadge>
-          <TraceBadge>{trace.endpoint || '/api/v1/analysis/analyze'}</TraceBadge>
-          <TraceBadge>{trace.symbol || '-'}</TraceBadge>
-          <TraceBadge>{trace.market || 'unknown'}</TraceBadge>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
-        <p className={sectionTitleClass}>Decision Fields</p>
+        <p className={sectionTitleClass}>{isEnglish ? 'Decision Fields' : '决策字段'}</p>
         <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
           {decisionFields.map(([name, field]) => (
             <div key={name} className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
@@ -334,13 +612,13 @@ function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: 
       </div>
 
       <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
-        <p className={sectionTitleClass}>Data Sources</p>
+        <p className={sectionTitleClass}>{isEnglish ? 'Data Used' : '使用的数据'}</p>
         <div className="mt-3 flex min-w-0 flex-col gap-2">
           {dataSources.length ? dataSources.map((source, index) => (
             <div key={`${source.name}-${index}`} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
               <span className="truncate text-xs font-semibold text-white/72">{source.name || 'source'}</span>
               <div className="flex min-w-0 flex-wrap justify-end gap-2">
-                <TraceBadge tone={traceStatusTone(source.status)}>{source.status || 'unknown'}</TraceBadge>
+                <TraceBadge tone={traceStatusTone(source.status)}>{String(source.status || 'unknown').toUpperCase()}</TraceBadge>
                 {source.provider ? <TraceBadge>{source.provider}</TraceBadge> : null}
               </div>
             </div>
@@ -349,38 +627,7 @@ function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: 
       </div>
 
       <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
-        <p className={sectionTitleClass}>LLM Usage</p>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {[
-            ['provider', llm.provider],
-            ['model', llm.model],
-            ['template', llm.template],
-            ['structured output', llm.structuredOutput],
-            ['schema validated', llm.schemaValidated],
-            ['prompt exposed', llm.promptExposed],
-          ].map(([label, value]) => (
-            <div key={String(label)} className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">{label}</p>
-              <p className="mt-1 break-words text-sm text-white/76">{formatTraceValue(value)}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
-        <p className={sectionTitleClass}>Signal Inputs</p>
-        <div className="mt-3 flex flex-col gap-2">
-          {signals.length ? signals.slice(0, 8).map((signal, index) => (
-            <div key={`${signal.name}-${index}`} className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm">
-              <span className="truncate text-white/72">{signal.name || 'signal'}</span>
-              <span className="break-words text-white/48">{formatTraceValue(signal.value)} · {signal.source || 'unknown'}</span>
-            </div>
-          )) : <p className="text-sm text-white/48">No signal list available.</p>}
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
-        <p className={sectionTitleClass}>Conflicts & Limitations</p>
+        <p className={sectionTitleClass}>{isEnglish ? 'Conflicts & Limitations' : '冲突与限制'}</p>
         <div className="mt-3 flex flex-col gap-2 text-sm text-white/66">
           {conflicts.length ? conflicts.map((conflict, index) => (
             <div key={`${conflict.type}-${index}`} className="rounded-xl border border-amber-300/15 bg-amber-300/8 px-3 py-2 text-amber-50/86">
@@ -392,6 +639,43 @@ function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: 
           ))}
         </div>
       </div>
+
+      <details
+        className="group rounded-2xl border border-white/8 bg-white/[0.025] p-4"
+        data-testid="home-bento-decision-trace-developer"
+      >
+        <summary className="cursor-pointer text-[11px] font-semibold tracking-[0] text-white/62 transition-colors hover:text-white">
+          {isEnglish ? 'Developer Details' : '开发者细节'}
+        </summary>
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {[
+            ['provider', llm.provider],
+            ['model', llm.model],
+            ['template', llm.template],
+            ['schema_validated', llm.schemaValidated],
+            ['prompt_exposed', llm.promptExposed],
+            ['engine_version', trace.engineVersion],
+            ['endpoint', trace.endpoint],
+            ['mode', trace.mode],
+          ].map(([label, value]) => (
+            <div key={String(label)} className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">{label}</p>
+              <p className="mt-1 break-words text-sm text-white/76">{formatTraceValue(value)}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">signal_inputs</p>
+          <div className="mt-2 flex flex-col gap-2">
+            {signals.length ? signals.slice(0, 8).map((signal, index) => (
+              <div key={`${signal.name}-${index}`} className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm">
+                <span className="truncate text-white/72">{signal.name || 'signal'}</span>
+                <span className="break-words text-white/48">{formatTraceValue(signal.value)} · {signal.source || 'unknown'}</span>
+              </div>
+            )) : <p className="text-sm text-white/48">No signal list available.</p>}
+          </div>
+        </div>
+      </details>
     </div>
   );
 }
@@ -2127,6 +2411,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
   const [hydratedRouteTaskId, setHydratedRouteTaskId] = useState<string | null>(null);
   const [isTraceDrawerOpen, setTraceDrawerOpen] = useState(false);
+  const [isFullReportDrawerOpen, setFullReportDrawerOpen] = useState(false);
+  const [mainCopyState, setMainCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const routeTaskId = searchParams.get('task_id') || searchParams.get('taskId') || null;
   const routeSymbol = normalizeTickerQuery(searchParams.get('symbol') || undefined);
   const routeSource = searchParams.get('source') || null;
@@ -2266,6 +2552,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       }
   ), [locale]);
   const activeDrawerPayload = activeDrawer && copy ? buildDrawerPayload(locale, copy, activeDrawer) : null;
+  const sourceSummary = useMemo(() => buildTraceSummary(activeTraceReport?.decisionTrace), [activeTraceReport?.decisionTrace]);
   const shouldRenderDashboardPanels = !isGuest || Boolean(guestPreview || pendingAnalysisTicker);
   const guestPaywall = isGuest ? <GuestPaywallOverlay registrationPath={registrationPath} /> : null;
   const deleteCopy = useMemo(() => ({
@@ -2289,6 +2576,20 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       setTraceDrawerOpen(true);
     }
   }, [isTraceDrawerOpen, searchParams, traceFixtureReport]);
+
+  useEffect(() => {
+    if (traceFixtureReport && searchParams.get('report') === 'open' && !isFullReportDrawerOpen) {
+      setFullReportDrawerOpen(true);
+    }
+  }, [isFullReportDrawerOpen, searchParams, traceFixtureReport]);
+
+  useEffect(() => {
+    if (mainCopyState === 'idle') {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setMainCopyState('idle'), 1800);
+    return () => window.clearTimeout(timer);
+  }, [mainCopyState]);
 
   useEffect(() => {
     purgeZombieDashboardStorage();
@@ -2561,6 +2862,18 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
   };
 
+  const handleCopyActiveReport = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('clipboard_unavailable');
+      }
+      await navigator.clipboard.writeText(buildReportMarkdown(buildFullReportSections(activeTraceReport, dashboardData)));
+      setMainCopyState('copied');
+    } catch {
+      setMainCopyState('failed');
+    }
+  };
+
   const omnibarModule = (
     <div className="order-first w-full shrink-0 xl:order-none" data-testid="home-bento-omnibar-shell">
       <form
@@ -2713,8 +3026,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         summary={readyCopy.decision.summary}
                         locale={locale}
                         reason={{ title: readyCopy.decision.reasonTitle, body: readyCopy.decision.reasonBody }}
-                        detailLabel={readyCopy.decision.detailLabel}
-                        onOpenDetails={() => setActiveDrawer('decision')}
+                        detailLabel={locale === 'en' ? 'Report' : '完整判断'}
+                        onOpenDetails={() => setFullReportDrawerOpen(true)}
                         isGuest={isGuest}
                         guestPaywall={guestPaywall}
                       />
@@ -2752,16 +3065,45 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           onOpenDetails={() => setActiveDrawer('strategy')}
                         />
                         {!isGuest ? (
-                          <div className="mt-3 flex w-full justify-end">
-                            <button
-                              type="button"
-                              className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/56 transition-colors hover:border-white/16 hover:bg-white/[0.07] hover:text-white"
-                              onClick={() => setTraceDrawerOpen(true)}
-                              data-testid="home-bento-decision-trace-trigger"
-                            >
-                              <FileSearch className="h-3.5 w-3.5 shrink-0" />
-                              <span className="truncate">{locale === 'en' ? 'Decision Trace' : '查看决策来源'}</span>
-                            </button>
+                          <div className="mt-3 flex w-full flex-col gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-3 sm:flex-row sm:items-center sm:justify-between" data-testid="home-bento-decision-actions">
+                            <p className="min-w-0 truncate text-xs text-white/46" data-testid="home-bento-decision-source-summary">
+                              {sourceSummary}
+                            </p>
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/12 bg-white text-black px-3 py-2 text-xs font-semibold transition-colors hover:bg-white/88"
+                                onClick={() => setFullReportDrawerOpen(true)}
+                              >
+                                <span className="truncate">{locale === 'en' ? 'Full Report' : '查看完整判断'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition-colors hover:border-white/16 hover:bg-white/[0.07] hover:text-white"
+                                onClick={() => setTraceDrawerOpen(true)}
+                                data-testid="home-bento-decision-trace-trigger"
+                              >
+                                <FileSearch className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{locale === 'en' ? 'Sources' : '决策来源'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition-colors hover:border-white/16 hover:bg-white/[0.07] hover:text-white"
+                                onClick={() => { void handleCopyActiveReport(); }}
+                              >
+                                <Copy className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{mainCopyState === 'copied' ? '已复制' : mainCopyState === 'failed' ? '复制失败' : '复制报告'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition-colors hover:border-white/16 hover:bg-white/[0.07] hover:text-white disabled:cursor-wait disabled:text-white/35"
+                                disabled={isBusy}
+                                onClick={() => { void handleAnalyze(readyCopy.ticker); }}
+                              >
+                                <RefreshCw className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{locale === 'en' ? 'Rerun' : '重新分析'}</span>
+                              </button>
+                            </div>
                           </div>
                         ) : null}
                         <div
@@ -2800,11 +3142,19 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         testId="home-bento-drawer"
       />
 
+      <FullDecisionReportDrawer
+        isOpen={isFullReportDrawerOpen}
+        onClose={() => setFullReportDrawerOpen(false)}
+        report={activeTraceReport}
+        dashboard={dashboardData}
+      />
+
       <Drawer
         isOpen={isTraceDrawerOpen}
         onClose={() => setTraceDrawerOpen(false)}
         title={locale === 'en' ? 'Decision Trace' : '决策来源'}
         width="max-w-xl"
+        zIndex={90}
         bodyClassName="overflow-x-hidden"
       >
         <DecisionTracePanel trace={activeTraceReport?.decisionTrace} locale={locale} />

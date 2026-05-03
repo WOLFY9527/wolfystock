@@ -2,6 +2,8 @@
 
 - 💱 **Portfolio 显示货币迁移到个人设置** — `/settings` 新增“资产显示偏好 / 默认显示货币”，统一保存 CNY/USD/HKD/EUR/JPY 总资产展示偏好；`/portfolio` Hero 移除大型显示货币选择器，改为紧凑状态、设置入口、按币种资产摘要与账户币种信息。交易台新增结算货币自动推断和手动覆盖，持仓继续显示原始币种并在可用时补充偏好币种折算，不改变成本法、会计公式或后端 FX provider 行为。
 
+- 🧠 **Home AI 判断结果改为 summary-first 报告体验** — `/` 与 `/zh` 的 Home AI 结果页移除常驻右侧重型 Decision Trace 面板，默认只展示决策摘要、执行计划、技术/基本面高亮与紧凑来源行。`查看完整判断` 现在打开大型完整判断报告抽屉，按执行摘要、重要信息速览、风险警报、利好催化、当日行情、技术透视、作战计划、检查清单和数据说明组织既有报告字段；`决策来源` 打开紧凑 trace 抽屉，开发者细节默认折叠且不暴露 raw prompt / system prompt / API key。新增 `/zh?fixture=analysis-trace&report=open` 作为无 LLM 调用的浏览器验收入口。
+
 - 🧊 **Market Overview Last-Known-Good 快照与缓存 UX** — `/market-overview` 新增后端持久化 last-known-good panel snapshot，外部行情源超时或冷启动失败时优先返回最近成功快照并标记 `stale/isFromSnapshot/lastSuccessfulAt/refreshError`，不再用空 payload 覆盖好数据。前端新增 `wolfystock.marketOverview.lastKnownGood.v1` 本地快照，页面刷新或后端慢启动时先渲染 LOCAL CACHE，再静默刷新；卡片级错误收敛为小型 STALE/ERROR badge，顶部状态条聚合 CACHE/STALE/REFRESH FAILED 与错误数量，减少重复红色错误块和 N/A 墙。
 
 - 🧠 **Stock Chat Phase 2 升级为 AI 决策台** — `/chat` 可见导航从“问股”收口为“决策台 / WOLFY AI 决策台”，移动端空态压缩为单个主模板与“更多模板”，控制台改为默认折叠抽屉并修复 Safari 窄屏透明遮挡。AI 引擎新增安全的 provider health 视图，只展示 DeepSeek/OpenAI/Gemini/Local 等 provider 的可用、未配置、离线或未知状态，不暴露 API key；检测到代码后只读取既有观察列表、持仓快照、scanner 历史和 rule backtest 历史证据，不自动运行 scanner/backtest/AI 分析，并把紧凑证据摘要传入 AgentExecutor 与每条回答底部证据 footer。
