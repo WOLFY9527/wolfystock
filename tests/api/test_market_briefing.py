@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -56,12 +57,78 @@ class MarketBriefingApiTestCase(unittest.TestCase):
 
     def test_get_market_briefing_fallback_only_avoids_positive_strong_judgement(self) -> None:
         service = MarketOverviewService()
-        payload = service.get_market_briefing()
+        with patch.object(service, "_build_market_temperature_inputs", return_value=service._fallback_market_temperature_inputs()):
+            payload = service.get_market_briefing()
 
         self.assertFalse(payload["isReliable"])
+        self.assertEqual(payload["source"], "fallback")
+        self.assertEqual(payload["freshness"], "fallback")
+        self.assertEqual(payload["confidence"], 0.0)
         self.assertIn("暂不生成强市场判断", payload["warning"])
         self.assertTrue(any("暂不生成强市场判断" in item["message"] for item in payload["items"]))
         self.assertFalse(any(item["severity"] == "positive" for item in payload["items"]))
+        self.assertTrue(all(item["severity"] in {"warning", "neutral", "risk"} for item in payload["items"]))
+
+    def test_get_market_briefing_low_coverage_mixed_inputs_avoids_positive_strong_judgement(self) -> None:
+        service = MarketOverviewService()
+        inputs = copy.deepcopy(service._fallback_market_temperature_inputs())
+
+        for key, source in (("indices", "sina"), ("rates", "sina"), ("crypto", "binance")):
+            panel = inputs[key]
+            panel["source"] = source
+            panel["sourceLabel"] = "实时数据"
+            panel["fallbackUsed"] = False
+            panel["isFallback"] = False
+            panel["freshness"] = "live"
+            for idx, item in enumerate(panel.get("items", [])):
+                if idx != 0:
+                    continue
+                item["source"] = source
+                item["sourceLabel"] = "实时数据"
+                item["fallbackUsed"] = False
+                item["isFallback"] = False
+                item["freshness"] = "live"
+
+        with patch.object(service, "_build_market_temperature_inputs", return_value=inputs):
+            payload = service.get_market_briefing()
+
+        self.assertFalse(payload["isReliable"])
+        self.assertLess(payload["confidence"], 0.25)
+        self.assertIn("暂不生成强市场判断", payload["warning"])
+        self.assertFalse(any(item["severity"] == "positive" for item in payload["items"]))
+
+    def test_get_market_briefing_mixed_enough_data_can_still_be_reliable(self) -> None:
+        service = MarketOverviewService()
+        inputs = copy.deepcopy(service._fallback_market_temperature_inputs())
+
+        for key, source in (("indices", "sina"), ("rates", "sina"), ("crypto", "binance")):
+            panel = inputs[key]
+            panel["source"] = source
+            panel["sourceLabel"] = "实时数据"
+            panel["fallbackUsed"] = False
+            panel["isFallback"] = False
+            panel["freshness"] = "live"
+            for item in panel.get("items", []):
+                item["source"] = source
+                item["sourceLabel"] = "实时数据"
+                item["fallbackUsed"] = False
+                item["isFallback"] = False
+                item["freshness"] = "live"
+
+        inputs["fx"]["source"] = "fallback"
+        inputs["fx"]["sourceLabel"] = "备用数据"
+        inputs["fx"]["fallbackUsed"] = True
+        inputs["fx"]["isFallback"] = True
+        inputs["fx"]["freshness"] = "fallback"
+
+        with patch.object(service, "_build_market_temperature_inputs", return_value=inputs):
+            payload = service.get_market_briefing()
+
+        self.assertTrue(payload["isReliable"])
+        self.assertEqual(payload["source"], "mixed")
+        self.assertGreater(payload["confidence"], 0.25)
+        self.assertEqual(payload["warning"], "部分解读已排除备用数据。")
+        self.assertFalse(any(item["severity"] == "risk" for item in payload["items"][:-1]))
 
 
 if __name__ == "__main__":

@@ -427,18 +427,19 @@ class MarketOverviewService:
         def fetcher() -> Dict[str, Any]:
             inputs = self._build_market_temperature_inputs()
             trust = self._summarize_market_temperature_confidence(inputs)
-            source = "computed" if trust["isReliable"] and not trust["fallbackInputCount"] else "mixed"
+            briefing_trust = self._market_briefing_trust(inputs, trust)
+            source = "computed" if briefing_trust["isReliable"] and not trust["fallbackInputCount"] else "mixed"
             if trust["reliableInputCount"] == 0:
                 source = "fallback"
             real_inputs = self._real_market_temperature_inputs(inputs)
-            scores = self._compute_market_temperature_scores(real_inputs) if trust["isReliable"] else self._insufficient_market_temperature_scores()
+            scores = self._compute_market_temperature_scores(real_inputs) if briefing_trust["isReliable"] else self._insufficient_market_temperature_scores()
             payload = {
                 "source": source,
                 "updatedAt": _now_iso(),
-                "items": self._build_market_briefing_items(real_inputs if trust["isReliable"] else inputs, scores, source, trust),
-                **trust,
+                "items": self._build_market_briefing_items(real_inputs if briefing_trust["isReliable"] else inputs, scores, source, briefing_trust),
+                **briefing_trust,
             }
-            if not trust["isReliable"]:
+            if not briefing_trust["isReliable"]:
                 payload["warning"] = "当前真实数据不足，暂不生成强市场判断。"
                 payload["fallbackUsed"] = True
                 payload["isFallback"] = trust["reliableInputCount"] == 0
@@ -1462,6 +1463,47 @@ class MarketOverviewService:
             "reliableInputCount": reliable_count,
             "fallbackInputCount": fallback_count,
             "excludedInputCount": excluded_count,
+            "isReliable": is_reliable,
+        }
+
+    def _market_briefing_trust(self, inputs: Dict[str, Any], trust: Dict[str, Any]) -> Dict[str, Any]:
+        reliable_panel_count = 0
+        total_panel_count = 0
+        for key in ("indices", "breadth", "flows", "sectors", "rates", "fx", "futures", "sentiment", "crypto"):
+            if key not in inputs:
+                continue
+            panel = inputs.get(key) or {}
+            if not isinstance(panel, dict):
+                continue
+            total_panel_count += 1
+            panel_items = panel.get("items") if isinstance(panel.get("items"), list) else []
+            category = self._category_for_cache_key(key)
+            if panel_items:
+                if any(
+                    isinstance(item, dict) and self._market_data_confidence(item, category) > 0
+                    for item in panel_items
+                ):
+                    reliable_panel_count += 1
+                continue
+            if self._market_data_confidence(panel, category) > 0:
+                reliable_panel_count += 1
+
+        reliable_count = int(trust.get("reliableInputCount") or 0)
+        fallback_count = int(trust.get("fallbackInputCount") or 0)
+        total_count = reliable_count + fallback_count
+        coverage = reliable_count / total_count if total_count else 0.0
+        panel_factor = min(1.0, reliable_panel_count / 3.0) if reliable_panel_count else 0.0
+        item_factor = min(1.0, reliable_count / 5.0) if reliable_count else 0.0
+        confidence = round(min(float(trust.get("confidence") or 0.0), coverage, panel_factor, item_factor), 2)
+        is_reliable = bool(
+            trust.get("isReliable")
+            and reliable_count >= 5
+            and reliable_panel_count >= 3
+            and coverage >= 0.25
+        )
+        return {
+            **trust,
+            "confidence": confidence,
             "isReliable": is_reliable,
         }
 
