@@ -110,8 +110,37 @@ function makeAccounts(items: AccountItem[] = [{ id: 1, name: 'Main' }]) {
   };
 }
 
-function makeSnapshot(options: { accountId?: number; fxStale?: boolean; accountCount?: number } = {}) {
+function makeSnapshot(options: {
+  accountId?: number;
+  fxStale?: boolean;
+  accountCount?: number;
+  includePosition?: boolean;
+  fxRates?: Array<{
+    fromCurrency: string;
+    toCurrency: string;
+    rate: number | null;
+    rateDate?: string | null;
+    source: string;
+    isStale: boolean;
+    updatedAt?: string | null;
+    sourceDirection: string;
+  }>;
+} = {}) {
   const accountId = options.accountId ?? 1;
+  const positions = options.includePosition ? [
+    {
+      symbol: 'AAPL',
+      market: 'us',
+      currency: 'USD',
+      quantity: 10,
+      avgCost: 150,
+      totalCost: 1500,
+      lastPrice: 160,
+      marketValueBase: 1600,
+      unrealizedPnlBase: 100,
+      valuationCurrency: 'USD',
+    },
+  ] : [];
   return {
     asOf: '2026-03-19',
     costMethod: 'fifo' as const,
@@ -125,7 +154,7 @@ function makeSnapshot(options: { accountId?: number; fxStale?: boolean; accountC
     feeTotal: 0,
     taxTotal: 0,
     fxStale: options.fxStale ?? true,
-    fxRates: [
+    fxRates: options.fxRates ?? [
       {
         fromCurrency: 'USD',
         toCurrency: 'CNY',
@@ -185,7 +214,7 @@ function makeSnapshot(options: { accountId?: number; fxStale?: boolean; accountC
         feeTotal: 0,
         taxTotal: 0,
         fxStale: options.fxStale ?? true,
-        positions: [],
+        positions,
       },
     ],
   };
@@ -265,12 +294,13 @@ async function waitForInitialLoad() {
 
 function openFxPanel(language: 'zh' | 'en' = 'zh') {
   fireEvent.click(screen.getByRole('button', { name: language === 'en' ? 'FX' : '汇率' }));
-  return screen.getByRole('button', { name: translate(language, 'portfolio.refreshFx') });
+  return within(screen.getByTestId('portfolio-fx-panel')).getByRole('button', { name: translate(language, 'portfolio.refreshFx') });
 }
 
 describe('PortfolioPage FX refresh', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1024 });
 
     getAccounts.mockResolvedValue(makeAccounts());
@@ -386,7 +416,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('heading', { name: '总资产 Total Assets' })).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(await screen.findByText(translate('zh', 'portfolio.fxStale'))).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).toBeInTheDocument();
     const submitTradeButton = screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') });
     expect(submitTradeButton).toHaveAttribute('type', 'submit');
     expect(submitTradeButton).not.toHaveAttribute('data-variant');
@@ -444,6 +474,131 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(mobileHistoryPanel).getByRole('heading', { name: '历史记录' })).toBeInTheDocument();
   });
 
+  it('renders display currency controls and converts totals and holdings without hiding original currency', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const displayCurrencySelect = screen.getByLabelText('DISPLAY CURRENCY') as HTMLSelectElement;
+    expect(displayCurrencySelect).toHaveValue('CNY');
+    for (const currency of ['CNY', 'USD', 'HKD', 'EUR', 'JPY']) {
+      expect(within(displayCurrencySelect).getByRole('option', { name: currency })).toBeInTheDocument();
+    }
+
+    expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('CNY 3,000.00');
+    expect(screen.getByText('USD 1,600.00')).toBeInTheDocument();
+    expect(screen.getByText('≈ CNY 11,592.00')).toBeInTheDocument();
+
+    fireEvent.change(displayCurrencySelect, { target: { value: 'USD' } });
+
+    expect(displayCurrencySelect).toHaveValue('USD');
+    expect(window.localStorage.getItem('wolfystock.portfolio.displayCurrency.v1')).toBe('USD');
+    expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('USD 414.08');
+    expect(screen.getByText('CNY 3,000.00')).toBeInTheDocument();
+    expect(screen.getByText('USD 1,600.00')).toBeInTheDocument();
+    expect(screen.queryByText('≈ USD 1,600.00')).not.toBeInTheDocument();
+
+    fireEvent.change(displayCurrencySelect, { target: { value: 'HKD' } });
+    expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('HKD 3,257.33');
+  });
+
+  it('shows an FX unavailable state instead of fake converted values when a display rate is missing', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({
+      includePosition: true,
+      fxRates: [
+        {
+          fromCurrency: 'USD',
+          toCurrency: 'CNY',
+          rate: null,
+          rateDate: null,
+          source: 'missing',
+          isStale: true,
+          updatedAt: null,
+          sourceDirection: 'missing',
+        },
+      ],
+    }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(screen.getByText('USD 1,600.00')).toBeInTheDocument();
+    expect(screen.getAllByText('FX unavailable').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/≈ CNY/)).not.toBeInTheDocument();
+  });
+
+  it('refreshes display FX from the portfolio refresh endpoint and reloads display data', async () => {
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
+
+    await waitFor(() => expect(refreshFx).toHaveBeenCalledWith({ accountId: undefined }));
+    await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshUpdated', { count: 1 }))).toBeInTheDocument();
+  });
+
+  it('refreshes portfolio data after trade submit, disables duplicate submit, and shows compact feedback', async () => {
+    const pendingTrade = deferredPromise<{ id: number }>();
+    createTrade.mockImplementationOnce(() => pendingTrade.promise);
+    getSnapshot
+      .mockResolvedValueOnce(makeSnapshot({ includePosition: false }))
+      .mockResolvedValueOnce(makeSnapshot({ includePosition: true }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.change(screen.getByLabelText('ACCOUNT'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('SYMBOL'), { target: { value: 'AAPL' } });
+    fireEvent.change(screen.getByLabelText('QUANTITY'), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText('PRICE'), { target: { value: '160' } });
+
+    const submitButton = screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => expect(submitButton).toBeDisabled());
+
+    await act(async () => {
+      pendingTrade.resolve({ id: 1 });
+      await pendingTrade.promise;
+    });
+
+    await waitFor(() => expect(createTrade).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(listTrades).toHaveBeenCalledTimes(3));
+    expect(await screen.findByTestId('portfolio-trade-feedback')).toHaveTextContent('AAPL 买入已记录 · 已刷新持仓');
+    expect(screen.getByLabelText('SYMBOL')).toHaveValue('');
+  });
+
+  it('shows compact trade errors and preserves the form when submit fails', async () => {
+    createTrade.mockRejectedValueOnce(
+      createApiError(
+        createParsedApiError({
+          title: '交易失败',
+          message: '余额不足',
+        }),
+      ),
+    );
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.change(screen.getByLabelText('ACCOUNT'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('SYMBOL'), { target: { value: 'AAPL' } });
+    fireEvent.change(screen.getByLabelText('QUANTITY'), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText('PRICE'), { target: { value: '160' } });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') }));
+
+    expect(await screen.findByTestId('portfolio-trade-feedback')).toHaveTextContent('余额不足');
+    expect(screen.getByLabelText('SYMBOL')).toHaveValue('AAPL');
+  });
+
   it('switches left tabs between trade, account, sync, and fx surfaces', async () => {
     render(<PortfolioPage />);
 
@@ -485,7 +640,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+    const accountSelect = screen.getByLabelText('ACCOUNT') as HTMLSelectElement;
     fireEvent.change(accountSelect, { target: { value: '1' } });
     fireEvent.click(screen.getByRole('button', { name: '账户' }));
     fireEvent.click(screen.getByRole('button', { name: '删除 Main' }));
@@ -494,7 +649,7 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.deleteConfirm') }));
 
     await waitFor(() => expect(deleteAccount).toHaveBeenCalledWith(1));
-    await waitFor(() => expect((screen.getAllByRole('combobox')[0] as HTMLSelectElement).value).toBe('2'));
+    await waitFor(() => expect((screen.getByLabelText('ACCOUNT') as HTMLSelectElement).value).toBe('2'));
     expect(await screen.findByText(translate('zh', 'portfolio.accountArchived'))).toBeInTheDocument();
   });
 
@@ -573,7 +728,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getAllByRole('combobox')[0];
+    const accountSelect = screen.getByLabelText('ACCOUNT');
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(screen.getByRole('button', { name: '同步' }));
@@ -704,7 +859,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getAllByRole('combobox')[0];
+    const accountSelect = screen.getByLabelText('ACCOUNT');
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(screen.getByRole('button', { name: '同步' }));
@@ -746,7 +901,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getAllByRole('combobox')[0];
+    const accountSelect = screen.getByLabelText('ACCOUNT');
     fireEvent.change(accountSelect, { target: { value: '1' } });
 
     await waitFor(() => {
@@ -866,7 +1021,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getAllByRole('combobox')[0];
+    const accountSelect = screen.getByLabelText('ACCOUNT');
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 1, costMethod: 'fifo' }));
 
@@ -914,7 +1069,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const costMethodSelect = screen.getAllByRole('combobox')[1];
+    const costMethodSelect = screen.getByLabelText('COST METHOD');
 
     fireEvent.click(openFxPanel());
     expect(await screen.findByRole('button', { name: translate('zh', 'portfolio.refreshingFx') })).toBeDisabled();
@@ -1020,7 +1175,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('ACCOUNT'), { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(screen.getByRole('button', { name: 'Sync' }));
     fireEvent.change(
@@ -1070,7 +1225,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('ACCOUNT'), { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(screen.getByRole('button', { name: '同步' }));
     fireEvent.change(
@@ -1133,7 +1288,7 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(screen.getByRole('button', { name: '股票买卖' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '资金划转' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '公司行为' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: '公司行为' }).length).toBeGreaterThan(0);
     expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.manualCash'))).not.toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.manualCorporate'))).not.toBeInTheDocument();
@@ -1159,7 +1314,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(amountInput.className).toContain('input-surface');
     expect(amountInput.className).toContain('rounded-lg');
 
-    fireEvent.click(screen.getByRole('button', { name: '公司行为' }));
+    fireEvent.click(within(screen.getByTestId('portfolio-trade-type-switcher')).getByRole('button', { name: '公司行为' }));
     expect(screen.getByText(translate('zh', 'portfolio.manualCorporate'))).toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.manualTrade'))).not.toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.manualCash'))).not.toBeInTheDocument();
@@ -1175,7 +1330,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-history-drawer')).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: '历史记录' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('zh', 'portfolio.tradeLedger') })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: translate('zh', 'portfolio.cashLedger') })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: translate('zh', 'portfolio.cashLedger') }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: translate('zh', 'portfolio.corporateLedger') }).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshLedger') })).toBeInTheDocument();
   });
@@ -1186,7 +1341,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     fireEvent.click(screen.getByRole('button', { name: '历史记录 ↗' }));
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.cashLedger') }));
+    fireEvent.click(screen.getAllByRole('button', { name: translate('zh', 'portfolio.cashLedger') })[0]);
     await waitFor(() => expect(listCashLedger).toHaveBeenCalled());
 
     const corporateLedgerButtons = screen.getAllByRole('button', { name: translate('zh', 'portfolio.corporateLedger') });
@@ -1210,7 +1365,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-history-drawer')).toBeInTheDocument();
     expect(within(holdingsPanel).getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '关闭历史记录' }));
+    fireEvent.click(screen.getAllByRole('button', { name: '关闭历史记录' })[0]);
     await waitFor(() => expect(screen.queryByTestId('portfolio-history-drawer')).not.toBeInTheDocument());
   });
 

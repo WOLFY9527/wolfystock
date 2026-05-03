@@ -7,7 +7,6 @@ import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Input, PillBadge, SectionShell, Select } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
-  getSafariReadySurfaceClassName,
   shouldApplySafariA11yGuard,
   useSafariRenderReady,
   useSafariWarmActivation,
@@ -47,6 +46,8 @@ const PORTFOLIO_ICON_BUTTON_CLASS = 'h-9 w-9 rounded-xl border-0 bg-white/[0.04]
 const PORTFOLIO_DANGER_GHOST_CLASS = 'h-8 w-8 rounded-lg border-0 bg-transparent p-0 text-white/30 hover:bg-red-500/10 hover:text-red-400';
 const CASH_CURRENCY_OPTIONS = ['CNY', 'HKD', 'USD'] as const;
 const FX_CURRENCY_OPTIONS = ['USD', 'CNY', 'HKD', 'EUR', 'JPY', 'GBP'] as const;
+const DISPLAY_CURRENCY_OPTIONS = ['CNY', 'USD', 'HKD', 'EUR', 'JPY'] as const;
+const DISPLAY_CURRENCY_STORAGE_KEY = 'wolfystock.portfolio.displayCurrency.v1';
 
 const DEFAULT_PAGE_SIZE = 20;
 const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
@@ -77,6 +78,15 @@ type DisplayFxRate = {
   cacheHit?: boolean;
   isStale?: boolean;
 };
+
+type DisplayCurrency = typeof DISPLAY_CURRENCY_OPTIONS[number];
+
+type ConvertedMoney = {
+  value: number;
+  currency: DisplayCurrency;
+  rate: number;
+  stale: boolean;
+} | null;
 
 type PendingDelete =
   | { eventType: 'trade'; id: number; message: string }
@@ -402,6 +412,44 @@ function formatSignedMoney(value: number, currency: string): string {
   return formatted;
 }
 
+function normalizeDisplayCurrency(value: unknown): DisplayCurrency {
+  const normalized = typeof value === 'string' ? value.toUpperCase() : '';
+  return DISPLAY_CURRENCY_OPTIONS.includes(normalized as DisplayCurrency)
+    ? (normalized as DisplayCurrency)
+    : 'CNY';
+}
+
+function readInitialDisplayCurrency(): DisplayCurrency {
+  if (typeof window === 'undefined') {
+    return 'CNY';
+  }
+  return normalizeDisplayCurrency(window.localStorage.getItem(DISPLAY_CURRENCY_STORAGE_KEY));
+}
+
+function getFxRateForDisplay(
+  fxRows: PortfolioFxRateItem[],
+  fromCurrency: string | undefined | null,
+  toCurrency: DisplayCurrency,
+): { rate: number; stale: boolean } | null {
+  const from = (fromCurrency || '').toUpperCase();
+  const to = toCurrency.toUpperCase();
+  if (!from || from === to) {
+    return { rate: 1, stale: false };
+  }
+
+  const direct = fxRows.find((item) => item.fromCurrency === from && item.toCurrency === to);
+  if (direct && typeof direct.rate === 'number' && direct.rate > 0) {
+    return { rate: direct.rate, stale: direct.isStale };
+  }
+
+  const inverse = fxRows.find((item) => item.fromCurrency === to && item.toCurrency === from);
+  if (inverse && typeof inverse.rate === 'number' && inverse.rate > 0) {
+    return { rate: 1 / inverse.rate, stale: inverse.isStale };
+  }
+
+  return null;
+}
+
 function extractIbkrSyncConfig(connection?: PortfolioBrokerConnectionItem | null): {
   apiBaseUrl?: string;
   verifySsl?: boolean;
@@ -450,6 +498,7 @@ const PortfolioPage: React.FC = () => {
     baseCurrency: 'CNY',
   });
   const [costMethod, setCostMethod] = useState<PortfolioCostMethod>('fifo');
+  const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>(() => readInitialDisplayCurrency());
   const [snapshot, setSnapshot] = useState<PortfolioSnapshotResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [fxRefreshing, setFxRefreshing] = useState(false);
@@ -457,6 +506,8 @@ const PortfolioPage: React.FC = () => {
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [riskWarning, setRiskWarning] = useState<string | null>(null);
   const [writeWarning, setWriteWarning] = useState<string | null>(null);
+  const [tradeSubmitting, setTradeSubmitting] = useState(false);
+  const [tradeFeedback, setTradeFeedback] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
 
   const [brokers, setBrokers] = useState<PortfolioImportBrokerItem[]>([]);
   const [brokerConnections, setBrokerConnections] = useState<PortfolioBrokerConnectionItem[]>([]);
@@ -537,6 +588,12 @@ const PortfolioPage: React.FC = () => {
     : eventType === 'cash'
       ? cashEvents.length
       : corporateEvents.length;
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(DISPLAY_CURRENCY_STORAGE_KEY, displayCurrency);
+    }
+  }, [displayCurrency]);
 
   const isActiveRefreshContext = (requestedViewKey: string, requestedRequestId: number) => {
     return (
@@ -761,13 +818,20 @@ const PortfolioPage: React.FC = () => {
       setWriteWarning(copy.writeRequiresAccount);
       return;
     }
+    if (tradeSubmitting) {
+      return;
+    }
+    const submittedSymbol = tradeForm.symbol.trim().toUpperCase();
+    const submittedSide = tradeForm.side;
     try {
+      setTradeSubmitting(true);
+      setTradeFeedback(null);
       setWriteWarning(null);
       await portfolioApi.createTrade({
         accountId: writableAccountId,
-        symbol: tradeForm.symbol,
+        symbol: submittedSymbol || tradeForm.symbol,
         tradeDate: tradeForm.tradeDate,
-        side: tradeForm.side,
+        side: submittedSide,
         quantity: Number(tradeForm.quantity),
         price: Number(tradeForm.price),
         fee: Number(tradeForm.fee || 0),
@@ -776,9 +840,17 @@ const PortfolioPage: React.FC = () => {
         note: tradeForm.note || undefined,
       });
       await refreshPortfolioData();
+      setTradeFeedback({
+        tone: 'success',
+        text: `${submittedSymbol || tradeForm.symbol} ${formatSideLabel(submittedSide, language)}已记录 · 已刷新持仓`,
+      });
       setTradeForm((prev) => ({ ...prev, symbol: '', tradeUid: '', note: '' }));
     } catch (err) {
-      setError(getParsedApiError(err));
+      const parsed = getParsedApiError(err);
+      setTradeFeedback({ tone: 'error', text: parsed.message || parsed.title });
+      setError(parsed);
+    } finally {
+      setTradeSubmitting(false);
     }
   };
 
@@ -1058,6 +1130,32 @@ const PortfolioPage: React.FC = () => {
     }
   };
 
+  const handleRefreshDisplayFx = async () => {
+    if (isLoading || fxRefreshing) {
+      return;
+    }
+    try {
+      setFxRefreshing(true);
+      setFxRefreshFeedback(null);
+      const result = await portfolioApi.refreshFx({ accountId: queryAccountId });
+      await loadSnapshotAndRisk();
+      setFxRefreshFeedback({
+        tone: result.errorCount > 0 || result.staleCount > 0 ? 'warning' : 'success',
+        text: result.errorCount > 0 || result.staleCount > 0
+          ? translate(language, 'portfolio.fxRefreshFallbackWarning', {
+            updatedCount: result.updatedCount,
+            staleCount: result.staleCount,
+            errorCount: result.errorCount,
+          })
+          : translate(language, 'portfolio.fxRefreshUpdated', { count: result.updatedCount }),
+      });
+    } catch (err) {
+      setError(getParsedApiError(err));
+    } finally {
+      setFxRefreshing(false);
+    }
+  };
+
   const snapshotCurrency = snapshot?.currency || 'CNY';
   const fxRateRows = useMemo<PortfolioFxRateItem[]>(() => snapshot?.fxRates || [], [snapshot?.fxRates]);
   const fxLastUpdated = useMemo(() => {
@@ -1113,6 +1211,26 @@ const PortfolioPage: React.FC = () => {
   const totalCash = snapshot?.totalCash ?? 0;
   const totalMarketValue = snapshot?.totalMarketValue ?? 0;
   const totalUnrealizedPnl = positionRows.reduce((sum, row) => sum + row.unrealizedPnlBase, 0);
+  const convertMoney = useCallback((value: number, fromCurrency: string | undefined | null): ConvertedMoney => {
+    const rate = getFxRateForDisplay(fxRateRows, fromCurrency, displayCurrency);
+    if (!rate) {
+      return null;
+    }
+    return {
+      value: value * rate.rate,
+      currency: displayCurrency,
+      rate: rate.rate,
+      stale: rate.stale,
+    };
+  }, [displayCurrency, fxRateRows]);
+  const totalEquityDisplay = convertMoney(totalEquity, snapshotCurrency);
+  const totalCashDisplay = convertMoney(totalCash, snapshotCurrency);
+  const totalMarketValueDisplay = convertMoney(totalMarketValue, snapshotCurrency);
+  const totalUnrealizedDisplay = convertMoney(totalUnrealizedPnl, snapshotCurrency);
+  const fxFreshnessLabel = fxRateRows.some((item) => item.isStale || item.source === 'missing')
+    ? copy.fxStale
+    : copy.fxFresh;
+  const fxProviderLabel = fxRateRows.find((item) => item.source && item.source !== 'missing')?.source || 'frankfurter';
   const historyHasNextPage = currentEventCount >= DEFAULT_PAGE_SIZE;
   const totalAssetsTitle = '总资产 Total Assets';
   const historyDrawerLabel = language === 'en' ? 'History ↗' : '历史记录 ↗';
@@ -1287,40 +1405,81 @@ const PortfolioPage: React.FC = () => {
         data-bento-surface="true"
         aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
         aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
-        className={getSafariReadySurfaceClassName(
-          isSafariReady,
-          'w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0 bg-transparent text-white/72',
-        )}
+        className="w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0 bg-transparent text-white/72"
       >
-	        <section className="mx-auto grid w-full max-w-[1600px] grid-cols-1 items-start gap-6 px-4 lg:px-8 xl:grid-cols-12 xl:gap-8">
-	          <section className="col-span-1 flex flex-col gap-6 xl:col-span-4">
+	        <section className="mx-auto grid w-full max-w-[1600px] grid-cols-12 items-stretch gap-5 px-4 lg:px-6">
 	            <div
 	              data-testid="portfolio-total-assets-card"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} shrink-0 flex justify-between items-end gap-3`}
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex shrink-0 flex-col gap-5 lg:flex-row lg:items-end lg:justify-between`}
 	            >
 	              <div className="min-w-0">
-	                <h1 className="mb-2 text-xs uppercase tracking-widest text-muted-text">{totalAssetsTitle}</h1>
+	                <div className="mb-3 flex min-w-0 flex-wrap items-center gap-3">
+	                  <h1 className="text-xs uppercase tracking-widest text-muted-text">{totalAssetsTitle}</h1>
+	                  {selectedAccount === 'all' ? (
+	                    <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">{copy.allAccounts}</span>
+	                  ) : null}
+	                </div>
 	                <div
 	                  data-testid="portfolio-total-assets-value"
 	                  className="font-mono text-[2.4rem] font-bold leading-none text-foreground tabular-nums md:text-[3.6rem]"
 	                  style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
 	                >
-	                  {formatMoney(totalEquity, snapshotCurrency)}
+	                  {totalEquityDisplay ? formatMoney(totalEquityDisplay.value, displayCurrency) : formatMoney(totalEquity, snapshotCurrency)}
 	                </div>
+	                {snapshotCurrency !== displayCurrency ? (
+	                  <div className="mt-2 font-mono text-xs text-white/35">{formatMoney(totalEquity, snapshotCurrency)}</div>
+	                ) : null}
 	              </div>
-	              <div
-	                className={`pb-2 font-mono text-xl tabular-nums ${
-	                  totalUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
-	                }`}
-	              >
-	                {totalUnrealizedPnl >= 0 ? '+ ' : '- '}
-	                {formatMoney(Math.abs(totalUnrealizedPnl), snapshotCurrency)}
+	              <div className="grid w-full min-w-0 gap-3 sm:grid-cols-2 lg:w-[520px]">
+	                <Select
+	                  label="DISPLAY CURRENCY"
+	                  labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+	                  value={displayCurrency}
+	                  onChange={(value) => setDisplayCurrency(normalizeDisplayCurrency(value))}
+	                  options={DISPLAY_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
+	                  className={PORTFOLIO_SELECT_CLASS}
+	                />
+	                <div className="flex flex-col justify-end gap-2">
+	                  <Button
+	                    type="button"
+	                    variant="ghost"
+	                    className={`${PORTFOLIO_SECONDARY_BUTTON_CLASS} w-full`}
+	                    onClick={() => void handleRefreshDisplayFx()}
+	                    disabled={isLoading || fxRefreshing}
+	                  >
+	                    {copy.refreshFx}
+	                  </Button>
+	                  <div className="min-w-0 truncate text-[10px] font-bold uppercase tracking-widest text-white/35">
+	                    {fxProviderLabel} · {fxLastUpdated} · {fxFreshnessLabel}
+	                  </div>
+	                  {fxRefreshFeedback && leftTab !== 'fx' ? (
+	                    <div className={`text-xs ${
+	                      fxRefreshFeedback.tone === 'success'
+	                        ? 'text-emerald-300'
+	                        : fxRefreshFeedback.tone === 'warning'
+	                          ? 'text-amber-200'
+	                          : 'text-secondary-text'
+	                    }`}>
+	                      {fxRefreshFeedback.text}
+	                    </div>
+	                  ) : null}
+	                </div>
+	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.totalCash}</div>
+	                  <div className="mt-1 font-mono text-sm text-white tabular-nums">{totalCashDisplay ? formatMoney(totalCashDisplay.value, displayCurrency) : 'FX unavailable'}</div>
+	                </div>
+	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.positionUnrealized}</div>
+	                  <div className={`mt-1 font-mono text-sm tabular-nums ${totalUnrealizedPnl >= 0 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]' : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'}`}>
+	                    {totalUnrealizedDisplay ? formatSignedMoney(totalUnrealizedDisplay.value, displayCurrency) : 'FX unavailable'}
+	                  </div>
+	                </div>
 	              </div>
 	            </div>
 	
 	            <div
 	              data-testid="portfolio-current-holdings-panel"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col overflow-visible lg:min-h-0 lg:flex-1 lg:overflow-hidden`}
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex h-full flex-col overflow-visible xl:col-span-7 xl:min-h-[520px] xl:overflow-hidden`}
 	            >
 	              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 pb-4">
 	                <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
@@ -1342,24 +1501,38 @@ const PortfolioPage: React.FC = () => {
 	              <div className="pt-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
 	                <div className="flex flex-col">
 	                  {positionRows.length === 0 ? (
-	                    <div className="rounded-xl border border-white/5 bg-white/[0.02] px-6 py-5 text-sm text-secondary-text">{copy.noPositions}</div>
+	                    <div className="rounded-xl border border-white/5 bg-white/[0.02] px-6 py-5 text-sm text-secondary-text">
+	                      <div className="text-foreground">{copy.noPositions}</div>
+	                      <div className="mt-1 text-xs text-muted-text">{language === 'zh' ? '录入交易后自动生成持仓' : 'New trades generate positions automatically.'}</div>
+	                    </div>
 	                  ) : (
 	                    positionRows.map((row) => (
 	                      <div
 	                        key={`${row.accountId}-${row.symbol}-${row.market}`}
-	                        className="flex items-center justify-between gap-4 border-b border-white/5 px-1 py-3 transition-colors hover:bg-white/[0.03]"
+	                        className="flex flex-col gap-3 border-b border-white/5 px-1 py-3 transition-colors hover:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between"
 	                      >
 	                        <div className="min-w-0">
 	                          <div className="truncate text-lg font-medium text-foreground">{row.symbol}</div>
 	                          <div className="truncate text-xs text-muted-text">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</div>
 	                        </div>
-	                        <div className="flex shrink-0 items-center gap-6">
+	                        <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 sm:justify-end">
 	                          <div className="text-right">
 	                            <div className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{copy.positionMarketValue}</div>
 	                            <div className="font-mono text-foreground tabular-nums">{formatMoney(row.marketValueBase, row.valuationCurrency)}</div>
+	                            {row.valuationCurrency !== displayCurrency ? (
+	                              <div className="mt-1 font-mono text-xs text-white/40">
+	                                {convertMoney(row.marketValueBase, row.valuationCurrency)
+	                                  ? `≈ ${formatMoney(convertMoney(row.marketValueBase, row.valuationCurrency)?.value, displayCurrency)}`
+	                                  : 'FX unavailable'}
+	                              </div>
+	                            ) : null}
 	                          </div>
 	                          <div className={`font-mono text-lg tabular-nums ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-	                            {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
+	                            {row.valuationCurrency === displayCurrency
+	                              ? formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)
+	                              : (convertMoney(row.unrealizedPnlBase, row.valuationCurrency)
+	                                ? formatSignedMoney(convertMoney(row.unrealizedPnlBase, row.valuationCurrency)?.value ?? 0, displayCurrency)
+	                                : 'FX unavailable')}
 	                          </div>
 	                        </div>
 	                      </div>
@@ -1368,9 +1541,8 @@ const PortfolioPage: React.FC = () => {
 	                </div>
 	              </div>
 	            </div>
-	          </section>
 	
-	          <section className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-1 flex flex-col gap-6 overflow-visible xl:col-span-4`}>
+	          <section className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex h-full flex-col gap-6 overflow-visible xl:col-span-5 xl:min-h-[520px]`}>
             <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -1406,10 +1578,22 @@ const PortfolioPage: React.FC = () => {
                 />
               </div>
               <div data-testid="portfolio-trade-station-summary" className="mt-3 flex flex-col gap-1 border-y border-white/5 py-2">
-                <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.totalCash}</span><span className="text-foreground">{formatMoney(totalCash, snapshotCurrency)}</span></div>
-                <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.totalMarketValue}</span><span className="text-foreground">{formatMoney(totalMarketValue, snapshotCurrency)}</span></div>
+                <div className="flex justify-between gap-3 text-xs"><span className="text-muted-text">{copy.totalCash}</span><span className="font-mono text-foreground">{totalCashDisplay ? formatMoney(totalCashDisplay.value, displayCurrency) : 'FX unavailable'}</span></div>
+                <div className="flex justify-between gap-3 text-xs"><span className="text-muted-text">{copy.totalMarketValue}</span><span className="font-mono text-foreground">{totalMarketValueDisplay ? formatMoney(totalMarketValueDisplay.value, displayCurrency) : 'FX unavailable'}</span></div>
                 <div className="flex justify-between text-xs"><span className="text-muted-text">{copy.fxState}</span><span data-testid="portfolio-bento-hero-fx-value" className={snapshot?.fxStale ? 'text-amber-300' : 'text-emerald-400'}>{snapshot?.fxStale ? copy.fxStale : copy.fxFresh}</span></div>
               </div>
+              {tradeFeedback ? (
+                <div
+                  data-testid="portfolio-trade-feedback"
+                  className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
+                    tradeFeedback.tone === 'success'
+                      ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'
+                      : 'border-rose-400/20 bg-rose-400/10 text-rose-300'
+                  }`}
+                >
+                  {tradeFeedback.text}
+                </div>
+              ) : null}
             </div>
 
             <div className="shrink-0 border-b border-white/5 pt-4 pb-4">
@@ -1462,7 +1646,7 @@ const PortfolioPage: React.FC = () => {
                           <Input label="TAX" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="optional" value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
                         </div>
                         <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        <button type="submit" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId}>{copy.submitTrade}</button>
+                        <button type="submit" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId || tradeSubmitting}>{tradeSubmitting ? copy.refreshingData : copy.submitTrade}</button>
                       </form>
                     </div>
                   ) : null}
@@ -1701,8 +1885,8 @@ const PortfolioPage: React.FC = () => {
             </section>
           ) : null}
 
-          {historyLayout === 'desktop' ? (
-            <section className="col-span-1 hidden xl:col-span-4 xl:flex">
+          {historyLayout !== 'mobile' && !isHistoryDrawerOpen ? (
+            <section className="col-span-12 hidden lg:flex">
               <div className={`${PORTFOLIO_GLASS_CARD_CLASS} flex h-full min-h-0 w-full flex-col overflow-hidden`}>
                 {historyPanelContent}
               </div>
