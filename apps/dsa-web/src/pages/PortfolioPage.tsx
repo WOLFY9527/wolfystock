@@ -7,9 +7,9 @@ import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Input, PillBadge, SectionShell, Select } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
+  getSafariReadySurfaceClassName,
   shouldApplySafariA11yGuard,
   useSafariRenderReady,
-  useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import { translate } from '../i18n/core';
 import { toDateInputValue } from '../utils/format';
@@ -35,11 +35,11 @@ const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
 const PORTFOLIO_GLASS_CARD_CLASS = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md p-5 transition-all hover:border-white/10';
 const PORTFOLIO_FIELD_LABEL_CLASS = '!mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40';
 const PORTFOLIO_FIELD_WRAPPER_CLASS = 'flex flex-col gap-1.5';
-const PORTFOLIO_FORM_GRID_CLASS = 'mt-6 grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2';
+const PORTFOLIO_FORM_GRID_CLASS = 'mt-4 grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2';
 const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-lg border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white placeholder:text-white/20 outline-none focus:border-emerald-500/50';
 const PORTFOLIO_SELECT_CLASS = 'min-w-0';
 const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'h-10 rounded-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 px-4 text-sm font-bold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] hover:from-blue-500 hover:to-purple-500';
-const PORTFOLIO_SUBMIT_BUTTON_CLASS = 'w-full mt-8 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium rounded-lg px-6 py-3 shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed';
+const PORTFOLIO_SUBMIT_BUTTON_CLASS = 'w-full mt-5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium rounded-lg px-6 py-2.5 shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed';
 const PORTFOLIO_SECONDARY_BUTTON_CLASS = 'h-9 rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white';
 const PORTFOLIO_TEXT_BUTTON_CLASS = 'h-8 rounded-md border-0 bg-transparent px-2 text-xs text-white/40 hover:bg-transparent hover:text-white disabled:text-white/15';
 const PORTFOLIO_ICON_BUTTON_CLASS = 'h-9 w-9 rounded-xl border-0 bg-white/[0.04] p-0 text-white/45 hover:bg-white/10 hover:text-white';
@@ -520,13 +520,6 @@ const PortfolioPage: React.FC = () => {
   const [ibkrSyncResult, setIbkrSyncResult] = useState<PortfolioIbkrSyncResponse | null>(null);
 
   const [leftTab, setLeftTab] = useState<'trade' | 'account' | 'sync' | 'fx'>('trade');
-  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
-  const [historyLayout, setHistoryLayout] = useState<'mobile' | 'desktop' | 'drawer'>(() => {
-    if (typeof window === 'undefined') return 'desktop';
-    if (window.innerWidth < 1024) return 'mobile';
-    if (window.innerWidth >= 1280) return 'desktop';
-    return 'drawer';
-  });
   const [eventType, setEventType] = useState<EventType>('trade');
   const [eventDateFrom] = useState('');
   const [eventDateTo] = useState('');
@@ -1232,39 +1225,9 @@ const PortfolioPage: React.FC = () => {
     : copy.fxFresh;
   const fxProviderLabel = fxRateRows.find((item) => item.source && item.source !== 'missing')?.source || 'frankfurter';
   const historyHasNextPage = currentEventCount >= DEFAULT_PAGE_SIZE;
+  const hasAnyHistoryRecords = tradeEvents.length > 0 || cashEvents.length > 0 || corporateEvents.length > 0;
   const totalAssetsTitle = '总资产 Total Assets';
-  const historyDrawerLabel = language === 'en' ? 'History ↗' : '历史记录 ↗';
   const historyDrawerTitle = language === 'en' ? 'Order History' : '历史记录';
-  const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setIsHistoryDrawerOpen(true));
-
-  useEffect(() => {
-    if (!isHistoryDrawerOpen) {
-      return;
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsHistoryDrawerOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isHistoryDrawerOpen]);
-
-  useEffect(() => {
-    const syncHistoryLayout = () => {
-      if (window.innerWidth < 1024) {
-        setHistoryLayout('mobile');
-      } else if (window.innerWidth >= 1280) {
-        setHistoryLayout('desktop');
-      } else {
-        setHistoryLayout('drawer');
-      }
-    };
-
-    syncHistoryLayout();
-    window.addEventListener('resize', syncHistoryLayout);
-    return () => window.removeEventListener('resize', syncHistoryLayout);
-  }, []);
 
   const historyPanelContent = (
     <div className="flex h-full min-h-0 flex-col bg-[var(--surface-1)] lg:bg-transparent">
@@ -1283,15 +1246,6 @@ const PortfolioPage: React.FC = () => {
             title={copy.refreshLedger}
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setIsHistoryDrawerOpen(false)}
-            className={`${PORTFOLIO_ICON_BUTTON_CLASS} lg:hidden`}
-            aria-label={language === 'en' ? 'Close order history' : '关闭历史记录'}
-          >
-            <span aria-hidden="true">×</span>
           </Button>
         </div>
       </div>
@@ -1319,7 +1273,11 @@ const PortfolioPage: React.FC = () => {
 
           {eventType === 'trade' ? (
             tradeEvents.length === 0 ? (
-              <div className="theme-panel-subtle rounded-[24px] px-5 py-6 text-sm text-secondary-text">{copy.emptyEventsBody}</div>
+              <div className="theme-panel-subtle rounded-xl px-5 py-4 text-sm text-secondary-text">
+                {positionRows.length === 0 && hasAnyHistoryRecords
+                  ? (language === 'zh' ? '历史记录存在，当前无持仓' : 'History exists while current holdings are empty')
+                  : copy.emptyEventsBody}
+              </div>
             ) : (
               tradeEvents.map((item) => (
                 <div key={`trade-${item.id}`} className="border-b border-white/5 px-1 py-4 transition-colors hover:bg-white/[0.03]">
@@ -1339,7 +1297,11 @@ const PortfolioPage: React.FC = () => {
 
           {eventType === 'cash' ? (
             cashEvents.length === 0 ? (
-              <div className="theme-panel-subtle rounded-[24px] px-5 py-6 text-sm text-secondary-text">{copy.emptyEventsBody}</div>
+              <div className="theme-panel-subtle rounded-xl px-5 py-4 text-sm text-secondary-text">
+                {positionRows.length === 0 && hasAnyHistoryRecords
+                  ? (language === 'zh' ? '历史记录存在，当前无持仓' : 'History exists while current holdings are empty')
+                  : copy.emptyEventsBody}
+              </div>
             ) : (
               cashEvents.map((item) => (
                 <div key={`cash-${item.id}`} className="border-b border-white/5 px-1 py-4 transition-colors hover:bg-white/[0.03]">
@@ -1359,7 +1321,11 @@ const PortfolioPage: React.FC = () => {
 
           {eventType === 'corporate' ? (
             corporateEvents.length === 0 ? (
-              <div className="theme-panel-subtle rounded-[24px] px-5 py-6 text-sm text-secondary-text">{copy.emptyEventsBody}</div>
+              <div className="theme-panel-subtle rounded-xl px-5 py-4 text-sm text-secondary-text">
+                {positionRows.length === 0 && hasAnyHistoryRecords
+                  ? (language === 'zh' ? '历史记录存在，当前无持仓' : 'History exists while current holdings are empty')
+                  : copy.emptyEventsBody}
+              </div>
             ) : (
               corporateEvents.map((item) => (
                 <div key={`corporate-${item.id}`} className="border-b border-white/5 px-1 py-4 transition-colors hover:bg-white/[0.03]">
@@ -1405,18 +1371,25 @@ const PortfolioPage: React.FC = () => {
         data-bento-surface="true"
         aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
         aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
-        className="w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0 bg-transparent text-white/72"
+        className={getSafariReadySurfaceClassName(
+          isSafariReady,
+          'w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0 bg-transparent text-white/72',
+        )}
       >
-	        <section className="mx-auto grid w-full max-w-[1600px] grid-cols-12 items-stretch gap-5 px-4 lg:px-6">
+        <section className="mx-auto w-full max-w-[1880px] px-4 sm:px-6 lg:px-8 2xl:px-10">
+          <div data-testid="portfolio-workspace-grid" className="grid grid-cols-12 items-start gap-5 xl:gap-6">
 	            <div
 	              data-testid="portfolio-total-assets-card"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex shrink-0 flex-col gap-5 lg:flex-row lg:items-end lg:justify-between`}
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex shrink-0 flex-col gap-5 lg:flex-row lg:items-stretch lg:justify-between`}
 	            >
-	              <div className="min-w-0">
+	              <div className="flex min-w-0 flex-1 flex-col justify-between gap-5">
+                  <div className="min-w-0">
 	                <div className="mb-3 flex min-w-0 flex-wrap items-center gap-3">
 	                  <h1 className="text-xs uppercase tracking-widest text-muted-text">{totalAssetsTitle}</h1>
 	                  {selectedAccount === 'all' ? (
 	                    <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">{copy.allAccounts}</span>
+	                  ) : writableAccount ? (
+	                    <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">{writableAccount.name}</span>
 	                  ) : null}
 	                </div>
 	                <div
@@ -1429,8 +1402,17 @@ const PortfolioPage: React.FC = () => {
 	                {snapshotCurrency !== displayCurrency ? (
 	                  <div className="mt-2 font-mono text-xs text-white/35">{formatMoney(totalEquity, snapshotCurrency)}</div>
 	                ) : null}
+                  </div>
+                  <div className="flex min-w-0 flex-wrap gap-2">
+                    <span className="rounded-full border border-white/5 bg-white/[0.025] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                      {copy.accountCount} {snapshot?.accountCount ?? accounts.length}
+                    </span>
+                    <span className="rounded-full border border-white/5 bg-white/[0.025] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                      {copy.costMethodLabel} {costMethod.toUpperCase()}
+                    </span>
+                  </div>
 	              </div>
-	              <div className="grid w-full min-w-0 gap-3 sm:grid-cols-2 lg:w-[520px]">
+	              <div className="grid w-full min-w-0 gap-3 sm:grid-cols-2 lg:w-[680px] xl:grid-cols-4">
 	                <Select
 	                  label="DISPLAY CURRENCY"
 	                  labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
@@ -1439,7 +1421,7 @@ const PortfolioPage: React.FC = () => {
 	                  options={DISPLAY_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
 	                  className={PORTFOLIO_SELECT_CLASS}
 	                />
-	                <div className="flex flex-col justify-end gap-2">
+	                <div className="flex flex-col justify-end gap-2 xl:col-span-2">
 	                  <Button
 	                    type="button"
 	                    variant="ghost"
@@ -1449,8 +1431,8 @@ const PortfolioPage: React.FC = () => {
 	                  >
 	                    {copy.refreshFx}
 	                  </Button>
-	                  <div className="min-w-0 truncate text-[10px] font-bold uppercase tracking-widest text-white/35">
-	                    {fxProviderLabel} · {fxLastUpdated} · {fxFreshnessLabel}
+	                  <div className="min-w-0 text-[10px] font-bold uppercase tracking-widest text-white/35">
+	                    {fxProviderLabel.toUpperCase()} · {fxFreshnessLabel} · {fxLastUpdated}
 	                  </div>
 	                  {fxRefreshFeedback && leftTab !== 'fx' ? (
 	                    <div className={`text-xs ${
@@ -1469,6 +1451,10 @@ const PortfolioPage: React.FC = () => {
 	                  <div className="mt-1 font-mono text-sm text-white tabular-nums">{totalCashDisplay ? formatMoney(totalCashDisplay.value, displayCurrency) : 'FX unavailable'}</div>
 	                </div>
 	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.totalMarketValue}</div>
+	                  <div className="mt-1 font-mono text-sm text-white tabular-nums">{totalMarketValueDisplay ? formatMoney(totalMarketValueDisplay.value, displayCurrency) : 'FX unavailable'}</div>
+	                </div>
+	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
 	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.positionUnrealized}</div>
 	                  <div className={`mt-1 font-mono text-sm tabular-nums ${totalUnrealizedPnl >= 0 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]' : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'}`}>
 	                    {totalUnrealizedDisplay ? formatSignedMoney(totalUnrealizedDisplay.value, displayCurrency) : 'FX unavailable'}
@@ -1479,30 +1465,19 @@ const PortfolioPage: React.FC = () => {
 	
 	            <div
 	              data-testid="portfolio-current-holdings-panel"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex h-full flex-col overflow-visible xl:col-span-7 xl:min-h-[520px] xl:overflow-hidden`}
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col overflow-visible xl:col-span-7 xl:min-h-[300px] 2xl:col-span-8`}
 	            >
 	              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 pb-4">
 	                <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
 	                  Current Holdings ({positionRows.length === 0 ? '共 0 项' : `共 ${positionRows.length} 项`})
 	                </h2>
-	                <Button
-	                  ref={openHistoryDrawerButton.ref}
-	                  type="button"
-	                  variant="ghost"
-	                  onClick={openHistoryDrawerButton.onClick}
-	                  onPointerUp={openHistoryDrawerButton.onPointerUp}
-	                  data-testid="portfolio-history-drawer-trigger"
-	                  className="shrink-0 rounded-xl border-0 bg-white/[0.04] px-3 py-1.5 text-xs text-white/55 hover:bg-white/10 hover:text-white lg:hidden"
-	                >
-	                  {historyDrawerLabel}
-	                </Button>
 	              </div>
 	
 	              <div className="pt-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
 	                <div className="flex flex-col">
 	                  {positionRows.length === 0 ? (
-	                    <div className="rounded-xl border border-white/5 bg-white/[0.02] px-6 py-5 text-sm text-secondary-text">
-	                      <div className="text-foreground">{copy.noPositions}</div>
+	                    <div data-testid="portfolio-empty-holdings" className="rounded-xl border border-white/5 bg-white/[0.02] px-5 py-4 text-sm text-secondary-text">
+	                      <div className="text-foreground">{language === 'zh' ? '当前无持仓' : 'No current holdings'}</div>
 	                      <div className="mt-1 text-xs text-muted-text">{language === 'zh' ? '录入交易后自动生成持仓' : 'New trades generate positions automatically.'}</div>
 	                    </div>
 	                  ) : (
@@ -1542,7 +1517,7 @@ const PortfolioPage: React.FC = () => {
 	              </div>
 	            </div>
 	
-	          <section className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex h-full flex-col gap-6 overflow-visible xl:col-span-5 xl:min-h-[520px]`}>
+	          <section data-testid="portfolio-trade-station-card" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-5 overflow-visible xl:col-span-5 xl:min-h-[300px] 2xl:col-span-4`}>
             <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -1646,6 +1621,11 @@ const PortfolioPage: React.FC = () => {
                           <Input label="TAX" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="optional" value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
                         </div>
                         <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        {!writableAccountId ? (
+                          <div className="mt-3 rounded-lg border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-xs text-amber-200">
+                            {language === 'zh' ? '请选择具体账户后录入交易' : 'Select a specific account before recording trades'}
+                          </div>
+                        ) : null}
                         <button type="submit" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId || tradeSubmitting}>{tradeSubmitting ? copy.refreshingData : copy.submitTrade}</button>
                       </form>
                     </div>
@@ -1879,43 +1859,12 @@ const PortfolioPage: React.FC = () => {
             </div>
           </section>
 
-          {historyLayout === 'mobile' ? (
-            <section data-testid="portfolio-mobile-history-panel" className={`${PORTFOLIO_GLASS_CARD_CLASS} flex min-h-[360px] max-h-[520px] flex-col overflow-hidden lg:hidden`}>
+            <section data-testid="portfolio-history-panel" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex max-h-[560px] min-h-[300px] flex-col overflow-hidden`}>
               {historyPanelContent}
             </section>
-          ) : null}
-
-          {historyLayout !== 'mobile' && !isHistoryDrawerOpen ? (
-            <section className="col-span-12 hidden lg:flex">
-              <div className={`${PORTFOLIO_GLASS_CARD_CLASS} flex h-full min-h-0 w-full flex-col overflow-hidden`}>
-                {historyPanelContent}
-              </div>
-            </section>
-          ) : null}
+          </div>
         </section>
       </div>
-
-      {isHistoryDrawerOpen ? (
-        <div className="fixed inset-0 z-50">
-          <button
-            type="button"
-            aria-label={language === 'en' ? 'Close history drawer' : '关闭历史抽屉'}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setIsHistoryDrawerOpen(false)}
-          />
-          <aside
-            data-testid="portfolio-history-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-label={historyDrawerTitle}
-            className="absolute inset-y-0 right-0 flex w-full justify-end"
-          >
-            <div className="flex h-full w-full max-w-md flex-col border-l border-white/5 shadow-2xl">
-              {historyPanelContent}
-            </div>
-          </aside>
-        </div>
-      ) : null}
 
       <ConfirmDialog
         isOpen={Boolean(pendingDelete)}
