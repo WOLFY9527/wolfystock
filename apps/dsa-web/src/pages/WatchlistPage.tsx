@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { analysisApi, DuplicateTaskError } from '../api/analysis';
+import { backtestApi } from '../api/backtest';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { watchlistApi } from '../api/watchlist';
 import { AuthGuardOverlay } from '../components/auth/AuthGuardOverlay';
@@ -19,9 +20,12 @@ import { ApiErrorAlert, Input, SectionShell, Select } from '../components/common
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import type { WatchlistItem } from '../types/watchlist';
+import type { RuleBacktestRunResponse } from '../types/backtest';
 import { buildLocalizedPath } from '../utils/localeRouting';
 
-type SortKey = 'newest' | 'scannerScore' | 'symbol' | 'market';
+type SortKey = 'newest' | 'scannerScore' | 'backtestReturn' | 'historicalHitRate' | 'recentlyScored' | 'recentlyBacktested' | 'symbol' | 'market';
+type EvidenceFilter = 'all' | 'hasScanner' | 'hasBacktest' | 'scannerSelected' | 'staleIntelligence';
+type BatchStatus = 'requested' | 'running' | 'completed' | 'failed' | 'skipped';
 type Notice = { tone: 'success' | 'warning' | 'danger'; message: string } | null;
 
 const ACTION_BUTTON_CLASS = 'inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-white/70 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45';
@@ -71,6 +75,78 @@ function isRecentlyAdded(item: WatchlistItem): boolean {
 
 function formatScore(value?: number | null): string {
   return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(1) : '--';
+}
+
+function formatPct(value?: number | null): string {
+  return typeof value === 'number' && Number.isFinite(value) ? `${value >= 0 ? '+' : ''}${value.toFixed(1)}%` : '--';
+}
+
+function formatRatio(value?: number | null): string {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(2) : '--';
+}
+
+function getNumeric(value?: number | null): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
+}
+
+function getTime(value?: string | null): number {
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function getScannerScore(item: WatchlistItem): number | null {
+  return item.intelligence?.scanner?.lastScore ?? item.scannerScore ?? null;
+}
+
+function getScannerStatus(item: WatchlistItem): string {
+  return normalizeText(item.intelligence?.scanner?.status || item.scoreStatus || 'unknown') || 'unknown';
+}
+
+function getBacktestReturn(item: WatchlistItem): number | null {
+  return item.intelligence?.backtest?.totalReturnPct ?? null;
+}
+
+function getHitRate(item: WatchlistItem): number | null {
+  return item.intelligence?.strategySimulation?.hitRate ?? null;
+}
+
+function hasScannerEvidence(item: WatchlistItem): boolean {
+  return getScannerScore(item) !== null || Boolean(item.scannerRunId || item.intelligence?.scanner?.profile);
+}
+
+function hasBacktestEvidence(item: WatchlistItem): boolean {
+  return item.intelligence?.backtest?.lastResultId != null;
+}
+
+function isStaleIntelligence(item: WatchlistItem): boolean {
+  return normalizeText(item.scoreStatus).toLowerCase() === 'stale'
+    || normalizeText(item.intelligence?.strategySimulation?.status).toLowerCase() === 'partial';
+}
+
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function buildDefaultBacktestWindow(): { startDate: string; endDate: string } {
+  const end = new Date(Date.now());
+  const start = new Date(end);
+  start.setFullYear(start.getFullYear() - 1);
+  return { startDate: formatDateInput(start), endDate: formatDateInput(end) };
+}
+
+function buildBacktestIntelligence(run: RuleBacktestRunResponse): NonNullable<WatchlistItem['intelligence']>['backtest'] {
+  return {
+    lastResultId: run.id,
+    totalReturnPct: run.totalReturnPct ?? null,
+    maxDrawdownPct: run.maxDrawdownPct ?? null,
+    sharpe: run.sharpeRatio ?? null,
+    tradeCount: run.tradeCount ?? null,
+    testedAt: run.completedAt || run.runAt || null,
+  };
 }
 
 function buildBacktestPath(item: WatchlistItem, language: 'zh' | 'en'): string {
@@ -125,6 +201,22 @@ function getCopy(language: 'zh' | 'en') {
       all: 'All',
       newest: 'Newest',
       scannerScore: 'Scanner score',
+      backtestReturn: 'Backtest return',
+      historicalHitRate: 'Historical hit rate',
+      recentlyScored: 'Recently scored',
+      recentlyBacktested: 'Recently backtested',
+      evidence: 'Evidence',
+      hasScanner: 'Has scanner evidence',
+      hasBacktest: 'Has backtest evidence',
+      scannerSelected: 'Selected by scanner',
+      staleIntelligence: 'Stale intelligence',
+      intelligence: 'Intelligence',
+      noEvidence: 'No strategy evidence',
+      batchBacktestFilter: 'Backtest current filter',
+      batchBacktesting: 'Backtesting...',
+      batchBacktestComplete: 'Watchlist backtest completed.',
+      batchBacktestLabel: 'Single-symbol watchlist backtest',
+      resultPrefix: 'Result',
       symbol: 'Symbol',
       name: 'Name',
       score: 'Score',
@@ -178,6 +270,22 @@ function getCopy(language: 'zh' | 'en') {
     all: '全部',
     newest: '最新',
     scannerScore: '扫描分数',
+    backtestReturn: '回测收益',
+    historicalHitRate: '历史胜率',
+    recentlyScored: '最近评分',
+    recentlyBacktested: '最近回测',
+    evidence: '证据筛选',
+    hasScanner: '有扫描证据',
+    hasBacktest: '有回测证据',
+    scannerSelected: '扫描入选',
+    staleIntelligence: '证据过期',
+    intelligence: '策略证据',
+    noEvidence: '暂无策略证据',
+    batchBacktestFilter: '回测当前筛选',
+    batchBacktesting: '回测中...',
+    batchBacktestComplete: '观察列表回测完成。',
+    batchBacktestLabel: '观察列表单标的回测',
+    resultPrefix: '结果',
     symbol: '代码',
     name: '名称',
     score: '分数',
@@ -229,12 +337,16 @@ const WatchlistPage: React.FC = () => {
   const [marketFilter, setMarketFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [contextFilter, setContextFilter] = useState('all');
+  const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('newest');
   const [pendingAnalyzeId, setPendingAnalyzeId] = useState<number | null>(null);
   const [pendingRemoveId, setPendingRemoveId] = useState<number | null>(null);
   const [isRefreshingScores, setRefreshingScores] = useState(false);
   const [refreshStatus, setRefreshStatus] = useState<{ enabled: boolean; usTime: string; cnTime: string; hkTime: string } | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [batchStatuses, setBatchStatuses] = useState<Record<string, BatchStatus>>({});
+  const [isBatchBacktesting, setIsBatchBacktesting] = useState(false);
+  const [backtestSessionKeys, setBacktestSessionKeys] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     document.title = language === 'en' ? 'Watchlist - WolfyStock' : '观察列表 - WolfyStock';
@@ -329,7 +441,12 @@ const WatchlistPage: React.FC = () => {
       const matchesContext = contextFilter === 'all'
         || `theme:${item.themeId || ''}` === contextFilter
         || `universe:${item.universeType || ''}` === contextFilter;
-      return matchesSearch && matchesMarket && matchesSource && matchesContext;
+      const matchesEvidence = evidenceFilter === 'all'
+        || (evidenceFilter === 'hasScanner' && hasScannerEvidence(item))
+        || (evidenceFilter === 'hasBacktest' && hasBacktestEvidence(item))
+        || (evidenceFilter === 'scannerSelected' && getScannerStatus(item) === 'selected')
+        || (evidenceFilter === 'staleIntelligence' && isStaleIntelligence(item));
+      return matchesSearch && matchesMarket && matchesSource && matchesContext && matchesEvidence;
     });
 
     return rows.sort((left, right) => {
@@ -339,13 +456,17 @@ const WatchlistPage: React.FC = () => {
         return marketCompare || left.symbol.localeCompare(right.symbol);
       }
       if (sortKey === 'scannerScore') {
-        const leftScore = left.scannerScore ?? Number.NEGATIVE_INFINITY;
-        const rightScore = right.scannerScore ?? Number.NEGATIVE_INFINITY;
+        const leftScore = getScannerScore(left) ?? Number.NEGATIVE_INFINITY;
+        const rightScore = getScannerScore(right) ?? Number.NEGATIVE_INFINITY;
         return rightScore - leftScore || (left.scannerRank ?? 9999) - (right.scannerRank ?? 9999);
       }
+      if (sortKey === 'backtestReturn') return getNumeric(getBacktestReturn(right)) - getNumeric(getBacktestReturn(left));
+      if (sortKey === 'historicalHitRate') return getNumeric(getHitRate(right)) - getNumeric(getHitRate(left));
+      if (sortKey === 'recentlyScored') return getTime(right.intelligence?.scanner?.lastScannedAt || right.lastScoredAt) - getTime(left.intelligence?.scanner?.lastScannedAt || left.lastScoredAt);
+      if (sortKey === 'recentlyBacktested') return getTime(right.intelligence?.backtest?.testedAt) - getTime(left.intelligence?.backtest?.testedAt);
       return getItemTime(right) - getItemTime(left);
     });
-  }, [contextFilter, items, marketFilter, query, sortKey, sourceFilter]);
+  }, [contextFilter, evidenceFilter, items, marketFilter, query, sortKey, sourceFilter]);
 
   const handleAnalyze = useCallback(async (item: WatchlistItem) => {
     setPendingAnalyzeId(item.id);
@@ -416,6 +537,93 @@ const WatchlistPage: React.FC = () => {
       setRefreshingScores(false);
     }
   }, [copy.scoreRefreshComplete]);
+
+  const handleBatchBacktestCurrentFilter = useCallback(async () => {
+    if (isBatchBacktesting) return;
+    const uniqueItems = Array.from(
+      new Map(filteredItems.map((item) => [normalizeText(item.symbol).toUpperCase(), item])).values(),
+    ).filter((item) => normalizeText(item.symbol));
+    if (uniqueItems.length === 0) return;
+
+    const { startDate, endDate } = buildDefaultBacktestWindow();
+    const pendingItems = uniqueItems.filter((item) => {
+      const key = `${normalizeText(item.symbol).toUpperCase()}:${startDate}:${endDate}:watchlist-default`;
+      return !backtestSessionKeys.has(key);
+    });
+    const skippedItems = uniqueItems.filter((item) => !pendingItems.includes(item));
+    if (skippedItems.length > 0) {
+      setBatchStatuses((current) => ({
+        ...current,
+        ...Object.fromEntries(skippedItems.map((item) => [item.symbol, 'skipped' as BatchStatus])),
+      }));
+    }
+    if (pendingItems.length === 0) return;
+
+    setIsBatchBacktesting(true);
+    setNotice(null);
+    setBatchStatuses((current) => ({
+      ...current,
+      ...Object.fromEntries(pendingItems.map((item) => [item.symbol, 'requested' as BatchStatus])),
+    }));
+
+    let cursor = 0;
+    let completed = 0;
+    let failed = 0;
+    const runOne = async (item: WatchlistItem) => {
+      const symbol = normalizeText(item.symbol).toUpperCase();
+      const key = `${symbol}:${startDate}:${endDate}:watchlist-default`;
+      setBacktestSessionKeys((current) => new Set(current).add(key));
+      setBatchStatuses((current) => ({ ...current, [item.symbol]: 'running' }));
+      try {
+        const run = await backtestApi.runRuleBacktest({
+          code: item.symbol,
+          strategyText: copy.batchBacktestLabel,
+          startDate,
+          endDate,
+          initialCapital: 100000,
+          feeBps: 0,
+          slippageBps: 0,
+          benchmarkMode: 'auto',
+          confirmed: true,
+          waitForCompletion: true,
+        });
+        completed += 1;
+        setItems((current) => current.map((row) => (
+          normalizeText(row.symbol).toUpperCase() === symbol
+            ? {
+                ...row,
+                intelligence: {
+                  ...(row.intelligence || {}),
+                  backtest: buildBacktestIntelligence(run),
+                },
+              }
+            : row
+        )));
+        setBatchStatuses((current) => ({ ...current, [item.symbol]: 'completed' }));
+      } catch {
+        failed += 1;
+        setBatchStatuses((current) => ({ ...current, [item.symbol]: 'failed' }));
+      }
+    };
+
+    const worker = async () => {
+      while (cursor < pendingItems.length) {
+        const next = pendingItems[cursor];
+        cursor += 1;
+        await runOne(next);
+      }
+    };
+
+    try {
+      await Promise.all(Array.from({ length: Math.min(2, pendingItems.length) }, () => worker()));
+      setNotice({
+        tone: failed > 0 ? 'warning' : 'success',
+        message: `${copy.batchBacktestComplete} ${completed}/${pendingItems.length}`,
+      });
+    } finally {
+      setIsBatchBacktesting(false);
+    }
+  }, [backtestSessionKeys, copy.batchBacktestComplete, copy.batchBacktestLabel, filteredItems, isBatchBacktesting]);
 
   if (isGuest) {
     return (
@@ -498,7 +706,7 @@ const WatchlistPage: React.FC = () => {
           </div>
           <div
             data-testid="watchlist-filter-grid"
-            className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5"
+            className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6"
           >
             <Input
               label={copy.search}
@@ -512,6 +720,19 @@ const WatchlistPage: React.FC = () => {
             <Select label={copy.source} value={sourceFilter} onChange={setSourceFilter} options={sourceOptions} className="min-w-0" />
             <Select label={copy.context} value={contextFilter} onChange={setContextFilter} options={contextOptions} className="min-w-0" />
             <Select
+              label={copy.evidence}
+              value={evidenceFilter}
+              onChange={(value) => setEvidenceFilter(value as EvidenceFilter)}
+              className="min-w-0"
+              options={[
+                { value: 'all', label: copy.all },
+                { value: 'hasScanner', label: copy.hasScanner },
+                { value: 'hasBacktest', label: copy.hasBacktest },
+                { value: 'scannerSelected', label: copy.scannerSelected },
+                { value: 'staleIntelligence', label: copy.staleIntelligence },
+              ]}
+            />
+            <Select
               label={copy.sort}
               value={sortKey}
               onChange={(value) => setSortKey(value as SortKey)}
@@ -519,14 +740,34 @@ const WatchlistPage: React.FC = () => {
               options={[
                 { value: 'newest', label: copy.newest },
                 { value: 'scannerScore', label: copy.scannerScore },
+                { value: 'backtestReturn', label: copy.backtestReturn },
+                { value: 'historicalHitRate', label: copy.historicalHitRate },
+                { value: 'recentlyScored', label: copy.recentlyScored },
+                { value: 'recentlyBacktested', label: copy.recentlyBacktested },
                 { value: 'symbol', label: copy.symbol },
                 { value: 'market', label: copy.market },
               ]}
             />
           </div>
 
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 backdrop-blur-md">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.batchBacktestLabel}</p>
+              <p className="mt-1 truncate text-xs text-white/45">{filteredItems.length} symbols · concurrency 2</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleBatchBacktestCurrentFilter()}
+              disabled={isBatchBacktesting || filteredItems.length === 0}
+              className="inline-flex h-8 shrink-0 items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-3 text-xs font-semibold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition hover:from-blue-500 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              {isBatchBacktesting ? copy.batchBacktesting : copy.batchBacktestFilter}
+            </button>
+          </div>
+
           <div className="overflow-x-auto no-scrollbar rounded-2xl border border-white/5">
-            <table className="min-w-[1180px] w-full text-left text-sm">
+            <table className="min-w-[1420px] w-full text-left text-sm">
               <thead className="bg-white/[0.03] text-[11px] uppercase tracking-[0.16em] text-white/35">
                 <tr>
                   <th className="px-4 py-3 font-semibold">{copy.symbol}</th>
@@ -535,6 +776,7 @@ const WatchlistPage: React.FC = () => {
                   <th className="px-4 py-3 font-semibold">{copy.score}</th>
                   <th className="px-4 py-3 font-semibold">{copy.rank}</th>
                   <th className="px-4 py-3 font-semibold">{copy.lastScored}</th>
+                  <th className="px-4 py-3 font-semibold">{copy.intelligence}</th>
                   <th className="px-4 py-3 font-semibold">{copy.source}</th>
                   <th className="px-4 py-3 font-semibold">{copy.context}</th>
                   <th className="px-4 py-3 font-semibold">{copy.added}</th>
@@ -542,7 +784,20 @@ const WatchlistPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {filteredItems.map((item) => (
+                {filteredItems.map((item) => {
+                  const scanner = item.intelligence?.scanner;
+                  const strategySimulation = item.intelligence?.strategySimulation;
+                  const backtest = item.intelligence?.backtest;
+                  const score = getScannerScore(item);
+                  const status = getScannerStatus(item);
+                  const hitRate = strategySimulation?.hitRate;
+                  const avgForward = strategySimulation?.avgForwardReturnPct;
+                  const returnPct = backtest?.totalReturnPct;
+                  const hasAnyEvidence = hasScannerEvidence(item)
+                    || strategySimulation?.status === 'ready'
+                    || hasBacktestEvidence(item);
+                  const batchStatus = batchStatuses[item.symbol];
+                  return (
                   <tr key={item.id} data-testid={`watchlist-row-${item.symbol}`} className="bg-white/[0.01] text-white/70">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -570,6 +825,45 @@ const WatchlistPage: React.FC = () => {
                         }`} title={item.scoreError || item.scoreReason || undefined}>
                           {item.scoreStatus === 'fresh' ? copy.fresh : item.scoreStatus === 'stale' ? copy.stale : '--'}
                         </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex max-w-[360px] flex-wrap items-center gap-1.5 text-[11px]" title={[scanner?.themeLabel || scanner?.theme, scanner?.profile, scanner?.reason].filter(Boolean).join(' · ') || undefined}>
+                        {!hasAnyEvidence ? (
+                          <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-white/40">{copy.noEvidence}</span>
+                        ) : null}
+                        {score !== null ? (
+                          <span className="rounded-lg border border-sky-400/20 bg-sky-400/10 px-2 py-1 font-mono text-sky-100">SCORE {formatScore(score)}</span>
+                        ) : null}
+                        {status !== 'unknown' ? (
+                          <span className="max-w-[140px] truncate rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono uppercase text-white/60">SCANNER {status}</span>
+                        ) : null}
+                        {typeof avgForward === 'number' || typeof hitRate === 'number' ? (
+                          <span className={`rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono ${
+                            (avgForward ?? 0) >= 0
+                              ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]'
+                              : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'
+                          }`}>
+                            HIST {formatPct(avgForward)} · HIT {typeof hitRate === 'number' ? `${Math.round(hitRate * 100)}%` : '--'}
+                          </span>
+                        ) : null}
+                        {backtest?.lastResultId != null ? (
+                          <>
+                            <span className={`rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono ${
+                              (returnPct ?? 0) >= 0
+                                ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]'
+                                : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'
+                            }`}>
+                              BT {formatPct(returnPct)} · DD {formatPct(backtest.maxDrawdownPct)} · SH {formatRatio(backtest.sharpe)}
+                            </span>
+                            <Link className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-white/55 transition hover:text-white" to={buildLocalizedPath(`/backtest/results/${backtest.lastResultId}`, language)}>
+                              {copy.resultPrefix} {backtest.lastResultId}
+                            </Link>
+                          </>
+                        ) : null}
+                        {batchStatus ? (
+                          <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono uppercase text-white/45">{batchStatus}</span>
+                        ) : null}
                       </div>
                     </td>
                     <td className="px-4 py-3">{item.source || '--'}</td>
@@ -617,7 +911,8 @@ const WatchlistPage: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

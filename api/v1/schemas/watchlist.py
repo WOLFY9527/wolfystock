@@ -69,6 +69,44 @@ class WatchlistItemResponse(BaseModel):
     notes: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    intelligence: Optional["WatchlistIntelligenceResponse"] = None
+
+
+class WatchlistScannerIntelligenceResponse(BaseModel):
+    last_score: Optional[float] = None
+    last_rank: Optional[int] = None
+    status: str = "unknown"
+    theme: Optional[str] = None
+    theme_label: Optional[str] = None
+    profile: Optional[str] = None
+    reason: Optional[str] = None
+    last_scanned_at: Optional[str] = None
+
+
+class WatchlistStrategySimulationIntelligenceResponse(BaseModel):
+    lookback_days: Optional[int] = None
+    forward_days: Optional[int] = None
+    avg_forward_return_pct: Optional[float] = None
+    hit_rate: Optional[float] = None
+    avg_excess_return_pct: Optional[float] = None
+    selection_count: Optional[int] = None
+    data_coverage: Optional[float] = None
+    status: str = "unknown"
+
+
+class WatchlistBacktestIntelligenceResponse(BaseModel):
+    last_result_id: Optional[int] = None
+    total_return_pct: Optional[float] = None
+    max_drawdown_pct: Optional[float] = None
+    sharpe: Optional[float] = None
+    trade_count: Optional[int] = None
+    tested_at: Optional[str] = None
+
+
+class WatchlistIntelligenceResponse(BaseModel):
+    scanner: WatchlistScannerIntelligenceResponse = Field(default_factory=WatchlistScannerIntelligenceResponse)
+    strategy_simulation: WatchlistStrategySimulationIntelligenceResponse = Field(default_factory=WatchlistStrategySimulationIntelligenceResponse)
+    backtest: WatchlistBacktestIntelligenceResponse = Field(default_factory=WatchlistBacktestIntelligenceResponse)
 
 
 class WatchlistItemListResponse(BaseModel):

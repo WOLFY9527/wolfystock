@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import json
 import threading
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -11,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import and_, desc, select
 
 from data_provider.base import canonical_stock_code
-from src.storage import AppUser, DatabaseManager, MarketScannerCandidate, MarketScannerRun, UserWatchlistItem
+from src.storage import AppUser, DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun, UserWatchlistItem
 
 class WatchlistService:
     """Business logic for user-owned candidate tracking."""
@@ -48,7 +49,7 @@ class WatchlistService:
 
     @staticmethod
     def _row_to_dict(row: UserWatchlistItem) -> Dict[str, Any]:
-        return {
+        payload = {
             "id": int(row.id),
             "symbol": str(row.symbol),
             "market": str(row.market),
@@ -69,6 +70,145 @@ class WatchlistService:
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
+        payload["intelligence"] = WatchlistService._build_intelligence_payload(payload)
+        return payload
+
+    @staticmethod
+    def _load_json_object(raw: Optional[str]) -> Dict[str, Any]:
+        if not raw:
+            return {}
+        try:
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _safe_float(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if number == number else None
+
+    @staticmethod
+    def _build_intelligence_payload(
+        item: Dict[str, Any],
+        *,
+        backtest: Optional[RuleBacktestRun] = None,
+    ) -> Dict[str, Any]:
+        scanner_score = WatchlistService._safe_float(item.get("scanner_score"))
+        scanner_status = "selected" if scanner_score is not None or item.get("scanner_run_id") else "unknown"
+        if str(item.get("score_status") or "").strip().lower() == "data_failed":
+            scanner_status = "data_failed"
+
+        strategy_simulation = {
+            "lookback_days": None,
+            "forward_days": None,
+            "avg_forward_return_pct": None,
+            "hit_rate": None,
+            "avg_excess_return_pct": None,
+            "selection_count": None,
+            "data_coverage": None,
+            "status": "unknown",
+        }
+
+        backtest_payload = {
+            "last_result_id": None,
+            "total_return_pct": None,
+            "max_drawdown_pct": None,
+            "sharpe": None,
+            "trade_count": None,
+            "tested_at": None,
+        }
+        if backtest is not None:
+            summary = WatchlistService._load_json_object(getattr(backtest, "summary_json", None))
+            metrics = summary.get("metrics") if isinstance(summary.get("metrics"), dict) else {}
+            backtest_payload = {
+                "last_result_id": int(backtest.id) if backtest.id is not None else None,
+                "total_return_pct": WatchlistService._safe_float(backtest.total_return_pct),
+                "max_drawdown_pct": WatchlistService._safe_float(backtest.max_drawdown_pct),
+                "sharpe": WatchlistService._safe_float(
+                    metrics.get("sharpe_ratio")
+                    if isinstance(metrics, dict)
+                    else None
+                ),
+                "trade_count": int(backtest.trade_count) if backtest.trade_count is not None else None,
+                "tested_at": (
+                    backtest.completed_at.isoformat()
+                    if backtest.completed_at
+                    else backtest.run_at.isoformat()
+                    if backtest.run_at
+                    else None
+                ),
+            }
+
+        return {
+            "scanner": {
+                "last_score": scanner_score,
+                "last_rank": int(item["scanner_rank"]) if item.get("scanner_rank") is not None else None,
+                "status": scanner_status,
+                "theme": item.get("theme_id"),
+                "theme_label": None,
+                "profile": item.get("score_profile"),
+                "reason": item.get("score_reason") or item.get("notes"),
+                "last_scanned_at": item.get("last_scored_at"),
+            },
+            "strategy_simulation": strategy_simulation,
+            "backtest": backtest_payload,
+        }
+
+    def _latest_backtests_by_symbol(
+        self,
+        *,
+        owner_id: str,
+        symbols: List[str],
+    ) -> Dict[str, RuleBacktestRun]:
+        normalized_symbols = sorted({self._normalize_symbol(symbol) for symbol in symbols if symbol})
+        if not normalized_symbols:
+            return {}
+        with self.db.get_session() as session:
+            rows = session.execute(
+                select(RuleBacktestRun)
+                .where(
+                    and_(
+                        RuleBacktestRun.owner_id == owner_id,
+                        RuleBacktestRun.code.in_(normalized_symbols),
+                        RuleBacktestRun.status == "completed",
+                    )
+                )
+                .order_by(
+                    RuleBacktestRun.code.asc(),
+                    desc(RuleBacktestRun.completed_at),
+                    desc(RuleBacktestRun.run_at),
+                    desc(RuleBacktestRun.id),
+                )
+            ).scalars().all()
+        latest: Dict[str, RuleBacktestRun] = {}
+        for row in rows:
+            symbol = str(row.code).upper()
+            if symbol not in latest:
+                latest[symbol] = row
+        return latest
+
+    def _attach_intelligence(
+        self,
+        *,
+        owner_id: str,
+        items: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        backtests = self._latest_backtests_by_symbol(
+            owner_id=owner_id,
+            symbols=[str(item.get("symbol") or "") for item in items],
+        )
+        for item in items:
+            item["intelligence"] = self._build_intelligence_payload(
+                item,
+                backtest=backtests.get(str(item.get("symbol") or "").upper()),
+            )
+        return items
 
     def list_items(self, owner_id: str) -> List[Dict[str, Any]]:
         resolved_owner_id = self.db.require_user_id(owner_id)
@@ -78,7 +218,8 @@ class WatchlistService:
                 .where(UserWatchlistItem.owner_id == resolved_owner_id)
                 .order_by(UserWatchlistItem.updated_at.desc(), UserWatchlistItem.id.desc())
             ).scalars().all()
-            return [self._row_to_dict(row) for row in rows]
+            items = [self._row_to_dict(row) for row in rows]
+        return self._attach_intelligence(owner_id=resolved_owner_id, items=items)
 
     def get_item_by_id(self, *, owner_id: str, item_id: int) -> Optional[Dict[str, Any]]:
         resolved_owner_id = self.db.require_user_id(owner_id)

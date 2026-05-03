@@ -1,5 +1,7 @@
 ## 2026-05-02
 
+- 📌 **观察列表策略证据同步 Phase 1** — `/watchlist` 现在把已有 scanner 评分/入选状态、scanner theme/profile 上下文与最新已完成单标的 rule backtest 摘要同步为紧凑策略证据条，支持按扫描分数、回测收益、历史胜率、最近评分与最近回测排序，并新增有扫描证据、有回测证据、扫描入选和证据过期筛选。观察列表新增用户手动触发的“观察列表单标的回测”批量动作，复用既有 Backtest API、限并发 2、当前会话去重，并在完成后原位更新 BT/DD/Sharpe 与结果链接；页面加载不会自动重跑 scanner、strategy simulation 或 backtest，也不改变 scanner 入选/排序逻辑、策略历史模拟计算或 backtest 收益计算。
+
 - 🧪 **Scanner 策略历史模拟 Phase 1** — `/api/v1/scanner/strategy-simulation` 新增基于已持久化 scanner runs 的轻量历史模拟，按 theme/profile/market 与 30/90/180D 窗口筛选历史扫描，并用本地历史价格计算 1/5/10/20 日 forward return、benchmark/excess return、命中率、覆盖率、run 摘要与 symbol 聚合；历史不足时返回 `insufficient_history`，不主动生成历史扫描、不调用 AI、不改变 scanner 入选/排序逻辑或 backtest 收益计算。`/scanner` 进阶工具新增默认折叠的“策略历史模拟”面板，复用当前扫描上下文发起查询，并以紧凑终端风格展示不足历史、汇总、run 表与 symbol 表。
 
 - 🧪 **Scanner 候选单标的回测实验室** — `/scanner` 新增紧凑的 Backtest Lab，可由用户手动对官方入选、预览入选、前 5 名、当前筛选或单个候选启动“候选单标的回测”，复用既有 rule backtest API 与共享 `/backtest/results/:id` 报告路由。批量回测由前端限并发编排并在当前会话内按 symbol/config/strategy 去重，不会在扫描运行或本地阈值预览变化时自动触发，也不改变 scanner 入选/排序规则或 backtest 计算逻辑。

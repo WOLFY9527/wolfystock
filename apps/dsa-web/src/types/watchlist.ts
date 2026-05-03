@@ -1,3 +1,40 @@
+export interface WatchlistScannerIntelligence {
+  lastScore?: number | null;
+  lastRank?: number | null;
+  status?: 'selected' | 'preview' | 'rejected' | 'data_failed' | 'unknown' | string | null;
+  theme?: string | null;
+  themeLabel?: string | null;
+  profile?: string | null;
+  reason?: string | null;
+  lastScannedAt?: string | null;
+}
+
+export interface WatchlistStrategySimulationIntelligence {
+  lookbackDays?: number | null;
+  forwardDays?: number | null;
+  avgForwardReturnPct?: number | null;
+  hitRate?: number | null;
+  avgExcessReturnPct?: number | null;
+  selectionCount?: number | null;
+  dataCoverage?: number | null;
+  status?: 'ready' | 'partial' | 'insufficient_history' | 'unknown' | string | null;
+}
+
+export interface WatchlistBacktestIntelligence {
+  lastResultId?: number | null;
+  totalReturnPct?: number | null;
+  maxDrawdownPct?: number | null;
+  sharpe?: number | null;
+  tradeCount?: number | null;
+  testedAt?: string | null;
+}
+
+export interface WatchlistIntelligence {
+  scanner?: WatchlistScannerIntelligence | null;
+  strategySimulation?: WatchlistStrategySimulationIntelligence | null;
+  backtest?: WatchlistBacktestIntelligence | null;
+}
+
 export interface WatchlistItem {
   id: number;
   symbol: string;
@@ -16,6 +53,7 @@ export interface WatchlistItem {
   themeId?: string | null;
   universeType?: string | null;
   notes?: string | null;
+  intelligence?: WatchlistIntelligence | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 }

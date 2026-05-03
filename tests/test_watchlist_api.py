@@ -15,7 +15,7 @@ from api.app import create_app
 from api.deps import CurrentUser, get_current_user
 import src.auth as auth
 from src.config import Config
-from src.storage import DatabaseManager, MarketScannerCandidate, MarketScannerRun
+from src.storage import DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun
 
 
 def _reset_auth_globals() -> None:
@@ -261,3 +261,99 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(item["scanner_rank"], 2)
         self.assertEqual(item["score_status"], "fresh")
         self.assertTrue(item["last_scored_at"])
+
+    def test_watchlist_items_include_read_only_intelligence_from_saved_records(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+        add_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={
+                "symbol": "WULF",
+                "market": "us",
+                "name": "TeraWulf",
+                "source": "scanner",
+                "scanner_run_id": 11,
+                "scanner_rank": 1,
+                "scanner_score": 60,
+                "theme_id": "crypto_miners",
+                "universe_type": "theme",
+                "notes": "趋势/动量通过",
+            },
+        )
+        self.assertEqual(add_resp.status_code, 200)
+
+        older = RuleBacktestRun(
+            owner_id="user-1",
+            code="WULF",
+            strategy_text="观察列表单标的回测",
+            parsed_strategy_json="{}",
+            strategy_hash="old",
+            status="completed",
+            run_at=datetime(2026, 5, 1, 8, 0, 0),
+            completed_at=datetime(2026, 5, 1, 8, 1, 0),
+            trade_count=1,
+            total_return_pct=4.0,
+            max_drawdown_pct=-2.0,
+        )
+        latest = RuleBacktestRun(
+            owner_id="user-1",
+            code="WULF",
+            strategy_text="观察列表单标的回测",
+            parsed_strategy_json="{}",
+            strategy_hash="latest",
+            status="completed",
+            run_at=datetime(2026, 5, 2, 8, 0, 0),
+            completed_at=datetime(2026, 5, 2, 8, 1, 0),
+            trade_count=6,
+            total_return_pct=24.6,
+            max_drawdown_pct=-8.2,
+            summary_json='{"metrics":{"sharpe_ratio":1.34}}',
+        )
+        failed = RuleBacktestRun(
+            owner_id="user-1",
+            code="WULF",
+            strategy_text="观察列表单标的回测",
+            parsed_strategy_json="{}",
+            strategy_hash="failed",
+            status="failed",
+            run_at=datetime(2026, 5, 3, 8, 0, 0),
+            completed_at=datetime(2026, 5, 3, 8, 1, 0),
+            trade_count=0,
+            total_return_pct=99.0,
+        )
+        with self.db.get_session() as session:
+            session.add_all([older, latest, failed])
+            session.commit()
+            latest_id = latest.id
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        item = list_resp.json()["items"][0]
+        intelligence = item["intelligence"]
+        self.assertEqual(intelligence["scanner"]["last_score"], 60.0)
+        self.assertEqual(intelligence["scanner"]["last_rank"], 1)
+        self.assertEqual(intelligence["scanner"]["status"], "selected")
+        self.assertEqual(intelligence["scanner"]["theme"], "crypto_miners")
+        self.assertEqual(intelligence["scanner"]["profile"], None)
+        self.assertEqual(intelligence["scanner"]["reason"], "趋势/动量通过")
+        self.assertEqual(intelligence["strategy_simulation"]["status"], "unknown")
+        self.assertEqual(intelligence["backtest"]["last_result_id"], latest_id)
+        self.assertEqual(intelligence["backtest"]["total_return_pct"], 24.6)
+        self.assertEqual(intelligence["backtest"]["max_drawdown_pct"], -8.2)
+        self.assertEqual(intelligence["backtest"]["sharpe"], 1.34)
+        self.assertEqual(intelligence["backtest"]["trade_count"], 6)
+
+    def test_watchlist_items_without_records_return_null_safe_intelligence(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+        add_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={"symbol": "MARA", "market": "us", "source": "scanner"},
+        )
+        self.assertEqual(add_resp.status_code, 200)
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        intelligence = list_resp.json()["items"][0]["intelligence"]
+        self.assertIsNone(intelligence["scanner"]["last_score"])
+        self.assertEqual(intelligence["scanner"]["status"], "unknown")
+        self.assertEqual(intelligence["strategy_simulation"]["status"], "unknown")
+        self.assertIsNone(intelligence["backtest"]["last_result_id"])

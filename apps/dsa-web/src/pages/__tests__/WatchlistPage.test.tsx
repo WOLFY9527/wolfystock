@@ -4,12 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WatchlistPage from '../WatchlistPage';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import type { WatchlistItem } from '../../types/watchlist';
+import type { RuleBacktestRunResponse } from '../../types/backtest';
 
-const { listWatchlistItems, removeWatchlistItem, refreshScores, getRefreshStatus, analyzeAsync, useProductSurfaceMock } = vi.hoisted(() => ({
+const { listWatchlistItems, removeWatchlistItem, refreshScores, getRefreshStatus, runRuleBacktest, analyzeAsync, useProductSurfaceMock } = vi.hoisted(() => ({
   listWatchlistItems: vi.fn(),
   removeWatchlistItem: vi.fn(),
   refreshScores: vi.fn(),
   getRefreshStatus: vi.fn(),
+  runRuleBacktest: vi.fn(),
   analyzeAsync: vi.fn(),
   useProductSurfaceMock: vi.fn(),
 }));
@@ -29,6 +31,12 @@ vi.mock('../../api/analysis', () => ({
     analyzeAsync,
   },
   DuplicateTaskError: class DuplicateTaskError extends Error {},
+}));
+
+vi.mock('../../api/backtest', () => ({
+  backtestApi: {
+    runRuleBacktest,
+  },
 }));
 
 vi.mock('../../hooks/useProductSurface', () => ({
@@ -57,6 +65,36 @@ function makeItem(overrides: Partial<WatchlistItem>): WatchlistItem {
     scoreReason: 'Latest scanner score.',
     scoreStatus: 'fresh',
     scoreError: null,
+    intelligence: {
+      scanner: {
+        lastScore: 94,
+        lastRank: 1,
+        status: 'selected',
+        theme: 'ai-momentum',
+        themeLabel: 'AI Momentum',
+        profile: 'us_preopen_v1',
+        reason: 'Latest scanner score.',
+        lastScannedAt: '2026-05-01T12:30:00',
+      },
+      strategySimulation: {
+        lookbackDays: 90,
+        forwardDays: 5,
+        avgForwardReturnPct: 3.2,
+        hitRate: 0.56,
+        avgExcessReturnPct: 2.1,
+        selectionCount: 5,
+        dataCoverage: 0.83,
+        status: 'ready',
+      },
+      backtest: {
+        lastResultId: 33,
+        totalReturnPct: 24.6,
+        maxDrawdownPct: -8.2,
+        sharpe: 1.34,
+        tradeCount: 6,
+        testedAt: '2026-05-01T13:30:00',
+      },
+    },
     themeId: 'ai-momentum',
     universeType: 'theme',
     notes: null,
@@ -108,6 +146,76 @@ const watchlistItems: WatchlistItem[] = [
   }),
 ];
 
+function makeRuleBacktestRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBacktestRunResponse {
+  return {
+    id: 501,
+    code: 'NVDA',
+    strategyText: '观察列表单标的回测',
+    parsedStrategy: {} as RuleBacktestRunResponse['parsedStrategy'],
+    strategyHash: 'hash-501',
+    timeframe: 'daily',
+    startDate: '2025-05-03',
+    endDate: '2026-05-03',
+    periodStart: '2025-05-03',
+    periodEnd: '2026-05-03',
+    lookbackBars: 252,
+    initialCapital: 100000,
+    feeBps: 0,
+    slippageBps: 0,
+    parsedConfidence: 1,
+    needsConfirmation: false,
+    warnings: [],
+    runAt: '2026-05-03T09:00:00Z',
+    completedAt: '2026-05-03T09:01:00Z',
+    status: 'completed',
+    statusHistory: [],
+    runTiming: {},
+    runDiagnostics: {},
+    noResultReason: null,
+    noResultMessage: null,
+    tradeCount: 4,
+    winCount: 3,
+    lossCount: 1,
+    totalReturnPct: 12.4,
+    annualizedReturnPct: 12.4,
+    sharpeRatio: 1.1,
+    benchmarkMode: 'auto',
+    benchmarkCode: null,
+    benchmarkReturnPct: null,
+    excessReturnVsBenchmarkPct: null,
+    buyAndHoldReturnPct: null,
+    excessReturnVsBuyAndHoldPct: null,
+    winRatePct: 75,
+    avgTradeReturnPct: 2.1,
+    maxDrawdownPct: -4.5,
+    avgHoldingDays: 6,
+    avgHoldingBars: 6,
+    avgHoldingCalendarDays: 6,
+    finalEquity: 112400,
+    summary: {},
+    dataQuality: {},
+    robustnessAnalysis: {},
+    artifactAvailability: {},
+    readbackIntegrity: {},
+    executionModel: {},
+    executionAssumptions: {},
+    executionAssumptionsSnapshot: {},
+    benchmarkCurve: [],
+    benchmarkSummary: {},
+    buyAndHoldCurve: [],
+    buyAndHoldSummary: {},
+    auditRows: [],
+    dailyReturnSeries: [],
+    exposureCurve: [],
+    aiSummary: null,
+    equityCurve: [],
+    trades: [],
+    executionTrace: null,
+    resultAuthority: {},
+    ...overrides,
+  };
+}
+
 function LocationProbe() {
   const location = useLocation();
   return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
@@ -122,6 +230,7 @@ function renderWatchlist(path = '/watchlist') {
           <Route path="/zh" element={<><div>home</div><LocationProbe /></>} />
           <Route path="/zh/scanner" element={<div>scanner</div>} />
           <Route path="/zh/backtest" element={<div>backtest</div>} />
+          <Route path="/zh/backtest/results/:runId" element={<div>backtest result</div>} />
           <Route path="/zh/login" element={<div>login</div>} />
         </Routes>
       </UiLanguageProvider>
@@ -154,6 +263,7 @@ describe('WatchlistPage', () => {
       maxSymbols: 250,
       running: false,
     });
+    runRuleBacktest.mockResolvedValue(makeRuleBacktestRun());
     analyzeAsync.mockResolvedValue({ taskId: 'task-1' });
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -174,7 +284,7 @@ describe('WatchlistPage', () => {
     expect(await screen.findByTestId('watchlist-row-NVDA')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-TSM')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-600519')).toBeInTheDocument();
-    expect(screen.getByTestId('watchlist-filter-grid')).toHaveClass('min-w-0', 'grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-5');
+    expect(screen.getByTestId('watchlist-filter-grid')).toHaveClass('min-w-0', 'grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-6');
     const marketSelect = screen.getByLabelText('市场');
     const contextSelect = screen.getByLabelText('主题 / 候选范围');
     expect(marketSelect).toHaveClass('select-surface', 'absolute', 'inset-0', 'opacity-0');
@@ -240,6 +350,108 @@ describe('WatchlistPage', () => {
     expect(within(rows[0] as HTMLElement).getByText('NVDA')).toBeInTheDocument();
     expect(within(rows[1] as HTMLElement).getByText('TSM')).toBeInTheDocument();
     expect(within(rows[2] as HTMLElement).getByText('600519')).toBeInTheDocument();
+  });
+
+  it('renders compact scanner, strategy simulation, and backtest intelligence chips', async () => {
+    renderWatchlist();
+    const row = await screen.findByTestId('watchlist-row-NVDA');
+
+    expect(within(row).getByText('SCORE 94.0')).toBeInTheDocument();
+    expect(within(row).getByText(/SCANNER selected/i)).toBeInTheDocument();
+    expect(within(row).getByText(/HIST \+3.2% · HIT 56%/)).toBeInTheDocument();
+    expect(within(row).getByText(/BT \+24.6% · DD -8.2% · SH 1.34/)).toBeInTheDocument();
+    expect(within(row).getByRole('link', { name: /结果 33/ })).toHaveAttribute('href', '/zh/backtest/results/33');
+  });
+
+  it('renders compact empty intelligence for old payloads without evidence', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 9,
+        symbol: 'MARA',
+        scannerRunId: null,
+        scannerRank: null,
+        scannerScore: null,
+        scoreStatus: null,
+        themeId: null,
+        universeType: null,
+        intelligence: undefined,
+      })],
+    });
+
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-MARA');
+    expect(within(row).getByText('暂无策略证据')).toBeInTheDocument();
+  });
+
+  it('sorts by backtest return and historical hit rate', async () => {
+    renderWatchlist();
+    await screen.findByTestId('watchlist-row-NVDA');
+
+    fireEvent.change(screen.getByLabelText('排序'), { target: { value: 'backtestReturn' } });
+    let rows = Array.from(document.querySelectorAll('tbody tr'));
+    expect(within(rows[0] as HTMLElement).getByText('NVDA')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('排序'), { target: { value: 'historicalHitRate' } });
+    rows = Array.from(document.querySelectorAll('tbody tr'));
+    expect(within(rows[0] as HTMLElement).getByText('NVDA')).toBeInTheDocument();
+  });
+
+  it('filters rows with backtest evidence', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({ id: 1, symbol: 'NVDA' }),
+        makeItem({
+          id: 4,
+          symbol: 'MARA',
+          scannerScore: 65,
+          intelligence: {
+            scanner: { lastScore: 65, status: 'selected' },
+            strategySimulation: { status: 'unknown' },
+            backtest: {},
+          },
+        }),
+      ],
+    });
+    renderWatchlist();
+    await screen.findByTestId('watchlist-row-NVDA');
+
+    fireEvent.change(screen.getByLabelText('证据筛选'), { target: { value: 'hasBacktest' } });
+
+    expect(screen.getByTestId('watchlist-row-NVDA')).toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-row-MARA')).not.toBeInTheDocument();
+  });
+
+  it('runs batch backtest for the current filter, de-dupes duplicate clicks, and updates visible metrics', async () => {
+    runRuleBacktest.mockImplementation(async ({ code }: { code: string }) => makeRuleBacktestRun({
+      id: code === 'NVDA' ? 701 : 702,
+      code,
+      totalReturnPct: code === 'NVDA' ? 14.2 : 8.1,
+      maxDrawdownPct: code === 'NVDA' ? -3.2 : -6.4,
+      sharpeRatio: code === 'NVDA' ? 1.5 : 0.9,
+      tradeCount: code === 'NVDA' ? 5 : 3,
+    }));
+    renderWatchlist();
+    await screen.findByTestId('watchlist-row-NVDA');
+
+    fireEvent.change(screen.getByLabelText('市场'), { target: { value: 'us' } });
+    const batchButton = screen.getByRole('button', { name: /回测当前筛选/ });
+    fireEvent.click(batchButton);
+    fireEvent.click(batchButton);
+
+    await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledTimes(1));
+    expect(runRuleBacktest).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'NVDA',
+      strategyText: '观察列表单标的回测',
+      initialCapital: 100000,
+      feeBps: 0,
+      slippageBps: 0,
+      benchmarkMode: 'auto',
+      waitForCompletion: true,
+    }));
+    const row = await screen.findByTestId('watchlist-row-NVDA');
+    expect(within(row).getByText(/BT \+14.2% · DD -3.2% · SH 1.50/)).toBeInTheDocument();
+    expect(within(row).getByRole('link', { name: /结果 701/ })).toHaveAttribute('href', '/zh/backtest/results/701');
   });
 
   it('keeps the filter controls overflow-safe with long labels', async () => {

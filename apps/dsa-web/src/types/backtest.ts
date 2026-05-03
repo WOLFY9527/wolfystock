@@ -990,6 +990,7 @@ export interface RuleBacktestRunResponse {
   lossCount: number;
   totalReturnPct?: number | null;
   annualizedReturnPct?: number | null;
+  sharpeRatio?: number | null;
   benchmarkMode?: string | null;
   benchmarkCode?: string | null;
   benchmarkReturnPct?: number | null;
