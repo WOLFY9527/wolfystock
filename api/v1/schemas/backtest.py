@@ -436,16 +436,25 @@ class RuleBacktestTradeItem(BaseModel):
     run_id: Optional[int] = None
     trade_index: Optional[int] = None
     code: str
+    side: Optional[str] = None
     entry_signal_date: Optional[str] = None
     exit_signal_date: Optional[str] = None
     entry_date: Optional[str] = None
     exit_date: Optional[str] = None
     entry_price: Optional[float] = None
     exit_price: Optional[float] = None
+    quantity: Optional[float] = None
+    gross_pnl: Optional[float] = None
+    net_pnl: Optional[float] = None
+    fees: Optional[float] = None
+    slippage: Optional[float] = None
     entry_signal: Optional[str] = None
     exit_signal: Optional[str] = None
     entry_trigger: Optional[str] = None
     exit_trigger: Optional[str] = None
+    entry_reason: Optional[str] = None
+    exit_reason: Optional[str] = None
+    signal_reason: Optional[str] = None
     return_pct: Optional[float] = None
     holding_days: Optional[int] = None
     holding_bars: Optional[int] = None

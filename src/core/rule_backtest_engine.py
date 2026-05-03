@@ -197,20 +197,102 @@ class RuleBacktestTrade:
     entry_slippage_amount: float = 0.0
     exit_slippage_amount: float = 0.0
     notes: Optional[str] = None
+    side: str = "long"
+    quantity: Optional[float] = None
+    gross_pnl: Optional[float] = None
+    net_pnl: Optional[float] = None
+    fees: Optional[float] = None
+    slippage: Optional[float] = None
+    entry_reason: Optional[str] = None
+    exit_reason: Optional[str] = None
+    signal_reason: Optional[str] = None
+
+    @staticmethod
+    def _classify_exit_reason(trigger: Optional[str]) -> str:
+        normalized = str(trigger or "").strip().upper()
+        if not normalized:
+            return "unknown"
+        if "END_OF_WINDOW" in normalized or "FINAL" in normalized:
+            return "final_close"
+        if "STOP_LOSS" in normalized:
+            return "stop_loss"
+        if "TAKE_PROFIT" in normalized:
+            return "take_profit"
+        if "TRAILING_STOP" in normalized:
+            return "trailing_stop"
+        if "TIME" in normalized:
+            return "time_exit"
+        return "signal_exit"
+
+    @staticmethod
+    def _classify_signal_reason(entry_rule: Dict[str, Any], exit_rule: Dict[str, Any]) -> str:
+        for payload in (entry_rule, exit_rule):
+            if not isinstance(payload, dict):
+                continue
+            spec = payload.get("strategy_spec")
+            if isinstance(spec, dict):
+                signal = spec.get("signal")
+                if isinstance(signal, dict) and signal.get("indicator_family"):
+                    family = str(signal.get("indicator_family"))
+                    if family == "moving_average":
+                        return "moving_average_crossover"
+                    return family
+                for key in ("strategy_family", "strategy_type"):
+                    if spec.get(key):
+                        return str(spec.get(key))
+            for key in ("strategy_family", "strategy_type", "indicator_family"):
+                if payload.get(key):
+                    return str(payload.get(key))
+        return "rule_conditions"
+
+    def _financial_fields(self) -> Dict[str, Optional[float]]:
+        quantity = self.quantity
+        fees = self.fees if self.fees is not None else float(self.entry_fee_amount or 0.0) + float(self.exit_fee_amount or 0.0)
+        slippage = (
+            self.slippage
+            if self.slippage is not None
+            else float(self.entry_slippage_amount or 0.0) + float(self.exit_slippage_amount or 0.0)
+        )
+        net_pnl = self.net_pnl
+        gross_pnl = self.gross_pnl
+        if quantity is not None:
+            price_delta_pnl = float(quantity) * (float(self.exit_price) - float(self.entry_price))
+            if net_pnl is None:
+                net_pnl = price_delta_pnl - float(fees or 0.0)
+            if gross_pnl is None:
+                gross_pnl = float(net_pnl) + float(fees or 0.0) + float(slippage or 0.0)
+        return {
+            "quantity": round(float(quantity), 6) if quantity is not None else None,
+            "gross_pnl": round(float(gross_pnl), 6) if gross_pnl is not None else None,
+            "net_pnl": round(float(net_pnl), 6) if net_pnl is not None else None,
+            "fees": round(float(fees), 6) if fees is not None else None,
+            "slippage": round(float(slippage), 6) if slippage is not None else None,
+        }
 
     def to_dict(self) -> Dict[str, Any]:
+        financials = self._financial_fields()
         return {
             "code": self.code,
+            "side": self.side or "long",
             "entry_signal_date": self.entry_signal_date.isoformat(),
             "exit_signal_date": self.exit_signal_date.isoformat(),
             "entry_date": self.entry_date.isoformat(),
             "exit_date": self.exit_date.isoformat(),
             "entry_price": round(self.entry_price, 6),
             "exit_price": round(self.exit_price, 6),
+            "quantity": financials["quantity"],
+            "gross_pnl": financials["gross_pnl"],
+            "net_pnl": financials["net_pnl"],
+            "fees": financials["fees"],
+            "slippage": financials["slippage"],
             "entry_signal": self.entry_signal,
             "exit_signal": self.exit_signal,
             "entry_trigger": self.entry_trigger,
             "exit_trigger": self.exit_trigger,
+            "entry_reason": self.entry_reason
+            or ("scheduled_entry" if str(self.entry_trigger or "").upper() == "PERIODIC_BUY" else "signal_entry" if self.entry_trigger or self.entry_signal else "unknown"),
+            "exit_reason": self.exit_reason or self._classify_exit_reason(self.exit_trigger or self.exit_signal),
+            "signal_reason": self.signal_reason or self._classify_signal_reason(self.entry_rule_json, self.exit_rule_json),
             "return_pct": round(self.return_pct, 4),
             "holding_days": self.holding_days,
             "holding_bars": self.holding_bars,
@@ -1402,6 +1484,7 @@ class RuleBacktestEngine:
                         exit_fee_amount=float(exit_execution["fee_amount"]),
                         entry_slippage_amount=float(active_position["entry_slippage_amount"]),
                         exit_slippage_amount=float(exit_execution["slippage_amount"]),
+                        quantity=float(shares),
                         notes="exit_signal_next_bar_open",
                     )
                 )
@@ -1560,6 +1643,7 @@ class RuleBacktestEngine:
                     exit_fee_amount=float(exit_execution["fee_amount"]),
                     entry_slippage_amount=float(active_position["entry_slippage_amount"]),
                     exit_slippage_amount=float(exit_execution["slippage_amount"]),
+                    quantity=float(shares),
                     notes="forced_close_at_window_end",
                 )
             )
@@ -1751,6 +1835,7 @@ class RuleBacktestEngine:
                         exit_fee_amount=float(exit_execution["fee_amount"]),
                         entry_slippage_amount=float(active_position["entry_slippage_amount"]),
                         exit_slippage_amount=float(exit_execution["slippage_amount"]),
+                        quantity=float(shares),
                         notes=f"{strategy_spec.get('strategy_type')}_exit_next_bar_open",
                     )
                 )
@@ -2019,6 +2104,7 @@ class RuleBacktestEngine:
                     exit_fee_amount=float(exit_execution["fee_amount"]),
                     entry_slippage_amount=float(active_position["entry_slippage_amount"]),
                     exit_slippage_amount=float(exit_execution["slippage_amount"]),
+                    quantity=float(shares),
                     notes="forced_close_at_window_end",
                 )
             )
@@ -2271,6 +2357,7 @@ class RuleBacktestEngine:
                         exit_fee_amount=float(exit_execution["fee_amount"]),
                         entry_slippage_amount=float(lot["entry_slippage_amount"]),
                         exit_slippage_amount=float(exit_execution["slippage_amount"]),
+                        quantity=float(lot["shares"]),
                         notes="periodic_accumulation_lot",
                     )
                 )

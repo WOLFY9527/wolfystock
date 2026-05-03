@@ -176,15 +176,23 @@ function makeRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBacktest
         tradeIndex: 1,
         entryDate: '2026-03-04',
         exitDate: '2026-04-10',
-        entryPrice: 103,
-        exitPrice: 141,
-        returnPct: 36.89,
-        holdingDays: 37,
-        holdingBars: 27,
-        holdingCalendarDays: 37,
-        entrySignal: 'MA5 > MA20',
-        exitSignal: 'MA5 < MA20',
-        entryRule: {},
+      entryPrice: 103,
+      exitPrice: 141,
+      quantity: 900,
+      grossPnl: 34200,
+      netPnl: 34184,
+      fees: 16,
+      slippage: 6,
+      returnPct: 36.89,
+      holdingDays: 37,
+      holdingBars: 27,
+      holdingCalendarDays: 37,
+      entryReason: 'signal_entry',
+      exitReason: 'signal_exit',
+      signalReason: 'moving_average_crossover',
+      entrySignal: 'MA5 > MA20',
+      exitSignal: 'MA5 < MA20',
+      entryRule: {},
         exitRule: {},
         entryIndicators: {},
         exitIndicators: {},
@@ -313,5 +321,77 @@ describe('BacktestResultReport', () => {
     createObjectUrlMock.mockRestore();
     clickMock.mockRestore();
     revokeObjectUrlMock.mockRestore();
+  });
+
+  it('renders trade attribution, event timeline, and risk diagnostics from existing payloads', () => {
+    render(<BacktestResultReport run={makeRun({
+      trades: [
+        {
+          code: 'ORCL',
+          tradeIndex: 1,
+          entryDate: '2026-03-04',
+          exitDate: '2026-03-24',
+          entryPrice: 103,
+          exitPrice: 115,
+          quantity: 900,
+          grossPnl: 10800,
+          netPnl: 10784,
+          fees: 16,
+          slippage: 6,
+          returnPct: 11.5,
+          holdingDays: 20,
+          entryReason: 'signal_entry',
+          exitReason: 'signal_exit',
+          signalReason: 'moving_average_crossover',
+          entrySignal: 'MA5 > MA20',
+          exitSignal: 'MA5 < MA20',
+          entryRule: {},
+          exitRule: {},
+          entryIndicators: {},
+          exitIndicators: {},
+        },
+        {
+          code: 'ORCL',
+          tradeIndex: 2,
+          entryDate: '2026-04-01',
+          exitDate: '2026-04-08',
+          entryPrice: 120,
+          exitPrice: 114,
+          quantity: 500,
+          grossPnl: -3000,
+          netPnl: -3012,
+          fees: 12,
+          slippage: 4,
+          returnPct: -5.02,
+          holdingDays: 7,
+          entryReason: 'signal_entry',
+          exitReason: 'stop_loss',
+          signalReason: 'moving_average_crossover',
+          entrySignal: 'MA5 > MA20',
+          exitSignal: 'FIXED_STOP_LOSS_5%',
+          entryRule: {},
+          exitRule: {},
+          entryIndicators: {},
+          exitIndicators: {},
+        },
+      ],
+    })} mode="professional" />);
+
+    expect(screen.getByTestId('backtest-report-attribution')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-attribution-exit-reason')).toHaveTextContent('signal exit');
+    expect(screen.getByTestId('backtest-attribution-exit-reason')).toHaveTextContent('stop loss');
+    expect(screen.getByTestId('backtest-attribution-month')).toHaveTextContent('2026-03');
+    expect(screen.getByTestId('backtest-attribution-year')).toHaveTextContent('2026');
+    expect(screen.getByTestId('backtest-attribution-holding-bucket')).toHaveTextContent('0-7d');
+
+    const timeline = screen.getByTestId('backtest-report-event-timeline');
+    expect(timeline).toHaveAttribute('data-visible-events', '4');
+    expect(within(timeline).getAllByText('ENTRY')).toHaveLength(2);
+    expect(within(timeline).getAllByText('EXIT')).toHaveLength(2);
+
+    const risk = screen.getByTestId('backtest-report-risk-diagnostics');
+    expect(within(risk).getByText('Worst Trade')).toBeInTheDocument();
+    expect(within(risk).getByText('-5.02%')).toBeInTheDocument();
+    expect(within(risk).getByText('Max Drawdown Period')).toBeInTheDocument();
   });
 });

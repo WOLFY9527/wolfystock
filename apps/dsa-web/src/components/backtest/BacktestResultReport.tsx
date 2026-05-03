@@ -61,9 +61,11 @@ const VALUE_CLASS = 'font-mono text-sm text-white';
 const POSITIVE_CLASS = 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]';
 const NEGATIVE_CLASS = 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]';
 const SECONDARY_BUTTON_CLASS = 'inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/70 transition-all hover:bg-white/10';
-const PRIMARY_BUTTON_CLASS = 'inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-3 py-2 text-xs font-semibold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all hover:from-blue-500 hover:to-purple-500';
+const PRIMARY_BUTTON_CLASS = 'inline-flex items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.18)] transition-all hover:border-emerald-400/45 hover:bg-emerald-500/15';
 const TRADE_ROW_LIMIT = 20;
 const LEDGER_ROW_LIMIT = 30;
+const EVENT_ROW_LIMIT = 12;
+const ATTRIBUTION_ROW_LIMIT = 6;
 
 function safeNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -171,6 +173,11 @@ function recordValue(source: Record<string, unknown>, ...keys: string[]): unknow
 function displayToken(value: unknown): string {
   const text = typeof value === 'string' ? value.trim() : value == null ? '' : String(value);
   return text ? text.replaceAll('_', ' ') : 'unknown';
+}
+
+function compactToken(value: unknown): string {
+  const text = displayToken(value);
+  return text === 'unknown' ? '--' : text;
 }
 
 function formatBps(value: unknown): string {
@@ -319,6 +326,172 @@ function getBenchmarkSentence(normalized: DeterministicBacktestNormalizedResult)
   return `${parts.join(' · ')}。`;
 }
 
+type AttributionRow = {
+  key: string;
+  trades: number;
+  netPnl: number | null;
+  returnPct: number | null;
+};
+
+type EventRow = {
+  date: string;
+  type: 'ENTRY' | 'EXIT';
+  label: string;
+  tone: 'positive' | 'negative' | 'neutral';
+};
+
+function tradeNetPnl(trade: RuleBacktestTradeItem): number | null {
+  const explicit = safeNumber(trade.netPnl);
+  if (explicit != null) return explicit;
+  const quantity = safeNumber(trade.quantity);
+  const entry = safeNumber(trade.entryPrice);
+  const exit = safeNumber(trade.exitPrice);
+  if (quantity == null || entry == null || exit == null) return null;
+  return (exit - entry) * quantity - (safeNumber(trade.fees) ?? 0);
+}
+
+function tradeFees(trade: RuleBacktestTradeItem): number | null {
+  return safeNumber(trade.fees) ?? (
+    safeNumber(trade.entryFeeAmount) != null || safeNumber(trade.exitFeeAmount) != null
+      ? (safeNumber(trade.entryFeeAmount) ?? 0) + (safeNumber(trade.exitFeeAmount) ?? 0)
+      : null
+  );
+}
+
+function tradeSlippage(trade: RuleBacktestTradeItem): number | null {
+  return safeNumber(trade.slippage) ?? (
+    safeNumber(trade.entrySlippageAmount) != null || safeNumber(trade.exitSlippageAmount) != null
+      ? (safeNumber(trade.entrySlippageAmount) ?? 0) + (safeNumber(trade.exitSlippageAmount) ?? 0)
+      : null
+  );
+}
+
+function holdingBucket(days: number | null): string {
+  if (days == null) return 'unknown';
+  if (days <= 7) return '0-7d';
+  if (days <= 30) return '8-30d';
+  if (days <= 90) return '31-90d';
+  return '90d+';
+}
+
+function getTradeMonth(trade: RuleBacktestTradeItem): string {
+  return safeText(trade.exitDate)?.slice(0, 7) || safeText(trade.entryDate)?.slice(0, 7) || 'unknown';
+}
+
+function getTradeYear(trade: RuleBacktestTradeItem): string {
+  return safeText(trade.exitDate)?.slice(0, 4) || safeText(trade.entryDate)?.slice(0, 4) || 'unknown';
+}
+
+function buildAttribution(
+  trades: RuleBacktestTradeItem[],
+  keyFor: (trade: RuleBacktestTradeItem) => string,
+): AttributionRow[] {
+  const groups = new Map<string, RuleBacktestTradeItem[]>();
+  trades.forEach((trade) => {
+    const key = keyFor(trade);
+    groups.set(key, [...(groups.get(key) || []), trade]);
+  });
+  return Array.from(groups.entries()).map(([key, group]) => {
+    const returns = group.map(getTradeReturn).filter((value): value is number => value != null);
+    const pnls = group.map(tradeNetPnl).filter((value): value is number => value != null);
+    return {
+      key,
+      trades: group.length,
+      netPnl: pnls.length ? pnls.reduce((total, value) => total + value, 0) : null,
+      returnPct: average(returns),
+    };
+  }).sort((a, b) => {
+    const aPnl = a.netPnl ?? a.returnPct ?? 0;
+    const bPnl = b.netPnl ?? b.returnPct ?? 0;
+    return Math.abs(bPnl) - Math.abs(aPnl);
+  }).slice(0, ATTRIBUTION_ROW_LIMIT);
+}
+
+function buildEvents(trades: RuleBacktestTradeItem[]): EventRow[] {
+  return trades.flatMap((trade) => {
+    const events: EventRow[] = [];
+    if (trade.entryDate) {
+      events.push({
+        date: trade.entryDate,
+        type: 'ENTRY',
+        label: compactToken(trade.entryReason || trade.entrySignal || trade.entryTrigger),
+        tone: 'neutral',
+      });
+    }
+    if (trade.exitDate) {
+      events.push({
+        date: trade.exitDate,
+        type: 'EXIT',
+        label: compactToken(trade.exitReason || trade.exitSignal || trade.exitTrigger),
+        tone: toneFor(getTradeReturn(trade)),
+      });
+    }
+    return events;
+  }).sort((a, b) => a.date.localeCompare(b.date)).slice(0, EVENT_ROW_LIMIT);
+}
+
+function maxStreak(trades: RuleBacktestTradeItem[], predicate: (value: number) => boolean): number {
+  let best = 0;
+  let current = 0;
+  trades.forEach((trade) => {
+    const value = getTradeReturn(trade);
+    if (value != null && predicate(value)) {
+      current += 1;
+      best = Math.max(best, current);
+    } else {
+      current = 0;
+    }
+  });
+  return best;
+}
+
+function sumNullable(values: Array<number | null>): number | null {
+  const numbers = values.filter((value): value is number => value != null);
+  if (!numbers.length) return null;
+  return numbers.reduce((total, value) => total + value, 0);
+}
+
+function drawdownPeriod(rows: DeterministicBacktestNormalizedRow[]): { start: string | null; trough: string | null; recovery: string | null; value: number | null } {
+  let peakDate: string | null = null;
+  let currentPeakDate: string | null = null;
+  let trough: string | null = null;
+  let recovery: string | null = null;
+  let minDrawdown = 0;
+  rows.forEach((row) => {
+    const drawdown = safeNumber(row.drawdownPct) ?? 0;
+    if (drawdown === 0) {
+      currentPeakDate = row.date;
+      if (trough && !recovery) recovery = row.date;
+    }
+    if (drawdown < minDrawdown) {
+      minDrawdown = drawdown;
+      peakDate = currentPeakDate;
+      trough = row.date;
+      recovery = null;
+    }
+  });
+  return { start: peakDate, trough, recovery, value: minDrawdown || null };
+}
+
+function AttributionList({ rows, testId }: { rows: AttributionRow[]; testId: string }) {
+  return (
+    <div data-testid={testId} className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3">
+      <div className="space-y-2">
+        {rows.length ? rows.map((row) => {
+          const contribution = row.netPnl != null ? signedNumber(row.netPnl) : signedPct(row.returnPct);
+          return (
+            <div key={row.key} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 text-xs">
+              <span className="truncate text-white/62">{compactToken(row.key)}</span>
+              <span className={`font-mono ${valueToneClass(toneFor(row.netPnl ?? row.returnPct))}`}>{contribution}</span>
+              <span className="font-mono text-white/42">{row.trades}x</span>
+            </div>
+          );
+        }) : <p className="text-xs text-white/42">--</p>}
+      </div>
+    </div>
+  );
+}
+
 function MetricCard({ item }: { item: MetricItem }) {
   return (
     <div className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3">
@@ -347,6 +520,28 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   );
   const trades = useMemo(() => (Array.isArray(run.trades) ? run.trades : []), [run.trades]);
   const tradeSummary = useMemo(() => getTradeSummary(run, trades), [run, trades]);
+  const attributionByMonth = useMemo(() => buildAttribution(trades, getTradeMonth), [trades]);
+  const attributionByYear = useMemo(() => buildAttribution(trades, getTradeYear), [trades]);
+  const attributionByExitReason = useMemo(() => buildAttribution(trades, (trade) => compactToken(trade.exitReason || trade.exitTrigger || trade.exitSignal)), [trades]);
+  const attributionByHoldingBucket = useMemo(() => buildAttribution(trades, (trade) => holdingBucket(safeNumber(trade.holdingDays ?? trade.holdingCalendarDays ?? trade.holdingBars))), [trades]);
+  const tradeEvents = useMemo(() => buildEvents(trades), [trades]);
+  const grossPnlTotal = useMemo(() => sumNullable(trades.map((trade) => safeNumber(trade.grossPnl))), [trades]);
+  const netPnlTotal = useMemo(() => sumNullable(trades.map(tradeNetPnl)), [trades]);
+  const feesTotal = useMemo(() => sumNullable(trades.map(tradeFees)), [trades]);
+  const slippageTotal = useMemo(() => sumNullable(trades.map(tradeSlippage)), [trades]);
+  const drawdown = useMemo(() => drawdownPeriod(normalized.rows), [normalized.rows]);
+  const bestTrade = useMemo(() => trades.reduce<RuleBacktestTradeItem | null>((best, trade) => {
+    const value = getTradeReturn(trade);
+    const bestValue = best ? getTradeReturn(best) : null;
+    return value != null && (bestValue == null || value > bestValue) ? trade : best;
+  }, null), [trades]);
+  const worstTrade = useMemo(() => trades.reduce<RuleBacktestTradeItem | null>((worst, trade) => {
+    const value = getTradeReturn(trade);
+    const worstValue = worst ? getTradeReturn(worst) : null;
+    return value != null && (worstValue == null || value < worstValue) ? trade : worst;
+  }, null), [trades]);
+  const consecutiveWins = useMemo(() => maxStreak(trades, (value) => value > 0), [trades]);
+  const consecutiveLosses = useMemo(() => maxStreak(trades, (value) => value < 0), [trades]);
   const metrics = useMemo(() => getMetricItems(normalized), [normalized]);
   const moreMetrics = useMemo(() => getMoreMetricItems(run, tradeSummary), [run, tradeSummary]);
   const dataQuality = useMemo(() => dataQualityEntries(run, normalized), [run, normalized]);
@@ -369,19 +564,22 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   const exportTrades = () => {
     downloadCsv(
       `backtest_trades_${run.id}.csv`,
-      ['Entry Date', 'Exit Date', 'Symbol', 'Entry Price', 'Exit Price', 'Return %', 'Fee Bps', 'Slippage Bps', 'Holding Days', 'Exit Reason', 'Signal Reason'],
+      ['Entry Date', 'Exit Date', 'Symbol', 'Quantity', 'Entry Price', 'Exit Price', 'Gross PnL', 'Net PnL', 'Return %', 'Fees', 'Slippage', 'Holding Days', 'Exit Reason', 'Signal Reason'],
       trades.map((trade) => [
         trade.entryDate,
         trade.exitDate,
         trade.code || run.code,
+        trade.quantity,
         trade.entryPrice,
         trade.exitPrice,
+        trade.grossPnl,
+        tradeNetPnl(trade),
         trade.returnPct,
-        trade.feeBps,
-        trade.slippageBps,
+        tradeFees(trade),
+        tradeSlippage(trade),
         trade.holdingDays ?? trade.holdingCalendarDays ?? trade.holdingBars,
-        trade.exitTrigger ?? trade.exitSignal,
-        trade.entrySignal ?? trade.entryTrigger,
+        trade.exitReason ?? trade.exitTrigger ?? trade.exitSignal,
+        trade.signalReason ?? trade.entrySignal ?? trade.entryTrigger,
       ]),
     );
   };
@@ -414,7 +612,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
     >
       <div className="flex min-w-0 flex-col gap-4 text-sm text-white/70">
         <nav className="flex min-w-0 gap-2 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="Backtest result sections">
-          {['概览', '曲线', '交易', '数据质量', '执行假设', '账本'].map((item) => (
+          {['概览', '曲线', '交易', '归因', '风险', '数据质量', '执行假设', '账本'].map((item) => (
             <a key={item} href={`#backtest-report-${item}`} className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/60 hover:bg-white/10">
               {item}
             </a>
@@ -498,6 +696,78 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           </div>
         </div>
 
+        <div id="backtest-report-归因" data-testid="backtest-report-attribution" className={GHOST_SECTION_CLASS}>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className={LABEL_CLASS}>Trade Attribution</p>
+              <h3 className="mt-1 text-sm font-semibold text-white">PnL Contribution</h3>
+            </div>
+            <div className="font-mono text-xs text-white/38">{trades.length} trades</div>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div>
+              <p className={`${LABEL_CLASS} mb-2`}>By Month</p>
+              <AttributionList rows={attributionByMonth} testId="backtest-attribution-month" />
+            </div>
+            <div>
+              <p className={`${LABEL_CLASS} mb-2`}>By Year</p>
+              <AttributionList rows={attributionByYear} testId="backtest-attribution-year" />
+            </div>
+            <div>
+              <p className={`${LABEL_CLASS} mb-2`}>By Exit Reason</p>
+              <AttributionList rows={attributionByExitReason} testId="backtest-attribution-exit-reason" />
+            </div>
+            <div>
+              <p className={`${LABEL_CLASS} mb-2`}>By Holding Duration</p>
+              <AttributionList rows={attributionByHoldingBucket} testId="backtest-attribution-holding-bucket" />
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <MetricCard item={{ key: 'gross', label: 'Gross PnL', value: signedNumber(grossPnlTotal), tone: toneFor(grossPnlTotal) }} />
+            <MetricCard item={{ key: 'net', label: 'Net PnL', value: signedNumber(netPnlTotal), tone: toneFor(netPnlTotal) }} />
+            <MetricCard item={{ key: 'fees', label: 'Fees', value: signedNumber(feesTotal), tone: feesTotal && feesTotal > 0 ? 'negative' : 'neutral' }} />
+            <MetricCard item={{ key: 'slippage', label: 'Slippage', value: signedNumber(slippageTotal), tone: slippageTotal && slippageTotal > 0 ? 'negative' : 'neutral' }} />
+          </div>
+        </div>
+
+        <div data-testid="backtest-report-event-timeline" data-visible-events={tradeEvents.length} data-total-events={trades.length * 2} className={GHOST_SECTION_CLASS}>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className={LABEL_CLASS}>Holding Timeline</p>
+              <h3 className="mt-1 text-sm font-semibold text-white">Entry / Exit Events</h3>
+            </div>
+            <span className="font-mono text-xs text-white/38">top {EVENT_ROW_LIMIT}</span>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {tradeEvents.length ? tradeEvents.map((event, index) => (
+              <div key={`${event.date}-${event.type}-${index}`} className="grid min-w-0 grid-cols-[auto_1fr] gap-3 rounded-xl border border-white/5 bg-black/20 p-3">
+                <div className={`font-mono text-[10px] font-bold ${valueToneClass(event.tone)}`}>{event.type}</div>
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-xs text-white/72">{event.date}</p>
+                  <p className="mt-1 truncate text-xs text-white/42">{event.label}</p>
+                </div>
+              </div>
+            )) : <p className="text-xs text-white/42">暂无交易事件</p>}
+          </div>
+        </div>
+
+        <div id="backtest-report-风险" data-testid="backtest-report-risk-diagnostics" className={GHOST_SECTION_CLASS}>
+          <p className={LABEL_CLASS}>Risk Diagnostics</p>
+          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <MetricCard item={{ key: 'best-trade', label: 'Best Trade', value: signedPct(getTradeReturn(bestTrade || {} as RuleBacktestTradeItem)), tone: toneFor(getTradeReturn(bestTrade || {} as RuleBacktestTradeItem)) }} />
+            <MetricCard item={{ key: 'worst-trade', label: 'Worst Trade', value: signedPct(getTradeReturn(worstTrade || {} as RuleBacktestTradeItem)), tone: toneFor(getTradeReturn(worstTrade || {} as RuleBacktestTradeItem)) }} />
+            <MetricCard item={{ key: 'wins', label: 'Consecutive Wins', value: String(consecutiveWins), tone: 'positive' }} />
+            <MetricCard item={{ key: 'losses', label: 'Consecutive Losses', value: String(consecutiveLosses), tone: 'negative' }} />
+          </div>
+          <div className="mt-3 rounded-xl border border-white/5 bg-black/20 p-3">
+            <p className={LABEL_CLASS}>Max Drawdown Period</p>
+            <p className="mt-2 truncate font-mono text-xs text-white/70">
+              {(drawdown.start || '--')} {'->'} {(drawdown.trough || '--')} · {signedPct(drawdown.value)}
+              {drawdown.recovery ? ` · recovered ${drawdown.recovery}` : ''}
+            </p>
+          </div>
+        </div>
+
         <div data-testid="backtest-report-trade-table" data-visible-rows={visibleTrades.length} data-total-rows={trades.length} className={GHOST_SECTION_CLASS}>
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
             <div>
@@ -509,10 +779,10 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             </button>
           </div>
           <div className="mt-3 overflow-x-auto rounded-xl border border-white/5 [scrollbar-width:none]">
-            <table className="min-w-[980px] w-full text-left text-xs">
+            <table className="min-w-[1220px] w-full text-left text-xs">
               <thead className="sticky top-0 bg-black/70 text-white/42">
                 <tr>
-                  {['Entry Date', 'Exit Date', 'Symbol', 'Entry', 'Exit', 'Return', 'Fee', 'Slippage', 'Holding', 'Exit Reason', 'Signal Reason'].map((label) => (
+                  {['Entry Date', 'Exit Date', 'Symbol', 'Qty', 'Entry', 'Exit', 'Gross', 'Net', 'Return', 'Fees', 'Slip', 'Holding', 'Exit Reason', 'Signal Reason'].map((label) => (
                     <th key={label} className="px-3 py-2 font-semibold">{label}</th>
                   ))}
                 </tr>
@@ -523,17 +793,20 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                     <td className="px-3 py-2 font-mono">{trade.entryDate || '--'}</td>
                     <td className="px-3 py-2 font-mono">{trade.exitDate || '--'}</td>
                     <td className="px-3 py-2 font-mono">{trade.code || run.code || '--'}</td>
+                    <td className="px-3 py-2 font-mono">{formatNumber(trade.quantity, 4)}</td>
                     <td className="px-3 py-2 font-mono">{formatNumber(trade.entryPrice)}</td>
                     <td className="px-3 py-2 font-mono">{formatNumber(trade.exitPrice)}</td>
+                    <td className={`px-3 py-2 font-mono ${valueToneClass(toneFor(trade.grossPnl))}`}>{formatNumber(trade.grossPnl)}</td>
+                    <td className={`px-3 py-2 font-mono ${valueToneClass(toneFor(tradeNetPnl(trade)))}`}>{formatNumber(tradeNetPnl(trade))}</td>
                     <td className={`px-3 py-2 font-mono ${valueToneClass(toneFor(trade.returnPct))}`}>{signedPct(trade.returnPct)}</td>
-                    <td className="px-3 py-2 font-mono">{formatNumber(trade.feeBps, 2)}</td>
-                    <td className="px-3 py-2 font-mono">{formatNumber(trade.slippageBps, 2)}</td>
+                    <td className="px-3 py-2 font-mono">{formatNumber(tradeFees(trade), 2)}</td>
+                    <td className="px-3 py-2 font-mono">{formatNumber(tradeSlippage(trade), 2)}</td>
                     <td className="px-3 py-2 font-mono">{formatNumber(trade.holdingDays ?? trade.holdingCalendarDays ?? trade.holdingBars, 0)}</td>
-                    <td className="max-w-[180px] truncate px-3 py-2">{trade.exitTrigger || trade.exitSignal || '--'}</td>
-                    <td className="max-w-[220px] truncate px-3 py-2">{trade.entrySignal || trade.entryTrigger || '--'}</td>
+                    <td className="max-w-[180px] truncate px-3 py-2">{compactToken(trade.exitReason || trade.exitTrigger || trade.exitSignal)}</td>
+                    <td className="max-w-[220px] truncate px-3 py-2">{compactToken(trade.signalReason || trade.entrySignal || trade.entryTrigger)}</td>
                   </tr>
                 )) : (
-                  <tr><td colSpan={11} className="px-3 py-6 text-center text-white/42">暂无交易记录</td></tr>
+                  <tr><td colSpan={14} className="px-3 py-6 text-center text-white/42">暂无交易记录</td></tr>
                 )}
               </tbody>
             </table>
