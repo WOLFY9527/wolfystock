@@ -11,8 +11,20 @@ import type {
   ScannerRunHistoryResponse,
 } from '../../types/scanner';
 import type { WatchlistItem } from '../../types/watchlist';
+import type { RuleBacktestRunResponse } from '../../types/backtest';
 
-const { getRuns, getRun, getThemes, createTheme, runScan, analyzeAsync, listWatchlistItems, addWatchlistItem, removeWatchlistItem } = vi.hoisted(() => ({
+const {
+  getRuns,
+  getRun,
+  getThemes,
+  createTheme,
+  runScan,
+  analyzeAsync,
+  listWatchlistItems,
+  addWatchlistItem,
+  removeWatchlistItem,
+  runRuleBacktest,
+} = vi.hoisted(() => ({
   getRuns: vi.fn(),
   getRun: vi.fn(),
   getThemes: vi.fn(),
@@ -22,6 +34,7 @@ const { getRuns, getRun, getThemes, createTheme, runScan, analyzeAsync, listWatc
   listWatchlistItems: vi.fn(),
   addWatchlistItem: vi.fn(),
   removeWatchlistItem: vi.fn(),
+  runRuleBacktest: vi.fn(),
 }));
 
 const writeTextMock = vi.fn();
@@ -52,6 +65,12 @@ vi.mock('../../api/analysis', () => ({
     analyzeAsync,
   },
   DuplicateTaskError: class DuplicateTaskError extends Error {},
+}));
+
+vi.mock('../../api/backtest', () => ({
+  backtestApi: {
+    runRuleBacktest,
+  },
 }));
 
 function makeCandidate(overrides: Partial<ScannerCandidate>): ScannerCandidate {
@@ -520,6 +539,49 @@ function makeWatchlistItem(overrides: Partial<WatchlistItem> = {}): WatchlistIte
   };
 }
 
+function makeRuleBacktestRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBacktestRunResponse {
+  return {
+    id: 27,
+    code: 'WULF',
+    strategyText: 'deterministic default',
+    parsedStrategy: {
+      executable: true,
+      entry: { type: 'group', op: 'and', rules: [] },
+      exit: { type: 'group', op: 'or', rules: [] },
+      summary: 'default',
+      assumptions: [],
+      warnings: [],
+      strategySpec: {},
+    },
+    strategyHash: 'hash-27',
+    timeframe: '1d',
+    startDate: '2025-05-03',
+    endDate: '2026-05-03',
+    lookbackBars: 252,
+    initialCapital: 100000,
+    feeBps: 0,
+    slippageBps: 0,
+    needsConfirmation: false,
+    warnings: [],
+    status: 'completed',
+    statusHistory: [],
+    tradeCount: 6,
+    winCount: 4,
+    lossCount: 2,
+    totalReturnPct: 12.3,
+    maxDrawdownPct: -8.1,
+    summary: { sharpe: 1.2 },
+    executionAssumptions: {},
+    benchmarkCurve: [],
+    benchmarkSummary: {},
+    dailyReturnSeries: [],
+    exposureCurve: [],
+    equityCurve: [],
+    trades: [],
+    ...overrides,
+  };
+}
+
 function LanguageSwitch() {
   const { setLanguage } = useI18n();
   return (
@@ -540,6 +602,8 @@ function renderUserScannerPage(withLanguageSwitch = false) {
           <Route path="/:locale" element={<div>Home Landing</div>} />
           <Route path="/backtest" element={<div>Backtest Landing</div>} />
           <Route path="/:locale/backtest" element={<div>Backtest Landing</div>} />
+          <Route path="/backtest/results/:runId" element={<div>Backtest Result</div>} />
+          <Route path="/:locale/backtest/results/:runId" element={<div>Backtest Result</div>} />
         </Routes>
       </MemoryRouter>
     </UiLanguageProvider>,
@@ -564,6 +628,7 @@ describe('UserScannerPage', () => {
     listWatchlistItems.mockReset();
     addWatchlistItem.mockReset();
     removeWatchlistItem.mockReset();
+    runRuleBacktest.mockReset();
     writeTextMock.mockReset();
     createObjectUrlMock.mockClear();
     revokeObjectUrlMock.mockClear();
@@ -659,6 +724,10 @@ describe('UserScannerPage', () => {
     });
     runScan.mockResolvedValue(makeRunDetail());
     analyzeAsync.mockResolvedValue({ taskId: 'task-1' });
+    runRuleBacktest.mockImplementation(async (params: { code: string }) => makeRuleBacktestRun({
+      id: params.code === 'WULF' ? 27 : params.code === 'MARA' ? 28 : params.code === 'RIOT' ? 29 : 30,
+      code: params.code,
+    }));
     listWatchlistItems.mockResolvedValue({ items: [] });
     addWatchlistItem.mockResolvedValue(makeWatchlistItem());
     removeWatchlistItem.mockResolvedValue({ deleted: 1 });
@@ -806,15 +875,11 @@ describe('UserScannerPage', () => {
     expect(await screen.findByText('Home Landing')).toBeInTheDocument();
   });
 
-  it('enables backtest action with scanner handoff query params for candidates with symbol', async () => {
+  it('enables backtest action for candidates with symbol', async () => {
     renderUserScannerPage();
 
     const card = await screen.findByTestId('scanner-result-card-NVDA');
-    const backtestLink = within(card).getByRole('link', { name: /回测|Backtest/i });
-    expect(backtestLink).toHaveAttribute(
-      'href',
-      '/zh/backtest?symbol=NVDA&source=scanner&scannerRunId=11&scannerRank=1&market=CN&scannerProfile=cn_preopen_v1&universeType=default',
-    );
+    expect(within(card).getByRole('button', { name: /回测|Backtest/i })).toBeEnabled();
   });
 
   it('shows backtest action as disabled when the candidate symbol is missing', async () => {
@@ -840,7 +905,7 @@ describe('UserScannerPage', () => {
     const card = await screen.findByTestId('scanner-result-card-NVDA');
     expect(within(card).getAllByText(/Tracked|已追踪/).length).toBeGreaterThan(0);
     expect(within(card).getByRole('button', { name: /Tracked|已追踪/ })).toBeDisabled();
-    expect(within(card).getByRole('link', { name: /回测|Backtest/i })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: /回测|Backtest/i })).toBeEnabled();
   });
 
   it('adds a scanner candidate to the watchlist and marks it tracked', async () => {
@@ -929,10 +994,7 @@ describe('UserScannerPage', () => {
     expect(within(detail).getByRole('button', { name: /分析|Analyze/i })).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: /复制代码|Copy symbol/i })).toBeInTheDocument();
     expect(within(detail).getByRole('button', { name: /导出该候选|Export candidate/i })).toBeInTheDocument();
-    expect(within(detail).getByRole('link', { name: /回测|Backtest/i })).toHaveAttribute(
-      'href',
-      '/zh/backtest?symbol=NVDA&source=scanner&scannerRunId=11&scannerRank=1&market=CN&scannerProfile=cn_preopen_v1&universeType=default',
-    );
+    expect(within(detail).getByRole('button', { name: /回测|Backtest/i })).toBeEnabled();
     expect(within(detail).getByText('Turnover')).toBeInTheDocument();
     expect(within(detail).getByText('Momentum expansion')).toBeInTheDocument();
     expect(within(detail).getByText('Backend risk: gap fade below support.')).toBeInTheDocument();
@@ -1080,7 +1142,7 @@ describe('UserScannerPage', () => {
 
     const actions = await screen.findByTestId('scanner-primary-actions');
     expect(within(actions).getByRole('button', { name: /分析 WULF|Analyze WULF/i })).toBeInTheDocument();
-    expect(within(actions).getByRole('link', { name: /回测 WULF|Backtest WULF/i })).toBeInTheDocument();
+    expect(within(actions).getByRole('button', { name: /回测 WULF|Backtest WULF/i })).toBeInTheDocument();
     expect(within(actions).getByRole('button', { name: /加入观察|Save to watchlist/i })).toBeInTheDocument();
     expect(within(actions).queryByRole('button', { name: /导出 CSV|Export CSV/i })).not.toBeInTheDocument();
     expect(within(actions).queryByRole('button', { name: /复制全部代码|Copy all symbols/i })).not.toBeInTheDocument();
@@ -1093,6 +1155,113 @@ describe('UserScannerPage', () => {
     expect(within(more).getByRole('button', { name: /复制全部代码|Copy all symbols/i })).toBeInTheDocument();
     expect(within(more).getByRole('button', { name: /复制前 5|Copy top 5/i })).toBeInTheDocument();
     expect(within(more).getByRole('button', { name: /历史扫描回放|Historical replay/i })).toBeInTheDocument();
+  });
+
+  it('keeps Backtest Lab compact by default and exposes scanner-safe config summary', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+
+    const lab = await screen.findByTestId('scanner-backtest-lab');
+    expect(lab).not.toHaveAttribute('open');
+    fireEvent.click(within(lab).getByText(/Backtest Lab|回测实验室/i));
+
+    expect(lab).toHaveTextContent(/候选单标的回测|Candidate single-symbol backtest/i);
+    expect(lab).toHaveTextContent(/100000/);
+    expect(lab).toHaveTextContent(/auto/i);
+    expect(lab).toHaveTextContent(/fee\/slip|费用\/滑点/i);
+  });
+
+  it('runs an individual scanner candidate backtest and links to the shared result report', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+
+    const card = await screen.findByTestId('scanner-result-card-WULF');
+    fireEvent.click(within(card).getByRole('button', { name: /回测|Backtest/i }));
+
+    await waitFor(() => {
+      expect(runRuleBacktest).toHaveBeenCalledWith(expect.objectContaining({
+        code: 'WULF',
+        initialCapital: 100000,
+        feeBps: 0,
+        slippageBps: 0,
+        benchmarkMode: 'auto',
+        confirmed: true,
+        waitForCompletion: true,
+      }));
+    });
+    expect(await within(card).findByText(/\+12\.3%/)).toBeInTheDocument();
+    expect(within(card).getByText(/-8\.1%/)).toBeInTheDocument();
+    expect(within(card).getByText(/1\.20/)).toBeInTheDocument();
+    expect(within(card).getByRole('link', { name: /查看报告|Report/i })).toHaveAttribute('href', expect.stringMatching(/\/(zh|en)\/backtest\/results\/27/));
+  });
+
+  it('batch backtests official selected symbols only and prevents duplicate clicks', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+
+    const lab = await screen.findByTestId('scanner-backtest-lab');
+    fireEvent.click(within(lab).getByText(/Backtest Lab|回测实验室/i));
+    const officialButton = within(lab).getByRole('button', { name: /回测官方入选|Official selected/i });
+    fireEvent.click(officialButton);
+    fireEvent.click(officialButton);
+
+    await waitFor(() => {
+      expect(runRuleBacktest).toHaveBeenCalledTimes(1);
+      expect(runRuleBacktest).toHaveBeenCalledWith(expect.objectContaining({ code: 'WULF' }));
+    });
+    expect(await within(lab).findByText('WULF')).toBeInTheDocument();
+    expect(within(lab).queryByText('MARA')).not.toBeInTheDocument();
+  });
+
+  it('batch backtests preview selected, top five, and current filtered candidate sets', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    const previewRender = renderUserScannerPage();
+
+    const lab = await screen.findByTestId('scanner-backtest-lab');
+    fireEvent.click(within(lab).getByText(/Backtest Lab|回测实验室/i));
+    fireEvent.click(within(lab).getByRole('button', { name: /回测预览入选|Preview selected/i }));
+    await waitFor(() => {
+      expect(runRuleBacktest.mock.calls.map((call) => call[0].code)).toEqual(['WULF', 'MARA', 'RIOT']);
+    });
+
+    previewRender.unmount();
+    runRuleBacktest.mockClear();
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    const topRender = renderUserScannerPage();
+    const topLab = await screen.findByTestId('scanner-backtest-lab');
+    fireEvent.click(within(topLab).getByText(/Backtest Lab|回测实验室/i));
+    fireEvent.click(within(topLab).getByRole('button', { name: /回测前 5 名|Top 5/i }));
+    await waitFor(() => {
+      expect(runRuleBacktest.mock.calls.map((call) => call[0].code)).toEqual(['WULF', 'MARA', 'RIOT', 'CIFR', 'HIVE']);
+    });
+
+    topRender.unmount();
+    runRuleBacktest.mockClear();
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+    const filteredLab = await screen.findByTestId('scanner-backtest-lab');
+    fireEvent.click(within(filteredLab).getByText(/Backtest Lab|回测实验室/i));
+    fireEvent.click(screen.getByRole('button', { name: /候选池|Candidate pool/i }));
+    fireEvent.click(within(filteredLab).getByRole('button', { name: /回测当前筛选|Filtered/i }));
+    await waitFor(() => {
+      expect(runRuleBacktest.mock.calls.map((call) => call[0].code)).toEqual(['WULF', 'MARA', 'RIOT', 'CIFR', 'HIVE']);
+    });
+  });
+
+  it('renders compact failed backtest errors without crashing old scanner responses', async () => {
+    runRuleBacktest.mockRejectedValueOnce(new Error('sample unavailable'));
+    getRun.mockResolvedValue(makeRunDetail({ candidates: [], shortlist: [], selected: [] }));
+    renderUserScannerPage();
+
+    expect(await screen.findByTestId('user-scanner-workspace')).toBeInTheDocument();
+
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+    const lab = await screen.findByTestId('scanner-backtest-lab');
+    fireEvent.click(within(lab).getByText(/Backtest Lab|回测实验室/i));
+    fireEvent.click(within(lab).getByRole('button', { name: /回测官方入选|Official selected/i }));
+
+    expect(await within(lab).findByText(/sample unavailable/i)).toBeInTheDocument();
   });
 
   it('renders strategy preview controls and updates preview count locally without rerunning scanner', async () => {
