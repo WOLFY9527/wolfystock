@@ -3,7 +3,8 @@ import { ArrowUp, Download, Lightbulb, PanelRightOpen, SendHorizontal } from 'lu
 import { useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { agentApi } from '../api/agent';
+import { agentApi, type AgentModelDeployment } from '../api/agent';
+import { watchlistApi } from '../api/watchlist';
 import { ApiErrorAlert, ConfirmDialog, Drawer, GlassCard, TypewriterText } from '../components/common';
 import { CARD_BUTTON_CLASS } from '../components/home-bento';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
@@ -79,6 +80,45 @@ type QuickQuestion = {
 };
 
 type ChatConsoleMode = 'engines' | 'history';
+type StockMarket = 'US' | 'CN' | 'HK' | 'unknown';
+type SmartRouteIntent =
+  | 'buy_or_hold'
+  | 'sell_or_reduce'
+  | 'risk_check'
+  | 'compare'
+  | 'breakout'
+  | 'trend'
+  | 'position_management'
+  | 'fundamental'
+  | 'event'
+  | 'general';
+
+type SmartRouteResult = {
+  symbols: string[];
+  market: StockMarket;
+  intent: SmartRouteIntent;
+  intentLabel: string;
+  recommendedLenses: string[];
+  confidence: 'high' | 'medium' | 'low';
+};
+
+type DataEvidenceStatus = 'available' | 'missing' | 'stale' | 'unknown';
+
+type DataEvidenceItem = {
+  key: string;
+  label: string;
+  status: DataEvidenceStatus;
+  source?: string;
+  updatedAt?: string;
+};
+
+type AnalysisLens = {
+  id: string;
+  label: string;
+  description: string;
+  skillId?: string;
+  advanced?: boolean;
+};
 
 const STARTER_PROMPT_CARDS: StarterPromptCard[] = [
   { id: 'entryDecision', skill: 'bull_trend' },
@@ -93,6 +133,38 @@ const QUICK_QUESTIONS: QuickQuestion[] = [
   { id: 'q4', skill: 'box_oscillation' },
   { id: 'q5', skill: 'bull_trend' },
   { id: 'q6', skill: 'emotion_cycle' },
+];
+
+const STOCK_CHAT_ANSWER_SECTIONS = ['结论', '关键依据', '关键价位', '风险', '操作计划', '数据可信度'];
+
+const PRIMARY_ANALYSIS_LENSES: AnalysisLens[] = [
+  { id: 'general', label: '综合判断', description: '适合普通问股，综合趋势、风险、基本面与操作计划。' },
+  { id: 'trend_following', label: '趋势跟踪', description: '判断趋势延续、回调、破位与趋势衰竭。', skillId: 'bull_trend' },
+  { id: 'ma_system', label: '均线系统', description: '关注 MA5/10/20/60 排列、金叉死叉和支撑压力。', skillId: 'ma_cross' },
+  { id: 'volume_breakout', label: '放量突破', description: '关注平台突破、成交量确认、假突破与回踩。', skillId: 'volume_breakout' },
+  { id: 'range_box', label: '箱体震荡', description: '适合判断区间上沿/下沿、突破与跌破。', skillId: 'box_oscillation' },
+  { id: 'emotion_cycle', label: '情绪周期', description: '适合题材股、短线强弱和市场情绪判断。', skillId: 'emotion_cycle' },
+  { id: 'leader_strategy', label: '龙头策略', description: '关注板块地位、相对强度、资金承接和持续性。', skillId: 'leader_strategy' },
+  { id: 'position_risk', label: '持仓风控', description: '结合成本、仓位、盈亏和止损线给出仓位建议。', skillId: 'volume_pullback' },
+  { id: 'fundamental_quality', label: '基本面质量', description: '关注收入、利润、估值、ROE、现金流和财报质量。' },
+  { id: 'event_driven', label: '事件驱动', description: '关注财报、政策、产品、并购、宏观事件影响。' },
+];
+
+const ADVANCED_ANALYSIS_LENSES: AnalysisLens[] = [
+  { id: 'chan_theory', label: '缠论回踩', description: '辅助观察中枢、背驰和回踩确认，不是确定性交易信号。', skillId: 'chan_theory', advanced: true },
+  { id: 'wave_theory', label: '波浪理论', description: '辅助判断浪形和节奏，主观性较高，需结合价格确认。', skillId: 'wave_theory', advanced: true },
+  { id: 'one_rise_three_fall', label: '一阳夹三阴', description: '辅助识别短线形态与反包可能，必须结合量价和风控。', skillId: 'one_rise_three_fall', advanced: true },
+];
+
+const DATA_CONTEXT_ITEMS: DataEvidenceItem[] = [
+  { key: 'quotes', label: '行情', status: 'unknown' },
+  { key: 'technical', label: '技术指标', status: 'unknown' },
+  { key: 'fundamental', label: '基本面', status: 'unknown' },
+  { key: 'news', label: '新闻', status: 'unknown' },
+  { key: 'position', label: '持仓', status: 'unknown' },
+  { key: 'watchlist', label: '观察列表', status: 'unknown' },
+  { key: 'scanner', label: '扫描器', status: 'unknown' },
+  { key: 'backtest', label: '回测', status: 'unknown' },
 ];
 
 const CANONICAL_SKILL_IDS = [
@@ -123,9 +195,69 @@ const SKILL_TEXT_ALIAS_TO_ID: Record<string, string> = CANONICAL_SKILL_IDS.reduc
 const ASSISTANT_MESSAGE_SURFACE_CLASS = 'w-full markdown-body text-[15px] leading-[1.6] text-white/90 break-words [&>p]:mb-3 [&>ul]:my-2 [&>ul]:pl-5 [&>li]:mb-1 [&>h3]:text-base [&>h3]:font-bold [&>h3]:mt-4 [&>h3]:mb-2';
 const STREAMING_ASSISTANT_MESSAGE_SURFACE_CLASS = `${ASSISTANT_MESSAGE_SURFACE_CLASS} whitespace-pre-wrap`;
 const CHAT_CONSOLE_TOGGLE_OPTIONS: Array<{ value: ChatConsoleMode; label: { zh: string; en: string } }> = [
-  { value: 'engines', label: { zh: '引擎视角', en: 'Engines' } },
+  { value: 'engines', label: { zh: '控制台', en: 'Console' } },
   { value: 'history', label: { zh: '历史记录', en: 'History' } },
 ];
+
+const formatRouteLabel = (route: SmartRouteResult): string => {
+  if (route.symbols.length === 0) return '先输入一个具体问题';
+  return `${route.symbols.join(', ')} · ${route.market} · ${route.intentLabel}`;
+};
+
+const inferMarket = (symbol: string): StockMarket => {
+  const normalized = symbol.toUpperCase();
+  if (/^\d{6}$/.test(normalized)) return 'CN';
+  if (/^(?:HK)?\d{4,5}(?:\.HK)?$/.test(normalized)) return 'HK';
+  if (/^[A-Z]{1,5}(?:\.[A-Z])?$/.test(normalized)) return 'US';
+  return 'unknown';
+};
+
+const detectSymbols = (text: string): string[] => {
+  const normalized = text.toUpperCase();
+  const matches = normalized.match(/\b(?:HK)?\d{4,6}(?:\.HK)?\b|\b[A-Z]{1,5}(?:\.[A-Z])?\b/g) ?? [];
+  const ignored = new Set(['MA', 'AI', 'US', 'CN', 'HK', 'ROE', 'ETF']);
+  return Array.from(new Set(matches.map((item) => item.replace(/^HK(?=\d)/, '').replace(/\.HK$/, '.HK')).filter((item) => !ignored.has(item))));
+};
+
+const classifyIntent = (text: string, symbols: string[]): Pick<SmartRouteResult, 'intent' | 'intentLabel' | 'recommendedLenses' | 'confidence'> => {
+  const value = text.toLowerCase();
+  if (symbols.length > 1 || /哪个|谁更强|比较|compare|vs\.?|versus/.test(value)) {
+    return { intent: 'compare', intentLabel: '对比', recommendedLenses: ['综合判断', '龙头策略'], confidence: symbols.length > 1 ? 'high' : 'medium' };
+  }
+  if (/持有|持仓|仓位|加仓|减仓|卖|sell|reduce|trim/.test(value)) {
+    return { intent: 'position_management', intentLabel: '持仓管理', recommendedLenses: ['持仓风控', '趋势跟踪'], confidence: 'high' };
+  }
+  if (/突破|breakout|放量|有效/.test(value)) {
+    return { intent: 'breakout', intentLabel: '突破确认', recommendedLenses: ['放量突破', '均线系统'], confidence: 'high' };
+  }
+  if (/风险|止损|回撤|risk/.test(value)) {
+    return { intent: 'risk_check', intentLabel: '风险检查', recommendedLenses: ['持仓风控', '趋势跟踪'], confidence: 'high' };
+  }
+  if (/短线|趋势|回踩|破位|trend/.test(value)) {
+    return { intent: 'trend', intentLabel: '趋势', recommendedLenses: ['趋势跟踪', '均线系统'], confidence: 'medium' };
+  }
+  if (/估值|财报|roe|利润|现金流|fundamental|valuation/.test(value)) {
+    return { intent: 'fundamental', intentLabel: '基本面', recommendedLenses: ['基本面质量'], confidence: 'high' };
+  }
+  if (/新闻|事件|财报后|政策|并购|earnings|event|catalyst/.test(value)) {
+    return { intent: 'event', intentLabel: '事件', recommendedLenses: ['事件驱动', '综合判断'], confidence: 'high' };
+  }
+  if (/买|还能|介入|持有|buy|hold/.test(value)) {
+    return { intent: 'buy_or_hold', intentLabel: '买入/持有', recommendedLenses: ['综合判断', '趋势跟踪'], confidence: 'high' };
+  }
+  return { intent: 'general', intentLabel: '普通问股', recommendedLenses: ['综合判断', '趋势跟踪'], confidence: symbols.length > 0 ? 'medium' : 'low' };
+};
+
+const routeStockQuestion = (text: string): SmartRouteResult => {
+  const symbols = detectSymbols(text);
+  const markets = Array.from(new Set(symbols.map(inferMarket).filter((market) => market !== 'unknown')));
+  const market: StockMarket = markets.length === 1 ? markets[0] : symbols.length ? 'unknown' : 'unknown';
+  return {
+    symbols,
+    market,
+    ...classifyIntent(text, symbols),
+  };
+};
 
 function SeamlessSegmentedControl({
   value,
@@ -201,8 +333,11 @@ const ChatPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState('');
   const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [agentModels, setAgentModels] = useState<AgentModelDeployment[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<string>('');
   const [showSkillDesc, setShowSkillDesc] = useState<string | null>(null);
+  const [showAdvancedLenses, setShowAdvancedLenses] = useState(false);
+  const [watchlistAction, setWatchlistAction] = useState<{ symbol: string; type: 'success' | 'error'; message: string } | null>(null);
   const [expandedThinking, setExpandedThinking] = useState<Set<string>>(new Set());
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -265,8 +400,7 @@ const ChatPage: React.FC = () => {
       setSkillsLoadError(null);
       const res = await agentApi.getSkills();
       setSkills(res.skills);
-      const defaultId = res.default_skill_id || res.skills[0]?.id || '';
-      setSelectedSkill(defaultId);
+      setSelectedSkill('');
     } catch (error: unknown) {
       setSkillsLoadError(getParsedApiError(error));
       setSkills([]);
@@ -278,6 +412,18 @@ const ChatPage: React.FC = () => {
     void loadSkills();
   }, [loadSkills]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void agentApi.getModels().then((res) => {
+      if (!cancelled) setAgentModels(res.models || []);
+    }).catch(() => {
+      if (!cancelled) setAgentModels([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const availableSkillIds = new Set(skills.map((skill) => skill.id));
   const starterPromptCards = STARTER_PROMPT_CARDS.filter(
     (card) => availableSkillIds.size === 0 || availableSkillIds.has(card.skill),
@@ -285,7 +431,23 @@ const ChatPage: React.FC = () => {
   const quickQuestions = QUICK_QUESTIONS.filter(
     (question) => availableSkillIds.size === 0 || availableSkillIds.has(question.skill),
   );
-  const engineSwitcherLabel = language === 'en' ? 'Analysis engines & perspectives' : '分析引擎与视角';
+  const smartRoute = useMemo(() => routeStockQuestion(input), [input]);
+  const primarySymbol = smartRoute.symbols[0];
+  const selectedLens = useMemo(
+    () => [...PRIMARY_ANALYSIS_LENSES, ...ADVANCED_ANALYSIS_LENSES].find((lens) => (lens.skillId || '') === selectedSkill)
+      ?? PRIMARY_ANALYSIS_LENSES[0],
+    [selectedSkill],
+  );
+  const evidenceItems: DataEvidenceItem[] = DATA_CONTEXT_ITEMS.map((item) => {
+    if (item.key === 'position' && followUpContextRef.current?.stock_code) {
+      return { ...item, status: 'available', source: 'analysis handoff' };
+    }
+    if (item.key === 'quotes' && followUpContextRef.current?.previous_price != null) {
+      return { ...item, status: 'available', source: 'previous report' };
+    }
+    return item;
+  });
+  const engineSwitcherLabel = language === 'en' ? 'Engine, lenses, data' : '引擎、视角与数据';
   const composerDisclaimer = language === 'en'
     ? 'AI insights are for reference only and are not investment advice. Confirm your risk tolerance before trading.'
     : 'AI 洞察仅供参考，不构成实质性投资建议。执行交易前请确认风险承受能力。';
@@ -293,6 +455,27 @@ const ChatPage: React.FC = () => {
   const mobileConsoleTitle = language === 'en' ? 'Chat console' : '问股控制台';
   const hasMessages = messages.length > 0;
   const showEmptyState = !hasMessages && !loading;
+
+  const buildStructuredChatContext = useCallback(() => {
+    const baseContext = followUpContextRef.current ? { ...followUpContextRef.current } : {};
+    return {
+      ...baseContext,
+      stock_chat: {
+        response_mode: 'structured_stock_analysis_v1',
+        answer_sections: STOCK_CHAT_ANSWER_SECTIONS,
+        instruction: '请用中文简洁输出：结论、关键依据、关键价位、风险、操作计划、数据可信度。数据缺失必须明确说明；不要承诺确定性收益。',
+        selected_lens: selectedLens.label,
+        data_context: evidenceItems.map(({ key, label, status, source, updatedAt }) => ({ key, label, status, source, updatedAt })),
+        smart_route: {
+          symbols: smartRoute.symbols,
+          market: smartRoute.market,
+          intent: smartRoute.intent,
+          recommended_lenses: smartRoute.recommendedLenses,
+          confidence: smartRoute.confidence,
+        },
+      },
+    };
+  }, [evidenceItems, selectedLens.label, smartRoute]);
 
   const handleStartNewChat = useCallback(() => {
     followUpContextRef.current = null;
@@ -359,7 +542,7 @@ const ChatPage: React.FC = () => {
         message: msgText,
         session_id: sessionId,
         skills: usedSkill ? [usedSkill] : undefined,
-        context: followUpContextRef.current ?? undefined,
+        context: buildStructuredChatContext(),
       };
       followUpHydrationTokenRef.current += 1;
       followUpContextRef.current = null;
@@ -367,7 +550,7 @@ const ChatPage: React.FC = () => {
       setInput('');
       await startStream(payload, { skillName: usedSkillName });
     },
-    [chat, input, loading, selectedSkill, sessionId, skills, startStream, t],
+    [buildStructuredChatContext, chat, input, loading, selectedSkill, sessionId, skills, startStream, t],
   );
 
   const handleStopGeneration = useCallback(() => {
@@ -417,6 +600,24 @@ const ChatPage: React.FC = () => {
     setSelectedSkill(q.skill);
     void handleSend(chat(`quickQuestions.${q.id}`), q.skill);
   };
+
+  const handleSelectLens = (lens: AnalysisLens) => {
+    setSelectedSkill(lens.skillId || '');
+  };
+
+  const handleAddWatchlist = useCallback(async (symbol: string, market: StockMarket) => {
+    try {
+      await watchlistApi.addWatchlistItem({
+        symbol,
+        market: market === 'unknown' ? 'us' : market.toLowerCase(),
+        source: 'scanner',
+        notes: 'From Stock Chat smart route',
+      });
+      setWatchlistAction({ symbol, type: 'success', message: `${symbol} 已加入观察列表` });
+    } catch {
+      setWatchlistAction({ symbol, type: 'error', message: `${symbol} 加入观察列表失败` });
+    }
+  }, []);
 
   const toggleThinking = (msgId: string) => {
     setExpandedThinking((prev) => {
@@ -695,49 +896,187 @@ const ChatPage: React.FC = () => {
     </>
   );
 
-  const renderEngineList = (testId: string) => (
-    <div data-testid={testId} className="flex flex-wrap gap-2.5">
-      <button
-        type="button"
-        onClick={() => setSelectedSkill('')}
-        className={`rounded-full border px-4 py-2 text-xs font-medium transition-all ${
-          selectedSkill === ''
-            ? 'border-white/12 bg-white/10 text-white shadow-sm'
-            : 'border-transparent bg-transparent text-white/50 hover:bg-white/[0.05] hover:text-white/90'
-        }`}
-      >
-        <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current align-middle" />
-        {chat('skills.general')}
-      </button>
-      {skills.map((s) => (
-        <div
-          key={s.id}
-          className="relative"
-          onMouseEnter={() => setShowSkillDesc(s.id)}
-          onMouseLeave={() => setShowSkillDesc(null)}
-        >
+  const renderDataEvidencePanel = (testId = 'chat-evidence-panel') => (
+    <section data-testid={testId} className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Data Evidence</p>
+        <p className="text-[10px] font-mono uppercase text-white/30">phase 1</p>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {evidenceItems.map((item) => (
+          <div key={item.key} className="min-w-0 rounded-lg border border-white/5 bg-black/20 px-2 py-1.5">
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <span className="truncate text-xs text-white/64">{item.label}</span>
+              <span className={`font-mono text-[10px] uppercase ${
+                item.status === 'available'
+                  ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]'
+                  : item.status === 'missing'
+                    ? 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'
+                    : 'text-white/32'
+              }`}>
+                {item.status}
+              </span>
+            </div>
+            {item.source ? <p className="mt-1 truncate text-[10px] text-white/30">{item.source}</p> : null}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+
+  const renderQuickActions = () => {
+    if (!primarySymbol) return null;
+    const symbolMarket = smartRoute.market === 'unknown' ? inferMarket(primarySymbol) : smartRoute.market;
+    const encodedSymbol = encodeURIComponent(primarySymbol);
+    const encodedMarket = encodeURIComponent(symbolMarket);
+    return (
+      <section data-testid="chat-quick-actions" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">Quick Actions</p>
+        <div className="flex min-w-0 flex-wrap gap-2">
+          <a
+            href={`/backtest?symbol=${encodedSymbol}&market=${encodedMarket}&source=chat`}
+            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10"
+            aria-label={`回测 ${primarySymbol}`}
+          >
+            回测
+          </a>
           <button
             type="button"
-            onClick={() => setSelectedSkill(s.id)}
-            className={`rounded-full border px-4 py-2 text-xs font-medium transition-all ${
-              selectedSkill === s.id
-                ? 'border-white/12 bg-white/10 text-white shadow-sm'
-                : 'border-transparent bg-transparent text-white/50 hover:bg-white/[0.05] hover:text-white/90'
-            }`}
+            onClick={() => {
+              void handleAddWatchlist(primarySymbol, symbolMarket);
+            }}
+            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10"
+            aria-label={`加入观察列表 ${primarySymbol}`}
           >
-            <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${selectedSkill === s.id ? 'animate-pulse bg-white' : 'bg-white/35'}`} />
-            {getLocalizedSkillNameById(s.id, s.name, t)}
+            加入观察列表
           </button>
-          {showSkillDesc === s.id && s.description ? (
-            <div className="theme-menu-panel absolute left-0 top-full z-50 mt-2 w-64 rounded-lg p-2.5 text-xs leading-relaxed text-secondary-text shadow-xl animate-fade-in">
-              <p className="mb-1 font-medium text-foreground">{getLocalizedSkillNameById(s.id, s.name, t)}</p>
-              <p>{s.description}</p>
-            </div>
-          ) : null}
+          <a
+            href={`/portfolio?symbol=${encodedSymbol}`}
+            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10"
+            aria-label={`查看持仓 ${primarySymbol}`}
+          >
+            查看持仓
+          </a>
+          <a
+            href={`/scanner?symbol=${encodedSymbol}&market=${encodedMarket}`}
+            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10"
+            aria-label={`查看扫描器证据 ${primarySymbol}`}
+          >
+            扫描器证据
+          </a>
+          <a
+            href={`/?symbol=${encodedSymbol}`}
+            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10"
+            aria-label={`打开分析报告 ${primarySymbol}`}
+          >
+            分析报告
+          </a>
         </div>
-      ))}
+        {watchlistAction?.symbol === primarySymbol ? (
+          <p className={`mt-2 text-xs ${watchlistAction.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {watchlistAction.message}
+          </p>
+        ) : null}
+      </section>
+    );
+  };
+
+  const renderSmartRouteStrip = () => (
+    <div data-testid="chat-smart-route-strip" className="mb-3 rounded-2xl border border-white/8 bg-black/35 px-3 py-2 text-xs text-white/58">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Smart Route</span>
+        <span className="font-mono text-white/80">{formatRouteLabel(smartRoute)}</span>
+      </div>
+      {smartRoute.symbols.length > 0 ? (
+        <p className="mt-1 truncate text-white/42">推荐视角：{smartRoute.recommendedLenses.join(' / ')}</p>
+      ) : null}
     </div>
   );
+
+  const renderLensButton = (lens: AnalysisLens) => {
+    const isActive = selectedLens.id === lens.id;
+    const isAvailable = !lens.skillId || availableSkillIds.size === 0 || availableSkillIds.has(lens.skillId);
+    return (
+      <button
+        key={lens.id}
+        type="button"
+        onClick={() => handleSelectLens(lens)}
+        disabled={!isAvailable}
+        onMouseEnter={() => setShowSkillDesc(lens.id)}
+        onMouseLeave={() => setShowSkillDesc(null)}
+        className={`min-w-0 rounded-xl border px-3 py-2 text-left transition-all ${
+          isActive
+            ? 'border-blue-400/40 bg-blue-500/10 text-white shadow-[0_0_15px_rgba(59,130,246,0.16)]'
+            : 'border-white/8 bg-white/[0.025] text-white/58 hover:bg-white/[0.06] hover:text-white/86'
+        } disabled:cursor-not-allowed disabled:opacity-40`}
+        title={lens.description}
+      >
+        <span className="block truncate text-xs font-semibold">{lens.label}</span>
+        {isActive || showSkillDesc === lens.id ? (
+          <span className="mt-1 block line-clamp-2 text-[10px] leading-relaxed text-white/40">{lens.description}</span>
+        ) : null}
+      </button>
+    );
+  };
+
+  const renderControlPanel = (testId: string) => {
+    const primaryModel = agentModels.find((model) => model.is_primary) || agentModels[0];
+    return (
+      <div data-testid={testId} className="flex flex-col gap-4">
+        <section data-testid="chat-engine-section" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">AI 引擎</p>
+          <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-white/6 bg-black/25 px-3 py-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-white">{primaryModel?.provider || '自动路由'}</p>
+              <p className="truncate font-mono text-[10px] text-white/36">{primaryModel?.model || 'provider auto-select'}</p>
+            </div>
+            <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 font-mono text-[10px] uppercase text-emerald-400">
+              auto
+            </span>
+          </div>
+        </section>
+
+        <section data-testid="chat-lens-section" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">分析视角</p>
+            <p className="truncate text-[10px] text-white/30">{selectedLens.label}</p>
+          </div>
+          <div data-testid="chat-strategy-grid" className="grid grid-cols-2 gap-2">
+            {PRIMARY_ANALYSIS_LENSES.map(renderLensButton)}
+          </div>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setShowAdvancedLenses((value) => !value)}
+              className="text-[10px] font-bold uppercase tracking-widest text-white/40 hover:text-white/70"
+            >
+              高级视角 {showAdvancedLenses ? '收起' : '展开'}
+            </button>
+            {showAdvancedLenses ? (
+              <div className="mt-2 grid grid-cols-1 gap-2">
+                {ADVANCED_ANALYSIS_LENSES.map(renderLensButton)}
+              </div>
+            ) : (
+              <p className="mt-1 text-[10px] leading-relaxed text-white/30">缠论、波浪等高级框架默认折叠；它们只作辅助观察，不是确定性信号。</p>
+            )}
+          </div>
+        </section>
+
+        <section data-testid="chat-data-context-section" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">数据上下文</p>
+          <div className="flex flex-wrap gap-1.5">
+            {evidenceItems.map((item) => (
+              <span key={item.key} className="rounded-full border border-white/8 bg-black/25 px-2 py-1 text-[10px] text-white/52">
+                {item.label} · <span className="font-mono uppercase text-white/32">{item.status}</span>
+              </span>
+            ))}
+          </div>
+        </section>
+
+        {renderDataEvidencePanel()}
+      </div>
+    );
+  };
 
   const renderComposerBody = () => (
     <>
@@ -757,6 +1096,7 @@ const ChatPage: React.FC = () => {
           type="button"
           onClick={openConsoleButton.onClick}
           onPointerUp={openConsoleButton.onPointerUp}
+          aria-label={language === 'en' ? 'Open chat console' : '打开问股控制台'}
           data-testid="chat-bento-brief-trigger"
           className={CARD_BUTTON_CLASS}
           title={language === 'en' ? 'Open console' : '打开控制台'}
@@ -788,6 +1128,10 @@ const ChatPage: React.FC = () => {
       ) : null}
 
       <div className="mx-auto w-full max-w-4xl">
+        {renderSmartRouteStrip()}
+        <div className="mb-3 lg:hidden">
+          {renderQuickActions()}
+        </div>
         <div
           data-testid="chat-composer-omnibar"
           className="relative mx-auto w-full max-w-4xl rounded-3xl border border-white/[0.05] bg-white/[0.04] p-2 shadow-2xl backdrop-blur-2xl"
@@ -1142,10 +1486,7 @@ const ChatPage: React.FC = () => {
 
             <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar pr-1">
               {consoleMode === 'engines' ? (
-                <div className="flex flex-col gap-4">
-                  <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-white/50">{engineSwitcherLabel}</h3>
-                  {renderEngineList('chat-strategy-grid')}
-                </div>
+                renderControlPanel('chat-control-panel')
               ) : (
                 <div className="flex min-h-full flex-col gap-4">
                   <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-white/50">{chat('historyTitle')}</h3>
@@ -1181,10 +1522,7 @@ const ChatPage: React.FC = () => {
 
           <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar">
             {consoleMode === 'engines' ? (
-              <div className="flex flex-col gap-4">
-                <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-white/50">{engineSwitcherLabel}</h3>
-                {renderEngineList('chat-drawer-strategy-grid')}
-              </div>
+              renderControlPanel('chat-drawer-control-panel')
             ) : (
               <div className="flex min-h-full flex-col gap-4">
                 <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-white/50">{chat('historyTitle')}</h3>

@@ -382,6 +382,24 @@ class AgentExecutor:
                 strategy = context["previous_strategy"]
                 strategy_text = json.dumps(strategy, ensure_ascii=False) if isinstance(strategy, dict) else str(strategy)
                 context_parts.append(f"上次策略分析:\n{strategy_text}")
+            stock_chat = context.get("stock_chat")
+            if isinstance(stock_chat, dict):
+                selected_lens = stock_chat.get("selected_lens")
+                smart_route = stock_chat.get("smart_route")
+                data_context = stock_chat.get("data_context")
+                answer_sections = stock_chat.get("answer_sections")
+                instruction = stock_chat.get("instruction")
+                route_text = json.dumps(smart_route, ensure_ascii=False) if isinstance(smart_route, dict) else ""
+                data_text = json.dumps(data_context, ensure_ascii=False) if isinstance(data_context, list) else ""
+                sections_text = " / ".join(str(item) for item in answer_sections) if isinstance(answer_sections, list) else ""
+                context_parts.append(
+                    "[Stock Chat 输出契约]\n"
+                    f"分析视角: {selected_lens or '综合判断'}\n"
+                    f"Smart Route: {route_text or '未识别'}\n"
+                    f"数据上下文: {data_text or '未检查'}\n"
+                    f"回答结构: {sections_text or '结论 / 关键依据 / 关键价位 / 风险 / 操作计划 / 数据可信度'}\n"
+                    f"约束: {instruction or '数据缺失必须说明，不承诺确定性收益。'}"
+                )
             if context_parts:
                 context_msg = "[系统提供的历史分析上下文，可供参考对比]\n" + "\n".join(context_parts)
                 messages.append({"role": "user", "content": context_msg})

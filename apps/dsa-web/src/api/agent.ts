@@ -33,6 +33,21 @@ export interface AgentStatusResponse {
   enabled: boolean;
 }
 
+export interface AgentModelDeployment {
+  deployment_id: string;
+  model: string;
+  provider: string;
+  source: string;
+  api_base?: string | null;
+  deployment_name?: string | null;
+  is_primary?: boolean;
+  is_fallback?: boolean;
+}
+
+export interface AgentModelsResponse {
+  models: AgentModelDeployment[];
+}
+
 export interface SkillsResponse {
   skills: SkillInfo[];
   default_skill_id: string;
@@ -66,6 +81,10 @@ export const agentApi = {
   },
   async getStatus(): Promise<AgentStatusResponse> {
     const response = await apiClient.get<AgentStatusResponse>('/api/v1/agent/status');
+    return response.data;
+  },
+  async getModels(): Promise<AgentModelsResponse> {
+    const response = await apiClient.get<AgentModelsResponse>('/api/v1/agent/models');
     return response.data;
   },
   async getChatSessions(limit = 50): Promise<ChatSessionItem[]> {

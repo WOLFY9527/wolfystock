@@ -143,6 +143,46 @@ class TestAgentExecutor(unittest.TestCase):
         self.assertEqual(result.tool_calls_log[0]["tool"], "echo")
         self.assertTrue(result.tool_calls_log[0]["success"])
 
+    def test_chat_injects_stock_chat_structured_contract(self):
+        """Stock Chat metadata is converted into prompt context without requiring old callers to send it."""
+        registry = _make_registry_with_echo()
+        adapter = _make_mock_adapter()
+        adapter.call_with_tools.return_value = LLMResponse(
+            content="结论\n- 观望",
+            tool_calls=[],
+            usage={"total_tokens": 20},
+            provider="openai",
+        )
+
+        executor = AgentExecutor(registry, adapter, max_steps=1)
+        result = executor.chat(
+            "ORCL 还能买吗？",
+            session_id="test-stock-chat-contract",
+            context={
+                "stock_chat": {
+                    "selected_lens": "综合判断",
+                    "answer_sections": ["结论", "关键依据", "关键价位", "风险", "操作计划", "数据可信度"],
+                    "instruction": "数据缺失必须明确说明；不要承诺确定性收益。",
+                    "smart_route": {
+                        "symbols": ["ORCL"],
+                        "market": "US",
+                        "intent": "buy_or_hold",
+                    },
+                    "data_context": [
+                        {"key": "quotes", "label": "行情", "status": "unknown"},
+                    ],
+                },
+            },
+        )
+
+        self.assertTrue(result.success)
+        messages = adapter.call_with_tools.call_args.args[0]
+        context_message = "\n".join(str(message.get("content", "")) for message in messages)
+        self.assertIn("Stock Chat 输出契约", context_message)
+        self.assertIn("分析视角: 综合判断", context_message)
+        self.assertIn("回答结构: 结论 / 关键依据 / 关键价位 / 风险 / 操作计划 / 数据可信度", context_message)
+        self.assertIn('"symbols": ["ORCL"]', context_message)
+
     def test_multiple_tool_calls_in_one_step(self):
         """Agent requests multiple tool calls in a single response."""
         registry = _make_registry_with_echo()

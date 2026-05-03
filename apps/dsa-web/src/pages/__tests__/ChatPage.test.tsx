@@ -24,6 +24,9 @@ const mockStartStream = vi.fn();
 const mockStopStream = vi.fn();
 const mockClearCompletionBadge = vi.fn();
 const mockStartNewChat = vi.fn();
+const { mockAddWatchlistItem } = vi.hoisted(() => ({
+  mockAddWatchlistItem: vi.fn(),
+}));
 let currentLanguage: 'zh' | 'en' = 'zh';
 
 const mockStoreState: {
@@ -73,17 +76,32 @@ const mockStoreState: {
 };
 
 const canonicalBullTrendLabel = (language: 'zh' | 'en') => translate(language, 'chat.skills.labels.bull_trend');
+const canonicalGeneralLabel = (language: 'zh' | 'en') => translate(language, 'chat.skills.general');
 
 vi.mock('../../api/agent', () => ({
   agentApi: {
     getSkills: vi.fn().mockResolvedValue({
       skills: [
         { id: 'bull_trend', name: '趋势分析', description: '测试技能' },
+        { id: 'ma_cross', name: '均线金叉', description: '均线测试' },
+        { id: 'volume_breakout', name: '放量突破', description: '突破测试' },
+        { id: 'leader_strategy', name: '龙头策略', description: '龙头测试' },
       ],
       default_skill_id: 'bull_trend',
     }),
+    getModels: vi.fn().mockResolvedValue({
+      models: [
+        { deployment_id: 'auto', model: 'deepseek-chat', provider: 'DeepSeek', source: 'env', is_primary: true },
+      ],
+    }),
     deleteChatSession: vi.fn().mockResolvedValue(undefined),
     sendChat: vi.fn().mockResolvedValue({ success: true }),
+  },
+}));
+
+vi.mock('../../api/watchlist', () => ({
+  watchlistApi: {
+    addWatchlistItem: mockAddWatchlistItem,
   },
 }));
 
@@ -168,9 +186,180 @@ beforeEach(() => {
   mockStoreState.sessionLoadError = null;
   mockStoreState.chatError = null;
   mockStoreState.stopStream = mockStopStream;
+  mockAddWatchlistItem.mockResolvedValue({
+    id: 1,
+    symbol: 'ORCL',
+    market: 'us',
+    source: 'chat',
+  });
 });
 
 describe('ChatPage', () => {
+  it('separates AI engine, analysis lens, and data context in the console', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('chat-engine-section')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-lens-section')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-data-context-section')).toBeInTheDocument();
+    expect(screen.getByText('AI 引擎')).toBeInTheDocument();
+    expect(screen.getByText('分析视角')).toBeInTheDocument();
+    expect(screen.getByText('数据上下文')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '引擎视角' })).not.toBeInTheDocument();
+  });
+
+  it('shows a concise description for the active analysis lens', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    await screen.findByTestId('chat-lens-section');
+    expect(screen.getAllByText('综合判断').length).toBeGreaterThan(0);
+    expect(screen.getByText('适合普通问股，综合趋势、风险、基本面与操作计划。')).toBeInTheDocument();
+  });
+
+  it('detects US tickers, buy/hold intent, and quick actions from the composer input', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    fireEvent.change(await screen.findByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
+      target: { value: 'ORCL 还能买吗？' },
+    });
+
+    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('ORCL · US · 买入/持有');
+    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('综合判断 / 趋势跟踪');
+    expect(screen.getByRole('link', { name: '回测 ORCL' })).toHaveAttribute('href', '/backtest?symbol=ORCL&market=US&source=chat');
+    expect(screen.getByRole('button', { name: '加入观察列表 ORCL' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '查看持仓 ORCL' })).toHaveAttribute('href', '/portfolio?symbol=ORCL');
+    expect(screen.getByRole('link', { name: '查看扫描器证据 ORCL' })).toHaveAttribute('href', '/scanner?symbol=ORCL&market=US');
+  });
+
+  it('detects CN symbols and compare intent for multiple symbols', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    const inputBox = await screen.findByPlaceholderText(translate('zh', 'chat.inputPlaceholder'));
+    fireEvent.change(inputBox, { target: { value: '用短线视角看 600519' } });
+    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('600519 · CN · 趋势');
+
+    fireEvent.change(inputBox, { target: { value: 'NVDA 和 AMD 谁更强？' } });
+    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('NVDA, AMD · US · 对比');
+    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('综合判断 / 龙头策略');
+  });
+
+  it('recommends portfolio risk and breakout lenses from wording', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    const inputBox = await screen.findByPlaceholderText(translate('zh', 'chat.inputPlaceholder'));
+    fireEvent.change(inputBox, { target: { value: '我持有 AAPL，要不要减仓？' } });
+    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('持仓风控 / 趋势跟踪');
+
+    fireEvent.change(inputBox, { target: { value: 'WULF 是否突破有效？' } });
+    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('放量突破 / 均线系统');
+  });
+
+  it('sends structured stock answer metadata without dropping existing context', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat?stock=600519&name=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'chat.notifyAction') }));
+
+    await waitFor(() => {
+      expect(mockStartStream).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: expect.objectContaining({
+            stock_code: '600519',
+            stock_name: '贵州茅台',
+            stock_chat: expect.objectContaining({
+              response_mode: 'structured_stock_analysis_v1',
+              answer_sections: ['结论', '关键依据', '关键价位', '风险', '操作计划', '数据可信度'],
+              smart_route: expect.objectContaining({
+                symbols: ['600519'],
+                market: 'CN',
+              }),
+            }),
+          }),
+        }),
+        expect.anything(),
+      );
+    });
+  });
+
+  it('shows evidence status safely and can add a detected symbol to watchlist', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('chat-evidence-panel')).toHaveTextContent('unknown');
+
+    fireEvent.change(screen.getByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
+      target: { value: 'ORCL 还能买吗？' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '加入观察列表 ORCL' }));
+
+    await waitFor(() => {
+      expect(mockAddWatchlistItem).toHaveBeenCalledWith({
+        symbol: 'ORCL',
+        market: 'us',
+        source: 'scanner',
+        notes: 'From Stock Chat smart route',
+      });
+    });
+    expect(await screen.findByText('ORCL 已加入观察列表')).toBeInTheDocument();
+  });
+
+  it('renders the compact mobile console content without desktop assumptions', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByTestId('chat-bento-brief-trigger'));
+
+    expect(await screen.findByTestId('chat-bento-drawer')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-drawer-control-panel')).toHaveTextContent('AI 引擎');
+    expect(screen.getByTestId('chat-drawer-control-panel')).toHaveTextContent('分析视角');
+    expect(screen.getByTestId('chat-drawer-control-panel')).toHaveTextContent('数据上下文');
+  });
+
   it('replaces persisted Gemini 429 failure notes with the timeout fallback copy', async () => {
     mockStoreState.messages = [
       {
@@ -250,7 +439,7 @@ describe('ChatPage', () => {
     expect(screen.queryByTestId('chat-skill-toolbar')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'h-full', 'min-h-0', 'w-full', 'shrink-0', 'flex-col', 'gap-5', 'overflow-y-auto', 'border-l', 'border-white/5', 'bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent', 'p-5', 'lg:w-[320px]', 'xl:w-[360px]');
     expect(screen.getByTestId('chat-console-mode-toggle')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-strategy-grid')).toHaveClass('flex', 'flex-wrap', 'gap-2.5');
+    expect(screen.getByTestId('chat-strategy-grid')).toHaveClass('grid', 'grid-cols-2', 'gap-2');
     expect(mockLoadInitialSession).toHaveBeenCalled();
     expect(mockClearCompletionBadge).toHaveBeenCalled();
 
@@ -566,7 +755,7 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: canonicalBullTrendLabel('zh') })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /综合判断/ })).toBeInTheDocument();
 
     const sendButton = screen.getByRole('button', {
       name: new RegExp(`${translate('zh', 'chat.notifyAction')}|${translate('zh', 'chat.notifySending').replace(/\./g, '\\.')}`),
@@ -580,14 +769,17 @@ describe('ChatPage', () => {
       expect(mockStartStream).toHaveBeenCalledWith(
         expect.objectContaining({
           message: '请深入分析 贵州茅台(600519)',
-          context: {
+          context: expect.objectContaining({
             stock_code: '600519',
             stock_name: '贵州茅台',
-          },
-          skills: ['bull_trend'],
+            stock_chat: expect.objectContaining({
+              response_mode: 'structured_stock_analysis_v1',
+            }),
+          }),
+          skills: undefined,
         }),
         expect.objectContaining({
-          skillName: canonicalBullTrendLabel('zh'),
+          skillName: canonicalGeneralLabel('zh'),
         }),
       );
     });
@@ -627,10 +819,14 @@ describe('ChatPage', () => {
       expect(mockStartStream).toHaveBeenLastCalledWith(
         expect.objectContaining({
           message: '继续分析成交量',
-          context: undefined,
+          context: expect.objectContaining({
+            stock_chat: expect.objectContaining({
+              response_mode: 'structured_stock_analysis_v1',
+            }),
+          }),
         }),
         expect.objectContaining({
-          skillName: canonicalBullTrendLabel('zh'),
+          skillName: canonicalGeneralLabel('zh'),
         }),
       );
     });
@@ -690,7 +886,7 @@ describe('ChatPage', () => {
           }),
         }),
         expect.objectContaining({
-          skillName: canonicalBullTrendLabel('zh'),
+          skillName: canonicalGeneralLabel('zh'),
         }),
       );
     });
@@ -706,7 +902,7 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByDisplayValue('请深入分析 AAPL')).toBeInTheDocument();
-    await screen.findByRole('button', { name: canonicalBullTrendLabel('zh') });
+    await screen.findByRole('button', { name: /综合判断/ });
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'chat.notifyAction') }));
 
@@ -714,13 +910,16 @@ describe('ChatPage', () => {
       expect(mockStartStream).toHaveBeenCalledWith(
         expect.objectContaining({
           message: '请深入分析 AAPL',
-          context: {
+          context: expect.objectContaining({
             stock_code: 'AAPL',
             stock_name: null,
-          },
+            stock_chat: expect.objectContaining({
+              response_mode: 'structured_stock_analysis_v1',
+            }),
+          }),
         }),
         expect.objectContaining({
-          skillName: canonicalBullTrendLabel('zh'),
+          skillName: canonicalGeneralLabel('zh'),
         }),
       );
     });
@@ -816,7 +1015,7 @@ describe('ChatPage', () => {
           }),
         }),
         expect.objectContaining({
-          skillName: canonicalBullTrendLabel('zh'),
+          skillName: canonicalGeneralLabel('zh'),
         }),
       );
     });
