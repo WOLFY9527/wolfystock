@@ -395,6 +395,28 @@ describe('AppContent route flows', () => {
     expect(await screen.findByText('backtest-compare-page')).toBeInTheDocument();
   });
 
+  it.each(['/backtest/results/123', '/zh/backtest/results/123'])(
+    'renders the deterministic backtest result route for signed-in users at %s',
+    async (path) => {
+      useAuthMock.mockReturnValue({
+        authEnabled: true,
+        loggedIn: true,
+        isLoading: false,
+        loadError: null,
+        refreshStatus: vi.fn(),
+      });
+      useProductSurfaceMock.mockReturnValue({
+        isGuest: false,
+        isAdmin: false,
+        isAdminMode: false,
+      });
+
+      renderAt(path);
+
+      expect(await screen.findByText('backtest-result-page')).toBeInTheDocument();
+    },
+  );
+
   it('redirects legacy locale guest scanner path to the guest surface', async () => {
     renderAt('/en/guest/scanner');
 
