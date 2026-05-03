@@ -5,26 +5,30 @@ import { marketOverviewApi } from '../api/marketOverview';
 import type {
   CnShortSentimentResponse,
   MarketBriefingResponse,
-  MarketFutureItem,
   MarketFuturesResponse,
   MarketTemperatureResponse,
   MarketTemperatureScore,
 } from '../api/market';
 import { marketApi } from '../api/market';
 import { FundsFlowCard } from '../components/market-overview/FundsFlowCard';
-import { MacroIndicatorsCard } from '../components/market-overview/MacroIndicatorsCard';
 import { MarketSentimentCard } from '../components/market-overview/MarketSentimentCard';
 import { MarketOverviewCard } from '../components/market-overview/MarketOverviewCard';
 import { VolatilityCard } from '../components/market-overview/VolatilityCard';
+import {
+  MARKET_OVERVIEW_TAB_CONFIG,
+  type MarketOverviewModuleId,
+  type MarketOverviewPulseMetricId,
+  type MarketOverviewTab,
+} from './MarketOverviewTabConfig';
 import { resolveMarketOverviewDisplayLabel } from '../components/market-overview/marketOverviewLabels';
 import { formatMarketOverviewTimestamp } from '../components/market-overview/marketOverviewFormat';
 import {
   DataFreshnessBadge,
   MARKET_OVERVIEW_GHOST_CARD_CLASS,
   MarketOverviewCardFrame,
+  MarketOverviewDenseQuoteItem,
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
-  MarketOverviewSparkline,
 } from '../components/market-overview/marketOverviewPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { GlassCard } from '../components/common';
@@ -51,7 +55,6 @@ type PanelState = {
 
 type PanelKey = keyof PanelState;
 type CardKey = Exclude<PanelKey, 'temperature' | 'briefing'>;
-type MarketOverviewTab = 'all' | 'us' | 'cn' | 'global' | 'crypto';
 type CardCoverageKind = 'real' | 'mixed' | 'fallback';
 type CryptoRealtimeStatus = 'live' | 'reconnecting' | 'snapshot';
 type MarketOverviewRowTier = 'hero' | 'secondary' | 'deep';
@@ -60,7 +63,7 @@ type MarketOverviewLayoutRow = {
   id: string;
   tier: MarketOverviewRowTier;
   columns: MarketOverviewRowColumns;
-  cards: CardKey[];
+  modules: MarketOverviewModuleId[];
   allowSingleFullWidth?: boolean;
 };
 type WorkbenchRail = MarketOverviewRowTier;
@@ -72,66 +75,130 @@ type LocalSnapshotEnvelope = {
 
 const MARKET_OVERVIEW_LKG_STORAGE_KEY = 'wolfystock.marketOverview.lastKnownGood.v1';
 
-const CATEGORY_LAYOUT: Record<MarketOverviewTab, MarketOverviewLayoutRow[]> = {
-  all: [
-    { id: 'all-core-trend', tier: 'hero', columns: 1, cards: ['indices'], allowSingleFullWidth: true },
-    { id: 'all-risk-liquidity', tier: 'secondary', columns: 2, cards: ['volatility', 'fundsFlow'] },
-    { id: 'all-sentiment-rates', tier: 'secondary', columns: 2, cards: ['sentiment', 'rates'] },
-    { id: 'all-cross-asset', tier: 'secondary', columns: 2, cards: ['fxCommodities', 'crypto'] },
-  ],
-  us: [
-    { id: 'us-core-trend', tier: 'hero', columns: 1, cards: ['indices'], allowSingleFullWidth: true },
-    { id: 'us-risk-flow', tier: 'secondary', columns: 2, cards: ['volatility', 'fundsFlow'] },
-    { id: 'us-rates-sentiment', tier: 'secondary', columns: 2, cards: ['rates', 'sentiment'] },
-    { id: 'us-macro-futures', tier: 'deep', columns: 2, cards: ['macro', 'futures'] },
-  ],
-  cn: [
-    { id: 'cn-core-trend', tier: 'hero', columns: 1, cards: ['cnIndices'], allowSingleFullWidth: true },
-    { id: 'cn-breadth-flow', tier: 'secondary', columns: 2, cards: ['cnBreadth', 'cnFlows'] },
-    { id: 'cn-theme-sentiment', tier: 'secondary', columns: 2, cards: ['sectorRotation', 'cnShortSentiment'] },
-    { id: 'cn-cross-sentiment', tier: 'deep', columns: 2, cards: ['fxCommodities', 'sentiment'] },
-  ],
-  global: [
-    { id: 'global-rates-fx', tier: 'hero', columns: 2, cards: ['rates', 'fxCommodities'] },
-    { id: 'global-risk-indices', tier: 'secondary', columns: 2, cards: ['volatility', 'indices'] },
-    { id: 'global-macro-sentiment', tier: 'secondary', columns: 2, cards: ['macro', 'sentiment'] },
-  ],
-  crypto: [
-    { id: 'crypto-core-list', tier: 'hero', columns: 1, cards: ['crypto'], allowSingleFullWidth: true },
-    { id: 'crypto-risk-rates', tier: 'secondary', columns: 2, cards: ['volatility', 'rates'] },
-    { id: 'crypto-macro-sentiment', tier: 'secondary', columns: 2, cards: ['fxCommodities', 'sentiment'] },
-  ],
+const MODULE_COVERAGE_CARDS: Record<MarketOverviewModuleId, CardKey[]> = {
+  globalIndices: ['indices'],
+  usIndices: ['indices'],
+  cnHkIndices: ['cnIndices'],
+  cryptoCore: ['crypto'],
+  volatility: ['volatility'],
+  fundsFlow: ['fundsFlow'],
+  sentiment: ['sentiment'],
+  rates: ['rates'],
+  fxCommodities: ['fxCommodities'],
+  cryptoSnapshot: ['crypto'],
+  cnSnapshot: ['cnIndices'],
+  usRates: ['rates', 'fxCommodities'],
+  usSentiment: ['sentiment'],
+  usBreadth: [],
+  usSectorRotation: [],
+  macroContext: ['volatility', 'rates', 'fxCommodities', 'crypto'],
+  cnBreadth: ['cnBreadth'],
+  cnFlows: ['cnFlows'],
+  sectorRotation: ['sectorRotation'],
+  shortSentiment: ['cnShortSentiment'],
+  fxCnhContext: ['fxCommodities', 'rates'],
+  macroRates: ['rates'],
+  macroFxCommodities: ['fxCommodities'],
+  globalRisk: ['volatility', 'crypto', 'indices'],
+  cryptoMomentum: ['crypto'],
+  cryptoLiquidity: [],
+  cryptoRiskContext: ['fxCommodities', 'rates', 'volatility'],
+  cryptoSentiment: ['sentiment'],
 };
 
 const CATEGORY_CARDS: Record<MarketOverviewTab, CardKey[]> = Object.fromEntries(
-  Object.entries(CATEGORY_LAYOUT).map(([tab, rows]) => [
+  Object.entries(MARKET_OVERVIEW_TAB_CONFIG).map(([tab, config]) => [
     tab,
-    rows.flatMap((row) => row.cards),
+    Array.from(new Set([...config.hero, ...config.modules].flatMap((moduleId) => MODULE_COVERAGE_CARDS[moduleId]))),
   ]),
 ) as Record<MarketOverviewTab, CardKey[]>;
 
-const CARD_LAYOUT_META: Record<CardKey, {
+const MODULE_LAYOUT_META: Record<MarketOverviewModuleId, {
   size: 'compact' | 'standard' | 'list' | 'large' | 'rail';
   priority: 'primary' | 'secondary' | 'fallback';
 }> = {
-  indices: { size: 'large', priority: 'primary' },
-  cnIndices: { size: 'large', priority: 'primary' },
-  crypto: { size: 'large', priority: 'primary' },
+  globalIndices: { size: 'large', priority: 'primary' },
+  usIndices: { size: 'large', priority: 'primary' },
+  cnHkIndices: { size: 'large', priority: 'primary' },
+  cryptoCore: { size: 'large', priority: 'primary' },
   volatility: { size: 'standard', priority: 'primary' },
   fundsFlow: { size: 'standard', priority: 'primary' },
-  macro: { size: 'standard', priority: 'primary' },
   rates: { size: 'list', priority: 'secondary' },
   fxCommodities: { size: 'list', priority: 'secondary' },
+  cryptoSnapshot: { size: 'list', priority: 'secondary' },
+  cnSnapshot: { size: 'list', priority: 'secondary' },
+  usRates: { size: 'list', priority: 'secondary' },
+  usSentiment: { size: 'compact', priority: 'secondary' },
+  usBreadth: { size: 'compact', priority: 'fallback' },
+  usSectorRotation: { size: 'compact', priority: 'fallback' },
+  macroContext: { size: 'list', priority: 'secondary' },
   sentiment: { size: 'compact', priority: 'secondary' },
-  futures: { size: 'compact', priority: 'secondary' },
   cnBreadth: { size: 'standard', priority: 'fallback' },
   cnFlows: { size: 'standard', priority: 'fallback' },
   sectorRotation: { size: 'standard', priority: 'fallback' },
-  cnShortSentiment: { size: 'compact', priority: 'fallback' },
+  shortSentiment: { size: 'compact', priority: 'fallback' },
+  fxCnhContext: { size: 'list', priority: 'secondary' },
+  macroRates: { size: 'list', priority: 'primary' },
+  macroFxCommodities: { size: 'list', priority: 'primary' },
+  globalRisk: { size: 'list', priority: 'secondary' },
+  cryptoMomentum: { size: 'list', priority: 'primary' },
+  cryptoLiquidity: { size: 'compact', priority: 'fallback' },
+  cryptoRiskContext: { size: 'list', priority: 'secondary' },
+  cryptoSentiment: { size: 'compact', priority: 'secondary' },
 };
-const DENSE_QUOTE_CARDS = new Set<CardKey>(['indices', 'cnIndices', 'crypto', 'volatility', 'fundsFlow', 'macro', 'rates', 'fxCommodities']);
+const DENSE_QUOTE_MODULES = new Set<MarketOverviewModuleId>([
+  'globalIndices',
+  'usIndices',
+  'cnHkIndices',
+  'cryptoCore',
+  'rates',
+  'fxCommodities',
+  'cryptoSnapshot',
+  'cnSnapshot',
+  'usRates',
+  'macroContext',
+  'fxCnhContext',
+  'macroRates',
+  'macroFxCommodities',
+  'globalRisk',
+  'cryptoMomentum',
+  'cryptoRiskContext',
+]);
 const AUTO_REFRESH_MS = 60_000;
 const PANEL_REQUEST_TIMEOUT_MS = 3_000;
+
+function buildCategoryLayout(tab: MarketOverviewTab): MarketOverviewLayoutRow[] {
+  const config = MARKET_OVERVIEW_TAB_CONFIG[tab];
+  const rows: MarketOverviewLayoutRow[] = [];
+  if (config.hero.length > 0) {
+    rows.push({
+      id: `${tab}-hero`,
+      tier: 'hero',
+      columns: Math.min(config.hero.length, 2) as MarketOverviewRowColumns,
+      modules: config.hero,
+      allowSingleFullWidth: true,
+    });
+  }
+  for (let index = 0; index < config.modules.length; index += 2) {
+    const modules = config.modules.slice(index, index + 2);
+    rows.push({
+      id: `${tab}-modules-${index / 2 + 1}`,
+      tier: index < 4 ? 'secondary' : 'deep',
+      columns: Math.min(modules.length, 2) as MarketOverviewRowColumns,
+      modules,
+      allowSingleFullWidth: false,
+    });
+  }
+  return rows;
+}
+
+const CATEGORY_LAYOUT: Record<MarketOverviewTab, MarketOverviewLayoutRow[]> = {
+  all: buildCategoryLayout('all'),
+  us: buildCategoryLayout('us'),
+  cn: buildCategoryLayout('cn'),
+  global: buildCategoryLayout('global'),
+  crypto: buildCategoryLayout('crypto'),
+};
 
 const FALLBACK_TEMPERATURE: MarketTemperatureResponse = {
   source: 'fallback',
@@ -332,84 +399,141 @@ type HeroAnchor = {
   item?: MarketOverviewItem;
 };
 
+type MetricRegistryEntry = {
+  label: string;
+  symbols: string[];
+  panelKeys: CardKey[];
+};
+
+const MARKET_OVERVIEW_METRIC_REGISTRY: Record<MarketOverviewPulseMetricId, MetricRegistryEntry> = {
+  SPX: { label: '标普500', symbols: ['SPX', '^GSPC', 'S&P 500'], panelKeys: ['indices'] },
+  NDX: { label: '纳斯达克100', symbols: ['NDX', '^NDX', 'NASDAQ 100'], panelKeys: ['indices'] },
+  DJI: { label: '道琼斯工业平均指数', symbols: ['DJI', 'DJIA', '^DJI', 'DOW JONES'], panelKeys: ['indices'] },
+  RUT: { label: '罗素2000', symbols: ['RUT', '^RUT', 'RUSSELL 2000'], panelKeys: ['indices'] },
+  SHCOMP: { label: '上证指数', symbols: ['SHCOMP', '000001.SH', '000001.SS', 'SH000001', 'SHANGHAI COMPOSITE'], panelKeys: ['cnIndices', 'indices'] },
+  SZCOMP: { label: '深证成指', symbols: ['SZCOMP', '399001.SZ', 'SZ399001', 'SHENZHEN COMPONENT'], panelKeys: ['cnIndices', 'indices'] },
+  CHINEXT: { label: '创业板指', symbols: ['CHINEXT', '399006.SZ', 'SZ399006'], panelKeys: ['cnIndices'] },
+  CSI300: { label: '沪深300', symbols: ['CSI300', '000300.SH', '000300.SS', 'CSI 300'], panelKeys: ['cnIndices', 'indices'] },
+  HSI: { label: '恒生指数', symbols: ['HSI', 'HANG SENG INDEX'], panelKeys: ['cnIndices', 'indices'] },
+  HSTECH: { label: '恒生科技指数', symbols: ['HSTECH', 'HANG SENG TECH'], panelKeys: ['cnIndices'] },
+  A50: { label: '富时A50', symbols: ['A50', 'CN00Y', 'FTSE A50'], panelKeys: ['cnIndices', 'fxCommodities'] },
+  BTC: { label: '比特币', symbols: ['BTC', 'BITCOIN'], panelKeys: ['crypto'] },
+  ETH: { label: '以太坊', symbols: ['ETH', 'ETHEREUM'], panelKeys: ['crypto'] },
+  SOL: { label: 'Solana', symbols: ['SOL', 'SOLANA'], panelKeys: ['crypto'] },
+  BNB: { label: 'BNB', symbols: ['BNB'], panelKeys: ['crypto'] },
+  VIX: { label: 'VIX 恐慌指数', symbols: ['VIX'], panelKeys: ['volatility'] },
+  VVIX: { label: 'VVIX', symbols: ['VVIX'], panelKeys: ['volatility'] },
+  US10Y: { label: '美国10年期国债收益率', symbols: ['US10Y', 'US 10Y', '10Y YIELD'], panelKeys: ['rates', 'macro'] },
+  US2Y: { label: '美国2年期国债收益率', symbols: ['US2Y', 'US 2Y', '2Y YIELD'], panelKeys: ['rates', 'macro'] },
+  US30Y: { label: '美国30年期国债收益率', symbols: ['US30Y', 'US 30Y', '30Y YIELD'], panelKeys: ['rates', 'macro'] },
+  DXY: { label: '美元指数', symbols: ['DXY', 'US DOLLAR INDEX'], panelKeys: ['fxCommodities', 'macro'] },
+  USDJPY: { label: 'USD/JPY', symbols: ['USDJPY', 'USD/JPY'], panelKeys: ['fxCommodities', 'macro'] },
+  USDCNH: { label: 'USD/CNH', symbols: ['USDCNH', 'USD/CNH'], panelKeys: ['fxCommodities', 'macro'] },
+  GOLD: { label: '黄金', symbols: ['GOLD', 'GOLD FUTURES'], panelKeys: ['fxCommodities'] },
+  WTI: { label: 'WTI 原油', symbols: ['WTI', 'OIL', 'WTI CRUDE'], panelKeys: ['fxCommodities'] },
+};
+
+const MARKET_OVERVIEW_SIGNAL_WATCH: Record<MarketOverviewTab, MarketOverviewPulseMetricId[]> = {
+  all: ['VIX', 'US10Y', 'DXY', 'BTC'],
+  us: ['VIX', 'US10Y', 'DXY', 'NDX'],
+  cn: ['CSI300', 'HSI', 'HSTECH', 'USDCNH'],
+  global: ['US10Y', 'DXY', 'GOLD', 'WTI', 'VIX'],
+  crypto: ['BTC', 'ETH', 'SOL', 'DXY'],
+};
+
 function findPanelItem(panel: MarketOverviewPanel | undefined, symbols: string[]): MarketOverviewItem | undefined {
   const normalizedSymbols = symbols.map((symbol) => symbol.toUpperCase());
   return panel?.items.find((item) => normalizedSymbols.includes(item.symbol.toUpperCase()));
 }
 
-function normalizeMarketToken(value?: string | null): string {
-  return (value || '').replace(/\s+/g, ' ').trim().toUpperCase();
+function panelByCardKey(panels: PanelState, cardKey: CardKey): MarketOverviewPanel | undefined {
+  if (cardKey === 'futures' || cardKey === 'cnShortSentiment') {
+    return undefined;
+  }
+  return panels[cardKey];
 }
 
-const US_CORE_INDEX_TOKENS = new Set([
-  'SPX',
-  '^GSPC',
-  'S&P 500',
-  'NDX',
-  '^NDX',
-  'NASDAQ 100',
-  'IXIC',
-  '^IXIC',
-  'NASDAQ COMPOSITE',
-  'DJI',
-  'DJIA',
-  '^DJI',
-  'DOW JONES',
-  'DOW JONES INDUSTRIAL AVERAGE',
-  'RUT',
-  '^RUT',
-  'RUSSELL 2000',
-].map(normalizeMarketToken));
-
-const CN_HK_INDEX_TOKENS = new Set([
-  '000001.SH',
-  'SH000001',
-  'SHANGHAI COMPOSITE',
-  '399001.SZ',
-  'SZ399001',
-  'SHENZHEN COMPONENT',
-  'CSI300',
-  '000300.SH',
-  'CSI 300',
-  'HSI',
-  'HANG SENG INDEX',
-  'HSTECH',
-  'HANG SENG TECH',
-].map(normalizeMarketToken));
-
-function isUsCoreIndexItem(item: MarketOverviewItem): boolean {
-  const symbol = normalizeMarketToken(item.symbol);
-  const label = normalizeMarketToken(item.label);
-  if (CN_HK_INDEX_TOKENS.has(symbol) || CN_HK_INDEX_TOKENS.has(label)) {
-    return false;
+function findMetricItem(panels: PanelState, metricId: MarketOverviewPulseMetricId): MarketOverviewItem | undefined {
+  const entry = MARKET_OVERVIEW_METRIC_REGISTRY[metricId];
+  for (const panelKey of entry.panelKeys) {
+    const item = findPanelItem(panelByCardKey(panels, panelKey), entry.symbols);
+    if (item) {
+      return item;
+    }
   }
-  return US_CORE_INDEX_TOKENS.has(symbol) || US_CORE_INDEX_TOKENS.has(label);
+  return undefined;
 }
 
-function filterPanelItems(panel: MarketOverviewPanel | undefined, predicate: (item: MarketOverviewItem) => boolean): MarketOverviewPanel | undefined {
-  if (!panel) {
-    return panel;
-  }
+function missingMetricItem(metricId: MarketOverviewPulseMetricId): MarketOverviewItem {
+  const entry = MARKET_OVERVIEW_METRIC_REGISTRY[metricId];
   return {
-    ...panel,
-    items: panel.items.filter(predicate),
+    symbol: metricId,
+    label: entry.label,
+    value: null,
+    unit: '',
+    changePct: null,
+    changeText: '未接入',
+    riskDirection: 'neutral',
+    trend: [],
+    source: 'unavailable',
+    sourceLabel: '未接入',
+    freshness: 'cached',
+    hoverDetails: ['等待数据'],
   };
 }
 
-function buildHeroAnchors(panels: PanelState): HeroAnchor[] {
-  return [
-    { key: 'SPX', label: '标普500', item: findPanelItem(panels.indices, ['SPX']) },
-    { key: 'CSI300', label: '沪深300', item: findPanelItem(panels.cnIndices, ['CSI300', '000300.SH']) || findPanelItem(panels.indices, ['CSI300']) },
-    { key: 'BTC', label: '比特币', item: findPanelItem(panels.crypto, ['BTC']) },
-    { key: 'VIX', label: 'VIX 恐慌指数', item: findPanelItem(panels.volatility, ['VIX']) },
-    { key: 'US10Y', label: '美债10年期', item: findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.macro, ['US10Y']) },
-    { key: 'DXY', label: '美元指数', item: findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY']) },
-  ];
+function buildMetricItems(panels: PanelState, metricIds: MarketOverviewPulseMetricId[]): MarketOverviewItem[] {
+  return metricIds.map((metricId) => findMetricItem(panels, metricId) || missingMetricItem(metricId));
+}
+
+function firstSourcePanelForMetrics(panels: PanelState, metricIds: MarketOverviewPulseMetricId[]): MarketOverviewPanel | undefined {
+  for (const metricId of metricIds) {
+    for (const panelKey of MARKET_OVERVIEW_METRIC_REGISTRY[metricId].panelKeys) {
+      const panel = panelByCardKey(panels, panelKey);
+      if (panel) {
+        return panel;
+      }
+    }
+  }
+  return undefined;
+}
+
+function buildMetricPanel(
+  panels: PanelState,
+  panelName: string,
+  metricIds: MarketOverviewPulseMetricId[],
+): MarketOverviewPanel {
+  const basePanel = firstSourcePanelForMetrics(panels, metricIds);
+  return {
+    panelName,
+    lastRefreshAt: basePanel?.lastRefreshAt || new Date(0).toISOString(),
+    status: basePanel?.status || 'success',
+    source: basePanel?.source || 'unavailable',
+    sourceLabel: basePanel?.sourceLabel || '未接入',
+    updatedAt: basePanel?.updatedAt,
+    asOf: basePanel?.asOf,
+    freshness: basePanel?.freshness || 'cached',
+    isFallback: basePanel?.isFallback,
+    isStale: basePanel?.isStale,
+    warning: basePanel?.warning,
+    items: buildMetricItems(panels, metricIds),
+  };
+}
+
+function buildHeroAnchors(panels: PanelState, metricIds: MarketOverviewPulseMetricId[]): HeroAnchor[] {
+  return metricIds.map((metricId) => {
+    const entry = MARKET_OVERVIEW_METRIC_REGISTRY[metricId];
+    return {
+      key: metricId,
+      label: entry.label,
+      item: findMetricItem(panels, metricId) || missingMetricItem(metricId),
+    };
+  });
 }
 
 function formatHeroValue(value: number | null | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return '-';
+    return 'N/A';
   }
   return new Intl.NumberFormat('en-US', {
     maximumFractionDigits: Math.abs(value) >= 100 ? 2 : 3,
@@ -504,7 +628,7 @@ const CrossAssetHeroRibbon: React.FC<{ anchors: HeroAnchor[] }> = ({ anchors }) 
       className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'overflow-hidden p-0')}
       aria-label="Cross asset hero ribbon"
     >
-      <div className="grid grid-cols-2 divide-x divide-y divide-white/5 sm:grid-cols-3 md:grid-cols-6 md:divide-y-0">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(112px,1fr))] divide-x divide-y divide-white/5">
         {anchors.map((anchor) => {
           const displayLabel = anchor.item ? resolveMarketOverviewDisplayLabel(anchor.item, language) : { primary: anchor.label, secondary: anchor.key };
           return (
@@ -748,13 +872,14 @@ function buildMarketDecision(params: {
     return Boolean(meta.source || meta.freshness || (meta.items?.length || 0) > 0);
   });
   if (!reliable && !hasLoadedSignals) {
+    const watchSignals = MARKET_OVERVIEW_SIGNAL_WATCH[activeCategory].slice(0, 3).join(' / ');
     return {
       text: '数据不足 · 等待更多实时源',
       chips: [
         { label: 'RISK', value: '数据不足', tone: 'border-amber-300/20 text-amber-200' },
         { label: 'LIQUIDITY', value: 'N/A', tone: 'border-white/10 text-white/45' },
         { label: 'BREADTH', value: 'N/A', tone: 'border-white/10 text-white/45' },
-        { label: 'WATCH', value: 'VIX / US10Y / DXY', tone: 'border-white/10 text-white/60' },
+        { label: 'WATCH', value: watchSignals, tone: 'border-white/10 text-white/60' },
       ],
     };
   }
@@ -770,11 +895,9 @@ function buildMarketDecision(params: {
   const riskLabel = reliable ? scoreStateLabel(temperature.scores.overall) : '数据不足';
   const liquidityLabel = reliable ? scoreStateLabel(temperature.scores.liquidity) : 'N/A';
   const breadthLabel = reliable ? scoreStateLabel(temperature.scores.cnMoneyEffect) : 'N/A';
-  const watchSignals = [vix, us10y, dxy, btc]
-    .filter(Boolean)
+  const watchSignals = MARKET_OVERVIEW_SIGNAL_WATCH[activeCategory]
+    .map((metricId) => findMetricItem(panels, metricId)?.symbol || metricId)
     .slice(0, 3)
-    .map((item) => item?.symbol)
-    .filter(Boolean)
     .join(' / ') || '实时源';
   const chips: DecisionChip[] = [
     { label: 'RISK', value: riskLabel, tone: reliable ? buildDecisionChipTone(temperature.scores.overall.value) : 'border-amber-300/20 text-amber-200' },
@@ -903,39 +1026,8 @@ const CategoryCoverageSummary: React.FC<{
 );
 
 const SignalWatchRailCard: React.FC<{ panels: PanelState; activeCategory: MarketOverviewTab }> = ({ panels, activeCategory }) => {
-  const watchByTab: Record<MarketOverviewTab, Array<[string, MarketOverviewItem | undefined]>> = {
-    all: [
-      ['VIX', findPanelItem(panels.volatility, ['VIX'])],
-      ['US10Y', findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.macro, ['US10Y'])],
-      ['DXY', findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY'])],
-      ['BTC', findPanelItem(panels.crypto, ['BTC'])],
-    ],
-    us: [
-      ['SPX', findPanelItem(panels.indices, ['SPX'])],
-      ['VIX', findPanelItem(panels.volatility, ['VIX'])],
-      ['US10Y', findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.macro, ['US10Y'])],
-      ['DXY', findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY'])],
-    ],
-    cn: [
-      ['CSI300', findPanelItem(panels.cnIndices, ['CSI300', '000300.SH'])],
-      ['HSI', findPanelItem(panels.cnIndices, ['HSI'])],
-      ['CN10Y', findPanelItem(panels.rates, ['CN10Y'])],
-      ['USDCNH', findPanelItem(panels.fxCommodities, ['USDCNH'])],
-    ],
-    global: [
-      ['US10Y', findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.macro, ['US10Y'])],
-      ['DXY', findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY'])],
-      ['GOLD', findPanelItem(panels.fxCommodities, ['GOLD'])],
-      ['VIX', findPanelItem(panels.volatility, ['VIX'])],
-    ],
-    crypto: [
-      ['BTC', findPanelItem(panels.crypto, ['BTC'])],
-      ['ETH', findPanelItem(panels.crypto, ['ETH'])],
-      ['DXY', findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY'])],
-      ['US10Y', findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.macro, ['US10Y'])],
-    ],
-  };
-  const chips = watchByTab[activeCategory];
+  const chips = MARKET_OVERVIEW_SIGNAL_WATCH[activeCategory]
+    .map((metricId) => [metricId, findMetricItem(panels, metricId) || missingMetricItem(metricId)] as const);
 
   return (
     <MarketOverviewCardFrame
@@ -1253,78 +1345,6 @@ const DataQualityCompactRailCard: React.FC<{ summary: DataQualitySummary }> = ({
   />
 );
 
-
-const FuturesPremarketCard: React.FC<{
-  data: MarketFuturesResponse;
-  loading?: boolean;
-  refreshing?: boolean;
-  onRefresh: () => void;
-}> = ({ data, loading = false, refreshing = false, onRefresh }) => {
-  const { t } = useI18n();
-  const title = t('marketOverviewPage.cards.futures.title');
-  const panel: MarketOverviewPanel = {
-    panelName: 'FuturesPremarketCard',
-    status: data.isFallback ? 'failure' : 'success',
-    lastRefreshAt: data.updatedAt,
-    source: data.source,
-    sourceLabel: data.sourceLabel,
-    updatedAt: data.updatedAt,
-    asOf: data.asOf,
-    freshness: data.freshness,
-    isFallback: data.isFallback,
-    isStale: data.isStale,
-    delayMinutes: data.delayMinutes,
-    warning: data.warning,
-    items: [],
-  };
-  const fallbackOnly = isFallbackOnlyMeta({ ...data, items: data.items });
-  const visibleItems = data.items.slice(0, 4);
-  const hiddenItemCount = Math.max(data.items.length - visibleItems.length, 0);
-  return (
-    <MarketOverviewCardFrame size="compact" className={cn('h-full', fallbackOnly ? 'border-orange-300/12' : '')}>
-      <div className="flex min-h-0 h-full flex-col gap-3">
-        <div className="flex shrink-0 items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.futures.eyebrow')}</p>
-            <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2>
-            <p className="mt-1 truncate text-[11px] text-white/42">{t('marketOverviewPage.cards.futures.description')}</p>
-          </div>
-          <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title })} refreshing={refreshing} onRefresh={onRefresh} />
-        </div>
-      <div className="min-h-0 overflow-y-auto border-y border-white/[0.045] ui-scroll-y-quiet">
-        {visibleItems.map((item: MarketFutureItem) => {
-          const positive = (item.changePercent || 0) >= 0;
-          const mutedTone = item.isFallback || item.freshness === 'fallback' || item.source === 'fallback';
-          return (
-            <article key={item.symbol} className="grid min-h-[46px] min-w-0 grid-cols-[minmax(0,1fr)_64px_minmax(86px,max-content)] items-center gap-2 overflow-hidden border-b border-white/[0.045] py-2 last:border-b-0 max-[640px]:grid-cols-[minmax(0,1fr)_minmax(82px,max-content)]">
-              <div className="min-w-0">
-                <p className="truncate text-xs font-semibold text-white/78">{item.name}</p>
-                <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                  <span className="truncate font-mono text-[10px] font-semibold uppercase text-white/32">{item.symbol} / {item.market}</span>
-                  <DataFreshnessBadge freshness={item.freshness || data.freshness || (item.source === 'fallback' ? 'fallback' : 'cached')} className="shrink-0 px-1.5 text-[9px]" />
-                </div>
-              </div>
-              <div className="w-[64px] shrink-0 max-[640px]:hidden">
-                <MarketOverviewSparkline values={item.sparkline} tone={mutedTone ? 'text-white/30' : positive ? 'text-emerald-400' : 'text-rose-400'} className="h-7" />
-              </div>
-              <div className="min-w-[86px] text-right font-mono">
-                <p className="truncate text-base font-semibold leading-none text-white">{formatNumber(item.value)}</p>
-                <p className={cn('mt-1 text-[11px] font-bold leading-none', mutedTone ? 'text-white/45' : positive ? 'text-emerald-400' : 'text-rose-400')}>
-                  {item.changePercent == null ? 'N/A' : `${item.changePercent >= 0 ? '+' : ''}${item.changePercent.toFixed(2)}%`}
-                </p>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-      {hiddenItemCount > 0 ? <p className="text-[10px] text-white/38">+{hiddenItemCount} 项保留在数据源快照中</p> : null}
-      {loading ? <div className="mt-3 rounded-lg border border-white/8 bg-white/[0.03] p-3 text-sm text-white/60">{t('marketOverviewPage.loading')}</div> : null}
-      <MarketOverviewPanelFooter panel={panel} sourceLabel={data.sourceLabel || `${t('marketOverviewPage.cards.futures.source')}: ${data.source.toUpperCase()}`} />
-      </div>
-    </MarketOverviewCardFrame>
-  );
-};
-
 const CnShortSentimentCard: React.FC<{
   data: CnShortSentimentResponse;
   loading?: boolean;
@@ -1386,6 +1406,95 @@ const CnShortSentimentCard: React.FC<{
     </MarketOverviewCardFrame>
   );
 };
+
+const ContextMetricModuleCard: React.FC<{
+  moduleId: MarketOverviewModuleId;
+  title: string;
+  eyebrow: string;
+  description: string;
+  panel: MarketOverviewPanel;
+  sourceLabel: string;
+  refreshing?: boolean;
+  onRefresh?: () => void;
+}> = ({
+  moduleId,
+  title,
+  eyebrow,
+  description,
+  panel,
+  sourceLabel,
+  refreshing = false,
+  onRefresh,
+}) => {
+  const { t } = useI18n();
+  const visibleItems = panel.items.slice(0, 8);
+  const hiddenItemCount = Math.max(panel.items.length - visibleItems.length, 0);
+
+  return (
+    <MarketOverviewCardFrame
+      size={MODULE_LAYOUT_META[moduleId].size}
+      testId={`market-overview-module-${moduleId}`}
+      className="h-full"
+    >
+      <div className="flex h-full min-h-0 flex-col gap-3">
+        <div className="flex shrink-0 items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{eyebrow}</p>
+            <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2>
+            <p className="mt-1 line-clamp-1 text-[11px] leading-4 text-white/42">{description}</p>
+          </div>
+          {onRefresh ? (
+            <MarketOverviewRefreshButton
+              label={t('marketOverviewPage.refreshCard', { title })}
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+            />
+          ) : null}
+        </div>
+        <div className="flex min-h-0 flex-col overflow-y-auto border-y border-white/[0.045] ui-scroll-y-quiet">
+          {visibleItems.map((item) => (
+            <MarketOverviewDenseQuoteItem
+              key={`${moduleId}-${item.symbol}`}
+              item={item}
+              neutralLabel={t('marketOverviewPage.direction.neutral')}
+            />
+          ))}
+        </div>
+        {hiddenItemCount > 0 ? (
+          <p className="text-[10px] text-white/38">+{hiddenItemCount} 项保留在数据源快照中</p>
+        ) : null}
+        <MarketOverviewPanelFooter panel={panel} sourceLabel={sourceLabel} />
+      </div>
+    </MarketOverviewCardFrame>
+  );
+};
+
+const ContextMissingModuleCard: React.FC<{
+  moduleId: MarketOverviewModuleId;
+  title: string;
+  eyebrow: string;
+  lines: string[];
+}> = ({ moduleId, title, eyebrow, lines }) => (
+  <MarketOverviewCardFrame
+    size={MODULE_LAYOUT_META[moduleId].size}
+    testId={`market-overview-module-${moduleId}`}
+    className="h-full border-white/[0.045] bg-white/[0.018]"
+  >
+    <div className="flex h-full min-w-0 flex-col gap-3">
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{eyebrow}</p>
+        <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2>
+      </div>
+      <div className="grid min-w-0 gap-2">
+        {lines.map((line) => (
+          <div key={line} className="min-w-0 rounded-lg border border-white/[0.055] bg-black/20 px-3 py-2 text-xs text-white/48">
+            {line}
+          </div>
+        ))}
+      </div>
+    </div>
+  </MarketOverviewCardFrame>
+);
 
 function assignPanelValue(nextPanels: PanelState, panelKey: PanelKey, value: PanelState[PanelKey]): void {
   switch (panelKey) {
@@ -1712,39 +1821,93 @@ const MarketOverviewPage: React.FC = () => {
     { key: 'crypto', label: t('marketOverviewPage.categories.crypto') },
   ], [t]);
 
-  const cardNodes = useMemo<Record<CardKey, React.ReactNode>>(() => ({
-    futures: (
-      <FuturesPremarketCard
-        data={panels.futures}
-        loading={loading && panels.futures === FALLBACK_FUTURES}
-        refreshing={refreshingPanel === 'futures'}
-        onRefresh={() => {
-          void refreshPanel('futures', marketApi.getFutures);
-        }}
-      />
-    ),
-    cnShortSentiment: (
-      <CnShortSentimentCard
-        data={panels.cnShortSentiment}
-        loading={loading && panels.cnShortSentiment === FALLBACK_CN_SHORT_SENTIMENT}
-        refreshing={refreshingPanel === 'cnShortSentiment'}
-        onRefresh={() => {
-          void refreshPanel('cnShortSentiment', marketApi.getCnShortSentiment);
-        }}
-      />
-    ),
-    indices: (
-      <MarketOverviewCard
-        title={t('marketOverviewPage.cards.indexTrends.title')}
-        eyebrow={t('marketOverviewPage.cards.indexTrends.eyebrow')}
-        description={t('marketOverviewPage.cards.indexTrends.description')}
+  const globalIndicesCard = (
+    <MarketOverviewCard
+      title={t('marketOverviewPage.cards.indexTrends.title')}
+      eyebrow={t('marketOverviewPage.cards.indexTrends.eyebrow')}
+      description={t('marketOverviewPage.cards.indexTrends.description')}
+      sourceLabel={t('marketOverviewPage.cards.indexTrends.source')}
+      panel={panels.indices}
+      loading={loading && !panels.indices}
+      refreshing={refreshingPanel === 'indices'}
+      variant="denseQuote"
+      onRefresh={() => {
+        void refreshPanel('indices', marketOverviewApi.getIndices);
+      }}
+    />
+  );
+
+  const cryptoSnapshotCard = (
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <div className="flex items-center justify-end">
+        <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold uppercase text-white/55">
+          {cryptoRealtimeStatus === 'live' ? 'Live' : cryptoRealtimeStatus === 'reconnecting' ? 'Reconnecting' : 'Snapshot'}
+        </span>
+      </div>
+      {cryptoRealtimeStatus === 'reconnecting' ? (
+        <div className="rounded-lg border border-amber-300/20 bg-amber-400/8 px-3 py-2 text-xs text-amber-100/80">
+          实时连接断开，显示最近快照
+        </div>
+      ) : null}
+      <div className="min-h-0 flex-1">
+        <MarketOverviewCard
+          title={t('marketOverviewPage.cards.crypto.title')}
+          eyebrow={t('marketOverviewPage.cards.crypto.eyebrow')}
+          description={t('marketOverviewPage.cards.crypto.description')}
+          sourceLabel={t('marketOverviewPage.cards.crypto.source')}
+          panel={panels.crypto}
+          loading={loading && !panels.crypto}
+          refreshing={refreshingPanel === 'crypto'}
+          variant="denseQuote"
+          onRefresh={() => {
+            void refreshPanel('crypto', marketApi.getCrypto);
+          }}
+        />
+      </div>
+    </div>
+  );
+
+  const moduleNodes: Record<MarketOverviewModuleId, React.ReactNode> = {
+    globalIndices: globalIndicesCard,
+    usIndices: (
+      <ContextMetricModuleCard
+        moduleId="usIndices"
+        title="US Index Core"
+        eyebrow="US PRICE ACTION"
+        description="SPX / NDX / DJI / RUT"
+        panel={buildMetricPanel(panels, 'UsIndexCoreModule', ['SPX', 'NDX', 'DJI', 'RUT'])}
         sourceLabel={t('marketOverviewPage.cards.indexTrends.source')}
-        panel={activeCategory === 'us' ? filterPanelItems(panels.indices, isUsCoreIndexItem) : panels.indices}
-        loading={loading && !panels.indices}
         refreshing={refreshingPanel === 'indices'}
-        variant="denseQuote"
         onRefresh={() => {
           void refreshPanel('indices', marketOverviewApi.getIndices);
+        }}
+      />
+    ),
+    cnHkIndices: (
+      <ContextMetricModuleCard
+        moduleId="cnHkIndices"
+        title={t('marketOverviewPage.cards.cnIndices.title')}
+        eyebrow="A股 / 港股"
+        description="上证 / 深成 / 创业板 / 沪深300 / 恒生 / A50 / USDCNH"
+        panel={buildMetricPanel(panels, 'CnHkIndexCoreModule', ['SHCOMP', 'SZCOMP', 'CHINEXT', 'CSI300', 'HSI', 'HSTECH', 'A50', 'USDCNH'])}
+        sourceLabel={t('marketOverviewPage.cards.cnIndices.source')}
+        refreshing={refreshingPanel === 'cnIndices'}
+        onRefresh={() => {
+          void refreshPanel('cnIndices', marketApi.getCnIndices);
+        }}
+      />
+    ),
+    cryptoCore: (
+      <ContextMetricModuleCard
+        moduleId="cryptoCore"
+        title="Crypto Core"
+        eyebrow="CRYPTO ONLY"
+        description="BTC / ETH / SOL / BNB"
+        panel={buildMetricPanel(panels, 'CryptoCoreModule', ['BTC', 'ETH', 'SOL', 'BNB'])}
+        sourceLabel={t('marketOverviewPage.cards.crypto.source')}
+        refreshing={refreshingPanel === 'crypto'}
+        onRefresh={() => {
+          void refreshPanel('crypto', marketApi.getCrypto);
         }}
       />
     ),
@@ -1758,34 +1921,15 @@ const MarketOverviewPage: React.FC = () => {
         }}
       />
     ),
-    crypto: (
-      <div className="flex h-full min-h-0 flex-col gap-2">
-        <div className="flex items-center justify-end">
-          <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold uppercase text-white/55">
-            {cryptoRealtimeStatus === 'live' ? 'Live' : cryptoRealtimeStatus === 'reconnecting' ? 'Reconnecting' : 'Snapshot'}
-          </span>
-        </div>
-        {cryptoRealtimeStatus === 'reconnecting' ? (
-          <div className="rounded-lg border border-amber-300/20 bg-amber-400/8 px-3 py-2 text-xs text-amber-100/80">
-            实时连接断开，显示最近快照
-          </div>
-        ) : null}
-        <div className="min-h-0 flex-1">
-          <MarketOverviewCard
-            title={t('marketOverviewPage.cards.crypto.title')}
-            eyebrow={t('marketOverviewPage.cards.crypto.eyebrow')}
-            description={t('marketOverviewPage.cards.crypto.description')}
-            sourceLabel={t('marketOverviewPage.cards.crypto.source')}
-            panel={panels.crypto}
-            loading={loading && !panels.crypto}
-            refreshing={refreshingPanel === 'crypto'}
-            variant="denseQuote"
-            onRefresh={() => {
-              void refreshPanel('crypto', marketApi.getCrypto);
-            }}
-          />
-        </div>
-      </div>
+    fundsFlow: (
+      <FundsFlowCard
+        panel={panels.fundsFlow}
+        loading={loading && !panels.fundsFlow}
+        refreshing={refreshingPanel === 'fundsFlow'}
+        onRefresh={() => {
+          void refreshPanel('fundsFlow', marketOverviewApi.getFundsFlow);
+        }}
+      />
     ),
     sentiment: (
       <MarketSentimentCard
@@ -1797,27 +1941,38 @@ const MarketOverviewPage: React.FC = () => {
         }}
       />
     ),
-    fundsFlow: (
-      <FundsFlowCard
-        panel={panels.fundsFlow}
-        loading={loading && !panels.fundsFlow}
-        refreshing={refreshingPanel === 'fundsFlow'}
+    rates: (
+      <MarketOverviewCard
+        title={t('marketOverviewPage.cards.rates.title')}
+        eyebrow={t('marketOverviewPage.cards.rates.eyebrow')}
+        description={t('marketOverviewPage.cards.rates.description')}
+        sourceLabel={t('marketOverviewPage.cards.rates.source')}
+        panel={panels.rates}
+        loading={loading && !panels.rates}
+        refreshing={refreshingPanel === 'rates'}
+        variant="denseQuote"
         onRefresh={() => {
-          void refreshPanel('fundsFlow', marketOverviewApi.getFundsFlow);
+          void refreshPanel('rates', marketApi.getRates);
         }}
       />
     ),
-    macro: (
-      <MacroIndicatorsCard
-        panel={panels.macro}
-        loading={loading && !panels.macro}
-        refreshing={refreshingPanel === 'macro'}
+    fxCommodities: (
+      <MarketOverviewCard
+        title={t('marketOverviewPage.cards.fxCommodities.title')}
+        eyebrow={t('marketOverviewPage.cards.fxCommodities.eyebrow')}
+        description={t('marketOverviewPage.cards.fxCommodities.description')}
+        sourceLabel={t('marketOverviewPage.cards.fxCommodities.source')}
+        panel={panels.fxCommodities}
+        loading={loading && !panels.fxCommodities}
+        refreshing={refreshingPanel === 'fxCommodities'}
+        variant="denseQuote"
         onRefresh={() => {
-          void refreshPanel('macro', marketOverviewApi.getMacro);
+          void refreshPanel('fxCommodities', marketApi.getFxCommodities);
         }}
       />
     ),
-    cnIndices: (
+    cryptoSnapshot: cryptoSnapshotCard,
+    cnSnapshot: (
       <MarketOverviewCard
         title={t('marketOverviewPage.cards.cnIndices.title')}
         eyebrow={t('marketOverviewPage.cards.cnIndices.eyebrow')}
@@ -1830,6 +1985,56 @@ const MarketOverviewPage: React.FC = () => {
         onRefresh={() => {
           void refreshPanel('cnIndices', marketApi.getCnIndices);
         }}
+      />
+    ),
+    usRates: (
+      <ContextMetricModuleCard
+        moduleId="usRates"
+        title="US Rates"
+        eyebrow="RATES / USD"
+        description="US10Y / US2Y / US30Y / DXY"
+        panel={buildMetricPanel(panels, 'UsRatesModule', ['US10Y', 'US2Y', 'US30Y', 'DXY'])}
+        sourceLabel={t('marketOverviewPage.cards.rates.source')}
+        refreshing={refreshingPanel === 'rates' || refreshingPanel === 'fxCommodities'}
+        onRefresh={() => {
+          void refreshPanel('rates', marketApi.getRates);
+        }}
+      />
+    ),
+    usSentiment: (
+      <MarketSentimentCard
+        panel={panels.sentiment}
+        loading={loading && !panels.sentiment}
+        refreshing={refreshingPanel === 'sentiment'}
+        onRefresh={() => {
+          void refreshPanel('sentiment', marketApi.getSentiment);
+        }}
+      />
+    ),
+    usBreadth: (
+      <ContextMissingModuleCard
+        moduleId="usBreadth"
+        title="US Breadth"
+        eyebrow="BREADTH"
+        lines={['Advance / decline：未接入', '52W high / low：未接入', 'Equal-weight breadth：未接入']}
+      />
+    ),
+    usSectorRotation: (
+      <ContextMissingModuleCard
+        moduleId="usSectorRotation"
+        title="US Sector Rotation"
+        eyebrow="SECTOR"
+        lines={['S&P sector breadth：未接入', '行业轮动强弱：未接入']}
+      />
+    ),
+    macroContext: (
+      <ContextMetricModuleCard
+        moduleId="macroContext"
+        title="Macro Pressure"
+        eyebrow="AUX CONTEXT"
+        description="DXY / US10Y / VIX / BTC"
+        panel={buildMetricPanel(panels, 'UsMacroContextModule', ['DXY', 'US10Y', 'VIX', 'BTC'])}
+        sourceLabel="Macro context"
       />
     ),
     cnBreadth: (
@@ -1874,39 +2079,110 @@ const MarketOverviewPage: React.FC = () => {
         }}
       />
     ),
-    rates: (
-      <MarketOverviewCard
-        title={t('marketOverviewPage.cards.rates.title')}
-        eyebrow={t('marketOverviewPage.cards.rates.eyebrow')}
-        description={t('marketOverviewPage.cards.rates.description')}
+    shortSentiment: (
+      <CnShortSentimentCard
+        data={panels.cnShortSentiment}
+        loading={loading && panels.cnShortSentiment === FALLBACK_CN_SHORT_SENTIMENT}
+        refreshing={refreshingPanel === 'cnShortSentiment'}
+        onRefresh={() => {
+          void refreshPanel('cnShortSentiment', marketApi.getCnShortSentiment);
+        }}
+      />
+    ),
+    fxCnhContext: (
+      <ContextMetricModuleCard
+        moduleId="fxCnhContext"
+        title="CNH / 外部压力"
+        eyebrow="FX / RATES"
+        description="USDCNH / DXY / US10Y"
+        panel={buildMetricPanel(panels, 'CnhContextModule', ['USDCNH', 'DXY', 'US10Y'])}
+        sourceLabel={t('marketOverviewPage.cards.fxCommodities.source')}
+      />
+    ),
+    macroRates: (
+      <ContextMetricModuleCard
+        moduleId="macroRates"
+        title="Rates Core"
+        eyebrow="GLOBAL MACRO"
+        description="US10Y / US2Y / US30Y"
+        panel={buildMetricPanel(panels, 'MacroRatesModule', ['US10Y', 'US2Y', 'US30Y'])}
         sourceLabel={t('marketOverviewPage.cards.rates.source')}
-        panel={panels.rates}
-        loading={loading && !panels.rates}
         refreshing={refreshingPanel === 'rates'}
-        variant="denseQuote"
         onRefresh={() => {
           void refreshPanel('rates', marketApi.getRates);
         }}
       />
     ),
-    fxCommodities: (
-      <MarketOverviewCard
-        title={t('marketOverviewPage.cards.fxCommodities.title')}
-        eyebrow={t('marketOverviewPage.cards.fxCommodities.eyebrow')}
-        description={t('marketOverviewPage.cards.fxCommodities.description')}
+    macroFxCommodities: (
+      <ContextMetricModuleCard
+        moduleId="macroFxCommodities"
+        title="FX / Commodities"
+        eyebrow="DOLLAR / REAL ASSETS"
+        description="DXY / USDJPY / USDCNH / GOLD / WTI"
+        panel={buildMetricPanel(panels, 'MacroFxCommoditiesModule', ['DXY', 'USDJPY', 'USDCNH', 'GOLD', 'WTI'])}
         sourceLabel={t('marketOverviewPage.cards.fxCommodities.source')}
-        panel={panels.fxCommodities}
-        loading={loading && !panels.fxCommodities}
         refreshing={refreshingPanel === 'fxCommodities'}
-        variant="denseQuote"
         onRefresh={() => {
           void refreshPanel('fxCommodities', marketApi.getFxCommodities);
         }}
       />
     ),
-  }), [activeCategory, cryptoRealtimeStatus, loading, panels, refreshPanel, refreshingPanel, t]);
+    globalRisk: (
+      <ContextMetricModuleCard
+        moduleId="globalRisk"
+        title="Global Risk"
+        eyebrow="RISK ASSETS"
+        description="VIX / BTC / SPX"
+        panel={buildMetricPanel(panels, 'GlobalRiskModule', ['VIX', 'BTC', 'SPX'])}
+        sourceLabel="Risk context"
+      />
+    ),
+    cryptoMomentum: (
+      <ContextMetricModuleCard
+        moduleId="cryptoMomentum"
+        title="Crypto Momentum"
+        eyebrow="TREND"
+        description="24H momentum for BTC / ETH / SOL / BNB"
+        panel={buildMetricPanel(panels, 'CryptoMomentumModule', ['BTC', 'ETH', 'SOL', 'BNB'])}
+        sourceLabel={t('marketOverviewPage.cards.crypto.source')}
+        refreshing={refreshingPanel === 'crypto'}
+        onRefresh={() => {
+          void refreshPanel('crypto', marketApi.getCrypto);
+        }}
+      />
+    ),
+    cryptoLiquidity: (
+      <ContextMissingModuleCard
+        moduleId="cryptoLiquidity"
+        title="Crypto Liquidity"
+        eyebrow="LIQUIDITY"
+        lines={['资金费率：未接入', '稳定币流动性：未接入', '链上数据：未接入']}
+      />
+    ),
+    cryptoRiskContext: (
+      <ContextMetricModuleCard
+        moduleId="cryptoRiskContext"
+        title="Crypto Risk Context"
+        eyebrow="MACRO PRESSURE"
+        description="DXY / US10Y / VIX as auxiliary risk pressure"
+        panel={buildMetricPanel(panels, 'CryptoRiskContextModule', ['DXY', 'US10Y', 'VIX'])}
+        sourceLabel="Macro pressure"
+      />
+    ),
+    cryptoSentiment: (
+      <MarketSentimentCard
+        panel={panels.sentiment}
+        loading={loading && !panels.sentiment}
+        refreshing={refreshingPanel === 'sentiment'}
+        onRefresh={() => {
+          void refreshPanel('sentiment', marketApi.getSentiment);
+        }}
+      />
+    ),
+  };
 
-  const heroAnchors = useMemo(() => buildHeroAnchors(panels), [panels]);
+  const activeTabConfig = MARKET_OVERVIEW_TAB_CONFIG[activeCategory];
+  const heroAnchors = useMemo(() => buildHeroAnchors(panels, activeTabConfig.pulse), [activeTabConfig.pulse, panels]);
   const dataQuality = useMemo(() => summarizeDataQuality(panels), [panels]);
   const refreshErrorCount = Object.keys(refreshErrors).length;
   const coverageSummary = useMemo(() => summarizeCardCoverage(panels, CATEGORY_CARDS[activeCategory]), [activeCategory, panels]);
@@ -1922,46 +2198,66 @@ const MarketOverviewPage: React.FC = () => {
   }), [activeCategoryLabel, coverageSummary, dataQuality, heroAnchors, language, panels.briefing, panels.temperature]);
   const activeRows = CATEGORY_LAYOUT[activeCategory];
 
-  const hasRenderableCard = (cardKey: CardKey): boolean => {
+  const hasRenderableModule = (moduleId: MarketOverviewModuleId): boolean => {
     if (loading) {
       return true;
     }
-    if (cardKey === 'futures') {
-      return panels.futures.items.length > 0 || Boolean(panels.futures.warning);
-    }
-    if (cardKey === 'cnShortSentiment') {
+    if (moduleId === 'shortSentiment') {
       return Boolean(panels.cnShortSentiment.summary || panels.cnShortSentiment.warning);
     }
-    const panel = panels[cardKey];
+    if (moduleId === 'usBreadth' || moduleId === 'usSectorRotation' || moduleId === 'cryptoLiquidity') {
+      return true;
+    }
+    const cards = MODULE_COVERAGE_CARDS[moduleId];
+    if (cards.length === 0) {
+      return true;
+    }
+    const panel = cards.map((cardKey) => panels[cardKey] as MarketOverviewPanel | undefined)
+      .find((candidate) => candidate?.errorMessage || (candidate?.items?.length || 0) > 0);
     return Boolean(panel?.errorMessage || (panel?.items?.length || 0) > 0);
   };
 
-  const renderCard = (cardKey: CardKey, rank: number, rail: WorkbenchRail = 'hero') => {
-    const layoutMeta = CARD_LAYOUT_META[cardKey];
+  const moduleCardTestId: Partial<Record<MarketOverviewModuleId, string>> = {
+    globalIndices: 'indices',
+    usIndices: 'indices',
+    cnHkIndices: 'cnIndices',
+    cryptoSnapshot: 'crypto',
+    cnSnapshot: 'cnIndices',
+    shortSentiment: 'cnShortSentiment',
+    macroRates: 'rates',
+    macroFxCommodities: 'fxCommodities',
+    usSentiment: 'sentiment',
+    cryptoSentiment: 'sentiment',
+  };
+
+  const renderModule = (moduleId: MarketOverviewModuleId, rank: number, rail: WorkbenchRail = 'hero') => {
+    const layoutMeta = MODULE_LAYOUT_META[moduleId];
+    const cardTestId = moduleCardTestId[moduleId] || moduleId;
     return (
     <div
-      key={cardKey}
-      data-testid={`market-overview-card-${cardKey}`}
+      key={moduleId}
+      data-testid={`market-overview-card-${cardTestId}`}
+      data-market-overview-module={moduleId}
       data-market-card-rank={rank}
       data-market-card-row={rail}
       data-market-card-size={layoutMeta.size}
-      data-market-card-density={DENSE_QUOTE_CARDS.has(cardKey) ? 'dense-quote' : 'standard'}
+      data-market-card-density={DENSE_QUOTE_MODULES.has(moduleId) ? 'dense-quote' : 'standard'}
       className="h-full min-w-0 w-full overflow-hidden"
     >
-      {cardNodes[cardKey]}
+      {moduleNodes[moduleId]}
     </div>
     );
   };
 
   const renderPlannedRow = (row: MarketOverviewLayoutRow, rowIndex: number) => {
-    const cards = row.cards.filter(hasRenderableCard);
-    if (cards.length === 0) {
+    const modules = row.modules.filter(hasRenderableModule);
+    if (modules.length === 0) {
       return null;
     }
-    const plannedRow = cards.length === 1 && row.allowSingleFullWidth
+    const plannedRow = modules.length === 1 && row.allowSingleFullWidth
       ? { ...row, columns: 1 as const }
-      : { ...row, columns: Math.min(row.columns, cards.length) as MarketOverviewRowColumns };
-    const children = cards.map((cardKey, cardIndex) => renderCard(cardKey, rowIndex * 10 + cardIndex, row.tier));
+      : { ...row, columns: Math.min(row.columns, modules.length) as MarketOverviewRowColumns };
+    const children = modules.map((moduleId, moduleIndex) => renderModule(moduleId, rowIndex * 10 + moduleIndex, row.tier));
 
     if (plannedRow.columns === 1) {
       return <MarketOverviewFullWidthRow key={row.id} row={plannedRow}>{children}</MarketOverviewFullWidthRow>;
@@ -1995,10 +2291,10 @@ const MarketOverviewPage: React.FC = () => {
       </section>
       <aside data-testid="market-overview-side-rail" data-mobile-order="rail" className="flex min-w-0 flex-col gap-3 xl:col-span-3">
         <div data-testid="market-overview-rail" className="flex min-w-0 flex-col gap-3">
-          <CategoryCoverageSummary label={activeCategoryLabel} summary={coverageSummary} />
-          <DataQualityCompactRailCard summary={dataQuality} />
-          <SignalWatchRailCard panels={panels} activeCategory={activeCategory} />
-          <ActionHintRailCard temperature={panels.temperature} />
+          {activeTabConfig.rail.includes('coverage') ? <CategoryCoverageSummary label={activeCategoryLabel} summary={coverageSummary} /> : null}
+          {activeTabConfig.rail.includes('quality') ? <DataQualityCompactRailCard summary={dataQuality} /> : null}
+          {activeTabConfig.rail.includes('signalWatch') ? <SignalWatchRailCard panels={panels} activeCategory={activeCategory} /> : null}
+          {activeTabConfig.rail.includes('actionHint') ? <ActionHintRailCard temperature={panels.temperature} /> : null}
         </div>
       </aside>
       {activeRows.some((row) => row.tier === 'deep') || activeCategory === 'all' ? (
