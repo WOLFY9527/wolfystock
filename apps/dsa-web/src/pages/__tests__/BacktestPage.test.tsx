@@ -564,14 +564,14 @@ describe('BacktestPage', () => {
   async function openDeterministicStrategyInput() {
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
     await switchToProfessionalMode();
-    expect(screen.getByTestId('backtest-setup-dashboard')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-control-section-setup')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('pro-workflow-step-strategy'));
+    expect(await screen.findByTestId('pro-step-strategy')).toBeInTheDocument();
   }
 
   async function parseDeterministicStrategy() {
     await openDeterministicStrategyInput();
-    fireEvent.click(within(screen.getByTestId('backtest-control-section-setup')).getByRole('button', { name: '解析策略' }));
-    expect(await screen.findByTestId('confirm-status-section')).toBeInTheDocument();
+    fireEvent.click(within(screen.getByTestId('pro-step-strategy')).getByRole('button', { name: '解析策略' }));
+    expect(await screen.findByTestId('pro-rule-preview')).toBeInTheDocument();
   }
 
   beforeEach(() => {
@@ -970,7 +970,7 @@ describe('BacktestPage', () => {
     expect(screen.queryByText(/来自扫描器|From scanner/i)).not.toBeInTheDocument();
   });
 
-  it('keeps normal mode compact and transitions into the pro IDE workspace', async () => {
+  it('renders the deterministic professional workspace shell', async () => {
     renderBacktestRoutes();
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
@@ -984,18 +984,25 @@ describe('BacktestPage', () => {
     await switchToProfessionalMode();
 
     expect(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByTestId('pro-backtest-workspace')).not.toHaveClass('overflow-hidden');
-    expect(screen.getByTestId('pro-backtest-sidebar')).toHaveClass('flex', 'flex-col', 'gap-4', 'xl:col-span-1', 'xl:sticky', 'xl:top-6');
-    expect(screen.getByTestId('pro-backtest-nav-assets')).toBeInTheDocument();
-    expect(screen.getByTestId('pro-backtest-nav-strategy')).toBeInTheDocument();
-    expect(screen.getByTestId('pro-backtest-nav-orders')).toBeInTheDocument();
-    expect(screen.getByTestId('pro-backtest-nav-execution')).toBeInTheDocument();
-    expect(screen.getByTestId('pro-backtest-nav-analytics')).toBeInTheDocument();
-    expect(screen.getByTestId('pro-backtest-compile-bar')).toHaveClass('rounded-[24px]', 'border', 'border-white/5', 'bg-white/[0.02]');
-    expect(screen.getByTestId('pro-panel-strategy')).toBeInTheDocument();
+    expect(screen.getByTestId('pro-backtest-workspace')).toHaveClass('max-w-[1600px]', 'w-full', 'mx-auto');
+    expect(screen.getByTestId('pro-workflow-rail')).toHaveClass('hidden', 'lg:flex', 'lg:sticky');
+    expect(screen.getByTestId('pro-mobile-step-chips')).toHaveClass('lg:hidden', 'overflow-x-auto', 'no-scrollbar');
+    expect(screen.getByTestId('pro-workspace-grid')).toHaveClass('lg:grid-cols-[220px_minmax(0,1fr)_320px]');
+    expect(screen.getByTestId('pro-step-workspace')).toBeInTheDocument();
+    expect(screen.getByTestId('pro-execution-rail')).toHaveClass('lg:sticky', 'lg:top-6');
+    expect(screen.getByTestId('pro-results-history-drawer')).toBeInTheDocument();
+    expect(screen.getByTestId('pro-results-history-content')).toHaveAttribute('hidden');
+    expect(within(screen.getByTestId('pro-workflow-rail')).getAllByRole('button')).toHaveLength(5);
+    expect(screen.getByTestId('pro-step-assets')).toBeInTheDocument();
+    expect(screen.queryByTestId('pro-step-strategy')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('标的代码')).toBeInTheDocument();
+    expect(screen.getByLabelText('对比基准')).toBeInTheDocument();
+    expect(screen.getByLabelText('开始日期')).toBeInTheDocument();
+    expect(screen.getByLabelText('结束日期')).toBeInTheDocument();
+    expect(screen.getByLabelText('初始资金')).toBeInTheDocument();
+    expect(within(screen.getByTestId('pro-execution-rail')).getByText('EXECUTION SUMMARY')).toBeInTheDocument();
+    expect(within(screen.getByTestId('pro-execution-rail')).getByText('READINESS')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: '执行回测任务' }).length).toBeGreaterThan(0);
-    expect(screen.getByTestId('backtest-cockpit-monitor')).not.toHaveClass('overflow-hidden');
-    expect(screen.getByTestId('backtest-setup-dashboard')).not.toHaveClass('overflow-y-auto', 'no-scrollbar');
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
 
@@ -1005,12 +1012,14 @@ describe('BacktestPage', () => {
     await switchToProfessionalMode();
 
     expect(screen.queryByTestId('pro-strategy-catalog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('pro-workflow-step-strategy'));
     fireEvent.click(screen.getByTestId('pro-open-template-drawer'));
     expect(await screen.findByTestId('pro-strategy-catalog-drawer')).toBeInTheDocument();
-    expect(screen.getByTestId('pro-strategy-catalog')).toBeInTheDocument();
+    const catalog = screen.getByTestId('pro-strategy-catalog');
+    expect(catalog).toBeInTheDocument();
     expect(screen.getAllByText('基础 / 默认策略').length).toBeGreaterThan(0);
-    expect(screen.getByText('均线交叉（SMA / EMA）')).toBeInTheDocument();
-    expect(screen.getAllByText('可执行').length).toBeGreaterThan(0);
+    expect(within(catalog).getByText('均线交叉（SMA / EMA）')).toBeInTheDocument();
+    expect(within(catalog).getAllByText('可执行').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: '进阶 / 扩展策略' }));
     expect(screen.getByText('简单动量')).toBeInTheDocument();
     expect(screen.getAllByText('当前不支持').length).toBeGreaterThan(0);
@@ -1040,7 +1049,7 @@ describe('BacktestPage', () => {
     fireEvent.click(screen.getByTestId('pro-open-template-drawer'));
     expect(await screen.findByTestId('pro-strategy-catalog-drawer')).toBeInTheDocument();
 
-    const executableTemplateCard = screen.getByText('MACD 金叉 / 死叉').closest('article');
+    const executableTemplateCard = within(screen.getByTestId('pro-strategy-catalog')).getByText('MACD 金叉 / 死叉').closest('article');
     expect(executableTemplateCard).not.toBeNull();
 
     fireEvent.click(within(executableTemplateCard as HTMLElement).getByRole('button', { name: '填入编辑器' }));
@@ -1049,37 +1058,51 @@ describe('BacktestPage', () => {
     expect(screen.getByDisplayValue('MACD 金叉买入，死叉卖出')).toBeInTheDocument();
   });
 
-  it('switches the professional workspace through one right-side panel at a time', async () => {
+  it('switches the professional workspace through one active step at a time', async () => {
     renderBacktestRoutes();
 
     await switchToProfessionalMode();
 
-    expect(screen.getByTestId('pro-panel-strategy')).toBeInTheDocument();
-    expect(screen.queryByTestId('pro-panel-assets')).not.toBeInTheDocument();
+    expect(screen.getByTestId('pro-step-assets')).toBeInTheDocument();
+    expect(screen.queryByTestId('pro-step-strategy')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('pro-backtest-nav-assets'));
-    expect(await screen.findByTestId('pro-panel-assets')).toBeInTheDocument();
-    expect(screen.queryByTestId('pro-panel-strategy')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('pro-workflow-step-strategy'));
+    expect(await screen.findByTestId('pro-step-strategy')).toBeInTheDocument();
+    expect(screen.getByLabelText('策略文本')).toBeInTheDocument();
+    expect(screen.getByTestId('pro-rule-preview')).toBeInTheDocument();
+    expect(screen.queryByTestId('pro-step-assets')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('pro-backtest-nav-orders'));
-    expect(await screen.findByTestId('pro-panel-orders')).toBeInTheDocument();
-    expect(screen.queryByTestId('pro-panel-assets')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('pro-workflow-step-orders'));
+    expect(await screen.findByTestId('pro-step-orders')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '执行路由' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '风险护栏' })).toBeInTheDocument();
+    expect(screen.queryByTestId('pro-step-strategy')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('pro-backtest-nav-execution'));
-    expect(await screen.findByTestId('pro-panel-execution')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('pro-workflow-step-costs'));
+    expect(await screen.findByTestId('pro-step-costs')).toBeInTheDocument();
+    expect(screen.getByLabelText('回看范围')).toBeInTheDocument();
+    expect(screen.getByLabelText('手续费 BP')).toBeInTheDocument();
+    expect(screen.getByLabelText('滑点 BP')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('pro-backtest-nav-analytics'));
-    expect(await screen.findByTestId('pro-panel-analytics')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('pro-workflow-step-advanced'));
+    expect(await screen.findByTestId('pro-step-advanced')).toBeInTheDocument();
+    expect(screen.getByTestId('pro-advanced-grid-search')).not.toHaveAttribute('open');
+    expect(screen.getByTestId('pro-advanced-bayesian')).not.toHaveAttribute('open');
+    expect(screen.getByLabelText('启用 Grid Search')).not.toBeChecked();
+    expect(screen.queryByText('为什么改成折叠')).not.toBeInTheDocument();
+    expect(screen.queryByText('执行通道说明')).not.toBeInTheDocument();
+    expect(screen.queryByText('控制策略')).not.toBeInTheDocument();
   });
 
   it('marks parsed strategy stale after setup changes', async () => {
     renderBacktestRoutes();
 
     await parseDeterministicStrategy();
-    expect(screen.getByText('确认当前解析')).toBeInTheDocument();
+    expect(screen.getByText('策略已解析')).toBeInTheDocument();
 
+    fireEvent.click(screen.getByTestId('pro-workflow-step-assets'));
     fireEvent.change(screen.getByLabelText('结束日期'), { target: { value: '2025-11-30' } });
-    expect(await screen.findByText('输入已变更。请重新解析后再继续。')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText('输入已变更，请重新解析').length).toBeGreaterThan(0));
   });
 
   it('shows unsupported guidance and applies rewrite suggestions', async () => {
@@ -1089,12 +1112,11 @@ describe('BacktestPage', () => {
 
     await openDeterministicStrategyInput();
     fireEvent.change(screen.getByLabelText('策略文本'), { target: { value: 'MACD金叉买入，止损5%，死叉卖出' } });
-    fireEvent.click(within(screen.getByTestId('backtest-control-section-setup')).getByRole('button', { name: '解析策略' }));
+    fireEvent.click(within(screen.getByTestId('pro-step-strategy')).getByRole('button', { name: '解析策略' }));
 
-    const guidanceSection = await screen.findByTestId('confirm-guidance-section');
-    const assumptionsSection = screen.getByTestId('confirm-assumptions-section');
+    const guidanceSection = await screen.findByTestId('pro-unsupported-guidance');
+    const assumptionsSection = screen.getByTestId('pro-assumption-summary');
     expect(screen.getAllByText('当前不支持').length).toBeGreaterThan(0);
-    expect(within(assumptionsSection).getByText('推断与提醒')).toBeInTheDocument();
     expect(within(assumptionsSection).getByText('未显式写出 MACD 参数，当前默认使用 (12, 26, 9)。')).toBeInTheDocument();
 
     fireEvent.click(within(guidanceSection).getByRole('button', {
@@ -1110,20 +1132,13 @@ describe('BacktestPage', () => {
 
     await parseDeterministicStrategy();
 
-    expect(screen.getByTestId('confirm-status-section')).toBeInTheDocument();
-    expect(screen.getByTestId('confirm-compact-summary-section')).toBeInTheDocument();
-    const executableSpecSection = screen.getByTestId('confirm-executable-spec-section');
+    expect(screen.getByTestId('pro-rule-preview')).toBeInTheDocument();
+    const executableSpecSection = screen.getByTestId('pro-parsed-summary');
     expect(executableSpecSection).toBeInTheDocument();
     expect(within(executableSpecSection).getByText('实际执行内容')).toBeInTheDocument();
-    expect(within(executableSpecSection).getByText('规格来源 · 显式 strategy_spec')).toBeInTheDocument();
-    expect(within(executableSpecSection).getAllByText('显式结构化').length).toBeGreaterThan(0);
-    expect(within(executableSpecSection).getAllByText('默认/推断').length).toBeGreaterThan(0);
     expect(within(executableSpecSection).getByText('每个交易日')).toBeInTheDocument();
     expect(within(executableSpecSection).getByText('100 股 / 次')).toBeInTheDocument();
-    expect(screen.getByText('原始输入与归一化表达')).toBeInTheDocument();
-    expect(screen.queryByText('查看解析细节')).not.toBeInTheDocument();
-    expect(screen.getByTestId('confirm-assumptions-section')).toBeInTheDocument();
-    expect(screen.getByText('默认补全与提醒')).toBeInTheDocument();
+    expect(screen.getByTestId('pro-assumption-summary')).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-display-board')).not.toBeInTheDocument();
     expect(screen.getAllByLabelText(/我已确认当前解析结果与执行假设/i)).toHaveLength(1);
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
@@ -1134,23 +1149,14 @@ describe('BacktestPage', () => {
 
     await parseDeterministicStrategy();
 
-    const additiveDashboard = screen.getByTestId('confirm-additive-dashboard');
-    expect(additiveDashboard).toBeInTheDocument();
-    expect(within(additiveDashboard).getByTestId('confirm-dashboard-risk-controls')).toBeInTheDocument();
-    expect(within(additiveDashboard).getByTestId('confirm-dashboard-risk-controls')).toHaveAttribute('title', '查看确认页风险控制 additive 摘要');
-    expect(within(additiveDashboard).getByText('风险控制卡片 / Risk Controls')).toBeInTheDocument();
-    const executableSpecSection = screen.getByTestId('confirm-executable-spec-section');
-    expect(within(executableSpecSection).getByText('风险控制 / Risk Controls')).toBeInTheDocument();
-    expect(within(executableSpecSection).getAllByText('止损').length).toBeGreaterThan(0);
-    expect(within(executableSpecSection).getAllByText('5.00%').length).toBeGreaterThan(0);
-    expect(within(executableSpecSection).getAllByText('止盈').length).toBeGreaterThan(0);
-    expect(within(executableSpecSection).getAllByText('10.00%').length).toBeGreaterThan(0);
-    expect(within(executableSpecSection).getAllByText('移动止损').length).toBeGreaterThan(0);
-    expect(within(executableSpecSection).getAllByText('8.00%').length).toBeGreaterThan(0);
-    expect(within(executableSpecSection).getByTestId('confirm-risk-controls-visualization')).toBeInTheDocument();
-    expect(within(executableSpecSection).getByText('保护梯度 / Protection Ladder')).toBeInTheDocument();
-    expect(within(executableSpecSection).getByText('已启用 3 项')).toBeInTheDocument();
-    expect(within(executableSpecSection).getByText('最高阈值 10.00%')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('pro-workflow-step-orders'));
+    const riskSection = await screen.findByTestId('pro-risk-controls-summary');
+    expect(within(riskSection).getByText('止损')).toBeInTheDocument();
+    expect(within(riskSection).getByText('5.00%')).toBeInTheDocument();
+    expect(within(riskSection).getByText('止盈')).toBeInTheDocument();
+    expect(within(riskSection).getByText('10.00%')).toBeInTheDocument();
+    expect(within(riskSection).getByText('移动止损')).toBeInTheDocument();
+    expect(within(riskSection).getByText('8.00%')).toBeInTheDocument();
   });
 
   it('marks executable spec fields as compatibility-derived when only legacy setup is available', async () => {
@@ -1160,9 +1166,8 @@ describe('BacktestPage', () => {
 
     await parseDeterministicStrategy();
 
-    const executableSpecSection = screen.getByTestId('confirm-executable-spec-section');
+    const executableSpecSection = screen.getByTestId('pro-parsed-summary');
     expect(within(executableSpecSection).getByText('规格来源 · 兼容 setup')).toBeInTheDocument();
-    expect(within(executableSpecSection).getAllByText('兼容 setup').length).toBeGreaterThan(1);
   });
 
   it('keeps historical evaluation functional across Normal and Professional modes', async () => {
@@ -1206,7 +1211,7 @@ describe('BacktestPage', () => {
     expect(within(controlPanel).getByTestId('historical-control-section-results')).toBeInTheDocument();
   });
 
-  it('shows expanded deterministic controls in Professional Mode', async () => {
+  it('keeps professional deterministic controls scoped to the active step', async () => {
     renderBacktestRoutes();
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
@@ -1215,12 +1220,12 @@ describe('BacktestPage', () => {
 
     expect(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByTestId('pro-backtest-workspace')).toHaveAttribute('data-module', 'rule');
-    expect(screen.getByTestId('backtest-setup-dashboard')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-control-section-symbol')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-control-section-setup')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-control-section-strategy')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-control-section-confirm')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-control-section-run')).toBeInTheDocument();
+    expect(screen.getByTestId('pro-step-assets')).toBeInTheDocument();
+    expect(screen.queryByTestId('pro-step-strategy')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('pro-step-orders')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('pro-step-costs')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('pro-step-advanced')).not.toBeInTheDocument();
+    expect(screen.getByTestId('pro-execution-readiness')).toBeInTheDocument();
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
 
@@ -1237,7 +1242,7 @@ describe('BacktestPage', () => {
     await parseDeterministicStrategy();
 
     fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
-    fireEvent.click(within(screen.getByTestId('backtest-sticky-action-bar')).getByRole('button', { name: '执行回测任务' }));
+    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
 
     expect(runRuleBacktest).toHaveBeenCalledTimes(1);
     expect(runRuleBacktest).toHaveBeenCalledWith(
@@ -1348,7 +1353,7 @@ describe('BacktestPage', () => {
     await parseDeterministicStrategy();
 
     fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
-    fireEvent.click(within(screen.getByTestId('backtest-sticky-action-bar')).getByRole('button', { name: '执行回测任务' }));
+    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
 
     const alerts = await screen.findAllByRole('alert');
     const alert = alerts.find((node) => node.textContent?.includes('服务器暂时不可用'));
@@ -1409,7 +1414,7 @@ describe('BacktestPage', () => {
     await waitFor(() => expect(getRuleBacktestRuns).toHaveBeenCalled());
     await switchToProfessionalMode();
 
-    fireEvent.click(screen.getByRole('button', { name: '查看' }));
+    fireEvent.click(within(screen.getByTestId('pro-workflow-rail')).getByRole('button', { name: '查看' }));
 
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /ORCL/i })).toBeInTheDocument();
@@ -1458,6 +1463,7 @@ describe('BacktestPage', () => {
     renderBacktestRoutes();
 
     await switchToProfessionalMode();
+    fireEvent.click(within(screen.getByTestId('pro-results-history-drawer')).getByRole('button', { name: /历史记录|History/i }));
     expect(await screen.findByTestId('backtest-setup-presets')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
