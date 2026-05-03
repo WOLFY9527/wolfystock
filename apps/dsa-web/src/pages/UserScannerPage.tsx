@@ -5,11 +5,15 @@ import {
   BookmarkCheck,
   BookmarkPlus,
   ChevronDown,
-  ChevronUp,
+  ChevronRight,
+  Clock,
   Copy,
   Download,
+  History,
+  Info,
   LayoutGrid,
-  PanelRightOpen,
+  LineChart,
+  MoreHorizontal,
   Play,
   Sparkles,
   Table2,
@@ -73,6 +77,7 @@ type ScanScope = 'default' | 'theme' | 'symbols';
 type ActionNotice = { tone: 'success' | 'warning' | 'danger'; message: string } | null;
 type ScannerBacktestStatus = 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'skipped_existing';
 type ScannerBacktestSource = 'official_selected' | 'preview_selected' | 'top_5' | 'current_filter' | 'manual';
+type ScannerDisclosureIcon = 'info' | 'history' | 'backtest' | 'watchlist' | 'more';
 type ScannerBacktestItem = {
   symbol: string;
   status: ScannerBacktestStatus;
@@ -1126,27 +1131,58 @@ function DetailSection({
 
 function AdvancedDisclosure({
   title,
+  summary,
+  icon = 'info',
   children,
   testId,
   defaultOpen = false,
 }: {
   title: string;
+  summary?: string;
+  icon?: ScannerDisclosureIcon;
   children: React.ReactNode;
   testId: string;
   defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const iconClassName = 'h-3.5 w-3.5 shrink-0 text-white/38';
+  const leadingIcon = {
+    info: <Info className={iconClassName} aria-hidden="true" />,
+    history: <History className={iconClassName} aria-hidden="true" />,
+    backtest: <LineChart className={iconClassName} aria-hidden="true" />,
+    watchlist: <BookmarkPlus className={iconClassName} aria-hidden="true" />,
+    more: <MoreHorizontal className={iconClassName} aria-hidden="true" />,
+  }[icon];
+  const actionLabel = open
+    ? (title.match(/[A-Za-z]/) ? `Collapse ${title}` : `收起 ${title}`)
+    : (title.match(/[A-Za-z]/) ? `Expand ${title}` : `展开 ${title}`);
+
   return (
-    <details
+    <section
       data-testid={testId}
-      open={defaultOpen || undefined}
       className="rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 text-xs backdrop-blur-md transition-all hover:border-white/10"
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40 [&::-webkit-details-marker]:hidden">
-        <span>{title}</span>
-        <ChevronDown className="h-3.5 w-3.5 text-white/32" aria-hidden="true" />
-      </summary>
-      <div className="mt-2">{children}</div>
-    </details>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {leadingIcon}
+          <div className="min-w-0">
+            <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{title}</h3>
+            {summary ? <p className="mt-0.5 truncate text-[11px] text-white/38">{summary}</p> : null}
+          </div>
+        </div>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={actionLabel}
+          onClick={() => setOpen((current) => !current)}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/8 bg-white/[0.035] px-2 py-1 text-[11px] text-white/58 hover:bg-white/[0.07] hover:text-white"
+        >
+          {open ? <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />}
+          <span>{open ? (title.match(/[A-Za-z]/) ? 'Collapse' : '收起') : (title.match(/[A-Za-z]/) ? 'Expand' : '展开')}</span>
+        </button>
+      </div>
+      {open ? <div className="mt-2">{children}</div> : null}
+    </section>
   );
 }
 
@@ -1521,10 +1557,11 @@ function ScannerBacktestLab({
     : `请求 ${requested} / 运行 ${running} / 完成 ${completed} / 失败 ${failed} / 复用 ${skipped}`;
 
   return (
-    <AdvancedDisclosure
-      testId="scanner-backtest-lab"
-      title={language === 'en' ? 'Backtest Lab' : '回测实验室'}
-    >
+    <section data-testid="scanner-backtest-lab" className="grid gap-3 rounded-xl border border-white/5 bg-white/[0.015] p-3 text-xs">
+      <div className="flex min-w-0 items-center gap-2">
+        <LineChart className="h-3.5 w-3.5 text-white/38" aria-hidden="true" />
+        <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'en' ? 'Backtest Lab' : '回测实验室'}</h3>
+      </div>
       <div className="grid gap-3 text-xs">
         <div className="grid gap-2 rounded-xl border border-white/5 bg-black/20 p-3 sm:grid-cols-2 xl:grid-cols-4">
           <FieldChip label={language === 'en' ? 'Mode' : '模式'} value={language === 'en' ? 'Candidate single-symbol backtest' : '候选单标的回测'} />
@@ -1581,7 +1618,7 @@ function ScannerBacktestLab({
           </div>
         ) : null}
       </div>
-    </AdvancedDisclosure>
+    </section>
   );
 }
 
@@ -1629,9 +1666,6 @@ function ScannerStrategySimulationPanel({
         : result?.status === 'failed'
           ? (language === 'en' ? 'failed' : 'failed')
           : (language === 'en' ? 'idle' : '待运行');
-  const title = language === 'en'
-    ? `History sim · ${lookbackDays}D · Forward ${forwardDays}D · View`
-    : `历史模拟 · ${lookbackDays}D · Forward ${forwardDays}D · 查看`;
   const summary = result?.summary;
   const compactMessage = disabled
     ? (language === 'en' ? 'Run one scan first, then inspect strategy history.' : '先运行一次扫描，再查看策略历史模拟')
@@ -1640,14 +1674,16 @@ function ScannerStrategySimulationPanel({
       : null;
 
   return (
-    <details
+    <section
       data-testid="scanner-strategy-simulation"
-      className="rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 text-xs backdrop-blur-md transition-all hover:border-white/10"
+      className="rounded-xl border border-white/5 bg-white/[0.015] p-3 text-xs"
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40 [&::-webkit-details-marker]:hidden">
-        <span className="min-w-0 truncate">{title}</span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-white/32" aria-hidden="true" />
-      </summary>
+      <div className="flex min-w-0 items-center gap-2">
+        <Clock className="h-3.5 w-3.5 text-white/38" aria-hidden="true" />
+        <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">
+          {language === 'en' ? `History sim · ${lookbackDays}D · Forward ${forwardDays}D` : `历史模拟 · ${lookbackDays}D · Forward ${forwardDays}D`}
+        </h3>
+      </div>
       <div className="mt-2 grid gap-3" data-testid="scanner-strategy-simulation-body">
         <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
           <div className="min-w-0">
@@ -1779,7 +1815,7 @@ function ScannerStrategySimulationPanel({
           </div>
         ) : null}
       </div>
-    </details>
+    </section>
   );
 }
 
@@ -1811,10 +1847,10 @@ function DiagnosticsPanel({
   if (!hasAnyDiagnostics) return null;
 
   return (
-    <details data-testid="scanner-diagnostics-panel" className="mt-3 rounded-xl border border-white/5 bg-white/[0.015] p-3">
-      <summary className="cursor-pointer text-xs font-semibold text-white/62">
+    <section data-testid="scanner-diagnostics-panel" className="mt-3 rounded-xl border border-white/5 bg-white/[0.015] p-3">
+      <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40">
         {language === 'en' ? 'Diagnostics and replay notes' : '诊断与复盘说明'}
-      </summary>
+      </h3>
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         {coverage ? (
           <DetailSection title={language === 'en' ? 'Coverage summary' : '覆盖摘要'}>
@@ -1877,7 +1913,7 @@ function DiagnosticsPanel({
           </DetailSection>
         ) : null}
       </div>
-    </details>
+    </section>
   );
 }
 
@@ -1916,6 +1952,7 @@ const UserScannerPage: React.FC = () => {
   const [watchlistAuthBlocked, setWatchlistAuthBlocked] = useState(false);
   const [pendingWatchlistIdentity, setPendingWatchlistIdentity] = useState<string | null>(null);
   const [pendingBatchWatchlistAction, setPendingBatchWatchlistAction] = useState<string | null>(null);
+  const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
   const [previousRunDetail, setPreviousRunDetail] = useState<ScannerRunDetail | null>(null);
   const [previewThreshold, setPreviewThreshold] = useState(50);
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
@@ -2506,8 +2543,6 @@ const UserScannerPage: React.FC = () => {
   const primaryWatchlistIdentity = primarySelectedCandidate ? getWatchlistIdentity(runDetail?.market || market, primarySelectedCandidate.symbol) : '';
   const isPrimaryTracked = Boolean(primaryWatchlistIdentity && trackedWatchlistIdentitySet.has(primaryWatchlistIdentity));
   const isPrimaryTrackPending = pendingWatchlistIdentity === primaryWatchlistIdentity;
-  const hasMeaningfulComparison = Boolean(comparisonState.previousRun && comparisonState.chips.some((chip) => !/继续入选|retained selected|Still in candidates/i.test(chip)));
-
   const handleAnalyzeCandidate = useCallback(async (candidate: ScannerCandidate) => {
     setPendingAnalyzeSymbol(candidate.symbol);
     setActionNotice(null);
@@ -2694,15 +2729,15 @@ const UserScannerPage: React.FC = () => {
         data-bento-surface="true"
         aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
         aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
-        className={getSafariReadySurfaceClassName(
-          isSafariReady,
-          'bento-surface-root flex w-full flex-1 flex-col min-h-0 min-w-0 bg-transparent text-foreground xl:h-[calc(100vh-96px)] xl:overflow-hidden',
-        )}
-      >
-        <main
-          data-testid="user-scanner-workspace"
-          className="w-full flex-1 flex flex-col min-h-0 min-w-0"
-        >
+	        className={getSafariReadySurfaceClassName(
+	          isSafariReady,
+	          'bento-surface-root flex w-full flex-1 flex-col min-w-0 bg-transparent text-foreground',
+	        )}
+	      >
+	        <main
+	          data-testid="user-scanner-workspace"
+	          className="w-full flex-1 flex flex-col min-w-0"
+	        >
           {pageError ? <ApiErrorAlert error={pageError} /> : null}
           {actionNotice ? (
             <div
@@ -2719,26 +2754,32 @@ const UserScannerPage: React.FC = () => {
             </div>
           ) : null}
 
-          <div className="flex w-full flex-1 min-h-0 min-w-0 flex-col gap-3 xl:flex-row xl:overflow-hidden">
-            <section
-              data-testid="scanner-sidebar"
-              className="flex w-full shrink-0 flex-col overflow-hidden rounded-[16px] border border-white/5 bg-white/[0.015] p-3 max-h-[calc(100vh-120px)] xl:h-full xl:w-[268px] xl:max-h-[calc(100vh-120px)] 2xl:w-[288px]"
-            >
-              <SectionShell
-                className="h-full flex flex-1 flex-col min-h-0 rounded-[24px] p-0 bg-transparent shadow-none"
-                contentClassName="h-full flex flex-1 flex-col min-h-0 space-y-0"
-              >
-                <div
-                  data-testid="scanner-sidebar-scroll-region"
-                  className="flex flex-1 flex-col min-h-0 gap-2.5 overflow-y-auto no-scrollbar"
-                >
-                  <PillTagGroup label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
-                  <PillTagGroup label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
-                  <div className="grid gap-2.5 sm:grid-cols-3 xl:grid-cols-1">
-                    <PillTagGroup label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
-                    <PillTagGroup label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
-                    <PillTagGroup label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
-                  </div>
+	          <div className="flex w-full flex-1 min-w-0 flex-col gap-3 xl:flex-row xl:items-start">
+	            <section
+	              data-testid="scanner-sidebar"
+	              className="flex w-full shrink-0 flex-col rounded-[16px] border border-white/5 bg-white/[0.015] p-3 xl:sticky xl:top-[calc(var(--shell-masthead-height)+1.25rem)] xl:w-[268px] xl:self-start 2xl:w-[288px]"
+	            >
+	              <SectionShell
+	                className="flex flex-col rounded-[24px] p-0 bg-transparent shadow-none"
+	                contentClassName="flex flex-col space-y-0"
+	              >
+	                <div
+	                  data-testid="scanner-sidebar-scroll-region"
+	                  className="flex flex-col gap-2.5"
+	                >
+	                  <PillTagGroup label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
+	                  <PillTagGroup label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
+	                  <PillTagGroup label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
+	                  <AdvancedDisclosure
+	                    testId="scanner-advanced-controls"
+	                    title={language === 'en' ? 'Advanced controls' : '高级参数'}
+	                    summary={language === 'en' ? 'Candidate limit · evaluation count · scan scope' : '候选上限 · 评估数量 · 扫描范围'}
+	                    icon="more"
+	                  >
+	                  <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-1">
+	                    <PillTagGroup label={t('scanner.universeLabel')} value={universeLimit} onChange={setUniverseLimit} options={universeOptions} />
+	                    <PillTagGroup label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
+	                  </div>
                   <PillTagGroup
                     label={language === 'en' ? 'Scan scope' : '扫描范围'}
                     value={scanScope}
@@ -2885,7 +2926,7 @@ const UserScannerPage: React.FC = () => {
                       </div>
                     </div>
                   ) : null}
-                  {scanScope === 'symbols' ? (
+	                  {scanScope === 'symbols' ? (
                     <div className="flex flex-col gap-1.5" data-testid="scanner-custom-symbols-control">
                       <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{language === 'en' ? 'Symbols' : '代码'}</span>
                       <textarea
@@ -2906,8 +2947,9 @@ const UserScannerPage: React.FC = () => {
                           {validationErrors.customSymbols}
                         </p>
                       ) : null}
-                    </div>
-                  ) : null}
+	                    </div>
+	                  ) : null}
+	                  </AdvancedDisclosure>
                   {validationErrors.run ? (
                     <p role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
                       {validationErrors.run}
@@ -2932,10 +2974,10 @@ const UserScannerPage: React.FC = () => {
               </SectionShell>
             </section>
 
-            <section
-              data-testid="scanner-results-pane"
-              className="flex flex-1 min-h-[520px] min-w-0 flex-col overflow-hidden rounded-[16px] border border-white/5 bg-white/[0.01] xl:min-h-0"
-            >
+	            <section
+	              data-testid="scanner-results-pane"
+	              className="flex min-h-[520px] flex-1 min-w-0 flex-col rounded-[16px] border border-white/5 bg-white/[0.01]"
+	            >
               <div data-testid="user-scanner-bento-hero" className="flex shrink-0 flex-col gap-2 border-b border-white/5 px-3 py-2.5">
                 <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
                   <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-white/45">
@@ -2949,10 +2991,10 @@ const UserScannerPage: React.FC = () => {
                   <div className="flex min-w-0 flex-col gap-2 sm:items-end">
                     {runDetail && primarySelectedCandidate ? (
                       <div className="grid w-full min-w-0 grid-cols-1 gap-1.5 sm:w-auto sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
-                        <div
-                          data-testid="scanner-primary-actions"
-                          className="grid min-w-0 grid-cols-1 gap-1.5 sm:col-span-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
-                        >
+	                        <div
+	                          data-testid="scanner-primary-actions"
+	                          className="grid min-w-0 grid-cols-1 gap-1.5 sm:col-span-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]"
+	                        >
                           <ActionButton
                             label={singleSelectedSymbol
                               ? (language === 'en' ? `Analyze ${singleSelectedSymbol}` : `分析 ${singleSelectedSymbol}`)
@@ -2973,8 +3015,8 @@ const UserScannerPage: React.FC = () => {
                             disabled={!normalizeCandidateSymbol(primarySelectedCandidate.symbol) || primaryBacktestItem?.status === 'running' || primaryBacktestItem?.status === 'queued'}
                             title={!normalizeCandidateSymbol(primarySelectedCandidate.symbol) ? backtestUnavailableLabel : undefined}
                           />
-                          <ActionButton
-                            label={language === 'en' ? 'Save to watchlist' : '加入观察'}
+	                          <ActionButton
+	                            label={language === 'en' ? 'Save to watchlist' : '加入观察'}
                             icon={isPrimaryTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
                             onClick={() => {
                               if (sortedCandidates.length > 1) {
@@ -2984,20 +3026,23 @@ const UserScannerPage: React.FC = () => {
                               void handleTrackCandidate(primarySelectedCandidate);
                             }}
                             disabled={watchlistAuthBlocked || isPrimaryTracked || isPrimaryTrackPending || Boolean(pendingBatchWatchlistAction)}
-                            title={getWatchlistActionTitle(isPrimaryTracked, watchlistAuthBlocked, language)}
-                          />
-                        </div>
-                        <details
-                          data-testid="scanner-more-actions"
-                          className="relative min-w-0 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/70 hover:bg-white/10"
-                        >
-                          <summary className="flex cursor-pointer list-none items-center justify-center gap-1.5 [&::-webkit-details-marker]:hidden">
-                            <span>{language === 'en' ? 'More' : '更多'}</span>
-                            <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-                          </summary>
-                          <div className="mt-2 grid min-w-[180px] gap-1.5 rounded-lg border border-white/5 bg-black/80 p-2 backdrop-blur-md sm:absolute sm:right-0 sm:z-20">
-                            <ActionButton
-                              label={language === 'en' ? 'Export CSV' : '导出 CSV'}
+	                            title={getWatchlistActionTitle(isPrimaryTracked, watchlistAuthBlocked, language)}
+	                          />
+	                          <div data-testid="scanner-more-actions" className="relative min-w-0">
+	                            <button
+	                              type="button"
+	                              aria-expanded={isMoreActionsOpen}
+	                              aria-label={language === 'en' ? 'More scanner actions' : '更多扫描操作'}
+	                              onClick={() => setIsMoreActionsOpen((current) => !current)}
+	                              className="inline-flex h-full w-full min-w-0 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white"
+	                            >
+	                              <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+	                              <span>{language === 'en' ? 'More' : '更多'}</span>
+	                            </button>
+	                            {isMoreActionsOpen ? (
+	                          <div data-testid="scanner-more-actions-panel" className="mt-2 grid min-w-[220px] gap-1.5 rounded-lg border border-white/5 bg-black/90 p-2 backdrop-blur-md">
+	                            <ActionButton
+	                              label={language === 'en' ? 'Export CSV' : '导出 CSV'}
                               icon={<Download className="h-3.5 w-3.5" />}
                               onClick={() => handleExportRows(
                                 sortedCandidates.map((candidate) => buildScannerExportRow(candidate, runDetail, language)),
@@ -3017,20 +3062,52 @@ const UserScannerPage: React.FC = () => {
                               onClick={() => void handleCopyText(sortedCandidates.slice(0, 5).map((candidate) => candidate.symbol).join(', '), 'top-5-symbols')}
                               disabled={!sortedCandidates.length}
                             />
-                            <button
-                              ref={openHistoryDrawerButton.ref}
-                              type="button"
+	                            <button
+	                              ref={openHistoryDrawerButton.ref}
+	                              type="button"
                               data-testid="user-scanner-bento-drawer-trigger"
-                              onClick={openHistoryDrawerButton.onClick}
+	                              onClick={openHistoryDrawerButton.onClick}
                               onPointerUp={openHistoryDrawerButton.onPointerUp}
                               className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-                            >
-                              <PanelRightOpen className="h-3.5 w-3.5" />
-                              <span>{language === 'en' ? 'Historical replay' : '历史扫描回放'}</span>
-                            </button>
-                          </div>
-                        </details>
-                      </div>
+	                            >
+	                              <History className="h-3.5 w-3.5" aria-hidden="true" />
+	                              <span>{language === 'en' ? 'Historical replay' : '历史扫描回放'}</span>
+	                            </button>
+	                            <ActionButton
+	                              label={language === 'en' ? 'Add official selected' : '加入全部入选'}
+	                              icon={<BookmarkPlus className="h-3.5 w-3.5" />}
+	                              onClick={() => void handleBatchTrackCandidates('official', sortedCandidates)}
+	                              disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !sortedCandidates.length}
+	                            />
+	                            <ActionButton
+	                              label={language === 'en' ? 'Add preview selected' : '加入预览入选'}
+	                              icon={<BookmarkPlus className="h-3.5 w-3.5" />}
+	                              onClick={() => void handleBatchTrackCandidates('preview', previewSelectedDiagnostics.map(diagnosticToCandidate))}
+	                              disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !previewSelectedDiagnostics.length}
+	                            />
+	                            <ActionButton
+	                              label={language === 'en' ? 'Add top 5' : '加入前 5 名'}
+	                              icon={<BookmarkPlus className="h-3.5 w-3.5" />}
+	                              onClick={() => void handleBatchTrackCandidates('top5', sortDiagnosticsForDecision(diagnosticCandidates, previewThreshold).slice(0, 5).map(diagnosticToCandidate))}
+	                              disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !diagnosticCandidates.length}
+	                            />
+	                            <ActionButton
+	                              label={language === 'en' ? 'Add filtered' : '加入当前筛选'}
+	                              icon={<BookmarkPlus className="h-3.5 w-3.5" />}
+	                              onClick={() => void handleBatchTrackCandidates('filtered', decisionSortedDiagnosticCandidates.map(diagnosticToCandidate))}
+	                              disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !decisionSortedDiagnosticCandidates.length}
+	                            />
+	                            <ActionButton
+	                              label={language === 'en' ? 'Batch backtest' : '批量回测'}
+	                              icon={<LineChart className="h-3.5 w-3.5" />}
+	                              onClick={() => handleBacktestBatch('official_selected')}
+	                              disabled={isBacktestBatchRunning || backtestCounts.official_selected === 0}
+	                            />
+	                          </div>
+	                            ) : null}
+	                          </div>
+	                        </div>
+	                      </div>
                     ) : (
                       <button
                         ref={openHistoryDrawerButton.ref}
@@ -3040,7 +3117,7 @@ const UserScannerPage: React.FC = () => {
                         onPointerUp={openHistoryDrawerButton.onPointerUp}
                         className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.05] px-2.5 py-1 text-xs text-white/80 transition-colors hover:bg-white/[0.1]"
                       >
-                        <PanelRightOpen className="h-4 w-4" />
+	                        <History className="h-4 w-4" aria-hidden="true" />
                         <span>{language === 'en' ? 'Historical replay' : '历史扫描回放'}</span>
                       </button>
                     )}
@@ -3083,11 +3160,15 @@ const UserScannerPage: React.FC = () => {
                       </span>
                     </div>
                   ) : null}
-                  {rejectionBuckets.length || hasRunDiagnosticsContent(runDetail) ? (
-                    <AdvancedDisclosure
-                      testId="scanner-diagnostics-disclosure"
-                      title={language === 'en' ? 'Diagnostic details' : '诊断详情'}
-                    >
+	                  {rejectionBuckets.length || hasRunDiagnosticsContent(runDetail) ? (
+	                    <AdvancedDisclosure
+	                      testId="scanner-diagnostics-disclosure"
+	                      title={language === 'en' ? 'Diagnostic details' : '诊断详情'}
+	                      summary={language === 'en'
+	                        ? `Evaluated ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize}, selected ${runDetail.summary?.selectedCount ?? shortlistCount}, main rejection: ${rejectionBuckets[0]?.label || 'n/a'}`
+	                        : `本次共评估 ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize}，只入选 ${runDetail.summary?.selectedCount ?? shortlistCount}，主要淘汰原因：${rejectionBuckets[0]?.label || '暂无'}`}
+	                      icon="info"
+	                    >
                       {rejectionBuckets.length ? (
                         <div
                           data-testid="scanner-rejection-aggregate"
@@ -3112,15 +3193,16 @@ const UserScannerPage: React.FC = () => {
                       <DiagnosticsPanel runDetail={runDetail} language={language} />
                     </AdvancedDisclosure>
                   ) : null}
-                  {hasCandidateDiagnostics ? (
-                    <AdvancedDisclosure
-                      testId="scanner-strategy-preview"
-                      title={language === 'en' ? 'Strategy preview' : '策略预览'}
-                    >
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-                          {language === 'en' ? 'Threshold' : '阈值'}
-                        </span>
+	                  {hasCandidateDiagnostics ? (
+	                    <div
+	                      data-testid="scanner-strategy-preview"
+	                      className="mt-2 rounded-xl border border-white/5 bg-white/[0.015] px-2.5 py-2 text-xs"
+	                    >
+	                      <div className="flex flex-wrap items-center gap-1.5">
+	                        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-white/40">
+	                          <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
+	                          {language === 'en' ? 'Threshold preview' : '阈值预览'}
+	                        </span>
                         {[40, 50, 60].map((threshold) => (
                           <button
                             key={threshold}
@@ -3148,15 +3230,18 @@ const UserScannerPage: React.FC = () => {
                             ? `Threshold ${previewThreshold} preview can select ${previewSelectedDiagnostics.length}`
                             : `阈值 ${previewThreshold} 预览可入选 ${previewSelectedDiagnostics.length} 个`}
                         </span>
-                      </div>
-                    </AdvancedDisclosure>
-                  ) : null}
-                  {hasCandidateDiagnostics ? (
-                    <AdvancedDisclosure
-                      testId="scanner-run-comparison-strip"
-                      title={language === 'en' ? 'History comparison' : '历史对比'}
-                      defaultOpen={hasMeaningfulComparison}
-                    >
+	                      </div>
+	                    </div>
+	                  ) : null}
+	                  {hasCandidateDiagnostics ? (
+	                    <AdvancedDisclosure
+	                      testId="scanner-run-comparison-strip"
+	                      title={language === 'en' ? 'History comparison' : '历史对比'}
+	                      summary={comparisonState.previousRun && comparisonState.chips.length
+	                        ? `${language === 'en' ? 'Compared with previous run' : '上次对比'}：${comparisonState.chips[0]}`
+	                        : (language === 'en' ? 'No previous comparable run' : '暂无上次扫描对比')}
+	                      icon="history"
+	                    >
                       <div className="ui-scroll-x-quiet flex max-w-full items-center gap-1.5">
                         <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/40">
                           {language === 'en' ? 'Compared with previous run' : '上次对比'}
@@ -3175,63 +3260,37 @@ const UserScannerPage: React.FC = () => {
                       </div>
                     </AdvancedDisclosure>
                   ) : null}
-                  {hasCandidateDiagnostics ? (
-                    <AdvancedDisclosure
-                      testId="scanner-batch-actions"
-                      title={language === 'en' ? 'Batch actions' : '批量操作'}
-                    >
-                      <div className="flex max-w-full flex-wrap gap-1.5">
-                        <ActionButton
-                          label={language === 'en' ? 'Add official selected' : '加入全部入选'}
-                          icon={<BookmarkPlus className="h-3.5 w-3.5" />}
-                          onClick={() => void handleBatchTrackCandidates('official', sortedCandidates)}
-                          disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !sortedCandidates.length}
-                        />
-                        <ActionButton
-                          label={language === 'en' ? 'Add preview selected' : '加入预览入选'}
-                          icon={<BookmarkPlus className="h-3.5 w-3.5" />}
-                          onClick={() => void handleBatchTrackCandidates('preview', previewSelectedDiagnostics.map(diagnosticToCandidate))}
-                          disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !previewSelectedDiagnostics.length}
-                        />
-                        <ActionButton
-                          label={language === 'en' ? 'Add top 5' : '加入前 5 名'}
-                          icon={<BookmarkPlus className="h-3.5 w-3.5" />}
-                          onClick={() => void handleBatchTrackCandidates('top5', sortDiagnosticsForDecision(diagnosticCandidates, previewThreshold).slice(0, 5).map(diagnosticToCandidate))}
-                          disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !diagnosticCandidates.length}
-                        />
-                        <ActionButton
-                          label={language === 'en' ? 'Add filtered' : '加入当前筛选'}
-                          icon={<BookmarkPlus className="h-3.5 w-3.5" />}
-                          onClick={() => void handleBatchTrackCandidates('filtered', decisionSortedDiagnosticCandidates.map(diagnosticToCandidate))}
-                          disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !decisionSortedDiagnosticCandidates.length}
-                        />
-                      </div>
-                    </AdvancedDisclosure>
-                  ) : null}
-                  {hasCandidateDiagnostics ? (
-                    <ScannerStrategySimulationPanel
-                      language={language}
-                      lookbackDays={simulationLookbackDays}
-                      forwardDays={simulationForwardDays}
-                      onLookbackDaysChange={setSimulationLookbackDays}
-                      onForwardDaysChange={setSimulationForwardDays}
-                      onRun={() => void handleStrategySimulation()}
-                      result={strategySimulation}
-                      isLoading={isStrategySimulationLoading}
-                      error={strategySimulationError}
-                      disabled={strategySimulationDisabled}
-                    />
-                  ) : null}
-                  {hasCandidateDiagnostics ? (
-                    <ScannerBacktestLab
-                      language={language}
-                      items={backtestItems}
-                      isRunning={isBacktestBatchRunning}
-                      onRunBatch={handleBacktestBatch}
-                      onCopySymbol={(symbol) => void handleCopyText(symbol, `backtest:${symbol}`)}
-                      counts={backtestCounts}
-                    />
-                  ) : null}
+	                  {hasCandidateDiagnostics ? (
+	                    <AdvancedDisclosure
+	                      testId="scanner-strategy-experiment"
+	                      title={language === 'en' ? 'Strategy experiment' : '策略实验区'}
+	                      summary={language === 'en' ? 'History simulation · batch backtest · recent results' : '历史模拟 · 批量回测 · 最近结果'}
+	                      icon="backtest"
+	                    >
+	                      <div className="grid gap-3">
+	                        <ScannerStrategySimulationPanel
+	                          language={language}
+	                          lookbackDays={simulationLookbackDays}
+	                          forwardDays={simulationForwardDays}
+	                          onLookbackDaysChange={setSimulationLookbackDays}
+	                          onForwardDaysChange={setSimulationForwardDays}
+	                          onRun={() => void handleStrategySimulation()}
+	                          result={strategySimulation}
+	                          isLoading={isStrategySimulationLoading}
+	                          error={strategySimulationError}
+	                          disabled={strategySimulationDisabled}
+	                        />
+	                        <ScannerBacktestLab
+	                          language={language}
+	                          items={backtestItems}
+	                          isRunning={isBacktestBatchRunning}
+	                          onRunBatch={handleBacktestBatch}
+	                          onCopySymbol={(symbol) => void handleCopyText(symbol, `backtest:${symbol}`)}
+	                          counts={backtestCounts}
+	                        />
+	                      </div>
+	                    </AdvancedDisclosure>
+	                  ) : null}
                 </div>
               ) : null}
 
@@ -3299,8 +3358,8 @@ const UserScannerPage: React.FC = () => {
                 </div>
               </div>
 
-              <div data-testid="scanner-candidate-scroll-region" className="min-h-0 flex-1 overflow-y-auto px-3 py-3 no-scrollbar">
-                <div className="grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
+	              <div data-testid="scanner-candidate-scroll-region" className="px-3 py-3">
+	                <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(300px,360px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
                   <div className="min-w-0">
                 {!selectedOnlyView ? (
                   decisionSortedDiagnosticCandidates.length ? (
@@ -3488,16 +3547,17 @@ const UserScannerPage: React.FC = () => {
                                 ) : null}
                               </div>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setInspectorSymbol(candidate.symbol);
-                                setExpandedSymbol(isExpanded ? null : candidate.symbol);
-                              }}
+	                            <button
+	                              type="button"
+	                              onClick={(event) => {
+	                                event.stopPropagation();
+	                                setInspectorSymbol(candidate.symbol);
+	                                setExpandedSymbol(isExpanded ? null : candidate.symbol);
+	                              }}
                               className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-white/8 bg-white/[0.04] px-2.5 py-1 text-xs text-white/65 hover:bg-white/[0.08]"
                             >
                               {language === 'en' ? 'Detail' : '详情'}
-                              {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                             </button>
                           </div>
 
@@ -3855,7 +3915,7 @@ const UserScannerPage: React.FC = () => {
                     const inspectorBacktestItem = backtestItemsBySymbol[normalizeCandidateSymbol(inspectorCandidate.symbol) || ''];
                     return (
                       <div className="hidden min-h-0 xl:block">
-                        <div className="sticky top-0 max-h-[calc(100vh-190px)] min-h-0">
+                        <div className="sticky top-0 max-h-[calc(100vh-190px)] min-h-0 overflow-y-auto pr-1 no-scrollbar">
                           <CandidateInspector
                             candidate={inspectorCandidate}
                             language={language}

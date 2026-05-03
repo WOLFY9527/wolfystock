@@ -540,9 +540,9 @@ html,
 html[data-scanner-shell='true'],
 body[data-scanner-shell='true'],
 #root[data-scanner-shell='true'] {
-  height: 100vh;
   min-height: 100vh;
-  overflow: hidden;
+  overflow-x: clip;
+  overflow-y: auto;
 }
 
 .app-boot-splash {
@@ -13738,16 +13738,18 @@ html[data-theme='spacex'] .shell-content-frame {
 }
 
 html[data-theme='spacex'] .theme-shell--scanner {
+  height: auto;
   min-height: 100vh;
-  overflow-y: clip;
+  overflow: visible;
 }
 
 html[data-theme='spacex'] .theme-shell--scanner.theme-shell--page-scroll {
-  overflow-y: visible;
+  overflow: visible;
 }
 
 html[data-theme='spacex'] .shell-content-frame--scanner {
-  min-height: 100vh;
+  min-height: auto;
+  overflow: visible;
   padding-bottom: 0;
 }
 
@@ -13758,8 +13760,8 @@ html[data-theme='spacex'] .shell-content-frame--system-control {
 }
 
 html[data-theme='spacex'] .shell-main-column--scanner {
-  min-height: calc(100vh - var(--shell-masthead-height) - 1.15rem);
-  overflow: hidden;
+  min-height: auto;
+  overflow: visible;
 }
 
 html[data-theme='spacex'] .shell-main-column--scanner.shell-main-column--page-scroll {
@@ -16436,7 +16438,28 @@ html[data-theme='spacex'] .shell-main-column {
 }
 
 html[data-theme='spacex'] .shell-main-column--scanner {
-  min-height: calc(100vh - var(--shell-masthead-height) - 1rem);
+  min-height: auto;
+}
+
+html[data-theme='spacex'] #root[data-scanner-shell='true'],
+html[data-theme='spacex'] .theme-shell.theme-shell--scanner {
+  height: auto;
+  min-height: 100vh;
+  overflow: visible;
+}
+
+html[data-theme='spacex'] .shell-content-frame.shell-content-frame--scanner,
+html[data-theme='spacex'] .shell-main-column.shell-main-column--scanner,
+html[data-theme='spacex'] .theme-shell--scanner .theme-page-transition {
+  flex: 0 0 auto;
+  height: auto;
+  min-height: auto;
+  overflow: visible;
+}
+
+html[data-theme='spacex'] .theme-shell--scanner .theme-page-transition {
+  padding-right: 0;
+  scrollbar-gutter: auto;
 }
 
 html[data-theme='spacex'] .shell-header-nav,
