@@ -392,6 +392,8 @@ class AnalysisResult:
     # ========== 运行透明度（Phase D1）==========
     runtime_execution: Optional[Dict[str, Any]] = None  # 运行期执行摘要（AI/数据源/通知/步骤）
     notification_result: Optional[Dict[str, Any]] = None  # 通知发送结果（若可用）
+    llm_structured_output: bool = False  # LLM response contained parseable JSON
+    llm_schema_validated: bool = False  # Parsed JSON passed the report schema
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -431,6 +433,8 @@ class AnalysisResult:
             'model_used': self.model_used,
             'runtime_execution': self.runtime_execution,
             'notification_result': self.notification_result,
+            'llm_structured_output': self.llm_structured_output,
+            'llm_schema_validated': self.llm_schema_validated,
         }
 
     def get_core_conclusion(self) -> str:
@@ -1812,9 +1816,11 @@ class GeminiAnalyzer:
                 data = json.loads(json_str)
 
                 # Schema validation (lenient: on failure, continue with raw dict)
+                schema_validated = True
                 try:
                     AnalysisReportSchema.model_validate(data)
                 except Exception as e:
+                    schema_validated = False
                     logger.warning(
                         "LLM report schema validation failed, continuing with raw dict: %s",
                         str(e)[:100],
@@ -1876,6 +1882,8 @@ class GeminiAnalyzer:
                     search_performed=data.get('search_performed', False),
                     data_sources=data.get('data_sources', 'Technical data' if report_language == "en" else '技术面数据'),
                     success=True,
+                    llm_structured_output=True,
+                    llm_schema_validated=schema_validated,
                 )
             else:
                 # 没有找到 JSON，尝试从纯文本中提取信息
@@ -1958,6 +1966,8 @@ class GeminiAnalyzer:
             raw_response=response_text,
             success=True,
             report_language=report_language,
+            llm_structured_output=False,
+            llm_schema_validated=False,
         )
     
     def batch_analyze(

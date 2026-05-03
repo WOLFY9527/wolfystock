@@ -115,6 +115,47 @@ const defaultHistoryReport = {
       ],
     },
   },
+  decisionTrace: {
+    engineVersion: 'analysis_decision_trace_v1',
+    mode: 'rule_scoring_with_llm_explanation',
+    endpoint: '/api/v1/analysis/analyze',
+    taskId: 'q3',
+    symbol: 'ORCL',
+    market: 'US',
+    decisionFields: {
+      action: { value: 'hold', source: 'rule', confidence: 0.78, notes: 'stabilized score path' },
+      score: { value: 78, source: 'rule', scale: '0-100' },
+      confidence: { value: '高', source: 'llm' },
+      entry: { value: '121.80 - 124.60', source: 'llm' },
+      target: { value: '133.50', source: 'llm' },
+      stop: { value: '117.40', source: 'llm' },
+    },
+    dataSources: [
+      { name: 'quote', status: 'used', provider: 'Yahoo Finance' },
+      { name: 'fundamental', status: 'fallback', provider: 'FMP' },
+      { name: 'news', status: 'missing', provider: null },
+    ],
+    signals: [
+      { name: 'MA alignment', value: 'bullish', impact: 'positive', source: 'technical_rule' },
+    ],
+    llm: {
+      used: true,
+      provider: 'openai',
+      model: 'openai/gpt-4.1-mini',
+      template: 'decision_dashboard_v2',
+      structuredOutput: true,
+      schemaValidated: true,
+      promptExposed: false,
+    },
+    conflicts: [
+      {
+        type: 'action_plan_mismatch',
+        severity: 'warning',
+        message: 'Action says sell but plan includes entry/accumulation.',
+      },
+    ],
+    limitations: ['fundamental data partial'],
+  },
 };
 
 describe('HomeSurfacePage', () => {
@@ -341,6 +382,45 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveClass('text-rose-400');
     expect(screen.getByText('133.50')).toHaveClass('text-rose-400');
     expect(screen.getByText('117.40')).toHaveClass('text-emerald-400');
+  });
+
+  it('opens the decision trace panel with fields, sources, llm metadata, and conflicts', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    const trigger = screen.getByRole('button', { name: '查看决策来源' });
+    expect(trigger).toBeInTheDocument();
+    fireEvent.click(trigger);
+
+    const panel = await screen.findByTestId('home-bento-decision-trace-panel');
+    expect(within(panel).getByText('Decision Fields')).toBeInTheDocument();
+    expect(within(panel).getByText('action')).toBeInTheDocument();
+    expect(within(panel).getAllByText('rule').length).toBeGreaterThan(0);
+    expect(within(panel).getByText('Data Sources')).toBeInTheDocument();
+    expect(within(panel).getByText('quote')).toBeInTheDocument();
+    expect(within(panel).getByText('fallback')).toBeInTheDocument();
+    expect(within(panel).getByText('LLM Usage')).toBeInTheDocument();
+    expect(within(panel).getByText('openai')).toBeInTheDocument();
+    expect(within(panel).getByText('openai/gpt-4.1-mini')).toBeInTheDocument();
+    expect(within(panel).getByText('decision_dashboard_v2')).toBeInTheDocument();
+    expect(within(panel).getByText('Action says sell but plan includes entry/accumulation.')).toBeInTheDocument();
+    expect(panel).not.toHaveTextContent('sk-');
+    expect(panel).not.toHaveTextContent('SYSTEM_PROMPT');
+  });
+
+  it('shows a safe unavailable trace state for old analysis reports without trace metadata', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      decisionTrace: undefined,
+    });
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+    fireEvent.click(screen.getByRole('button', { name: '查看决策来源' }));
+
+    expect(await screen.findByTestId('home-bento-decision-trace-panel')).toHaveTextContent('当前分析未包含决策溯源');
   });
 
   it('keeps the full bento card layout when there is no non-test history', async () => {

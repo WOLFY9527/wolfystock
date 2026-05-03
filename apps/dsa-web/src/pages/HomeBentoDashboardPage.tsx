@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Lock, Search } from 'lucide-react';
+import { FileSearch, Lock, Search } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { publicAnalysisApi } from '../api/publicAnalysis';
 import { withFallback } from '../api/withFallback';
@@ -24,7 +24,7 @@ import {
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
-import type { AnalysisReport, HistoryItem, StandardReportField, TaskProgressModule } from '../types/analysis';
+import type { AnalysisReport, DecisionTrace, HistoryItem, StandardReportField, TaskProgressModule } from '../types/analysis';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
 import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
 import { createPublicAnalysisFallbackPreview } from '../utils/publicAnalysisFallback';
@@ -60,6 +60,156 @@ type PendingHistoryDelete =
 type HomeBentoDashboardPageProps = {
   isGuest?: boolean;
 };
+
+function formatTraceValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') {
+    return '-';
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'yes' : 'no';
+  }
+  return String(value);
+}
+
+function TraceBadge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'used' | 'warning' | 'missing' }) {
+  const toneClass = tone === 'used'
+    ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100'
+    : tone === 'warning'
+      ? 'border-amber-300/20 bg-amber-300/10 text-amber-100'
+      : tone === 'missing'
+        ? 'border-rose-300/20 bg-rose-300/10 text-rose-100'
+        : 'border-white/10 bg-white/[0.04] text-white/62';
+  return (
+    <span className={`inline-flex min-w-0 max-w-full items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${toneClass}`}>
+      <span className="truncate">{children}</span>
+    </span>
+  );
+}
+
+function traceStatusTone(status?: string): 'neutral' | 'used' | 'warning' | 'missing' {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized === 'used') {
+    return 'used';
+  }
+  if (normalized === 'fallback' || normalized === 'stale') {
+    return 'warning';
+  }
+  if (normalized === 'missing') {
+    return 'missing';
+  }
+  return 'neutral';
+}
+
+function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: DashboardLocale }) {
+  if (!trace) {
+    return (
+      <div
+        className="rounded-2xl border border-white/8 bg-white/[0.025] p-4 text-sm text-white/56"
+        data-testid="home-bento-decision-trace-panel"
+      >
+        当前分析未包含决策溯源
+      </div>
+    );
+  }
+
+  const decisionFields = Object.entries(trace.decisionFields || {});
+  const dataSources = trace.dataSources || [];
+  const signals = trace.signals || [];
+  const conflicts = trace.conflicts || [];
+  const limitations = trace.limitations || [];
+  const llm = trace.llm || {};
+  const sectionTitleClass = 'text-[11px] font-semibold uppercase tracking-[0.18em] text-white/44';
+
+  return (
+    <div className="flex min-w-0 flex-col gap-4" data-testid="home-bento-decision-trace-panel">
+      <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+        <p className={sectionTitleClass}>Developer Summary</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <TraceBadge>{trace.mode || 'unknown'}</TraceBadge>
+          <TraceBadge>{trace.endpoint || '/api/v1/analysis/analyze'}</TraceBadge>
+          <TraceBadge>{trace.symbol || '-'}</TraceBadge>
+          <TraceBadge>{trace.market || 'unknown'}</TraceBadge>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+        <p className={sectionTitleClass}>Decision Fields</p>
+        <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+          {decisionFields.map(([name, field]) => (
+            <div key={name} className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <span className="truncate text-xs font-semibold text-white/72">{name}</span>
+                <TraceBadge>{field.source || 'unknown'}</TraceBadge>
+              </div>
+              <p className="mt-1 break-words text-sm text-white">{formatTraceValue(field.value)}</p>
+              {field.notes ? <p className="mt-1 line-clamp-2 text-xs text-white/42">{field.notes}</p> : null}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+        <p className={sectionTitleClass}>Data Sources</p>
+        <div className="mt-3 flex min-w-0 flex-col gap-2">
+          {dataSources.length ? dataSources.map((source, index) => (
+            <div key={`${source.name}-${index}`} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
+              <span className="truncate text-xs font-semibold text-white/72">{source.name || 'source'}</span>
+              <div className="flex min-w-0 flex-wrap justify-end gap-2">
+                <TraceBadge tone={traceStatusTone(source.status)}>{source.status || 'unknown'}</TraceBadge>
+                {source.provider ? <TraceBadge>{source.provider}</TraceBadge> : null}
+              </div>
+            </div>
+          )) : <p className="text-sm text-white/48">No source metadata available.</p>}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+        <p className={sectionTitleClass}>LLM Usage</p>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {[
+            ['provider', llm.provider],
+            ['model', llm.model],
+            ['template', llm.template],
+            ['structured output', llm.structuredOutput],
+            ['schema validated', llm.schemaValidated],
+            ['prompt exposed', llm.promptExposed],
+          ].map(([label, value]) => (
+            <div key={String(label)} className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">{label}</p>
+              <p className="mt-1 break-words text-sm text-white/76">{formatTraceValue(value)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+        <p className={sectionTitleClass}>Signal Inputs</p>
+        <div className="mt-3 flex flex-col gap-2">
+          {signals.length ? signals.slice(0, 8).map((signal, index) => (
+            <div key={`${signal.name}-${index}`} className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm">
+              <span className="truncate text-white/72">{signal.name || 'signal'}</span>
+              <span className="break-words text-white/48">{formatTraceValue(signal.value)} · {signal.source || 'unknown'}</span>
+            </div>
+          )) : <p className="text-sm text-white/48">No signal list available.</p>}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+        <p className={sectionTitleClass}>Conflicts & Limitations</p>
+        <div className="mt-3 flex flex-col gap-2 text-sm text-white/66">
+          {conflicts.length ? conflicts.map((conflict, index) => (
+            <div key={`${conflict.type}-${index}`} className="rounded-xl border border-amber-300/15 bg-amber-300/8 px-3 py-2 text-amber-50/86">
+              {conflict.message || conflict.type || 'trace warning'}
+            </div>
+          )) : <p>{locale === 'en' ? 'No obvious conflicts detected.' : '未检测到明显冲突'}</p>}
+          {limitations.map((item) => (
+            <p key={item} className="text-white/46">{item}</p>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 type DashboardField = {
   label: string;
@@ -1791,6 +1941,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [guestFallbackNotice, setGuestFallbackNotice] = useState<string | null>(null);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
   const [hydratedRouteTaskId, setHydratedRouteTaskId] = useState<string | null>(null);
+  const [isTraceDrawerOpen, setTraceDrawerOpen] = useState(false);
   const routeTaskId = searchParams.get('task_id') || searchParams.get('taskId') || null;
   const routeSymbol = normalizeTickerQuery(searchParams.get('symbol') || undefined);
   const routeSource = searchParams.get('source') || null;
@@ -1889,6 +2040,20 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
 
     return buildInPlacePlaceholderDashboard(locale, effectiveTicker);
   }, [activeTicker, completedTaskReport, guestPreview, isGuest, locale, pendingAnalysisTicker, recentHistoryItems, routeSymbol, selectedReport, selectedTicker]);
+  const activeTraceReport = useMemo<AnalysisReport | null>(() => {
+    const effectiveTicker = routeSymbol || activeTicker || selectedTicker || null;
+    if (
+      completedTaskReport
+      && effectiveTicker
+      && normalizeTickerQuery(completedTaskReport.meta.stockCode) === effectiveTicker
+    ) {
+      return completedTaskReport;
+    }
+    if (selectedReport && (!effectiveTicker || selectedTicker === effectiveTicker)) {
+      return selectedReport;
+    }
+    return completedTaskReport || selectedReport || null;
+  }, [activeTicker, completedTaskReport, routeSymbol, selectedReport, selectedTicker]);
   const copy = dashboardData;
   const standbyCopy = useMemo(() => (
     locale === 'en'
@@ -2381,6 +2546,19 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           detailLabel={readyCopy.strategy.detailLabel}
                           onOpenDetails={() => setActiveDrawer('strategy')}
                         />
+                        {!isGuest ? (
+                          <div className="mt-3 flex w-full justify-end">
+                            <button
+                              type="button"
+                              className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/56 transition-colors hover:border-white/16 hover:bg-white/[0.07] hover:text-white"
+                              onClick={() => setTraceDrawerOpen(true)}
+                              data-testid="home-bento-decision-trace-trigger"
+                            >
+                              <FileSearch className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{locale === 'en' ? 'Decision Trace' : '查看决策来源'}</span>
+                            </button>
+                          </div>
+                        ) : null}
                         <div
                           className="mt-6 grid w-full grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:flex-1"
                           data-testid="home-bento-secondary-grid"
@@ -2416,6 +2594,16 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         modules={activeDrawerPayload?.modules || []}
         testId="home-bento-drawer"
       />
+
+      <Drawer
+        isOpen={isTraceDrawerOpen}
+        onClose={() => setTraceDrawerOpen(false)}
+        title={locale === 'en' ? 'Decision Trace' : '决策来源'}
+        width="max-w-xl"
+        bodyClassName="overflow-x-hidden"
+      >
+        <DecisionTracePanel trace={activeTraceReport?.decisionTrace} locale={locale} />
+      </Drawer>
 
       <Drawer
         isOpen={isHistoryDrawerOpen}

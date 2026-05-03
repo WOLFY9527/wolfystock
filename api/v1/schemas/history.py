@@ -216,6 +216,7 @@ class AnalysisReport(BaseModel):
     summary: ReportSummary = Field(..., description="概览区")
     strategy: Optional[ReportStrategy] = Field(None, description="策略点位区")
     details: Optional[ReportDetails] = Field(None, description="详情区")
+    decision_trace: Optional[Any] = Field(None, description="决策溯源元数据（可选）")
 
 
 class MarkdownReportResponse(BaseModel):

@@ -317,6 +317,60 @@ export interface ReportDetails {
   dividendMetrics?: Record<string, unknown>;
 }
 
+export interface DecisionTraceField {
+  value?: string | number | boolean | null;
+  source?: 'llm' | 'rule' | 'frontend' | 'fallback' | 'unknown' | 'technical_rule' | 'blended' | string;
+  confidence?: number | null;
+  scale?: string | null;
+  notes?: string | null;
+}
+
+export interface DecisionTraceDataSource {
+  name?: string;
+  status?: 'used' | 'missing' | 'stale' | 'fallback' | 'unknown' | string;
+  provider?: string | null;
+  updatedAt?: string | null;
+  notes?: string | null;
+}
+
+export interface DecisionTraceSignal {
+  name?: string;
+  value?: string | number | boolean | null;
+  impact?: string | null;
+  source?: string | null;
+  weight?: number | null;
+}
+
+export interface DecisionTraceConflict {
+  type?: string;
+  severity?: 'info' | 'warning' | 'error' | string;
+  message?: string;
+}
+
+export interface DecisionTrace {
+  engineVersion?: string;
+  mode?: string;
+  endpoint?: string;
+  taskId?: string;
+  symbol?: string;
+  market?: string;
+  generatedAt?: string;
+  decisionFields?: Record<string, DecisionTraceField>;
+  dataSources?: DecisionTraceDataSource[];
+  signals?: DecisionTraceSignal[];
+  llm?: {
+    used?: boolean;
+    provider?: string | null;
+    model?: string | null;
+    template?: string | null;
+    structuredOutput?: boolean;
+    schemaValidated?: boolean;
+    promptExposed?: boolean;
+  };
+  conflicts?: DecisionTraceConflict[];
+  limitations?: string[];
+}
+
 export interface RuntimeExecutionStep {
   key: string;
   status: string;
@@ -398,6 +452,7 @@ export interface AnalysisReport {
   summary: ReportSummary;
   strategy?: ReportStrategy;
   details?: ReportDetails;
+  decisionTrace?: DecisionTrace;
   contractMeta?: FrontendReportContractMeta;
 }
 

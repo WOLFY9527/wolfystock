@@ -415,6 +415,131 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(analysis_result["full_reasoning"], "等待回踩确认后再加仓。")
         self.assertEqual(payload["details"]["raw_ai_response"], {"provider": "llm", "content": "raw ai response"})
 
+    def test_build_report_payload_includes_decision_trace_metadata(self) -> None:
+        service = AnalysisService()
+        result = SimpleNamespace(
+            code="WULF",
+            name="WULF",
+            query_id="q-decision-trace",
+            current_price=21.06,
+            change_pct=-1.2,
+            model_used="openai/gpt-4.1-mini",
+            analysis_summary="短线承压。",
+            operation_advice="卖出",
+            trend_prediction="看空",
+            sentiment_score=38,
+            news_summary="news",
+            technical_analysis="price below MA20",
+            fundamental_analysis="fundamental",
+            risk_warning="risk",
+            report_language="zh",
+            decision_type="sell",
+            confidence_level="高",
+            llm_structured_output=True,
+            llm_schema_validated=True,
+            dashboard={
+                "battle_plan": {
+                    "sniper_points": {
+                        "ideal_buy": "21.06",
+                        "stop_loss": "19.50",
+                        "take_profit": "22.60-22.62",
+                    },
+                    "position_strategy": {"entry_plan": "分批建仓策略"},
+                },
+                "decision_context": {
+                    "score_breakdown": [
+                        {"label": "技术分", "score": 32, "note": "价格位于 MA20 下方"},
+                    ],
+                },
+                "structured_analysis": {
+                    "data_quality": {"missing_fields": ["fundamentals.revenue"]},
+                    "technicals": {"ma20": {"value": 22.1, "source": "technical_rule"}},
+                    "fundamentals": {"status": "partial"},
+                    "sentiment_analysis": {"status": "ok"},
+                    "realtime_context": {"source": "yfinance", "market": "US"},
+                },
+            },
+            runtime_execution={
+                "ai": {"provider": "openai", "model": "openai/gpt-4.1-mini"},
+                "data": {
+                    "market": {"source": "Yahoo Finance", "status": "ok"},
+                    "fundamentals": {"source": "fmp", "status": "partial", "fallback_occurred": True},
+                    "news": {"source": "brave", "status": "ok"},
+                },
+                "steps": [],
+            },
+            notification_result={"status": "ok"},
+            get_sniper_points=lambda: {
+                "ideal_buy": "21.06",
+                "stop_loss": "19.50",
+                "take_profit": "22.60-22.62",
+            },
+        )
+
+        payload = service._build_report_payload(
+            result,
+            query_id="q-decision-trace",
+            report_type="detailed",
+        )
+
+        trace = payload["decision_trace"]
+        self.assertEqual(trace["engine_version"], "analysis_decision_trace_v1")
+        self.assertEqual(trace["endpoint"], "/api/v1/analysis/analyze")
+        self.assertEqual(trace["decision_fields"]["action"]["source"], "rule")
+        self.assertEqual(trace["decision_fields"]["score"]["source"], "rule")
+        self.assertEqual(trace["decision_fields"]["confidence"]["source"], "llm")
+        self.assertEqual(trace["decision_fields"]["entry"]["source"], "llm")
+        self.assertEqual(trace["llm"]["provider"], "openai")
+        self.assertEqual(trace["llm"]["template"], "decision_dashboard_v2")
+        self.assertTrue(trace["llm"]["structured_output"])
+        self.assertTrue(trace["llm"]["schema_validated"])
+        self.assertFalse(trace["llm"]["prompt_exposed"])
+        self.assertIn("data_sources", trace)
+        self.assertNotIn("sk-", json.dumps(trace))
+        self.assertNotIn("SYSTEM_PROMPT", json.dumps(trace))
+
+    def test_decision_trace_flags_action_plan_and_quality_conflicts(self) -> None:
+        service = AnalysisService()
+        trace = service._build_decision_trace(
+            SimpleNamespace(
+                code="WULF",
+                query_id="q-conflict",
+                model_used="openai/gpt-4.1-mini",
+                operation_advice="卖出",
+                sentiment_score=92,
+                confidence_level="高",
+                decision_type="sell",
+                report_language="zh",
+                dashboard={
+                    "battle_plan": {
+                        "sniper_points": {"ideal_buy": "21.06", "stop_loss": "19.50"},
+                        "position_strategy": {"entry_plan": "分批建仓策略，继续加仓"},
+                    },
+                    "decision_context": {"score_breakdown": [{"label": "技术分", "score": 30}]},
+                    "structured_analysis": {
+                        "data_quality": {
+                            "missing_fields": [
+                                "fundamentals.revenue",
+                                "fundamentals.netIncome",
+                                "news.latest",
+                                "technicals.ma20",
+                            ]
+                        },
+                        "fundamentals": {"status": "missing"},
+                    },
+                    "intelligence": {"risk_alerts": ["基本面数据缺失"]},
+                },
+                runtime_execution={"ai": {"provider": "openai", "model": "openai/gpt-4.1-mini"}, "data": {}},
+                get_sniper_points=lambda: {"ideal_buy": "21.06", "stop_loss": "19.50"},
+            ),
+            query_id="q-conflict",
+            report_type="detailed",
+        )
+
+        conflict_types = {item["type"] for item in trace["conflicts"]}
+        self.assertIn("action_plan_mismatch", conflict_types)
+        self.assertIn("low_data_quality_high_confidence", conflict_types)
+
     def test_build_analysis_report_extracts_fundamental_fields_from_snapshot(self) -> None:
         if _build_analysis_report is None:
             self.skipTest("analysis endpoint helpers unavailable in this environment")

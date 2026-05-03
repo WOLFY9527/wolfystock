@@ -942,6 +942,11 @@ def get_analysis_status(
                     stop_loss=str(getattr(record, 'stop_loss', None)) if getattr(record, 'stop_loss', None) is not None else None,
                     take_profit=str(getattr(record, 'take_profit', None)) if getattr(record, 'take_profit', None) is not None else None,
                 ),
+                decision_trace=(
+                    ((raw_result or {}).get("report") or {}).get("decision_trace")
+                    if isinstance((raw_result or {}).get("report"), dict)
+                    else (raw_result or {}).get("decision_trace")
+                ) if isinstance(raw_result, dict) else None,
             ).model_dump()
             return TaskStatus(
                 task_id=task_id,
@@ -1100,5 +1105,6 @@ def _build_analysis_report(
         meta=meta,
         summary=summary,
         strategy=strategy,
-        details=details
+        details=details,
+        decision_trace=report_data.get("decision_trace"),
     )
