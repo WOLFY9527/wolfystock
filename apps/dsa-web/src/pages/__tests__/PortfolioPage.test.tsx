@@ -408,8 +408,16 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('button', { name: '历史记录 ↗' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: translate('zh', 'portfolio.costFutuDiluted') })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: translate('zh', 'portfolio.costThsPnl') })).toBeInTheDocument();
-    expect(screen.getByLabelText('ACCOUNT')).toHaveClass('pr-10', 'ui-control-value');
-    expect(screen.getByLabelText('COST METHOD')).toHaveClass('pr-10', 'ui-control-value');
+    const accountSelect = screen.getByLabelText('ACCOUNT') as HTMLSelectElement;
+    const costMethodSelect = screen.getByLabelText('COST METHOD') as HTMLSelectElement;
+    expect(accountSelect).toHaveClass('select-surface', 'appearance-none', 'pr-10', 'ui-control-value');
+    expect(accountSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
+    expect(accountSelect.closest('.select-field__control')?.querySelector('.select-field__icon')).toHaveClass('pointer-events-none', 'absolute');
+    expect(within(accountSelect).getByRole('option', { name: translate('zh', 'portfolio.allAccounts') })).toBeInTheDocument();
+    expect(costMethodSelect).toHaveClass('select-surface', 'appearance-none', 'pr-10', 'ui-control-value');
+    expect(costMethodSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
+    expect(costMethodSelect.closest('.select-field__control')?.querySelector('.select-field__icon')).toHaveClass('pointer-events-none', 'absolute');
+    expect(within(costMethodSelect).getByRole('option', { name: translate('zh', 'portfolio.costFifo') })).toBeInTheDocument();
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
     const tradeStationSection = screen.getByRole('heading', { name: 'Trade Station' }).closest('section');
     expect(Boolean(totalAssetsCard.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);

@@ -1,4 +1,6 @@
 import { render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { Select } from '../Select';
 
@@ -24,12 +26,20 @@ describe('Select', () => {
     );
 
     const select = screen.getByLabelText('Market');
-    expect(select).toHaveClass('ui-control-value', 'w-full', 'min-w-0', 'max-w-full', 'pr-10');
+    expect(select).toHaveClass('select-surface', 'ui-control-value', 'w-full', 'min-w-0', 'max-w-full', 'pr-10', 'appearance-none');
 
     const control = container.querySelector('.select-field__control');
     expect(control).toHaveClass('ui-control-shell', 'min-w-0', 'w-full', 'max-w-full');
 
     const icon = container.querySelector('.select-field__icon');
-    expect(icon).toHaveClass('ui-control-icon');
+    expect(icon).toHaveClass('ui-control-icon', 'pointer-events-none');
+  });
+
+  it('keeps the SpaceX theme select override from erasing chevron padding', () => {
+    const css = readFileSync(resolve(__dirname, '../../../index.css'), 'utf8');
+
+    expect(css).toContain("html[data-theme='spacex'] select.select-surface");
+    expect(css).toContain('padding-right: 2.5rem;');
+    expect(css).toContain('letter-spacing: 0;');
   });
 });

@@ -1035,7 +1035,11 @@ describe('UserScannerPage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'US' }));
     fireEvent.click(screen.getByRole('button', { name: /主题标的池|Theme universe/i }));
-    expect(screen.getByTestId('scanner-theme-select')).toHaveTextContent(/AI 半导体|AI semiconductors/);
+    const themeSelect = screen.getByTestId('scanner-theme-select');
+    expect(themeSelect).toHaveTextContent(/AI 半导体|AI semiconductors/);
+    expect(themeSelect).toHaveClass('select-surface', 'appearance-none', 'pr-10', 'ui-control-value');
+    expect(themeSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
+    expect(themeSelect.closest('.select-field__control')?.querySelector('.select-field__icon')).toHaveClass('pointer-events-none', 'absolute');
     fireEvent.change(screen.getByTestId('scanner-theme-select'), { target: { value: 'crypto_miners' } });
     fireEvent.click(screen.getByRole('button', { name: /运行扫描|Run scanner/i }));
 

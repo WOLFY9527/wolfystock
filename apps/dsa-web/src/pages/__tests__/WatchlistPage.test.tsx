@@ -175,8 +175,14 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('watchlist-row-TSM')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-600519')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-filter-grid')).toHaveClass('min-w-0', 'grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-5');
-    expect(screen.getByLabelText('市场')).toHaveClass('pr-10', 'ui-control-value');
-    expect(screen.getByLabelText('主题 / 候选范围')).toHaveClass('pr-10', 'ui-control-value');
+    const marketSelect = screen.getByLabelText('市场');
+    const contextSelect = screen.getByLabelText('主题 / 候选范围');
+    expect(marketSelect).toHaveClass('select-surface', 'appearance-none', 'pr-10', 'ui-control-value');
+    expect(marketSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
+    expect(marketSelect.closest('.select-field__control')?.querySelector('.select-field__icon')).toHaveClass('pointer-events-none', 'absolute');
+    expect(contextSelect).toHaveClass('select-surface', 'appearance-none', 'pr-10', 'ui-control-value');
+    expect(contextSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
+    expect(contextSelect.closest('.select-field__control')?.querySelector('.select-field__icon')).toHaveClass('pointer-events-none', 'absolute');
     expect(listWatchlistItems).toHaveBeenCalledTimes(1);
   });
 

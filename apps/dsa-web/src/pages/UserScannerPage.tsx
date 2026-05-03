@@ -2201,34 +2201,37 @@ const UserScannerPage: React.FC = () => {
                   {scanScope === 'theme' ? (
                     <div className="flex min-w-0 flex-col gap-1.5" data-testid="scanner-theme-control">
                       <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{language === 'en' ? 'Theme' : '主题'}</span>
-                      <select
-                        data-testid="scanner-theme-select"
-                        value={themeId}
-                        onChange={(event) => setThemeId(event.target.value)}
-                        aria-invalid={Boolean(validationErrors.theme)}
-                        aria-describedby={validationErrors.theme ? 'scanner-theme-error' : undefined}
-                        className="ui-control-value w-full min-w-0 max-w-full rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 pr-10 text-xs text-white outline-none focus:border-indigo-400/50"
-                      >
-                        <option value="">{language === 'en' ? 'Select a theme' : '选择主题'}</option>
-                        {configuredMarketThemes.length ? (
-                          <optgroup label={language === 'en' ? 'Ready seed lists' : '可用 seed 主题'}>
-                            {configuredMarketThemes.map((theme) => (
-                              <option key={theme.id} value={theme.id}>
-                                {getThemeLabel(theme, language)} · {theme.symbols.length}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ) : null}
-                        {unconfiguredMarketThemes.length ? (
-                          <optgroup label={language === 'en' ? 'Unavailable / unconfigured' : '未配置'}>
-                            {unconfiguredMarketThemes.map((theme) => (
-                              <option key={theme.id} value={theme.id} disabled>
-                                {getThemeLabel(theme, language)} · {language === 'en' ? 'not configured' : '未配置'}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ) : null}
-                      </select>
+                      <div className="select-field__control ui-control-shell relative flex min-w-0 w-full max-w-full items-center">
+                        <select
+                          data-testid="scanner-theme-select"
+                          value={themeId}
+                          onChange={(event) => setThemeId(event.target.value)}
+                          aria-invalid={Boolean(validationErrors.theme)}
+                          aria-describedby={validationErrors.theme ? 'scanner-theme-error' : undefined}
+                          className="select-surface ui-control-value w-full min-w-0 max-w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 pr-10 text-xs text-white outline-none focus:border-indigo-400/50"
+                        >
+                          <option value="">{language === 'en' ? 'Select a theme' : '选择主题'}</option>
+                          {configuredMarketThemes.length ? (
+                            <optgroup label={language === 'en' ? 'Ready seed lists' : '可用 seed 主题'}>
+                              {configuredMarketThemes.map((theme) => (
+                                <option key={theme.id} value={theme.id}>
+                                  {getThemeLabel(theme, language)} · {theme.symbols.length}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ) : null}
+                          {unconfiguredMarketThemes.length ? (
+                            <optgroup label={language === 'en' ? 'Unavailable / unconfigured' : '未配置'}>
+                              {unconfiguredMarketThemes.map((theme) => (
+                                <option key={theme.id} value={theme.id} disabled>
+                                  {getThemeLabel(theme, language)} · {language === 'en' ? 'not configured' : '未配置'}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ) : null}
+                        </select>
+                        <ChevronDown className="select-field__icon ui-control-icon pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" aria-hidden="true" />
+                      </div>
                       {selectedTheme && !selectedTheme.symbols.length ? (
                         <p className="text-[11px] leading-relaxed text-amber-100/72">
                           {language === 'en' ? 'This theme is not configured yet.' : '该主题尚未配置成分股。'}
