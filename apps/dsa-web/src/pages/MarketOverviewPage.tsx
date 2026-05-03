@@ -53,44 +53,52 @@ type CardKey = Exclude<PanelKey, 'temperature' | 'briefing'>;
 type MarketOverviewTab = 'all' | 'us' | 'cn' | 'global' | 'crypto';
 type CardCoverageKind = 'real' | 'mixed' | 'fallback';
 type CryptoRealtimeStatus = 'live' | 'reconnecting' | 'snapshot';
-type WorkbenchRail = 'hero' | 'secondary' | 'deep' | 'fallback';
+type MarketOverviewRowTier = 'hero' | 'secondary' | 'deep';
+type MarketOverviewRowColumns = 1 | 2 | 3;
+type MarketOverviewLayoutRow = {
+  id: string;
+  tier: MarketOverviewRowTier;
+  columns: MarketOverviewRowColumns;
+  cards: CardKey[];
+  allowSingleFullWidth?: boolean;
+};
+type WorkbenchRail = MarketOverviewRowTier;
 
-const CATEGORY_LAYOUT: Record<MarketOverviewTab, {
-  primary: CardKey[];
-  secondary: CardKey[];
-  fallback: CardKey[];
-}> = {
-  all: {
-    primary: ['indices', 'volatility'],
-    secondary: ['fundsFlow', 'sentiment', 'rates', 'fxCommodities', 'crypto', 'cnIndices'],
-    fallback: [],
-  },
-  us: {
-    primary: ['indices'],
-    secondary: ['volatility', 'fundsFlow'],
-    fallback: ['rates', 'macro', 'sentiment', 'futures'],
-  },
-  cn: {
-    primary: ['cnIndices'],
-    secondary: ['cnBreadth', 'cnFlows'],
-    fallback: ['sectorRotation', 'cnShortSentiment', 'fxCommodities', 'sentiment'],
-  },
-  global: {
-    primary: ['rates', 'fxCommodities', 'macro'],
-    secondary: ['indices', 'volatility'],
-    fallback: ['sentiment', 'futures'],
-  },
-  crypto: {
-    primary: ['crypto'],
-    secondary: ['volatility', 'macro'],
-    fallback: ['fxCommodities', 'sentiment'],
-  },
+const CATEGORY_LAYOUT: Record<MarketOverviewTab, MarketOverviewLayoutRow[]> = {
+  all: [
+    { id: 'all-core-trend', tier: 'hero', columns: 1, cards: ['indices'], allowSingleFullWidth: true },
+    { id: 'all-risk-flow', tier: 'secondary', columns: 3, cards: ['volatility', 'fundsFlow', 'sentiment'] },
+    { id: 'all-macro-cross', tier: 'secondary', columns: 2, cards: ['rates', 'fxCommodities'] },
+    { id: 'all-crypto-cn', tier: 'secondary', columns: 2, cards: ['crypto', 'cnIndices'] },
+  ],
+  us: [
+    { id: 'us-core-trend', tier: 'hero', columns: 1, cards: ['indices'], allowSingleFullWidth: true },
+    { id: 'us-risk-flow', tier: 'secondary', columns: 2, cards: ['volatility', 'fundsFlow'] },
+    { id: 'us-rates-sentiment', tier: 'secondary', columns: 2, cards: ['rates', 'sentiment'] },
+    { id: 'us-macro-futures', tier: 'deep', columns: 2, cards: ['macro', 'futures'] },
+  ],
+  cn: [
+    { id: 'cn-core-trend', tier: 'hero', columns: 1, cards: ['cnIndices'], allowSingleFullWidth: true },
+    { id: 'cn-breadth-flow', tier: 'secondary', columns: 2, cards: ['cnBreadth', 'cnFlows'] },
+    { id: 'cn-theme-sentiment', tier: 'secondary', columns: 2, cards: ['sectorRotation', 'cnShortSentiment'] },
+    { id: 'cn-cross-sentiment', tier: 'deep', columns: 2, cards: ['fxCommodities', 'sentiment'] },
+  ],
+  global: [
+    { id: 'global-rates-fx', tier: 'hero', columns: 2, cards: ['rates', 'fxCommodities'] },
+    { id: 'global-risk-indices', tier: 'secondary', columns: 2, cards: ['volatility', 'indices'] },
+    { id: 'global-macro-sentiment', tier: 'secondary', columns: 2, cards: ['macro', 'sentiment'] },
+  ],
+  crypto: [
+    { id: 'crypto-core-list', tier: 'hero', columns: 1, cards: ['crypto'], allowSingleFullWidth: true },
+    { id: 'crypto-risk-rates', tier: 'secondary', columns: 2, cards: ['volatility', 'rates'] },
+    { id: 'crypto-macro-sentiment', tier: 'secondary', columns: 2, cards: ['fxCommodities', 'sentiment'] },
+  ],
 };
 
 const CATEGORY_CARDS: Record<MarketOverviewTab, CardKey[]> = Object.fromEntries(
-  Object.entries(CATEGORY_LAYOUT).map(([tab, layout]) => [
+  Object.entries(CATEGORY_LAYOUT).map(([tab, rows]) => [
     tab,
-    [...layout.primary, ...layout.secondary, ...layout.fallback],
+    rows.flatMap((row) => row.cards),
   ]),
 ) as Record<MarketOverviewTab, CardKey[]>;
 
@@ -871,6 +879,58 @@ const MarketOverviewStatusStrip: React.FC<{
   </section>
 );
 
+const MarketOverviewRow: React.FC<{
+  row: MarketOverviewLayoutRow;
+  children: React.ReactNode;
+}> = ({ row, children }) => (
+  <section
+    data-testid="market-overview-row"
+    data-row-id={row.id}
+    data-row-tier={row.tier}
+    data-row-columns={row.columns}
+    className={cn(
+      'grid w-full min-w-0 grid-cols-1 items-stretch gap-4',
+      row.columns === 2 ? 'md:grid-cols-2 md:auto-rows-fr' : '',
+      row.columns === 3 ? 'md:grid-cols-3 md:auto-rows-fr' : '',
+    )}
+  >
+    {children}
+  </section>
+);
+
+const MarketOverviewFullWidthRow: React.FC<{
+  row: MarketOverviewLayoutRow;
+  children: React.ReactNode;
+}> = ({ row, children }) => (
+  <MarketOverviewRow row={{ ...row, columns: 1 }}>
+    {children}
+  </MarketOverviewRow>
+);
+
+const MarketOverviewTwoColumnRow: React.FC<{
+  row: MarketOverviewLayoutRow;
+  children: React.ReactNode;
+}> = ({ row, children }) => (
+  <MarketOverviewRow row={{ ...row, columns: 2 }}>
+    {children}
+  </MarketOverviewRow>
+);
+
+const MarketOverviewThreeColumnRow: React.FC<{
+  row: MarketOverviewLayoutRow;
+  children: React.ReactNode;
+}> = ({ row, children }) => (
+  <MarketOverviewRow row={{ ...row, columns: 3 }}>
+    {children}
+  </MarketOverviewRow>
+);
+
+const MarketOverviewMainStack: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div data-testid="market-overview-main-stack" className="flex min-w-0 flex-col gap-4">
+    {children}
+  </div>
+);
+
 const MarketStateCompactRailCard: React.FC<{ data: MarketTemperatureResponse }> = ({ data }) => {
   const score = data.scores.overall;
   const reliable = isTemperatureReliable(data);
@@ -1424,7 +1484,7 @@ const MarketOverviewPage: React.FC = () => {
       />
     ),
     crypto: (
-      <div className="flex h-full flex-col gap-2">
+      <div className="flex h-full min-h-0 flex-col gap-2">
         <div className="flex items-center justify-end">
           <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold uppercase text-white/55">
             {cryptoRealtimeStatus === 'live' ? 'Live' : cryptoRealtimeStatus === 'reconnecting' ? 'Reconnecting' : 'Snapshot'}
@@ -1435,19 +1495,21 @@ const MarketOverviewPage: React.FC = () => {
             实时连接断开，显示最近快照
           </div>
         ) : null}
-        <MarketOverviewCard
-          title={t('marketOverviewPage.cards.crypto.title')}
-          eyebrow={t('marketOverviewPage.cards.crypto.eyebrow')}
-          description={t('marketOverviewPage.cards.crypto.description')}
-          sourceLabel={t('marketOverviewPage.cards.crypto.source')}
-          panel={panels.crypto}
-          loading={loading && !panels.crypto}
-          refreshing={refreshingPanel === 'crypto'}
-          variant="denseQuote"
-          onRefresh={() => {
-            void refreshPanel('crypto', marketApi.getCrypto);
-          }}
-        />
+        <div className="min-h-0 flex-1">
+          <MarketOverviewCard
+            title={t('marketOverviewPage.cards.crypto.title')}
+            eyebrow={t('marketOverviewPage.cards.crypto.eyebrow')}
+            description={t('marketOverviewPage.cards.crypto.description')}
+            sourceLabel={t('marketOverviewPage.cards.crypto.source')}
+            panel={panels.crypto}
+            loading={loading && !panels.crypto}
+            refreshing={refreshingPanel === 'crypto'}
+            variant="denseQuote"
+            onRefresh={() => {
+              void refreshPanel('crypto', marketApi.getCrypto);
+            }}
+          />
+        </div>
       </div>
     ),
     sentiment: (
@@ -1582,44 +1644,58 @@ const MarketOverviewPage: React.FC = () => {
     temperature: panels.temperature,
     briefing: panels.briefing,
   }), [activeCategoryLabel, coverageSummary, dataQuality, heroAnchors, language, panels.briefing, panels.temperature]);
-  const activeLayout = CATEGORY_LAYOUT[activeCategory];
-  const heroOrder = activeLayout.primary;
-  const secondaryOrder = activeLayout.secondary;
-  const deepPanelOrder = activeLayout.fallback;
+  const activeRows = CATEGORY_LAYOUT[activeCategory];
   const fallbackOnlyOrder = CATEGORY_CARDS[activeCategory].filter((cardKey) => getCardCoverageKind(panels, cardKey) === 'fallback');
+
+  const hasRenderableCard = (cardKey: CardKey): boolean => {
+    if (loading) {
+      return true;
+    }
+    if (cardKey === 'futures') {
+      return panels.futures.items.length > 0 || Boolean(panels.futures.warning);
+    }
+    if (cardKey === 'cnShortSentiment') {
+      return Boolean(panels.cnShortSentiment.summary || panels.cnShortSentiment.warning);
+    }
+    const panel = panels[cardKey];
+    return Boolean(panel?.errorMessage || (panel?.items?.length || 0) > 0);
+  };
 
   const renderCard = (cardKey: CardKey, rank: number, rail: WorkbenchRail = 'hero') => {
     const layoutMeta = CARD_LAYOUT_META[cardKey];
-    const shouldSpanPrimaryRail = rail === 'hero' && layoutMeta.size === 'large';
     return (
     <div
       key={cardKey}
       data-testid={`market-overview-card-${cardKey}`}
       data-market-card-rank={rank}
+      data-market-card-row={rail}
       data-market-card-size={layoutMeta.size}
       data-market-card-density={DENSE_QUOTE_CARDS.has(cardKey) ? 'dense-quote' : 'standard'}
-      className={cn(
-        'min-w-0 w-full overflow-hidden',
-        shouldSpanPrimaryRail ? 'lg:col-span-2' : '',
-      )}
+      className="h-full min-w-0 w-full overflow-hidden"
     >
       {cardNodes[cardKey]}
     </div>
     );
   };
 
-  const renderCardGrid = (rankOrder: CardKey[], rail: WorkbenchRail) => (
-    <div className={cn(
-      'grid w-full grid-cols-1 gap-4',
-      rail === 'hero' ? 'lg:grid-cols-2' : '',
-      rail === 'secondary' ? 'lg:grid-cols-2' : '',
-      rail === 'deep' && rankOrder.length % 3 === 0 ? 'lg:grid-cols-3' : '',
-      rail === 'deep' && rankOrder.length % 3 !== 0 ? 'lg:grid-cols-2' : '',
-      rail === 'fallback' ? 'grid-cols-1' : '',
-    )}>
-      {rankOrder.map((cardKey, index) => renderCard(cardKey, index, rail))}
-    </div>
-  );
+  const renderPlannedRow = (row: MarketOverviewLayoutRow, rowIndex: number) => {
+    const cards = row.cards.filter(hasRenderableCard);
+    if (cards.length === 0) {
+      return null;
+    }
+    const plannedRow = cards.length === 1 && row.allowSingleFullWidth
+      ? { ...row, columns: 1 as const }
+      : { ...row, columns: Math.min(row.columns, cards.length) as MarketOverviewRowColumns };
+    const children = cards.map((cardKey, cardIndex) => renderCard(cardKey, rowIndex * 10 + cardIndex, row.tier));
+
+    if (plannedRow.columns === 1) {
+      return <MarketOverviewFullWidthRow key={row.id} row={plannedRow}>{children}</MarketOverviewFullWidthRow>;
+    }
+    if (plannedRow.columns === 3) {
+      return <MarketOverviewThreeColumnRow key={row.id} row={plannedRow}>{children}</MarketOverviewThreeColumnRow>;
+    }
+    return <MarketOverviewTwoColumnRow key={row.id} row={plannedRow}>{children}</MarketOverviewTwoColumnRow>;
+  };
 
   const handleExportSummary = useCallback(async () => {
     await navigator.clipboard.writeText(exportSummaryText);
@@ -1633,31 +1709,34 @@ const MarketOverviewPage: React.FC = () => {
         data-mobile-order="main"
         className="flex min-w-0 flex-col gap-4 xl:col-span-9"
       >
-        <section data-testid="market-overview-hero-lane" data-card-tier="hero" className="min-w-0">
-          {renderCardGrid(heroOrder, 'hero')}
-        </section>
-        <section data-testid="market-overview-secondary-grid" data-card-tier="secondary" className="min-w-0">
-          {renderCardGrid(secondaryOrder, 'secondary')}
-        </section>
+        <MarketOverviewMainStack>
+          <section data-testid="market-overview-hero-lane" data-card-tier="hero" className="min-w-0">
+            {activeRows.filter((row) => row.tier === 'hero').map(renderPlannedRow)}
+          </section>
+          <section data-testid="market-overview-secondary-grid" data-card-tier="secondary" className="flex min-w-0 flex-col gap-4">
+            {activeRows.filter((row) => row.tier === 'secondary').map(renderPlannedRow)}
+          </section>
+          {activeRows.some((row) => row.tier === 'deep') ? (
+            <section
+              data-testid="market-overview-deep-panels"
+              data-panel-grouping="deterministic-rows"
+              data-card-tier="deep"
+              className="flex min-w-0 flex-col gap-4"
+            >
+              {activeRows.filter((row) => row.tier === 'deep').map(renderPlannedRow)}
+            </section>
+          ) : null}
+        </MarketOverviewMainStack>
       </section>
       <aside data-testid="market-overview-side-rail" data-mobile-order="rail" className="flex min-w-0 flex-col gap-3 xl:col-span-3">
-        <CategoryCoverageSummary label={activeCategoryLabel} summary={coverageSummary} />
-        <MarketStateCompactRailCard data={panels.temperature} />
-        <DataQualityCompactRailCard summary={dataQuality} />
-        <BriefingCompactRailCard data={panels.briefing} />
-        <PendingSourcesCompactRailCard fallbackCount={fallbackOnlyOrder.length} />
+        <div data-testid="market-overview-rail" className="flex min-w-0 flex-col gap-3">
+          <CategoryCoverageSummary label={activeCategoryLabel} summary={coverageSummary} />
+          <MarketStateCompactRailCard data={panels.temperature} />
+          <DataQualityCompactRailCard summary={dataQuality} />
+          <BriefingCompactRailCard data={panels.briefing} />
+          <PendingSourcesCompactRailCard fallbackCount={fallbackOnlyOrder.length} />
+        </div>
       </aside>
-      {deepPanelOrder.length > 0 ? (
-        <section
-          data-testid="market-overview-deep-panels"
-          data-panel-grouping="balanced"
-          data-card-tier="deep"
-          data-mobile-order="deep"
-          className="min-w-0 xl:col-span-12"
-        >
-          {renderCardGrid(deepPanelOrder, 'deep')}
-        </section>
-      ) : null}
     </main>
   );
 

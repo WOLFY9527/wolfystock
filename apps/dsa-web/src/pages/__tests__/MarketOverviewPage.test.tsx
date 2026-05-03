@@ -479,18 +479,19 @@ function expandPendingDataSourceSection() {
   }
 }
 
-function getPrimaryCardOrder(): string[] {
-  return Array.from(screen.getByTestId('market-overview-primary-rail').querySelectorAll('[data-testid^="market-overview-card-"]'))
+function getRowCardOrder(rowId: string): string[] {
+  const row = screen.getByTestId('market-overview-main-stack').querySelector(`[data-row-id="${rowId}"]`);
+  return Array.from(row?.querySelectorAll('[data-testid^="market-overview-card-"]') || [])
     .map((node) => node.getAttribute('data-testid')?.replace('market-overview-card-', '') || '');
+}
+
+function getRowIds(): string[] {
+  return Array.from(screen.getByTestId('market-overview-main-stack').querySelectorAll('[data-testid="market-overview-row"]'))
+    .map((node) => node.getAttribute('data-row-id') || '');
 }
 
 function getSideCardOrder(): string[] {
   return Array.from(screen.getByTestId('market-overview-side-rail').querySelectorAll('[data-testid^="market-overview-card-"]'))
-    .map((node) => node.getAttribute('data-testid')?.replace('market-overview-card-', '') || '');
-}
-
-function getDeepCardOrder(): string[] {
-  return Array.from(screen.getByTestId('market-overview-deep-panels').querySelectorAll('[data-testid^="market-overview-card-"]'))
     .map((node) => node.getAttribute('data-testid')?.replace('market-overview-card-', '') || '');
 }
 
@@ -786,31 +787,32 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-decision-strip')).toHaveAttribute('data-mobile-order', 'decision');
   });
 
-  it('renders each tab with a decision strip, hero lane, secondary grid, and tab-specific deep group', async () => {
+  it('renders each tab with deterministic row groups and the shared decision layer', async () => {
     render(<MarketOverviewPage />);
 
-    const expectations: Array<[string, string[]]> = [
-      ['全部', ['market-overview-card-indices', 'market-overview-card-volatility']],
-      ['美股', ['market-overview-card-volatility', 'market-overview-card-fundsFlow', 'market-overview-card-indices']],
-      ['A股/港股', ['market-overview-card-cnIndices', 'market-overview-card-cnBreadth', 'market-overview-card-cnFlows']],
-      ['全球宏观', ['market-overview-card-rates', 'market-overview-card-fxCommodities', 'market-overview-card-macro']],
-      ['加密货币', ['market-overview-card-crypto', 'market-overview-card-volatility', 'market-overview-card-macro']],
+    const expectations: Array<[string, string[], string[]]> = [
+      ['全部', ['all-core-trend', 'all-risk-flow', 'all-macro-cross', 'all-crypto-cn'], ['market-overview-card-indices', 'market-overview-card-sentiment']],
+      ['美股', ['us-core-trend', 'us-risk-flow', 'us-rates-sentiment', 'us-macro-futures'], ['market-overview-card-indices', 'market-overview-card-futures']],
+      ['A股/港股', ['cn-core-trend', 'cn-breadth-flow', 'cn-theme-sentiment', 'cn-cross-sentiment'], ['market-overview-card-cnIndices', 'market-overview-card-cnShortSentiment']],
+      ['全球宏观', ['global-rates-fx', 'global-risk-indices', 'global-macro-sentiment'], ['market-overview-card-rates', 'market-overview-card-macro']],
+      ['加密货币', ['crypto-core-list', 'crypto-risk-rates', 'crypto-macro-sentiment'], ['market-overview-card-crypto', 'market-overview-card-sentiment']],
     ];
 
-    for (const [tab, heroCards] of expectations) {
+    for (const [tab, rowIds, visibleCards] of expectations) {
       fireEvent.click(await screen.findByRole('button', { name: tab }));
       const heroLane = await screen.findByTestId('market-overview-hero-lane');
       const secondaryGrid = screen.getByTestId('market-overview-secondary-grid');
-      heroCards.forEach((testId) => {
+      visibleCards.forEach((testId) => {
         expect(screen.getByTestId(testId)).toBeInTheDocument();
       });
+      expect(getRowIds()).toEqual(rowIds);
       expect(screen.getByTestId('market-decision-strip')).toBeInTheDocument();
       expect(heroLane).toHaveAttribute('data-card-tier', 'hero');
       expect(secondaryGrid).toHaveAttribute('data-card-tier', 'secondary');
-      if (tab === '全部') {
-        expect(screen.queryByTestId('market-overview-deep-panels')).not.toBeInTheDocument();
-      } else {
+      if (tab === '美股' || tab === 'A股/港股') {
         expect(screen.getByTestId('market-overview-deep-panels')).toHaveAttribute('data-card-tier', 'deep');
+      } else {
+        expect(screen.queryByTestId('market-overview-deep-panels')).not.toBeInTheDocument();
       }
     }
   });
@@ -845,6 +847,9 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     const indicesCard = await screen.findByTestId('market-overview-card-indices');
+    await waitFor(() => {
+      expect(within(indicesCard).getAllByTestId('market-overview-dense-quote-item').length).toBeGreaterThan(0);
+    });
     const firstQuote = within(indicesCard).getAllByTestId('market-overview-dense-quote-item')[0];
     const metadata = within(firstQuote).getByTestId('market-overview-quote-metadata');
     const valueBlock = within(firstQuote).getByTestId('market-overview-quote-value');
@@ -1036,7 +1041,8 @@ describe('MarketOverviewPage', () => {
     const sideRail = await screen.findByTestId('market-overview-side-rail');
     expect(sideRail.className).not.toContain('max-h-[800px]');
     expect(sideRail.className).not.toContain('overflow-y-auto');
-    expect(screen.getByTestId('market-overview-card-indices')).toHaveClass('lg:col-span-2');
+    expect(getRowCardOrder('all-core-trend')).toEqual(['indices']);
+    expect(screen.getByTestId('market-overview-card-indices')).toHaveAttribute('data-market-card-row', 'hero');
     expect(await screen.findByTestId('market-overview-card-cnIndices')).toHaveClass('min-w-0', 'w-full');
     expect(screen.getByTestId('market-overview-card-crypto')).toHaveClass('min-w-0', 'w-full');
     expect(screen.queryByText('实时行情')).not.toBeInTheDocument();
@@ -1161,13 +1167,13 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     fireEvent.click(await screen.findByRole('button', { name: '美股' }));
-    expect(getPrimaryCardOrder()).toEqual(['indices', 'volatility', 'fundsFlow']);
+    expect(getRowCardOrder('us-core-trend')).toEqual(['indices']);
+    expect(getRowCardOrder('us-risk-flow')).toEqual(['volatility', 'fundsFlow']);
     expect(within(screen.getByTestId('market-overview-card-volatility')).getByText('VIX 恐慌指数')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '全球宏观' }));
-    const globalOrder = getPrimaryCardOrder();
-    expect(globalOrder).toContain('rates');
-    expect(globalOrder).toContain('volatility');
+    expect(getRowCardOrder('global-rates-fx')).toEqual(['rates', 'fxCommodities']);
+    expect(getRowCardOrder('global-risk-indices')).toEqual(['volatility', 'indices']);
   });
 
   it('keeps deterministic workstation card order for every category', async () => {
@@ -1195,32 +1201,46 @@ describe('MarketOverviewPage', () => {
 
     await screen.findByTestId('market-overview-primary-rail');
     await waitFor(() => {
-      expect(getPrimaryCardOrder()).toEqual(['indices', 'volatility', 'fundsFlow', 'sentiment', 'rates', 'fxCommodities', 'crypto', 'cnIndices']);
+      expect(getRowIds()).toEqual(['all-core-trend', 'all-risk-flow', 'all-macro-cross', 'all-crypto-cn']);
     });
+    expect(getRowCardOrder('all-core-trend')).toEqual(['indices']);
+    expect(getRowCardOrder('all-risk-flow')).toEqual(['volatility', 'fundsFlow', 'sentiment']);
+    expect(getRowCardOrder('all-macro-cross')).toEqual(['rates', 'fxCommodities']);
+    expect(getRowCardOrder('all-crypto-cn')).toEqual(['crypto', 'cnIndices']);
     expect(screen.queryByTestId('market-overview-deep-panels')).not.toBeInTheDocument();
     expect(getSideCardOrder()).toEqual([]);
 
     fireEvent.click(screen.getByRole('button', { name: '美股' }));
-    expect(getPrimaryCardOrder()).toEqual(['indices', 'volatility', 'fundsFlow']);
-    expect(getDeepCardOrder()).toEqual(['rates', 'macro', 'sentiment', 'futures']);
+    expect(getRowIds()).toEqual(['us-core-trend', 'us-risk-flow', 'us-rates-sentiment', 'us-macro-futures']);
+    expect(getRowCardOrder('us-core-trend')).toEqual(['indices']);
+    expect(getRowCardOrder('us-risk-flow')).toEqual(['volatility', 'fundsFlow']);
+    expect(getRowCardOrder('us-rates-sentiment')).toEqual(['rates', 'sentiment']);
+    expect(getRowCardOrder('us-macro-futures')).toEqual(['macro', 'futures']);
     expect(getSideCardOrder()).toEqual([]);
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
-    expect(getPrimaryCardOrder()).toEqual(['cnIndices', 'cnBreadth', 'cnFlows']);
-    expect(getDeepCardOrder()).toEqual(['sectorRotation', 'cnShortSentiment', 'fxCommodities', 'sentiment']);
+    expect(getRowIds()).toEqual(['cn-core-trend', 'cn-breadth-flow', 'cn-theme-sentiment', 'cn-cross-sentiment']);
+    expect(getRowCardOrder('cn-core-trend')).toEqual(['cnIndices']);
+    expect(getRowCardOrder('cn-breadth-flow')).toEqual(['cnBreadth', 'cnFlows']);
+    expect(getRowCardOrder('cn-theme-sentiment')).toEqual(['sectorRotation', 'cnShortSentiment']);
+    expect(getRowCardOrder('cn-cross-sentiment')).toEqual(['fxCommodities', 'sentiment']);
     expect(getSideCardOrder()).toEqual([]);
 
     fireEvent.click(screen.getByRole('button', { name: '全球宏观' }));
-    expect(getPrimaryCardOrder()).toEqual(['rates', 'fxCommodities', 'macro', 'indices', 'volatility']);
-    expect(getDeepCardOrder()).toEqual(['sentiment', 'futures']);
+    expect(getRowIds()).toEqual(['global-rates-fx', 'global-risk-indices', 'global-macro-sentiment']);
+    expect(getRowCardOrder('global-rates-fx')).toEqual(['rates', 'fxCommodities']);
+    expect(getRowCardOrder('global-risk-indices')).toEqual(['volatility', 'indices']);
+    expect(getRowCardOrder('global-macro-sentiment')).toEqual(['macro', 'sentiment']);
     expect(getSideCardOrder()).toEqual([]);
     expect(screen.getByTestId('market-overview-card-macro')).toHaveClass('min-w-0', 'w-full');
 
     fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
-    expect(getPrimaryCardOrder()).toEqual(['crypto', 'volatility', 'macro']);
-    expect(getDeepCardOrder()).toEqual(['fxCommodities', 'sentiment']);
+    expect(getRowIds()).toEqual(['crypto-core-list', 'crypto-risk-rates', 'crypto-macro-sentiment']);
+    expect(getRowCardOrder('crypto-core-list')).toEqual(['crypto']);
+    expect(getRowCardOrder('crypto-risk-rates')).toEqual(['volatility', 'rates']);
+    expect(getRowCardOrder('crypto-macro-sentiment')).toEqual(['fxCommodities', 'sentiment']);
     expect(getSideCardOrder()).toEqual([]);
-    expect(screen.getByTestId('market-overview-card-crypto')).toHaveClass('lg:col-span-2');
+    expect(screen.getByTestId('market-overview-card-crypto')).toHaveAttribute('data-market-card-row', 'hero');
   });
 
   it('keeps mixed data cards in grouped deep panels when the tab uses them as supporting content', async () => {
@@ -1250,7 +1270,8 @@ describe('MarketOverviewPage', () => {
     const secondaryGrid = screen.getByTestId('market-overview-secondary-grid');
     const cnIndicesCard = await screen.findByTestId('market-overview-card-cnIndices');
     expect(secondaryGrid).toContainElement(cnIndicesCard);
-    expect(cnIndicesCard).toHaveAttribute('data-market-card-rank', '5');
+    expect(getRowCardOrder('all-crypto-cn')).toEqual(['crypto', 'cnIndices']);
+    expect(cnIndicesCard).toHaveAttribute('data-market-card-row', 'secondary');
   });
 
   it('counts A-share and Hong Kong mixed coverage without marking the category all fallback', async () => {
@@ -1468,9 +1489,9 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByRole('heading', { name: /A股与港股指数/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /市场宽度与赚钱效应/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /资金流向/i })).toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-card-cnIndices')).toHaveAttribute('data-market-card-rank', '0');
-    expect(screen.getByTestId('market-overview-card-cnBreadth')).toHaveAttribute('data-market-card-rank', '0');
-    expect(screen.getByTestId('market-overview-card-cnShortSentiment')).toHaveAttribute('data-market-card-rank', '1');
+    expect(getRowCardOrder('cn-core-trend')).toEqual(['cnIndices']);
+    expect(getRowCardOrder('cn-breadth-flow')).toEqual(['cnBreadth', 'cnFlows']);
+    expect(getRowCardOrder('cn-theme-sentiment')).toEqual(['sectorRotation', 'cnShortSentiment']);
 
     fireEvent.click(screen.getByRole('button', { name: '美股' }));
     expect(screen.getByRole('heading', { name: /全球核心指数走势/i })).toBeInTheDocument();
@@ -1482,9 +1503,9 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByText('Shanghai Composite')).not.toBeInTheDocument();
     expect(screen.queryByText('Shenzhen Component')).not.toBeInTheDocument();
     expect(screen.queryByText('DXY')).not.toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-card-indices')).toHaveAttribute('data-market-card-rank', '0');
-    expect(screen.getByTestId('market-overview-card-volatility')).toHaveAttribute('data-market-card-rank', '0');
-    expect(screen.getByTestId('market-overview-card-fundsFlow')).toHaveAttribute('data-market-card-rank', '1');
+    expect(getRowCardOrder('us-core-trend')).toEqual(['indices']);
+    expect(getRowCardOrder('us-risk-flow')).toEqual(['volatility', 'fundsFlow']);
+    expect(getRowCardOrder('us-rates-sentiment')).toEqual(['rates', 'sentiment']);
 
     expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1);
     expect(marketApi.getRates).toHaveBeenCalledTimes(1);
@@ -1689,17 +1710,15 @@ describe('MarketOverviewPage', () => {
 
     await waitFor(() => expect(marketApi.getCrypto).toHaveBeenCalledTimes(1));
 
-    expect(screen.getByTestId('market-overview-card-indices')).toHaveAttribute('data-market-card-rank', '0');
-    expect(screen.getByTestId('market-overview-card-volatility')).toHaveAttribute('data-market-card-rank', '1');
-    expect(screen.getByTestId('market-overview-card-fundsFlow')).toHaveAttribute('data-market-card-rank', '0');
-    expect(screen.getByTestId('market-overview-card-crypto')).toHaveAttribute('data-market-card-rank', '4');
-    expect(await screen.findByTestId('market-overview-card-cnIndices')).toHaveAttribute('data-market-card-rank', '5');
+    expect(getRowCardOrder('all-core-trend')).toEqual(['indices']);
+    expect(getRowCardOrder('all-risk-flow')).toEqual(['volatility', 'fundsFlow', 'sentiment']);
+    expect(getRowCardOrder('all-crypto-cn')).toEqual(['crypto', 'cnIndices']);
     expect(window.localStorage.getItem('market-overview-order-all')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
 
-    expect(screen.getByTestId('market-overview-card-cnIndices')).toHaveAttribute('data-market-card-rank', '0');
-    expect(screen.getByTestId('market-overview-card-cnBreadth')).toHaveAttribute('data-market-card-rank', '0');
+    expect(getRowCardOrder('cn-core-trend')).toEqual(['cnIndices']);
+    expect(getRowCardOrder('cn-breadth-flow')).toEqual(['cnBreadth', 'cnFlows']);
     expect(window.localStorage.getItem('market-overview-order-cn')).toBeNull();
   });
 });

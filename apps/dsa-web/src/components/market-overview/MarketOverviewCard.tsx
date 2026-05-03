@@ -51,8 +51,8 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
   const items = (panel?.items || []).filter(isRenderableMarketOverviewItem);
   const fallbackOnly = isFallbackOnlyPanel(panel);
   const denseQuote = variant === 'denseQuote';
-  const visibleItems = denseQuote ? items.slice(0, 5) : items;
-  const hiddenItemCount = denseQuote ? Math.max(items.length - visibleItems.length, 0) : 0;
+  const visibleItems = items.slice(0, 5);
+  const hiddenItemCount = Math.max(items.length - visibleItems.length, 0);
 
   return (
     <MarketOverviewCardFrame
