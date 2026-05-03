@@ -24,8 +24,12 @@ const mockStartStream = vi.fn();
 const mockStopStream = vi.fn();
 const mockClearCompletionBadge = vi.fn();
 const mockStartNewChat = vi.fn();
-const { mockAddWatchlistItem } = vi.hoisted(() => ({
+const { mockAddWatchlistItem, mockListWatchlistItems, mockGetSnapshot, mockGetRecentWatchlists, mockGetRuleBacktestRuns } = vi.hoisted(() => ({
   mockAddWatchlistItem: vi.fn(),
+  mockListWatchlistItems: vi.fn(),
+  mockGetSnapshot: vi.fn(),
+  mockGetRecentWatchlists: vi.fn(),
+  mockGetRuleBacktestRuns: vi.fn(),
 }));
 let currentLanguage: 'zh' | 'en' = 'zh';
 
@@ -94,6 +98,17 @@ vi.mock('../../api/agent', () => ({
         { deployment_id: 'auto', model: 'deepseek-chat', provider: 'DeepSeek', source: 'env', is_primary: true },
       ],
     }),
+    getProviderHealth: vi.fn().mockResolvedValue({
+      routingMode: 'AUTO',
+      currentProvider: 'DeepSeek',
+      currentModel: 'deepseek-chat',
+      providers: [
+        { id: 'deepseek', label: 'DeepSeek', status: 'available', model: 'deepseek-chat', selected: true },
+        { id: 'openai', label: 'OpenAI', status: 'not_configured' },
+        { id: 'gemini', label: 'Gemini', status: 'offline' },
+        { id: 'local', label: 'Local', status: 'unknown' },
+      ],
+    }),
     deleteChatSession: vi.fn().mockResolvedValue(undefined),
     sendChat: vi.fn().mockResolvedValue({ success: true }),
   },
@@ -102,6 +117,25 @@ vi.mock('../../api/agent', () => ({
 vi.mock('../../api/watchlist', () => ({
   watchlistApi: {
     addWatchlistItem: mockAddWatchlistItem,
+    listWatchlistItems: mockListWatchlistItems,
+  },
+}));
+
+vi.mock('../../api/portfolio', () => ({
+  portfolioApi: {
+    getSnapshot: mockGetSnapshot,
+  },
+}));
+
+vi.mock('../../api/scanner', () => ({
+  scannerApi: {
+    getRecentWatchlists: mockGetRecentWatchlists,
+  },
+}));
+
+vi.mock('../../api/backtest', () => ({
+  backtestApi: {
+    getRuleBacktestRuns: mockGetRuleBacktestRuns,
   },
 }));
 
@@ -192,6 +226,45 @@ beforeEach(() => {
     market: 'us',
     source: 'chat',
   });
+  mockListWatchlistItems.mockResolvedValue({
+    items: [
+      {
+        id: 11,
+        symbol: 'ORCL',
+        market: 'us',
+        source: 'scanner',
+        intelligence: {
+          scanner: { status: 'selected', lastRank: 3, lastScore: 82.1, lastScannedAt: '2026-05-02T10:00:00Z' },
+          backtest: { lastResultId: 34, totalReturnPct: 12.3, testedAt: '2026-05-01T10:00:00Z' },
+        },
+      },
+    ],
+  });
+  mockGetSnapshot.mockResolvedValue({
+    asOf: '2026-05-03',
+    accounts: [
+      {
+        accountId: 1,
+        accountName: 'Main',
+        positions: [
+          { symbol: 'AAPL', market: 'us', quantity: 3, lastPrice: 200, marketValueBase: 600 },
+        ],
+      },
+    ],
+  });
+  mockGetRecentWatchlists.mockResolvedValue({
+    items: [
+      { id: 7, market: 'us', status: 'completed', runAt: '2026-05-02T10:00:00Z', topSymbols: ['ORCL', 'NVDA'] },
+    ],
+  });
+  mockGetRuleBacktestRuns.mockResolvedValue({
+    total: 1,
+    page: 1,
+    limit: 1,
+    items: [
+      { id: 34, code: 'ORCL', status: 'completed', totalReturnPct: 12.3, maxDrawdownPct: -4.2, completedAt: '2026-05-01T10:00:00Z' },
+    ],
+  });
 });
 
 describe('ChatPage', () => {
@@ -242,10 +315,73 @@ describe('ChatPage', () => {
 
     expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('ORCL · US · 买入/持有');
     expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('综合判断 / 趋势跟踪');
-    expect(screen.getByRole('link', { name: '回测 ORCL' })).toHaveAttribute('href', '/backtest?symbol=ORCL&market=US&source=chat');
-    expect(screen.getByRole('button', { name: '加入观察列表 ORCL' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '查看持仓 ORCL' })).toHaveAttribute('href', '/portfolio?symbol=ORCL');
-    expect(screen.getByRole('link', { name: '查看扫描器证据 ORCL' })).toHaveAttribute('href', '/scanner?symbol=ORCL&market=US');
+    expect(screen.getAllByRole('link', { name: '回测 ORCL' })[0]).toHaveAttribute('href', '/backtest?symbol=ORCL&market=US&source=chat');
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '已在观察列表 ORCL' }).length).toBeGreaterThan(0));
+    expect(screen.getAllByRole('link', { name: '查看持仓 ORCL' })[0]).toHaveAttribute('href', '/portfolio?symbol=ORCL');
+    expect(screen.getAllByRole('link', { name: '查看扫描器证据 ORCL' })[0]).toHaveAttribute('href', '/scanner?symbol=ORCL&market=US');
+  });
+
+  it('renames the route surface to the AI decision desk without using generic ask-stock as the main label', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('heading', { name: 'WOLFY AI 决策台' })).toBeInTheDocument();
+    expect(screen.getByText('用自然语言调用行情、持仓、扫描器与回测证据')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '问股' })).not.toBeInTheDocument();
+  });
+
+  it('renders provider health states without exposing secrets', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    const engineSection = await screen.findByTestId('chat-engine-section');
+    expect(engineSection).toHaveTextContent('AUTO → DeepSeek');
+    expect(engineSection).toHaveTextContent('DeepSeek 可用');
+    expect(engineSection).toHaveTextContent('OpenAI 未配置');
+    expect(engineSection).toHaveTextContent('Gemini 离线');
+    expect(engineSection).toHaveTextContent('Local UNKNOWN');
+    expect(engineSection.textContent).not.toMatch(/api[_-]?key|secret|sk-/i);
+  });
+
+  it('looks up real read-only evidence for detected symbols and keeps unchecked categories unknown', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    fireEvent.change(await screen.findByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
+      target: { value: 'ORCL 还能买吗？' },
+    });
+
+    await waitFor(() => expect(mockListWatchlistItems).toHaveBeenCalled());
+    expect(mockGetSnapshot).toHaveBeenCalled();
+    expect(mockGetRecentWatchlists).toHaveBeenCalledWith({ market: 'us', limitDays: 7 });
+    expect(mockGetRuleBacktestRuns).toHaveBeenCalledWith({ code: 'ORCL', page: 1, limit: 1 });
+
+    const evidencePanel = screen.getByTestId('chat-evidence-panel');
+    expect(evidencePanel).toHaveTextContent('持仓');
+    expect(evidencePanel).toHaveTextContent('missing');
+    expect(evidencePanel).toHaveTextContent('观察列表');
+    expect(evidencePanel).toHaveTextContent('available');
+    expect(evidencePanel).toHaveTextContent('扫描器');
+    expect(evidencePanel).toHaveTextContent('available');
+    expect(evidencePanel).toHaveTextContent('回测');
+    expect(evidencePanel).toHaveTextContent('available');
+    expect(evidencePanel).toHaveTextContent('行情');
+    expect(evidencePanel).toHaveTextContent('unknown');
   });
 
   it('detects CN symbols and compare intent for multiple symbols', async () => {
@@ -301,9 +437,16 @@ describe('ChatPage', () => {
           context: expect.objectContaining({
             stock_code: '600519',
             stock_name: '贵州茅台',
-            stock_chat: expect.objectContaining({
-              response_mode: 'structured_stock_analysis_v1',
-              answer_sections: ['结论', '关键依据', '关键价位', '风险', '操作计划', '数据可信度'],
+              stock_chat: expect.objectContaining({
+                response_mode: 'structured_stock_analysis_v1',
+                stock_context: expect.objectContaining({
+                  symbols: ['600519'],
+                  evidence: expect.objectContaining({
+                    portfolio: expect.objectContaining({ status: expect.any(String) }),
+                    watchlist: expect.objectContaining({ status: expect.any(String) }),
+                  }),
+                }),
+                answer_sections: ['结论', '关键依据', '关键价位', '风险', '操作计划', '数据可信度'],
               smart_route: expect.objectContaining({
                 symbols: ['600519'],
                 market: 'CN',
@@ -312,6 +455,68 @@ describe('ChatPage', () => {
           }),
         }),
         expect.anything(),
+      );
+    });
+  });
+
+  it('sends evidence summary to the AgentExecutor request and renders an assistant evidence footer', async () => {
+    mockStoreState.messages = [
+      {
+        id: 'assistant-evidence',
+        role: 'assistant',
+        content: '结论：谨慎观察',
+        skillName: '综合判断',
+        evidenceFooter: {
+          provider: 'DeepSeek',
+          model: 'deepseek-chat',
+          lenses: ['综合判断', '趋势跟踪'],
+          items: [
+            { label: '行情', status: 'unknown' },
+            { label: '持仓', status: 'missing', summary: '无' },
+            { label: '观察列表', status: 'available', summary: '已加入' },
+            { label: 'Scanner', status: 'available', summary: '最近入选' },
+            { label: '回测', status: 'available', summary: '有' },
+          ],
+        },
+      },
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('chat-answer-evidence-footer-assistant-evidence')).toHaveTextContent('LLM: DeepSeek deepseek-chat');
+    expect(screen.getByTestId('chat-answer-evidence-footer-assistant-evidence')).toHaveTextContent('数据: 行情 UNKNOWN · 持仓 无 · 观察列表 已加入 · Scanner 最近入选 · 回测 有');
+
+    fireEvent.change(screen.getByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
+      target: { value: 'ORCL 还能买吗？' },
+    });
+    await waitFor(() => expect(mockGetRuleBacktestRuns).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'chat.notifyAction') }));
+
+    await waitFor(() => {
+      expect(mockStartStream).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: expect.objectContaining({
+            stock_chat: expect.objectContaining({
+              stock_context: expect.objectContaining({
+                symbols: ['ORCL'],
+                evidence: expect.objectContaining({
+                  watchlist: expect.objectContaining({ inWatchlist: true }),
+                  portfolio: expect.objectContaining({ hasPosition: false }),
+                  backtest: expect.objectContaining({ resultId: 34, returnPct: 12.3 }),
+                }),
+              }),
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          evidenceFooter: expect.objectContaining({ provider: 'DeepSeek' }),
+        }),
       );
     });
   });
@@ -325,22 +530,15 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByTestId('chat-evidence-panel')).toHaveTextContent('unknown');
+    expect(await screen.findByTestId('chat-evidence-panel')).toHaveTextContent('先输入具体标的');
 
     fireEvent.change(screen.getByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
       target: { value: 'ORCL 还能买吗？' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '加入观察列表 ORCL' }));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '已在观察列表 ORCL' }).length).toBeGreaterThan(0));
+    fireEvent.click(screen.getAllByRole('button', { name: '已在观察列表 ORCL' })[0]);
 
-    await waitFor(() => {
-      expect(mockAddWatchlistItem).toHaveBeenCalledWith({
-        symbol: 'ORCL',
-        market: 'us',
-        source: 'scanner',
-        notes: 'From Stock Chat smart route',
-      });
-    });
-    expect(await screen.findByText('ORCL 已加入观察列表')).toBeInTheDocument();
+    expect(mockAddWatchlistItem).not.toHaveBeenCalled();
   });
 
   it('renders the compact mobile console content without desktop assumptions', async () => {
@@ -407,11 +605,11 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-main')).not.toHaveClass('relative');
     expect(screen.queryByTestId('chat-status-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-bento-hero-skill')).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: translate('zh', 'chat.title') })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: translate('zh', 'chat.title') })).toBeInTheDocument();
     expect(screen.queryByTitle('查看摘要')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-message-scroll')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-message-stream')).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex-1', 'overflow-y-auto', 'flex', 'flex-col', 'items-center', 'justify-center');
+    expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex-1', 'overflow-y-auto', 'flex', 'flex-col', 'items-center', 'justify-start');
     expect(screen.getByTestId('chat-empty-state')).not.toHaveClass('pb-10', 'pb-8', 'mb-8');
     expect(screen.getByTestId('chat-input-shell')).toHaveClass('w-full', 'shrink-0');
     expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('mt-auto', 'pt-4', 'pb-8', 'pb-10', 'mb-8');
@@ -445,7 +643,7 @@ describe('ChatPage', () => {
 
     fireEvent.click(screen.getByTestId('chat-bento-brief-trigger'));
     expect(await screen.findByTestId('chat-bento-drawer')).toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: '问股控制台' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '决策台控制台' })).toBeInTheDocument();
   });
 
   it('switches the right-side console between engines and history', async () => {
@@ -520,15 +718,15 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByText(translate('zh', 'chat.emptyTitle'))).toBeInTheDocument();
-    expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex-1', 'overflow-y-auto', 'flex', 'flex-col', 'items-center', 'justify-center');
-    expect(screen.getByRole('heading', { name: translate('zh', 'chat.emptyTitle') })).toHaveClass('text-3xl', 'font-bold', 'text-white');
+    expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex-1', 'overflow-y-auto', 'flex', 'flex-col', 'items-center', 'justify-start');
+    expect(screen.getByRole('heading', { name: translate('zh', 'chat.title') })).toHaveClass('text-xl', 'font-bold', 'text-white');
     const entryDecisionCard = screen.getByTestId('chat-starter-card-entryDecision');
-    expect(entryDecisionCard).toHaveClass('flex', 'flex-col', 'items-center', 'justify-center', 'rounded-2xl', 'border', 'border-white/5', 'bg-white/[0.02]', 'px-8', 'py-6', 'text-center', 'hover:bg-white/[0.05]');
+    expect(entryDecisionCard).toHaveClass('flex', 'flex-col', 'items-center', 'justify-center', 'rounded-2xl', 'border', 'border-white/5', 'bg-white/[0.02]', 'px-4', 'py-3', 'text-center', 'hover:bg-white/[0.05]');
     expect(screen.getAllByText(translate('zh', 'chat.starterCards.entryDecision.title')).length).toBeGreaterThan(0);
     expect(screen.getAllByText(translate('zh', 'chat.starterCards.positionReview.title')).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(translate('zh', 'chat.starterCards.eventFollowUp.title')).length).toBeGreaterThan(0);
-    expect(screen.getByText(translate('zh', 'chat.emptyBody'))).toBeInTheDocument();
-    expect(screen.getByTestId('chat-quick-question-cloud')).toHaveClass('flex', 'flex-wrap', 'justify-center', 'gap-3');
+    expect(screen.getByTestId('chat-mobile-template-eventFollowUp')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'chat.description'))).toBeInTheDocument();
+    expect(screen.getByTestId('chat-quick-question-cloud')).toHaveClass('hidden', 'flex-wrap', 'justify-center');
     expect(screen.getByText(translate('zh', 'chat.quickQuestions.q3'))).toHaveClass(
       'inline-flex',
       'items-center',
@@ -1032,7 +1230,7 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
-    expect(document.title).toBe('Ask Stock - WolfyStock');
+    expect(document.title).toBe('AI Decision Desk - WolfyStock');
   });
 
   it('updates hero and input copy immediately when language switches to english', async () => {

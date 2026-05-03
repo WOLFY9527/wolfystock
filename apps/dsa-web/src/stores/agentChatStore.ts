@@ -35,10 +35,23 @@ export interface Message {
   skill?: string;
   skillName?: string;
   thinkingSteps?: ProgressStep[];
+  evidenceFooter?: ChatEvidenceFooter;
 }
 
 export interface StreamMeta {
   skillName?: string;
+  evidenceFooter?: ChatEvidenceFooter;
+}
+
+export interface ChatEvidenceFooter {
+  provider?: string;
+  model?: string;
+  lenses?: string[];
+  items?: Array<{
+    label: string;
+    status: string;
+    summary?: string | null;
+  }>;
 }
 
 interface AgentChatState {
@@ -291,6 +304,7 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
             skill: payload.skills?.[0],
             skillName,
             thinkingSteps: [...thinkingSteps],
+            evidenceFooter: meta?.evidenceFooter,
           },
         ],
       }));

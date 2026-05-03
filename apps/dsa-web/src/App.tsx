@@ -173,7 +173,7 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
   let moduleName = language === 'en' ? 'Premium module' : '高级模块';
 
   if (routePathname.startsWith('/chat')) {
-    moduleName = language === 'en' ? 'Ask Stock' : '问股';
+    moduleName = language === 'en' ? 'Decision Desk' : '决策台';
   } else if (routePathname.startsWith('/portfolio')) {
     moduleName = language === 'en' ? 'Portfolio' : '持仓管理';
   } else if (routePathname.startsWith('/watchlist')) {

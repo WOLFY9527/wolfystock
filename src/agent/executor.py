@@ -387,10 +387,12 @@ class AgentExecutor:
                 selected_lens = stock_chat.get("selected_lens")
                 smart_route = stock_chat.get("smart_route")
                 data_context = stock_chat.get("data_context")
+                stock_context = stock_chat.get("stock_context")
                 answer_sections = stock_chat.get("answer_sections")
                 instruction = stock_chat.get("instruction")
                 route_text = json.dumps(smart_route, ensure_ascii=False) if isinstance(smart_route, dict) else ""
                 data_text = json.dumps(data_context, ensure_ascii=False) if isinstance(data_context, list) else ""
+                stock_context_text = json.dumps(stock_context, ensure_ascii=False) if isinstance(stock_context, dict) else ""
                 sections_text = " / ".join(str(item) for item in answer_sections) if isinstance(answer_sections, list) else ""
                 context_parts.append(
                     "[Stock Chat 输出契约]\n"
@@ -400,6 +402,15 @@ class AgentExecutor:
                     f"回答结构: {sections_text or '结论 / 关键依据 / 关键价位 / 风险 / 操作计划 / 数据可信度'}\n"
                     f"约束: {instruction or '数据缺失必须说明，不承诺确定性收益。'}"
                 )
+                if stock_context_text:
+                    context_parts.append(
+                        "[Stock Chat 证据摘要]\n"
+                        f"{stock_context_text}\n"
+                        "使用规则: 只能引用此处标记为 available/used/fallback 的证据；"
+                        "未知、缺失或未检查的数据必须明确说明，不能补写成已验证事实；"
+                        "如果持仓证据已知，必须区分无持仓与有持仓建议；"
+                        "如果大多数数据 unknown/missing，避免强确定性结论。"
+                    )
             if context_parts:
                 context_msg = "[系统提供的历史分析上下文，可供参考对比]\n" + "\n".join(context_parts)
                 messages.append({"role": "user", "content": context_msg})

@@ -247,6 +247,36 @@ class AgentModelsEndpointTestCase(unittest.TestCase):
         self.assertTrue(payload["models"][1]["is_fallback"])
         self.assertNotIn("api_key", str(payload))
 
+    def test_provider_health_endpoint_returns_statuses_without_secrets(self) -> None:
+        config = _build_config(
+            litellm_model="deepseek/deepseek-chat",
+            litellm_fallback_models=["openai/gpt-4o-mini"],
+            deepseek_api_keys=["sk-deepseek-secret"],
+            openai_api_keys=[],
+            gemini_api_keys=[],
+            llm_model_list=[
+                {
+                    "model_name": "__legacy_deepseek__",
+                    "litellm_params": {"model": "__legacy_deepseek__", "api_key": "sk-deepseek-secret"},
+                },
+            ],
+        )
+
+        with patch("api.v1.endpoints.agent.get_config", return_value=config):
+            payload = asyncio.run(agent.get_agent_provider_health()).model_dump()
+
+        self.assertEqual(payload["routing_mode"], "AUTO")
+        self.assertEqual(payload["current_provider"], "DeepSeek")
+        providers = {item["id"]: item for item in payload["providers"]}
+        self.assertEqual(providers["deepseek"]["status"], "available")
+        self.assertTrue(providers["deepseek"]["selected"])
+        self.assertEqual(providers["openai"]["status"], "not_configured")
+        self.assertEqual(providers["gemini"]["status"], "not_configured")
+        self.assertIn(providers["local"]["status"], {"offline", "unknown", "not_configured"})
+        self.assertNotIn("api_key", str(payload).lower())
+        self.assertNotIn("secret", str(payload).lower())
+        self.assertNotIn("sk-deepseek", str(payload).lower())
+
 
 class AgentSkillsEndpointTestCase(unittest.TestCase):
     def test_skills_endpoint_returns_skill_metadata_shape(self) -> None:

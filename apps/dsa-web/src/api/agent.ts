@@ -48,6 +48,24 @@ export interface AgentModelsResponse {
   models: AgentModelDeployment[];
 }
 
+export type AgentProviderHealthStatus = 'available' | 'not_configured' | 'disabled' | 'offline' | 'unknown';
+
+export interface AgentProviderHealthItem {
+  id: string;
+  label: string;
+  status: AgentProviderHealthStatus;
+  model?: string | null;
+  selected?: boolean;
+  reason?: string | null;
+}
+
+export interface AgentProviderHealthResponse {
+  routingMode: 'AUTO' | 'MANUAL' | string;
+  currentProvider?: string | null;
+  currentModel?: string | null;
+  providers: AgentProviderHealthItem[];
+}
+
 export interface SkillsResponse {
   skills: SkillInfo[];
   default_skill_id: string;
@@ -85,6 +103,10 @@ export const agentApi = {
   },
   async getModels(): Promise<AgentModelsResponse> {
     const response = await apiClient.get<AgentModelsResponse>('/api/v1/agent/models');
+    return response.data;
+  },
+  async getProviderHealth(): Promise<AgentProviderHealthResponse> {
+    const response = await apiClient.get<AgentProviderHealthResponse>('/api/v1/agent/provider-health');
     return response.data;
   },
   async getChatSessions(limit = 50): Promise<ChatSessionItem[]> {

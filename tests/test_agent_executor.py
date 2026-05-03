@@ -183,6 +183,55 @@ class TestAgentExecutor(unittest.TestCase):
         self.assertIn("回答结构: 结论 / 关键依据 / 关键价位 / 风险 / 操作计划 / 数据可信度", context_message)
         self.assertIn('"symbols": ["ORCL"]', context_message)
 
+    def test_chat_injects_stock_evidence_summary_honestly(self):
+        """Stock Chat evidence metadata is kept compact and tells the model not to overclaim."""
+        registry = _make_registry_with_echo()
+        adapter = _make_mock_adapter()
+        adapter.call_with_tools.return_value = LLMResponse(
+            content="结论\n- 数据不足，先观察",
+            tool_calls=[],
+            usage={"total_tokens": 20},
+            provider="deepseek",
+            model="deepseek-chat",
+        )
+
+        executor = AgentExecutor(registry, adapter, max_steps=1)
+        result = executor.chat(
+            "ORCL 还能买吗？",
+            session_id="test-stock-chat-evidence",
+            context={
+                "stock_chat": {
+                    "selected_lens": "综合判断",
+                    "smart_route": {
+                        "symbols": ["ORCL"],
+                        "market": "US",
+                        "intent": "buy_or_hold",
+                    },
+                    "stock_context": {
+                        "symbols": ["ORCL"],
+                        "market": "US",
+                        "intent": "buy_or_hold",
+                        "evidence": {
+                            "quote": {"status": "unknown"},
+                            "portfolio": {"status": "available", "hasPosition": False},
+                            "watchlist": {"status": "available", "inWatchlist": True},
+                            "scanner": {"status": "available", "summary": "recently selected"},
+                            "backtest": {"status": "available", "resultId": 34, "returnPct": 12.3},
+                            "news": {"status": "unknown"},
+                        },
+                    },
+                },
+            },
+        )
+
+        self.assertTrue(result.success)
+        messages = adapter.call_with_tools.call_args.args[0]
+        context_message = "\n".join(str(message.get("content", "")) for message in messages)
+        self.assertIn("Stock Chat 证据摘要", context_message)
+        self.assertIn('"portfolio": {"status": "available", "hasPosition": false}', context_message)
+        self.assertIn('"quote": {"status": "unknown"}', context_message)
+        self.assertIn("未知、缺失或未检查的数据必须明确说明", context_message)
+
     def test_multiple_tool_calls_in_one_step(self):
         """Agent requests multiple tool calls in a single response."""
         registry = _make_registry_with_echo()

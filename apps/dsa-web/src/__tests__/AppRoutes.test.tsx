@@ -220,7 +220,7 @@ describe('AppContent route flows', () => {
   );
 
   it.each([
-    ['/chat', 'auth-guard:Ask Stock'],
+    ['/chat', 'auth-guard:Decision Desk'],
     ['/portfolio', 'auth-guard:Portfolio'],
     ['/backtest', 'auth-guard:Backtest'],
   ])(

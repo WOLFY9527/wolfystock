@@ -3,8 +3,11 @@ import { ArrowUp, Download, Lightbulb, PanelRightOpen, SendHorizontal } from 'lu
 import { useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { agentApi, type AgentModelDeployment } from '../api/agent';
+import { agentApi, type AgentModelDeployment, type AgentProviderHealthResponse, type AgentProviderHealthStatus } from '../api/agent';
 import { watchlistApi } from '../api/watchlist';
+import { portfolioApi } from '../api/portfolio';
+import { scannerApi } from '../api/scanner';
+import { backtestApi } from '../api/backtest';
 import { ApiErrorAlert, ConfirmDialog, Drawer, GlassCard, TypewriterText } from '../components/common';
 import { CARD_BUTTON_CLASS } from '../components/home-bento';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
@@ -20,9 +23,6 @@ import { buildFollowUpPrompt, resolveChatFollowUpContext } from '../utils/chatFo
 import { normalizeAssistantMessageContent } from '../utils/chatTimeoutFallback';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
-  getSafariReadySurfaceClassName,
-  shouldApplySafariA11yGuard,
-  useSafariRenderReady,
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import { translate } from '../i18n/core';
@@ -102,7 +102,7 @@ type SmartRouteResult = {
   confidence: 'high' | 'medium' | 'low';
 };
 
-type DataEvidenceStatus = 'available' | 'missing' | 'stale' | 'unknown';
+type DataEvidenceStatus = 'used' | 'available' | 'missing' | 'stale' | 'fallback' | 'unknown' | 'error';
 
 type DataEvidenceItem = {
   key: string;
@@ -110,6 +110,11 @@ type DataEvidenceItem = {
   status: DataEvidenceStatus;
   source?: string;
   updatedAt?: string;
+  summary?: string;
+  inWatchlist?: boolean;
+  hasPosition?: boolean;
+  resultId?: number;
+  returnPct?: number;
 };
 
 type AnalysisLens = {
@@ -157,14 +162,14 @@ const ADVANCED_ANALYSIS_LENSES: AnalysisLens[] = [
 ];
 
 const DATA_CONTEXT_ITEMS: DataEvidenceItem[] = [
-  { key: 'quotes', label: '行情', status: 'unknown' },
+  { key: 'quote', label: '行情', status: 'unknown' },
   { key: 'technical', label: '技术指标', status: 'unknown' },
   { key: 'fundamental', label: '基本面', status: 'unknown' },
-  { key: 'news', label: '新闻', status: 'unknown' },
-  { key: 'position', label: '持仓', status: 'unknown' },
+  { key: 'portfolio', label: '持仓', status: 'unknown' },
   { key: 'watchlist', label: '观察列表', status: 'unknown' },
   { key: 'scanner', label: '扫描器', status: 'unknown' },
   { key: 'backtest', label: '回测', status: 'unknown' },
+  { key: 'news', label: '新闻', status: 'unknown' },
 ];
 
 const CANONICAL_SKILL_IDS = [
@@ -203,6 +208,33 @@ const formatRouteLabel = (route: SmartRouteResult): string => {
   if (route.symbols.length === 0) return '先输入一个具体问题';
   return `${route.symbols.join(', ')} · ${route.market} · ${route.intentLabel}`;
 };
+
+const normalizeEvidenceSymbol = (symbol: string) => symbol.toUpperCase().replace(/^HK(?=\d)/, '').replace(/\.HK$/, '');
+
+const toMarketParam = (market: StockMarket): 'cn' | 'us' | 'hk' => {
+  if (market === 'CN') return 'cn';
+  if (market === 'HK') return 'hk';
+  return 'us';
+};
+
+const providerStatusLabel: Record<AgentProviderHealthStatus, string> = {
+  available: '可用',
+  not_configured: '未配置',
+  disabled: '停用',
+  offline: '离线',
+  unknown: 'UNKNOWN',
+};
+
+const evidenceSummaryText = (item: DataEvidenceItem): string => {
+  if (item.key === 'portfolio') return item.hasPosition ? '有持仓' : item.status === 'missing' ? '无' : item.status.toUpperCase();
+  if (item.key === 'watchlist') return item.inWatchlist ? '已加入' : item.status === 'missing' ? '未加入' : item.status.toUpperCase();
+  if (item.key === 'scanner') return item.summary || (item.status === 'available' ? '最近入选' : item.status.toUpperCase());
+  if (item.key === 'backtest') return item.resultId ? '有' : item.status === 'missing' ? '无' : item.status.toUpperCase();
+  return item.summary || item.status.toUpperCase();
+};
+
+const buildInitialEvidenceItems = (hasSymbol: boolean): DataEvidenceItem[] =>
+  DATA_CONTEXT_ITEMS.map((item) => ({ ...item, status: hasSymbol ? item.status : 'unknown' }));
 
 const inferMarket = (symbol: string): StockMarket => {
   const normalized = symbol.toUpperCase();
@@ -327,13 +359,12 @@ function getSessionBucketLabel(dateValue: string | null | undefined, language: '
 }
 
 const ChatPage: React.FC = () => {
-  const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
-  const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState('');
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [agentModels, setAgentModels] = useState<AgentModelDeployment[]>([]);
+  const [providerHealth, setProviderHealth] = useState<AgentProviderHealthResponse | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<string>('');
   const [showSkillDesc, setShowSkillDesc] = useState<string | null>(null);
   const [showAdvancedLenses, setShowAdvancedLenses] = useState(false);
@@ -349,6 +380,9 @@ const ChatPage: React.FC = () => {
   const [skillsLoadError, setSkillsLoadError] = useState<ParsedApiError | null>(null);
   const [consoleMode, setConsoleMode] = useState<ChatConsoleMode>('engines');
   const [isMobileConsoleOpen, setIsMobileConsoleOpen] = useState(false);
+  const [mobileTemplatesOpen, setMobileTemplatesOpen] = useState(false);
+  const [evidenceItems, setEvidenceItems] = useState<DataEvidenceItem[]>(buildInitialEvidenceItems(false));
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [animatedAssistantMessageId, setAnimatedAssistantMessageId] = useState<string | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement>(null);
   const isAutoScroll = useRef(true);
@@ -419,6 +453,11 @@ const ChatPage: React.FC = () => {
     }).catch(() => {
       if (!cancelled) setAgentModels([]);
     });
+    void agentApi.getProviderHealth().then((res) => {
+      if (!cancelled) setProviderHealth(res);
+    }).catch(() => {
+      if (!cancelled) setProviderHealth(null);
+    });
     return () => {
       cancelled = true;
     };
@@ -433,31 +472,171 @@ const ChatPage: React.FC = () => {
   );
   const smartRoute = useMemo(() => routeStockQuestion(input), [input]);
   const primarySymbol = smartRoute.symbols[0];
+  const evidenceSymbolKey = useMemo(
+    () => smartRoute.symbols.slice(0, 3).map(normalizeEvidenceSymbol).join(','),
+    [smartRoute.symbols],
+  );
   const selectedLens = useMemo(
     () => [...PRIMARY_ANALYSIS_LENSES, ...ADVANCED_ANALYSIS_LENSES].find((lens) => (lens.skillId || '') === selectedSkill)
       ?? PRIMARY_ANALYSIS_LENSES[0],
     [selectedSkill],
   );
-  const evidenceItems: DataEvidenceItem[] = DATA_CONTEXT_ITEMS.map((item) => {
-    if (item.key === 'position' && followUpContextRef.current?.stock_code) {
-      return { ...item, status: 'available', source: 'analysis handoff' };
+
+  useEffect(() => {
+    if (!evidenceSymbolKey) {
+      setEvidenceItems(buildInitialEvidenceItems(false));
+      setEvidenceLoading(false);
+      return undefined;
     }
-    if (item.key === 'quotes' && followUpContextRef.current?.previous_price != null) {
-      return { ...item, status: 'available', source: 'previous report' };
-    }
-    return item;
-  });
+
+    const symbols = evidenceSymbolKey.split(',').filter(Boolean);
+    const primary = symbols[0];
+    const market = toMarketParam(smartRoute.market === 'unknown' ? inferMarket(primary) : smartRoute.market);
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setEvidenceLoading(true);
+      const nextItems = buildInitialEvidenceItems(true);
+
+      const setItem = (key: string, patch: Partial<DataEvidenceItem>) => {
+        const index = nextItems.findIndex((item) => item.key === key);
+        if (index >= 0) nextItems[index] = { ...nextItems[index], ...patch };
+      };
+
+      Promise.allSettled([
+        watchlistApi.listWatchlistItems(),
+        portfolioApi.getSnapshot(),
+        scannerApi.getRecentWatchlists({ market, limitDays: 7 }),
+        backtestApi.getRuleBacktestRuns({ code: primary, page: 1, limit: 1 }),
+      ]).then(([watchlistResult, portfolioResult, scannerResult, backtestResult]) => {
+        if (cancelled) return;
+
+        if (watchlistResult.status === 'fulfilled') {
+          const match = (watchlistResult.value.items || []).find((item) => normalizeEvidenceSymbol(item.symbol) === primary);
+          if (match) {
+            setItem('watchlist', {
+              status: 'available',
+              source: 'watchlist',
+              updatedAt: match.updatedAt || match.createdAt || undefined,
+              inWatchlist: true,
+              summary: '已加入',
+            });
+            const scannerIntel = match.intelligence?.scanner;
+            if (scannerIntel?.status) {
+              setItem('scanner', {
+                status: scannerIntel.status === 'selected' ? 'available' : 'missing',
+                source: 'watchlist intelligence',
+                updatedAt: scannerIntel.lastScannedAt || undefined,
+                summary: scannerIntel.status === 'selected' ? `最近入选 #${scannerIntel.lastRank ?? '-'}` : String(scannerIntel.status),
+              });
+            }
+            const backtestIntel = match.intelligence?.backtest;
+            if (backtestIntel?.lastResultId) {
+              setItem('backtest', {
+                status: 'available',
+                source: 'watchlist intelligence',
+                updatedAt: backtestIntel.testedAt || undefined,
+                resultId: backtestIntel.lastResultId,
+                returnPct: backtestIntel.totalReturnPct ?? undefined,
+                summary: backtestIntel.totalReturnPct != null ? `${backtestIntel.totalReturnPct.toFixed(1)}%` : '有结果',
+              });
+            }
+          } else {
+            setItem('watchlist', { status: 'missing', source: 'watchlist', inWatchlist: false, summary: '未加入' });
+          }
+        } else {
+          setItem('watchlist', { status: 'error', source: 'watchlist' });
+        }
+
+        if (portfolioResult.status === 'fulfilled') {
+          const position = (portfolioResult.value.accounts || [])
+            .flatMap((account) => account.positions || [])
+            .find((item) => normalizeEvidenceSymbol(item.symbol) === primary && Number(item.quantity || 0) !== 0);
+          setItem('portfolio', {
+            status: position ? 'available' : 'missing',
+            source: 'portfolio snapshot',
+            updatedAt: portfolioResult.value.asOf,
+            hasPosition: Boolean(position),
+            summary: position ? `${position.quantity} 股` : '无持仓',
+          });
+        } else {
+          setItem('portfolio', { status: 'error', source: 'portfolio snapshot' });
+        }
+
+        if (scannerResult.status === 'fulfilled') {
+          const run = (scannerResult.value.items || []).find((item) => (item.topSymbols || []).map(normalizeEvidenceSymbol).includes(primary));
+          if (run) {
+            setItem('scanner', {
+              status: 'available',
+              source: `scanner run #${run.id}`,
+              updatedAt: run.completedAt || run.runAt || undefined,
+              summary: '最近入选',
+            });
+          } else if (nextItems.find((item) => item.key === 'scanner')?.status === 'unknown') {
+            setItem('scanner', { status: 'missing', source: 'scanner recent', summary: '未入选' });
+          }
+        } else if (nextItems.find((item) => item.key === 'scanner')?.status === 'unknown') {
+          setItem('scanner', { status: 'error', source: 'scanner recent' });
+        }
+
+        if (backtestResult.status === 'fulfilled') {
+          const run = (backtestResult.value.items || []).find((item) => normalizeEvidenceSymbol(item.code || '') === primary);
+          if (run) {
+            setItem('backtest', {
+              status: run.status === 'completed' ? 'available' : 'stale',
+              source: `rule backtest #${run.id}`,
+              updatedAt: run.completedAt || run.runAt || undefined,
+              resultId: run.id,
+              returnPct: run.totalReturnPct ?? undefined,
+              summary: run.totalReturnPct != null ? `${run.totalReturnPct.toFixed(1)}%` : String(run.status),
+            });
+          } else if (nextItems.find((item) => item.key === 'backtest')?.status === 'unknown') {
+            setItem('backtest', { status: 'missing', source: 'rule backtest history', summary: '无结果' });
+          }
+        } else if (nextItems.find((item) => item.key === 'backtest')?.status === 'unknown') {
+          setItem('backtest', { status: 'error', source: 'rule backtest history' });
+        }
+
+        if (followUpContextRef.current?.previous_price != null) {
+          setItem('quote', { status: 'available', source: 'previous report', summary: String(followUpContextRef.current.previous_price) });
+        }
+
+        setEvidenceItems(nextItems);
+      }).finally(() => {
+        if (!cancelled) setEvidenceLoading(false);
+      });
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [evidenceSymbolKey, smartRoute.market]);
   const engineSwitcherLabel = language === 'en' ? 'Engine, lenses, data' : '引擎、视角与数据';
   const composerDisclaimer = language === 'en'
     ? 'AI insights are for reference only and are not investment advice. Confirm your risk tolerance before trading.'
     : 'AI 洞察仅供参考，不构成实质性投资建议。执行交易前请确认风险承受能力。';
   const chatConsoleTitle = language === 'en' ? 'Research console' : '综合控制台';
-  const mobileConsoleTitle = language === 'en' ? 'Chat console' : '问股控制台';
+  const mobileConsoleTitle = language === 'en' ? 'Decision console' : '决策台控制台';
   const hasMessages = messages.length > 0;
   const showEmptyState = !hasMessages && !loading;
 
   const buildStructuredChatContext = useCallback(() => {
     const baseContext = followUpContextRef.current ? { ...followUpContextRef.current } : {};
+    const evidenceByKey = Object.fromEntries(
+      evidenceItems.map(({ key, status, source, updatedAt, summary, inWatchlist, hasPosition, resultId, returnPct }) => [
+        key,
+        {
+          status,
+          source,
+          updatedAt,
+          summary,
+          ...(inWatchlist != null ? { inWatchlist } : {}),
+          ...(hasPosition != null ? { hasPosition } : {}),
+          ...(resultId != null ? { resultId } : {}),
+          ...(returnPct != null ? { returnPct } : {}),
+        },
+      ]),
+    );
     return {
       ...baseContext,
       stock_chat: {
@@ -473,9 +652,29 @@ const ChatPage: React.FC = () => {
           recommended_lenses: smartRoute.recommendedLenses,
           confidence: smartRoute.confidence,
         },
+        stock_context: {
+          symbols: smartRoute.symbols.slice(0, 3),
+          market: smartRoute.market,
+          intent: smartRoute.intent,
+          recommended_lenses: smartRoute.recommendedLenses,
+          evidence: evidenceByKey,
+        },
       },
     };
   }, [evidenceItems, selectedLens.label, smartRoute]);
+
+  const buildEvidenceFooter = useCallback(() => ({
+    provider: providerHealth?.currentProvider || providerHealth?.providers.find((item) => item.selected)?.label || 'AUTO/UNKNOWN',
+    model: providerHealth?.currentModel || providerHealth?.providers.find((item) => item.selected)?.model || undefined,
+    lenses: smartRoute.recommendedLenses.length ? smartRoute.recommendedLenses : [selectedLens.label],
+    items: evidenceItems
+      .filter((item) => ['quote', 'portfolio', 'watchlist', 'scanner', 'backtest'].includes(item.key))
+      .map((item) => ({
+        label: item.key === 'scanner' ? 'Scanner' : item.label,
+        status: item.status,
+        summary: evidenceSummaryText(item),
+      })),
+  }), [evidenceItems, providerHealth, selectedLens.label, smartRoute.recommendedLenses]);
 
   const handleStartNewChat = useCallback(() => {
     followUpContextRef.current = null;
@@ -548,9 +747,9 @@ const ChatPage: React.FC = () => {
       followUpContextRef.current = null;
       setIsFollowUpContextLoading(false);
       setInput('');
-      await startStream(payload, { skillName: usedSkillName });
+      await startStream(payload, { skillName: usedSkillName, evidenceFooter: buildEvidenceFooter() });
     },
-    [buildStructuredChatContext, chat, input, loading, selectedSkill, sessionId, skills, startStream, t],
+    [buildEvidenceFooter, buildStructuredChatContext, chat, input, loading, selectedSkill, sessionId, skills, startStream, t],
   );
 
   const handleStopGeneration = useCallback(() => {
@@ -706,6 +905,29 @@ const ChatPage: React.FC = () => {
       })}
     </div>
   );
+
+  const renderEvidenceFooter = (msg: Message) => {
+    const footer = msg.evidenceFooter;
+    if (!footer) return null;
+    const dataText = (footer.items || [])
+      .map((item) => `${item.label} ${item.summary || item.status.toUpperCase()}`)
+      .join(' · ');
+    return (
+      <details
+        data-testid={`chat-answer-evidence-footer-${msg.id}`}
+        className="mt-3 rounded-xl border border-white/8 bg-white/[0.025] px-3 py-2 text-[11px] text-white/46"
+      >
+        <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-widest text-white/40">
+          本次使用
+        </summary>
+        <div className="mt-2 space-y-1">
+          <p>LLM: <span className="font-mono text-white/72">{footer.provider || 'AUTO/UNKNOWN'} {footer.model || ''}</span></p>
+          <p>视角: {(footer.lenses || []).join(' / ') || '综合判断'}</p>
+          <p>数据: {dataText || 'UNKNOWN'}</p>
+        </div>
+      </details>
+    );
+  };
 
   const latestAssistantMessageId = useMemo(
     () => [...messages].reverse().find((msg) => msg.role === 'assistant')?.id ?? null,
@@ -900,8 +1122,11 @@ const ChatPage: React.FC = () => {
     <section data-testid={testId} className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Data Evidence</p>
-        <p className="text-[10px] font-mono uppercase text-white/30">phase 1</p>
+        <p className="text-[10px] font-mono uppercase text-white/30">{evidenceLoading ? 'checking' : smartRoute.symbols.length ? 'read-only' : 'idle'}</p>
       </div>
+      {smartRoute.symbols.length === 0 ? (
+        <p className="rounded-lg border border-white/5 bg-black/20 px-2 py-2 text-xs text-white/42">先输入具体标的</p>
+      ) : null}
       <div className="grid grid-cols-2 gap-1.5">
         {evidenceItems.map((item) => (
           <div key={item.key} className="min-w-0 rounded-lg border border-white/5 bg-black/20 px-2 py-1.5">
@@ -909,15 +1134,16 @@ const ChatPage: React.FC = () => {
               <span className="truncate text-xs text-white/64">{item.label}</span>
               <span className={`font-mono text-[10px] uppercase ${
                 item.status === 'available'
+                  || item.status === 'used'
                   ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]'
-                  : item.status === 'missing'
+                  : item.status === 'missing' || item.status === 'error'
                     ? 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'
                     : 'text-white/32'
               }`}>
                 {item.status}
               </span>
             </div>
-            {item.source ? <p className="mt-1 truncate text-[10px] text-white/30">{item.source}</p> : null}
+            <p className="mt-1 truncate text-[10px] text-white/30">{item.summary || item.source || 'UNKNOWN'}</p>
           </div>
         ))}
       </div>
@@ -929,6 +1155,12 @@ const ChatPage: React.FC = () => {
     const symbolMarket = smartRoute.market === 'unknown' ? inferMarket(primarySymbol) : smartRoute.market;
     const encodedSymbol = encodeURIComponent(primarySymbol);
     const encodedMarket = encodeURIComponent(symbolMarket);
+    const watchlistEvidence = evidenceItems.find((item) => item.key === 'watchlist');
+    const portfolioEvidence = evidenceItems.find((item) => item.key === 'portfolio');
+    const backtestEvidence = evidenceItems.find((item) => item.key === 'backtest');
+    const isInWatchlist = watchlistEvidence?.inWatchlist === true;
+    const hasPosition = portfolioEvidence?.hasPosition === true;
+    const hasBacktest = Boolean(backtestEvidence?.resultId);
     return (
       <section data-testid="chat-quick-actions" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
         <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">Quick Actions</p>
@@ -938,24 +1170,26 @@ const ChatPage: React.FC = () => {
             className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10"
             aria-label={`回测 ${primarySymbol}`}
           >
-            回测
+            {hasBacktest ? '查看最近回测' : '运行回测'}
           </a>
           <button
             type="button"
             onClick={() => {
+              if (isInWatchlist) return;
               void handleAddWatchlist(primarySymbol, symbolMarket);
             }}
+            disabled={isInWatchlist}
             className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10"
-            aria-label={`加入观察列表 ${primarySymbol}`}
+            aria-label={`${isInWatchlist ? '已在观察列表' : '加入观察列表'} ${primarySymbol}`}
           >
-            加入观察列表
+            {isInWatchlist ? '已在观察列表' : '加入观察列表'}
           </button>
           <a
             href={`/portfolio?symbol=${encodedSymbol}`}
             className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10"
             aria-label={`查看持仓 ${primarySymbol}`}
           >
-            查看持仓
+            {hasPosition ? '查看持仓' : '未持仓'}
           </a>
           <a
             href={`/scanner?symbol=${encodedSymbol}&market=${encodedMarket}`}
@@ -1021,18 +1255,38 @@ const ChatPage: React.FC = () => {
 
   const renderControlPanel = (testId: string) => {
     const primaryModel = agentModels.find((model) => model.is_primary) || agentModels[0];
+    const currentProvider = providerHealth?.currentProvider || providerHealth?.providers.find((item) => item.selected)?.label || primaryModel?.provider || 'DeepSeek';
+    const currentModel = providerHealth?.currentModel || providerHealth?.providers.find((item) => item.selected)?.model || primaryModel?.model || 'provider auto-select';
     return (
       <div data-testid={testId} className="flex flex-col gap-4">
         <section data-testid="chat-engine-section" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
           <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">AI 引擎</p>
           <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-white/6 bg-black/25 px-3 py-2">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">{primaryModel?.provider || '自动路由'}</p>
-              <p className="truncate font-mono text-[10px] text-white/36">{primaryModel?.model || 'provider auto-select'}</p>
+              <p className="truncate text-sm font-semibold text-white">{providerHealth?.routingMode || 'AUTO'} → {currentProvider}</p>
+              <p className="truncate font-mono text-[10px] text-white/36">{currentModel}</p>
             </div>
             <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 font-mono text-[10px] uppercase text-emerald-400">
-              auto
+              {providerHealth?.routingMode || 'auto'}
             </span>
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-1.5">
+            {(providerHealth?.providers || []).map((provider) => (
+              <div key={provider.id} className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-white/5 bg-black/20 px-2 py-1.5">
+                <span className={`truncate text-xs ${provider.selected ? 'text-white' : 'text-white/58'}`}>
+                  {provider.label} {providerStatusLabel[provider.status] || provider.status}
+                </span>
+                <span className={`font-mono text-[10px] uppercase ${
+                  provider.status === 'available'
+                    ? 'text-emerald-400'
+                    : provider.status === 'not_configured' || provider.status === 'offline' || provider.status === 'disabled'
+                      ? 'text-rose-400'
+                      : 'text-white/36'
+                }`}>
+                  {providerStatusLabel[provider.status] || provider.status}
+                </span>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -1074,6 +1328,9 @@ const ChatPage: React.FC = () => {
         </section>
 
         {renderDataEvidencePanel()}
+        <div className="hidden lg:block">
+          {renderQuickActions()}
+        </div>
       </div>
     );
   };
@@ -1096,7 +1353,7 @@ const ChatPage: React.FC = () => {
           type="button"
           onClick={openConsoleButton.onClick}
           onPointerUp={openConsoleButton.onPointerUp}
-          aria-label={language === 'en' ? 'Open chat console' : '打开问股控制台'}
+          aria-label={language === 'en' ? 'Open decision console' : '打开决策台控制台'}
           data-testid="chat-bento-brief-trigger"
           className={CARD_BUTTON_CLASS}
           title={language === 'en' ? 'Open console' : '打开控制台'}
@@ -1191,15 +1448,9 @@ const ChatPage: React.FC = () => {
 
   return (
     <div
-      ref={surfaceRef}
       data-testid="chat-bento-page"
       data-bento-surface="true"
-      aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
-      aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
-      className={getSafariReadySurfaceClassName(
-        isSafariReady,
-        'gemini-bento-page bento-surface-root gemini-bento-page--chat flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-[#030303]',
-      )}
+      className="gemini-bento-page bento-surface-root gemini-bento-page--chat flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-[#030303]"
     >
       <div
         data-testid="chat-workspace"
@@ -1232,9 +1483,9 @@ const ChatPage: React.FC = () => {
               >
                 <div
                   data-testid="chat-empty-state"
-                  className="flex flex-1 flex-col items-center justify-center overflow-y-auto no-scrollbar"
+                  className="flex flex-1 flex-col items-center justify-start overflow-y-auto no-scrollbar"
                 >
-                  <div className="flex w-full max-w-5xl flex-col items-center gap-12 px-6 pt-6 text-center md:px-8 xl:px-12">
+                  <div className="flex w-full max-w-5xl flex-col items-center gap-5 px-4 pt-5 text-center sm:gap-10 md:px-8 xl:px-12">
                     {skillsLoadError ? (
                       <ApiErrorAlert
                         error={skillsLoadError}
@@ -1246,17 +1497,18 @@ const ChatPage: React.FC = () => {
                     ) : null}
 
                     <div className="flex w-full max-w-4xl flex-col items-center">
-                      <div className="mb-3 flex items-center justify-center gap-3">
-                        <Lightbulb className="h-6 w-6 text-white/80" aria-hidden="true" />
-                        <h1 className="text-3xl font-bold text-white">{chat('emptyTitle')}</h1>
+                      <div className="mb-2 flex items-center justify-center gap-3">
+                        <Lightbulb className="h-5 w-5 text-white/80 sm:h-6 sm:w-6" aria-hidden="true" />
+                        <h1 className="text-xl font-bold text-white sm:text-3xl">{chat('title')}</h1>
                       </div>
-                      <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/62">
-                        {chat('emptyBody')}
+                      <p className="mt-1 max-w-3xl text-xs leading-relaxed text-white/62 sm:mt-3 sm:text-sm">
+                        {chat('description')}
                       </p>
+                      <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-white/40">{chat('emptyTitle')}</p>
                     </div>
 
-                    <div className="grid w-full max-w-5xl grid-cols-1 gap-6 lg:grid-cols-3">
-                      {starterPromptCards.map((card) => (
+                    <div className="grid w-full max-w-5xl grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 lg:gap-6">
+                      {starterPromptCards.slice(0, 2).map((card, index) => (
                         <GlassCard
                           key={card.id}
                           as="button"
@@ -1264,7 +1516,7 @@ const ChatPage: React.FC = () => {
                           onClick={() => {
                             void handleSend(chat(`starterCards.${card.id}.prompt`), card.skill);
                           }}
-                          className="flex min-w-0 flex-col items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-8 py-6 text-center transition-colors duration-150 hover:bg-white/[0.05]"
+                          className={`${index > 0 ? 'hidden sm:flex' : 'flex'} min-w-0 flex-col items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-center transition-colors duration-150 hover:bg-white/[0.05] sm:px-8 sm:py-6`}
                         >
                           <div className="flex flex-col items-center justify-center gap-3">
                             <p className="break-words whitespace-normal text-sm font-bold text-white">{chat(`starterCards.${card.id}.title`)}</p>
@@ -1279,10 +1531,39 @@ const ChatPage: React.FC = () => {
                       ))}
                     </div>
 
+                    {starterPromptCards.length > 2 ? (
+                      <details
+                        data-testid="chat-more-templates"
+                        open={mobileTemplatesOpen}
+                        onToggle={(event) => setMobileTemplatesOpen((event.currentTarget as HTMLDetailsElement).open)}
+                        className="w-full max-w-5xl text-left sm:hidden"
+                      >
+                        <summary className="cursor-pointer list-none text-center text-[10px] font-bold uppercase tracking-widest text-white/40">
+                          更多模板
+                        </summary>
+                        <div className="mt-2 grid grid-cols-1 gap-2">
+                          {starterPromptCards.slice(1).map((card) => (
+                            <button
+                              key={card.id}
+                              type="button"
+                              data-testid={`chat-mobile-template-${card.id}`}
+                              onClick={() => {
+                                void handleSend(chat(`starterCards.${card.id}.prompt`), card.skill);
+                              }}
+                              className="rounded-xl border border-white/6 bg-white/[0.025] px-3 py-2 text-left text-xs text-white/64"
+                            >
+                              <span className="block font-bold text-white/80">{chat(`starterCards.${card.id}.title`)}</span>
+                              <span className="mt-1 block line-clamp-1 text-white/40">{chat(`starterCards.${card.id}.prompt`)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
+
                     {quickQuestions.length > 0 ? (
                       <div
                         data-testid="chat-quick-question-cloud"
-                        className="flex flex-wrap justify-center gap-3"
+                        className="hidden flex-wrap justify-center gap-2 sm:flex sm:gap-3"
                       >
                         {quickQuestions.map((q) => (
                           <button
@@ -1423,6 +1704,7 @@ const ChatPage: React.FC = () => {
                                   </Markdown>
                                 </div>
                               )}
+                              {renderEvidenceFooter(msg)}
                             </div>
                           </div>
                         );

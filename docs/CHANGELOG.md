@@ -1,5 +1,9 @@
 ## 2026-05-04
 
+- 🧊 **Market Overview Last-Known-Good 快照与缓存 UX** — `/market-overview` 新增后端持久化 last-known-good panel snapshot，外部行情源超时或冷启动失败时优先返回最近成功快照并标记 `stale/isFromSnapshot/lastSuccessfulAt/refreshError`，不再用空 payload 覆盖好数据。前端新增 `wolfystock.marketOverview.lastKnownGood.v1` 本地快照，页面刷新或后端慢启动时先渲染 LOCAL CACHE，再静默刷新；卡片级错误收敛为小型 STALE/ERROR badge，顶部状态条聚合 CACHE/STALE/REFRESH FAILED 与错误数量，减少重复红色错误块和 N/A 墙。
+
+- 🧠 **Stock Chat Phase 2 升级为 AI 决策台** — `/chat` 可见导航从“问股”收口为“决策台 / WOLFY AI 决策台”，移动端空态压缩为单个主模板与“更多模板”，控制台改为默认折叠抽屉并修复 Safari 窄屏透明遮挡。AI 引擎新增安全的 provider health 视图，只展示 DeepSeek/OpenAI/Gemini/Local 等 provider 的可用、未配置、离线或未知状态，不暴露 API key；检测到代码后只读取既有观察列表、持仓快照、scanner 历史和 rule backtest 历史证据，不自动运行 scanner/backtest/AI 分析，并把紧凑证据摘要传入 AgentExecutor 与每条回答底部证据 footer。
+
 - 🧠 **Stock Chat Phase 1 引擎透明化与 Smart Routing** — `/chat` 问股控制台将 AI 引擎、分析视角与数据上下文拆分展示，默认以综合判断、趋势跟踪、均线系统、放量突破、箱体震荡、情绪周期、龙头策略、持仓风控、基本面质量与事件驱动等专业视角呈现，并把缠论/波浪/一阳夹三阴收进高级辅助视角。输入框新增本地 deterministic Smart Route，识别 ORCL/AAPL/600519/0700.HK 等代码、US/CN/HK 市场、买入持有/持仓管理/突破/对比/趋势/基本面/事件等意图，并只推荐视角不自动触发分析。聊天请求新增 `structured_stock_analysis_v1` 输出契约，要求结论、关键依据、关键价位、风险、操作计划与数据可信度结构化输出；数据证据面板默认明确 unknown，不冒充已使用数据；检测到单标的时提供回测、加入观察列表、查看持仓、扫描器证据和分析报告 quick actions，全部由用户点击触发。
 
 ## 2026-05-02

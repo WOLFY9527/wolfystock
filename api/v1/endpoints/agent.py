@@ -15,7 +15,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from api.deps import CurrentUser, get_current_user, require_admin_user
 from src.config import get_config
-from src.services.agent_model_service import list_agent_model_deployments
+from src.services.agent_model_service import list_agent_model_deployments, list_agent_provider_health
 
 # Tool name -> Chinese display name mapping
 TOOL_DISPLAY_NAMES: Dict[str, str] = {
@@ -120,6 +120,24 @@ class AgentModelsResponse(BaseModel):
     models: List[AgentModelDeployment]
 
 
+class AgentProviderHealthItem(BaseModel):
+    id: str
+    label: str
+    status: str
+    model: Optional[str] = None
+    selected: bool = False
+    reason: Optional[str] = None
+
+
+class AgentProviderHealthResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    routing_mode: str = Field(serialization_alias="routingMode")
+    current_provider: Optional[str] = Field(default=None, serialization_alias="currentProvider")
+    current_model: Optional[str] = Field(default=None, serialization_alias="currentModel")
+    providers: List[AgentProviderHealthItem]
+
+
 @router.get("/status", response_model=AgentStatusResponse)
 async def get_agent_status():
     """Return whether the Ask Stock experience should be exposed."""
@@ -133,6 +151,12 @@ async def get_agent_models():
     return AgentModelsResponse(
         models=[AgentModelDeployment(**item) for item in list_agent_model_deployments(config)]
     )
+
+
+@router.get("/provider-health", response_model=AgentProviderHealthResponse)
+async def get_agent_provider_health():
+    """Get safe Agent provider readiness without exposing credentials."""
+    return AgentProviderHealthResponse(**list_agent_provider_health(get_config()))
 
 
 def _build_skills_response(config) -> SkillsResponse:

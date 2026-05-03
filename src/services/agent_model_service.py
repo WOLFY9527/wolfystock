@@ -32,6 +32,27 @@ def _get_model_provider(model_name: str) -> str:
     return "openai"
 
 
+def _provider_label(provider: str) -> str:
+    return {
+        "deepseek": "DeepSeek",
+        "openai": "OpenAI",
+        "gemini": "Gemini",
+        "vertex_ai": "Gemini",
+        "ollama": "Local",
+        "local": "Local",
+    }.get(provider, provider[:1].upper() + provider[1:])
+
+
+def _has_configured_key(config, provider: str) -> bool:
+    if provider in {"gemini", "vertex_ai"}:
+        return any(k and len(k) >= 8 for k in (getattr(config, "gemini_api_keys", []) or []))
+    if provider == "openai":
+        return any(k and len(k) >= 8 for k in (getattr(config, "openai_api_keys", []) or []))
+    if provider == "deepseek":
+        return any(k and len(k) >= 8 for k in (getattr(config, "deepseek_api_keys", []) or []))
+    return False
+
+
 def _build_non_legacy_deployments(config) -> List[Dict[str, Any]]:
     source = _get_models_source(config)
     primary_model = get_effective_agent_primary_model(config)
@@ -136,3 +157,61 @@ def list_agent_model_deployments(config) -> List[Dict[str, Any]]:
             item["deployment_id"],
         ),
     )
+
+
+def list_agent_provider_health(config) -> Dict[str, Any]:
+    """Return safe provider readiness metadata for the Agent UI.
+
+    This is a configuration/readiness view only. It never probes paid APIs and
+    never returns API keys, headers, or raw LiteLLM params.
+    """
+    deployments = list_agent_model_deployments(config)
+    primary_model = get_effective_agent_primary_model(config)
+    current_provider = _get_model_provider(primary_model) if primary_model else ""
+    deployment_by_provider: Dict[str, Dict[str, Any]] = {}
+    for deployment in deployments:
+        provider = str(deployment.get("provider") or "").lower()
+        if provider and (provider not in deployment_by_provider or deployment.get("is_primary")):
+            deployment_by_provider[provider] = deployment
+
+    agent_enabled = bool(config.is_agent_available())
+    provider_ids = ["deepseek", "openai", "gemini", "local"]
+    for provider in sorted(deployment_by_provider):
+        if provider not in {"vertex_ai", "ollama"} and provider not in provider_ids:
+            provider_ids.append(provider)
+
+    providers: List[Dict[str, Any]] = []
+    for provider in provider_ids:
+        lookup_provider = "ollama" if provider == "local" else provider
+        deployment = deployment_by_provider.get(lookup_provider) or deployment_by_provider.get(provider)
+        has_key = _has_configured_key(config, lookup_provider)
+        is_selected = bool(current_provider) and (
+            lookup_provider == current_provider
+            or (provider == "local" and current_provider in {"ollama", "local"})
+        )
+        if not agent_enabled:
+            status = "disabled"
+        elif deployment or has_key:
+            status = "available"
+        elif provider == "local":
+            status = "offline"
+        else:
+            status = "not_configured"
+
+        providers.append(
+            {
+                "id": provider,
+                "label": _provider_label(provider),
+                "status": status,
+                "model": (deployment or {}).get("model") if deployment else (primary_model if is_selected else None),
+                "selected": is_selected,
+                "reason": None,
+            }
+        )
+
+    return {
+        "routing_mode": "AUTO",
+        "current_provider": _provider_label(current_provider) if current_provider else None,
+        "current_model": primary_model or None,
+        "providers": providers,
+    }
