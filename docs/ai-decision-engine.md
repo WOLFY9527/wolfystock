@@ -66,8 +66,10 @@ Safety notes:
 ## Home Report UX
 
 - The default Home result view is an AI decision dashboard: summary action, score, confidence context, execution plan, and compact evidence/source state.
-- `查看完整判断` opens a large report drawer built from existing `standard_report` and legacy summary fields. It renders 执行摘要、重要信息速览、风险警报、利好催化、当日行情、技术透视、作战计划、检查清单 and 数据说明, with missing values shown as `--`.
-- `决策来源` opens a compact trace drawer for decision fields, data used, conflicts, and limitations. Developer details such as provider, model, template, schema status, endpoint, and signal inputs are collapsed by default.
+- `完整报告` opens a formal financial research report drawer built from existing `standard_report` and legacy summary fields. It renders 投资结论、执行计划、核心证据、风险警报、利好催化、市场快照、技术透视、基本面摘要、检查清单 and 数据说明, with missing values shown as `--`.
+- The report drawer supports `导出 Markdown` and browser print / PDF export (`导出 PDF`). The print flow uses a report-only view so app navigation and action buttons are not part of the printable report.
+- `决策来源` opens a compact evidence/trace drawer for decision fields, data used, conflicts, and limitations. Developer details such as provider, model, template, schema status, endpoint, and signal inputs are collapsed by default.
+- `完整报告` and `决策来源` live inside the main AI decision card action row alongside `复制报告` and `重新分析`; there is no separate action/source card.
 - The Home UI does not expose raw prompts, system prompts, API keys, or secrets in either drawer.
 - Fixture verification paths:
   - `/zh?fixture=analysis-trace`

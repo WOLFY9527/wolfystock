@@ -8,6 +8,7 @@ import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
 import { stocksApi } from '../../api/stocks';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { useStockPoolStore } from '../../stores';
+import { buildInstitutionalReportMarkdown } from '../../utils/homeReportIdentity';
 import HomeSurfacePage from '../HomeSurfacePage';
 
 const { useProductSurfaceMock } = vi.hoisted(() => ({
@@ -394,31 +395,55 @@ describe('HomeSurfacePage', () => {
     renderSurface();
     await screen.findByText('Oracle Corporation');
 
-    expect(screen.getByRole('button', { name: '查看完整判断' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '完整报告' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '决策来源' })).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-decision-trace-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-decision-actions')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('完整报告');
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('决策来源');
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('复制报告');
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('重新分析');
+    expect(screen.queryByText('查看完整判断')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '查看完整判断' }));
+    fireEvent.click(screen.getByRole('button', { name: '完整报告' }));
 
     const report = await screen.findByTestId('home-bento-full-report-drawer');
     [
-      '执行摘要',
-      '重要信息速览',
+      '投资结论',
+      '执行计划',
+      '核心证据',
       '风险警报',
       '利好催化',
-      '当日行情',
+      '市场快照',
       '技术透视',
-      '作战计划',
+      '基本面摘要',
       '检查清单',
       '数据说明',
     ].forEach((sectionTitle) => {
       expect(within(report).getByText(sectionTitle)).toBeInTheDocument();
     });
+    expect(within(report).getByText('WOLFY AI EQUITY RESEARCH')).toBeInTheDocument();
+    expect(within(report).getByText('AI 洞察仅供参考，不构成投资建议。')).toBeInTheDocument();
+    expect(within(report).getByRole('button', { name: '导出 Markdown' })).toBeInTheDocument();
+    expect(within(report).getByRole('button', { name: /导出 PDF|打印\/PDF/ })).toBeInTheDocument();
     expect(within(report).getAllByText('--').length).toBeGreaterThan(0);
 
     fireEvent.click(within(report).getByRole('button', { name: '复制报告' }));
     await waitFor(() => expect(writeText).toHaveBeenCalled());
-    expect(String(writeText.mock.calls[0][0])).toContain('执行摘要');
+    expect(String(writeText.mock.calls[0][0])).toContain('投资结论');
+  });
+
+  it('builds markdown export with company identity and disclaimer', () => {
+    const markdown = buildInstitutionalReportMarkdown(defaultHistoryReport, {
+      companyName: 'Tempus AI',
+      ticker: 'TEM',
+      generatedAt: '2026-05-04T02:02:00+08:00',
+    });
+
+    expect(markdown).toContain('# Wolfy AI Equity Research: Tempus AI (TEM)');
+    expect(markdown).toContain('AI 洞察仅供参考，不构成投资建议。');
+    expect(markdown).toContain('## 投资结论 / Investment Thesis');
+    expect(markdown).toContain('## 数据说明 / Data Notes');
   });
 
   it('opens the compact decision trace drawer with collapsed developer details', async () => {
@@ -463,8 +488,18 @@ describe('HomeSurfacePage', () => {
 
     renderSurface('/zh?fixture=analysis-trace');
 
+    expect(await screen.findByText('Tempus AI')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-decision-company-header')).toHaveTextContent('Tempus AI');
+    expect(screen.getByTestId('home-bento-decision-company-header')).toHaveTextContent('(TEM)');
+    expect(document.body.textContent).not.toContain('TEM (TEM) (TEM)');
     expect(await screen.findByText(/Fixture result only; not investment advice/i)).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('Fixture result only; not investment advice.');
+    expect(screen.queryByTestId('home-bento-decision-actions')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('完整报告');
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('决策来源');
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('复制报告');
+    expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('重新分析');
+    expect(screen.queryByText('查看完整判断')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('128.50');
     expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('136.00-138.00');
 
@@ -550,9 +585,33 @@ describe('HomeSurfacePage', () => {
     renderSurface('/zh?fixture=analysis-trace&report=open');
 
     const report = await screen.findByTestId('home-bento-full-report-drawer');
-    expect(screen.getByRole('dialog')).toHaveTextContent('完整判断报告');
-    expect(within(report).getByText('执行摘要')).toBeInTheDocument();
-    expect(within(report).getByText('Oracle Trace Fixture')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveTextContent('完整报告');
+    expect(within(report).getByText('投资结论')).toBeInTheDocument();
+    expect(within(report).getByText('Tempus AI (TEM)')).toBeInTheDocument();
+    expect(within(report).getByText('AI 洞察仅供参考，不构成投资建议。')).toBeInTheDocument();
+  });
+
+  it('renders history titles with company plus ticker without duplicate ticker strings', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValueOnce({
+      total: 4,
+      page: 1,
+      limit: 20,
+      items: [
+        { id: 11, queryId: 'tem-1', stockCode: 'TEM', stockName: 'Tempus AI', companyName: 'Tempus AI', createdAt: '2026-05-04T02:02:00Z', generatedAt: '2026-05-04T02:02:00Z', isTest: false },
+        { id: 12, queryId: 'tem-2', stockCode: 'TEM', stockName: 'TEM', createdAt: '2026-05-04T02:00:00Z', generatedAt: '2026-05-04T02:00:00Z', isTest: false },
+        { id: 13, queryId: 'tem-3', stockCode: 'TEM', stockName: 'Tempus AI (TEM)', createdAt: '2026-05-04T01:58:00Z', generatedAt: '2026-05-04T01:58:00Z', isTest: false },
+        { id: 14, queryId: 'tem-4', stockCode: 'TEM', stockName: 'TEM (TEM) (TEM)', createdAt: '2026-05-04T01:55:00Z', generatedAt: '2026-05-04T01:55:00Z', isTest: false },
+      ],
+    });
+
+    renderSurface();
+    fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
+    const drawer = await screen.findByTestId('home-bento-history-drawer');
+
+    expect(within(drawer).getAllByText('Tempus AI (TEM)').length).toBeGreaterThanOrEqual(2);
+    expect(within(drawer).getByTestId('home-bento-history-item-12')).toHaveTextContent(/^TEMTEM ·/);
+    expect(drawer).not.toHaveTextContent('TEM (TEM) (TEM)');
   });
 
   it('shows a safe unavailable trace state for old analysis reports without trace metadata', async () => {

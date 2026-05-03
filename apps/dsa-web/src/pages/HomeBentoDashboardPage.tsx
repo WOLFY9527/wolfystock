@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Copy, FileSearch, Lock, RefreshCw, Search } from 'lucide-react';
+import { Copy, Download, FileSearch, Lock, Printer, RefreshCw, Search } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { publicAnalysisApi } from '../api/publicAnalysis';
 import { withFallback } from '../api/withFallback';
@@ -27,6 +27,14 @@ import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
 import type { AnalysisReport, DecisionTrace, HistoryItem, StandardReport, StandardReportChecklistItem, StandardReportField, TaskProgressModule } from '../types/analysis';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
 import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
+import {
+  buildInstitutionalReportMarkdown,
+  getCompanyDisplayName,
+  getCompanyWithTicker,
+  getSymbolDisplay,
+  normalizeCompanyNameCandidate,
+  readObjectField,
+} from '../utils/homeReportIdentity';
 import { createPublicAnalysisFallbackPreview } from '../utils/publicAnalysisFallback';
 
 type DrawerMetric = {
@@ -64,10 +72,10 @@ type HomeBentoDashboardPageProps = {
 function buildDecisionTraceFixtureReport(): AnalysisReport {
   return {
     meta: {
-      queryId: 'fixture-analysis-trace-orcl',
-      stockCode: 'ORCL',
-      stockName: 'Oracle Trace Fixture',
-      companyName: 'Oracle Trace Fixture',
+      queryId: 'fixture-analysis-trace-tem',
+      stockCode: 'TEM',
+      stockName: 'Tempus AI',
+      companyName: 'Tempus AI',
       reportType: 'detailed',
       reportLanguage: 'zh',
       createdAt: '2026-05-04T09:00:00Z',
@@ -93,9 +101,9 @@ function buildDecisionTraceFixtureReport(): AnalysisReport {
     details: {
       standardReport: {
         summaryPanel: {
-          stock: 'Oracle Trace Fixture',
-          ticker: 'ORCL',
-          score: 5.8,
+          stock: 'Tempus AI',
+          ticker: 'TEM',
+          score: 3.6,
           currentPrice: '130.20',
           changePct: '-0.40%',
           operationAdvice: '等待回踩',
@@ -156,8 +164,8 @@ function buildDecisionTraceFixtureReport(): AnalysisReport {
       engineVersion: 'analysis_decision_trace_v1',
       mode: 'hybrid',
       endpoint: '/fixture/home-analysis-trace',
-      taskId: 'fixture-analysis-trace-orcl',
-      symbol: 'ORCL',
+      taskId: 'fixture-analysis-trace-tem',
+      symbol: 'TEM',
       market: 'US',
       generatedAt: '2026-05-04T09:00:00Z',
       decisionFields: {
@@ -312,6 +320,18 @@ type FullReportSection = {
   checklist?: Array<{ label: string; status: string }>;
 };
 
+type ReportIdentity = {
+  companyName: string;
+  ticker: string;
+  companyWithTicker: string;
+  generatedAt: string;
+  market: string;
+  currency: string;
+  providers: string;
+  horizon: string;
+  dataStatus: string;
+};
+
 function normalizeChecklistStatus(item: StandardReportChecklistItem | string): { label: string; status: string } {
   if (typeof item === 'string') {
     return { label: item, status: 'UNKNOWN' };
@@ -329,6 +349,55 @@ function normalizeChecklistStatus(item: StandardReportChecklistItem | string): {
   return { label: item.text || '--', status: normalized };
 }
 
+function formatReportDateTime(value?: string): string {
+  const text = String(value || '').trim();
+  if (!text) {
+    return '--';
+  }
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) {
+    return text;
+  }
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+}
+
+function buildReportIdentity(report: AnalysisReport | null, dashboard?: DashboardPayload, override?: Partial<ReportIdentity>): ReportIdentity {
+  const ticker = override?.ticker || getSymbolDisplay(report) || dashboard?.ticker || EMPTY_FIELD_VALUE;
+  const companyName = override?.companyName || getCompanyDisplayName(report) || dashboard?.decision.company || ticker;
+  const generatedAt = override?.generatedAt
+    || report?.meta.reportGeneratedAt
+    || report?.meta.createdAt
+    || report?.decisionTrace?.generatedAt
+    || '';
+  const dataSources = report?.decisionTrace?.dataSources || [];
+  const providers = dataSources
+    .map((source) => source.provider || source.name)
+    .filter(Boolean)
+    .join(', ');
+  const statuses = dataSources.map((source) => source.status).filter(Boolean);
+  const schemaStatus = report?.decisionTrace?.llm?.schemaValidated ? 'schema ok' : 'schema unverified';
+
+  return {
+    companyName,
+    ticker,
+    companyWithTicker: companyName.toUpperCase() === ticker ? ticker : `${companyName} (${ticker})`,
+    generatedAt: formatReportDateTime(generatedAt),
+    market: override?.market || report?.decisionTrace?.market || '--',
+    currency: override?.currency || safeReportValue(readObjectField(report, ['details', 'standardReport', 'summaryPanel', 'currency']) || readObjectField(report, ['details', 'standardReport', 'market', 'currency'])),
+    providers: override?.providers || providers || '--',
+    horizon: override?.horizon || safeReportValue(report?.details?.standardReport?.summaryPanel?.timeSensitivity || report?.details?.standardReport?.decisionPanel?.marketStructure || '短线 / 中短线'),
+    dataStatus: override?.dataStatus || [...new Set([...statuses, schemaStatus])].join(' / ') || '--',
+  };
+}
+
 function buildFullReportSections(report: AnalysisReport | null, dashboard: DashboardPayload): FullReportSection[] {
   const standardReport = getReportSource(report);
   const summaryPanel = standardReport?.summaryPanel;
@@ -344,30 +413,44 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
   const technicalFields = standardReport?.technicalFields || standardReport?.tableSections?.technical?.fields || [];
   const coverageNotes = standardReport?.coverageNotes;
   const checklistItems = (standardReport?.checklistItems || standardReport?.checklist || []).map(normalizeChecklistStatus);
+  const evidenceBullets = listOrMissing([
+    ...(reasonLayer?.coreReasons || []),
+    fieldValue(technicalFields, ['MA ALIGNMENT', 'Moving Averages', '均线']),
+    fieldValue(standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields, ['Revenue', 'Revenue Growth', '收入', '营收']),
+    highlights?.sentimentSummary || reasonLayer?.sentimentSummary || report?.summary.sentimentLabel,
+    fieldValue(technicalFields, ['VOLUME DYNAMICS', 'Volume', '量价', '成交量']),
+  ], '暂无足够证据字段');
 
   return [
     {
       id: 'summary',
-      title: '执行摘要',
+      title: '投资结论',
       rows: [
-        { label: '标的', value: safeReportValue(summaryPanel?.stock || report?.meta.stockName || dashboard.decision.company) },
-        { label: '代码', value: safeReportValue(summaryPanel?.ticker || report?.meta.stockCode || dashboard.ticker) },
         { label: '动作', value: safeReportValue(summaryPanel?.operationAdvice || report?.summary.operationAdvice || dashboard.decision.signalLabel) },
         { label: '评分', value: safeReportValue(summaryPanel?.score ?? dashboard.decision.heroValue) },
-        { label: '趋势', value: safeReportValue(summaryPanel?.trendPrediction || report?.summary.trendPrediction || dashboard.decision.scoreValue) },
+        { label: '趋势/结构', value: safeReportValue(decisionPanel?.marketStructure || summaryPanel?.trendPrediction || report?.summary.trendPrediction || dashboard.decision.scoreValue) },
         { label: '一句话判断', value: safeReportValue(summaryPanel?.oneSentence || report?.summary.analysisSummary || dashboard.decision.summary) },
-        { label: '有效期', value: safeReportValue(summaryPanel?.timeSensitivity || summaryPanel?.marketTime || summaryPanel?.reportGeneratedAt || report?.meta.reportGeneratedAt) },
+        { label: '关键理由', value: safeReportValue(reasonLayer?.coreReasons?.[0] || reasonLayer?.latestKeyUpdate || dashboard.decision.reasonBody) },
       ],
     },
     {
-      id: 'brief',
-      title: '重要信息速览',
-      bullets: listOrMissing([
-        highlights?.sentimentSummary || reasonLayer?.sentimentSummary || report?.summary.sentimentLabel,
-        highlights?.earningsOutlook,
-        ...(highlights?.latestNews || []),
-        reasonLayer?.latestKeyUpdate,
-      ], '暂无足够新闻、情绪或财报速览'),
+      id: 'trading-plan',
+      title: '执行计划',
+      rows: [
+        { label: '理想买点', value: safeReportValue(decisionPanel?.idealEntry || report?.strategy?.idealBuy) },
+        { label: '次级买点', value: safeReportValue(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy) },
+        { label: '目标', value: safeReportValue(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit) },
+        { label: '止损', value: safeReportValue(decisionPanel?.stopLoss || report?.strategy?.stopLoss) },
+        { label: '仓位', value: safeReportValue(decisionPanel?.positionSizing) },
+        { label: '持仓/空仓建议', value: safeReportValue(decisionPanel?.holderAdvice || decisionPanel?.noPositionAdvice || decisionPanel?.buildStrategy || report?.summary.operationAdvice) },
+        { label: '风控策略', value: safeReportValue(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason) },
+      ],
+      bullets: decisionPanel?.executionReminders,
+    },
+    {
+      id: 'evidence',
+      title: '核心证据',
+      bullets: evidenceBullets,
     },
     {
       id: 'risks',
@@ -389,13 +472,12 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
     },
     {
       id: 'market',
-      title: '当日行情',
+      title: '市场快照',
       rows: [
         { label: '开盘', value: fieldValue(marketFields, ['open', '开盘']) || safeReportValue(market?.regularMetrics?.open) },
         { label: '最高', value: fieldValue(marketFields, ['high', '最高']) || safeReportValue(market?.regularMetrics?.high) },
         { label: '最低', value: fieldValue(marketFields, ['low', '最低']) || safeReportValue(market?.regularMetrics?.low) },
         { label: '收盘', value: fieldValue(marketFields, ['close', '收盘', 'current']) || safeReportValue(summaryPanel?.currentPrice || market?.regularMetrics?.close) },
-        { label: '涨跌额', value: fieldValue(marketFields, ['change amount', '涨跌额']) || safeReportValue(summaryPanel?.changeAmount || market?.regularMetrics?.changeAmount) },
         { label: '涨跌幅', value: fieldValue(marketFields, ['change pct', 'change%', '涨跌幅']) || safeReportValue(summaryPanel?.changePct || market?.regularMetrics?.changePct) },
         { label: '成交量', value: fieldValue(marketFields, ['volume', '成交量']) || safeReportValue(market?.regularMetrics?.volume) },
         { label: '成交额', value: fieldValue(marketFields, ['turnover', 'amount', '成交额']) || safeReportValue(market?.regularMetrics?.amount) },
@@ -412,33 +494,28 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
         { label: '支撑位', value: safeReportValue(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy) },
         { label: '压力位', value: safeReportValue(decisionPanel?.resistance || decisionPanel?.target || report?.strategy?.takeProfit) },
         { label: '量价判断', value: fieldValue(technicalFields, ['VOLUME DYNAMICS', 'Volume', '量价', '成交量']) },
-        { label: '筹码/成本', value: fieldValue(technicalFields, ['chip', 'cost', '筹码', '成本']) },
       ],
     },
     {
-      id: 'battle-plan',
-      title: '作战计划',
+      id: 'fundamentals',
+      title: '基本面摘要',
       rows: [
-        { label: '理想买点', value: safeReportValue(decisionPanel?.idealEntry || report?.strategy?.idealBuy) },
-        { label: '次级买点', value: safeReportValue(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy) },
-        { label: '止损', value: safeReportValue(decisionPanel?.stopLoss || report?.strategy?.stopLoss) },
-        { label: '目标', value: safeReportValue(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit) },
-        { label: '仓位', value: safeReportValue(decisionPanel?.positionSizing) },
-        { label: '进场策略', value: safeReportValue(decisionPanel?.buildStrategy || report?.summary.operationAdvice) },
-        { label: '风控策略', value: safeReportValue(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason) },
+        { label: '营收', value: fieldValue(standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields, ['Revenue', 'Revenue Growth', '收入', '营收']) || '--' },
+        { label: 'ROE', value: fieldValue(standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields, ['ROE']) || '--' },
+        { label: '利润率', value: fieldValue(standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields, ['Margin', 'EBITDA MARGIN', '毛利率', '利润率']) || '--' },
+        { label: 'EPS', value: fieldValue(standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields, ['EPS', 'LATEST EPS']) || '--' },
+        { label: '估值', value: fieldValue(standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields, ['PE', 'Forward PE', '市盈率', '估值']) || '--' },
       ],
-      bullets: decisionPanel?.executionReminders,
     },
     {
       id: 'checklist',
       title: '检查清单',
       checklist: checklistItems.length ? checklistItems : [
-        { label: '多头结构是否一致', status: 'UNKNOWN' },
-        { label: '背离/追高风险', status: 'UNKNOWN' },
-        { label: '量能确认', status: 'UNKNOWN' },
-        { label: '重大负面新闻', status: 'UNKNOWN' },
-        { label: '筹码健康', status: 'UNKNOWN' },
-        { label: '估值匹配', status: 'UNKNOWN' },
+        { label: '趋势与行动一致', status: 'UNKNOWN' },
+        { label: '入场区间明确', status: 'UNKNOWN' },
+        { label: '止损纪律明确', status: 'UNKNOWN' },
+        { label: '数据覆盖充分', status: 'UNKNOWN' },
+        { label: '冲突已标注', status: 'UNKNOWN' },
       ],
     },
     {
@@ -447,19 +524,11 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
       bullets: [
         ...listOrMissing(coverageNotes?.dataSources, '数据源未完整标注'),
         ...listOrMissing(coverageNotes?.coverageGaps || coverageNotes?.missingFieldNotes, '缺失字段会以 -- 展示'),
+        ...listOrMissing(coverageNotes?.conflictNotes, '暂无额外冲突说明'),
         ...listOrMissing(coverageNotes?.methodNotes, '本报告为 AI 辅助分析，不构成投资建议'),
       ],
     },
   ];
-}
-
-function buildReportMarkdown(sections: FullReportSection[]): string {
-  return sections.map((section) => {
-    const rows = (section.rows || []).map((row) => `- ${row.label}: ${row.value}`);
-    const bullets = (section.bullets || []).map((item) => `- ${item}`);
-    const checklist = (section.checklist || []).map((item) => `- [${item.status}] ${item.label}`);
-    return [`## ${section.title}`, ...rows, ...bullets, ...checklist].join('\n');
-  }).join('\n\n');
 }
 
 function FullDecisionReportDrawer({
@@ -475,24 +544,74 @@ function FullDecisionReportDrawer({
 }) {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const sections = useMemo(() => buildFullReportSections(report, dashboard), [dashboard, report]);
+  const identity = useMemo(() => buildReportIdentity(report, dashboard), [dashboard, report]);
+  const markdown = useMemo(() => buildInstitutionalReportMarkdown(report), [report]);
 
   const handleCopyReport = async () => {
     try {
       if (!navigator.clipboard?.writeText) {
         throw new Error('clipboard_unavailable');
       }
-      await navigator.clipboard.writeText(buildReportMarkdown(sections));
+      await navigator.clipboard.writeText(markdown);
       setCopyState('copied');
     } catch {
       setCopyState('failed');
     }
   };
 
+  const buildExportFileName = (extension: 'md'): string => {
+    const safeCompany = identity.companyName.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') || 'Report';
+    const safeDate = identity.generatedAt.replace(/\D/g, '').slice(0, 8) || 'latest';
+    return `WolfyStock_${safeCompany}_${identity.ticker}_${safeDate}.${extension}`;
+  };
+
+  const handleMarkdownExport = () => {
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = buildExportFileName('md');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  const handlePrintReport = () => {
+    const printWindow = window.open('', '_blank', 'width=960,height=1200');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+    const escapedMarkdown = markdown
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>${identity.companyWithTicker} - Wolfy AI Equity Research</title>
+          <style>
+            body { margin: 0; background: #fff; color: #111827; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+            main { max-width: 820px; margin: 0 auto; padding: 40px 34px; }
+            pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; line-height: 1.58; font-size: 13px; }
+            @media print { main { padding: 0; } }
+          </style>
+        </head>
+        <body><main><pre>${escapedMarkdown}</pre></main></body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => printWindow.print(), 80);
+  };
+
   return (
     <Drawer
       isOpen={isOpen}
       onClose={onClose}
-      title="完整判断报告"
+      title="完整报告"
       width="max-w-[min(100vw,65rem)]"
       zIndex={90}
       bodyClassName="overflow-x-hidden"
@@ -501,22 +620,57 @@ function FullDecisionReportDrawer({
         className="min-w-0 space-y-5 rounded-l-[28px] border border-white/[0.08] bg-[#080B10]/92 p-4 text-white shadow-2xl sm:p-7"
         data-testid="home-bento-full-report-drawer"
       >
-        <header className="flex min-w-0 flex-col gap-4 border-b border-white/8 pb-5 md:flex-row md:items-end md:justify-between">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">AI DECISION REPORT</p>
-            <h2 className="mt-2 break-words text-2xl font-semibold tracking-[0] text-white md:text-3xl">
-              {dashboard.decision.company} · {dashboard.ticker}
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/58">{dashboard.decision.summary}</p>
+        <header className="min-w-0 border-b border-white/8 pb-5">
+          <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/42">WOLFY AI EQUITY RESEARCH</p>
+              <h2 className="mt-2 break-words text-2xl font-semibold tracking-[0] text-white md:text-3xl">
+                {identity.companyWithTicker}
+              </h2>
+              <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 text-sm text-white/68 sm:grid-cols-2">
+                <span>Action: {dashboard.decision.signalLabel}</span>
+                <span>Score: {dashboard.decision.heroValue} / 100</span>
+                <span>Confidence: {dashboard.decision.heroValue === EMPTY_FIELD_VALUE ? '--' : `${Math.round(Number(dashboard.decision.heroValue) * 10)}%`}</span>
+                <span>Report generated: {identity.generatedAt}</span>
+                <span className="sm:col-span-2">Data status: {identity.dataStatus}</span>
+              </div>
+            </div>
+            <div className="flex min-w-0 flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleMarkdownExport}
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
+              >
+                <Download className="h-4 w-4" />
+                导出 Markdown
+              </button>
+              <button
+                type="button"
+                onClick={handlePrintReport}
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
+              >
+                <Printer className="h-4 w-4" />
+                导出 PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => { void handleCopyReport(); }}
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
+              >
+                <Copy className="h-4 w-4" />
+                {copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制报告'}
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => { void handleCopyReport(); }}
-            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
-          >
-            <Copy className="h-4 w-4" />
-            {copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制报告'}
-          </button>
+          <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3 text-xs text-white/56 md:grid-cols-4">
+            <span>Market: {identity.market}</span>
+            <span>Currency: {identity.currency}</span>
+            <span className="min-w-0 truncate">Providers: {identity.providers}</span>
+            <span>Horizon: {identity.horizon}</span>
+          </div>
+          <p className="mt-4 rounded-xl border border-amber-300/18 bg-amber-300/8 px-3 py-2 text-sm text-amber-50/82">
+            AI 洞察仅供参考，不构成投资建议。
+          </p>
         </header>
 
         <div className="grid min-w-0 grid-cols-1 gap-4">
@@ -811,16 +965,14 @@ const COMPANY_PROFILES: Record<string, { company: string; sector: string }> = {
 function resolveCompanyProfile(ticker: string, rawCompany?: string): { company: string; sector: string } {
   const normalizedTicker = normalizeTickerQuery(ticker);
   const knownProfile = COMPANY_PROFILES[normalizedTicker];
-  const cleanedCompany = String(rawCompany || '')
-    .replace(new RegExp(`\\s*[（(]${normalizedTicker}[）)]\\s*$`, 'i'), '')
-    .trim();
+  const cleanedCompany = normalizeCompanyNameCandidate(rawCompany, normalizedTicker);
 
   if (knownProfile) {
     return knownProfile;
   }
 
   return {
-    company: cleanedCompany && cleanedCompany.toUpperCase() !== normalizedTicker ? cleanedCompany : normalizedTicker || EMPTY_FIELD_VALUE,
+    company: cleanedCompany || normalizedTicker || EMPTY_FIELD_VALUE,
     sector: 'Unclassified',
   };
 }
@@ -958,7 +1110,7 @@ const CONTENT: Record<DashboardLocale, {
       summary: '订单动能回升，价格重新贴近强趋势区间，适合用回踩确认来组织仓位。',
       reasonTitle: '最近报告归因',
       reasonBody: '盘中监测到大级别资金吸筹，价格成功站稳 MA60 关键支撑位，并伴随 MACD 零轴上方金叉，确认箱体突破有效。',
-      detailLabel: '查看完整判断',
+      detailLabel: '完整报告',
     },
     strategy: {
       title: '执行策略',
@@ -1324,12 +1476,7 @@ function resolveHistoryGeneratedAt(historyItem: HistoryItem, locale: DashboardLo
 }
 
 function resolveHistoryCompanyLabel(historyItem: HistoryItem): string {
-  const ticker = normalizeTickerQuery(historyItem.stockCode);
-  const companyName = String(historyItem.companyName || historyItem.stockName || '').trim();
-  if (!companyName || companyName.toUpperCase() === ticker) {
-    return ticker;
-  }
-  return `${companyName} (${ticker})`;
+  return getCompanyWithTicker(historyItem);
 }
 
 function buildInPlacePlaceholderDashboard(
@@ -2101,7 +2248,7 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
     reasonLayer?.topCatalyst,
     reasonLayer?.newsValueTier,
   ].filter(Boolean).slice(0, 2).join(' · ') || EMPTY_FIELD_VALUE;
-  const rawCompany = report.meta.companyName || report.meta.stockName || summaryPanel?.stock || stockCode;
+  const rawCompany = getCompanyDisplayName(report);
   const companyProfile = resolveCompanyProfile(stockCode, rawCompany);
   const rawSignalLabel = report.summary.sentimentLabel || EMPTY_FIELD_VALUE;
   const rawScoreValue = decisionContext?.shortTermView || report.summary.trendPrediction || report.summary.operationAdvice || EMPTY_FIELD_VALUE;
@@ -2179,7 +2326,7 @@ function buildGuestDashboardFromPreview(
   const score = typeof summary.sentimentScore === 'number' ? summary.sentimentScore : 68;
   const sentimentTone = toneFromScore(score);
   const scoreText = (score / 10).toFixed(1);
-  const rawCompany = preview.report.meta.stockName || preview.stockName || stockCode;
+  const rawCompany = getCompanyDisplayName(preview.report) || preview.stockName || stockCode;
   const companyProfile = resolveCompanyProfile(stockCode, rawCompany);
   const actionText = localizeNarrativeText(locale, summary.operationAdvice, seed.decision.scoreValue);
   const trendText = localizeNarrativeText(locale, summary.trendPrediction, actionText);
@@ -2867,12 +3014,50 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       if (!navigator.clipboard?.writeText) {
         throw new Error('clipboard_unavailable');
       }
-      await navigator.clipboard.writeText(buildReportMarkdown(buildFullReportSections(activeTraceReport, dashboardData)));
+      await navigator.clipboard.writeText(buildInstitutionalReportMarkdown(activeTraceReport));
       setMainCopyState('copied');
     } catch {
       setMainCopyState('failed');
     }
   };
+
+  const reportActionButtons = !isGuest ? (
+    <>
+      <button
+        type="button"
+        className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/12 bg-white px-3 py-2 text-xs font-semibold text-black transition-colors hover:bg-white/88"
+        onClick={() => setFullReportDrawerOpen(true)}
+      >
+        <span className="truncate">{locale === 'en' ? 'Full Report' : '完整报告'}</span>
+      </button>
+      <button
+        type="button"
+        className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition-colors hover:border-white/16 hover:bg-white/[0.07] hover:text-white"
+        onClick={() => setTraceDrawerOpen(true)}
+        data-testid="home-bento-decision-trace-trigger"
+      >
+        <FileSearch className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">{locale === 'en' ? 'Sources' : '决策来源'}</span>
+      </button>
+      <button
+        type="button"
+        className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-transparent px-3 py-2 text-xs font-semibold text-white/52 transition-colors hover:border-white/12 hover:bg-white/[0.04] hover:text-white"
+        onClick={() => { void handleCopyActiveReport(); }}
+      >
+        <Copy className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">{mainCopyState === 'copied' ? '已复制' : mainCopyState === 'failed' ? '复制失败' : '复制报告'}</span>
+      </button>
+      <button
+        type="button"
+        className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-transparent px-3 py-2 text-xs font-semibold text-white/52 transition-colors hover:border-white/12 hover:bg-white/[0.04] hover:text-white disabled:cursor-wait disabled:text-white/35"
+        disabled={isBusy}
+        onClick={() => { void handleAnalyze(dashboardData.ticker); }}
+      >
+        <RefreshCw className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">{locale === 'en' ? 'Rerun' : '重新分析'}</span>
+      </button>
+    </>
+  ) : null;
 
   const omnibarModule = (
     <div className="order-first w-full shrink-0 xl:order-none" data-testid="home-bento-omnibar-shell">
@@ -3026,8 +3211,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         summary={readyCopy.decision.summary}
                         locale={locale}
                         reason={{ title: readyCopy.decision.reasonTitle, body: readyCopy.decision.reasonBody }}
-                        detailLabel={locale === 'en' ? 'Report' : '完整判断'}
+                        detailLabel={locale === 'en' ? 'Report' : '完整报告'}
                         onOpenDetails={() => setFullReportDrawerOpen(true)}
+                        sourceSummary={!isGuest ? sourceSummary : undefined}
+                        reportActions={reportActionButtons}
                         isGuest={isGuest}
                         guestPaywall={guestPaywall}
                       />
@@ -3064,48 +3251,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           detailLabel={readyCopy.strategy.detailLabel}
                           onOpenDetails={() => setActiveDrawer('strategy')}
                         />
-                        {!isGuest ? (
-                          <div className="mt-3 flex w-full flex-col gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-3 sm:flex-row sm:items-center sm:justify-between" data-testid="home-bento-decision-actions">
-                            <p className="min-w-0 truncate text-xs text-white/46" data-testid="home-bento-decision-source-summary">
-                              {sourceSummary}
-                            </p>
-                            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                              <button
-                                type="button"
-                                className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/12 bg-white text-black px-3 py-2 text-xs font-semibold transition-colors hover:bg-white/88"
-                                onClick={() => setFullReportDrawerOpen(true)}
-                              >
-                                <span className="truncate">{locale === 'en' ? 'Full Report' : '查看完整判断'}</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition-colors hover:border-white/16 hover:bg-white/[0.07] hover:text-white"
-                                onClick={() => setTraceDrawerOpen(true)}
-                                data-testid="home-bento-decision-trace-trigger"
-                              >
-                                <FileSearch className="h-3.5 w-3.5 shrink-0" />
-                                <span className="truncate">{locale === 'en' ? 'Sources' : '决策来源'}</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition-colors hover:border-white/16 hover:bg-white/[0.07] hover:text-white"
-                                onClick={() => { void handleCopyActiveReport(); }}
-                              >
-                                <Copy className="h-3.5 w-3.5 shrink-0" />
-                                <span className="truncate">{mainCopyState === 'copied' ? '已复制' : mainCopyState === 'failed' ? '复制失败' : '复制报告'}</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition-colors hover:border-white/16 hover:bg-white/[0.07] hover:text-white disabled:cursor-wait disabled:text-white/35"
-                                disabled={isBusy}
-                                onClick={() => { void handleAnalyze(readyCopy.ticker); }}
-                              >
-                                <RefreshCw className="h-3.5 w-3.5 shrink-0" />
-                                <span className="truncate">{locale === 'en' ? 'Rerun' : '重新分析'}</span>
-                              </button>
-                            </div>
-                          </div>
-                        ) : null}
                         <div
                           className="mt-6 grid w-full grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:flex-1"
                           data-testid="home-bento-secondary-grid"

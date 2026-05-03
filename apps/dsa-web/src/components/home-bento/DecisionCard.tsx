@@ -36,10 +36,12 @@ type DecisionCardProps = {
   locale: 'zh' | 'en';
   onOpenDetails: () => void;
   reason: DecisionReason;
+  reportActions?: React.ReactNode;
   scoreLabel: string;
   scoreValue: string;
   signalLabel: string;
   signalTone: SignalTone;
+  sourceSummary?: string;
   sector?: string;
   summary: string;
   ticker: string;
@@ -190,9 +192,11 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   locale,
   onOpenDetails,
   reason,
+  reportActions,
   scoreValue,
   signalLabel,
   signalTone,
+  sourceSummary,
   sector,
   summary,
   ticker,
@@ -227,6 +231,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         <button
           ref={openDetailsButtonRef}
           type="button"
+          aria-label={isEnglish ? 'Open full report' : '打开完整报告'}
           className={CARD_BUTTON_CLASS}
           data-testid="home-bento-drawer-trigger-decision"
           onClick={handleOpenDetailsClick}
@@ -323,6 +328,21 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
               {insightCopy}
             </p>
           </div>
+
+          {sourceSummary || reportActions ? (
+            <div className="mb-6 flex min-w-0 flex-col gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-3" data-testid="home-bento-decision-action-row">
+              {sourceSummary ? (
+                <p className="min-w-0 text-xs leading-5 text-white/46" data-testid="home-bento-decision-source-summary">
+                  {sourceSummary}
+                </p>
+              ) : null}
+              {reportActions ? (
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  {reportActions}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="relative flex flex-col overflow-hidden rounded-[28px] border border-white/[0.06] bg-black/10 px-5 py-4 backdrop-blur-xl md:px-6">
             <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-3">
