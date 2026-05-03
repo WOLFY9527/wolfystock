@@ -80,13 +80,6 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
           </div>
         ) : null}
 
-        {fallbackOnly && !denseQuote ? (
-          <div className="rounded-lg border border-orange-300/20 bg-orange-400/8 px-3 py-2 text-xs leading-5 text-orange-100/85" data-testid="market-overview-fallback-only-notice">
-            <p className="font-semibold">暂未接入真实数据源</p>
-            <p className="text-orange-100/70">当前为备用示例数据，不参与市场温度评分</p>
-          </div>
-        ) : null}
-
         {denseQuote ? (
           <div
             data-testid="market-overview-dense-quote-grid"

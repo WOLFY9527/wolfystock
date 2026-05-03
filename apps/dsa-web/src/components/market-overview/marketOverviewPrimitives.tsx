@@ -120,16 +120,26 @@ function metaText(meta?: Partial<MarketDataMeta>): string[] {
   const asOf = formatMarketOverviewTimestamp(meta?.asOf);
   const updatedAt = formatMarketOverviewTimestamp(meta?.updatedAt);
   if (asOf) {
-    parts.push(`行情时间 ${asOf}`);
+    parts.push(`Quote ${asOf}`);
   }
   if (updatedAt) {
-    parts.push(`更新 ${updatedAt}`);
+    parts.push(`Update ${updatedAt}`);
   }
   return parts;
 }
 
 function metadataTitle(parts: string[], warning?: string | null, hoverDetails?: string[] | null): string | undefined {
   return [...parts, warning, ...(hoverDetails || [])].filter(Boolean).join(' · ') || undefined;
+}
+
+function shouldShowInlineWarning(meta?: Partial<MarketDataMeta>): boolean {
+  if (!meta?.warning) {
+    return false;
+  }
+  if (meta.freshness === 'error' || meta.source === 'error' || meta.isStale || meta.freshness === 'stale') {
+    return true;
+  }
+  return false;
 }
 
 export const MarketOverviewSparkline: React.FC<{ values?: number[]; tone?: string; className?: string }> = ({
@@ -197,15 +207,19 @@ export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; 
   const freshness = resolveFreshness(resolvedMeta);
 
   return (
-    <div className="mt-auto flex flex-col gap-2 border-t border-white/5 pt-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="mt-auto min-w-0 border-t border-white/5 pt-3">
+      <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
         <DataFreshnessBadge freshness={freshness} />
-        <span className="text-[10px] uppercase tracking-widest text-white/34">
+        <span
+          data-testid="market-overview-footer-meta"
+          className="min-w-0 truncate text-[10px] uppercase tracking-widest text-white/34"
+          title={details.join(' · ') || fallbackUpdatedAt || sourceLabel}
+        >
           {details.join(' · ') || fallbackUpdatedAt || sourceLabel}
         </span>
       </div>
-      {resolvedMeta?.warning ? (
-        <p className="text-[10px] leading-4 text-amber-200/75">{resolvedMeta.warning}</p>
+      {shouldShowInlineWarning(resolvedMeta) ? (
+        <p className="text-[10px] leading-4 text-amber-200/75">{resolvedMeta?.warning}</p>
       ) : null}
     </div>
   );

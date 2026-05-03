@@ -61,9 +61,9 @@ const CATEGORY_LAYOUT: Record<MarketOverviewTab, {
   fallback: CardKey[];
 }> = {
   all: {
-    primary: ['volatility', 'fundsFlow', 'indices'],
-    secondary: ['cnIndices', 'crypto', 'rates', 'macro', 'sentiment'],
-    fallback: ['cnBreadth', 'cnFlows', 'sectorRotation', 'cnShortSentiment', 'fxCommodities', 'futures'],
+    primary: ['indices', 'volatility'],
+    secondary: ['fundsFlow', 'sentiment', 'rates', 'fxCommodities', 'crypto', 'cnIndices'],
+    fallback: [],
   },
   us: {
     primary: ['indices'],
@@ -588,6 +588,147 @@ function summarizeDataQuality(panels: PanelState): DataQualitySummary {
   };
 }
 
+type DecisionChip = {
+  label: 'RISK' | 'LIQUIDITY' | 'BREADTH' | 'WATCH';
+  value: string;
+  tone?: string;
+};
+
+function describeDirectionalItem(item?: MarketOverviewItem, fallbackLabel = 'N/A'): string {
+  if (!item) {
+    return fallbackLabel;
+  }
+  const label = item.label || item.symbol;
+  if (item.changePct == null || !Number.isFinite(item.changePct)) {
+    return `${label} 中性`;
+  }
+  if (item.changePct > 0.15) {
+    return `${label} 偏强`;
+  }
+  if (item.changePct < -0.15) {
+    return `${label} 偏弱`;
+  }
+  return `${label} 横盘`;
+}
+
+function scoreStateLabel(score: MarketTemperatureScore, pressure = false): string {
+  if (pressure) {
+    return score.value >= 65 ? '偏高' : score.value >= 55 ? '中性偏高' : score.value <= 40 ? '偏低' : '中性';
+  }
+  return score.label || (score.value >= 60 ? '偏强' : score.value <= 45 ? '偏弱' : '中性');
+}
+
+function buildDecisionChipTone(value: number, pressure = false): string {
+  if (pressure) {
+    return value >= 65 ? 'border-rose-300/25 text-rose-200' : value >= 55 ? 'border-amber-300/25 text-amber-200' : 'border-emerald-300/20 text-emerald-200';
+  }
+  return value >= 60 ? 'border-emerald-300/20 text-emerald-200' : value <= 45 ? 'border-sky-300/20 text-sky-200' : 'border-white/10 text-white/60';
+}
+
+function buildMarketDecision(params: {
+  activeCategory: MarketOverviewTab;
+  panels: PanelState;
+  dataQuality: DataQualitySummary;
+}): { text: string; chips: DecisionChip[] } {
+  const { activeCategory, panels, dataQuality } = params;
+  const temperature = panels.temperature;
+  const reliable = isTemperatureReliable(temperature);
+  const hasLoadedSignals = CATEGORY_CARDS[activeCategory].some((cardKey) => {
+    const meta = getCardMeta(panels, cardKey);
+    return Boolean(meta.source || meta.freshness || (meta.items?.length || 0) > 0);
+  });
+  if (!reliable && !hasLoadedSignals) {
+    return {
+      text: '市场状态：数据不足 · 等待更多实时源',
+      chips: [
+        { label: 'RISK', value: 'N/A', tone: 'border-white/10 text-white/45' },
+        { label: 'WATCH', value: '等待实时源', tone: 'border-amber-300/20 text-amber-200' },
+      ],
+    };
+  }
+
+  const vix = findPanelItem(panels.volatility, ['VIX']);
+  const btc = findPanelItem(panels.crypto, ['BTC']);
+  const spx = findPanelItem(panels.indices, ['SPX']);
+  const csi = findPanelItem(panels.cnIndices, ['CSI300', '000300.SH']) || findPanelItem(panels.indices, ['CSI300']);
+  const us10y = findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.macro, ['US10Y']);
+  const dxy = findPanelItem(panels.fxCommodities, ['DXY']) || findPanelItem(panels.macro, ['DXY']);
+  const hsi = findPanelItem(panels.cnIndices, ['HSI']);
+
+  const riskLabel = reliable ? scoreStateLabel(temperature.scores.overall) : '数据不足';
+  const liquidityLabel = reliable ? scoreStateLabel(temperature.scores.liquidity) : 'N/A';
+  const breadthLabel = reliable ? scoreStateLabel(temperature.scores.cnMoneyEffect) : 'N/A';
+  const watchSignals = [vix, us10y, dxy, btc]
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((item) => item?.symbol)
+    .filter(Boolean)
+    .join(' / ') || '实时源';
+  const chips: DecisionChip[] = [
+    { label: 'RISK', value: riskLabel, tone: reliable ? buildDecisionChipTone(temperature.scores.overall.value) : 'border-amber-300/20 text-amber-200' },
+    { label: 'LIQUIDITY', value: liquidityLabel, tone: reliable ? buildDecisionChipTone(temperature.scores.liquidity.value) : 'border-white/10 text-white/45' },
+    { label: 'BREADTH', value: breadthLabel, tone: reliable ? buildDecisionChipTone(temperature.scores.cnMoneyEffect.value) : 'border-white/10 text-white/45' },
+    { label: 'WATCH', value: watchSignals, tone: 'border-white/10 text-white/60' },
+  ];
+
+  if (!reliable) {
+    return {
+      text: '市场状态：数据不足 · 等待更多实时源',
+      chips,
+    };
+  }
+
+  const compareUsCn = typeof spx?.changePct === 'number' && typeof csi?.changePct === 'number'
+    ? spx.changePct >= csi.changePct ? '美股强于A股' : 'A股强于美股'
+    : '跨市场强弱待确认';
+  const texts: Record<MarketOverviewTab, string> = {
+    all: `风险${riskLabel} · ${compareUsCn} · ${describeDirectionalItem(btc, 'BTC 待确认')} · 重点观察 ${watchSignals}`,
+    us: `美股风险${scoreStateLabel(temperature.scores.usRiskAppetite)} · ${describeDirectionalItem(vix, 'VIX 待确认')} · ${describeDirectionalItem(spx, '标普500 待确认')}`,
+    cn: `A股宽度${breadthLabel} · ${describeDirectionalItem(csi, '沪深300 待确认')} · ${describeDirectionalItem(hsi, '港股待确认')}`,
+    global: `宏观压力${scoreStateLabel(temperature.scores.macroPressure, true)} · ${describeDirectionalItem(dxy, 'DXY 待确认')} · ${describeDirectionalItem(us10y, 'US10Y 待确认')}`,
+    crypto: `${describeDirectionalItem(btc, 'BTC 待确认')} · ${describeDirectionalItem(findPanelItem(panels.crypto, ['ETH']), 'ETH 待确认')} · 宏观风险${riskLabel}`,
+  };
+
+  const qualityHint = dataQuality.hasConcern ? ` · ${dataQuality.status}` : '';
+  return {
+    text: `${texts[activeCategory]}${qualityHint}`,
+    chips,
+  };
+}
+
+const MarketDecisionStrip: React.FC<{
+  activeCategory: MarketOverviewTab;
+  panels: PanelState;
+  dataQuality: DataQualitySummary;
+}> = ({ activeCategory, panels, dataQuality }) => {
+  const decision = buildMarketDecision({ activeCategory, panels, dataQuality });
+  return (
+    <section
+      data-testid="market-decision-strip"
+      data-mobile-order="decision"
+      className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'flex min-w-0 flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between')}
+    >
+      <div className="min-w-0">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">DECISION</p>
+        <p data-testid="market-decision-text" className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-white/82 md:truncate">
+          {decision.text}
+        </p>
+      </div>
+      <div className="ui-scroll-x-quiet -mx-1 flex min-w-0 max-w-full gap-2 px-1 md:mx-0 md:shrink-0 md:px-0">
+        {decision.chips.map((chip) => (
+          <span
+            key={`${chip.label}-${chip.value}`}
+            className={cn('inline-flex shrink-0 items-center gap-1 rounded-full border bg-white/[0.025] px-2 py-1 text-[10px] font-bold uppercase tracking-widest', chip.tone)}
+          >
+            <span className="text-white/36">{chip.label}</span>
+            <span className="max-w-[140px] truncate font-mono normal-case tracking-normal">{chip.value}</span>
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+};
+
 const CompactRailCard: React.FC<{
   railKey: string;
   testId: string;
@@ -733,17 +874,20 @@ const MarketOverviewStatusStrip: React.FC<{
 const MarketStateCompactRailCard: React.FC<{ data: MarketTemperatureResponse }> = ({ data }) => {
   const score = data.scores.overall;
   const reliable = isTemperatureReliable(data);
+  const stateValue = reliable
+    ? score.value >= 70 ? 'HIGH' : score.value >= 45 ? 'MED' : 'LOW'
+    : 'N/A';
   return (
     <CompactRailCard
       railKey="state"
       testId="market-overview-rail-state"
       eyebrow="STATE"
       title={reliable ? score.label : '数据不足'}
-      value={reliable ? formatNumber(score.value, 0) : 'N/A'}
+      value={stateValue}
       tone={reliable ? scoreTone(score) : 'text-white/45'}
       lines={[
-        <span key="temperature" data-testid="market-temperature-strip">市场温度总览 · 可信度：{confidenceLabel(data.confidence)}</span>,
-        <span key="inputs" className="font-mono">真实 {data.reliableInputCount ?? 0} · 备用 {data.fallbackInputCount ?? 0} · 排除 {data.excludedInputCount ?? 0} · confidence {formatNumber(data.confidence, 2)}</span>,
+        <span key="temperature" data-testid="market-temperature-strip">温度 {reliable ? formatNumber(score.value, 0) : 'N/A'} · 可信 {confidenceLabel(data.confidence)}</span>,
+        <span key="inputs" className="font-mono">R {data.reliableInputCount ?? 0} · F {data.fallbackInputCount ?? 0} · X {data.excludedInputCount ?? 0} · C {formatNumber(data.confidence, 2)}</span>,
         !reliable ? <span key="unreliable" data-testid="market-temperature-unreliable-summary">市场温度：数据不足 · 真实输入不足，暂不生成综合判断</span> : null,
       ].filter(Boolean)}
     />
@@ -774,10 +918,10 @@ const BriefingCompactRailCard: React.FC<{ data: MarketBriefingResponse }> = ({ d
     value={confidenceLabel(data.confidence)}
     tone={data.isReliable === false || data.isFallback ? 'text-amber-200' : 'text-white'}
     lines={[
+      <span key="lead" data-testid="market-briefing-card">
+        {(data.items[0]?.title || '暂无简报')} · {(data.items[0]?.message || data.warning || '等待市场信号')}
+      </span>,
       data.warning ? <span key="warning" data-testid="market-briefing-warning">{data.warning}</span> : null,
-      ...(data.items.length ? data.items : [{ title: '暂无简报', message: data.warning || '等待市场信号' }]).slice(0, data.warning ? 2 : 3).map((item, index) => (
-        <span key={`${item.title}-${index}`} data-testid={index === 0 ? 'market-briefing-card' : undefined}>{item.title} · {item.message}</span>
-      )),
     ].filter(Boolean)}
   />
 );
@@ -791,8 +935,8 @@ const PendingSourcesCompactRailCard: React.FC<{ fallbackCount: number }> = ({ fa
     value={String(fallbackCount)}
     tone={fallbackCount > 0 ? 'text-amber-200' : 'text-white/45'}
     lines={[
-      fallbackCount > 0 ? '备用模块保留在下方深层网格' : '暂无待接入模块',
-      '不参与市场温度评分',
+      fallbackCount > 0 ? '备用源集中显示' : '暂无待接入模块',
+      '卡片内仅保留状态徽标',
     ]}
   />
 );
@@ -835,12 +979,6 @@ const FuturesPremarketCard: React.FC<{
           </div>
           <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title })} refreshing={refreshing} onRefresh={onRefresh} />
         </div>
-      {fallbackOnly ? (
-        <div className="mb-3 rounded-lg border border-orange-300/20 bg-orange-400/8 px-3 py-2 text-xs leading-5 text-orange-100/85" data-testid="market-overview-fallback-only-notice">
-          <p className="font-semibold">暂未接入真实数据源</p>
-          <p className="text-orange-100/70">当前为备用示例数据，不参与市场温度评分</p>
-        </div>
-      ) : null}
       <div className="min-h-0 overflow-y-auto border-y border-white/[0.045] ui-scroll-y-quiet">
         {visibleItems.map((item: MarketFutureItem) => {
           const positive = (item.changePercent || 0) >= 0;
@@ -912,12 +1050,6 @@ const CnShortSentimentCard: React.FC<{
           </div>
           <MarketOverviewRefreshButton label={t('marketOverviewPage.refreshCard', { title })} refreshing={refreshing} onRefresh={onRefresh} />
         </div>
-      {fallbackOnly ? (
-        <div className="mb-3 rounded-lg border border-orange-300/20 bg-orange-400/8 px-3 py-2 text-xs leading-5 text-orange-100/85" data-testid="market-overview-fallback-only-notice">
-          <p className="font-semibold">暂未接入真实数据源</p>
-          <p className="text-orange-100/70">当前为备用示例数据，不参与市场温度评分</p>
-        </div>
-      ) : null}
       <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
@@ -1587,6 +1719,7 @@ const MarketOverviewPage: React.FC = () => {
               briefing={<MarketBriefingCompactSummary data={panels.briefing} />}
             />
           </section>
+          <MarketDecisionStrip activeCategory={activeCategory} panels={panels} dataQuality={dataQuality} />
           </div>
         </section>
         {renderDeterministicGrid()}

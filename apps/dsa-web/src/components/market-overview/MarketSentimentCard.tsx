@@ -50,14 +50,14 @@ export const MarketSentimentCard: React.FC<{
   };
   const items = panel?.items || [];
   const primary = resolvePrimaryItem(items);
-  const supporting = items.filter((item) => item.symbol !== primary?.symbol).slice(0, 3);
+  const supporting = items.filter((item) => item.symbol !== primary?.symbol).slice(0, 2);
   const score = primary?.value ?? 50;
   const gaugeRatio = Math.min(1, Math.max(0, score / 100));
   const title = t('marketOverviewPage.cards.sentiment.title');
 
   return (
-    <MarketOverviewCardFrame size="standard" className="h-full">
-      <div className="flex min-h-0 h-full flex-col gap-3">
+    <MarketOverviewCardFrame size="compact" className="h-full min-h-[180px]">
+      <div data-testid="market-sentiment-compact-card" className="flex min-h-0 h-full flex-col gap-2.5">
         <div className="flex shrink-0 items-center justify-between gap-4">
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.sentiment.eyebrow')}</p>
@@ -77,21 +77,21 @@ export const MarketSentimentCard: React.FC<{
         ) : null}
 
         {primary ? (
-          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{t('marketOverviewPage.cards.sentiment.primaryLabel')}</p>
-                <p className="mt-1 truncate text-2xl font-bold font-mono text-white">{formatMetricValue(primary, 0)}</p>
-                <p className="mt-1 text-xs uppercase tracking-widest text-white/28">{describeSentiment(primary.value, t)}</p>
+          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2">
+            <div className="flex min-w-0 items-center justify-between gap-3">
+              <div className="min-w-0 flex items-baseline gap-2">
+                <p className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/40">SENTIMENT</p>
+                <p className="truncate font-mono text-lg font-bold leading-none text-white">{formatMetricValue(primary, 0)}</p>
+                <p className="truncate text-xs font-semibold text-white/45">{describeSentiment(primary.value, t)}</p>
               </div>
-              <span className={cn('shrink-0 pt-1 text-right text-[11px] font-bold', getDirectionTone(primary.riskDirection))}>
+              <span className={cn('shrink-0 text-right text-[11px] font-bold', getDirectionTone(primary.riskDirection))}>
                 {formatChangeSummary(primary, t('marketOverviewPage.direction.neutral'))}
               </span>
             </div>
 
-            <div className="mt-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 text-[9px] uppercase tracking-widest text-white/30">
+            <div className="mt-2 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 text-[9px] uppercase tracking-widest text-white/30">
               <span>{t('marketOverviewPage.cards.sentiment.gaugeLeft')}</span>
-              <div className="h-1.5 min-w-0 overflow-hidden rounded-full bg-white/[0.06]">
+              <div className="h-1 min-w-0 overflow-hidden rounded-full bg-white/[0.06]">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-rose-400 via-sky-400 to-emerald-400"
                   style={{ width: `${gaugeRatio * 100}%` }}
@@ -102,7 +102,7 @@ export const MarketSentimentCard: React.FC<{
           </div>
         ) : null}
 
-        <div className="grid min-h-0 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-3 ui-scroll-y-quiet">
+        <div className="grid min-h-0 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2 ui-scroll-y-quiet">
           {supporting.map((item) => (
             <div key={item.symbol} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2">
               <div className="flex items-start justify-between gap-3">
@@ -113,7 +113,7 @@ export const MarketSentimentCard: React.FC<{
                   {formatChangeSummary(item, t('marketOverviewPage.direction.neutral'))}
                 </span>
               </div>
-              <p className="mt-3 truncate text-2xl font-mono text-white">{formatMetricValue(item)}</p>
+              <p className="mt-2 truncate text-base font-mono text-white">{formatMetricValue(item)}</p>
               <div className="mt-2 flex items-center gap-2 text-[10px] uppercase tracking-widest text-white/24">
                 {item.unit ? <span>{item.unit}</span> : null}
                 <span>{item.symbol}</span>
