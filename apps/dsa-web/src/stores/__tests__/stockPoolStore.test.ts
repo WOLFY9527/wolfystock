@@ -433,6 +433,22 @@ describe('stockPoolStore', () => {
     expect(useStockPoolStore.getState().selectCachedHistoryForStock('NVDA')).toBe(false);
   });
 
+  it('normalizes nullable task progress modules from API snapshots', () => {
+    useStockPoolStore.getState().syncTaskCreated({
+      taskId: 'task-null-modules',
+      stockCode: 'WULF',
+      stockName: 'WULF',
+      status: 'processing',
+      progress: 12,
+      message: 'Running AI analysis',
+      reportType: 'detailed',
+      createdAt: '2026-05-03T10:00:00Z',
+      progressModules: null,
+    } as never);
+
+    expect(useStockPoolStore.getState().activeTasks[0].progressModules).toEqual([]);
+  });
+
   it('ignores late task updates after a task has been removed', () => {
     const pendingTask = {
       taskId: 'task-1',

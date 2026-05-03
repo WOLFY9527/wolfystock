@@ -400,6 +400,8 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.queryByText('参数快照')).not.toBeInTheDocument();
     expect(screen.getByText('已完成')).toBeInTheDocument();
     expect(screen.getByTestId('deterministic-result-kpi-bento')).toBeInTheDocument();
+    expect(screen.getByTestId('deterministic-result-kpi-bento')).toHaveTextContent('年化收益');
+    expect(screen.getByTestId('deterministic-result-kpi-bento')).not.toHaveTextContent('{value}');
 
     fireEvent.click(screen.getByRole('tab', { name: '审计明细' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-audit')).toBeInTheDocument();

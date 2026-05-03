@@ -212,16 +212,20 @@ function upsertTask(tasks: TaskInfo[], task: TaskInfo): TaskInfo[] {
 }
 
 function normalizeTaskReport(task: TaskInfo): TaskInfo {
+  const normalizedTask = {
+    ...task,
+    progressModules: Array.isArray(task.progressModules) ? task.progressModules : [],
+  };
   const existingResult = task.result;
   const report = existingResult?.report;
   if (!report) {
-    return task;
+    return normalizedTask;
   }
 
   const normalizedReport = normalizeFrontendReportContract(report);
 
   return {
-    ...task,
+    ...normalizedTask,
     result: {
       queryId: existingResult?.queryId || normalizedReport.meta.queryId || task.taskId,
       stockCode: existingResult?.stockCode || normalizedReport.meta.stockCode || task.stockCode,

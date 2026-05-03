@@ -1619,7 +1619,7 @@ function InPlaceDecisionSkeleton({
   message?: string;
   progress?: number;
 }) {
-  const visibleModules = progressModules.slice(0, 5);
+  const visibleModules = Array.isArray(progressModules) ? progressModules.slice(0, 5) : [];
   const activeModule = visibleModules.find((module) => module.status === 'running') || visibleModules[0];
   const progressValue = typeof progress === 'number' ? Math.max(0, Math.min(progress, 99)) : 12;
   return (
