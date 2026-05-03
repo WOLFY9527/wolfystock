@@ -12,6 +12,12 @@ import { useUiPreferences } from '../contexts/UiPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
 import { buildLoginPath, buildRegistrationPath, useProductSurface } from '../hooks/useProductSurface';
 import type { MarketColorConvention } from '../utils/marketColors';
+import {
+  PORTFOLIO_DISPLAY_CURRENCY_OPTIONS,
+  readPortfolioDisplayCurrency,
+  savePortfolioDisplayCurrency,
+  type PortfolioDisplayCurrency,
+} from '../utils/portfolioPreferences';
 
 const GLASS_INPUT_CLASS = 'w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-white outline-none transition-[border-color,box-shadow] focus:border-white/24 focus:shadow-[0_0_20px_rgba(99,102,241,0.12)]';
 const SETTINGS_PRIMARY_BUTTON_CLASS = 'rounded-lg border border-white/10 bg-white/5 px-6 py-2.5 text-sm font-medium text-white transition-all hover:border-blue-500/40 hover:bg-white/10 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)] disabled:pointer-events-none disabled:opacity-50';
@@ -74,6 +80,8 @@ const PersonalSettingsPage: React.FC = () => {
   const [notificationSaving, setNotificationSaving] = useState(false);
   const [notificationError, setNotificationError] = useState<ParsedApiError | null>(null);
   const [notificationNotice, setNotificationNotice] = useState<string | null>(null);
+  const [portfolioDisplayCurrency, setPortfolioDisplayCurrency] = useState<PortfolioDisplayCurrency>(() => readPortfolioDisplayCurrency());
+  const [portfolioDisplayCurrencySaved, setPortfolioDisplayCurrencySaved] = useState(false);
   const loginPath = buildLoginPath('/settings');
   const registrationPath = buildRegistrationPath('/settings');
 
@@ -149,6 +157,13 @@ const PersonalSettingsPage: React.FC = () => {
     }
   };
 
+  const handlePortfolioDisplayCurrencyChange = (currency: PortfolioDisplayCurrency) => {
+    const saved = savePortfolioDisplayCurrency(currency);
+    setPortfolioDisplayCurrency(saved);
+    setPortfolioDisplayCurrencySaved(true);
+    window.setTimeout(() => setPortfolioDisplayCurrencySaved(false), 1800);
+  };
+
   return (
     <section
       data-testid="personal-settings-workspace"
@@ -218,6 +233,48 @@ const PersonalSettingsPage: React.FC = () => {
                   );
                 })}
               </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4 xl:col-span-2">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">
+                    {t('settings.portfolioDisplayTitle')}
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-secondary-text">
+                    {t('settings.portfolioDisplayDesc')}
+                  </p>
+                </div>
+                {portfolioDisplayCurrencySaved ? (
+                  <span className="rounded-full border border-[hsl(var(--accent-positive-hsl)/0.28)] bg-[hsl(var(--accent-positive-hsl)/0.12)] px-3 py-1 text-[11px] text-[hsl(var(--accent-positive-hsl))]">
+                    {t('settings.portfolioDisplaySaved')}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
+                {t('settings.portfolioDisplayDefaultCurrency')}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label={t('settings.portfolioDisplayDefaultCurrency')}>
+                {PORTFOLIO_DISPLAY_CURRENCY_OPTIONS.map((currency) => {
+                  const active = portfolioDisplayCurrency === currency;
+                  return (
+                    <button
+                      key={currency}
+                      type="button"
+                      onClick={() => handlePortfolioDisplayCurrencyChange(currency)}
+                      aria-pressed={active}
+                      className={active
+                        ? 'rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition-all'
+                        : 'rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white'}
+                    >
+                      {currency}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-xs leading-5 text-muted-text">
+                {t('settings.portfolioDisplayNativeSettlementHint')}
+              </p>
             </div>
           </div>
 

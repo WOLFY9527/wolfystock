@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApiError, createParsedApiError } from '../../api/error';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { translate } from '../../i18n/core';
+import {
+  LEGACY_PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY,
+  PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY,
+} from '../../utils/portfolioPreferences';
 import PortfolioPage from '../PortfolioPage';
 
 const {
@@ -419,8 +423,10 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-total-assets-card')).toHaveClass('col-span-12');
     expect(screen.getByRole('heading', { name: '总资产 Total Assets' })).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
-    expect(within(screen.getByTestId('portfolio-total-assets-card')).getByLabelText('DISPLAY CURRENCY')).toBeInTheDocument();
-    expect(within(screen.getByTestId('portfolio-total-assets-card')).getByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).toBeInTheDocument();
+    expect(within(screen.getByTestId('portfolio-total-assets-card')).queryByLabelText('DISPLAY CURRENCY')).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('portfolio-total-assets-card')).getByTestId('portfolio-display-currency-status')).toHaveTextContent('显示货币 CNY');
+    expect(within(screen.getByTestId('portfolio-total-assets-card')).getByRole('link', { name: /在设置中修改/ })).toHaveAttribute('href', '/zh/settings');
+    expect(within(screen.getByTestId('portfolio-total-assets-card')).getByTestId('portfolio-currency-breakdown')).toHaveTextContent('按币种：暂无资产');
     expect(within(screen.getByTestId('portfolio-total-assets-card')).getByText(translate('zh', 'portfolio.totalCash'))).toBeInTheDocument();
     expect(within(screen.getByTestId('portfolio-total-assets-card')).getByText(translate('zh', 'portfolio.totalMarketValue'))).toBeInTheDocument();
     expect(within(screen.getByTestId('portfolio-total-assets-card')).getByText(translate('zh', 'portfolio.positionUnrealized'))).toBeInTheDocument();
@@ -553,33 +559,36 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(tradeStation).getByRole('button', { name: translate('zh', 'portfolio.submitTrade') })).toBeDisabled();
   });
 
-  it('renders display currency controls and converts totals and holdings without hiding original currency', async () => {
+  it('reads display currency from shared settings storage and converts totals and holdings without hiding original currency', async () => {
+    window.localStorage.setItem(PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY, 'USD');
     getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
 
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
 
-    const displayCurrencySelect = screen.getByLabelText('DISPLAY CURRENCY') as HTMLSelectElement;
-    expect(displayCurrencySelect).toHaveValue('CNY');
-    for (const currency of ['CNY', 'USD', 'HKD', 'EUR', 'JPY']) {
-      expect(within(displayCurrencySelect).getByRole('option', { name: currency })).toBeInTheDocument();
-    }
-
-    expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('CNY 3,000.00');
-    expect(screen.getByText('USD 1,600.00')).toBeInTheDocument();
-    expect(screen.getByText('≈ CNY 11,592.00')).toBeInTheDocument();
-
-    fireEvent.change(displayCurrencySelect, { target: { value: 'USD' } });
-
-    expect(displayCurrencySelect).toHaveValue('USD');
-    expect(window.localStorage.getItem('wolfystock.portfolio.displayCurrency.v1')).toBe('USD');
+    expect(screen.queryByLabelText('DISPLAY CURRENCY')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-display-currency-status')).toHaveTextContent('显示货币 USD');
+    expect(screen.getByRole('link', { name: /在设置中修改/ })).toHaveAttribute('href', '/zh/settings');
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('USD 414.08');
-    expect(screen.getByText('CNY 3,000.00')).toBeInTheDocument();
+    expect(screen.getByText('≈ CNY 3,000.00')).toBeInTheDocument();
     expect(screen.getByText('USD 1,600.00')).toBeInTheDocument();
     expect(screen.queryByText('≈ USD 1,600.00')).not.toBeInTheDocument();
+    expect(screen.getByText('+USD 100.00')).toBeInTheDocument();
+    expect(screen.queryByText('≈ USD 100.00')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-currency-breakdown')).toHaveTextContent('CNY 3,000.00');
+  });
 
-    fireEvent.change(displayCurrencySelect, { target: { value: 'HKD' } });
+  it('migrates the legacy portfolio display currency key to the shared settings key', async () => {
+    window.localStorage.setItem(LEGACY_PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY, 'HKD');
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(window.localStorage.getItem(PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY)).toBe('HKD');
+    expect(screen.getByTestId('portfolio-display-currency-status')).toHaveTextContent('显示货币 HKD');
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('HKD 3,257.33');
   });
 
@@ -605,7 +614,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(screen.getByText('USD 1,600.00')).toBeInTheDocument();
-    expect(within(screen.getByTestId('portfolio-total-assets-card')).getAllByText('FX unavailable')).toHaveLength(1);
+    expect(within(screen.getByTestId('portfolio-total-assets-card')).getAllByText('折算不可用').length).toBeGreaterThan(0);
     expect(screen.queryByText(/≈ CNY/)).not.toBeInTheDocument();
   });
 
@@ -649,10 +658,48 @@ describe('PortfolioPage FX refresh', () => {
     });
 
     await waitFor(() => expect(createTrade).toHaveBeenCalledTimes(1));
+    expect(createTrade).toHaveBeenCalledWith(expect.objectContaining({ currency: 'USD' }));
     await waitFor(() => expect(getSnapshot.mock.calls.length).toBeGreaterThan(snapshotCallsBeforeSubmit));
     await waitFor(() => expect(listTrades.mock.calls.length).toBeGreaterThan(tradeCallsBeforeSubmit));
     expect(await screen.findByTestId('portfolio-trade-feedback')).toHaveTextContent('AAPL 买入已记录 · 已刷新持仓');
     expect(screen.getByLabelText('SYMBOL')).toHaveValue('');
+  });
+
+  it('infers settlement currency from US, HK, A-share, and crypto symbols with manual override', async () => {
+    getAccounts.mockResolvedValueOnce(makeAccounts([
+      { id: 1, name: 'US Account', market: 'us', baseCurrency: 'USD' },
+      { id: 2, name: 'HK Account', market: 'hk', baseCurrency: 'HKD' },
+      { id: 3, name: 'CN Account', market: 'cn', baseCurrency: 'CNY' },
+    ]));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const symbolInput = screen.getByLabelText('SYMBOL');
+    const settlementSelect = screen.getByLabelText('结算货币') as HTMLSelectElement;
+
+    for (const symbol of ['AAPL', 'NVDA', 'ORCL', 'WULF']) {
+      fireEvent.change(symbolInput, { target: { value: symbol } });
+      await waitFor(() => expect(settlementSelect).toHaveValue('USD'));
+    }
+
+    for (const symbol of ['00700.HK', '9988.HK', 'HK:00700']) {
+      fireEvent.change(symbolInput, { target: { value: symbol } });
+      await waitFor(() => expect(settlementSelect).toHaveValue('HKD'));
+    }
+
+    for (const symbol of ['600519', '000001.SZ', '600000.SH', 'SH:600519', 'SZ:000001']) {
+      fireEvent.change(symbolInput, { target: { value: symbol } });
+      await waitFor(() => expect(settlementSelect).toHaveValue('CNY'));
+    }
+
+    fireEvent.change(symbolInput, { target: { value: 'BTCUSDT' } });
+    await waitFor(() => expect(settlementSelect).toHaveValue('USD'));
+
+    fireEvent.change(settlementSelect, { target: { value: 'JPY' } });
+    expect(settlementSelect).toHaveValue('JPY');
+    expect(screen.getByText('标的结算货币与账户基准币种不同，将依赖汇率折算。')).toBeInTheDocument();
   });
 
   it('shows compact trade errors and preserves the form when submit fails', async () => {
@@ -1002,7 +1049,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(listTrades).toHaveBeenCalledTimes(tradeCallsBeforeRefresh);
     expect(listCashLedger).not.toHaveBeenCalled();
     expect(listCorporateActions).not.toHaveBeenCalled();
-    expect(screen.getByText(translate('zh', 'portfolio.fxFresh'))).toBeInTheDocument();
+    expect(screen.getAllByText(translate('zh', 'portfolio.fxFresh')).length).toBeGreaterThan(0);
   });
 
   it('shows warning feedback when live FX refresh falls back to stale cache', async () => {

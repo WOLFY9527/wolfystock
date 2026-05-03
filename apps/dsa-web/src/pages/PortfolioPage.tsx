@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshCw, Trash2 } from 'lucide-react';
+import { Settings, RefreshCw, Trash2 } from 'lucide-react';
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
@@ -13,6 +13,18 @@ import {
 } from '../hooks/useSafariInteractionReady';
 import { translate } from '../i18n/core';
 import { toDateInputValue } from '../utils/format';
+import { buildLocalizedPath } from '../utils/localeRouting';
+import {
+  inferSettlementCurrency,
+  LEGACY_PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY,
+  normalizePortfolioDisplayCurrency,
+  PORTFOLIO_DISPLAY_CURRENCY_CHANGED_EVENT,
+  PORTFOLIO_DISPLAY_CURRENCY_OPTIONS,
+  PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY,
+  readPortfolioDisplayCurrency,
+  savePortfolioDisplayCurrency,
+  type PortfolioDisplayCurrency,
+} from '../utils/portfolioPreferences';
 import type {
   PortfolioAccountItem,
   PortfolioBrokerConnectionItem,
@@ -46,8 +58,6 @@ const PORTFOLIO_ICON_BUTTON_CLASS = 'h-9 w-9 rounded-xl border-0 bg-white/[0.04]
 const PORTFOLIO_DANGER_GHOST_CLASS = 'h-8 w-8 rounded-lg border-0 bg-transparent p-0 text-white/30 hover:bg-red-500/10 hover:text-red-400';
 const CASH_CURRENCY_OPTIONS = ['CNY', 'HKD', 'USD'] as const;
 const FX_CURRENCY_OPTIONS = ['USD', 'CNY', 'HKD', 'EUR', 'JPY', 'GBP'] as const;
-const DISPLAY_CURRENCY_OPTIONS = ['CNY', 'USD', 'HKD', 'EUR', 'JPY'] as const;
-const DISPLAY_CURRENCY_STORAGE_KEY = 'wolfystock.portfolio.displayCurrency.v1';
 
 const DEFAULT_PAGE_SIZE = 20;
 const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
@@ -79,7 +89,7 @@ type DisplayFxRate = {
   isStale?: boolean;
 };
 
-type DisplayCurrency = typeof DISPLAY_CURRENCY_OPTIONS[number];
+type DisplayCurrency = PortfolioDisplayCurrency;
 
 type ConvertedMoney = {
   value: number;
@@ -412,20 +422,6 @@ function formatSignedMoney(value: number, currency: string): string {
   return formatted;
 }
 
-function normalizeDisplayCurrency(value: unknown): DisplayCurrency {
-  const normalized = typeof value === 'string' ? value.toUpperCase() : '';
-  return DISPLAY_CURRENCY_OPTIONS.includes(normalized as DisplayCurrency)
-    ? (normalized as DisplayCurrency)
-    : 'CNY';
-}
-
-function readInitialDisplayCurrency(): DisplayCurrency {
-  if (typeof window === 'undefined') {
-    return 'CNY';
-  }
-  return normalizeDisplayCurrency(window.localStorage.getItem(DISPLAY_CURRENCY_STORAGE_KEY));
-}
-
 function getFxRateForDisplay(
   fxRows: PortfolioFxRateItem[],
   fromCurrency: string | undefined | null,
@@ -499,7 +495,7 @@ const PortfolioPage: React.FC = () => {
     baseCurrency: 'CNY',
   });
   const [costMethod, setCostMethod] = useState<PortfolioCostMethod>('fifo');
-  const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>(() => readInitialDisplayCurrency());
+  const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>(() => readPortfolioDisplayCurrency());
   const [snapshot, setSnapshot] = useState<PortfolioSnapshotResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [fxRefreshing, setFxRefreshing] = useState(false);
@@ -540,6 +536,7 @@ const PortfolioPage: React.FC = () => {
     symbol: '',
     tradeDate: getTodayIso(),
     side: 'buy' as PortfolioSide,
+    currency: 'CNY' as DisplayCurrency,
     quantity: '',
     price: '',
     fee: '',
@@ -547,6 +544,7 @@ const PortfolioPage: React.FC = () => {
     tradeUid: '',
     note: '',
   });
+  const [tradeCurrencyManuallyEdited, setTradeCurrencyManuallyEdited] = useState(false);
   const [cashForm, setCashForm] = useState({
     eventDate: getTodayIso(),
     direction: 'in' as PortfolioCashDirection,
@@ -588,12 +586,57 @@ const PortfolioPage: React.FC = () => {
     : eventType === 'cash'
       ? cashEvents.length
       : corporateEvents.length;
+  const accountBaseCurrencies = useMemo(() => (
+    Array.from(new Set(
+      activeAccounts
+        .map((account) => account.baseCurrency?.toUpperCase())
+        .filter((currency): currency is string => Boolean(currency)),
+    ))
+  ), [activeAccounts]);
+  const inferredTradeCurrency = useMemo(
+    () => inferSettlementCurrency(tradeForm.symbol, writableAccount?.baseCurrency),
+    [tradeForm.symbol, writableAccount?.baseCurrency],
+  );
+  const tradeCurrencyWarning = writableAccount?.baseCurrency
+    && tradeForm.currency !== normalizePortfolioDisplayCurrency(writableAccount.baseCurrency)
+    ? (language === 'zh'
+      ? '标的结算货币与账户基准币种不同，将依赖汇率折算。'
+      : 'The symbol settlement currency differs from the account base currency and will rely on FX conversion.')
+    : null;
+  const tradeCurrencyHint = language === 'zh'
+    ? '自动按标的市场推断，可手动覆盖；交易会保留该结算币种。'
+    : 'Auto-inferred from the symbol market; manual override keeps the trade settlement currency.';
+  const settingsPath = buildLocalizedPath('/settings', language);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(DISPLAY_CURRENCY_STORAGE_KEY, displayCurrency);
-    }
+    savePortfolioDisplayCurrency(displayCurrency);
   }, [displayCurrency]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+    const handleDisplayCurrencyChange = (event: Event) => {
+      const next = event instanceof CustomEvent
+        ? normalizePortfolioDisplayCurrency(event.detail?.currency)
+        : readPortfolioDisplayCurrency();
+      setDisplayCurrency(next);
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key === PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY
+        || event.key === LEGACY_PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY
+      ) {
+        setDisplayCurrency(readPortfolioDisplayCurrency());
+      }
+    };
+    window.addEventListener(PORTFOLIO_DISPLAY_CURRENCY_CHANGED_EVENT, handleDisplayCurrencyChange);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener(PORTFOLIO_DISPLAY_CURRENCY_CHANGED_EVENT, handleDisplayCurrencyChange);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
 
   const isActiveRefreshContext = (requestedViewKey: string, requestedRequestId: number) => {
     return (
@@ -803,6 +846,12 @@ const PortfolioPage: React.FC = () => {
     }
   }, [writeBlocked]);
 
+  useEffect(() => {
+    if (!tradeCurrencyManuallyEdited) {
+      setTradeForm((prev) => ({ ...prev, currency: inferredTradeCurrency }));
+    }
+  }, [inferredTradeCurrency, tradeCurrencyManuallyEdited]);
+
   const positionRows: FlatPosition[] = useMemo(() => {
     if (!snapshot) return [];
     const rows: FlatPosition[] = [];
@@ -843,6 +892,7 @@ const PortfolioPage: React.FC = () => {
         price: Number(tradeForm.price),
         fee: Number(tradeForm.fee || 0),
         tax: Number(tradeForm.tax || 0),
+        currency: tradeForm.currency,
         tradeUid: tradeForm.tradeUid || undefined,
         note: tradeForm.note || undefined,
       });
@@ -851,7 +901,8 @@ const PortfolioPage: React.FC = () => {
         tone: 'success',
         text: `${submittedSymbol || tradeForm.symbol} ${formatSideLabel(submittedSide, language)}已记录 · 已刷新持仓`,
       });
-      setTradeForm((prev) => ({ ...prev, symbol: '', tradeUid: '', note: '' }));
+      setTradeForm((prev) => ({ ...prev, symbol: '', currency: inferSettlementCurrency('', writableAccount?.baseCurrency), tradeUid: '', note: '' }));
+      setTradeCurrencyManuallyEdited(false);
     } catch (err) {
       const parsed = getParsedApiError(err);
       setTradeFeedback({ tone: 'error', text: parsed.message || parsed.title });
@@ -1236,6 +1287,17 @@ const PortfolioPage: React.FC = () => {
   const totalCashDisplay = convertMoney(totalCash, snapshotCurrency);
   const totalMarketValueDisplay = convertMoney(totalMarketValue, snapshotCurrency);
   const totalUnrealizedDisplay = convertMoney(totalUnrealizedPnl, snapshotCurrency);
+  const currencyBuckets = useMemo(() => {
+    const buckets = new Map<string, number>();
+    for (const account of snapshot?.accounts || []) {
+      const currency = (account.baseCurrency || snapshotCurrency || 'CNY').toUpperCase();
+      buckets.set(currency, (buckets.get(currency) || 0) + Number(account.totalEquity || 0));
+    }
+    return Array.from(buckets.entries())
+      .map(([currency, value]) => ({ currency, value }))
+      .filter((item) => item.value !== 0)
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  }, [snapshot?.accounts, snapshotCurrency]);
   const hasHoldings = positionRows.length > 0;
   const hasHistory = tradeEvents.length > 0 || cashEvents.length > 0 || corporateEvents.length > 0;
   const isEmptyPortfolio = !hasHoldings;
@@ -1260,11 +1322,26 @@ const PortfolioPage: React.FC = () => {
   const totalAssetsTitle = '总资产 Total Assets';
   const historyDrawerTitle = language === 'en' ? 'Order History' : '历史记录';
   const zeroAssetStatus = language === 'zh' ? '等待交易录入' : 'Awaiting trade entry';
+  const currencyBreakdownTitle = language === 'zh' ? '按币种' : 'By currency';
+  const currencyBreakdownEmpty = language === 'zh' ? '按币种：暂无资产' : 'By currency: no assets';
+  const displayCurrencyStatus = language === 'zh' ? `显示货币 ${displayCurrency}` : `Display ${displayCurrency}`;
+  const editDisplayCurrencyLabel = language === 'zh' ? '在设置中修改' : 'Change in Settings';
+  const fxUnavailableLabel = language === 'zh' ? '折算不可用' : 'FX unavailable';
+  const accountCurrencyLabel = language === 'zh' ? '账户币种' : 'Account currencies';
+  const activeAccountsLabel = language === 'zh' ? '活跃账户' : 'Active accounts';
+  const writableAccountsLabel = language === 'zh' ? '可写账户' : 'Writable accounts';
   const noHoldingsHistoryNote = language === 'zh' ? '历史记录存在，当前无持仓' : 'History exists while current holdings are empty';
   const recentActivityTitle = language === 'zh' ? '近期活动' : 'Recent Activity';
   const emptyRecentActivityLabel = language === 'zh' ? '暂无历史记录' : 'No history yet';
   const viewFullHistoryLabel = language === 'zh' ? '查看全部历史' : 'View full history';
   const hideFullHistoryLabel = language === 'zh' ? '收起完整历史' : 'Hide full history';
+  const renderConvertedDisplay = (value: number, nativeCurrency: string) => {
+    if (nativeCurrency === displayCurrency) {
+      return null;
+    }
+    const converted = convertMoney(value, nativeCurrency);
+    return converted ? `≈ ${formatMoney(converted.value, displayCurrency)}` : fxUnavailableLabel;
+  };
 
   const historyPanelContent = (
     <div className="flex h-full min-h-0 flex-col bg-[var(--surface-1)] lg:bg-transparent">
@@ -1503,15 +1580,15 @@ const PortfolioPage: React.FC = () => {
 	                  <div className="mt-2 text-xs text-white/35">{zeroAssetStatus}</div>
 	                ) : null}
 	                {snapshotCurrency !== displayCurrency ? (
-	                  <div className="mt-2 font-mono text-xs text-white/35">{formatMoney(totalEquity, snapshotCurrency)}</div>
+	                  <div className="mt-2 font-mono text-xs text-white/35">≈ {formatMoney(totalEquity, snapshotCurrency)}</div>
 	                ) : null}
                   </div>
                   <div className="flex min-w-0 flex-wrap gap-2">
                     <span className="rounded-full border border-white/5 bg-white/[0.025] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white/40">
                       {copy.costMethodLabel} {costMethod.toUpperCase()}
                     </span>
-                    {hasFxUnavailable ? (
-                      <span className="rounded-full border border-amber-300/15 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-200">FX unavailable</span>
+	                    {hasFxUnavailable ? (
+                      <span className="rounded-full border border-amber-300/15 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-200">{fxUnavailableLabel}</span>
                     ) : null}
                   </div>
 	              </div>
@@ -1547,26 +1624,54 @@ const PortfolioPage: React.FC = () => {
 	                  ]}
 	                  className={PORTFOLIO_SELECT_CLASS}
 	                />
-	                <Select
-	                  label="DISPLAY CURRENCY"
-	                  labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
-	                  value={displayCurrency}
-	                  onChange={(value) => setDisplayCurrency(normalizeDisplayCurrency(value))}
-	                  options={DISPLAY_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
-	                  className={PORTFOLIO_SELECT_CLASS}
-	                />
-	                <Button
-	                  type="button"
-	                  variant="ghost"
-	                  className={`${PORTFOLIO_SECONDARY_BUTTON_CLASS} w-full`}
-	                  onClick={() => void handleRefreshDisplayFx()}
-	                  disabled={isLoading || fxRefreshing}
-	                >
-	                  {copy.refreshFx}
-	                </Button>
-	                <div className="min-w-0 text-[10px] font-bold uppercase tracking-widest text-white/35">
-	                  {fxProviderLabel.toUpperCase()} · {fxFreshnessLabel} · {fxLastUpdated}
-	                </div>
+                  <div data-testid="portfolio-display-currency-status" className="rounded-xl bg-white/[0.025] px-3 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{displayCurrencyStatus}</span>
+                      <a
+                        href={settingsPath}
+                        className="inline-flex items-center gap-1 text-xs text-white/55 transition-colors hover:text-white"
+                      >
+                        <Settings className="h-3.5 w-3.5" aria-hidden="true" />
+                        {editDisplayCurrencyLabel}
+                      </a>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/35">
+                      <span>{fxProviderLabel.toUpperCase()}</span>
+                      <span>·</span>
+                      <span>{fxFreshnessLabel}</span>
+                      <span>·</span>
+                      <span>{fxLastUpdated}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className={`${PORTFOLIO_TEXT_BUTTON_CLASS} mt-2 px-0`}
+                      onClick={() => void handleRefreshDisplayFx()}
+                      disabled={isLoading || fxRefreshing}
+                    >
+                      {copy.refreshFx}
+                    </Button>
+                  </div>
+                  <div data-testid="portfolio-currency-breakdown" className="rounded-xl bg-white/[0.025] px-3 py-3">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{currencyBreakdownTitle}</div>
+                    {currencyBuckets.length ? (
+                      <div className="mt-2 flex flex-col gap-1.5">
+                        {currencyBuckets.map((item) => (
+                          <div key={item.currency} className="flex items-center justify-between gap-3 text-xs">
+                            <span className="font-mono text-white/45">{item.currency}</span>
+                            <span className="font-mono text-white tabular-nums">{formatMoney(item.value, item.currency)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-xs text-white/40">{currencyBreakdownEmpty}</div>
+                    )}
+                  </div>
+                  <div className="rounded-xl bg-white/[0.025] px-3 py-3 text-xs text-white/45">
+                    <div className="flex justify-between gap-3"><span>{activeAccountsLabel}</span><span className="font-mono text-white">{activeAccounts.length}</span></div>
+                    <div className="mt-1 flex justify-between gap-3"><span>{writableAccountsLabel}</span><span className="font-mono text-white">{writableAccounts.length}</span></div>
+                    <div className="mt-1 flex justify-between gap-3"><span>{accountCurrencyLabel}</span><span className="min-w-0 truncate font-mono text-white">{accountBaseCurrencies.join(' / ') || '--'}</span></div>
+                  </div>
 	                {fxRefreshFeedback && leftTab !== 'fx' ? (
 	                  <div className={`text-xs ${
 	                    fxRefreshFeedback.tone === 'success'
@@ -1609,18 +1714,19 @@ const PortfolioPage: React.FC = () => {
 	                            <div className="font-mono text-foreground tabular-nums">{formatMoney(row.marketValueBase, row.valuationCurrency)}</div>
 	                            {row.valuationCurrency !== displayCurrency ? (
 	                              <div className="mt-1 font-mono text-xs text-white/40">
-	                                {convertMoney(row.marketValueBase, row.valuationCurrency)
-	                                  ? `≈ ${formatMoney(convertMoney(row.marketValueBase, row.valuationCurrency)?.value, displayCurrency)}`
-	                                  : 'FX unavailable'}
+	                                {renderConvertedDisplay(row.marketValueBase, row.valuationCurrency)}
 	                              </div>
 	                            ) : null}
 	                          </div>
-	                          <div className={`font-mono text-lg tabular-nums ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-	                            {row.valuationCurrency === displayCurrency
-	                              ? formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)
-	                              : (convertMoney(row.unrealizedPnlBase, row.valuationCurrency)
-	                                ? formatSignedMoney(convertMoney(row.unrealizedPnlBase, row.valuationCurrency)?.value ?? 0, displayCurrency)
-	                                : 'FX unavailable')}
+	                          <div className="text-right">
+	                            <div className={`font-mono text-lg tabular-nums ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+	                              {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
+	                            </div>
+	                            {row.valuationCurrency !== displayCurrency ? (
+	                              <div className="mt-1 font-mono text-xs text-white/40">
+	                                {renderConvertedDisplay(row.unrealizedPnlBase, row.valuationCurrency)}
+	                              </div>
+	                            ) : null}
 	                          </div>
 	                        </div>
 	                      </div>
@@ -1771,14 +1877,49 @@ const PortfolioPage: React.FC = () => {
                       <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualTrade}</p>
                       <form onSubmit={handleTradeSubmit}>
                         <div className={PORTFOLIO_FORM_GRID_CLASS}>
-                          <Input label="SYMBOL" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="AAPL" value={tradeForm.symbol} onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                          <Input
+                            label="SYMBOL"
+                            labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                            containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS}
+                            className={PORTFOLIO_INPUT_CLASS}
+                            placeholder="AAPL"
+                            value={tradeForm.symbol}
+                            onChange={(e) => {
+                              const symbol = e.target.value;
+                              setTradeForm((prev) => ({
+                                ...prev,
+                                symbol,
+                                currency: tradeCurrencyManuallyEdited
+                                  ? prev.currency
+                                  : inferSettlementCurrency(symbol, writableAccount?.baseCurrency),
+                              }));
+                            }}
+                            required
+                          />
                           <Input label="TRADE DATE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
                           <Select label="SIDE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side} onChange={(value) => setTradeForm((prev) => ({ ...prev, side: value as PortfolioSide }))} options={[{ value: 'buy', label: copy.buy }, { value: 'sell', label: copy.sell }]} />
-                          <Input label="REFERENCE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="text" placeholder="optional" value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
+                          <Select
+                            label={language === 'zh' ? '结算货币' : 'SETTLEMENT CURRENCY'}
+                            labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                            className={PORTFOLIO_SELECT_CLASS}
+                            value={tradeForm.currency}
+                            onChange={(value) => {
+                              setTradeCurrencyManuallyEdited(true);
+                              setTradeForm((prev) => ({ ...prev, currency: normalizePortfolioDisplayCurrency(value) }));
+                            }}
+                            options={PORTFOLIO_DISPLAY_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
+                          />
                           <Input label="QUANTITY" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
                           <Input label="PRICE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
                           <Input label="FEE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="optional" value={tradeForm.fee} onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
                           <Input label="TAX" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="optional" value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
+                          <Input label="REFERENCE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="text" placeholder="optional" value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
+                        </div>
+                        <div className="mt-3 rounded-lg bg-white/[0.025] px-3 py-2 text-xs leading-5 text-white/45">
+                          {tradeCurrencyHint}
+                          {tradeCurrencyWarning ? (
+                            <span className="mt-1 block text-amber-200">{tradeCurrencyWarning}</span>
+                          ) : null}
                         </div>
                         <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
                         {!writableAccountId ? (

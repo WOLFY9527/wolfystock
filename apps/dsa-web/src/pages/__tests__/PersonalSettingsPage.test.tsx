@@ -2,6 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '../../i18n/core';
+import {
+  PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY,
+  readPortfolioDisplayCurrency,
+} from '../../utils/portfolioPreferences';
 import PersonalSettingsPage from '../PersonalSettingsPage';
 
 const zh = (key: string, vars?: Record<string, string | number | undefined>) => translate('zh', key, vars);
@@ -73,6 +77,7 @@ vi.mock('../../components/settings/ChangePasswordCard', () => ({
 describe('PersonalSettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     getNotificationPreferences.mockResolvedValue({
       channel: 'email',
       enabled: false,
@@ -126,10 +131,44 @@ describe('PersonalSettingsPage', () => {
     expect(screen.queryByRole('button', { name: zh('language.zh') })).not.toBeInTheDocument();
     expect(screen.getByText(zh('settings.dataDensityTitle'))).toBeInTheDocument();
     expect(screen.getByText(zh('settings.numberFormatTitle'))).toBeInTheDocument();
+    expect(screen.getByText(zh('settings.portfolioDisplayTitle'))).toBeInTheDocument();
+    expect(screen.getByText(zh('settings.portfolioDisplayDesc'))).toBeInTheDocument();
+    expect(screen.getByText(zh('settings.portfolioDisplayNativeSettlementHint'))).toBeInTheDocument();
     expect(screen.getByRole('link', { name: zh('settings.personalGuestSignInAction') })).toHaveAttribute('href', '/login?redirect=%2Fsettings');
     expect(screen.getByRole('link', { name: zh('settings.personalGuestCreateAccountAction') })).toHaveAttribute('href', '/login?mode=create&redirect=%2Fsettings');
     expect(screen.queryByRole('link', { name: zh('nav.independentConsole') })).not.toBeInTheDocument();
     expect(getNotificationPreferences).not.toHaveBeenCalled();
+  });
+
+  it('persists the default portfolio display currency without exposing secrets', () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      passwordChangeable: false,
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: true,
+      isAdmin: false,
+      loggedIn: false,
+      currentUser: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <PersonalSettingsPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(zh('settings.portfolioDisplayDefaultCurrency'))).toBeInTheDocument();
+    for (const currency of ['CNY', 'USD', 'HKD', 'EUR', 'JPY']) {
+      expect(screen.getByRole('button', { name: currency })).toBeInTheDocument();
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: 'HKD' }));
+
+    expect(window.localStorage.getItem(PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY)).toBe('HKD');
+    expect(readPortfolioDisplayCurrency()).toBe('HKD');
+    expect(screen.getByText(zh('settings.portfolioDisplaySaved'))).toBeInTheDocument();
+    expect(screen.queryByText(/API_KEY|SECRET|TOKEN|WEBHOOK/)).not.toBeInTheDocument();
   });
 
   it('keeps admin console links out of personal settings content', async () => {
