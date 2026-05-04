@@ -147,8 +147,50 @@ function makeSnapshot(options: {
       marketValueBase: 1600,
       unrealizedPnlBase: 100,
       valuationCurrency: 'USD',
+      costBasisNative: 1500,
+      marketValueNative: 1600,
+      unrealizedPnlNative: 100,
+      unrealizedPnlPct: 6.6667,
+      displayMarketValue: 1600,
+      displayUnrealizedPnl: 100,
+      displayCurrency: 'USD',
+      displayFxStatus: 'live' as const,
     },
   ] : [];
+  const analytics = {
+    pnl: {
+      displayCurrency: 'CNY',
+      realized: { amount: 120, amountDisplay: 'CNY 120.00', percent: 4, currency: 'CNY', fxStatus: 'live' as const },
+      unrealized: { amount: options.includePosition ? 100 : 0, amountDisplay: 'CNY 100.00', percent: 3.3, currency: 'CNY', fxStatus: options.fxStale ? 'unavailable' as const : 'live' as const },
+      total: { amount: options.includePosition ? 220 : 120, amountDisplay: 'CNY 220.00', percent: 7.3, currency: 'CNY', fxStatus: options.fxStale ? 'unavailable' as const : 'live' as const },
+    },
+    exposure: {
+      byAccount: options.includePosition ? [
+        { key: String(accountId), label: `Account ${accountId}`, marketValue: 2000, displayValue: 2000, displayCurrency: 'CNY', percent: 100, fxStatus: 'live' as const, accountId, accountName: `Account ${accountId}`, baseCurrency: 'CNY', holdingCount: 1 },
+      ] : [],
+      byCurrency: options.includePosition ? [
+        { key: 'USD', label: 'USD', marketValue: 1600, displayValue: 1600, displayCurrency: 'USD', percent: 100, fxStatus: options.fxStale ? 'unavailable' as const : 'live' as const, nativeValue: 1600, nativeCurrency: 'USD', currency: 'USD', holdingCount: 1 },
+      ] : [],
+      byMarket: options.includePosition ? [
+        { key: 'us', label: 'US', marketValue: 2000, displayValue: 2000, displayCurrency: 'CNY', percent: 100, fxStatus: 'live' as const, market: 'us', holdingCount: 1 },
+      ] : [],
+      bySymbol: options.includePosition ? [
+        { key: 'AAPL', label: 'AAPL', marketValue: 1600, displayValue: 1600, displayCurrency: 'USD', percent: 100, fxStatus: options.fxStale ? 'unavailable' as const : 'live' as const, symbol: 'AAPL', market: 'us', currency: 'USD', unrealizedPnl: 100, unrealizedPnlPct: 6.6667, holdingCount: 1 },
+      ] : [],
+      bySector: [],
+      sectorStatus: 'unavailable' as const,
+    },
+    risk: {
+      largestPosition: options.includePosition ? { key: 'AAPL', label: 'AAPL', marketValue: 1600, displayValue: 1600, displayCurrency: 'USD', percent: 100, fxStatus: 'live' as const, symbol: 'AAPL' } : null,
+      largestCurrency: options.includePosition ? { key: 'USD', label: 'USD', marketValue: 1600, displayValue: 1600, displayCurrency: 'USD', percent: 100, fxStatus: 'live' as const, currency: 'USD' } : null,
+      largestMarket: options.includePosition ? { key: 'us', label: 'US', marketValue: 2000, displayValue: 2000, displayCurrency: 'CNY', percent: 100, fxStatus: 'live' as const, market: 'us' } : null,
+      holdingCount: options.includePosition ? 1 : 0,
+      accountCount: options.accountCount ?? 1,
+      cashPercent: options.includePosition ? 33.3333 : null,
+      fxUnavailable: options.fxStale ?? true,
+      warnings: options.includePosition ? ['single_position_gt_30', 'single_currency_gt_80', 'single_market_gt_80'] : ['no_holdings'],
+    },
+  };
   return {
     asOf: '2026-03-19',
     costMethod: 'fifo' as const,
@@ -204,6 +246,7 @@ function makeSnapshot(options: {
         ],
       },
     },
+    analytics,
     accounts: [
       {
         accountId,
@@ -303,6 +346,10 @@ async function waitForInitialLoad() {
 function openFxPanel(language: 'zh' | 'en' = 'zh') {
   fireEvent.click(screen.getByRole('button', { name: language === 'en' ? 'FX' : '汇率' }));
   return within(screen.getByTestId('portfolio-fx-panel')).getByRole('button', { name: translate(language, 'portfolio.refreshFx') });
+}
+
+function getLeftTabButton(name: string) {
+  return within(screen.getByTestId('portfolio-left-tab-switcher')).getByRole('button', { name });
 }
 
 describe('PortfolioPage FX refresh', () => {
@@ -451,6 +498,11 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(screen.getByTestId('portfolio-total-assets-card')).getByText(translate('zh', 'portfolio.totalCash'))).toBeInTheDocument();
     expect(within(screen.getByTestId('portfolio-total-assets-card')).getByText(translate('zh', 'portfolio.totalMarketValue'))).toBeInTheDocument();
     expect(within(screen.getByTestId('portfolio-total-assets-card')).getByText(translate('zh', 'portfolio.positionUnrealized'))).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('已实现盈亏');
+    expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('未实现盈亏');
+    expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('总盈亏');
+    expect(screen.getByTestId('portfolio-exposure-card')).toHaveTextContent('暂无持仓，录入交易后生成盈亏与资产配置。');
+    expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('暂无持仓');
     expect(await screen.findByText(translate('zh', 'portfolio.fxStale'))).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).toBeInTheDocument();
     const submitTradeButton = screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') });
@@ -463,13 +515,13 @@ describe('PortfolioPage FX refresh', () => {
     expect(submitTradeButton.className).toContain('py-2.5');
     expect(submitTradeButton.className).toContain('shadow-[0_0_15px_rgba(139,92,246,0.3)]');
     expect(screen.queryByText(translate('zh', 'portfolio.scopeHint'))).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '交易' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '账户' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '同步' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '汇率' })).toBeInTheDocument();
+    expect(getLeftTabButton('交易')).toBeInTheDocument();
+    expect(getLeftTabButton('账户')).toBeInTheDocument();
+    expect(getLeftTabButton('同步')).toBeInTheDocument();
+    expect(getLeftTabButton('汇率')).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-left-tab-switcher').className).toContain('bg-white/[0.05]');
-    expect(screen.getByRole('button', { name: '交易' }).className).toContain('bg-white/10');
-    expect(screen.getByRole('button', { name: '账户' }).className).not.toContain('border-white');
+    expect(getLeftTabButton('交易').className).toContain('bg-white/10');
+    expect(getLeftTabButton('账户').className).not.toContain('border-white');
     expect(screen.queryByRole('heading', { name: /Current Holdings/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-start-card')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '历史记录 ↗' })).not.toBeInTheDocument();
@@ -498,7 +550,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(Boolean(holdingsPanel.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
-  it('renders the mobile empty portfolio order as hero, start, recent activity, trade station', async () => {
+  it('renders the mobile empty portfolio order as hero, pnl, start, exposure, risk, trade station, recent activity', async () => {
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
 
     render(<PortfolioPage />);
@@ -506,17 +558,23 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
+    const pnlSummary = screen.getByTestId('portfolio-pnl-summary');
     const startCard = screen.getByTestId('portfolio-start-card');
-    const recentActivity = screen.getByTestId('portfolio-recent-activity');
+    const exposureCard = screen.getByTestId('portfolio-exposure-card');
+    const riskCard = screen.getByTestId('portfolio-risk-card');
     const tradeStationSection = screen.getByRole('heading', { name: 'Trade Station' }).closest('section') as HTMLElement;
+    const recentActivity = screen.getByTestId('portfolio-recent-activity');
 
-    expect(Boolean(totalAssetsCard.compareDocumentPosition(startCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(startCard.compareDocumentPosition(recentActivity) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(recentActivity.compareDocumentPosition(tradeStationSection) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(totalAssetsCard.compareDocumentPosition(pnlSummary) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(pnlSummary.compareDocumentPosition(startCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(startCard.compareDocumentPosition(exposureCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(exposureCard.compareDocumentPosition(riskCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(riskCard.compareDocumentPosition(tradeStationSection) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(tradeStationSection.compareDocumentPosition(recentActivity) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
   });
 
-  it('renders empty portfolio start card and recent activity in the same workflow column for small history', async () => {
+  it('renders empty portfolio start card and recent activity after analytics for small history', async () => {
     listTrades.mockResolvedValueOnce({
       items: [
         { id: 7, accountId: 1, symbol: 'AAPL', market: 'us', tradeDate: '2026-03-18', side: 'buy', quantity: 1, price: 100, fee: 0, tax: 0, currency: 'USD', createdAt: '2026-03-18T00:00:00Z' },
@@ -537,7 +595,7 @@ describe('PortfolioPage FX refresh', () => {
     const startCard = screen.getByTestId('portfolio-start-card');
     const recentActivity = screen.getByTestId('portfolio-recent-activity');
     expect(workflowColumn).toContainElement(startCard);
-    expect(workflowColumn).toContainElement(recentActivity);
+    expect(workflowColumn).not.toContainElement(recentActivity);
     expect(workflowColumn).toHaveClass('space-y-4');
     expect(startCard).toHaveClass('xl:col-span-7');
     expect(startCard).not.toHaveClass('xl:min-h-[300px]', 'min-h-[520px]');
@@ -566,6 +624,50 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(recentActivity).getByText('暂无历史记录')).toBeInTheDocument();
     expect(recentActivity).not.toHaveClass('min-h-[300px]', 'min-h-[520px]');
     expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
+  });
+
+  it('renders pnl, holding unrealized percent, exposure tabs, and risk summary for active holdings', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(screen.getByTestId('portfolio-pnl-realized')).toHaveTextContent('已实现盈亏');
+    expect(screen.getByTestId('portfolio-pnl-unrealized')).toHaveTextContent('未实现盈亏');
+    expect(screen.getByTestId('portfolio-pnl-total')).toHaveTextContent('总盈亏');
+    const holdings = screen.getByTestId('portfolio-current-holdings-panel');
+    expect(within(holdings).getByText('AAPL')).toBeInTheDocument();
+    expect(within(holdings).getByText('6.7%')).toBeInTheDocument();
+    const exposure = screen.getByTestId('portfolio-exposure-card');
+    expect(within(exposure).getByRole('button', { name: '账户' })).toBeInTheDocument();
+    expect(within(exposure).getByRole('button', { name: '币种' })).toBeInTheDocument();
+    expect(within(exposure).getByRole('button', { name: '市场' })).toBeInTheDocument();
+    expect(within(exposure).getByRole('button', { name: '标的' })).toBeInTheDocument();
+    fireEvent.click(within(exposure).getByRole('button', { name: '币种' }));
+    expect(exposure).toHaveTextContent('USD');
+    expect(exposure).toHaveTextContent('USD 1,600.00');
+    fireEvent.click(within(exposure).getByRole('button', { name: '标的' }));
+    expect(exposure).toHaveTextContent('AAPL');
+    expect(exposure).toHaveTextContent('6.7%');
+    const risk = screen.getByTestId('portfolio-risk-card');
+    expect(risk).toHaveTextContent('最大持仓');
+    expect(risk).toHaveTextContent('最大币种');
+    expect(risk).toHaveTextContent('最大市场');
+    expect(risk).toHaveTextContent('单一标的占比较高');
+  });
+
+  it('keeps native exposure visible when FX conversion is unavailable', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: true }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+    fireEvent.click(within(screen.getByTestId('portfolio-exposure-card')).getByRole('button', { name: '币种' }));
+
+    const exposure = screen.getByTestId('portfolio-exposure-card');
+    expect(exposure).toHaveTextContent('折算不可用');
+    expect(exposure).toHaveTextContent('USD 1,600.00');
   });
 
   it('shows the disabled trade reason if the trade account is all accounts', async () => {
@@ -755,15 +857,15 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.queryByText(translate('zh', 'portfolio.createAccountTitle'))).not.toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.dataSyncTitle'))).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '账户' }));
+    fireEvent.click(getLeftTabButton('账户'));
     expect(screen.getAllByText(translate('zh', 'portfolio.createAccountTitle')).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: translate('zh', 'portfolio.createAccount') })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '同步' }));
+    fireEvent.click(getLeftTabButton('同步'));
     expect(screen.getByText(translate('zh', 'portfolio.dataSyncTitle'))).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'portfolio.currentImportAccount'))).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '汇率' }));
+    fireEvent.click(getLeftTabButton('汇率'));
     expect(screen.getByTestId('portfolio-fx-panel')).toBeInTheDocument();
     expect(screen.getByText('LIVE EXCHANGE ENGINE')).toBeInTheDocument();
     expect(screen.getByLabelText('Base Currency')).toHaveValue('USD');
@@ -789,7 +891,7 @@ describe('PortfolioPage FX refresh', () => {
 
     const accountSelect = screen.getByLabelText('TRADE ACCOUNT') as HTMLSelectElement;
     fireEvent.change(accountSelect, { target: { value: '1' } });
-    fireEvent.click(screen.getByRole('button', { name: '账户' }));
+    fireEvent.click(getLeftTabButton('账户'));
     fireEvent.click(screen.getByRole('button', { name: '删除 Main' }));
 
     expect(await screen.findByText(translate('zh', 'portfolio.accountDeleteMessage'))).toBeInTheDocument();
@@ -830,7 +932,7 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 1, costMethod: 'fifo' }));
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
-    fireEvent.click(screen.getByRole('button', { name: '同步' }));
+    fireEvent.click(getLeftTabButton('同步'));
 
     const brokerSelect = screen.getAllByRole('combobox').find((element) =>
       (element as HTMLSelectElement).value === 'huatai'
@@ -878,7 +980,7 @@ describe('PortfolioPage FX refresh', () => {
     const accountSelect = screen.getByLabelText('ASSET SCOPE');
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
-    fireEvent.click(screen.getByRole('button', { name: '同步' }));
+    fireEvent.click(getLeftTabButton('同步'));
 
     const brokerSelect = screen.getAllByRole('combobox').find((element) =>
       (element as HTMLSelectElement).value === 'huatai'
@@ -1009,7 +1111,7 @@ describe('PortfolioPage FX refresh', () => {
     const accountSelect = screen.getByLabelText('ASSET SCOPE');
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
-    fireEvent.click(screen.getByRole('button', { name: '同步' }));
+    fireEvent.click(getLeftTabButton('同步'));
 
     const brokerSelect = screen.getAllByRole('combobox').find((element) =>
       (element as HTMLSelectElement).value === 'huatai'
@@ -1257,15 +1359,15 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(screen.getByRole('heading', { name: '总资产 Total Assets' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Trade' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sync' })).toBeInTheDocument();
+    expect(getLeftTabButton('Trade')).toBeInTheDocument();
+    expect(getLeftTabButton('Account')).toBeInTheDocument();
+    expect(getLeftTabButton('Sync')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'History ↗' })).not.toBeInTheDocument();
     expect(screen.getByText('No current holdings')).toBeInTheDocument();
     expect(openFxPanel('en')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Sync' }));
+    fireEvent.click(getLeftTabButton('Sync'));
     expect(screen.getByText(translate('en', 'portfolio.dataSyncTitle'))).toBeInTheDocument();
   });
 
@@ -1324,7 +1426,7 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.change(screen.getByLabelText('TRADE ACCOUNT'), { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
-    fireEvent.click(screen.getByRole('button', { name: 'Sync' }));
+    fireEvent.click(getLeftTabButton('Sync'));
     fireEvent.change(
       screen.getAllByRole('combobox').find((element) => (element as HTMLSelectElement).value === 'huatai') as HTMLSelectElement,
       { target: { value: 'ibkr' } },
@@ -1375,7 +1477,7 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.change(screen.getByLabelText('TRADE ACCOUNT'), { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
-    fireEvent.click(screen.getByRole('button', { name: '同步' }));
+    fireEvent.click(getLeftTabButton('同步'));
     fireEvent.change(
       screen.getAllByRole('combobox').find((element) => (element as HTMLSelectElement).value === 'huatai') as HTMLSelectElement,
       { target: { value: 'ibkr' } },
@@ -1770,15 +1872,15 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.click(screen.getByRole('button', { name: '账户' }));
+    fireEvent.click(getLeftTabButton('账户'));
     expect(screen.getAllByText(translate('zh', 'portfolio.createAccountTitle')).length).toBeGreaterThan(0);
     expect(screen.queryByText(translate('zh', 'portfolio.manualTrade'))).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '同步' }));
+    fireEvent.click(getLeftTabButton('同步'));
     expect(screen.getByText(translate('zh', 'portfolio.dataSyncTitle'))).toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.createAccountTitle'))).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '交易' }));
+    fireEvent.click(getLeftTabButton('交易'));
     expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
   });
 });

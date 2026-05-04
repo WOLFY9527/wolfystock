@@ -33,6 +33,7 @@ import type {
   PortfolioCorporateActionListItem,
   PortfolioCorporateActionType,
   PortfolioCostMethod,
+  PortfolioExposureItem,
   PortfolioFxRateItem,
   PortfolioImportBrokerItem,
   PortfolioIbkrSyncResponse,
@@ -71,6 +72,7 @@ const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
 type AccountOption = 'all' | number;
 type EventType = 'trade' | 'cash' | 'corporate';
 type TradeFormType = 'stock' | 'fund' | 'corporate';
+type ExposureTab = 'account' | 'currency' | 'market' | 'symbol' | 'sector';
 
 type FlatPosition = PortfolioPositionItem & {
   accountId: number;
@@ -437,6 +439,14 @@ function formatSignedMoney(value: number, currency: string): string {
   return formatted;
 }
 
+function formatPercent(value: number | undefined | null): string {
+  if (value == null || Number.isNaN(value)) return '--';
+  return `${Number(value).toLocaleString(undefined, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })}%`;
+}
+
 function getFxRateForDisplay(
   fxRows: PortfolioFxRateItem[],
   fromCurrency: string | undefined | null,
@@ -532,6 +542,7 @@ const PortfolioPage: React.FC = () => {
   const [ibkrSyncResult, setIbkrSyncResult] = useState<PortfolioIbkrSyncResponse | null>(null);
 
   const [leftTab, setLeftTab] = useState<'trade' | 'account' | 'sync' | 'fx'>('trade');
+  const [exposureTab, setExposureTab] = useState<ExposureTab>('account');
   const [eventType, setEventType] = useState<EventType>('trade');
   const [eventDateFrom] = useState('');
   const [eventDateTo] = useState('');
@@ -1470,6 +1481,74 @@ const PortfolioPage: React.FC = () => {
     const converted = convertMoney(value, nativeCurrency);
     return converted ? `≈ ${formatMoney(converted.value, displayCurrency)}` : fxUnavailableLabel;
   };
+  const analytics = snapshot?.analytics ?? null;
+  const pnlSourceCurrency = analytics?.pnl.displayCurrency || snapshotCurrency;
+  const realizedPnl = analytics?.pnl.realized.amount ?? snapshot?.realizedPnl ?? 0;
+  const unrealizedPnl = analytics?.pnl.unrealized.amount ?? totalUnrealizedPnl;
+  const totalPnl = analytics?.pnl.total.amount ?? realizedPnl + unrealizedPnl;
+  const realizedPnlDisplay = convertMoney(realizedPnl, pnlSourceCurrency);
+  const unrealizedPnlDisplay = convertMoney(unrealizedPnl, pnlSourceCurrency);
+  const totalPnlDisplay = convertMoney(totalPnl, pnlSourceCurrency);
+  const analyticsEmptyText = language === 'zh' ? '暂无持仓，录入交易后生成盈亏与资产配置。' : 'No holdings yet. Add trades to generate P&L and allocation.';
+  const pnlLabels = {
+    realized: language === 'zh' ? '已实现盈亏' : 'Realized',
+    unrealized: language === 'zh' ? '未实现盈亏' : 'Unrealized',
+    total: language === 'zh' ? '总盈亏' : 'Total P&L',
+    native: language === 'zh' ? '原币' : 'Native',
+  };
+  const exposureTitle = language === 'zh' ? '资产配置' : 'Exposure';
+  const riskTitle = language === 'zh' ? '组合质量' : 'Portfolio Quality';
+  const exposureEmpty = language === 'zh' ? '暂无配置数据' : 'No exposure data';
+  const riskWarningLabels: Record<string, string> = {
+    no_holdings: language === 'zh' ? '暂无持仓' : 'No holdings',
+    single_position_gt_30: language === 'zh' ? '单一标的占比较高' : 'Single position concentration',
+    single_currency_gt_80: language === 'zh' ? '单一币种占比较高' : 'Single currency concentration',
+    single_market_gt_80: language === 'zh' ? '单一市场占比较高' : 'Single market concentration',
+    fx_conversion_unavailable: language === 'zh' ? '部分折算不可用，已保留原币值' : 'Some FX conversion is unavailable; native values remain visible',
+  };
+  const exposureTabs = [
+    { value: 'account', label: language === 'zh' ? '账户' : 'Account' },
+    { value: 'currency', label: language === 'zh' ? '币种' : 'Currency' },
+    { value: 'market', label: language === 'zh' ? '市场' : 'Market' },
+    { value: 'symbol', label: language === 'zh' ? '标的' : 'Symbol' },
+    ...(analytics?.exposure.sectorStatus === 'available' ? [{ value: 'sector', label: language === 'zh' ? '行业' : 'Sector' }] : []),
+  ];
+  const exposureRows: PortfolioExposureItem[] = (() => {
+    const exposure = analytics?.exposure;
+    if (!exposure) return [];
+    if (exposureTab === 'account') return exposure.byAccount || [];
+    if (exposureTab === 'currency') return exposure.byCurrency || [];
+    if (exposureTab === 'market') return exposure.byMarket || [];
+    if (exposureTab === 'symbol') return exposure.bySymbol || [];
+    return exposure.bySector || [];
+  })();
+  const formatAnalyticsMoney = (value: number, currency: string) => {
+    const converted = convertMoney(value, currency);
+    if (converted) return formatMoney(converted.value, displayCurrency);
+    if (value === 0) return formatMoney(0, displayCurrency);
+    return formatMoney(value, currency);
+  };
+  const renderPnlTile = (key: 'realized' | 'unrealized' | 'total', value: number, converted: ConvertedMoney) => (
+    <div data-testid={`portfolio-pnl-${key}`} className="rounded-xl bg-white/[0.025] px-3 py-3">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{pnlLabels[key]}</div>
+      <div className={`mt-1 font-mono text-sm tabular-nums ${value >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+        {converted ? formatSignedMoney(converted.value, displayCurrency) : formatSignedMoney(value, pnlSourceCurrency)}
+      </div>
+      {pnlSourceCurrency !== displayCurrency ? (
+        <div className="mt-1 truncate font-mono text-[11px] text-white/35">
+          {pnlLabels.native} {formatSignedMoney(value, pnlSourceCurrency)}
+        </div>
+      ) : null}
+    </div>
+  );
+  const renderExposureValue = (row: PortfolioExposureItem) => {
+    const currency = row.displayCurrency || snapshotCurrency;
+    const display = formatAnalyticsMoney(row.displayValue ?? row.marketValue ?? 0, currency);
+    const native = row.nativeCurrency && row.nativeCurrency !== displayCurrency && row.nativeValue != null
+      ? formatMoney(row.nativeValue, row.nativeCurrency)
+      : null;
+    return { display, native };
+  };
 
   const renderTradeActions = (item: PortfolioTradeListItem, context: 'history' | 'recent') => {
     if (item.isActive === false) {
@@ -1878,6 +1957,15 @@ const PortfolioPage: React.FC = () => {
 	                ) : null}
 	              </div>
 	            </div>
+
+	            <section
+	              data-testid="portfolio-pnl-summary"
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 grid gap-2 sm:grid-cols-3`}
+	            >
+	              {renderPnlTile('realized', realizedPnl, realizedPnlDisplay)}
+	              {renderPnlTile('unrealized', unrealizedPnl, unrealizedPnlDisplay)}
+	              {renderPnlTile('total', totalPnl, totalPnlDisplay)}
+	            </section>
 	
 	            {hasHoldings ? (
 	              <div
@@ -1914,6 +2002,9 @@ const PortfolioPage: React.FC = () => {
 	                          <div className="text-right">
 	                            <div className={`font-mono text-lg tabular-nums ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
 	                              {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
+	                            </div>
+	                            <div className="mt-1 font-mono text-xs text-white/40">
+	                              {formatPercent(row.unrealizedPnlPct)}
 	                            </div>
 	                            {row.valuationCurrency !== displayCurrency ? (
 	                              <div className="mt-1 font-mono text-xs text-white/40">
@@ -1972,9 +2063,106 @@ const PortfolioPage: React.FC = () => {
 	                    </div>
 	                  ) : null}
 	                </div>
-	                {recentActivityContent}
 	              </div>
 	            )}
+
+	            <section
+	              data-testid="portfolio-exposure-card"
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-4 xl:col-span-7 2xl:col-span-8`}
+	            >
+	              <div className="flex flex-wrap items-center justify-between gap-3">
+	                <h2 className="text-xs uppercase tracking-widest text-muted-text">{exposureTitle}</h2>
+	                <SeamlessSegmentedControl
+	                  value={exposureTab}
+	                  onChange={(value) => setExposureTab(value as ExposureTab)}
+	                  options={exposureTabs}
+	                  className="sm:w-auto"
+	                  itemClassName="px-3 text-xs sm:flex-none"
+	                  dataTestId="portfolio-exposure-tabs"
+	                />
+	              </div>
+	              {exposureRows.length ? (
+	                <div className="flex flex-col gap-2">
+	                  {exposureRows.map((row) => {
+	                    const values = renderExposureValue(row);
+	                    return (
+	                      <div key={`${exposureTab}-${row.key}`} className="min-w-0 rounded-xl bg-white/[0.025] px-3 py-3">
+	                        <div className="flex min-w-0 items-center justify-between gap-3">
+	                          <div className="min-w-0">
+	                            <div className="truncate text-sm font-medium text-white">{row.label}</div>
+	                            <div className="mt-1 text-xs text-white/40">
+	                              {formatPercent(row.percent)}
+	                              {row.fxStatus === 'unavailable' ? ` · ${fxUnavailableLabel}` : ''}
+	                            </div>
+	                          </div>
+	                          <div className="shrink-0 text-right">
+	                            <div className="font-mono text-sm text-white tabular-nums">{values.display}</div>
+	                            {values.native ? <div className="mt-1 font-mono text-[11px] text-white/35">{values.native}</div> : null}
+	                          </div>
+	                        </div>
+	                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.04]">
+	                          <div className="h-full rounded-full bg-emerald-400/70" style={{ width: `${Math.max(2, Math.min(100, row.percent || 0))}%` }} />
+	                        </div>
+	                        {exposureTab === 'symbol' && row.unrealizedPnl != null ? (
+	                          <div className="mt-2 flex justify-between gap-3 text-xs text-white/40">
+	                            <span>{copy.positionUnrealized}</span>
+	                            <span className={Number(row.unrealizedPnl) >= 0 ? 'text-emerald-300' : 'text-rose-300'}>
+	                              {formatSignedMoney(Number(row.unrealizedPnl), row.displayCurrency || snapshotCurrency)}
+	                              {' '}
+	                              {formatPercent(row.unrealizedPnlPct)}
+	                            </span>
+	                          </div>
+	                        ) : null}
+	                      </div>
+	                    );
+	                  })}
+	                </div>
+	              ) : (
+	                <div className="rounded-xl bg-white/[0.025] px-4 py-3 text-sm text-white/40">
+	                  {hasHoldings ? exposureEmpty : analyticsEmptyText}
+	                </div>
+	              )}
+	            </section>
+
+	            <section
+	              data-testid="portfolio-risk-card"
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-3 xl:col-span-5 2xl:col-span-4`}
+	            >
+	              <h2 className="text-xs uppercase tracking-widest text-muted-text">{riskTitle}</h2>
+	              <div className="grid grid-cols-2 gap-2">
+	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                  <div className="text-[10px] uppercase tracking-widest text-white/40">{language === 'zh' ? '最大持仓' : 'Largest Position'}</div>
+	                  <div className="mt-1 truncate text-sm text-white">{analytics?.risk.largestPosition?.label || '--'}</div>
+	                  <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(analytics?.risk.largestPosition?.percent)}</div>
+	                </div>
+	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                  <div className="text-[10px] uppercase tracking-widest text-white/40">{language === 'zh' ? '最大币种' : 'Largest Currency'}</div>
+	                  <div className="mt-1 truncate text-sm text-white">{analytics?.risk.largestCurrency?.label || '--'}</div>
+	                  <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(analytics?.risk.largestCurrency?.percent)}</div>
+	                </div>
+	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                  <div className="text-[10px] uppercase tracking-widest text-white/40">{language === 'zh' ? '最大市场' : 'Largest Market'}</div>
+	                  <div className="mt-1 truncate text-sm text-white">{analytics?.risk.largestMarket?.label || '--'}</div>
+	                  <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(analytics?.risk.largestMarket?.percent)}</div>
+	                </div>
+	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                  <div className="text-[10px] uppercase tracking-widest text-white/40">{language === 'zh' ? '持仓数量' : 'Holdings'}</div>
+	                  <div className="mt-1 font-mono text-sm text-white">{analytics?.risk.holdingCount ?? positionRows.length}</div>
+	                  <div className="mt-1 font-mono text-xs text-white/45">{language === 'zh' ? '账户' : 'Accounts'} {analytics?.risk.accountCount ?? snapshot?.accountCount ?? 0}</div>
+	                </div>
+	              </div>
+	              <div className="rounded-xl bg-white/[0.025] px-3 py-3 text-xs text-white/45">
+	                {(analytics?.risk.warnings || []).length ? (
+	                  <div className="flex flex-col gap-1.5">
+	                    {(analytics?.risk.warnings || []).map((warning) => (
+	                      <span key={warning}>{riskWarningLabels[warning] || warning}</span>
+	                    ))}
+	                  </div>
+	                ) : (
+	                  <span>{language === 'zh' ? '暂无集中度提示' : 'No concentration warnings'}</span>
+	                )}
+	              </div>
+	            </section>
 	
 	          <section data-testid="portfolio-trade-station-card" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-5 overflow-visible xl:col-span-5 xl:min-h-[300px] 2xl:col-span-4`}>
             <div className="shrink-0">
@@ -2352,6 +2540,12 @@ const PortfolioPage: React.FC = () => {
               ) : null}
             </div>
           </section>
+
+            {!hasHoldings ? (
+              <div className="col-span-12">
+                {recentActivityContent}
+              </div>
+            ) : null}
 
             {shouldRenderFullHistory ? (
               <section data-testid="portfolio-history-full" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col overflow-hidden ${currentEventCount > 5 ? 'max-h-[560px]' : 'max-h-none'}`}>

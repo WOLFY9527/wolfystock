@@ -447,6 +447,59 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertAlmostEqual(fifo_acc["positions"][0]["quantity"], 50.0, places=6)
         self.assertAlmostEqual(avg_acc["positions"][0]["quantity"], 50.0, places=6)
 
+    def test_snapshot_analytics_expose_pnl_exposure_and_risk(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="us", base_currency="USD")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=100,
+            price=10,
+            fee=10,
+            tax=0,
+            market="us",
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 3),
+            side="sell",
+            quantity=40,
+            price=15,
+            fee=5,
+            tax=0,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("AAPL", date(2026, 1, 4), 20.0)
+
+        snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 4), cost_method="fifo")
+        position = snapshot["accounts"][0]["positions"][0]
+
+        self.assertAlmostEqual(position["market_value_native"], 1200.0, places=6)
+        self.assertAlmostEqual(position["cost_basis_native"], 606.0, places=6)
+        self.assertAlmostEqual(position["unrealized_pnl_native"], 594.0, places=6)
+        self.assertAlmostEqual(position["unrealized_pnl_pct"], 98.019802, places=6)
+        self.assertAlmostEqual(snapshot["analytics"]["pnl"]["realized"]["amount"], 191.0, places=6)
+        self.assertAlmostEqual(snapshot["analytics"]["pnl"]["unrealized"]["amount"], 594.0, places=6)
+        self.assertAlmostEqual(snapshot["analytics"]["pnl"]["total"]["amount"], 785.0, places=6)
+        self.assertEqual(snapshot["analytics"]["exposure"]["by_account"][0]["account_id"], aid)
+        self.assertEqual(snapshot["analytics"]["exposure"]["by_currency"][0]["currency"], "USD")
+        self.assertEqual(snapshot["analytics"]["exposure"]["by_market"][0]["market"], "us")
+        self.assertEqual(snapshot["analytics"]["exposure"]["by_symbol"][0]["symbol"], "AAPL")
+        self.assertEqual(snapshot["analytics"]["risk"]["holding_count"], 1)
+        self.assertIn("single_position_gt_30", snapshot["analytics"]["risk"]["warnings"])
+
     def test_corporate_actions_dividend_and_split(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
         aid = account["id"]
@@ -1116,6 +1169,63 @@ class PortfolioServiceTestCase(unittest.TestCase):
             row = session.execute(select(PortfolioTrade).where(PortfolioTrade.id == trade["id"])).scalar_one()
         self.assertFalse(row.is_active)
         self.assertIsNotNone(row.voided_at)
+
+    def test_snapshot_analytics_exclude_soft_voided_trade(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+        voided = self.service.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="cn",
+            currency="CNY",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="000001",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=5,
+            price=10,
+            market="cn",
+            currency="CNY",
+        )
+        self.assertTrue(self.service.delete_trade_event(voided["id"]))
+        self._save_close("600519", date(2026, 1, 2), 200.0)
+        self._save_close("000001", date(2026, 1, 2), 12.0)
+
+        snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
+
+        self.assertEqual([item["symbol"] for item in snapshot["accounts"][0]["positions"]], ["000001"])
+        self.assertEqual([item["symbol"] for item in snapshot["analytics"]["exposure"]["by_symbol"]], ["000001"])
+        self.assertAlmostEqual(snapshot["analytics"]["pnl"]["unrealized"]["amount"], 10.0, places=6)
+
+    def test_snapshot_analytics_mark_fx_unavailable_but_keep_native_values(self) -> None:
+        account = self.service.create_account(name="HK", broker="Demo", market="hk", base_currency="USD")
+        aid = account["id"]
+        self.service.record_trade(
+            account_id=aid,
+            symbol="00700",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="hk",
+            currency="HKD",
+        )
+        self._save_close("00700", date(2026, 1, 2), 110.0)
+
+        snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 2), cost_method="fifo")
+        position = snapshot["accounts"][0]["positions"][0]
+
+        self.assertEqual(position["currency"], "HKD")
+        self.assertAlmostEqual(position["market_value_native"], 1100.0, places=6)
+        self.assertEqual(position["display_fx_status"], "unavailable")
+        self.assertEqual(snapshot["analytics"]["pnl"]["unrealized"]["fx_status"], "unavailable")
+        self.assertTrue(snapshot["analytics"]["risk"]["fx_unavailable"])
 
     def test_delete_sell_trade_restores_prior_quantity(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")

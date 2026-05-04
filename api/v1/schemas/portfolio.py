@@ -261,6 +261,14 @@ class PortfolioPositionItem(BaseModel):
     market_value_base: float
     unrealized_pnl_base: float
     valuation_currency: str
+    cost_basis_native: Optional[float] = None
+    market_value_native: Optional[float] = None
+    unrealized_pnl_native: Optional[float] = None
+    unrealized_pnl_pct: Optional[float] = None
+    display_market_value: Optional[float] = None
+    display_unrealized_pnl: Optional[float] = None
+    display_currency: Optional[str] = None
+    display_fx_status: Optional[Literal["live", "stale", "unavailable"]] = None
 
 
 class PortfolioAccountSnapshot(BaseModel):
@@ -301,6 +309,69 @@ class PortfolioFxRateItem(BaseModel):
     source_direction: str
 
 
+class PortfolioPnlMetric(BaseModel):
+    amount: float
+    amount_display: Optional[str] = None
+    percent: Optional[float] = None
+    currency: str
+    fx_status: Literal["live", "stale", "unavailable"] = "live"
+
+
+class PortfolioPnlSummary(BaseModel):
+    display_currency: str
+    realized: PortfolioPnlMetric
+    unrealized: PortfolioPnlMetric
+    total: PortfolioPnlMetric
+
+
+class PortfolioExposureItem(BaseModel):
+    key: str
+    label: str
+    market_value: float
+    display_value: float
+    display_currency: str
+    percent: float
+    fx_status: Literal["live", "stale", "unavailable"] = "live"
+    native_value: Optional[float] = None
+    native_currency: Optional[str] = None
+    account_id: Optional[int] = None
+    account_name: Optional[str] = None
+    base_currency: Optional[str] = None
+    currency: Optional[str] = None
+    market: Optional[str] = None
+    symbol: Optional[str] = None
+    sector: Optional[str] = None
+    holding_count: Optional[int] = None
+    unrealized_pnl: Optional[float] = None
+    unrealized_pnl_pct: Optional[float] = None
+
+
+class PortfolioExposureSummary(BaseModel):
+    by_account: List[PortfolioExposureItem] = Field(default_factory=list)
+    by_currency: List[PortfolioExposureItem] = Field(default_factory=list)
+    by_market: List[PortfolioExposureItem] = Field(default_factory=list)
+    by_symbol: List[PortfolioExposureItem] = Field(default_factory=list)
+    by_sector: List[PortfolioExposureItem] = Field(default_factory=list)
+    sector_status: Literal["available", "unavailable"] = "unavailable"
+
+
+class PortfolioRiskSummary(BaseModel):
+    largest_position: Optional[Dict[str, Any]] = None
+    largest_currency: Optional[Dict[str, Any]] = None
+    largest_market: Optional[Dict[str, Any]] = None
+    holding_count: int = 0
+    account_count: int = 0
+    cash_percent: Optional[float] = None
+    fx_unavailable: bool = False
+    warnings: List[str] = Field(default_factory=list)
+
+
+class PortfolioAnalyticsSummary(BaseModel):
+    pnl: PortfolioPnlSummary
+    exposure: PortfolioExposureSummary
+    risk: PortfolioRiskSummary
+
+
 class PortfolioSnapshotResponse(BaseModel):
     as_of: str
     cost_method: str
@@ -317,6 +388,7 @@ class PortfolioSnapshotResponse(BaseModel):
     market_breakdown: List[PortfolioMarketBreakdownItem] = Field(default_factory=list)
     fx_rates: List[PortfolioFxRateItem] = Field(default_factory=list)
     portfolio_attribution: Dict[str, Any] = Field(default_factory=dict)
+    analytics: Optional[PortfolioAnalyticsSummary] = None
     accounts: List[PortfolioAccountSnapshot] = Field(default_factory=list)
 
 

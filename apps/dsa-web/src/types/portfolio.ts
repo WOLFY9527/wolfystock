@@ -100,6 +100,14 @@ export interface PortfolioPositionItem {
   marketValueBase: number;
   unrealizedPnlBase: number;
   valuationCurrency: string;
+  costBasisNative?: number | null;
+  marketValueNative?: number | null;
+  unrealizedPnlNative?: number | null;
+  unrealizedPnlPct?: number | null;
+  displayMarketValue?: number | null;
+  displayUnrealizedPnl?: number | null;
+  displayCurrency?: string | null;
+  displayFxStatus?: PortfolioFxStatus | null;
 }
 
 export interface PortfolioAccountSnapshot {
@@ -144,6 +152,71 @@ export interface PortfolioLiveFxRateResponse {
   error?: string | null;
 }
 
+export type PortfolioFxStatus = 'live' | 'stale' | 'unavailable';
+
+export interface PortfolioPnlMetric {
+  amount: number;
+  amountDisplay?: string | null;
+  percent?: number | null;
+  currency: string;
+  fxStatus: PortfolioFxStatus;
+}
+
+export interface PortfolioPnlSummary {
+  displayCurrency: string;
+  realized: PortfolioPnlMetric;
+  unrealized: PortfolioPnlMetric;
+  total: PortfolioPnlMetric;
+}
+
+export interface PortfolioExposureItem {
+  key: string;
+  label: string;
+  marketValue: number;
+  displayValue: number;
+  displayCurrency: string;
+  percent: number;
+  fxStatus: PortfolioFxStatus;
+  nativeValue?: number | null;
+  nativeCurrency?: string | null;
+  accountId?: number | null;
+  accountName?: string | null;
+  baseCurrency?: string | null;
+  currency?: string | null;
+  market?: string | null;
+  symbol?: string | null;
+  sector?: string | null;
+  holdingCount?: number | null;
+  unrealizedPnl?: number | null;
+  unrealizedPnlPct?: number | null;
+}
+
+export interface PortfolioExposureSummary {
+  byAccount: PortfolioExposureItem[];
+  byCurrency: PortfolioExposureItem[];
+  byMarket: PortfolioExposureItem[];
+  bySymbol: PortfolioExposureItem[];
+  bySector: PortfolioExposureItem[];
+  sectorStatus: 'available' | 'unavailable';
+}
+
+export interface PortfolioAnalyticsRiskSummary {
+  largestPosition?: PortfolioExposureItem | null;
+  largestCurrency?: PortfolioExposureItem | null;
+  largestMarket?: PortfolioExposureItem | null;
+  holdingCount: number;
+  accountCount: number;
+  cashPercent?: number | null;
+  fxUnavailable: boolean;
+  warnings: string[];
+}
+
+export interface PortfolioAnalyticsSummary {
+  pnl: PortfolioPnlSummary;
+  exposure: PortfolioExposureSummary;
+  risk: PortfolioAnalyticsRiskSummary;
+}
+
 export interface PortfolioSnapshotResponse {
   asOf: string;
   costMethod: PortfolioCostMethod;
@@ -159,6 +232,7 @@ export interface PortfolioSnapshotResponse {
   fxStale: boolean;
   fxRates?: PortfolioFxRateItem[];
   portfolioAttribution?: Record<string, unknown>;
+  analytics?: PortfolioAnalyticsSummary | null;
   accounts: PortfolioAccountSnapshot[];
 }
 

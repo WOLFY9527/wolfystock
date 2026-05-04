@@ -336,6 +336,45 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(payload["fx_rates"][0]["source"], "manual")
         self.assertFalse(payload["fx_rates"][0]["is_stale"])
 
+    def test_snapshot_api_returns_backwards_compatible_analytics_payload(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Main", "broker": "Demo", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+        self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "AAPL",
+                "trade_date": "2026-01-01",
+                "side": "buy",
+                "quantity": 10,
+                "price": 100.0,
+                "market": "us",
+                "currency": "USD",
+            },
+        )
+        self._save_close("AAPL", date(2026, 1, 2), 130.0)
+
+        snapshot_resp = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"as_of": "2026-01-02", "cost_method": "fifo"},
+        )
+        self.assertEqual(snapshot_resp.status_code, 200)
+        payload = snapshot_resp.json()
+
+        self.assertIn("total_market_value", payload)
+        self.assertIn("accounts", payload)
+        self.assertIn("analytics", payload)
+        self.assertIn("pnl", payload["analytics"])
+        self.assertIn("exposure", payload["analytics"])
+        self.assertIn("risk", payload["analytics"])
+        self.assertAlmostEqual(payload["analytics"]["pnl"]["unrealized"]["amount"], 300.0, places=6)
+        self.assertEqual(payload["analytics"]["exposure"]["by_symbol"][0]["symbol"], "AAPL")
+        self.assertEqual(payload["analytics"]["risk"]["largest_position"]["symbol"], "AAPL")
+
     def test_snapshot_invalid_cost_method_returns_400(self) -> None:
         resp = self.client.get("/api/v1/portfolio/snapshot", params={"cost_method": "bad"})
         self.assertEqual(resp.status_code, 400)

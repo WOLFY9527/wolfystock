@@ -37,6 +37,9 @@ VALID_CORPORATE_ACTIONS = {"cash_dividend", "split_adjustment"}
 VALID_BROKER_CONNECTION_STATUSES = {"active", "disabled", "error"}
 VALID_BROKER_IMPORT_MODES = {"file", "manual", "api"}
 PORTFOLIO_FX_REFRESH_DISABLED_REASON = "portfolio_fx_update_disabled"
+FX_STATUS_LIVE = "live"
+FX_STATUS_STALE = "stale"
+FX_STATUS_UNAVAILABLE = "unavailable"
 
 
 class PortfolioConflictError(Exception):
@@ -2470,10 +2473,14 @@ class PortfolioService:
                     valuation_currency=account.base_currency,
                 )
 
-            accounts_payload.append(account_snapshot["public"])
+            public_snapshot = self._ensure_position_analytics_fields(
+                account_payload=account_snapshot["public"],
+                display_currency=account.base_currency,
+            )
+            accounts_payload.append(public_snapshot)
             self._accumulate_market_breakdown(
                 market_breakdown=market_breakdown,
-                account_snapshot=account_snapshot["public"],
+                account_snapshot=public_snapshot,
                 aggregate_currency=aggregate_currency,
                 as_of_date=as_of_date,
             )
@@ -2566,6 +2573,12 @@ class PortfolioService:
         }
         snapshot_payload["portfolio_attribution"] = self._build_portfolio_attribution(
             snapshot=snapshot_payload,
+            as_of_date=as_of_date,
+        )
+        snapshot_payload["analytics"] = self._build_snapshot_analytics(
+            snapshot=snapshot_payload,
+            account_rows=account_rows,
+            aggregate_currency=aggregate_currency,
             as_of_date=as_of_date,
         )
         return snapshot_payload
@@ -2876,6 +2889,7 @@ class PortfolioService:
         fees_total_base = 0.0
         taxes_total_base = 0.0
         realized_pnl_base = 0.0
+        realized_pnl_by_symbol: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
         fx_stale = False
         fx_currencies_used: Set[str] = set()
 
@@ -2966,7 +2980,7 @@ class PortfolioService:
                         elif state.quantity > EPS and cost_method == "ths_pnl":
                             state.total_cost -= proceeds_net - cost_basis
                     realized_local = proceeds_net - cost_basis
-                    realized_base, stale_realized, _ = self._convert_amount(
+                    realized_base, stale_realized, realized_source = self._convert_amount(
                         amount=realized_local,
                         from_currency=key[2],
                         to_currency=account.base_currency,
@@ -2975,6 +2989,25 @@ class PortfolioService:
                     if self._normalize_currency(key[2]) != self._normalize_currency(account.base_currency):
                         fx_currencies_used.add(self._normalize_currency(key[2]))
                     realized_pnl_base += realized_base
+                    realized_bucket = realized_pnl_by_symbol.setdefault(
+                        key,
+                        {
+                            "symbol": key[0],
+                            "market": key[1],
+                            "currency": key[2],
+                            "amount_native": 0.0,
+                            "amount_base": 0.0,
+                            "quantity_sold": 0.0,
+                            "fx_status": FX_STATUS_LIVE,
+                        },
+                    )
+                    realized_bucket["amount_native"] += realized_local
+                    realized_bucket["amount_base"] += realized_base
+                    realized_bucket["quantity_sold"] += qty
+                    realized_bucket["fx_status"] = self._combine_fx_statuses(
+                        realized_bucket["fx_status"],
+                        self._fx_status(stale_realized, realized_source),
+                    )
                     fx_stale = fx_stale or stale_realized
                 else:
                     raise ValueError(f"Unsupported trade side: {event.side}")
@@ -3079,6 +3112,7 @@ class PortfolioService:
             "tax_total": round(taxes_total_base, 6),
             "fx_stale": fx_stale,
             "positions": position_rows,
+            "realized_pnl_by_symbol": self._realized_symbol_payload(realized_pnl_by_symbol),
         }
         account_payload["industry_attribution"] = self._build_snapshot_industry_attribution(
             snapshot=self._wrap_account_snapshot_payload(account_payload),
@@ -3332,20 +3366,26 @@ class PortfolioService:
                 fx_currencies_used.add(self._normalize_currency(currency))
 
             local_market_value = qty * float(last_price)
-            market_base, stale_market, _ = self._convert_amount(
+            market_base, stale_market, market_source = self._convert_amount(
                 amount=local_market_value,
                 from_currency=currency,
                 to_currency=account.base_currency,
                 as_of_date=as_of_date,
             )
-            cost_base, stale_cost, _ = self._convert_amount(
+            cost_base, stale_cost, cost_source = self._convert_amount(
                 amount=total_cost,
                 from_currency=currency,
                 to_currency=account.base_currency,
                 as_of_date=as_of_date,
             )
             unrealized_base = market_base - cost_base
+            unrealized_native = local_market_value - total_cost
+            unrealized_pct = (unrealized_native / abs(total_cost)) * 100.0 if abs(total_cost) > EPS else None
             fx_stale = fx_stale or stale_market or stale_cost
+            display_fx_status = self._combine_fx_statuses(
+                self._fx_status(stale_market, market_source),
+                self._fx_status(stale_cost, cost_source),
+            )
 
             position_rows.append(
                 {
@@ -3359,6 +3399,14 @@ class PortfolioService:
                     "market_value_base": round(market_base, 8),
                     "unrealized_pnl_base": round(unrealized_base, 8),
                     "valuation_currency": account.base_currency,
+                    "cost_basis_native": round(total_cost, 8),
+                    "market_value_native": round(local_market_value, 8),
+                    "unrealized_pnl_native": round(unrealized_native, 8),
+                    "unrealized_pnl_pct": round(unrealized_pct, 6) if unrealized_pct is not None else None,
+                    "display_market_value": round(market_base, 8),
+                    "display_unrealized_pnl": round(unrealized_base, 8),
+                    "display_currency": account.base_currency,
+                    "display_fx_status": display_fx_status,
                 }
             )
 
@@ -4045,6 +4093,355 @@ class PortfolioService:
                 }
             )
         rows.sort(key=lambda item: (-float(item["total_market_value"]), str(item["market"])))
+        return rows
+
+    def _build_snapshot_analytics(
+        self,
+        *,
+        snapshot: Dict[str, Any],
+        account_rows: Iterable[Any],
+        aggregate_currency: str,
+        as_of_date: date,
+    ) -> Dict[str, Any]:
+        account_lookup = {int(account.id): account for account in account_rows}
+        display_currency = self._normalize_currency(aggregate_currency)
+        total_market_value = float(snapshot.get("total_market_value") or 0.0)
+        total_cash = float(snapshot.get("total_cash") or 0.0)
+        realized_amount = float(snapshot.get("realized_pnl") or 0.0)
+        unrealized_amount = float(snapshot.get("unrealized_pnl") or 0.0)
+        total_pnl = realized_amount + unrealized_amount
+        cost_basis = total_market_value - unrealized_amount
+        pnl_percent = (total_pnl / abs(cost_basis)) * 100.0 if abs(cost_basis) > EPS else None
+        fx_status = FX_STATUS_STALE if snapshot.get("fx_stale") else FX_STATUS_LIVE
+
+        by_account: List[Dict[str, Any]] = []
+        by_currency: Dict[str, Dict[str, Any]] = {}
+        by_market: Dict[str, Dict[str, Any]] = {}
+        by_symbol: Dict[str, Dict[str, Any]] = {}
+        any_fx_unavailable = False
+
+        for account_snapshot in list(snapshot.get("accounts") or []):
+            account_id = int(account_snapshot.get("account_id") or 0)
+            account = account_lookup.get(account_id)
+            base_currency = self._normalize_currency(
+                account_snapshot.get("base_currency") or getattr(account, "base_currency", display_currency)
+            )
+            account_market_value, account_stale, account_source = self._convert_amount(
+                amount=float(account_snapshot.get("total_market_value") or 0.0),
+                from_currency=base_currency,
+                to_currency=display_currency,
+                as_of_date=as_of_date,
+            )
+            account_fx_status = self._fx_status(account_stale, account_source)
+            any_fx_unavailable = any_fx_unavailable or account_fx_status == FX_STATUS_UNAVAILABLE
+            by_account.append(
+                self._exposure_row(
+                    key=str(account_id),
+                    label=str(account_snapshot.get("account_name") or account_id),
+                    market_value=account_market_value,
+                    total_market_value=total_market_value,
+                    display_currency=display_currency,
+                    fx_status=account_fx_status,
+                    native_value=float(account_snapshot.get("total_market_value") or 0.0),
+                    native_currency=base_currency,
+                    account_id=account_id,
+                    account_name=account_snapshot.get("account_name"),
+                    base_currency=base_currency,
+                    holding_count=len(account_snapshot.get("positions") or []),
+                )
+            )
+
+            for position in list(account_snapshot.get("positions") or []):
+                position = self._ensure_position_analytics_fields(
+                    account_payload={"positions": [position]},
+                    display_currency=base_currency,
+                )["positions"][0]
+                symbol = str(position.get("symbol") or "").strip().upper()
+                market = self._normalize_snapshot_position_market(
+                    position.get("market"),
+                    fallback_market=account_snapshot.get("market"),
+                ) or "unknown"
+                native_currency = self._normalize_currency(position.get("currency") or base_currency)
+                native_value = float(position.get("market_value_native") or 0.0)
+                display_value, display_stale, display_source = self._convert_amount(
+                    amount=native_value,
+                    from_currency=native_currency,
+                    to_currency=display_currency,
+                    as_of_date=as_of_date,
+                )
+                position_fx_status = self._fx_status(display_stale, display_source)
+                any_fx_unavailable = any_fx_unavailable or position_fx_status == FX_STATUS_UNAVAILABLE
+
+                currency_bucket = by_currency.setdefault(
+                    native_currency,
+                    {
+                        "key": native_currency,
+                        "label": native_currency,
+                        "currency": native_currency,
+                        "native_currency": native_currency,
+                        "native_value": 0.0,
+                        "display_value": 0.0,
+                        "fx_status": FX_STATUS_LIVE,
+                        "holding_count": 0,
+                    },
+                )
+                currency_bucket["native_value"] += native_value
+                currency_bucket["display_value"] += display_value
+                currency_bucket["holding_count"] += 1
+                currency_bucket["fx_status"] = self._combine_fx_statuses(currency_bucket["fx_status"], position_fx_status)
+
+                market_bucket = by_market.setdefault(
+                    market,
+                    {
+                        "key": market,
+                        "label": market.upper(),
+                        "market": market,
+                        "display_value": 0.0,
+                        "fx_status": FX_STATUS_LIVE,
+                        "holding_count": 0,
+                    },
+                )
+                market_bucket["display_value"] += display_value
+                market_bucket["holding_count"] += 1
+                market_bucket["fx_status"] = self._combine_fx_statuses(market_bucket["fx_status"], position_fx_status)
+
+                symbol_bucket = by_symbol.setdefault(
+                    symbol,
+                    {
+                        "key": symbol,
+                        "label": symbol,
+                        "symbol": symbol,
+                        "market": market,
+                        "currency": native_currency,
+                        "display_value": 0.0,
+                        "fx_status": FX_STATUS_LIVE,
+                        "unrealized_pnl": 0.0,
+                        "unrealized_pnl_pct": position.get("unrealized_pnl_pct"),
+                        "holding_count": 0,
+                    },
+                )
+                symbol_bucket["display_value"] += display_value
+                symbol_bucket["unrealized_pnl"] += float(position.get("display_unrealized_pnl") or 0.0)
+                symbol_bucket["holding_count"] += 1
+                symbol_bucket["fx_status"] = self._combine_fx_statuses(symbol_bucket["fx_status"], position_fx_status)
+
+        by_account.sort(key=lambda item: (-float(item["market_value"]), str(item["label"])))
+        currency_rows = [
+            self._exposure_row(
+                key=item["key"],
+                label=item["label"],
+                market_value=float(item["display_value"]),
+                total_market_value=total_market_value,
+                display_currency=display_currency,
+                fx_status=item["fx_status"],
+                native_value=round(float(item["native_value"]), 6),
+                native_currency=item["native_currency"],
+                currency=item["currency"],
+                holding_count=int(item["holding_count"]),
+            )
+            for item in by_currency.values()
+        ]
+        market_rows = [
+            self._exposure_row(
+                key=item["key"],
+                label=item["label"],
+                market_value=float(item["display_value"]),
+                total_market_value=total_market_value,
+                display_currency=display_currency,
+                fx_status=item["fx_status"],
+                market=item["market"],
+                holding_count=int(item["holding_count"]),
+            )
+            for item in by_market.values()
+        ]
+        symbol_rows = [
+            self._exposure_row(
+                key=item["key"],
+                label=item["label"],
+                market_value=float(item["display_value"]),
+                total_market_value=total_market_value,
+                display_currency=display_currency,
+                fx_status=item["fx_status"],
+                symbol=item["symbol"],
+                market=item["market"],
+                currency=item["currency"],
+                unrealized_pnl=round(float(item["unrealized_pnl"]), 6),
+                unrealized_pnl_pct=item.get("unrealized_pnl_pct"),
+                holding_count=int(item["holding_count"]),
+            )
+            for item in by_symbol.values()
+        ]
+        for rows in (currency_rows, market_rows, symbol_rows):
+            rows.sort(key=lambda item: (-float(item["market_value"]), str(item["label"])))
+
+        largest_position = symbol_rows[0] if symbol_rows else None
+        largest_currency = currency_rows[0] if currency_rows else None
+        largest_market = market_rows[0] if market_rows else None
+        warnings: List[str] = []
+        if not symbol_rows:
+            warnings.append("no_holdings")
+        if largest_position and float(largest_position.get("percent") or 0.0) > 30.0:
+            warnings.append("single_position_gt_30")
+        if largest_currency and float(largest_currency.get("percent") or 0.0) > 80.0:
+            warnings.append("single_currency_gt_80")
+        if largest_market and float(largest_market.get("percent") or 0.0) > 80.0:
+            warnings.append("single_market_gt_80")
+        if any_fx_unavailable:
+            warnings.append("fx_conversion_unavailable")
+
+        return {
+            "pnl": {
+                "display_currency": display_currency,
+                "realized": self._pnl_metric(
+                    amount=realized_amount,
+                    percent=(realized_amount / abs(cost_basis)) * 100.0 if abs(cost_basis) > EPS else None,
+                    currency=display_currency,
+                    fx_status=fx_status,
+                ),
+                "unrealized": self._pnl_metric(
+                    amount=unrealized_amount,
+                    percent=(unrealized_amount / abs(cost_basis)) * 100.0 if abs(cost_basis) > EPS else None,
+                    currency=display_currency,
+                    fx_status=FX_STATUS_UNAVAILABLE if any_fx_unavailable else fx_status,
+                ),
+                "total": self._pnl_metric(
+                    amount=total_pnl,
+                    percent=pnl_percent,
+                    currency=display_currency,
+                    fx_status=FX_STATUS_UNAVAILABLE if any_fx_unavailable else fx_status,
+                ),
+            },
+            "exposure": {
+                "by_account": by_account,
+                "by_currency": currency_rows,
+                "by_market": market_rows,
+                "by_symbol": symbol_rows[:10],
+                "by_sector": [],
+                "sector_status": "unavailable",
+            },
+            "risk": {
+                "largest_position": largest_position,
+                "largest_currency": largest_currency,
+                "largest_market": largest_market,
+                "holding_count": len(symbol_rows),
+                "account_count": int(snapshot.get("account_count") or 0),
+                "cash_percent": round((total_cash / float(snapshot.get("total_equity") or 0.0)) * 100.0, 4)
+                if abs(float(snapshot.get("total_equity") or 0.0)) > EPS
+                else None,
+                "fx_unavailable": any_fx_unavailable,
+                "warnings": warnings,
+            },
+        }
+
+    def _ensure_position_analytics_fields(
+        self,
+        *,
+        account_payload: Dict[str, Any],
+        display_currency: str,
+    ) -> Dict[str, Any]:
+        payload = dict(account_payload)
+        positions = []
+        for raw_position in list(payload.get("positions") or []):
+            position = dict(raw_position)
+            currency = self._normalize_currency(position.get("currency") or display_currency)
+            total_cost = float(position.get("total_cost") or 0.0)
+            market_value = float(position.get("market_value_native", position.get("market_value_base") or 0.0) or 0.0)
+            unrealized = float(
+                position.get(
+                    "unrealized_pnl_native",
+                    position.get("unrealized_pnl_base") or (market_value - total_cost),
+                )
+                or 0.0
+            )
+            position.setdefault("cost_basis_native", round(total_cost, 8))
+            position.setdefault("market_value_native", round(market_value, 8))
+            position.setdefault("unrealized_pnl_native", round(unrealized, 8))
+            if position.get("unrealized_pnl_pct") is None:
+                position["unrealized_pnl_pct"] = round((unrealized / abs(total_cost)) * 100.0, 6) if abs(total_cost) > EPS else None
+            position.setdefault("display_market_value", position.get("market_value_base", market_value))
+            position.setdefault("display_unrealized_pnl", position.get("unrealized_pnl_base", unrealized))
+            position.setdefault("display_currency", display_currency)
+            position.setdefault(
+                "display_fx_status",
+                FX_STATUS_LIVE if currency == self._normalize_currency(display_currency) else FX_STATUS_STALE,
+            )
+            positions.append(position)
+        payload["positions"] = positions
+        return payload
+
+    @staticmethod
+    def _pnl_metric(
+        *,
+        amount: float,
+        percent: Optional[float],
+        currency: str,
+        fx_status: str,
+    ) -> Dict[str, Any]:
+        return {
+            "amount": round(float(amount), 6),
+            "amount_display": f"{currency} {float(amount):,.2f}",
+            "percent": round(float(percent), 6) if percent is not None else None,
+            "currency": currency,
+            "fx_status": fx_status,
+        }
+
+    @staticmethod
+    def _exposure_row(
+        *,
+        key: str,
+        label: str,
+        market_value: float,
+        total_market_value: float,
+        display_currency: str,
+        fx_status: str,
+        **extra: Any,
+    ) -> Dict[str, Any]:
+        row = {
+            "key": key,
+            "label": label,
+            "market_value": round(float(market_value), 6),
+            "display_value": round(float(market_value), 6),
+            "display_currency": display_currency,
+            "percent": round((float(market_value) / total_market_value) * 100.0, 4)
+            if abs(total_market_value) > EPS
+            else 0.0,
+            "fx_status": fx_status,
+        }
+        row.update(extra)
+        return row
+
+    @staticmethod
+    def _fx_status(stale: bool, source: str) -> str:
+        if source == "fallback_1_to_1":
+            return FX_STATUS_UNAVAILABLE
+        if stale:
+            return FX_STATUS_STALE
+        return FX_STATUS_LIVE
+
+    @staticmethod
+    def _combine_fx_statuses(*statuses: str) -> str:
+        if FX_STATUS_UNAVAILABLE in statuses:
+            return FX_STATUS_UNAVAILABLE
+        if FX_STATUS_STALE in statuses:
+            return FX_STATUS_STALE
+        return FX_STATUS_LIVE
+
+    @staticmethod
+    def _realized_symbol_payload(realized_pnl_by_symbol: Dict[Tuple[str, str, str], Dict[str, Any]]) -> List[Dict[str, Any]]:
+        rows = []
+        for item in realized_pnl_by_symbol.values():
+            rows.append(
+                {
+                    "symbol": item["symbol"],
+                    "market": item["market"],
+                    "currency": item["currency"],
+                    "amount_native": round(float(item["amount_native"]), 8),
+                    "amount_base": round(float(item["amount_base"]), 8),
+                    "quantity_sold": round(float(item["quantity_sold"]), 8),
+                    "fx_status": item["fx_status"],
+                }
+            )
+        rows.sort(key=lambda item: (-abs(float(item["amount_base"])), str(item["symbol"])))
         return rows
 
     @staticmethod
