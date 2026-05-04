@@ -37,8 +37,8 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName }
         <p className="text-xs text-white/40 mb-8 leading-relaxed">{body}</p>
         <button
           type="button"
-          onClick={() => navigate(loginPath)}
           className="w-full py-3 bg-white text-black font-bold text-sm rounded-xl hover:bg-white/90 active:scale-95 transition-all"
+          onClick={() => navigate(loginPath)}
         >
           {buttonLabel}
         </button>

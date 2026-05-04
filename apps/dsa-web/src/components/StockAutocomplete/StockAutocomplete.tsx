@@ -45,6 +45,7 @@ function FallbackInput({
   return (
     <input
       type="text"
+      className={cn('input-surface input-focus-glow product-command-input w-full min-w-0 max-w-full', className)}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={(e) => {
@@ -54,7 +55,6 @@ function FallbackInput({
       }}
       placeholder={placeholder}
       disabled={disabled}
-      className={cn('input-surface input-focus-glow product-command-input w-full min-w-0 max-w-full', className)}
       data-autocomplete-mode="fallback"
     />
   );
@@ -242,6 +242,12 @@ function StockAutocompleteInner({
       <input
         ref={inputRef}
         type="text"
+        className={cn(
+          'input-surface input-focus-glow product-command-input w-full min-w-0 max-w-full pr-10 truncate',
+          "focus:outline-none",
+          isOpen && "rounded-b-none",
+          className
+        )}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -255,12 +261,6 @@ function StockAutocompleteInner({
         onBlur={handleBlur}
         placeholder={placeholder}
         disabled={disabled}
-        className={cn(
-          'input-surface input-focus-glow product-command-input w-full min-w-0 max-w-full pr-10 truncate',
-          "focus:outline-none",
-          isOpen && "rounded-b-none",
-          className
-        )}
         aria-autocomplete="none"
         role="combobox"
         aria-expanded={isOpen}

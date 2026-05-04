@@ -1189,13 +1189,13 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                 <div className="flex items-center gap-3">
                   <input
                     type="range"
+                    className="settings-input-checkbox h-1.5 flex-1 cursor-pointer rounded-full bg-border/60"
                     min="0"
                     max="2"
                     step="0.1"
                     value={runtimeConfig.temperature}
                     disabled={busy}
                     onChange={(event) => setRuntimeConfig((previous) => ({ ...previous, temperature: event.target.value }))}
-                    className="settings-input-checkbox h-1.5 flex-1 cursor-pointer rounded-full bg-border/60"
                   />
                   <span className="w-8 text-right text-sm text-secondary-text">{runtimeConfig.temperature}</span>
                 </div>
@@ -1244,10 +1244,10 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                         <label key={model} className="flex items-center gap-2 text-sm text-secondary-text">
                           <input
                             type="checkbox"
+                            className="settings-input-checkbox h-4 w-4 rounded border-border/70 bg-base"
                             checked={runtimeConfig.fallbackModels.includes(model)}
                             disabled={busy || model === runtimeConfig.primaryModel}
                             onChange={() => toggleFallbackModel(model)}
-                            className="settings-input-checkbox h-4 w-4 rounded border-border/70 bg-base"
                           />
                           <span>{model}</span>
                         </label>

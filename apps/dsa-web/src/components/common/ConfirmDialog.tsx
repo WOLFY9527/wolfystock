@@ -115,9 +115,9 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             </label>
             <input
               aria-label={confirmationLabel ?? t('common.confirm')}
+              className="input-surface h-10 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
               value={normalizedTypedValue}
               onChange={(event) => onConfirmationValueChange?.(event.target.value)}
-              className="input-surface h-10 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
             />
             <p className="mt-2 text-xs text-muted-text">
               {confirmationHint ?? confirmationPhrase}

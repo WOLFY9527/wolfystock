@@ -51,8 +51,8 @@ export const PreviewShell: React.FC<PreviewShellProps> = ({ children }) => {
             <div className="shell-mobile-strip">
               <button
                 type="button"
-                onClick={() => setMobileOpen(true)}
                 className="shell-mobile-button"
+                onClick={() => setMobileOpen(true)}
                 aria-label={t('shell.openMenu')}
               >
                 <Menu className="h-4 w-4" />
