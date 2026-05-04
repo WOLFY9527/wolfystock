@@ -2960,7 +2960,12 @@ class DatabaseManager:
             ).scalars().all(),
             "trade_rows": session.execute(
                 select(PortfolioTrade)
-                .where(PortfolioTrade.account_id == resolved_account_id)
+                .where(
+                    and_(
+                        PortfolioTrade.account_id == resolved_account_id,
+                        or_(PortfolioTrade.is_active.is_(True), PortfolioTrade.is_active.is_(None)),
+                    )
+                )
                 .order_by(PortfolioTrade.trade_date.asc(), PortfolioTrade.id.asc())
             ).scalars().all(),
             "cash_rows": session.execute(

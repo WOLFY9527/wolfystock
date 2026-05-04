@@ -62,6 +62,10 @@ class PortfolioRepository:
             return
         session.info.setdefault("phase_f_sync_account_ids", set()).add(int(account_id))
 
+    @staticmethod
+    def _active_trade_condition() -> Any:
+        return or_(PortfolioTrade.is_active.is_(True), PortfolioTrade.is_active.is_(None))
+
     def _account_conditions(
         self,
         *,
@@ -982,7 +986,7 @@ class PortfolioRepository:
             .where(PortfolioTrade.id == trade_id)
         )
         if not include_voided:
-            query = query.where(PortfolioTrade.is_active.is_(True))
+            query = query.where(self._active_trade_condition())
         if not include_all_owners:
             query = query.where(PortfolioAccount.owner_id == self.db.require_user_id(owner_id))
         return session.execute(query.limit(1)).scalar_one_or_none()
@@ -1068,7 +1072,7 @@ class PortfolioRepository:
             PortfolioTrade.trade_date <= as_of,
         ]
         if not include_voided:
-            conditions.append(PortfolioTrade.is_active.is_(True))
+            conditions.append(self._active_trade_condition())
         rows = session.execute(
             select(PortfolioTrade)
             .where(and_(*conditions))
@@ -1129,7 +1133,7 @@ class PortfolioRepository:
                 select(func.min(PortfolioTrade.trade_date)).where(
                     and_(
                         PortfolioTrade.account_id == account_id,
-                        PortfolioTrade.is_active.is_(True),
+                        self._active_trade_condition(),
                         PortfolioTrade.trade_date <= as_of,
                     )
                 )
@@ -1173,7 +1177,7 @@ class PortfolioRepository:
         with self.db.get_session() as session:
             conditions = []
             if not include_voided:
-                conditions.append(PortfolioTrade.is_active.is_(True))
+                conditions.append(self._active_trade_condition())
             if account_id is not None:
                 conditions.append(PortfolioTrade.account_id == account_id)
             if date_from is not None:

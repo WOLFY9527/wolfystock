@@ -995,6 +995,12 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(len(snapshot_rows), 0)
         self.assertEqual(len(lot_rows), 0)
 
+    def test_legacy_null_is_active_trade_is_treated_as_active_in_default_list(self) -> None:
+        condition_sql = str(PortfolioRepository._active_trade_condition().compile(compile_kwargs={"literal_binds": True}))
+        self.assertIn("is_active", condition_sql.lower())
+        self.assertIn("is true", condition_sql.lower())
+        self.assertIn("is null", condition_sql.lower())
+
     def test_update_trade_recalculates_holdings_and_keeps_trade_active(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="us", base_currency="USD")
         aid = account["id"]

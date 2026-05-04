@@ -847,7 +847,10 @@ class PortfolioService:
             **self._owner_kwargs(),
         )
         result = {
-            "items": [self._trade_row_to_dict(row) for row in rows],
+            "items": [
+                self._trade_row_to_dict(row) if include_voided else self._legacy_trade_row_to_dict(row)
+                for row in rows
+            ],
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -3902,6 +3905,14 @@ class PortfolioService:
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "updated_at": row.updated_at.isoformat() if getattr(row, "updated_at", None) else None,
         }
+
+    @staticmethod
+    def _legacy_trade_row_to_dict(row: Any) -> Dict[str, Any]:
+        payload = PortfolioService._trade_row_to_dict(row)
+        payload.pop("is_active", None)
+        payload.pop("voided_at", None)
+        payload.pop("updated_at", None)
+        return payload
 
     @staticmethod
     def _cash_ledger_row_to_dict(row: Any) -> Dict[str, Any]:
