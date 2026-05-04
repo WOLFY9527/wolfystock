@@ -143,6 +143,7 @@ export const marketApi = {
   getCnBreadth: () => getPanel('/api/v1/market/cn-breadth', 'ChinaBreadthCard'),
   getCnFlows: () => getPanel('/api/v1/market/cn-flows', 'ChinaFlowsCard'),
   getSectorRotation: () => getPanel('/api/v1/market/sector-rotation', 'SectorRotationCard'),
+  getUsBreadth: () => getPanel('/api/v1/market/us-breadth', 'UsBreadthCard'),
   getRates: () => getPanel('/api/v1/market/rates', 'RatesCard'),
   getFxCommodities: () => getPanel('/api/v1/market/fx-commodities', 'FxCommoditiesCard'),
   getTemperature: async (): Promise<MarketTemperatureResponse> => {

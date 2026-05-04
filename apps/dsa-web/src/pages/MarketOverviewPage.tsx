@@ -45,6 +45,7 @@ type PanelState = {
   cnBreadth?: MarketOverviewPanel;
   cnFlows?: MarketOverviewPanel;
   sectorRotation?: MarketOverviewPanel;
+  usBreadth?: MarketOverviewPanel;
   rates?: MarketOverviewPanel;
   fxCommodities?: MarketOverviewPanel;
   temperature: MarketTemperatureResponse;
@@ -89,8 +90,8 @@ const MODULE_COVERAGE_CARDS: Record<MarketOverviewModuleId, CardKey[]> = {
   cnSnapshot: ['cnIndices'],
   usRates: ['rates', 'fxCommodities'],
   usSentiment: ['sentiment'],
-  usBreadth: [],
-  usSectorRotation: [],
+  usBreadth: ['usBreadth'],
+  usSectorRotation: ['usBreadth'],
   macroContext: ['volatility', 'rates', 'fxCommodities', 'crypto'],
   cnBreadth: ['cnBreadth'],
   cnFlows: ['cnFlows'],
@@ -101,7 +102,7 @@ const MODULE_COVERAGE_CARDS: Record<MarketOverviewModuleId, CardKey[]> = {
   macroFxCommodities: ['fxCommodities'],
   globalRisk: ['volatility', 'crypto', 'indices'],
   cryptoMomentum: ['crypto'],
-  cryptoLiquidity: [],
+  cryptoLiquidity: ['crypto'],
   cryptoRiskContext: ['fxCommodities', 'rates', 'volatility'],
   cryptoSentiment: ['sentiment'],
 };
@@ -520,6 +521,75 @@ function buildMetricPanel(
   };
 }
 
+function buildFilteredPanel(
+  sourcePanel: MarketOverviewPanel | undefined,
+  panelName: string,
+  symbols: string[],
+  fallbackItems: MarketOverviewItem[] = [],
+): MarketOverviewPanel {
+  const symbolSet = new Set(symbols);
+  const items = sourcePanel?.items.filter((item) => symbolSet.has(item.symbol)) || [];
+  const updatedAt = sourcePanel?.updatedAt || new Date(0).toISOString();
+  return {
+    panelName,
+    lastRefreshAt: sourcePanel?.lastRefreshAt || updatedAt,
+    status: sourcePanel?.status || 'success',
+    source: sourcePanel?.source || 'unavailable',
+    sourceLabel: sourcePanel?.sourceLabel || '未接入',
+    updatedAt,
+    asOf: sourcePanel?.asOf,
+    freshness: sourcePanel?.freshness || 'fallback',
+    isFallback: sourcePanel?.isFallback,
+    isStale: sourcePanel?.isStale,
+    warning: sourcePanel?.warning,
+    items: items.length > 0 ? items : fallbackItems,
+  };
+}
+
+function unavailableMarketItem(symbol: string, label: string, message: string): MarketOverviewItem {
+  return {
+    symbol,
+    label,
+    value: null,
+    unit: '',
+    changePct: null,
+    changeText: message,
+    riskDirection: 'neutral',
+    trend: [],
+    source: 'unavailable',
+    sourceLabel: '未接入',
+    freshness: 'fallback',
+    isFallback: true,
+    warning: message,
+    hoverDetails: [message],
+  };
+}
+
+function buildCryptoLiquidityPanel(sourcePanel: MarketOverviewPanel | undefined): MarketOverviewPanel {
+  const fallbackItems = [
+    unavailableMarketItem('BTC_FUNDING', 'BTC Funding', '暂不可用'),
+    unavailableMarketItem('ETH_FUNDING', 'ETH Funding', '暂不可用'),
+    unavailableMarketItem('SOL_FUNDING', 'SOL Funding', '暂不可用'),
+    unavailableMarketItem('BNB_FUNDING', 'BNB Funding', '暂不可用'),
+    unavailableMarketItem('STABLECOIN_LIQUIDITY', 'Stablecoin liquidity', '未接入'),
+    unavailableMarketItem('BTC_DOMINANCE', 'Dominance', '未接入'),
+  ];
+  const panel = buildFilteredPanel(
+    sourcePanel,
+    'CryptoLiquidityModule',
+    ['BTC_FUNDING', 'ETH_FUNDING', 'SOL_FUNDING', 'BNB_FUNDING', 'STABLECOIN_LIQUIDITY', 'BTC_DOMINANCE'],
+    fallbackItems,
+  );
+  const existingSymbols = new Set(panel.items.map((item) => item.symbol));
+  return {
+    ...panel,
+    items: [
+      ...panel.items,
+      ...fallbackItems.filter((item) => !existingSymbols.has(item.symbol)),
+    ],
+  };
+}
+
 function buildHeroAnchors(panels: PanelState, metricIds: MarketOverviewPulseMetricId[]): HeroAnchor[] {
   return metricIds.map((metricId) => {
     const entry = MARKET_OVERVIEW_METRIC_REGISTRY[metricId];
@@ -778,7 +848,7 @@ function collectFreshnessValues(panels: PanelState): FreshnessCountKey[] {
       values.push('cached');
     }
   };
-  const panelKeys: CardKey[] = ['indices', 'volatility', 'crypto', 'sentiment', 'fundsFlow', 'macro', 'cnIndices', 'cnBreadth', 'cnFlows', 'sectorRotation', 'rates', 'fxCommodities'];
+  const panelKeys: CardKey[] = ['indices', 'volatility', 'crypto', 'sentiment', 'fundsFlow', 'macro', 'cnIndices', 'cnBreadth', 'cnFlows', 'sectorRotation', 'usBreadth', 'rates', 'fxCommodities'];
   panelKeys.forEach((key) => {
     const panel = panels[key] as MarketOverviewPanel | undefined;
     if (!panel) {
@@ -1469,33 +1539,6 @@ const ContextMetricModuleCard: React.FC<{
   );
 };
 
-const ContextMissingModuleCard: React.FC<{
-  moduleId: MarketOverviewModuleId;
-  title: string;
-  eyebrow: string;
-  lines: string[];
-}> = ({ moduleId, title, eyebrow, lines }) => (
-  <MarketOverviewCardFrame
-    size={MODULE_LAYOUT_META[moduleId].size}
-    testId={`market-overview-module-${moduleId}`}
-    className="h-full border-white/[0.045] bg-white/[0.018]"
-  >
-    <div className="flex h-full min-w-0 flex-col gap-3">
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40">{eyebrow}</p>
-        <h2 className="mt-1 truncate text-sm font-semibold text-white/84">{title}</h2>
-      </div>
-      <div className="grid min-w-0 gap-2">
-        {lines.map((line) => (
-          <div key={line} className="min-w-0 rounded-lg border border-white/[0.055] bg-black/20 px-3 py-2 text-xs text-white/48">
-            {line}
-          </div>
-        ))}
-      </div>
-    </div>
-  </MarketOverviewCardFrame>
-);
-
 function assignPanelValue(nextPanels: PanelState, panelKey: PanelKey, value: PanelState[PanelKey]): void {
   switch (panelKey) {
     case 'indices':
@@ -1508,6 +1551,7 @@ function assignPanelValue(nextPanels: PanelState, panelKey: PanelKey, value: Pan
     case 'cnBreadth':
     case 'cnFlows':
     case 'sectorRotation':
+    case 'usBreadth':
     case 'rates':
     case 'fxCommodities':
       nextPanels[panelKey] = value as MarketOverviewPanel;
@@ -1605,6 +1649,8 @@ function fallbackPanelValue(panelKey: PanelKey, error: unknown): PanelState[Pane
       return fallbackPanel('ChinaFlowsCard', error) as PanelState[PanelKey];
     case 'sectorRotation':
       return fallbackPanel('SectorRotationCard', error) as PanelState[PanelKey];
+    case 'usBreadth':
+      return fallbackPanel('UsBreadthCard', error) as PanelState[PanelKey];
     case 'rates':
       return fallbackPanel('RatesCard', error) as PanelState[PanelKey];
     case 'fxCommodities':
@@ -1662,6 +1708,7 @@ const MarketOverviewPage: React.FC = () => {
       ['cnBreadth', marketApi.getCnBreadth],
       ['cnFlows', marketApi.getCnFlows],
       ['sectorRotation', marketApi.getSectorRotation],
+      ['usBreadth', marketApi.getUsBreadth],
       ['rates', marketApi.getRates],
       ['fxCommodities', marketApi.getFxCommodities],
       ['temperature', marketApi.getTemperature],
@@ -2012,19 +2059,39 @@ const MarketOverviewPage: React.FC = () => {
       />
     ),
     usBreadth: (
-      <ContextMissingModuleCard
+      <ContextMetricModuleCard
         moduleId="usBreadth"
         title="US Breadth"
-        eyebrow="BREADTH"
-        lines={['Advance / decline：未接入', '52W high / low：未接入', 'Equal-weight breadth：未接入']}
+        eyebrow="BREADTH PROXY"
+        description="Sector ETF proxy / RSP vs SPY / IWM vs SPY"
+        panel={buildFilteredPanel(
+          panels.usBreadth,
+          'UsBreadthProxyModule',
+          ['SECTORS_UP', 'SECTORS_DOWN', 'STRONGEST_SECTOR', 'WEAKEST_SECTOR', 'RSP_SPY', 'IWM_SPY', 'QQQ_SPY', 'SECTOR_PROXY_UNAVAILABLE'],
+        )}
+        sourceLabel="Sector ETF proxy"
+        refreshing={refreshingPanel === 'usBreadth'}
+        onRefresh={() => {
+          void refreshPanel('usBreadth', marketApi.getUsBreadth);
+        }}
       />
     ),
     usSectorRotation: (
-      <ContextMissingModuleCard
+      <ContextMetricModuleCard
         moduleId="usSectorRotation"
-        title="US Sector Rotation"
-        eyebrow="SECTOR"
-        lines={['S&P sector breadth：未接入', '行业轮动强弱：未接入']}
+        title="Sector Health"
+        eyebrow="SECTOR ETF"
+        description="Strongest / weakest US sector ETF proxies"
+        panel={buildFilteredPanel(
+          panels.usBreadth,
+          'UsSectorHealthModule',
+          ['STRONGEST_SECTOR', 'WEAKEST_SECTOR', 'XLK', 'XLF', 'XLY', 'XLE', 'XLV', 'XLI', 'XLP', 'XLU', 'SECTOR_PROXY_UNAVAILABLE'],
+        )}
+        sourceLabel="Yahoo Finance"
+        refreshing={refreshingPanel === 'usBreadth'}
+        onRefresh={() => {
+          void refreshPanel('usBreadth', marketApi.getUsBreadth);
+        }}
       />
     ),
     macroContext: (
@@ -2152,11 +2219,17 @@ const MarketOverviewPage: React.FC = () => {
       />
     ),
     cryptoLiquidity: (
-      <ContextMissingModuleCard
+      <ContextMetricModuleCard
         moduleId="cryptoLiquidity"
         title="Crypto Liquidity"
-        eyebrow="LIQUIDITY"
-        lines={['资金费率：未接入', '稳定币流动性：未接入', '链上数据：未接入']}
+        eyebrow="FUNDING / LIQUIDITY"
+        description="Funding rates; stablecoin and dominance stay unavailable until a reliable source exists"
+        panel={buildCryptoLiquidityPanel(panels.crypto)}
+        sourceLabel="Binance Futures / unavailable context"
+        refreshing={refreshingPanel === 'crypto'}
+        onRefresh={() => {
+          void refreshPanel('crypto', marketApi.getCrypto);
+        }}
       />
     ),
     cryptoRiskContext: (
@@ -2205,7 +2278,7 @@ const MarketOverviewPage: React.FC = () => {
     if (moduleId === 'shortSentiment') {
       return Boolean(panels.cnShortSentiment.summary || panels.cnShortSentiment.warning);
     }
-    if (moduleId === 'usBreadth' || moduleId === 'usSectorRotation' || moduleId === 'cryptoLiquidity') {
+    if (moduleId === 'cryptoLiquidity') {
       return true;
     }
     const cards = MODULE_COVERAGE_CARDS[moduleId];

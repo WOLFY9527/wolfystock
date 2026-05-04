@@ -272,6 +272,19 @@ class MarketOverviewService:
         "GOLD": ("Gold futures", "GC=F", "USD"),
         "OIL": ("WTI crude", "CL=F", "USD"),
     }
+    US_SECTOR_ETFS = {
+        "XLK": "Technology",
+        "XLF": "Financials",
+        "XLY": "Consumer Discretionary",
+        "XLE": "Energy",
+        "XLV": "Health Care",
+        "XLI": "Industrials",
+        "XLP": "Consumer Staples",
+        "XLU": "Utilities",
+        "XLB": "Materials",
+        "XLRE": "Real Estate",
+        "XLC": "Communication Services",
+    }
     CN_SINA_SYMBOLS = {
         "000001.SH": "sh000001",
         "000001.SS": "sh000001",
@@ -358,6 +371,16 @@ class MarketOverviewService:
             endpoint_url="/api/v1/market/sector-rotation",
             fetcher=self._fetch_sector_rotation_snapshot,
             fallback_factory=self._fallback_sector_rotation_snapshot,
+            actor=actor,
+        )
+
+    def get_us_breadth(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return self._classified_snapshot(
+            cache_key="us_breadth",
+            panel_name="UsBreadthCard",
+            endpoint_url="/api/v1/market/us-breadth",
+            fetcher=self._fetch_us_breadth_snapshot,
+            fallback_factory=self._fallback_us_breadth_snapshot,
             actor=actor,
         )
 
@@ -772,6 +795,7 @@ class MarketOverviewService:
         fallback_items = [
             ("BTC", "Bitcoin", 75800.0, -0.2, [75220.0, 75640.0, 76110.0, 75800.0]),
             ("ETH", "Ethereum", 3120.0, -0.4, [3090.0, 3148.0, 3162.0, 3120.0]),
+            ("SOL", "Solana", 143.2, 0.0, [140.0, 141.0, 142.0, 143.2]),
             ("BNB", "BNB", 590.0, 0.3, [584.0, 588.0, 586.0, 590.0]),
         ]
         return {
@@ -798,7 +822,7 @@ class MarketOverviewService:
                     "warning": "正在获取实时加密货币行情，当前显示备用快照",
                 }
                 for symbol, name, value, change_percent, sparkline in fallback_items
-            ],
+            ] + self._crypto_funding_unavailable_items(updated_at) + self._crypto_unavailable_context_items(updated_at),
             "last_update": updated_at,
             "updatedAt": updated_at,
             "asOf": updated_at,
@@ -816,6 +840,7 @@ class MarketOverviewService:
     def _ttl_for_cache_key(self, cache_key: str) -> int:
         ttl_key = {
             "cn_breadth": "breadth",
+            "us_breadth": "breadth",
             "cn_flows": "flows",
             "fx_commodities": "fx_commodity",
             "cn_short_sentiment": "sentiment",
@@ -832,6 +857,7 @@ class MarketOverviewService:
             "macro": "macro_rate",
             "cn_indices": "equity_index",
             "cn_breadth": "breadth",
+            "us_breadth": "breadth",
             "cn_flows": "flows",
             "sector_rotation": "sentiment",
             "rates": "macro_rate",
@@ -955,10 +981,10 @@ class MarketOverviewService:
         }
 
     def _fetch_crypto_market_snapshot(self) -> Dict[str, Any]:
-        symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
+        symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
         ticker_response = requests.get(
             "https://api.binance.com/api/v3/ticker/24hr",
-            params={"symbols": '["BTCUSDT","ETHUSDT","BNBUSDT"]'},
+            params={"symbols": '["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT"]'},
             timeout=2,
         )
         ticker_response.raise_for_status()
@@ -970,6 +996,7 @@ class MarketOverviewService:
         labels = {
             "BTCUSDT": ("BTC", "Bitcoin"),
             "ETHUSDT": ("ETH", "Ethereum"),
+            "SOLUSDT": ("SOL", "Solana"),
             "BNBUSDT": ("BNB", "BNB"),
         }
         last_update = _now_iso()
@@ -979,6 +1006,10 @@ class MarketOverviewService:
             short_symbol, label = labels[symbol]
             price = self._clean_number(row.get("lastPrice")) or 0.0
             change = self._clean_number(row.get("priceChangePercent")) or 0.0
+            quote_volume = self._clean_number(row.get("quoteVolume"))
+            high = self._clean_number(row.get("highPrice"))
+            low = self._clean_number(row.get("lowPrice"))
+            range_percent = self._percent_change(low, high) if high is not None and low is not None else None
             trend = history_map.get(symbol) or [price]
             week_change = self._percent_change(trend[0], trend[-1]) if len(trend) > 1 else None
             items.append({
@@ -991,6 +1022,8 @@ class MarketOverviewService:
                 "hover_details": [
                     f"24H {self._signed_percent_text(change)}",
                     f"7D {self._signed_percent_text(week_change)}",
+                    f"24H range {self._signed_percent_text(range_percent)}",
+                    f"Quote volume {self._compact_usd(quote_volume)}",
                 ],
                 "risk_direction": self._risk_direction(change),
                 "unit": "USD",
@@ -998,6 +1031,14 @@ class MarketOverviewService:
                 "last_update": last_update,
                 "error": None,
             })
+        funding_items = self._fetch_binance_funding_items(labels, last_update)
+        items.extend(funding_items)
+        funding_symbols = {item.get("symbol") for item in funding_items}
+        items.extend([
+            item for item in self._crypto_funding_unavailable_items(last_update)
+            if item.get("symbol") not in funding_symbols
+        ])
+        items.extend(self._crypto_unavailable_context_items(last_update))
         return {
             "items": items,
             "last_update": last_update,
@@ -1005,6 +1046,55 @@ class MarketOverviewService:
             "fallback_used": False,
             "source": "binance",
         }
+
+    def _fetch_binance_funding_items(self, labels: Dict[str, tuple[str, str]], last_update: str) -> List[Dict[str, Any]]:
+        items: List[Dict[str, Any]] = []
+        for futures_symbol, (short_symbol, label) in labels.items():
+            try:
+                response = requests.get(
+                    "https://fapi.binance.com/fapi/v1/premiumIndex",
+                    params={"symbol": futures_symbol},
+                    timeout=2,
+                )
+                response.raise_for_status()
+                row = response.json()
+                funding_rate = self._clean_number(row.get("lastFundingRate"))
+            except Exception:
+                funding_rate = None
+            if funding_rate is None:
+                continue
+            funding_percent = funding_rate * 100
+            items.append({
+                "symbol": f"{short_symbol}_FUNDING",
+                "label": f"{short_symbol} Funding",
+                "price": round(funding_percent, 4),
+                "value": round(funding_percent, 4),
+                "change": round(funding_percent, 4),
+                "changePercent": round(funding_percent, 4),
+                "change_text": f"{funding_percent:+.4f}%",
+                "trend": [round(funding_percent, 4)],
+                "hover_details": [f"{label} perpetual funding", "Binance Futures public endpoint"],
+                "risk_direction": "increasing" if funding_percent > 0.01 else "neutral",
+                "unit": "%",
+                "source": "binance",
+                "last_update": last_update,
+                "error": None,
+            })
+        return items
+
+    def _crypto_unavailable_context_items(self, updated_at: str) -> List[Dict[str, Any]]:
+        return [
+            self._unavailable_item("稳定币流动性", "STABLECOIN_LIQUIDITY", "未接入", updated_at, detail="Stablecoin liquidity：未接入"),
+            self._unavailable_item("BTC Dominance", "BTC_DOMINANCE", "未接入", updated_at, detail="Dominance：未接入"),
+        ]
+
+    def _crypto_funding_unavailable_items(self, updated_at: str) -> List[Dict[str, Any]]:
+        return [
+            self._unavailable_item("BTC Funding", "BTC_FUNDING", "暂不可用", updated_at, detail="Bitcoin funding：暂不可用"),
+            self._unavailable_item("ETH Funding", "ETH_FUNDING", "暂不可用", updated_at, detail="Ethereum funding：暂不可用"),
+            self._unavailable_item("SOL Funding", "SOL_FUNDING", "暂不可用", updated_at, detail="Solana funding：暂不可用"),
+            self._unavailable_item("BNB Funding", "BNB_FUNDING", "暂不可用", updated_at, detail="BNB funding：暂不可用"),
+        ]
 
     def _fetch_market_sentiment_snapshot(self) -> Dict[str, Any]:
         provider_error = None
@@ -1280,6 +1370,93 @@ class MarketOverviewService:
     def _fetch_cn_breadth_snapshot(self) -> Dict[str, Any]:
         return self._fallback_cn_breadth_snapshot()
 
+    def _fetch_us_breadth_snapshot(self) -> Dict[str, Any]:
+        quote_items: List[Dict[str, Any]] = []
+        for ticker, label in self.US_SECTOR_ETFS.items():
+            try:
+                quote = self._latest_quote(ticker)
+            except Exception:
+                continue
+            change_pct = self._clean_number(quote.get("change_pct"))
+            value = self._clean_number(quote.get("value"))
+            if change_pct is None or value is None:
+                continue
+            quote_items.append({
+                "symbol": ticker,
+                "label": label,
+                "value": round(value, 3),
+                "price": round(value, 3),
+                "change": round(change_pct, 3),
+                "changePercent": round(change_pct, 3),
+                "change_text": self._signed_percent_text(change_pct),
+                "sparkline": quote.get("trend", []),
+                "trend": quote.get("trend", []),
+                "unit": "USD",
+                "risk_direction": self._risk_direction(change_pct),
+                "hover_details": ["Sector ETF proxy"],
+                "source": "yfinance_proxy",
+                "sourceLabel": "Yahoo Finance",
+                "isFallback": False,
+            })
+        if not quote_items:
+            return self._fallback_us_breadth_snapshot()
+
+        sorted_by_change = sorted(quote_items, key=lambda item: float(item.get("changePercent") or 0), reverse=True)
+        sectors_up = sum(1 for item in quote_items if float(item.get("changePercent") or 0) > 0)
+        sectors_down = sum(1 for item in quote_items if float(item.get("changePercent") or 0) < 0)
+        strongest = sorted_by_change[0]
+        weakest = sorted_by_change[-1]
+        items = [
+            self._computed_metric_item("Sectors Up", "SECTORS_UP", sectors_up, "sectors", detail="Sector ETF proxy"),
+            self._computed_metric_item("Sectors Down", "SECTORS_DOWN", sectors_down, "sectors", detail="Sector ETF proxy"),
+            self._computed_metric_item(f"Strongest {strongest['symbol']}", "STRONGEST_SECTOR", strongest["changePercent"], "%", detail=str(strongest["label"])),
+            self._computed_metric_item(f"Weakest {weakest['symbol']}", "WEAKEST_SECTOR", weakest["changePercent"], "%", detail=str(weakest["label"])),
+        ]
+        items.extend(self._us_relative_pressure_items())
+        items.extend(sorted_by_change)
+
+        updated_at = _now_iso()
+        return {
+            "source": "yfinance_proxy",
+            "sourceLabel": "Yahoo Finance",
+            "updatedAt": updated_at,
+            "asOf": updated_at,
+            "items": [
+                {
+                    **item,
+                    "updatedAt": updated_at,
+                    "asOf": updated_at,
+                    "source": item.get("source") or "computed",
+                    "sourceLabel": item.get("sourceLabel") or "系统计算",
+                    "isFallback": False,
+                }
+                for item in items
+            ],
+            "fallbackUsed": False,
+            "warning": None,
+        }
+
+    def _us_relative_pressure_items(self) -> List[Dict[str, Any]]:
+        pairs = [
+            ("RSP_SPY", "RSP vs SPY", "RSP", "SPY"),
+            ("IWM_SPY", "IWM vs SPY", "IWM", "SPY"),
+            ("QQQ_SPY", "QQQ vs SPY", "QQQ", "SPY"),
+        ]
+        items = []
+        for symbol, label, left, right in pairs:
+            try:
+                left_quote = self._latest_quote(left)
+                right_quote = self._latest_quote(right)
+            except Exception:
+                continue
+            left_change = self._clean_number(left_quote.get("change_pct"))
+            right_change = self._clean_number(right_quote.get("change_pct"))
+            if left_change is None or right_change is None:
+                continue
+            spread = left_change - right_change
+            items.append(self._computed_metric_item(label, symbol, round(spread, 3), "%", detail="Relative 1D pressure proxy"))
+        return items
+
     def _fetch_cn_flows_snapshot(self) -> Dict[str, Any]:
         return self._fallback_cn_flows_snapshot()
 
@@ -1330,6 +1507,24 @@ class MarketOverviewService:
             self._metric_item("上涨比例", "ADV_RATIO", 63.2, 3.8, 6.40, "%", [55, 58, 61, 63.2]),
         ]
         return self._card_snapshot(items, explanation="上涨家数占优，市场赚钱效应较好。")
+
+    def _fallback_us_breadth_snapshot(self) -> Dict[str, Any]:
+        updated_at = _now_iso()
+        return {
+            "source": "unavailable",
+            "sourceLabel": "未接入",
+            "updatedAt": updated_at,
+            "asOf": updated_at,
+            "freshness": "fallback",
+            "fallbackUsed": True,
+            "isFallback": True,
+            "warning": "Sector ETF breadth proxy 数据暂不可用",
+            "items": [
+                self._unavailable_item("数据暂不可用", "SECTOR_PROXY_UNAVAILABLE", "数据暂不可用", updated_at, detail="Sector ETF proxy 暂不可用"),
+                self._unavailable_item("Advance / decline", "ADVANCE_DECLINE_UNAVAILABLE", "未接入", updated_at),
+                self._unavailable_item("52W high / low", "HIGH_LOW_UNAVAILABLE", "未接入", updated_at),
+            ],
+        }
 
     def _fallback_cn_flows_snapshot(self) -> Dict[str, Any]:
         items = [
@@ -1888,6 +2083,58 @@ class MarketOverviewService:
             payload["explanation"] = explanation
         return payload
 
+    def _computed_metric_item(self, label: str, symbol: str, value: float, unit: str, detail: Optional[str] = None) -> Dict[str, Any]:
+        numeric_value = float(value)
+        return {
+            "name": label,
+            "label": label,
+            "symbol": symbol,
+            "value": round(numeric_value, 3),
+            "price": round(numeric_value, 3),
+            "change": round(numeric_value, 3),
+            "changePercent": round(numeric_value, 3),
+            "change_text": self._signed_percent_text(numeric_value) if unit == "%" else f"{numeric_value:.0f}",
+            "sparkline": [round(numeric_value, 3)],
+            "trend": [round(numeric_value, 3)],
+            "unit": unit,
+            "source": "yfinance_proxy",
+            "sourceLabel": "Yahoo Finance",
+            "isFallback": False,
+            "risk_direction": self._risk_direction(numeric_value),
+            "hover_details": [detail] if detail else [],
+        }
+
+    def _unavailable_item(
+        self,
+        label: str,
+        symbol: str,
+        message: str,
+        updated_at: str,
+        detail: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "name": label,
+            "label": label,
+            "symbol": symbol,
+            "value": None,
+            "price": None,
+            "change": None,
+            "changePercent": None,
+            "change_text": message,
+            "sparkline": [],
+            "trend": [],
+            "unit": "",
+            "source": "unavailable",
+            "sourceLabel": "未接入",
+            "updatedAt": updated_at,
+            "asOf": updated_at,
+            "freshness": "fallback",
+            "isFallback": True,
+            "warning": message,
+            "risk_direction": "neutral",
+            "hover_details": [detail or message],
+        }
+
     def _mark_static_fallback_item(self, item: Dict[str, Any], updated_at: str) -> Dict[str, Any]:
         return {
             **item,
@@ -2106,6 +2353,17 @@ class MarketOverviewService:
         if value is None:
             return "N/A"
         return f"{value:+.2f}%"
+
+    @staticmethod
+    def _compact_usd(value: Optional[float]) -> str:
+        if value is None:
+            return "N/A"
+        abs_value = abs(value)
+        if abs_value >= 1_000_000_000:
+            return f"${value / 1_000_000_000:.2f}B"
+        if abs_value >= 1_000_000:
+            return f"${value / 1_000_000:.2f}M"
+        return f"${value:.0f}"
 
     @staticmethod
     def _clean_number(value: Any) -> Optional[float]:

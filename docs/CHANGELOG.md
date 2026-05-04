@@ -2,6 +2,8 @@
 
 - 🧠 **Decision Desk Evidence v2** — `/chat` 检测到股票代码后新增只读 `/api/v1/agent/stock-evidence` 证据查询，合并轻量实时行情、已有本地日线技术指标和已持久化分析/行情中的基本面字段，不调用 LLM、不自动运行 scanner/backtest/analysis。数据上下文现在可显示行情价格/provider、技术 MA/RSI/支撑压力、基本面 partial/missing 字段和新闻 UNKNOWN；发送给 AgentExecutor 的 `stock_context.evidence` 改为紧凑证据摘要，并明确要求只使用 available/partial/stale/fallback 证据、UNKNOWN/MISSING 必须如实说明。回答 footer 同步展示行情、技术、基本面、持仓、观察列表、Scanner 与回测状态，不暴露 raw prompt / system prompt / API key。
 
+- 📊 **Market Overview Relevant Depth v3** — `/market-overview` 的美股页签新增基于 Yahoo/yfinance proxy 的 sector ETF breadth proxy，展示上涨/下跌行业数、最强/最弱行业 ETF 与 RSP/SPY、IWM/SPY、QQQ/SPY 相对压力；加密页签把 Binance 公开行情扩展到 BTC/ETH/SOL/BNB，并在可用时展示 Binance Futures funding rate。稳定币流动性、dominance、真实美股 advance/decline、A股/HK 北向南向实时源仍按未接入/备用状态紧凑展示，不冒充实时数据；新增 `/api/v1/market/us-breadth` 继续复用 MarketCache、SWR 与 last-known-good snapshot 元数据。
+
 - 🧾 **Home AI Report UX v3 身份与完整报告映射** — `/zh?fixture=analysis-trace` 的 Home AI 决策卡不再把 `待确认股票` 当作用户可见公司名；公司身份统一走 `companyName / stockName / quote / profile / fundamentals / overview / metadata / standardReport` 等字段的去重 fallback，最后只回退到 ticker 或 `--`。独立来源/动作卡彻底移除，`完整报告 / 决策来源 / 复制报告 / 重新分析` 现在位于 AI 决策卡右上动作区，紧凑来源行留在卡片内部。完整报告抽屉与 Markdown/PDF 导出补齐重要信息速览、风险警报、利好催化、当日行情、数据透视、技术透视、基本面摘要、作战计划、检查清单和数据说明，并对 provider 列表按顺序去重；Trace 抽屉继续默认折叠开发者细节且不暴露 raw prompt / system prompt / API key。
 
 - 🧭 **Scanner 候选优先工作台 v3 收口** — `/scanner` 结果区进一步收口为 candidate-first 工作流：顶部改为紧凑扫描命令条与单行阈值预览，候选池默认提前到诊断/历史对比/策略实验之前，移动端也保持“控制 -> 摘要 -> 候选池 -> 选中候选 -> 次级面板”的顺序。候选行改为终端式结构，只保留一个主动作和 `更多` 二级动作；右侧 Inspector 改为“为什么入选 / 主要风险 / 下一步”的决策卡，并把规则诊断、数据质量、开发者字段收进默认折叠区。此次仅调整 `apps/dsa-web` 前端展示与交互层次，不改变 scanner selection logic、threshold preview 计算、strategy simulation、backtest 计算或后端 endpoint。

@@ -105,6 +105,11 @@ def get_sector_rotation(current_user: Optional[CurrentUser] = Depends(get_option
     return MarketOverviewService().get_sector_rotation(actor=_actor(current_user))
 
 
+@router.get("/us-breadth", summary="Get US sector ETF breadth proxy snapshot")
+def get_us_breadth(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return MarketOverviewService().get_us_breadth(actor=_actor(current_user))
+
+
 @router.get("/rates", summary="Get global rates and bond market snapshot")
 def get_rates(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
     return MarketOverviewService().get_rates(actor=_actor(current_user))

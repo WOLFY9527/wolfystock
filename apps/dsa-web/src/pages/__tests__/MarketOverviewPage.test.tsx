@@ -25,6 +25,7 @@ vi.mock('../../api/market', () => ({
     getCnBreadth: vi.fn(),
     getCnFlows: vi.fn(),
     getSectorRotation: vi.fn(),
+    getUsBreadth: vi.fn(),
     getRates: vi.fn(),
     getFxCommodities: vi.fn(),
     getTemperature: vi.fn(),
@@ -155,6 +156,16 @@ const cryptoFullPanel = () => ({
       hoverDetails: ['24H -0.40%'],
     },
     {
+      symbol: 'SOL',
+      label: 'Solana',
+      value: 143.2,
+      unit: 'USD',
+      changePct: 1.8,
+      riskDirection: 'decreasing' as const,
+      trend: [139, 141, 143.2],
+      hoverDetails: ['24H +1.80%'],
+    },
+    {
       symbol: 'BNB',
       label: 'BNB',
       value: 590,
@@ -163,6 +174,46 @@ const cryptoFullPanel = () => ({
       riskDirection: 'decreasing' as const,
       trend: [584, 588, 590],
       hoverDetails: ['24H +0.30%'],
+    },
+    {
+      symbol: 'BTC_FUNDING',
+      label: 'BTC Funding',
+      value: 0.012,
+      unit: '%',
+      changePct: 0.012,
+      riskDirection: 'increasing' as const,
+      trend: [0.01, 0.012],
+      hoverDetails: ['Binance Futures'],
+    },
+  ],
+});
+
+const usBreadthPanel = () => denseQuotePanel('UsBreadthCard', [
+  quoteItem('SECTORS_UP', 'Sectors Up', 8, 0),
+  quoteItem('SECTORS_DOWN', 'Sectors Down', 3, 0),
+  quoteItem('STRONGEST_SECTOR', 'Strongest XLK', 1.8, 1.8),
+  quoteItem('WEAKEST_SECTOR', 'Weakest XLE', -0.6, -0.6),
+  quoteItem('RSP_SPY', 'RSP vs SPY', -0.4, -0.4),
+  quoteItem('IWM_SPY', 'IWM vs SPY', -0.8, -0.8),
+], 'yahoo');
+
+const usBreadthUnavailablePanel = () => ({
+  ...snapshotPanel('UsBreadthCard', 'SECTOR_PROXY_UNAVAILABLE', '数据暂不可用'),
+  source: 'unavailable',
+  sourceLabel: '未接入',
+  freshness: 'fallback' as const,
+  isFallback: true,
+  items: [
+    {
+      ...snapshotPanel('UsBreadthCard', 'SECTOR_PROXY_UNAVAILABLE', '数据暂不可用').items[0],
+      value: null,
+      changePct: null,
+      unit: '',
+      source: 'unavailable',
+      sourceLabel: '未接入',
+      freshness: 'fallback' as const,
+      isFallback: true,
+      hoverDetails: ['Sector ETF proxy 暂不可用'],
     },
   ],
 });
@@ -622,6 +673,7 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getCnBreadth).mockResolvedValue(snapshotPanel('ChinaBreadthCard', 'BREADTH', '赚钱效应'));
     vi.mocked(marketApi.getCnFlows).mockResolvedValue(snapshotPanel('ChinaFlowsCard', 'NORTHBOUND', '北向资金'));
     vi.mocked(marketApi.getSectorRotation).mockResolvedValue(snapshotPanel('SectorRotationCard', 'AI', 'AI / 算力'));
+    vi.mocked(marketApi.getUsBreadth).mockResolvedValue(usBreadthPanel());
     vi.mocked(marketApi.getRates).mockResolvedValue({
       ...snapshotPanel('RatesCard', 'US10Y', 'US 10Y'),
       items: [
@@ -765,7 +817,7 @@ describe('MarketOverviewPage', () => {
     expect(getPulseText()).not.toMatch(/标普500|沪深300|恒生指数|道琼斯/);
     expect(screen.getByTestId('market-overview-module-cryptoCore')).toHaveTextContent(/Crypto Core/);
     expect(screen.getByTestId('market-overview-module-cryptoMomentum')).toHaveTextContent(/Crypto Momentum/);
-    expect(screen.getByTestId('market-overview-module-cryptoLiquidity')).toHaveTextContent(/资金费率：未接入/);
+    expect(screen.getByTestId('market-overview-module-cryptoLiquidity')).toHaveTextContent(/BTC Funding|未接入/);
     expect(screen.getByTestId('market-overview-module-cryptoRiskContext')).toHaveTextContent(/Macro Pressure|Crypto Risk Context/);
     expect(screen.queryByTestId('market-overview-module-cnHkIndices')).not.toBeInTheDocument();
     expect(screen.queryByTestId('market-overview-module-usIndices')).not.toBeInTheDocument();
@@ -1551,6 +1603,53 @@ describe('MarketOverviewPage', () => {
       expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/加密货币数据覆盖：真实 [1-9]/);
     });
     expect(screen.getByTestId('market-overview-card-cryptoCore').closest('[data-testid="market-overview-main-grid"]')).toBeTruthy();
+  });
+
+  it('renders US breadth and sector health from the depth endpoint', async () => {
+    vi.mocked(marketApi.getUsBreadth).mockResolvedValueOnce(usBreadthPanel());
+
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '美股' }));
+
+    const breadthCard = await screen.findByTestId('market-overview-card-usBreadth');
+    expect(within(breadthCard).getByRole('heading', { name: /US Breadth|Breadth Proxy/i })).toBeInTheDocument();
+    expect(breadthCard).toHaveTextContent(/Sector ETF proxy|proxy/i);
+    expect(breadthCard).toHaveTextContent(/Sectors Up|Strongest XLK|RSP vs SPY/);
+    expect(breadthCard).not.toHaveTextContent(/未接入/);
+
+    const sectorCard = screen.getByTestId('market-overview-card-usSectorRotation');
+    expect(sectorCard).toHaveTextContent(/Sector Health|Strongest XLK|Weakest XLE/);
+  });
+
+  it('keeps US breadth unavailable state compact and honest', async () => {
+    vi.mocked(marketApi.getUsBreadth).mockResolvedValueOnce(usBreadthUnavailablePanel());
+
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '美股' }));
+    const breadthCard = await screen.findByTestId('market-overview-card-usBreadth');
+
+    expect(breadthCard).toHaveTextContent(/数据暂不可用|未接入/);
+    expect(breadthCard).toHaveTextContent(/备用|未接入/);
+    expect(within(breadthCard).queryByText(/Advance \/ decline：未接入/)).not.toBeInTheDocument();
+  });
+
+  it('renders crypto funding and compact unavailable liquidity context without market dumps', async () => {
+    vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
+
+    render(<MarketOverviewPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '加密货币' }));
+
+    expect(await screen.findByTestId('market-overview-card-cryptoCore')).toHaveTextContent(/Bitcoin|Ethereum|Solana|BNB/);
+    expect(screen.getByTestId('market-overview-card-cryptoMomentum')).toHaveTextContent(/Bitcoin|Ethereum|Solana|BNB/);
+    const liquidityCard = screen.getByTestId('market-overview-card-cryptoLiquidity');
+    expect(liquidityCard).toHaveTextContent(/Funding|BTC Funding/);
+    expect(liquidityCard).toHaveTextContent(/Stablecoin liquidity.*未接入|Dominance.*未接入/);
+    expect(screen.getByTestId('market-overview-card-cryptoRiskContext')).toHaveTextContent(/DXY|US 10Y|VIX/);
+    expect(screen.queryByTestId('market-overview-module-cnHkIndices')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('market-overview-module-usIndices')).not.toBeInTheDocument();
   });
 
   it('does not show an empty state when fallback cards are still useful grouped content', async () => {
