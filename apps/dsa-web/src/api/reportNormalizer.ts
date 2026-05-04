@@ -1,5 +1,6 @@
 import type {
   AnalysisReport,
+  DecisionTrace,
   FrontendReportContractMeta,
   ReportDetails,
   ReportMeta,
@@ -78,6 +79,18 @@ const normalizeAnalysisReport = (
   const normalizedStandardReport = (
     standardReport ? camelizeDeep(standardReport) : undefined
   ) as StandardReport | undefined;
+  const decisionTraceCandidates = [
+    report.decisionTrace,
+    toRecord((report as unknown as Record<string, unknown>).decision_trace),
+  ];
+  const decisionTraceMatch = decisionTraceCandidates.find((candidate) => toRecord(candidate));
+  const normalizedDecisionTrace = (
+    decisionTraceMatch ? camelizeDeep(decisionTraceMatch) : undefined
+  ) as DecisionTrace | undefined;
+  const normalizedAnalysisResult = toRecord(camelizeDeep(
+    (details as Record<string, unknown> | undefined)?.analysisResult
+      ?? (details as Record<string, unknown> | undefined)?.analysis_result,
+  ));
   const payloadVariant: FrontendReportContractMeta['payloadVariant'] = normalizedStandardReport
     ? 'standard_report'
     : report.details
@@ -89,6 +102,7 @@ const normalizeAnalysisReport = (
     ? {
         ...report.details,
         standardReport: normalizedStandardReport,
+        analysisResult: normalizedAnalysisResult,
       }
     : report.details;
 
@@ -111,6 +125,7 @@ const normalizeAnalysisReport = (
       sentimentScore,
     },
     details: normalizedDetails,
+    decisionTrace: normalizedDecisionTrace,
     contractMeta: {
       payloadVariant,
       standardReportSource,

@@ -313,6 +313,8 @@ export interface ReportDetails {
   rawResult?: Record<string, unknown>;
   contextSnapshot?: Record<string, unknown>;
   standardReport?: StandardReport;
+  analysisResult?: Record<string, unknown>;
+  rawAiResponse?: string | Record<string, unknown>;
   financialReport?: Record<string, unknown>;
   dividendMetrics?: Record<string, unknown>;
 }

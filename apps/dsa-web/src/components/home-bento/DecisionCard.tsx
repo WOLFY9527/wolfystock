@@ -148,14 +148,6 @@ function getActionToneStyle(
   };
 }
 
-function getConvictionPercent(value: string, unit: string): number {
-  const parsedValue = Number.parseFloat(value);
-  const parsedUnit = Number.parseFloat(unit.replace(/[^0-9.]/g, ''));
-  const base = Number.isFinite(parsedUnit) && parsedUnit > 0 ? parsedUnit : parsedValue <= 5 ? 5 : 10;
-  const rawPercent = Number.isFinite(parsedValue) ? (parsedValue / base) * 100 : 0;
-  return Math.max(0, Math.min(100, Math.round(rawPercent)));
-}
-
 function getConvictionSegmentClass(tone: SignalTone, active: boolean): string {
   if (!active) {
     return 'bg-white/[0.08]';
@@ -167,6 +159,58 @@ function getConvictionSegmentClass(tone: SignalTone, active: boolean): string {
     return 'bg-white/70 shadow-[0_0_10px_rgba(226,232,240,0.35)]';
   }
   return 'bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.5)]';
+}
+
+function resolveConfidencePresentation(value: string | undefined): { display: string; activeSegments: number } {
+  const text = String(value || '').trim();
+  if (!text || text === '-') {
+    return { display: '-', activeSegments: 0 };
+  }
+
+  const normalized = text.toLowerCase();
+  if (/(极高|very high)/.test(normalized)) {
+    return { display: text, activeSegments: 5 };
+  }
+  if (/(高|high)/.test(normalized)) {
+    return { display: text, activeSegments: 4 };
+  }
+  if (/(中等|中|medium|moderate)/.test(normalized)) {
+    return { display: text, activeSegments: 3 };
+  }
+  if (/(低|low)/.test(normalized)) {
+    return { display: text, activeSegments: 2 };
+  }
+
+  const percentMatch = text.match(/^(-?\d+(?:\.\d+)?)\s*%$/);
+  if (percentMatch) {
+    const percent = Number.parseFloat(percentMatch[1]);
+    if (Number.isFinite(percent)) {
+      return {
+        display: text,
+        activeSegments: Math.max(0, Math.min(5, Math.ceil(percent / 20))),
+      };
+    }
+  }
+
+  if (/^-?\d+(?:\.\d+)?$/.test(text)) {
+    const numeric = Number.parseFloat(text);
+    if (Number.isFinite(numeric)) {
+      if (numeric >= 0 && numeric <= 1) {
+        return {
+          display: text,
+          activeSegments: Math.max(0, Math.min(5, Math.ceil(numeric * 5))),
+        };
+      }
+      if (numeric >= 0 && numeric <= 100) {
+        return {
+          display: text,
+          activeSegments: Math.max(0, Math.min(5, Math.ceil(numeric / 20))),
+        };
+      }
+    }
+  }
+
+  return { display: text, activeSegments: 0 };
 }
 
 function getSupportingIndicators(locale: 'zh' | 'en', tone: SignalTone): SupportingIndicator[] {
@@ -249,9 +293,9 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   const isEnglish = locale === 'en';
   const insightCopy = reason.body || summary || scoreValue || '-';
   const sectorLabel = formatSectorLabel(locale, sector);
-  const convictionPercent = getConvictionPercent(heroValue, heroUnit);
-  const convictionDisplay = confidenceValue?.trim() || `${convictionPercent}%`;
-  const activeConvictionSegments = Math.ceil(convictionPercent / 20);
+  const confidencePresentation = resolveConfidencePresentation(confidenceValue);
+  const convictionDisplay = confidencePresentation.display;
+  const activeConvictionSegments = confidencePresentation.activeSegments;
 
   return (
     <BentoCard

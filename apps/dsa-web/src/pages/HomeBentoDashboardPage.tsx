@@ -1044,6 +1044,31 @@ function isZombieStockLabel(value: unknown): boolean {
   return normalized === '待确认股票' || normalized === 'unknown' || normalized === 'unnamed stock' || /^股票[A-Z0-9.]+$/i.test(text);
 }
 
+function hasTrustedNormalizedHomeContent(report: AnalysisReport): boolean {
+  const standardReport = report.details?.standardReport;
+  const summaryPanel = standardReport?.summaryPanel;
+  const decisionPanel = standardReport?.decisionPanel;
+  const battleCards = standardReport?.battlePlanCompact?.cards || [];
+  const analysisResult = readObjectField(report, ['details', 'analysisResult']) as Record<string, unknown> | undefined;
+  const trace = getDecisionTrace(report);
+
+  return Boolean(
+    trace?.decisionFields && Object.keys(trace.decisionFields).length > 0
+    || summaryPanel?.score !== undefined
+    || summaryPanel?.oneSentence
+    || decisionPanel?.confidence
+    || decisionPanel?.idealEntry
+    || decisionPanel?.target
+    || decisionPanel?.stopLoss
+    || battleCards.length > 0
+    || analysisResult?.score !== undefined
+    || analysisResult?.confidence
+    || analysisResult?.entryPrice
+    || analysisResult?.takeProfit
+    || analysisResult?.stopLoss,
+  );
+}
+
 function hasFailedAnalysisText(value: unknown): boolean {
   if (typeof value !== 'string') {
     return false;
@@ -1466,11 +1491,18 @@ function findBattlePlanValue(standardReport: StandardReport | undefined, aliases
 function normalizeHomeAnalysisResult(report: AnalysisReport, locale: DashboardLocale): HomeNormalizedAnalysisResult {
   const standardReport = report.details?.standardReport;
   const summaryPanel = standardReport?.summaryPanel;
+  const reportTitle = standardReport?.title;
+  const titleScore = readObjectField(reportTitle, ['score']);
+  const titleSignalText = readObjectField(reportTitle, ['signalText']);
+  const titleOperationAdvice = readObjectField(reportTitle, ['operationAdvice']);
+  const titleTrendPrediction = readObjectField(reportTitle, ['trendPrediction']);
+  const titleOneSentence = readObjectField(reportTitle, ['oneSentence']);
   const decisionPanel = standardReport?.decisionPanel;
   const decisionContext = standardReport?.decisionContext;
   const reasonLayer = standardReport?.reasonLayer;
   const trace = getDecisionTrace(report);
   const traceFields = trace?.decisionFields || {};
+  const analysisResult = readObjectField(report, ['details', 'analysisResult']) as Record<string, unknown> | undefined;
   const rawResult = report.details?.rawResult as Record<string, unknown> | undefined;
   const rawDashboard = (rawResult?.dashboard as Record<string, unknown> | undefined) || {};
   const rawDataPerspective = (rawDashboard.dataPerspective as Record<string, unknown> | undefined) || {};
@@ -1512,7 +1544,9 @@ function normalizeHomeAnalysisResult(report: AnalysisReport, locale: DashboardLo
   const score = normalizeScoreValue(firstMeaningfulValue([
     traceFields.score?.value,
     summaryPanel?.score,
+    titleScore,
     report.summary.sentimentScore,
+    analysisResult?.score,
     readObjectField(report, ['summary', 'score']),
     readObjectField(rawDashboard, ['summary', 'score']),
   ]));
@@ -1520,8 +1554,11 @@ function normalizeHomeAnalysisResult(report: AnalysisReport, locale: DashboardLo
   return {
     action: normalizeDecisionAction(firstMeaningfulValue([
       traceFields.action?.value,
+      titleSignalText,
       summaryPanel?.operationAdvice,
       standardReport?.decisionPanel?.keyAction,
+      analysisResult?.action,
+      analysisResult?.decision,
       report.summary.sentimentLabel,
       report.summary.operationAdvice,
       readObjectField(rawDashboard, ['summary', 'operation_advice']),
@@ -1530,6 +1567,8 @@ function normalizeHomeAnalysisResult(report: AnalysisReport, locale: DashboardLo
     confidence: firstMeaningfulValue([
       traceFields.confidence?.value,
       decisionPanel?.confidence,
+      analysisResult?.confidence,
+      analysisResult?.confidenceLevel,
       readObjectField(rawDashboard, ['summary', 'confidence']),
     ]),
     entry: firstMeaningfulValue([
@@ -1538,6 +1577,8 @@ function normalizeHomeAnalysisResult(report: AnalysisReport, locale: DashboardLo
       decisionPanel?.support,
       report.strategy?.idealBuy,
       findBattlePlanValue(standardReport, ['entry', 'ideal', '理想', '建仓', '入场']),
+      analysisResult?.entryPrice,
+      analysisResult?.secondaryEntryPrice,
     ]),
     target: firstMeaningfulValue([
       traceFields.target?.value,
@@ -1545,32 +1586,41 @@ function normalizeHomeAnalysisResult(report: AnalysisReport, locale: DashboardLo
       decisionPanel?.targetZone,
       report.strategy?.takeProfit,
       findBattlePlanValue(standardReport, ['target', '目标']),
+      analysisResult?.takeProfit,
     ]),
     stop: firstMeaningfulValue([
       traceFields.stop?.value,
       decisionPanel?.stopLoss,
       report.strategy?.stopLoss,
       findBattlePlanValue(standardReport, ['stop', '止损']),
+      analysisResult?.stopLoss,
     ]),
     summary: firstMeaningfulValue([
+      titleOneSentence,
       summaryPanel?.oneSentence,
       report.summary.analysisSummary,
+      analysisResult?.summary,
       reasonLayer?.latestKeyUpdate,
     ]),
     scoreContext: firstMeaningfulValue([
       decisionContext?.shortTermView,
       summaryPanel?.trendPrediction,
+      titleTrendPrediction,
       report.summary.trendPrediction,
       report.summary.operationAdvice,
+      analysisResult?.strategy,
     ]),
     badge: firstMeaningfulValue([
       summaryPanel?.operationAdvice,
+      titleOperationAdvice,
       reasonLayer?.topCatalyst,
       reasonLayer?.newsValueTier,
     ]),
     reason: firstMeaningfulValue([
+      titleOneSentence,
       summaryPanel?.oneSentence,
       report.summary.analysisSummary,
+      analysisResult?.fullReasoning,
       reasonLayer?.coreReasons?.[0],
       reasonLayer?.topCatalyst,
       reasonLayer?.latestKeyUpdate,
@@ -1579,6 +1629,8 @@ function normalizeHomeAnalysisResult(report: AnalysisReport, locale: DashboardLo
       decisionPanel?.buildStrategy,
       decisionPanel?.holderAdvice,
       decisionPanel?.noPositionAdvice,
+      readObjectField(rawDashboard, ['coreConclusion', 'positionAdvice', 'noPosition']),
+      readObjectField(rawDashboard, ['coreConclusion', 'positionAdvice', 'hasPosition']),
       report.summary.operationAdvice,
     ]),
     technicalFields,
@@ -2563,7 +2615,7 @@ function buildDrawerPayload(locale: DashboardLocale, dashboard: DashboardPayload
 
 function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisReport): DashboardPayload {
   const stockCode = normalizeTickerQuery(report.meta.stockCode || 'NVDA');
-  if (hasUntrustedReportMarker(report)) {
+  if (hasUntrustedReportMarker(report) && !hasTrustedNormalizedHomeContent(report)) {
     return buildInPlacePlaceholderDashboard(locale, stockCode);
   }
 
@@ -3028,7 +3080,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       }
   ), [locale]);
   const activeDrawerPayload = activeDrawer && copy ? buildDrawerPayload(locale, copy, activeDrawer) : null;
-  const sourceSummary = useMemo(() => buildTraceSummary(activeTraceReport?.decisionTrace), [activeTraceReport?.decisionTrace]);
+  const activeDecisionTrace = useMemo(() => (activeTraceReport ? getDecisionTrace(activeTraceReport) : undefined), [activeTraceReport]);
+  const sourceSummary = useMemo(() => buildTraceSummary(activeDecisionTrace), [activeDecisionTrace]);
   const shouldRenderDashboardPanels = !isGuest || Boolean(guestPreview || pendingAnalysisTicker);
   const guestPaywall = isGuest ? <GuestPaywallOverlay registrationPath={registrationPath} /> : null;
   const deleteCopy = useMemo(() => ({
@@ -3629,7 +3682,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         zIndex={90}
         bodyClassName="overflow-x-hidden"
       >
-        <DecisionTracePanel trace={activeTraceReport?.decisionTrace} locale={locale} />
+        <DecisionTracePanel trace={activeDecisionTrace} locale={locale} />
       </Drawer>
 
       <Drawer

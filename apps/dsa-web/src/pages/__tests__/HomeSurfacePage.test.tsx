@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analysisApi } from '../../api/analysis';
 import { createApiError, createParsedApiError } from '../../api/error';
 import { historyApi } from '../../api/history';
+import { normalizeFrontendReportContract } from '../../api/reportNormalizer';
 import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
 import { stocksApi } from '../../api/stocks';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
@@ -620,6 +621,134 @@ describe('HomeSurfacePage', () => {
     expect(within(panel).queryByText('confidence')).not.toBeInTheDocument();
   });
 
+  it('normalizes a HOOD-style live payload without collapsing to placeholder cards', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValueOnce({
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [
+        { id: 88, queryId: 'task-hood-live', stockCode: 'HOOD', stockName: '待确认股票', companyName: '待确认股票', createdAt: '2026-05-04T12:04:19Z', generatedAt: '2026-05-04T12:05:11Z', isTest: false },
+      ],
+    });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce(normalizeFrontendReportContract({
+      meta: {
+        id: 88,
+        queryId: 'task-hood-live',
+        stockCode: 'HOOD',
+        stockName: '待确认股票',
+        companyName: '待确认股票',
+        reportType: 'full',
+        createdAt: '2026-05-04T12:05:11Z',
+      },
+      summary: {
+        analysisSummary: '',
+        operationAdvice: '',
+        trendPrediction: '',
+        sentimentScore: 52,
+        sentimentLabel: '中性',
+      },
+      strategy: {},
+      details: {
+        standard_report: {
+          title: {
+            stock: '待确认股票 (HOOD)',
+            score: 52,
+            signal_text: '观望',
+            operation_advice: '观望',
+            trend_prediction: '看空',
+            one_sentence: '短线技术偏弱，但基本面仍有支撑，综合建议以观望为主。',
+          },
+          summary_panel: {
+            stock: '待确认股票 (HOOD)',
+            ticker: 'HOOD',
+            score: 52,
+            current_price: '73.67',
+            operation_advice: '观望',
+            trend_prediction: '看空',
+            one_sentence: '短线技术偏弱，但基本面仍有支撑，综合建议以观望为主。',
+          },
+          decision_panel: {
+            confidence: '低',
+          },
+          technical_fields: [
+            { label: 'Moving Averages', value: 'MA20 below MA60' },
+            { label: 'RSI-14', value: '43.5' },
+            { label: 'MACD', value: 'Below zero' },
+          ],
+          fundamental_fields: [
+            { label: 'ROE', value: '4.17%' },
+            { label: 'Revenue Growth', value: '15.10%' },
+          ],
+          battle_plan_compact: {
+            cards: [
+              { label: '理想买入点', value: '74.23-75.18（回踩支撑确认）' },
+              { label: '目标位', value: '75.27（更强压力 / 高位目标）' },
+              { label: '止损位', value: '73.10（趋势破位止损位）' },
+            ],
+          },
+        },
+        analysis_result: {
+          action: '观望',
+          score: 52,
+          confidence: '中',
+          entry_price: '74.23-75.18（回踩支撑确认）',
+          stop_loss: '73.10（趋势破位止损位）',
+          take_profit: '75.27（更强压力 / 高位目标）',
+          summary: 'HOOD 当前处于弱势空头趋势，建议保持观望。',
+        },
+      } as unknown as typeof defaultHistoryReport.details,
+      decision_trace: {
+        symbol: 'HOOD',
+        market: 'US',
+        decision_fields: {
+          action: { value: 'hold', source: 'rule' },
+          score: { value: 52, source: 'rule', scale: '0-100' },
+          confidence: { value: '低', source: 'llm' },
+        },
+        data_sources: [
+          { name: 'quote', status: 'used', provider: 'alpaca' },
+          { name: 'fundamentals', status: 'partial', provider: 'fmp' },
+        ],
+        llm: {
+          used: true,
+          provider: 'gemini',
+          model: 'gemini/gemini-2.5-flash',
+          template: 'decision_dashboard_v2',
+          schema_validated: false,
+          prompt_exposed: false,
+        },
+      },
+    } as never));
+
+    renderSurface();
+
+    await waitFor(() => expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('52'));
+    expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('观望');
+    expect(screen.getByTestId('home-bento-decision-conviction-value')).toHaveTextContent('低');
+    expect(screen.getByTestId('home-bento-decision-conviction-value')).not.toHaveTextContent('0%');
+    expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('74.23-75.18');
+    expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('75.27');
+    expect(screen.getByTestId('home-bento-card-strategy')).toHaveTextContent('73.10');
+    expect(screen.getByTestId('home-bento-card-tech')).toHaveTextContent('43.5');
+    expect(screen.getByTestId('home-bento-card-fundamentals')).toHaveTextContent('4.17%');
+
+    fireEvent.click(screen.getByRole('button', { name: '完整报告' }));
+    const report = await screen.findByTestId('home-bento-full-report-drawer');
+    expect(within(report).getByText('投资结论')).toBeInTheDocument();
+    expect(within(report).getByText('短线技术偏弱，但基本面仍有支撑，综合建议以观望为主。')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /关闭|Close/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '决策来源' }));
+    const panel = await screen.findByTestId('home-bento-decision-trace-panel');
+    const developerDetails = within(panel).getByTestId('home-bento-decision-trace-developer');
+    expect(developerDetails).not.toHaveAttribute('open');
+    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('Schema 未确认');
+    expect(within(panel).getByText('报价')).toBeInTheDocument();
+    expect(within(panel).getByText('部分可用')).toBeInTheDocument();
+  });
+
   it('loads the dev/test decision trace fixture without submitting analysis', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getList).mockResolvedValueOnce({
@@ -962,7 +1091,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-fundamentals')).toBeInTheDocument();
-    expect(screen.getAllByText('-').length).toBeGreaterThan(8);
+    expect(screen.getAllByText('-').length).toBeGreaterThan(6);
+    expect(screen.queryByText('0%')).not.toBeInTheDocument();
     expect(screen.getAllByText('N/A').length).toBeGreaterThan(0);
     expect(screen.queryByText('Bullish')).not.toBeInTheDocument();
     expect(screen.queryByText('172.92-178.04 (Pullback support confirmed)')).not.toBeInTheDocument();
@@ -1722,7 +1852,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-fundamentals')).toBeInTheDocument();
-    expect(screen.getAllByText('-').length).toBeGreaterThan(8);
+    expect(screen.getAllByText('-').length).toBeGreaterThan(6);
+    expect(screen.queryByText('0%')).not.toBeInTheDocument();
     expect(screen.getAllByText('N/A').length).toBeGreaterThan(0);
     expect(screen.queryByText('反弹验证')).not.toBeInTheDocument();
     expect(screen.queryByText('事件驱动后仍需量能确认')).not.toBeInTheDocument();
