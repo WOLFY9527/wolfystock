@@ -9,6 +9,8 @@ cd apps/dsa-web
 npm run check:design
 ```
 
+For a broader task-type check matrix and reporting guidance, see [`docs/checks/ci-gate-clarity.md`](./ci-gate-clarity.md).
+
 ## Blocking Rules
 
 - `no-solid-gray-bg`: blocks Tailwind solid gray background surfaces such as `bg-gray-*`, `bg-zinc-*`, `bg-slate-*`, and `bg-neutral-*`.
@@ -22,6 +24,8 @@ The gray rule intentionally does not block `text-gray-*`, `border-gray-*`, or `r
 - `native-ui`: warns on clear default/native UI risks, including scroll containers without a stealth scrollbar utility and native controls without visible styling.
 
 Warnings are non-blocking because the current source still has legacy surfaces that need visual review before broad cleanup. New code should avoid adding warning-only findings.
+
+Do not wire warning-only findings into `scripts/ci_gate.sh`; keep the design guard as a separate frontend check unless a future pass explicitly changes its contract.
 
 ## Exceptions
 
