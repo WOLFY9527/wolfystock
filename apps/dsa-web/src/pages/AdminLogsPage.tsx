@@ -755,7 +755,7 @@ function JsonBlock({ value }: { value: unknown }) {
     return <span>{String(value)}</span>;
   }
   return (
-    <pre className="mt-2 max-h-44 overflow-auto rounded-xl border border-white/5 bg-black/30 p-3 text-[11px] leading-5 text-white/68">
+    <pre className="mt-2 max-h-44 overflow-auto no-scrollbar rounded-xl border border-white/5 bg-black/30 p-3 text-[11px] leading-5 text-white/68">
       {JSON.stringify(sanitizeDisplayValue(value), null, 2)}
     </pre>
   );
@@ -1228,7 +1228,7 @@ const AdminLogsPage: React.FC = () => {
                   <select
                     id="admin-logs-level-filter"
                     aria-label={locale === 'zh' ? '级别筛选' : 'Level filter'}
-                    className="input-surface h-9 w-full min-w-0 rounded-lg px-3 text-sm"
+                    className="input-surface h-9 w-full min-w-0 appearance-none truncate rounded-lg px-3 pr-10 text-sm"
                     value={levelFilter}
                     onChange={(event) => setLevelFilter(event.target.value as LevelFilter)}
                   >
@@ -1240,7 +1240,7 @@ const AdminLogsPage: React.FC = () => {
                   <select
                     id="admin-logs-category-filter"
                     aria-label={locale === 'zh' ? '分类筛选' : 'Category filter'}
-                    className="input-surface h-9 w-full min-w-0 rounded-lg px-3 text-sm"
+                    className="input-surface h-9 w-full min-w-0 appearance-none truncate rounded-lg px-3 pr-10 text-sm"
                     value={categoryFilter}
                     onChange={(event) => setCategoryFilter(event.target.value as 'all' | LogCategory)}
                   >
@@ -1263,7 +1263,7 @@ const AdminLogsPage: React.FC = () => {
               {activeTab !== 'raw' ? (
                 <select
                   aria-label={locale === 'zh' ? '状态筛选' : 'Status filter'}
-                  className="input-surface h-9 w-full min-w-0 rounded-lg px-3 text-sm"
+                  className="input-surface h-9 w-full min-w-0 appearance-none truncate rounded-lg px-3 pr-10 text-sm"
                   value={statusFilter}
                   onChange={(event) => setStatusFilter(event.target.value as (typeof STATUS_FILTER_OPTIONS)[number])}
                 >
@@ -1276,7 +1276,7 @@ const AdminLogsPage: React.FC = () => {
               <select
                 id="admin-logs-since-filter"
                 aria-label={locale === 'zh' ? '时间范围' : 'Time range'}
-                className="input-surface h-9 w-full min-w-0 rounded-lg px-3 text-sm"
+                className="input-surface h-9 w-full min-w-0 appearance-none truncate rounded-lg px-3 pr-10 text-sm"
                 value={sinceFilter}
                 onChange={(event) => setSinceFilter(event.target.value as (typeof SINCE_OPTIONS)[number])}
               >

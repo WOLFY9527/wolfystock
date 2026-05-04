@@ -86,7 +86,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
         {denseQuote ? (
           <div
             data-testid="market-overview-dense-quote-grid"
-            className="flex min-h-0 flex-col overflow-y-auto border-y border-white/[0.045] ui-scroll-y-quiet"
+            className="flex min-h-0 flex-col overflow-y-auto no-scrollbar border-y border-white/[0.045] ui-scroll-y-quiet"
           >
             {visibleItems.map((item) => (
               <MarketOverviewDenseQuoteItem
@@ -97,7 +97,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
             ))}
           </div>
         ) : (
-          <div className="min-h-0 overflow-y-auto ui-scroll-y-quiet">
+          <div className="min-h-0 overflow-y-auto no-scrollbar ui-scroll-y-quiet">
             {visibleItems.map((item) => (
               <MarketOverviewDataRow
                 key={item.symbol}

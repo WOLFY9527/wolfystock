@@ -1962,7 +1962,7 @@ describe('SettingsPage', () => {
     expect(screen.getByText('1. 任务路由')).toBeInTheDocument();
     expect(screen.getByText('2. 服务商库')).toBeInTheDocument();
     expect(screen.getByText('3. 高级配置（可选）')).toBeInTheDocument();
-    expect(screen.getByText('LLM PROVIDERS')).toBeInTheDocument();
+    expect(screen.getByText('模型供应商')).toBeInTheDocument();
     expect(screen.getByText('高级渠道配置')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '打开高级设置' })).toBeInTheDocument();
     expect(screen.getByTestId('ai-task-row-analysis')).toBeInTheDocument();

@@ -105,7 +105,7 @@ export const MarketSentimentCard: React.FC<{
           </div>
         ) : null}
 
-        <div className="grid min-h-0 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2 ui-scroll-y-quiet">
+        <div className="grid min-h-0 grid-cols-1 gap-2 overflow-y-auto no-scrollbar sm:grid-cols-2 ui-scroll-y-quiet">
           {supporting.map((item) => (
             <div key={item.symbol} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2">
               <div className="flex items-start justify-between gap-3">

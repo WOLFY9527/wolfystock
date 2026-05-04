@@ -122,18 +122,18 @@ export const Select: React.FC<SelectProps> = ({
           id={resolvedId}
           name={name}
           value={displayValue}
+          disabled={disabled}
+          {...props}
+          className={cn(
+            'select-surface absolute inset-0 z-10 h-full w-full min-w-0 cursor-pointer appearance-none truncate rounded-lg pr-10 opacity-0 outline-none',
+            disabled ? 'cursor-not-allowed' : '',
+          )}
           onChange={(e) => {
             if (!isControlled) {
               setUncontrolledValue(e.target.value);
             }
             onChange(e.target.value);
           }}
-          disabled={disabled}
-          {...props}
-          className={cn(
-            'select-surface absolute inset-0 z-10 h-full w-full min-w-0 cursor-pointer rounded-lg opacity-0 outline-none',
-            disabled ? 'cursor-not-allowed' : '',
-          )}
         >
           {!hasCustomChildren && resolvedPlaceholder ? (
             <option value="" disabled>

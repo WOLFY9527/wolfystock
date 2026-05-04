@@ -36,7 +36,7 @@ export function SuggestionsList({
   return (
     <ul
       id="suggestions-list"
-      className="theme-dropdown-panel z-[100] max-h-60 overflow-auto rounded-b-lg rounded-t-none border-x border-b"
+      className="theme-dropdown-panel z-[100] max-h-60 overflow-y-auto no-scrollbar rounded-b-lg rounded-t-none border-x border-b"
       style={style}
       role="listbox"
     >

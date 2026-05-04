@@ -53,7 +53,7 @@ export const VolatilityCard: React.FC<{
           </div>
         ) : null}
 
-        <div data-testid="market-overview-dense-quote-grid" className="flex min-h-0 flex-col overflow-y-auto border-y border-white/[0.045] ui-scroll-y-quiet">
+        <div data-testid="market-overview-dense-quote-grid" className="flex min-h-0 flex-col overflow-y-auto no-scrollbar border-y border-white/[0.045] ui-scroll-y-quiet">
           {compactItems.map((item) => (
             <MarketOverviewDenseQuoteItem
               key={item.symbol}

@@ -62,12 +62,12 @@ const PROVIDER_LIBRARY_GROUPS: Array<{
 }> = [
   {
     key: 'llm',
-    title: 'LLM PROVIDERS',
+    title: '模型供应商',
     keys: ['gemini', 'aihubmix', 'openai', 'anthropic', 'deepseek', 'zhipu'],
   },
   {
     key: 'embeddings',
-    title: 'EMBEDDINGS',
+    title: '向量模型',
     keys: [],
   },
 ];

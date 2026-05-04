@@ -1462,7 +1462,7 @@ const CnShortSentimentCard: React.FC<{
           <p className="min-w-0 max-w-[220px] truncate text-right text-xs leading-5 text-white/55">{data.summary}</p>
         </div>
       </div>
-      <div className="grid min-h-0 grid-cols-2 gap-2 overflow-y-auto ui-scroll-y-quiet">
+      <div className="grid min-h-0 grid-cols-2 gap-2 overflow-y-auto no-scrollbar ui-scroll-y-quiet">
         {metrics.slice(0, 6).map(([key, label, value]) => (
           <div key={key} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2">
             <p className="truncate text-[10px] text-white/38">{label}</p>
@@ -1522,7 +1522,7 @@ const ContextMetricModuleCard: React.FC<{
             />
           ) : null}
         </div>
-        <div className="flex min-h-0 flex-col overflow-y-auto border-y border-white/[0.045] ui-scroll-y-quiet">
+        <div className="flex min-h-0 flex-col overflow-y-auto no-scrollbar border-y border-white/[0.045] ui-scroll-y-quiet">
           {visibleItems.map((item) => (
             <MarketOverviewDenseQuoteItem
               key={`${moduleId}-${item.symbol}`}
