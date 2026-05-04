@@ -394,8 +394,8 @@ function makeCryptoDiagnosticsRun(overrides: Partial<ScannerRunDetail> = {}): Sc
         status: 'rejected',
         score: 55,
         provider: 'alpaca',
-        reason: 'missing momentum threshold',
-        failedRules: ['below_momentum_threshold'],
+        reason: 'below liquidity threshold',
+        failedRules: ['below_liquidity_threshold'],
         missingFields: [],
         metrics: { return20d: 3.1, trend: 8 },
       },
@@ -407,7 +407,7 @@ function makeCryptoDiagnosticsRun(overrides: Partial<ScannerRunDetail> = {}): Sc
         score: 52,
         provider: 'alpaca',
         reason: null,
-        failedRules: ['below_relative_strength'],
+        failedRules: ['below_price_threshold'],
         missingFields: [],
         metrics: { return20d: -2.4, trend: 4 },
       },
@@ -1207,23 +1207,30 @@ describe('UserScannerPage', () => {
         themeId: 'crypto_miners',
       }));
     });
-    expect(screen.getByText(/入选 1|1 selected/)).toBeInTheDocument();
+    expect(screen.getAllByText(/入选 1|1 selected/).length).toBeGreaterThan(0);
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/UNIVERSE/);
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/11/);
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/EVALUATED/);
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/9/);
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/DATA FAILED/);
+    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/SKIPPED/);
     expect(screen.getByTestId('scanner-summary-counters')).toHaveTextContent(/SELECTED/);
     expect(screen.getByTestId('scanner-summary-counters')).toHaveTextContent(/REJECTED/);
-    expect(screen.getByTestId('scanner-decision-summary')).toHaveTextContent(/WULF (唯一通过|is the only pass)/);
-    expect(screen.getByTestId('scanner-decision-summary')).toHaveTextContent(/10 (个候选被淘汰|candidates eliminated)/);
+    expect(screen.getByTestId('scanner-decision-summary')).toHaveTextContent(/本次扫描：1 个入选 \/ 9 个评估|Scan: 1 selected \/ 9 evaluated/);
+    expect(screen.getByTestId('scanner-decision-summary')).toHaveTextContent(/最佳候选：WULF · 60\/100|Best candidate: WULF · 60\/100/);
+    expect(screen.getByTestId('scanner-decision-summary')).toHaveTextContent(/主要淘汰原因：流动性不足|Main rejection: Liquidity weak/);
+    expect(screen.getByTestId('scanner-decision-summary')).toHaveTextContent(/数据状态：2 个数据失败|Data status: 2 data failed/);
     expect(screen.getByTestId('scanner-result-card-WULF')).toBeInTheDocument();
     expect(screen.getByTestId('scanner-candidate-preview')).toHaveTextContent(/其余 10 个候选未入选|10 other candidates were not selected/);
     expect(screen.getByTestId('scanner-candidate-preview')).toHaveTextContent(/MARA/);
 
     fireEvent.click(screen.getByRole('button', { name: /查看全部候选|View all candidates/i }));
-    expect(await screen.findByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/missing momentum threshold/);
-    expect(screen.getByTestId('scanner-candidate-row-CIFR')).toHaveTextContent(/missing price history/);
+    expect(await screen.findByTestId('scanner-candidate-row-WULF')).toHaveTextContent(/官方|Official/);
+    expect(screen.getByTestId('scanner-candidate-row-WULF')).toHaveTextContent(/通过筛选|Passed screening/);
+    expect(screen.getByTestId('scanner-candidate-row-WULF')).toHaveTextContent(/已验证|Verified/);
+    expect(screen.getByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/流动性不足|Liquidity weak/);
+    expect(screen.getByTestId('scanner-candidate-row-RIOT')).toHaveTextContent(/价格低于阈值|Price below threshold/);
+    expect(screen.getByTestId('scanner-candidate-row-CIFR')).toHaveTextContent(/数据不足|Data thin/);
   });
 
   it('keeps advanced scanner actions out of the default top toolbar and available in disclosure', async () => {
@@ -1675,6 +1682,9 @@ describe('UserScannerPage', () => {
     getRun.mockResolvedValue(themedRun);
     renderUserScannerPage();
 
+    expect(await screen.findByText(/基础扫描|Basic scan/i)).toBeInTheDocument();
+    expect(await screen.findByText(/高级参数|Advanced controls/i)).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-advanced-controls')).toHaveTextContent(/候选上限.*评估深度.*扫描范围|Candidate size.*evaluation depth.*scan scope/i);
     const advanced = await openAdvancedControls();
     fireEvent.click(within(advanced).getByRole('button', { name: /主题标的池|Theme universe/i }));
     const themeSelect = await screen.findByTestId('scanner-theme-select');
@@ -1692,9 +1702,13 @@ describe('UserScannerPage', () => {
     expect(selectedInspector).toHaveTextContent('WULF');
     expect(selectedInspector).toHaveTextContent(/入选|Selected/);
     expect(selectedInspector).toHaveTextContent('60/100');
-    expect(selectedInspector).toHaveTextContent('alpaca');
+    expect(selectedInspector).toHaveTextContent(/Alpaca/);
     expect(selectedInspector).toHaveTextContent(/为什么入选|Why selected/);
+    expect(selectedInspector).toHaveTextContent(/通过当前筛选条件|Passed current screening/);
+    expect(selectedInspector).not.toHaveTextContent(/^passed$/);
     expect(selectedInspector).toHaveTextContent(/主要风险|Main risks/);
+    expect(selectedInspector).toHaveTextContent(/评分不算强信号|Score is not a strong signal/);
+    expect(selectedInspector).toHaveTextContent(/本次只有 1 个候选，样本偏窄|Only one selected candidate/);
     expect(selectedInspector).toHaveTextContent(/下一步|Next steps/);
 
     fireEvent.click(screen.getByRole('button', { name: /候选池|Candidate pool/i }));
@@ -1703,14 +1717,14 @@ describe('UserScannerPage', () => {
     expect(await screen.findByTestId('scanner-candidate-inspector')).toHaveTextContent('MARA');
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent(/淘汰|Rejected/);
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('55/100');
-    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('missing momentum threshold');
+    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent(/流动性不足|Liquidity weak/);
 
     fireEvent.click(screen.getByRole('button', { name: /数据失败|Data failed/i }));
     fireEvent.click(await screen.findByTestId('scanner-candidate-row-CIFR'));
 
     expect(await screen.findByTestId('scanner-candidate-inspector')).toHaveTextContent('CIFR');
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent(/数据失败|Data failed/);
-    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('history');
+    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent(/数据不足|Data thin/);
     expect(screen.getByTestId('scanner-mobile-candidate-inspector')).toBeInTheDocument();
   });
 
@@ -1722,9 +1736,12 @@ describe('UserScannerPage', () => {
     const inspector = await screen.findByTestId('scanner-candidate-inspector');
     expect(within(inspector).getByRole('button', { name: /展开.*规则诊断|Expand.*Rule diagnostics/i })).toBeInTheDocument();
     expect(within(inspector).getByRole('button', { name: /展开.*数据质量|Expand.*Data quality/i })).toBeInTheDocument();
+    expect(within(inspector).getByRole('button', { name: /展开.*开发者字段|Expand.*Developer fields/i })).toBeInTheDocument();
 
     fireEvent.click(within(inspector).getByRole('button', { name: /展开.*规则诊断|Expand.*Rule diagnostics/i }));
     expect(within(inspector).getAllByText(/passed/i).length).toBeGreaterThan(0);
+    fireEvent.click(within(inspector).getByRole('button', { name: /展开.*数据质量|Expand.*Data quality/i }));
+    expect(within(inspector).getAllByText(/Alpaca/).length).toBeGreaterThan(0);
   });
 
   it('filters scanner diagnostics by rejected and data-failed candidates', async () => {
@@ -1737,13 +1754,13 @@ describe('UserScannerPage', () => {
     expect(screen.getByText(/其余 10 个候选未入选|10 other candidates were not selected/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /淘汰|Rejected/i }));
-    expect(await screen.findByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/missing momentum threshold/);
-    expect(screen.getByTestId('scanner-candidate-row-RIOT')).toHaveTextContent(/below relative strength/);
+    expect(await screen.findByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/流动性不足|Liquidity weak/);
+    expect(screen.getByTestId('scanner-candidate-row-RIOT')).toHaveTextContent(/价格低于阈值|Price below threshold/);
     expect(screen.queryByTestId('scanner-candidate-row-CIFR')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /数据失败|Data failed/i }));
-    expect(await screen.findByTestId('scanner-candidate-row-CIFR')).toHaveTextContent(/missing price history/);
-    expect(screen.getByTestId('scanner-candidate-row-HIVE')).toHaveTextContent(/quote/);
+    expect(await screen.findByTestId('scanner-candidate-row-CIFR')).toHaveTextContent(/数据不足|Data thin/);
+    expect(screen.getByTestId('scanner-candidate-row-HIVE')).toHaveTextContent(/实时缺失|Realtime missing/);
     expect(screen.queryByTestId('scanner-candidate-row-MARA')).not.toBeInTheDocument();
   });
 
