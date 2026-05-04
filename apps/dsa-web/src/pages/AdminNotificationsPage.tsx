@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BellRing, CheckCircle2, Power, Send, Trash2, Webhook } from 'lucide-react';
+import { BellRing, CheckCircle2, Power, Send, ShieldCheck, Trash2, Webhook } from 'lucide-react';
 import {
   adminNotificationsApi,
   type NotificationChannel,
@@ -179,27 +179,56 @@ function channelTarget(channel: NotificationChannel, language: 'zh' | 'en'): str
       ? `${language === 'en' ? 'Existing system channel' : '已有系统通道'}: ${systemChannel}`
       : (language === 'en' ? 'Existing system channel' : '已有系统通道');
   }
-  const url = channel.config.webhookUrl || channel.config.webhook_url;
-  return typeof url === 'string' && url ? url : (language === 'en' ? 'Webhook target hidden' : 'Webhook 目标已隐藏');
-}
-
-function channelToken(channel: NotificationChannel): string | null {
-  const token = channel.config.token || channel.config.secret;
-  return typeof token === 'string' && token ? token : null;
+  return language === 'en' ? 'Webhook target masked' : 'Webhook 目标已脱敏';
 }
 
 function eventTypesText(channel: NotificationChannel, language: 'zh' | 'en'): string {
   return channel.eventTypes.length ? channel.eventTypes.join(', ') : (language === 'en' ? 'All event types' : '全部事件类型');
 }
 
-function deliveryStatusLabel(status: string, language: 'zh' | 'en'): string {
+function statusLabel(status: string | null | undefined, language: 'zh' | 'en'): string {
   const normalized = String(status || '').toLowerCase();
-  if (normalized === 'delivered') return language === 'en' ? 'Delivered' : '已投递';
-  if (normalized === 'partial') return language === 'en' ? 'Partially delivered' : '部分投递';
-  if (normalized === 'failed') return language === 'en' ? 'Delivery failed' : '投递失败';
-  if (normalized === 'no_channels') return language === 'en' ? 'No matching channels' : '无匹配通道';
-  if (normalized === 'pending') return language === 'en' ? 'Pending' : '待处理';
-  return status;
+  if (normalized === 'success' || normalized === 'delivered') return language === 'en' ? 'Success' : '成功';
+  if (normalized === 'failed' || normalized === 'error') return language === 'en' ? 'Failed' : '失败';
+  if (normalized === 'partial') return language === 'en' ? 'Partial' : '部分成功';
+  if (normalized === 'pending') return language === 'en' ? 'Pending' : '等待中';
+  if (normalized === 'disabled') return language === 'en' ? 'Disabled' : '已停用';
+  if (normalized === 'no_channels') return language === 'en' ? 'Unconfigured' : '未配置';
+  if (normalized === 'provider_down') return language === 'en' ? 'Provider down' : '服务异常';
+  if (normalized === 'provider_error') return language === 'en' ? 'Channel error' : '通道异常';
+  if (normalized === 'unknown' || !normalized) return language === 'en' ? 'Unknown' : '未确认';
+  return language === 'en' ? status || 'Unknown' : '未确认';
+}
+
+function statusTone(status: string | null | undefined): string {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized === 'success' || normalized === 'delivered') return 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100';
+  if (normalized === 'failed' || normalized === 'error' || normalized === 'provider_error' || normalized === 'provider_down') return 'border-rose-300/25 bg-rose-500/10 text-rose-100';
+  if (normalized === 'pending' || normalized === 'partial') return 'border-amber-300/25 bg-amber-400/10 text-amber-100';
+  if (normalized === 'disabled' || normalized === 'no_channels') return 'border-white/10 bg-white/[0.03] text-white/45';
+  return 'border-cyan-300/20 bg-cyan-400/10 text-cyan-100';
+}
+
+function coverageLabel(channel: NotificationChannel, language: 'zh' | 'en'): string {
+  return `${language === 'en' ? 'Min level' : '最低级别'} ${severityLabel(channel.severityMin, language)} · ${eventTypesText(channel, language)}`;
+}
+
+function failureSummaryLabel(channel: NotificationChannel, deliveryError: StatusNotice | null, language: 'zh' | 'en'): string {
+  if (deliveryError?.message) return deliveryError.message;
+  const summary = String(channel.lastErrorSummary || '').toLowerCase();
+  if (!summary) return language === 'en' ? 'No failure recorded' : '暂无失败记录';
+  if (summary.includes('ssl')) return language === 'en' ? 'SSL certificate verification failed' : 'SSL 证书校验失败';
+  if (summary.includes('timeout')) return language === 'en' ? 'Webhook delivery timed out' : 'Webhook 投递超时';
+  if (summary.includes('webhook')) return language === 'en' ? 'Webhook delivery failed' : 'Webhook 投递失败';
+  return language === 'en' ? channel.lastErrorSummary || 'Failed' : '失败';
+}
+
+function scopeLabel(channel: NotificationChannel, language: 'zh' | 'en'): string {
+  const scope = String(channel.routeScope || 'log_notification_association');
+  if (scope === 'log_notification_association') {
+    return language === 'en' ? 'Log notification route' : '日志通知路由';
+  }
+  return language === 'en' ? 'Notification route' : '通知路由';
 }
 
 function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
@@ -222,6 +251,31 @@ const AdminNotificationsPage: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<StatusNotice | null>(null);
   const [error, setError] = useState<ParsedApiError | null>(null);
+
+  const routeSummary = useMemo(() => {
+    const enabledRoutes = channels.filter((channel) => channel.enabled).length;
+    const disabledRoutes = channels.filter((channel) => !channel.enabled).length;
+    const missingTargets = channels.filter((channel) => String(channel.targetSummary || '').includes('unconfigured')).length;
+    const grouped = channels.reduce<Record<string, number>>((acc, channel) => {
+      const key = channel.type === 'system_channel'
+        ? `${text('Existing', '已有通道')}:${String(channel.config.channel || text('Unconfigured', '未配置'))}`
+        : channel.type === 'webhook'
+          ? text('Webhook route', 'Webhook 路由')
+          : text('In-app route', '站内路由');
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    const categories = Array.from(new Set(channels.flatMap((channel) => (
+      channel.eventTypes.length ? channel.eventTypes : [text('All event types', '全部事件类型')]
+    ))));
+    return {
+      enabledRoutes,
+      disabledRoutes,
+      missingTargets,
+      grouped,
+      categories,
+    };
+  }, [channels, text]);
 
   const loadAll = useCallback(async () => {
     setIsLoading(true);
@@ -323,18 +377,23 @@ const AdminNotificationsPage: React.FC = () => {
     }
   }, [loadAll]);
 
-  const testChannel = useCallback(async (channelId: number) => {
+  const testChannel = useCallback(async (channelId: number, dryRun: boolean) => {
     setBusyId(channelId);
     setNotice(null);
     try {
-      const response = await adminNotificationsApi.testChannel(channelId);
+      const response = await adminNotificationsApi.testChannel(channelId, { dryRun });
       if (response.success) {
-        setNotice({ tone: 'success', message: text('Test notification accepted.', '测试通知已发送。') });
+        setNotice({
+          tone: 'success',
+          message: dryRun
+            ? text('Dry run passed. No notification was sent.', '试运行通过，未发送真实通知。')
+            : text('Test notification accepted.', '测试通知已发送。'),
+        });
       } else {
         const failure = formatDeliveryError(language as 'zh' | 'en', response.error, response.errorCode, response.diagnostics);
         setNotice(failure || {
           tone: 'danger',
-          message: text('Test notification failed.', '测试通知失败。'),
+          message: dryRun ? text('Dry run failed.', '试运行失败。') : text('Test notification failed.', '测试通知失败。'),
           rawMessage: response.error || null,
         });
       }
@@ -347,11 +406,21 @@ const AdminNotificationsPage: React.FC = () => {
   }, [language, loadAll, text]);
 
   const deleteChannel = useCallback(async (channelId: number) => {
+    const confirmed = window.confirm(text(
+      'Remove only this log notification route association? The configured system channel and credentials will not be deleted.',
+      '仅解除日志路由绑定？这不会删除系统通道或已配置凭据。',
+    ));
+    if (!confirmed) return;
     setBusyId(channelId);
     setNotice(null);
     try {
-      await adminNotificationsApi.deleteChannel(channelId);
-      setNotice({ tone: 'success', message: text('Log notification route removed.', '日志通知关联已移除。') });
+      const response = await adminNotificationsApi.deleteChannel(channelId);
+      setNotice({
+        tone: 'success',
+        message: response.deletedScope === 'log_notification_association'
+          ? text('Only the log notification route binding was removed. The system channel remains configured.', '仅解除日志路由绑定；系统通道仍保留。')
+          : text('Log notification route removed.', '日志通知关联已移除。'),
+      });
       await loadAll();
     } catch (err) {
       setError(getParsedApiError(err));
@@ -407,13 +476,56 @@ const AdminNotificationsPage: React.FC = () => {
           {notice.rawMessage && notice.rawMessage !== notice.message ? (
             <details className="mt-2 rounded-md border border-white/10 bg-black/10 px-2 py-1">
               <summary className="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-secondary-text">
-                {text('View raw diagnostic', '查看原始诊断')}
+                {text('Developer details', '开发者细节')}
               </summary>
               <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] leading-5 text-secondary-text">{notice.rawMessage}</pre>
             </details>
           ) : null}
         </div>
       ) : null}
+
+      <GlassCard as="section" className="p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">{text('Route coverage', '路由覆盖')}</h2>
+            <p className="mt-1 text-xs text-muted-text">
+              {channels.length
+                ? text('Log notification rules mapped to safe operator channels.', '日志通知规则与安全运维通道的覆盖情况。')
+                : text('No rules exist yet.', '暂无通知规则。')}
+            </p>
+          </div>
+          <ShieldCheck className="h-4 w-4 text-emerald-100/70" />
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+          {[
+            { label: text('Enabled', '已启用'), value: routeSummary.enabledRoutes, tone: 'text-emerald-100' },
+            { label: text('Configured channels', '已配置通道'), value: channels.length, tone: 'text-white' },
+            { label: text('Disabled', '已停用'), value: routeSummary.disabledRoutes, tone: 'text-white/55' },
+            { label: text('Unconfigured', '未配置'), value: routeSummary.missingTargets, tone: routeSummary.missingTargets ? 'text-amber-100' : 'text-white/55' },
+          ].map((item) => (
+            <div key={item.label} className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
+              <p className="text-[11px] font-semibold text-muted-text">{item.label}</p>
+              <p className={cn('mt-2 text-xl font-semibold', item.tone)}>{item.value}</p>
+            </div>
+          ))}
+        </div>
+        {channels.length ? (
+          <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
+              <p className="text-[11px] font-semibold text-muted-text">{text('Grouped routes', '路由分组')}</p>
+              <p className="mt-2 break-words text-xs leading-5 text-secondary-text">
+                {Object.entries(routeSummary.grouped).map(([label, count]) => `${label} × ${count}`).join(' · ')}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
+              <p className="text-[11px] font-semibold text-muted-text">{text('Covered events', '覆盖事件')}</p>
+              <p className="mt-2 break-words text-xs leading-5 text-secondary-text">
+                {routeSummary.categories.join(' · ')}
+              </p>
+            </div>
+          </div>
+        ) : null}
+      </GlassCard>
 
       <section className="grid min-h-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
         <GlassCard as="form" className="space-y-3 p-4" onSubmit={(event) => {
@@ -437,7 +549,7 @@ const AdminNotificationsPage: React.FC = () => {
             <span className="text-xs font-semibold text-secondary-text">{text('Channel type', '通道类型')}</span>
             <select
               aria-label={text('Channel type', '通道类型')}
-              className="input-surface h-9 w-full rounded-lg px-3 text-sm"
+              className="input-surface h-9 w-full appearance-none rounded-lg px-3 pr-10 text-sm truncate"
               value={draft.type}
               onChange={(event) => setDraft((current) => ({ ...current, type: event.target.value as NotificationChannelType }))}
             >
@@ -450,7 +562,7 @@ const AdminNotificationsPage: React.FC = () => {
             <span className="text-xs font-semibold text-secondary-text">{text('Minimum severity', '最低严重级别')}</span>
             <select
               aria-label={text('Minimum severity', '最低严重级别')}
-              className="input-surface h-9 w-full rounded-lg px-3 text-sm"
+              className="input-surface h-9 w-full appearance-none rounded-lg px-3 pr-10 text-sm truncate"
               value={draft.severityMin}
               onChange={(event) => setDraft((current) => ({ ...current, severityMin: event.target.value as NotificationSeverity }))}
             >
@@ -474,7 +586,7 @@ const AdminNotificationsPage: React.FC = () => {
               <span className="text-xs font-semibold text-secondary-text">{text('Existing notification channel', '已有通知通道')}</span>
               <select
                 aria-label={text('Existing notification channel', '已有通知通道')}
-                className="input-surface h-9 w-full rounded-lg px-3 text-sm"
+                className="input-surface h-9 w-full appearance-none rounded-lg px-3 pr-10 text-sm truncate"
                 value={draft.systemChannel}
                 onChange={(event) => setDraft((current) => ({ ...current, systemChannel: event.target.value }))}
               >
@@ -514,6 +626,7 @@ const AdminNotificationsPage: React.FC = () => {
           <label className="flex items-center gap-2 text-xs font-semibold text-secondary-text">
             <input
               type="checkbox"
+              className="h-4 w-4 rounded border border-white/15 bg-white/[0.03] accent-emerald-400"
               checked={draft.enabled}
               onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}
             />
@@ -529,8 +642,8 @@ const AdminNotificationsPage: React.FC = () => {
           <GlassCard as="section" className="min-h-0 p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold text-foreground">{text('Channels', '通知通道')}</h2>
-                <p className="mt-1 text-xs text-muted-text">{text(`${channels.length} configured routes`, `${channels.length} 个已配置通道`)}</p>
+                <h2 className="text-sm font-semibold text-foreground">{text('Notification rules', '通知规则')}</h2>
+                <p className="mt-1 text-xs text-muted-text">{text(`${channels.length} configured routes`, `${channels.length} 条已配置路由`)}</p>
               </div>
               <BellRing className="h-4 w-4 text-emerald-100/70" />
             </div>
@@ -540,46 +653,55 @@ const AdminNotificationsPage: React.FC = () => {
                   const deliveryError = formatDeliveryError(language as 'zh' | 'en', channel.lastError, channel.lastErrorCode, channel.lastErrorDiagnostics);
 
                   return (
-                  <div key={channel.id} data-testid={`notification-channel-${channel.id}`} className="grid gap-3 px-3 py-3 md:grid-cols-[minmax(9rem,1fr)_minmax(12rem,1.2fr)_8rem_9rem_13rem] md:items-center">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{channel.name}</p>
-                      <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-text">
-                        {channel.type === 'webhook' ? <Webhook className="h-3 w-3" /> : <BellRing className="h-3 w-3" />}
-                        {channel.type === 'system_channel'
-                          ? text('Existing channel', '已有通道')
-                          : channel.type === 'webhook'
-                            ? text('Webhook', 'Webhook')
-                            : text('In-app', '站内')}
+                  <div key={channel.id} data-testid={`notification-channel-${channel.id}`} className="grid gap-3 px-3 py-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(16rem,1.4fr)_minmax(11rem,0.8fr)_minmax(13rem,0.9fr)] lg:items-start">
+                    <div className="min-w-0 space-y-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{channel.name}</p>
+                        <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-text">
+                          {channel.type === 'webhook' ? <Webhook className="h-3 w-3" /> : <BellRing className="h-3 w-3" />}
+                          {scopeLabel(channel, language as 'zh' | 'en')} · {channel.type === 'system_channel'
+                            ? text('Existing channel', '已有通道')
+                            : channel.type === 'webhook'
+                              ? text('Webhook', 'Webhook')
+                              : text('In-app', '站内')}
+                        </p>
+                      </div>
+                      <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold', channel.enabled ? 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100' : 'border-white/10 bg-white/[0.03] text-white/45')}>
+                        {channel.enabled ? text('Active', '已启用') : text('Disabled', '已停用')}
+                      </span>
+                    </div>
+                    <div className="min-w-0 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
+                      <p className="text-[11px] font-semibold text-muted-text">{text('Route coverage', '路由覆盖')}</p>
+                      <p className="mt-1 break-words text-xs leading-5 text-secondary-text">{coverageLabel(channel, language as 'zh' | 'en')}</p>
+                      <p className="mt-2 text-[11px] font-semibold text-muted-text">{text('Destination', '目标通道')}</p>
+                      <p className="mt-1 break-words text-xs leading-5 text-secondary-text">{channelTarget(channel, language as 'zh' | 'en')}</p>
+                    </div>
+                    <div className="min-w-0 space-y-2 text-[11px] text-muted-text">
+                      <div>
+                        <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold', severityTone[channel.severityMin])}>
+                          {severityLabel(channel.severityMin, language as 'zh' | 'en')}
+                        </span>
+                      </div>
+                      <p>
+                        {text('Last trigger', '最近触发')}: <span className="text-secondary-text">{formatDate(channel.lastTriggeredAt || channel.lastSentAt)}</span>
+                      </p>
+                      <p>
+                        {text('Last status', '最近状态')}: <span className={cn('rounded-full border px-2 py-0.5', statusTone(channel.lastStatus))}>{statusLabel(channel.lastStatus, language as 'zh' | 'en')}</span>
+                      </p>
+                      <p>
+                        {text('Last failure', '最近失败')}: <span className="text-secondary-text">{failureSummaryLabel(channel, deliveryError, language as 'zh' | 'en')}</span>
                       </p>
                     </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-xs text-secondary-text" title={channelTarget(channel, language as 'zh' | 'en')}>{channelTarget(channel, language as 'zh' | 'en')}</p>
-                      {channelToken(channel) ? <p className="mt-1 truncate text-[11px] text-muted-text">{channelToken(channel)}</p> : null}
-                      <p className="mt-1 truncate text-[11px] text-muted-text">{eventTypesText(channel, language as 'zh' | 'en')}</p>
-                      {deliveryError ? (
-                        <div className="mt-2 space-y-1 text-[11px] leading-5 text-rose-100">
-                          <p className="truncate" title={channel.lastError || undefined}>
-                            {deliveryError.message}
-                          </p>
-                          {deliveryError.details?.length ? (
-                            <ul className="space-y-1 opacity-90">
-                              {deliveryError.details.slice(0, 2).map((detail) => (
-                                <li key={detail}>• {detail}</li>
-                              ))}
-                            </ul>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div>
-                      <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold', severityTone[channel.severityMin])}>{severityLabel(channel.severityMin, language as 'zh' | 'en')}</span>
-                      <p className={cn('mt-1 text-[11px]', channel.enabled ? 'text-emerald-100' : 'text-white/45')}>{channel.enabled ? text('Enabled', '已启用') : text('Disabled', '已禁用')}</p>
-                    </div>
-                    <div className="text-[11px] text-muted-text">
-                      <p>{text('Tested', '最近测试')}: {formatDate(channel.lastTestedAt)}</p>
-                      <p>{text('Sent', '最近投递')}: {formatDate(channel.lastSentAt)}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2 md:justify-end">
+                    <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
+                      <button
+                        type="button"
+                        className="btn-secondary h-8 rounded-lg px-3 text-xs"
+                        onClick={() => void testChannel(channel.id, true)}
+                        disabled={busyId === channel.id}
+                      >
+                        <ShieldCheck className="h-3 w-3" />
+                        {text('Dry run', '仅验证')}
+                      </button>
                       <button
                         type="button"
                         className="btn-secondary h-8 rounded-lg px-3 text-xs"
@@ -592,28 +714,29 @@ const AdminNotificationsPage: React.FC = () => {
                       <button
                         type="button"
                         className="btn-secondary h-8 rounded-lg px-3 text-xs"
-                        onClick={() => void testChannel(channel.id)}
+                        onClick={() => void testChannel(channel.id, false)}
                         disabled={busyId === channel.id}
                       >
                         <Send className="h-3 w-3" />
-                        {text('Test', '测试')}
+                        {text('Test send', '测试发送')}
                       </button>
-                      {channel.enabled ? (
-                        <button
-                          type="button"
-                          className="btn-secondary h-8 rounded-lg px-3 text-xs text-rose-100"
-                          onClick={() => void deleteChannel(channel.id)}
-                          disabled={busyId === channel.id}
-                          title={text('Remove this route from log notifications only', '仅从日志通知中移除此关联')}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                          {text('Delete', '删除')}
-                        </button>
-                      ) : null}
+                      <button
+                        type="button"
+                        className="btn-secondary h-8 rounded-lg px-3 text-xs text-rose-100"
+                        onClick={() => void deleteChannel(channel.id)}
+                        disabled={busyId === channel.id}
+                        title={text('Only unbind the log notification route; system channel is not deleted.', '仅解除日志路由绑定；不会删除系统通道。')}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        {text('Unbind', '解除绑定')}
+                      </button>
+                      <p className="basis-full text-[11px] leading-4 text-muted-text lg:text-right">
+                        {text('Only removes the log route binding. The system channel is not deleted.', '仅解除日志路由绑定，不会删除系统通道。')}
+                      </p>
                     </div>
                   </div>
                 ); }) : (
-                  <p className="px-3 py-6 text-sm text-muted-text">{text('No notification channels configured.', '暂无通知通道。')}</p>
+                  <p className="px-3 py-6 text-sm text-muted-text">{text('No notification rules configured.', '暂无通知规则。')}</p>
                 )}
               </div>
             </div>
@@ -634,7 +757,7 @@ const AdminNotificationsPage: React.FC = () => {
                     <p className="text-xs text-secondary-text">{formatDate(event.createdAt)}</p>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-foreground">{event.title}</p>
-                      <p className="mt-1 truncate text-[11px] text-muted-text" title={displayEventMessage(event.message, language as 'zh' | 'en')}>{event.eventType} · {deliveryStatusLabel(event.deliveryStatus, language as 'zh' | 'en')}</p>
+                      <p className="mt-1 truncate text-[11px] text-muted-text" title={displayEventMessage(event.message, language as 'zh' | 'en')}>{event.eventType} · {statusLabel(event.deliveryStatus, language as 'zh' | 'en')}</p>
                     </div>
                     <div>
                       <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold', severityTone[event.severity])}>{severityLabel(event.severity, language as 'zh' | 'en')}</span>

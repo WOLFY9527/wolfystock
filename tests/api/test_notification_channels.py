@@ -9,7 +9,7 @@ import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
@@ -313,6 +313,45 @@ class NotificationChannelsTestCase(unittest.TestCase):
         self.assertEqual(len(self.delivery.webhook_calls), 1)
         self.assertEqual(self.delivery.webhook_calls[0]["url"], "https://hooks.example.test/test")
 
+    def test_channel_listing_includes_additive_route_status_metadata(self) -> None:
+        self.service.create_channel(
+            name="ops webhook",
+            type="webhook",
+            enabled=True,
+            severity_min="warning",
+            event_types=["admin_logs.event"],
+            config={"webhook_url": "https://hooks.example.test/test", "token": "secret-token"},
+        )
+
+        payload = self.service.list_channels()[0]
+
+        self.assertEqual(payload["route_scope"], "log_notification_association")
+        self.assertEqual(payload["coverage_summary"], "admin_logs.event; min_severity=warning")
+        self.assertEqual(payload["target_summary"], "webhook:configured")
+        self.assertEqual(payload["last_status"], "unknown")
+        self.assertNotIn("secret-token", str(payload))
+        self.assertNotIn("https://hooks.example.test/test", str(payload))
+
+    def test_dry_run_validates_channel_without_sending(self) -> None:
+        channel = self.service.create_channel(
+            name="ops webhook",
+            type="webhook",
+            enabled=True,
+            severity_min="warning",
+            event_types=[],
+            config={"webhook_url": "https://hooks.example.test/test"},
+        )
+
+        result = self.service.test_channel(channel["id"], dry_run=True)
+
+        self.assertTrue(result["success"])
+        self.assertTrue(result["dry_run"])
+        self.assertEqual(result["target_summary"], "webhook:configured")
+        self.assertEqual(self.delivery.webhook_calls, [])
+        listed = self.service.list_channels()[0]
+        self.assertIsNotNone(listed["last_tested_at"])
+        self.assertIsNone(listed["last_sent_at"])
+
     def test_delivery_failure_is_recorded_not_raised(self) -> None:
         failing = NotificationService(db=self.db, delivery_client=FakeDeliveryClient(fail=True))
         failing.create_channel(
@@ -380,6 +419,18 @@ class NotificationChannelsTestCase(unittest.TestCase):
             channels = failing.list_channels()
             self.assertEqual(channels[0]["last_error_code"], "ssl_certificate_verify_failed")
             self.assertIn("CERTIFICATE_VERIFY_FAILED", channels[0]["last_error"])
+
+    def test_test_channel_missing_route_returns_clean_error(self) -> None:
+        with patch("api.v1.endpoints.admin_notifications.NotificationService", return_value=self.service), self.assertRaises(HTTPException) as raised:
+            admin_notifications.test_notification_channel(
+                channel_id=404,
+                request=SimpleNamespace(headers={"accept-language": "zh-CN"}),
+                dry_run=True,
+                _=_admin_user(),
+            )
+
+        self.assertEqual(raised.exception.status_code, 404)
+        self.assertEqual(raised.exception.detail["error"], "not_found")
 
     def test_notification_event_dedupe_window_returns_existing_event(self) -> None:
         first = self.service.emit_event(

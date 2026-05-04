@@ -209,6 +209,18 @@ def _classify_delivery_error(message: Any) -> Dict[str, Any]:
     }
 
 
+def _error_summary(message: Any) -> Optional[str]:
+    classification = _classify_delivery_error(message)
+    code = classification.get("code")
+    if code == "ssl_certificate_verify_failed":
+        return "SSL certificate verification failed"
+    if code == "webhook_timeout":
+        return "Webhook delivery timed out"
+    if code == "webhook_delivery_failed":
+        return "Webhook delivery failed"
+    return None
+
+
 class NotificationService:
     """CRUD, test delivery, event emission, and acknowledgement."""
 
@@ -305,25 +317,34 @@ class NotificationService:
             row = self._get_channel_row(session, channel_id)
             session.delete(row)
 
-    def test_channel(self, channel_id: int) -> Dict[str, Any]:
+    def test_channel(self, channel_id: int, *, dry_run: bool = False) -> Dict[str, Any]:
         with self.db.session_scope() as session:
             row = self._get_channel_row(session, channel_id)
             now = _utcnow()
             try:
-                self._deliver_to_channel(
-                    row,
-                    {
-                        "event_type": "notification.test",
-                        "severity": "info",
-                        "title": "Test notification",
-                        "message": "Admin notification channel test",
-                        "payload": {},
-                    },
-                )
+                if dry_run:
+                    self._validate_channel_target(row)
+                else:
+                    self._deliver_to_channel(
+                        row,
+                        {
+                            "event_type": "notification.test",
+                            "severity": "info",
+                            "title": "Test notification",
+                            "message": "Admin notification channel test",
+                            "payload": {},
+                        },
+                    )
                 row.last_tested_at = now
-                row.last_sent_at = now
+                if not dry_run:
+                    row.last_sent_at = now
                 row.last_error = None
-                return {"success": True, "channel": self._channel_payload(row)}
+                return {
+                    "success": True,
+                    "dry_run": bool(dry_run),
+                    "target_summary": self._target_summary(row),
+                    "channel": self._channel_payload(row),
+                }
             except Exception as exc:
                 classification = _classify_delivery_error(exc)
                 row.last_tested_at = now
@@ -331,6 +352,8 @@ class NotificationService:
                 logger.warning("notification channel test failed: %s", exc)
                 return {
                     "success": False,
+                    "dry_run": bool(dry_run),
+                    "target_summary": self._target_summary(row),
                     "error": str(exc),
                     "error_code": classification["code"],
                     "diagnostics": classification["diagnostics"],
@@ -524,6 +547,18 @@ class NotificationService:
             return
         raise ValueError(f"unsupported channel type: {channel.type}")
 
+    def _validate_channel_target(self, channel: NotificationChannel) -> None:
+        config = _safe_json_loads(channel.config_json, {})
+        if channel.type == "in_app":
+            return
+        if channel.type == "webhook":
+            _validate_webhook_url(config.get("webhook_url"))
+            return
+        if channel.type == "system_channel":
+            _normalize_system_channel(config.get("channel"))
+            return
+        raise ValueError(f"unsupported channel type: {channel.type}")
+
     def _format_system_channel_message(self, payload: Dict[str, Any]) -> str:
         severity = str(payload.get("severity") or "info").upper()
         event_type = str(payload.get("event_type") or "")
@@ -596,6 +631,7 @@ class NotificationService:
     def _channel_payload(self, row: NotificationChannel) -> Dict[str, Any]:
         config = _safe_json_loads(row.config_json, {})
         error_classification = _classify_delivery_error(row.last_error)
+        last_status = self._last_status(row)
         return {
             "id": row.id,
             "name": row.name,
@@ -604,14 +640,47 @@ class NotificationService:
             "severity_min": row.severity_min,
             "event_types": _safe_json_loads(row.event_types_json, []),
             "config": _mask_config(config),
+            "route_scope": "log_notification_association",
+            "coverage_summary": self._coverage_summary(row),
+            "target_summary": self._target_summary(row),
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
             "last_tested_at": row.last_tested_at.isoformat() if row.last_tested_at else None,
+            "last_triggered_at": row.last_sent_at.isoformat() if row.last_sent_at else None,
             "last_sent_at": row.last_sent_at.isoformat() if row.last_sent_at else None,
+            "last_status": last_status,
             "last_error": row.last_error,
+            "last_error_summary": _error_summary(row.last_error),
             "last_error_code": error_classification["code"],
             "last_error_diagnostics": error_classification["diagnostics"],
         }
+
+    def _coverage_summary(self, row: NotificationChannel) -> str:
+        event_types = _safe_json_loads(row.event_types_json, [])
+        events = ", ".join(str(item) for item in event_types if str(item).strip()) or "all_events"
+        return f"{events}; min_severity={row.severity_min}"
+
+    def _target_summary(self, row: NotificationChannel) -> str:
+        config = _safe_json_loads(row.config_json, {})
+        if row.type == "in_app":
+            return "in_app_admin_inbox"
+        if row.type == "system_channel":
+            channel = str(config.get("channel") or "").strip().lower()
+            return f"system_channel:{channel}" if channel else "system_channel:unconfigured"
+        if row.type == "webhook":
+            return "webhook:configured" if config.get("webhook_url") else "webhook:unconfigured"
+        return "unknown"
+
+    def _last_status(self, row: NotificationChannel) -> str:
+        if not bool(row.enabled):
+            return "disabled"
+        if row.last_error:
+            return "failed"
+        if row.last_sent_at:
+            return "success"
+        if row.last_tested_at:
+            return "success"
+        return "unknown"
 
     def _event_payload(self, row: NotificationEvent) -> Dict[str, Any]:
         return {

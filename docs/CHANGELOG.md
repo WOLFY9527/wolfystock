@@ -1,5 +1,7 @@
 ## 2026-05-04
 
+- 🔔 **Admin Notification Rules 运维视图增强** — `/admin/notifications` 新增路由覆盖摘要、规则分组、覆盖事件、最近触发/失败状态和明确的“仅解除日志路由绑定”删除文案；测试发送拆出“仅验证/试运行”和真实测试发送，试运行只校验目标配置不会发送通知。后端通知规则列表补充安全的 coverage/status/target 摘要字段，并为测试接口增加 `dry_run=true`，继续保持删除规则只移除 `log_notification_association`，不删除系统通知通道或凭据。
+
 - 🦆 **DuckDB Quant Engine Phase 1.5（验证层）** — 可选 DuckDB quant engine 新增显式 OHLCV ingest、`StockDaily` 本地存储 bounded ingest、`factor_daily` 基础日频因子构建、coverage 报告与 richer benchmark metadata。新增 `/api/v1/quant/duckdb/ingest-ohlcv`、`build-factors`、`coverage`，并增强 `benchmark` 返回 `durationMs / rowsScanned / symbolsScanned / dataMode / topResults`。DuckDB 继续默认 `QUANT_DUCKDB_ENABLED=false`，禁用时不会创建数据库文件；PostgreSQL 仍是业务数据库，不使用 `pg_duckdb`，不改变 scanner selection、backtest 计算、Portfolio accounting、AI 决策或通知路由。
 
 - 🦆 **DuckDB Quant Engine Phase 1（可选骨架）** — 新增只读 DuckDB quant analytics skeleton：`QuantDuckDBService` 可显式初始化 `ohlcv_daily / factor_daily`、写入小批量 OHLCV 样本、用 SQL window function 生成 MA/momentum/volatility/dollar-volume 基础因子，并通过管理员接口 `/api/v1/quant/duckdb/health|init|benchmark` 返回安全 health 与 benchmark 计数。DuckDB 默认 `QUANT_DUCKDB_ENABLED=false`、懒加载依赖且不参与 app startup；PostgreSQL 仍是业务数据库，现有 Python backtest、scanner selection、backtest 计算与 Portfolio accounting 均不接入也不改变。

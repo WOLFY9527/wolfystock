@@ -12,11 +12,17 @@ export interface NotificationChannel {
   severityMin: NotificationSeverity;
   eventTypes: string[];
   config: Record<string, unknown>;
+  routeScope?: string;
+  coverageSummary?: string;
+  targetSummary?: string;
   createdAt?: string | null;
   updatedAt?: string | null;
   lastTestedAt?: string | null;
+  lastTriggeredAt?: string | null;
   lastSentAt?: string | null;
+  lastStatus?: string | null;
   lastError?: string | null;
+  lastErrorSummary?: string | null;
   lastErrorCode?: string | null;
   lastErrorDiagnostics?: Record<string, unknown>;
 }
@@ -58,10 +64,17 @@ export interface NotificationEventListResponse {
 
 export interface NotificationChannelTestResult {
   success: boolean;
+  dryRun?: boolean;
+  targetSummary?: string;
   error?: string | null;
   errorCode?: string | null;
   diagnostics?: Record<string, unknown>;
   channel: NotificationChannel;
+}
+
+export interface NotificationChannelDeleteResult {
+  success: boolean;
+  deletedScope?: string;
 }
 
 function toApiPayload(payload: Partial<NotificationChannelPayload>) {
@@ -123,17 +136,26 @@ export const adminNotificationsApi = {
     return normalizeChannel(response.data);
   },
 
-  async deleteChannel(channelId: number): Promise<void> {
-    await apiClient.delete(`/api/v1/admin/notification-channels/${encodeURIComponent(String(channelId))}`);
+  async deleteChannel(channelId: number): Promise<NotificationChannelDeleteResult> {
+    const response = await apiClient.delete<Record<string, unknown>>(`/api/v1/admin/notification-channels/${encodeURIComponent(String(channelId))}`);
+    const normalized = toCamelCase<NotificationChannelDeleteResult>(response.data || {});
+    return {
+      success: Boolean(normalized.success),
+      deletedScope: normalized.deletedScope ? String(normalized.deletedScope) : undefined,
+    };
   },
 
-  async testChannel(channelId: number): Promise<NotificationChannelTestResult> {
+  async testChannel(channelId: number, options?: { dryRun?: boolean }): Promise<NotificationChannelTestResult> {
     const response = await apiClient.post<Record<string, unknown>>(
       `/api/v1/admin/notification-channels/${encodeURIComponent(String(channelId))}/test`,
+      undefined,
+      { params: options?.dryRun ? { dry_run: true } : undefined },
     );
     const normalized = toCamelCase<NotificationChannelTestResult & { channel: Record<string, unknown> }>(response.data);
     return {
       success: Boolean(normalized.success),
+      dryRun: Boolean(normalized.dryRun),
+      targetSummary: normalized.targetSummary ? String(normalized.targetSummary) : '',
       error: normalized.error || null,
       errorCode: normalized.errorCode || null,
       diagnostics: normalized.diagnostics && typeof normalized.diagnostics === 'object' ? normalized.diagnostics : {},

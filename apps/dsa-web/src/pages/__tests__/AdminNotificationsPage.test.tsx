@@ -53,7 +53,9 @@ const channels = [
     createdAt: '2026-05-02T08:00:00Z',
     updatedAt: '2026-05-02T08:00:00Z',
     lastTestedAt: null,
+    lastTriggeredAt: '2026-05-02T08:20:00Z',
     lastSentAt: '2026-05-02T08:20:00Z',
+    lastStatus: 'success',
     lastError: null,
   },
   {
@@ -67,11 +69,18 @@ const channels = [
       webhookUrl: 'https://hooks.example.test/***',
       token: '********',
     },
+    routeScope: 'log_notification_association',
+    coverageSummary: 'admin_logs.storage; min_severity=warning',
+    targetSummary: 'webhook:configured',
     createdAt: '2026-05-02T08:00:00Z',
     updatedAt: '2026-05-02T08:00:00Z',
     lastTestedAt: '2026-05-02T08:15:00Z',
+    lastTriggeredAt: '2026-05-02T08:20:00Z',
     lastSentAt: '2026-05-02T08:20:00Z',
-    lastError: null,
+    lastStatus: 'provider_down',
+    lastError: 'provider_down: webhook provider unavailable',
+    lastErrorSummary: 'Webhook delivery failed',
+    lastErrorCode: 'webhook_delivery_failed',
   },
 ];
 
@@ -99,19 +108,33 @@ describe('AdminNotificationsPage', () => {
     listNotifications.mockResolvedValue({ total: 1, limit: 100, offset: 0, items: notifications });
     createChannel.mockResolvedValue(channels[1]);
     updateChannel.mockResolvedValue({ ...channels[1], enabled: false });
-    deleteChannel.mockResolvedValue(undefined);
-    testChannel.mockResolvedValue({ success: true, channel: channels[1] });
+    deleteChannel.mockResolvedValue({ success: true, deletedScope: 'log_notification_association' });
+    testChannel.mockResolvedValue({ success: true, dryRun: false, channel: channels[1] });
     acknowledgeNotification.mockResolvedValue({ ...notifications[0], acknowledgedAt: '2026-05-02T08:30:00Z' });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
-  it('renders notification channel list with masked webhook and token fields', async () => {
+  it('renders notification rule coverage summary in chinese', async () => {
+    uiLanguageState.current = 'zh';
+    render(<AdminNotificationsPage />);
+
+    expect(await screen.findByText('路由覆盖')).toBeInTheDocument();
+    expect(screen.getByText('通知规则')).toBeInTheDocument();
+    expect(screen.getAllByText('已启用').length).toBeGreaterThan(0);
+    expect(screen.getByText('已配置通道')).toBeInTheDocument();
+    expect(screen.getByText('覆盖事件')).toBeInTheDocument();
+    expect(screen.getAllByText(/admin_logs\.storage/).length).toBeGreaterThan(0);
+  });
+
+  it('renders notification channel list without exposing webhook urls or tokens', async () => {
     render(<AdminNotificationsPage />);
 
     expect(await screen.findByText('Ops inbox')).toBeInTheDocument();
     const webhookRow = screen.getByTestId('notification-channel-2');
     expect(within(webhookRow).getByText('Ops webhook')).toBeInTheDocument();
-    expect(within(webhookRow).getByText('https://hooks.example.test/***')).toBeInTheDocument();
-    expect(within(webhookRow).getByText('********')).toBeInTheDocument();
+    expect(within(webhookRow).getByText('Webhook target masked')).toBeInTheDocument();
+    expect(screen.queryByText('https://hooks.example.test/***')).not.toBeInTheDocument();
+    expect(screen.queryByText('********')).not.toBeInTheDocument();
   });
 
   it('renders localized chinese page copy when the ui language is zh', async () => {
@@ -121,10 +144,20 @@ describe('AdminNotificationsPage', () => {
     expect(await screen.findByText('管理员通知')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '刷新' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '创建通道' })).toBeInTheDocument();
-    expect(screen.getByText('通知通道')).toBeInTheDocument();
+    expect(screen.getByText('通知规则')).toBeInTheDocument();
     expect(screen.getByText('通知事件')).toBeInTheDocument();
     expect(screen.getAllByText('严重').length).toBeGreaterThan(0);
     expect(screen.queryByText('critical')).not.toBeInTheDocument();
+  });
+
+  it('maps raw statuses to chinese in default rule UI', async () => {
+    uiLanguageState.current = 'zh';
+    render(<AdminNotificationsPage />);
+
+    const webhookRow = await screen.findByTestId('notification-channel-2');
+    expect(within(webhookRow).getByText('服务异常')).toBeInTheDocument();
+    expect(within(webhookRow).getByText('Webhook 投递失败。')).toBeInTheDocument();
+    expect(screen.queryByText('provider_down')).not.toBeInTheDocument();
   });
 
   it('validates required create form fields before submitting', async () => {
@@ -181,24 +214,41 @@ describe('AdminNotificationsPage', () => {
     render(<AdminNotificationsPage />);
 
     const webhookRow = await screen.findByTestId('notification-channel-2');
-    fireEvent.click(within(webhookRow).getByRole('button', { name: 'Test' }));
+    fireEvent.click(within(webhookRow).getByRole('button', { name: 'Test send' }));
 
     await waitFor(() => {
-      expect(testChannel).toHaveBeenCalledWith(2);
+      expect(testChannel).toHaveBeenCalledWith(2, { dryRun: false });
       expect(listChannels).toHaveBeenCalledTimes(2);
     });
   });
 
-  it('deletes only the log notification association for a configured channel', async () => {
+  it('dry-runs a channel and shows that no notification was sent', async () => {
+    uiLanguageState.current = 'zh';
+    testChannel.mockResolvedValueOnce({ success: true, dryRun: true, targetSummary: 'webhook:configured', channel: channels[1] });
     render(<AdminNotificationsPage />);
 
     const webhookRow = await screen.findByTestId('notification-channel-2');
-    fireEvent.click(within(webhookRow).getByRole('button', { name: 'Delete' }));
+    fireEvent.click(within(webhookRow).getByRole('button', { name: '仅验证' }));
+
+    await waitFor(() => {
+      expect(testChannel).toHaveBeenCalledWith(2, { dryRun: true });
+    });
+    expect(await screen.findByText('试运行通过，未发送真实通知。')).toBeInTheDocument();
+  });
+
+  it('deletes only the log notification association for a configured channel', async () => {
+    uiLanguageState.current = 'zh';
+    render(<AdminNotificationsPage />);
+
+    const webhookRow = await screen.findByTestId('notification-channel-2');
+    expect(within(webhookRow).getByText('仅解除日志路由绑定，不会删除系统通道。')).toBeInTheDocument();
+    fireEvent.click(within(webhookRow).getByRole('button', { name: '解除绑定' }));
 
     await waitFor(() => {
       expect(deleteChannel).toHaveBeenCalledWith(2);
       expect(listChannels).toHaveBeenCalledTimes(2);
     });
+    expect(await screen.findByText('仅解除日志路由绑定；系统通道仍保留。')).toBeInTheDocument();
   });
 
   it('shows localized ssl delivery diagnostics when webhook verification fails', async () => {
@@ -217,7 +267,7 @@ describe('AdminNotificationsPage', () => {
     render(<AdminNotificationsPage />);
 
     const webhookRow = await screen.findByTestId('notification-channel-2');
-    fireEvent.click(within(webhookRow).getByRole('button', { name: '测试' }));
+    fireEvent.click(within(webhookRow).getByRole('button', { name: '测试发送' }));
 
     expect(await screen.findByText('Webhook SSL 证书校验失败。')).toBeInTheDocument();
     expect(
@@ -225,7 +275,8 @@ describe('AdminNotificationsPage', () => {
         (content, element) => element?.tagName?.toLowerCase() === 'li' && (element.textContent?.includes('请检查证书链。') ?? false),
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText('查看原始诊断')).toBeInTheDocument();
+    expect(screen.getByText('开发者细节')).toBeInTheDocument();
+    expect(screen.getByText('开发者细节').closest('details')).not.toHaveAttribute('open');
   });
 
   it('shows localized english ssl delivery diagnostics when webhook verification fails', async () => {
@@ -244,7 +295,7 @@ describe('AdminNotificationsPage', () => {
     render(<AdminNotificationsPage />);
 
     const webhookRow = await screen.findByTestId('notification-channel-2');
-    fireEvent.click(within(webhookRow).getByRole('button', { name: 'Test' }));
+    fireEvent.click(within(webhookRow).getByRole('button', { name: 'Test send' }));
 
     expect(await screen.findByText('Webhook SSL certificate verification failed.')).toBeInTheDocument();
     expect(
@@ -252,7 +303,7 @@ describe('AdminNotificationsPage', () => {
         (content, element) => element?.tagName?.toLowerCase() === 'li' && (element.textContent?.includes('Check the certificate chain.') ?? false),
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText('View raw diagnostic')).toBeInTheDocument();
+    expect(screen.getByText('Developer details')).toBeInTheDocument();
   });
 
   it('renders notifications with severity and acknowledge action', async () => {
@@ -268,5 +319,16 @@ describe('AdminNotificationsPage', () => {
       expect(acknowledgeNotification).toHaveBeenCalledWith(10);
       expect(listNotifications).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('renders compact chinese empty state when no rules exist', async () => {
+    uiLanguageState.current = 'zh';
+    listChannels.mockResolvedValueOnce({ items: [], availableSystemChannels: ['discord'] });
+    listNotifications.mockResolvedValueOnce({ total: 0, limit: 100, offset: 0, items: [] });
+
+    render(<AdminNotificationsPage />);
+
+    expect((await screen.findAllByText('暂无通知规则。')).length).toBeGreaterThan(0);
+    expect(screen.getByText('暂无通知事件。')).toBeInTheDocument();
   });
 });

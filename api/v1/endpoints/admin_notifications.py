@@ -204,10 +204,11 @@ def delete_notification_channel(
 def test_notification_channel(
     channel_id: int,
     request: Request,
+    dry_run: bool = Query(default=False),
     _: CurrentUser = Depends(require_admin_user),
 ):
     try:
-        result = NotificationService().test_channel(channel_id)
+        result = NotificationService().test_channel(channel_id, dry_run=(dry_run is True))
         if not result.get("success"):
             error_code = result.get("error_code")
             diagnostics = result.get("diagnostics") or {}

@@ -36,11 +36,17 @@ class NotificationChannelUpdateRequest(BaseModel):
 
 class NotificationChannelModel(NotificationChannelBase):
     id: int
+    route_scope: str = "log_notification_association"
+    coverage_summary: str = ""
+    target_summary: str = ""
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     last_tested_at: Optional[str] = None
+    last_triggered_at: Optional[str] = None
     last_sent_at: Optional[str] = None
+    last_status: str = "unknown"
     last_error: Optional[str] = None
+    last_error_summary: Optional[str] = None
     last_error_code: Optional[str] = None
     last_error_diagnostics: Dict[str, Any] = Field(default_factory=dict)
 
@@ -52,6 +58,8 @@ class NotificationChannelListResponse(BaseModel):
 
 class NotificationChannelTestResponse(BaseModel):
     success: bool
+    dry_run: bool = False
+    target_summary: str = ""
     error: Optional[str] = None
     error_code: Optional[str] = None
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
