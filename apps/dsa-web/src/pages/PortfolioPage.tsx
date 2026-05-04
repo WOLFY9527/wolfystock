@@ -1825,12 +1825,13 @@ const PortfolioPage: React.FC = () => {
           'w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0 bg-transparent text-white/72',
         )}
       >
-        <section className="mx-auto w-full max-w-[1880px] px-4 sm:px-6 lg:px-8 2xl:px-10">
-          <div data-testid="portfolio-workspace-grid" className="grid grid-cols-12 items-start gap-4 xl:gap-5">
-	            <div
-	              data-testid="portfolio-total-assets-card"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 grid shrink-0 gap-4 lg:grid-cols-[minmax(260px,1.1fr)_minmax(360px,1.7fr)_minmax(220px,0.8fr)] lg:items-stretch`}
-	            >
+        <section className="w-full max-w-[1600px] mx-auto px-4 xl:px-8 flex flex-col gap-8">
+          <div data-testid="portfolio-workspace-grid" className="flex flex-col gap-8">
+            <div data-testid="portfolio-row-macro" className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+		            <div
+		              data-testid="portfolio-total-assets-card"
+		              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-12 grid shrink-0 gap-4 lg:grid-cols-[minmax(260px,1.1fr)_minmax(360px,1.7fr)_minmax(220px,0.8fr)] lg:items-stretch`}
+		            >
 	              <div className="flex min-w-0 flex-col justify-between gap-4">
                   <div className="min-w-0">
 	                <div className="mb-3 flex min-w-0 flex-wrap items-center gap-3">
@@ -1954,121 +1955,24 @@ const PortfolioPage: React.FC = () => {
 	                  }`}>
 	                    {fxRefreshFeedback.text}
 	                  </div>
-	                ) : null}
-	              </div>
-	            </div>
+		                ) : null}
+		              </div>
+		            </div>
+            </div>
 
+            <div data-testid="portfolio-row-routing" className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
 	            <section
 	              data-testid="portfolio-pnl-summary"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 grid gap-2 sm:grid-cols-3`}
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-4 grid gap-2 sm:grid-cols-3`}
 	            >
 	              {renderPnlTile('realized', realizedPnl, realizedPnlDisplay)}
 	              {renderPnlTile('unrealized', unrealizedPnl, unrealizedPnlDisplay)}
 	              {renderPnlTile('total', totalPnl, totalPnlDisplay)}
 	            </section>
-	
-	            {hasHoldings ? (
-	              <div
-	                data-testid="portfolio-current-holdings-panel"
-	                className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col overflow-visible xl:col-span-7 2xl:col-span-8`}
-	              >
-	                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 pb-4">
-	                  <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
-	                    Current Holdings ({`共 ${positionRows.length} 项`})
-	                  </h2>
-	                </div>
-	
-	                <div className="pt-3 lg:max-h-[420px] lg:min-h-0 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
-	                  <div className="flex flex-col">
-	                    {positionRows.map((row) => (
-	                      <div
-	                        key={`${row.accountId}-${row.symbol}-${row.market}`}
-	                        className="flex flex-col gap-3 border-b border-white/5 px-1 py-3 transition-colors hover:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between"
-	                      >
-	                        <div className="min-w-0">
-	                          <div className="truncate text-lg font-medium text-foreground">{row.symbol}</div>
-	                          <div className="truncate text-xs text-muted-text">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</div>
-	                        </div>
-	                        <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 sm:justify-end">
-	                          <div className="text-right">
-	                            <div className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{copy.positionMarketValue}</div>
-	                            <div className="font-mono text-foreground tabular-nums">{formatMoney(row.marketValueBase, row.valuationCurrency)}</div>
-	                            {row.valuationCurrency !== displayCurrency ? (
-	                              <div className="mt-1 font-mono text-xs text-white/40">
-	                                {renderConvertedDisplay(row.marketValueBase, row.valuationCurrency)}
-	                              </div>
-	                            ) : null}
-	                          </div>
-	                          <div className="text-right">
-	                            <div className={`font-mono text-lg tabular-nums ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-	                              {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
-	                            </div>
-	                            <div className="mt-1 font-mono text-xs text-white/40">
-	                              {formatPercent(row.unrealizedPnlPct)}
-	                            </div>
-	                            {row.valuationCurrency !== displayCurrency ? (
-	                              <div className="mt-1 font-mono text-xs text-white/40">
-	                                {renderConvertedDisplay(row.unrealizedPnlBase, row.valuationCurrency)}
-	                              </div>
-	                            ) : null}
-	                          </div>
-	                        </div>
-	                      </div>
-	                    ))}
-	                  </div>
-	                </div>
-	              </div>
-	            ) : (
-	              <div
-	                data-testid="portfolio-empty-workflow-column"
-	                className="col-span-12 space-y-4 xl:col-span-7 2xl:col-span-8"
-	              >
-	                <div
-	                  data-testid="portfolio-start-card"
-	                  className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col gap-4 xl:col-span-7 2xl:col-span-8`}
-	                >
-	                  <div className="flex flex-wrap items-start justify-between gap-3">
-	                    <div>
-	                      <h2 className="text-sm font-semibold text-white">{language === 'zh' ? '当前无持仓' : 'No current holdings'}</h2>
-	                      <p className="mt-1 text-sm text-white/45">{language === 'zh' ? '录入第一笔买入交易后自动生成持仓' : 'Enter the first buy trade to generate holdings automatically.'}</p>
-	                    </div>
-	                    {hasHistory ? (
-	                      <span className="rounded-full border border-amber-300/15 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-200">{noHoldingsHistoryNote}</span>
-	                    ) : null}
-	                  </div>
-	                  <div className="grid gap-2 sm:grid-cols-3">
-	                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">active accounts</div>
-	                      <div className="mt-1 font-mono text-lg text-white">{activeAccounts.length}</div>
-	                    </div>
-	                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">writable accounts</div>
-	                      <div className="mt-1 font-mono text-lg text-white">{writableAccounts.length}</div>
-	                    </div>
-	                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">selected trade account</div>
-	                      <div className="mt-1 truncate text-sm text-white">{writableAccount?.name || copy.allAccounts}</div>
-	                    </div>
-	                  </div>
-	                  <div className="grid gap-2 text-xs text-white/45 sm:grid-cols-3">
-	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '1. 选择账户' : '1. Select account'}</div>
-	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '2. 输入标的' : '2. Enter symbol'}</div>
-	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '3. 提交交易' : '3. Submit trade'}</div>
-	                  </div>
-	                  {!hasWritableAccounts ? (
-	                    <div className="rounded-lg border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-xs text-amber-200">
-	                      {hasActiveAccounts
-	                        ? (language === 'zh' ? '当前账户不可写，请选择具体可写账户。' : 'Current accounts are not writable. Select a writable account.')
-	                        : (language === 'zh' ? '暂无可写账户，请先创建账户。' : 'No writable account yet. Create an account first.')}
-	                    </div>
-	                  ) : null}
-	                </div>
-	              </div>
-	            )}
 
 	            <section
 	              data-testid="portfolio-exposure-card"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-4 xl:col-span-7 2xl:col-span-8`}
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-4 flex flex-col gap-4`}
 	            >
 	              <div className="flex flex-wrap items-center justify-between gap-3">
 	                <h2 className="text-xs uppercase tracking-widest text-muted-text">{exposureTitle}</h2>
@@ -2126,7 +2030,7 @@ const PortfolioPage: React.FC = () => {
 
 	            <section
 	              data-testid="portfolio-risk-card"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-3 xl:col-span-5 2xl:col-span-4`}
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-4 flex flex-col gap-3`}
 	            >
 	              <h2 className="text-xs uppercase tracking-widest text-muted-text">{riskTitle}</h2>
 	              <div className="grid grid-cols-2 gap-2">
@@ -2163,8 +2067,109 @@ const PortfolioPage: React.FC = () => {
 	                )}
 	              </div>
 	            </section>
+            </div>
+
+            <div data-testid="portfolio-row-execution" className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+	            {hasHoldings ? (
+	              <div
+	                data-testid="portfolio-current-holdings-panel"
+	                className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col overflow-visible xl:col-span-8 xl:order-2`}
+	              >
+	                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 pb-4">
+	                  <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
+		                    当前持仓（共 {positionRows.length} 项）
+	                  </h2>
+	                </div>
+
+	                <div className="pt-3 lg:max-h-[420px] lg:min-h-0 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
+	                  <div className="flex flex-col">
+	                    {positionRows.map((row) => (
+	                      <div
+	                        key={`${row.accountId}-${row.symbol}-${row.market}`}
+		                        className="flex flex-col gap-3 rounded-xl border-b border-white/5 px-3 py-3 transition-colors hover:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between"
+	                      >
+	                        <div className="min-w-0">
+	                          <div className="truncate text-lg font-medium text-foreground">{row.symbol}</div>
+	                          <div className="truncate text-xs text-muted-text">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</div>
+	                        </div>
+	                        <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 sm:justify-end">
+	                          <div className="text-right">
+	                            <div className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{copy.positionMarketValue}</div>
+	                            <div className="font-mono text-foreground tabular-nums">{formatMoney(row.marketValueBase, row.valuationCurrency)}</div>
+	                            {row.valuationCurrency !== displayCurrency ? (
+	                              <div className="mt-1 font-mono text-xs text-white/40">
+	                                {renderConvertedDisplay(row.marketValueBase, row.valuationCurrency)}
+	                              </div>
+	                            ) : null}
+	                          </div>
+	                          <div className="text-right">
+	                            <div className={`font-mono text-lg tabular-nums ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+	                              {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
+	                            </div>
+	                            <div className="mt-1 font-mono text-xs text-white/40">
+	                              {formatPercent(row.unrealizedPnlPct)}
+	                            </div>
+	                            {row.valuationCurrency !== displayCurrency ? (
+	                              <div className="mt-1 font-mono text-xs text-white/40">
+	                                {renderConvertedDisplay(row.unrealizedPnlBase, row.valuationCurrency)}
+	                              </div>
+	                            ) : null}
+	                          </div>
+	                        </div>
+	                      </div>
+	                    ))}
+	                  </div>
+	                </div>
+	              </div>
+	            ) : (
+	              <div
+	                data-testid="portfolio-empty-workflow-column"
+	                className="col-span-12 space-y-4 xl:col-span-8 xl:order-2"
+	              >
+	                <div
+	                  data-testid="portfolio-start-card"
+	                  className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col gap-4`}
+	                >
+	                  <div className="flex flex-wrap items-start justify-between gap-3">
+	                    <div>
+	                      <h2 className="text-sm font-semibold text-white">{language === 'zh' ? '当前无持仓' : 'No current holdings'}</h2>
+	                      <p className="mt-1 text-sm text-white/45">{language === 'zh' ? '录入第一笔买入交易后自动生成持仓' : 'Enter the first buy trade to generate holdings automatically.'}</p>
+	                    </div>
+	                    {hasHistory ? (
+	                      <span className="rounded-full border border-amber-300/15 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-200">{noHoldingsHistoryNote}</span>
+	                    ) : null}
+	                  </div>
+	                  <div className="grid gap-2 sm:grid-cols-3">
+	                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+		                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">活跃账户</div>
+	                      <div className="mt-1 font-mono text-lg text-white">{activeAccounts.length}</div>
+	                    </div>
+	                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+		                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">可写账户</div>
+	                      <div className="mt-1 font-mono text-lg text-white">{writableAccounts.length}</div>
+	                    </div>
+	                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+		                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">当前交易账户</div>
+	                      <div className="mt-1 truncate text-sm text-white">{writableAccount?.name || copy.allAccounts}</div>
+	                    </div>
+	                  </div>
+	                  <div className="grid gap-2 text-xs text-white/45 sm:grid-cols-3">
+	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '1. 选择账户' : '1. Select account'}</div>
+	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '2. 输入标的' : '2. Enter symbol'}</div>
+	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '3. 提交交易' : '3. Submit trade'}</div>
+	                  </div>
+	                  {!hasWritableAccounts ? (
+	                    <div className="rounded-lg border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-xs text-amber-200">
+	                      {hasActiveAccounts
+	                        ? (language === 'zh' ? '当前账户不可写，请选择具体可写账户。' : 'Current accounts are not writable. Select a writable account.')
+	                        : (language === 'zh' ? '暂无可写账户，请先创建账户。' : 'No writable account yet. Create an account first.')}
+	                    </div>
+	                  ) : null}
+	                </div>
+	              </div>
+	            )}
 	
-	          <section data-testid="portfolio-trade-station-card" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-5 overflow-visible xl:col-span-5 xl:min-h-[300px] 2xl:col-span-4`}>
+		          <section data-testid="portfolio-trade-station-card" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-5 overflow-visible xl:col-span-4 xl:order-1 xl:min-h-[300px]`}>
             <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -2470,7 +2475,7 @@ const PortfolioPage: React.FC = () => {
               {leftTab === 'fx' ? (
                 <div data-testid="portfolio-fx-panel" className="space-y-4">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-text">LIVE EXCHANGE ENGINE</p>
+	                    <p className="text-xs uppercase tracking-[0.18em] text-muted-text">实时汇率引擎</p>
                     <p className="mt-1 text-[11px] text-white/35">
                       {language === 'en' ? 'Last update' : '最后更新'} {selectedFxRate?.timestamp ? formatFxTimestamp(selectedFxRate.timestamp) : fxLastUpdated}
                       {selectedFxRate?.isStale ? ` · ${copy.fxStale}` : ''}
@@ -2478,7 +2483,7 @@ const PortfolioPage: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-2">
                     <Select
-                      label="Base Currency"
+	                      label={language === 'zh' ? '基准币种' : 'Base Currency'}
                       labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                       className={PORTFOLIO_SELECT_CLASS}
                       value={fxBaseCurrency}
@@ -2487,7 +2492,7 @@ const PortfolioPage: React.FC = () => {
                     />
                     <span className="mb-2 flex h-10 w-8 items-center justify-center rounded-lg bg-white/[0.04] text-white/45" aria-hidden="true">⇄</span>
                     <Select
-                      label="Quote Currency"
+	                      label={language === 'zh' ? '报价币种' : 'Quote Currency'}
                       labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                       className={PORTFOLIO_SELECT_CLASS}
                       value={fxQuoteCurrency}
@@ -2508,7 +2513,7 @@ const PortfolioPage: React.FC = () => {
 	                    </div>
 	                    <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
 	                      <span className="truncate">{selectedFxRate?.provider || 'frankfurter'}</span>
-	                      <span>{selectedFxRate?.cacheHit ? 'CACHE' : 'LIVE'}</span>
+		                      <span>{selectedFxRate?.cacheHit ? (language === 'zh' ? '缓存' : 'CACHE') : (language === 'zh' ? '实时' : 'LIVE')}</span>
 	                      {selectedFxRate?.isStale ? <span className="text-amber-300">{copy.fxStale}</span> : null}
 	                    </div>
 	                  </div>
@@ -2542,19 +2547,20 @@ const PortfolioPage: React.FC = () => {
           </section>
 
             {!hasHoldings ? (
-              <div className="col-span-12">
+              <div className="col-span-12 xl:col-span-8 xl:order-3">
                 {recentActivityContent}
               </div>
             ) : null}
 
             {shouldRenderFullHistory ? (
-              <section data-testid="portfolio-history-full" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col overflow-hidden ${currentEventCount > 5 ? 'max-h-[560px]' : 'max-h-none'}`}>
+              <section data-testid="portfolio-history-full" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 xl:col-span-8 xl:order-4 flex flex-col overflow-hidden ${currentEventCount > 5 ? 'max-h-[800px] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]' : 'max-h-none'}`}>
                 {historyPanelContent}
               </section>
             ) : null}
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
+    </div>
 
       <Drawer
         isOpen={Boolean(editingTrade)}

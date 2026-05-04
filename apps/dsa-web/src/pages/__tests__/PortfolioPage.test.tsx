@@ -481,14 +481,14 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const workspace = screen.getByTestId('portfolio-workspace-grid');
-    expect(workspace.parentElement).toHaveClass('max-w-[1880px]', 'px-4', 'sm:px-6', 'lg:px-8', '2xl:px-10');
-    expect(workspace).toHaveClass('grid', 'grid-cols-12', 'items-start', 'gap-4', 'xl:gap-5');
+    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-8');
+    expect(workspace).toHaveClass('flex', 'flex-col', 'gap-8');
     expect(screen.getByTestId('portfolio-bento-page')).toHaveAttribute('data-bento-surface', 'true');
     expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6', 'min-h-0');
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('max-w-[1920px]', 'mx-auto', 'px-4', 'py-2');
     expect(screen.queryByTestId('portfolio-bento-hero')).not.toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-total-assets-card')).toHaveClass('col-span-12');
+    expect(screen.getByTestId('portfolio-total-assets-card')).toHaveClass('xl:col-span-12');
     expect(screen.getByRole('heading', { name: '总资产 Total Assets' })).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(within(screen.getByTestId('portfolio-total-assets-card')).queryByLabelText('DISPLAY CURRENCY')).not.toBeInTheDocument();
@@ -550,7 +550,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(Boolean(holdingsPanel.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
-  it('renders the mobile empty portfolio order as hero, pnl, start, exposure, risk, trade station, recent activity', async () => {
+  it('renders the mobile empty portfolio order as hero, pnl, exposure, risk, start, trade station, recent activity', async () => {
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
 
     render(<PortfolioPage />);
@@ -566,10 +566,10 @@ describe('PortfolioPage FX refresh', () => {
     const recentActivity = screen.getByTestId('portfolio-recent-activity');
 
     expect(Boolean(totalAssetsCard.compareDocumentPosition(pnlSummary) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(pnlSummary.compareDocumentPosition(startCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(startCard.compareDocumentPosition(exposureCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(pnlSummary.compareDocumentPosition(exposureCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(exposureCard.compareDocumentPosition(riskCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(riskCard.compareDocumentPosition(tradeStationSection) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(riskCard.compareDocumentPosition(startCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(startCard.compareDocumentPosition(tradeStationSection) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(tradeStationSection.compareDocumentPosition(recentActivity) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
   });
@@ -597,13 +597,13 @@ describe('PortfolioPage FX refresh', () => {
     expect(workflowColumn).toContainElement(startCard);
     expect(workflowColumn).not.toContainElement(recentActivity);
     expect(workflowColumn).toHaveClass('space-y-4');
-    expect(startCard).toHaveClass('xl:col-span-7');
     expect(startCard).not.toHaveClass('xl:min-h-[300px]', 'min-h-[520px]');
     expect(within(startCard).getByText('当前无持仓')).toBeInTheDocument();
     expect(within(startCard).getByText('录入第一笔买入交易后自动生成持仓')).toBeInTheDocument();
     expect(within(startCard).getByText('历史记录存在，当前无持仓')).toBeInTheDocument();
-    expect(within(startCard).getByText(/active accounts/i)).toBeInTheDocument();
-    expect(within(startCard).getByText(/writable accounts/i)).toBeInTheDocument();
+    expect(within(startCard).getByText('活跃账户')).toBeInTheDocument();
+    expect(within(startCard).getByText('可写账户')).toBeInTheDocument();
+    expect(within(startCard).queryByText(/active accounts|writable accounts/i)).not.toBeInTheDocument();
     expect(within(startCard).getByText(/Main/)).toBeInTheDocument();
     expect(within(recentActivity).getByText('历史记录存在，当前无持仓')).toBeInTheDocument();
     expect(within(recentActivity).getByText('AAPL')).toBeInTheDocument();
@@ -867,7 +867,7 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.click(getLeftTabButton('汇率'));
     expect(screen.getByTestId('portfolio-fx-panel')).toBeInTheDocument();
-    expect(screen.getByText('LIVE EXCHANGE ENGINE')).toBeInTheDocument();
+    expect(screen.getByText('实时汇率引擎')).toBeInTheDocument();
     expect(screen.getByLabelText('Base Currency')).toHaveValue('USD');
     expect(screen.getByLabelText('Quote Currency')).toHaveValue('CNY');
     expect(screen.getByText('USD/CNY')).toBeInTheDocument();
@@ -1198,7 +1198,7 @@ describe('PortfolioPage FX refresh', () => {
       staleCount: 1,
       errorCount: 1,
     }))).toBeInTheDocument();
-    expect(screen.getByText('CACHE')).toBeInTheDocument();
+    expect(screen.getByText('缓存')).toBeInTheDocument();
   });
 
   it('restores the button state and shows the existing error alert when FX refresh fails', async () => {
@@ -1362,7 +1362,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(getLeftTabButton('Trade')).toBeInTheDocument();
     expect(getLeftTabButton('Account')).toBeInTheDocument();
     expect(getLeftTabButton('Sync')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /当前持仓/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'History ↗' })).not.toBeInTheDocument();
     expect(screen.getByText('No current holdings')).toBeInTheDocument();
     expect(openFxPanel('en')).toBeInTheDocument();
@@ -1860,7 +1860,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const holdingsPanel = screen.getByTestId('portfolio-current-holdings-panel');
-    expect(within(holdingsPanel).getByRole('heading', { name: /Current Holdings/i })).toBeInTheDocument();
+    expect(within(holdingsPanel).getByRole('heading', { name: /当前持仓/ })).toBeInTheDocument();
     const historyPanel = screen.getByTestId('portfolio-history-full');
     expect(historyPanel).toBeInTheDocument();
     expect(screen.queryByTestId('portfolio-history-drawer')).not.toBeInTheDocument();
