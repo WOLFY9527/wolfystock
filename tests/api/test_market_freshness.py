@@ -85,7 +85,9 @@ class MarketFreshnessCacheTestCase(unittest.TestCase):
 
         self.assertEqual(payload["items"][0]["price"], 52)
         self.assertEqual(payload["warning"], "数据源刷新失败，当前显示最近快照")
-        self.assertIn("cnn down", payload["lastError"])
+        self.assertEqual(payload["lastError"], "数据源暂不可用")
+        self.assertEqual(payload["providerHealth"]["errorSummary"], "数据源暂不可用")
+        self.assertNotIn("cnn down", str(payload))
 
     def test_fallback_data_keeps_fallback_freshness(self) -> None:
         service = MarketOverviewService()

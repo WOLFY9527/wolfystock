@@ -77,9 +77,9 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
         {panel?.errorMessage ? (
           <div className="flex min-w-0 items-center gap-2" title={panel.errorMessage}>
             <span data-testid="market-overview-compact-error-badge" className="rounded-md border border-amber-300/20 bg-amber-400/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-100/78">
-              {panel.isStale || panel.isFromSnapshot ? '陈旧' : '异常'}
+              {panel.isStale || panel.isFromSnapshot ? '过期' : '数据异常'}
             </span>
-            <span className="min-w-0 truncate text-[10px] text-white/38">刷新异常，保留最近快照</span>
+            <span className="min-w-0 truncate text-[10px] text-white/38">刷新失败，保留最近快照</span>
           </div>
         ) : null}
 

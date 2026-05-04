@@ -1,5 +1,5 @@
 import apiClient from './index';
-import type { MarketDataMeta, MarketOverviewPanel, MarketOverviewItem } from './marketOverview';
+import type { MarketDataMeta, MarketOverviewPanel, MarketOverviewItem, MarketProviderHealth } from './marketOverview';
 import { toCamelCase } from './utils';
 import { API_BASE_URL } from '../utils/constants';
 
@@ -18,6 +18,7 @@ type MarketSnapshotItem = {
   source?: string | null;
   sourceLabel?: string | null;
   sourceType?: string | null;
+  providerHealth?: MarketProviderHealth;
   updatedAt?: string;
   asOf?: string;
   freshness?: MarketDataMeta['freshness'];
@@ -45,6 +46,7 @@ type MarketSnapshotPayload = {
   source?: string | null;
   sourceLabel?: string | null;
   sourceType?: string | null;
+  providerHealth?: MarketProviderHealth;
   asOf?: string;
   freshness?: MarketDataMeta['freshness'];
   isFallback?: boolean;
@@ -79,6 +81,7 @@ function normalizeItem(item: MarketSnapshotItem): MarketOverviewItem {
     source: item.source || undefined,
     sourceLabel: item.sourceLabel || undefined,
     sourceType: item.sourceType || undefined,
+    providerHealth: item.providerHealth,
     updatedAt: item.updatedAt,
     asOf: item.asOf,
     freshness: item.freshness,
@@ -106,6 +109,7 @@ function normalizeMarketSnapshotPayload(rawPayload: Record<string, unknown>, pan
     source: payload.source || undefined,
     sourceLabel: payload.sourceLabel || undefined,
     sourceType: payload.sourceType || undefined,
+    providerHealth: payload.providerHealth,
     updatedAt: payload.updatedAt || payload.lastUpdate || new Date().toISOString(),
     asOf: payload.asOf,
     freshness: payload.freshness,
@@ -176,6 +180,7 @@ export type MarketTemperatureScore = {
 export type MarketTemperatureResponse = {
   source: 'computed' | 'fallback' | 'mixed' | string;
   sourceLabel?: string;
+  providerHealth?: MarketProviderHealth;
   updatedAt: string;
   asOf?: string;
   freshness?: MarketDataMeta['freshness'];
@@ -209,6 +214,7 @@ export type MarketBriefingItem = {
 export type MarketBriefingResponse = {
   source: 'computed' | 'fallback' | 'mixed' | string;
   sourceLabel?: string;
+  providerHealth?: MarketProviderHealth;
   updatedAt: string;
   asOf?: string;
   freshness?: MarketDataMeta['freshness'];
@@ -236,6 +242,7 @@ export type MarketFutureItem = {
   sparkline: number[];
   source: string;
   sourceLabel?: string;
+  providerHealth?: MarketProviderHealth;
   updatedAt?: string;
   asOf?: string;
   freshness?: MarketDataMeta['freshness'];
@@ -249,6 +256,7 @@ export type MarketFutureItem = {
 export type MarketFuturesResponse = {
   source: 'fallback' | 'public' | 'mixed' | string;
   sourceLabel?: string;
+  providerHealth?: MarketProviderHealth;
   updatedAt: string;
   asOf?: string;
   freshness?: MarketDataMeta['freshness'];
@@ -263,6 +271,7 @@ export type MarketFuturesResponse = {
 export type CnShortSentimentResponse = {
   source: 'fallback' | 'public' | 'mixed' | string;
   sourceLabel?: string;
+  providerHealth?: MarketProviderHealth;
   updatedAt: string;
   asOf?: string;
   freshness?: MarketDataMeta['freshness'];

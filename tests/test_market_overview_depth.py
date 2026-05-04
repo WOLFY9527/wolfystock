@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import Mock, patch
 
 from api.v1.endpoints import market
@@ -41,6 +42,9 @@ def test_us_breadth_sector_proxy_returns_stable_shape_with_metadata() -> None:
     assert payload["sourceLabel"] == "Yahoo Finance"
     assert payload["freshness"] in {"live", "delayed", "cached", "stale"}
     assert payload["isFallback"] is False
+    assert payload["providerHealth"]["provider"] == "yfinance_proxy"
+    assert payload["providerHealth"]["status"] in {"live", "cache"}
+    assert isinstance(payload["providerHealth"]["latencyMs"], int)
     assert payload["items"][0]["sourceLabel"] == "Yahoo Finance"
 
 
@@ -53,8 +57,96 @@ def test_us_breadth_unavailable_returns_compact_fallback_shape() -> None:
     assert payload["source"] == "unavailable"
     assert payload["freshness"] == "fallback"
     assert payload["isFallback"] is True
+    assert payload["providerHealth"]["status"] == "unavailable"
     assert any(item["symbol"] == "SECTOR_PROXY_UNAVAILABLE" for item in payload["items"])
     assert "未接入" in payload["items"][0]["label"] or "暂不可用" in payload["items"][0]["label"]
+
+
+def test_market_refresh_failure_serves_stale_snapshot_with_provider_health() -> None:
+    service = MarketOverviewService()
+    quotes = {
+        "XLK": {"value": 220.0, "change_pct": 1.8, "trend": [216.0, 220.0], "volume": 10_000_000},
+        "XLF": {"value": 44.0, "change_pct": -0.4, "trend": [44.2, 44.0], "volume": 8_000_000},
+        "SPY": {"value": 520.0, "change_pct": 0.6, "trend": [516.0, 520.0], "volume": 60_000_000},
+        "RSP": {"value": 168.0, "change_pct": 0.2, "trend": [167.0, 168.0], "volume": 4_000_000},
+        "QQQ": {"value": 460.0, "change_pct": 1.1, "trend": [454.0, 460.0], "volume": 45_000_000},
+        "IWM": {"value": 210.0, "change_pct": -0.3, "trend": [211.0, 210.0], "volume": 22_000_000},
+    }
+
+    with patch.object(service, "_latest_quote", side_effect=lambda ticker: quotes[ticker]):
+        warm_payload = service.get_us_breadth()
+
+    entry = market_cache.get("us_breadth")
+    assert entry is not None
+    entry.expires_at = entry.fetched_at - timedelta(seconds=1)
+
+    with patch.object(service, "_latest_quote", side_effect=RuntimeError("provider_down raw stack trace")):
+        stale_payload = service.get_us_breadth()
+        market_cache.wait_for_refreshes(timeout=2)
+        served_payload = service.get_us_breadth()
+
+    assert stale_payload["items"][0]["symbol"] == warm_payload["items"][0]["symbol"]
+    assert served_payload["items"][0]["symbol"] == warm_payload["items"][0]["symbol"]
+    assert served_payload["isStale"] is True
+    assert served_payload["providerHealth"]["status"] == "stale"
+    assert served_payload["providerHealth"]["errorSummary"] == "数据源暂不可用"
+    assert "provider_down" not in str(served_payload)
+    assert "raw stack trace" not in str(served_payload)
+
+
+def test_error_only_payload_does_not_overwrite_last_known_good_snapshot() -> None:
+    service = MarketOverviewService()
+    good_payload = {
+        "source": "sina",
+        "updatedAt": "2026-04-29T10:00:00+08:00",
+        "asOf": "2026-04-29T10:00:00+08:00",
+        "items": [{"symbol": "000001.SH", "label": "上证指数", "value": 3120.55, "source": "sina"}],
+    }
+
+    first = service._cached_payload("cn_indices", lambda: good_payload, service._fallback_cn_indices_snapshot)
+    entry = market_cache.get("cn_indices")
+    assert entry is not None
+    entry.expires_at = entry.fetched_at - timedelta(seconds=1)
+
+    stale = service._cached_payload(
+        "cn_indices",
+        lambda: {"source": "error", "error": "provider_error leaked raw exception", "items": []},
+        service._fallback_cn_indices_snapshot,
+    )
+    market_cache.wait_for_refreshes(timeout=2)
+    second = service._cached_payload(
+        "cn_indices",
+        lambda: {"source": "error", "error": "provider_error leaked raw exception", "items": []},
+        service._fallback_cn_indices_snapshot,
+    )
+
+    assert first["items"][0]["value"] == 3120.55
+    assert stale["items"][0]["value"] == 3120.55
+    assert second["items"][0]["value"] == 3120.55
+    assert MarketOverviewService._market_data_cache["cn_indices"]["items"][0]["value"] == 3120.55
+    assert "provider_error leaked raw exception" not in str(second)
+
+
+def test_partial_provider_health_is_preserved_for_mixed_cn_indices() -> None:
+    service = MarketOverviewService()
+    live_quote = {
+        "000001.SH": {
+            "symbol": "000001.SH",
+            "name": "上证指数",
+            "value": 3120.55,
+            "change": 12.3,
+            "changePercent": 0.39,
+            "asOf": "2026-04-29T10:00:00+08:00",
+        }
+    }
+
+    with patch.object(service, "_fetch_sina_cn_index_quotes", return_value=live_quote):
+        payload = service.get_cn_indices()
+
+    assert payload["source"] == "mixed"
+    assert payload["providerHealth"]["status"] == "partial"
+    assert any(item["source"] == "sina" and item["isFallback"] is False for item in payload["items"])
+    assert any(item["isFallback"] is True for item in payload["items"])
 
 
 def test_market_us_breadth_endpoint_uses_market_service() -> None:

@@ -948,7 +948,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-data-quality')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-rail-quality')).toHaveTextContent(/数据质量：部分备用/i);
     expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0);
-    expect(screen.getAllByTestId('data-freshness-badge-delayed').length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('data-freshness-badge-cache').length).toBeGreaterThan(0);
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
   });
 
@@ -994,6 +994,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-cache-status')).not.toHaveTextContent(/REFRESH FAILED|CACHE|STALE/i);
     expect(screen.getAllByText('标普500').length).toBeGreaterThan(0);
     expect(screen.queryByText(/更新失败：indices request timed out/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/provider_down|provider_error|UNKNOWN/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('market-overview-refresh-error-count')).toHaveTextContent(/[1-9]/);
   });
 
@@ -1393,7 +1394,7 @@ describe('MarketOverviewPage', () => {
     expect(within(firstQuote).getByText('标普500')).toBeInTheDocument();
     expect(within(firstQuote).getByText('SPX')).toBeInTheDocument();
     expect(within(firstQuote).getByText('5,120.25')).toBeInTheDocument();
-    expect(within(firstQuote).getByTestId('data-freshness-badge-delayed')).toBeInTheDocument();
+    expect(within(firstQuote).getByTestId('data-freshness-badge-cache')).toBeInTheDocument();
   });
 
   it('keeps quote-heavy cards out of the insight rail and reserves it for compact helpers', async () => {
@@ -1633,7 +1634,7 @@ describe('MarketOverviewPage', () => {
     const breadthCard = await screen.findByTestId('market-overview-card-usBreadth');
 
     expect(breadthCard).toHaveTextContent(/数据暂不可用|未接入/);
-    expect(breadthCard).toHaveTextContent(/备用|未接入/);
+    expect(breadthCard).toHaveTextContent(/暂不可用|未接入/);
     expect(within(breadthCard).queryByText(/Advance \/ decline：未接入/)).not.toBeInTheDocument();
   });
 
@@ -1738,25 +1739,26 @@ describe('MarketOverviewPage', () => {
     expect(MockEventSource.instances).toHaveLength(0);
   });
 
-  it('renders all data freshness badge states', () => {
+  it('renders all provider health badge states in Chinese', () => {
     render(
       <div>
-        {(['live', 'delayed', 'cached', 'stale', 'fallback', 'mock', 'error'] as const).map((freshness) => (
-          <DataFreshnessBadge key={freshness} freshness={freshness} />
+        {(['live', 'cache', 'stale', 'fallback', 'partial', 'unavailable', 'refreshing', 'error'] as const).map((status) => (
+          <DataFreshnessBadge key={status} status={status} />
         ))}
       </div>,
     );
 
     expect(screen.getByText('实时')).toBeInTheDocument();
-    expect(screen.getByText('延迟')).toBeInTheDocument();
-    expect(screen.getByText('快照')).toBeInTheDocument();
-    expect(screen.getByText('旧数据')).toBeInTheDocument();
+    expect(screen.getByText('缓存')).toBeInTheDocument();
+    expect(screen.getByText('过期')).toBeInTheDocument();
     expect(screen.getByText('备用')).toBeInTheDocument();
-    expect(screen.getByText('模拟')).toBeInTheDocument();
-    expect(screen.getByText('异常')).toBeInTheDocument();
+    expect(screen.getByText('部分数据')).toBeInTheDocument();
+    expect(screen.getByText('暂不可用')).toBeInTheDocument();
+    expect(screen.getByText('刷新中')).toBeInTheDocument();
+    expect(screen.getByText('数据异常')).toBeInTheDocument();
   });
 
-  it('shows stale card data as old data', async () => {
+  it('shows stale card data as expired data', async () => {
     vi.mocked(marketApi.getCnIndices).mockResolvedValueOnce({
       ...snapshotPanel('ChinaIndicesCard', '000001.SH', '上证指数'),
       freshness: 'stale' as const,
@@ -1778,7 +1780,7 @@ describe('MarketOverviewPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
     expandPendingDataSourceSection();
-    await waitFor(() => expect(screen.getAllByText('旧数据').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText('过期').length).toBeGreaterThan(0));
     expect(screen.getAllByText(/数据可能已过期/i).length).toBeGreaterThan(0);
   });
 
@@ -1786,10 +1788,34 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getCnIndices).mockResolvedValueOnce({
       ...snapshotPanel('ChinaIndicesCard', '000001.SH', '上证指数'),
       isRefreshing: true,
+      providerHealth: {
+        provider: 'sina',
+        status: 'refreshing' as const,
+        asOf: '2026-04-29T10:00:00',
+        updatedAt: '2026-04-29T10:01:00',
+        latencyMs: 120,
+        errorSummary: null,
+        isFallback: false,
+        isStale: false,
+        isRefreshing: true,
+        sourceLabel: 'Sina',
+      },
       items: [
         {
           ...snapshotPanel('ChinaIndicesCard', '000001.SH', '上证指数').items[0],
           value: 3120.55,
+          providerHealth: {
+            provider: 'sina',
+            status: 'refreshing' as const,
+            asOf: '2026-04-29T10:00:00',
+            updatedAt: '2026-04-29T10:01:00',
+            latencyMs: 120,
+            errorSummary: null,
+            isFallback: false,
+            isStale: false,
+            isRefreshing: true,
+            sourceLabel: 'Sina',
+          },
         },
       ],
     });
@@ -1798,7 +1824,7 @@ describe('MarketOverviewPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
     expandPendingDataSourceSection();
-    await waitFor(() => expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByTestId('data-freshness-badge-refreshing').length).toBeGreaterThan(0));
     expect(screen.getAllByText('上证指数').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/3,120.55|3120.55/).length).toBeGreaterThan(0);
   });

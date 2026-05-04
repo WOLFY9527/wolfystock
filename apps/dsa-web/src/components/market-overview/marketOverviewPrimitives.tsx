@@ -1,7 +1,7 @@
 import type React from 'react';
 import { RefreshCcw } from 'lucide-react';
 import { useI18n } from '../../contexts/UiLanguageContext';
-import type { MarketDataFreshness, MarketDataMeta, MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
+import type { MarketDataFreshness, MarketDataMeta, MarketOverviewItem, MarketOverviewPanel, MarketProviderHealthStatus } from '../../api/marketOverview';
 import { cn } from '../../utils/cn';
 import { GlassCard } from '../common';
 import { formatMarketOverviewTimestamp } from './marketOverviewFormat';
@@ -14,22 +14,34 @@ import { resolveMarketOverviewDisplayLabel } from './marketOverviewLabels';
 
 const FRESHNESS_LABELS: Record<MarketDataFreshness, string> = {
   live: '实时',
-  delayed: '延迟',
-  cached: '快照',
-  stale: '旧数据',
+  delayed: '缓存',
+  cached: '缓存',
+  stale: '过期',
   fallback: '备用',
-  mock: '模拟',
-  error: '异常',
+  mock: '备用',
+  error: '数据异常',
 };
 
-const FRESHNESS_CLASSES: Record<MarketDataFreshness, string> = {
+const STATUS_LABELS: Record<MarketProviderHealthStatus, string> = {
+  live: '实时',
+  cache: '缓存',
+  stale: '过期',
+  fallback: '备用',
+  partial: '部分数据',
+  unavailable: '暂不可用',
+  error: '数据异常',
+  refreshing: '刷新中',
+};
+
+const FRESHNESS_CLASSES: Record<MarketProviderHealthStatus, string> = {
   live: 'border-emerald-300/30 bg-emerald-400/10 text-emerald-200',
-  delayed: 'border-sky-300/25 bg-sky-400/10 text-sky-200',
-  cached: 'border-white/15 bg-white/[0.06] text-white/65',
+  cache: 'border-white/15 bg-white/[0.06] text-white/65',
   stale: 'border-amber-300/30 bg-amber-400/10 text-amber-200',
   fallback: 'border-orange-300/30 bg-orange-400/10 text-orange-200',
-  mock: 'border-fuchsia-300/30 bg-fuchsia-400/10 text-fuchsia-200',
+  partial: 'border-cyan-300/25 bg-cyan-400/10 text-cyan-200',
+  unavailable: 'border-white/12 bg-white/[0.04] text-white/48',
   error: 'border-rose-300/35 bg-rose-400/10 text-rose-200',
+  refreshing: 'border-sky-300/25 bg-sky-400/10 text-sky-200',
 };
 
 export const MARKET_OVERVIEW_GHOST_CARD_CLASS = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md p-5 transition-all hover:border-white/10';
@@ -89,27 +101,59 @@ export const MarketOverviewCardFrame: React.FC<{
   </GlassCard>
 );
 
-function resolveFreshness(meta?: Partial<MarketDataMeta>): MarketDataFreshness {
-  if (meta?.freshness) {
-    return meta.freshness;
+function resolveProviderStatus(meta?: Partial<MarketDataMeta>): MarketProviderHealthStatus {
+  if (meta?.providerHealth?.status) {
+    return meta.providerHealth.status;
   }
-  if (meta?.isFallback || meta?.source === 'fallback') {
+  if (meta?.isRefreshing) {
+    return 'refreshing';
+  }
+  if (meta?.source === 'unavailable') {
+    return 'unavailable';
+  }
+  if (meta?.freshness === 'error') {
+    return 'error';
+  }
+  if (meta?.isFallback || meta?.source === 'fallback' || meta?.freshness === 'fallback' || meta?.freshness === 'mock') {
     return 'fallback';
   }
-  if (meta?.isStale) {
+  if (meta?.isStale || meta?.freshness === 'stale') {
     return 'stale';
   }
-  return 'cached';
+  if (meta?.freshness === 'live') {
+    return 'live';
+  }
+  return 'cache';
 }
 
-export const DataFreshnessBadge: React.FC<{ freshness?: MarketDataFreshness; className?: string }> = ({ freshness, className }) => {
-  const resolved = freshness || 'cached';
+function resolveFreshness(meta?: Partial<MarketDataMeta>): MarketProviderHealthStatus {
+  return resolveProviderStatus(meta);
+}
+
+function legacyFreshnessToStatus(freshness?: MarketDataFreshness): MarketProviderHealthStatus {
+  if (freshness === 'live') {
+    return 'live';
+  }
+  if (freshness === 'stale') {
+    return 'stale';
+  }
+  if (freshness === 'fallback' || freshness === 'mock') {
+    return 'fallback';
+  }
+  if (freshness === 'error') {
+    return 'error';
+  }
+  return 'cache';
+}
+
+export const DataFreshnessBadge: React.FC<{ freshness?: MarketDataFreshness; status?: MarketProviderHealthStatus; className?: string }> = ({ freshness, status, className }) => {
+  const resolved = status || legacyFreshnessToStatus(freshness);
   return (
     <span
       data-testid={`data-freshness-badge-${resolved}`}
       className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-none', FRESHNESS_CLASSES[resolved], className)}
     >
-      {FRESHNESS_LABELS[resolved]}
+      {STATUS_LABELS[resolved] || FRESHNESS_LABELS[freshness || 'cached']}
     </span>
   );
 };
@@ -216,7 +260,7 @@ export const MarketOverviewPanelFooter: React.FC<{ panel?: MarketOverviewPanel; 
   return (
     <div className="mt-auto min-w-0 border-t border-white/5 pt-3">
       <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
-        <DataFreshnessBadge freshness={freshness} />
+        <DataFreshnessBadge status={freshness} />
         <span
           data-testid="market-overview-footer-meta"
           className="min-w-0 truncate text-[10px] uppercase tracking-widest text-white/34"
@@ -275,7 +319,7 @@ export const MarketDataRow: React.FC<{
           title={metadataTitle(itemDetails, item.warning, item.hoverDetails)}
           className="col-start-2 flex min-w-0 max-w-full items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-[9px] text-white/32 max-[640px]:col-start-1 max-[640px]:row-start-2 max-[640px]:pl-3.5"
         >
-          <DataFreshnessBadge freshness={freshness} className="shrink-0 px-1.5 text-[9px]" />
+          <DataFreshnessBadge status={freshness} className="shrink-0 px-1.5 text-[9px]" />
           {compactDetails ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{compactDetails}</span> : null}
           {item.hoverDetails?.map((detail, index) => (
             <span key={`${detail}-${index}`} className="shrink-0 leading-4 text-white/28">{detail}</span>
@@ -343,7 +387,7 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
         title={metadataTitle(itemDetails, item.warning, item.hoverDetails)}
         className="col-start-2 flex min-w-0 max-w-full items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-[9px] text-white/32 max-[720px]:col-start-1 max-[720px]:row-start-2 max-[720px]:pl-3.5"
       >
-        <DataFreshnessBadge freshness={freshness} className="shrink-0 px-1.5 text-[9px]" />
+        <DataFreshnessBadge status={freshness} className="shrink-0 px-1.5 text-[9px]" />
         {compactDetails ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{compactDetails}</span> : null}
         {item.hoverDetails?.map((detail, index) => (
           <span key={`${detail}-${index}`} className="shrink-0 leading-4 text-white/28">{detail}</span>

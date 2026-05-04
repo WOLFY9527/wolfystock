@@ -881,7 +881,7 @@ function summarizeDataQuality(panels: PanelState): DataQualitySummary {
   const status = counts.error > 0
     ? '异常'
     : counts.stale > 0
-      ? '存在旧数据'
+      ? '存在过期数据'
       : counts.fallback + counts.mock > 0
         ? '部分备用'
         : '良好';
@@ -1197,7 +1197,7 @@ const DataQualityCompactSummary: React.FC<{ summary: DataQualitySummary }> = ({ 
     meta={(
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span>可用快照</span>
-        <span className="font-mono tabular-nums">备用 {summary.counts.fallback} · 旧 {summary.counts.stale} · 异常 {summary.counts.error}</span>
+        <span className="font-mono tabular-nums">备用 {summary.counts.fallback} · 过期 {summary.counts.stale} · 异常 {summary.counts.error}</span>
       </div>
     )}
   />
@@ -1250,7 +1250,7 @@ const MarketOverviewCacheStatus: React.FC<{
     : loading && hasLocalSnapshot
       ? '本地缓存'
       : dataQuality.counts.stale > 0
-        ? '陈旧'
+        ? '过期'
         : dataQuality.counts.fallback > 0
           ? '缓存'
           : '实时';
@@ -1387,6 +1387,7 @@ const ExecutiveSecondaryGroups: React.FC<{
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <DataFreshnessBadge
                     freshness={(freshness || (coverage === 'fallback' ? 'fallback' : 'cached')) as MarketOverviewPanel['freshness']}
+                    status={coverage === 'mixed' ? 'partial' : undefined}
                     className="px-1.5 text-[9px]"
                   />
                   <span className="font-mono text-[10px] uppercase text-white/32">{coverage}</span>
@@ -1410,7 +1411,7 @@ const DataQualityCompactRailCard: React.FC<{ summary: DataQualitySummary }> = ({
     tone={summary.hasConcern ? 'text-amber-200' : 'text-emerald-300'}
     lines={[
       <span key="quality" data-testid="market-data-quality">可用快照 · 备用 {summary.counts.fallback}</span>,
-      <span key="risk" className="font-mono">旧 {summary.counts.stale} · 缺失 {summary.counts.error}</span>,
+      <span key="risk" className="font-mono">过期 {summary.counts.stale} · 缺失 {summary.counts.error}</span>,
     ]}
   />
 );
@@ -1572,17 +1573,25 @@ function assignPanelValue(nextPanels: PanelState, panelKey: PanelKey, value: Pan
 }
 
 function describePanelError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error || 'market panel unavailable');
+  const message = error instanceof Error ? error.message : String(error || '');
+  const lower = message.toLowerCase();
+  if (lower.includes('timeout') || lower.includes('timed out') || message.includes('超时')) {
+    return '数据源请求超时';
+  }
+  if (lower.includes('provider_down') || lower.includes('provider_error') || lower.includes('unavailable') || message.includes('不可用')) {
+    return '数据源暂不可用';
+  }
+  return '数据源刷新失败';
 }
 
 function fallbackPanel(panelName: string, error: unknown): MarketOverviewPanel {
   const updatedAt = new Date().toISOString();
-  const message = describePanelError(error);
+  const warning = describePanelError(error);
   return {
     panelName,
     lastRefreshAt: updatedAt,
     status: 'failure',
-    errorMessage: `更新失败：${message}`,
+    errorMessage: '更新失败：数据源刷新失败',
     source: 'error',
     sourceLabel: '数据源异常',
     updatedAt,
@@ -1590,7 +1599,7 @@ function fallbackPanel(panelName: string, error: unknown): MarketOverviewPanel {
     freshness: 'error',
     isFallback: true,
     isStale: true,
-    warning: '数据源暂不可用，请稍后自动刷新。',
+    warning: `数据源暂不可用，请稍后自动刷新。${warning}`,
     items: [],
   };
 }

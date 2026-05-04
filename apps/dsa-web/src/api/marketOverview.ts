@@ -4,11 +4,27 @@ import { toCamelCase } from './utils';
 export type MarketRiskDirection = 'increasing' | 'decreasing' | 'neutral';
 export type MarketPanelStatus = 'success' | 'failure';
 export type MarketDataFreshness = 'live' | 'delayed' | 'cached' | 'stale' | 'fallback' | 'mock' | 'error';
+export type MarketProviderHealthStatus = 'live' | 'cache' | 'stale' | 'fallback' | 'partial' | 'unavailable' | 'error' | 'refreshing';
+
+export interface MarketProviderHealth {
+  provider: string;
+  status: MarketProviderHealthStatus;
+  asOf?: string | null;
+  updatedAt?: string | null;
+  latencyMs?: number | null;
+  errorSummary?: string | null;
+  isFallback: boolean;
+  isStale: boolean;
+  isRefreshing: boolean;
+  sourceLabel: string;
+  card?: string;
+}
 
 export interface MarketDataMeta {
   source: string;
   sourceLabel?: string;
   sourceType?: string;
+  providerHealth?: MarketProviderHealth;
   updatedAt: string;
   asOf?: string;
   freshness: MarketDataFreshness;
@@ -56,6 +72,7 @@ function normalizePanel(payload: Record<string, unknown>): MarketOverviewPanel {
     source: normalized.source,
     sourceLabel: normalized.sourceLabel,
     sourceType: normalized.sourceType,
+    providerHealth: normalized.providerHealth,
     updatedAt: normalized.updatedAt || normalized.lastRefreshAt,
     asOf: normalized.asOf,
     freshness: normalized.freshness,

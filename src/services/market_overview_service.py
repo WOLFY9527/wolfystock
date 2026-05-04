@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import math
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
@@ -72,6 +73,17 @@ SOURCE_LABELS = {
     "mock": "模拟数据",
     "public": "公开数据",
     "unavailable": "不可用",
+}
+
+PROVIDER_HEALTH_STATUSES = {
+    "live",
+    "cache",
+    "stale",
+    "fallback",
+    "partial",
+    "unavailable",
+    "error",
+    "refreshing",
 }
 
 
@@ -151,6 +163,20 @@ def classify_market_payload_reliability(payload: Dict[str, Any], category: str =
 
 def _now_iso() -> str:
     return datetime.now(CN_TZ).isoformat(timespec="seconds")
+
+
+def _compact_error_summary(error: Any) -> Optional[str]:
+    text = str(error or "").strip()
+    if not text:
+        return None
+    lowered = text.lower()
+    if "timeout" in lowered or "timed out" in lowered or "超时" in lowered:
+        return "数据源请求超时"
+    if "unavailable" in lowered or "provider_down" in lowered or "down" in lowered or "不可用" in lowered:
+        return "数据源暂不可用"
+    if "rate" in lowered and "limit" in lowered:
+        return "数据源限流"
+    return "数据源刷新失败"
 
 
 def _parse_market_time(value: Any) -> Optional[datetime]:
@@ -446,8 +472,11 @@ class MarketOverviewService:
                 **trust,
             }
 
+        started_at = time.monotonic()
         payload = self._cached_payload("temperature", fetcher, fallback_factory)
-        return self._with_market_meta(payload, self._category_for_cache_key("temperature"))
+        payload = self._with_market_meta(payload, self._category_for_cache_key("temperature"))
+        payload["providerHealth"] = self._provider_health(payload, "temperature", duration_ms=int((time.monotonic() - started_at) * 1000), error_summary=_compact_error_summary(payload.get("lastError")))
+        return payload
 
     def get_market_briefing(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         def fetcher() -> Dict[str, Any]:
@@ -490,10 +519,14 @@ class MarketOverviewService:
                 **trust,
             }
 
+        started_at = time.monotonic()
         payload = self._cached_payload("market_briefing", fetcher, fallback_factory)
-        return self._with_market_meta(payload, self._category_for_cache_key("market_briefing"))
+        payload = self._with_market_meta(payload, self._category_for_cache_key("market_briefing"))
+        payload["providerHealth"] = self._provider_health(payload, "market_briefing", duration_ms=int((time.monotonic() - started_at) * 1000), error_summary=_compact_error_summary(payload.get("lastError")))
+        return payload
 
     def get_futures(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        started_at = time.monotonic()
         payload = self._cached_payload(
             "futures",
             self._fetch_futures_snapshot,
@@ -506,9 +539,11 @@ class MarketOverviewService:
             payload = self._fallback_futures_snapshot()
         payload = self._with_market_meta(payload, "futures")
         payload["items"] = [self._with_item_meta(item, "futures", payload) for item in payload.get("items", [])]
+        payload["providerHealth"] = self._provider_health(payload, "futures", duration_ms=int((time.monotonic() - started_at) * 1000), error_summary=_compact_error_summary(payload.get("lastError")))
         return payload
 
     def get_cn_short_sentiment(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        started_at = time.monotonic()
         payload = self._cached_payload(
             "cn_short_sentiment",
             self._fetch_cn_short_sentiment_snapshot,
@@ -517,6 +552,7 @@ class MarketOverviewService:
         payload.setdefault("source", "public")
         payload.setdefault("updatedAt", _now_iso())
         payload = self._with_market_meta(payload, self._category_for_cache_key("cn_short_sentiment"))
+        payload["providerHealth"] = self._provider_health(payload, "cn_short_sentiment", duration_ms=int((time.monotonic() - started_at) * 1000), error_summary=_compact_error_summary(payload.get("lastError")))
         return payload
 
     def _panel(
@@ -527,17 +563,19 @@ class MarketOverviewService:
         fetcher: Callable[[], PanelPayload],
         actor: Optional[Dict[str, Any]],
     ) -> PanelPayload:
+        started_at = time.monotonic()
         status = "success"
         snapshot = self._cached_payload(
             cache_key,
             fetcher,
             lambda: self._fallback_overview_panel(cache_key, panel_name, "数据源刷新超时，当前显示备用快照"),
         )
-        error_message = snapshot.get("lastError") or snapshot.get("error_message")
+        duration_ms = int((time.monotonic() - started_at) * 1000)
+        error_message = _compact_error_summary(snapshot.get("lastError") or snapshot.get("error_message"))
         if error_message:
             status = "failure"
-            snapshot.setdefault("error_message", str(error_message))
-            raw_response: Dict[str, Any] = {"cache": "stale_or_fallback", "error": str(error_message)}
+            snapshot["error_message"] = error_message
+            raw_response: Dict[str, Any] = {"cache": "stale_or_fallback", "error": error_message}
         elif snapshot.get("isRefreshing"):
             raw_response = {"cache": "stale_refreshing"}
         else:
@@ -551,6 +589,8 @@ class MarketOverviewService:
         snapshot.setdefault("items", [])
         snapshot = self._with_market_meta(snapshot, self._category_for_cache_key(cache_key))
         snapshot["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), snapshot) for item in snapshot.get("items", [])]
+        snapshot["providerHealth"] = self._provider_health(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message)
+        raw_response.update(self._provider_log_meta(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message))
         log_session_id = ExecutionLogService().record_market_overview_fetch(
             panel_name=panel_name,
             endpoint_url=endpoint_url,
@@ -572,17 +612,18 @@ class MarketOverviewService:
         fallback_factory: Callable[[], Dict[str, Any]],
         actor: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
+        started_at = time.monotonic()
         error_message = None
         status = "success"
         snapshot = self._cached_payload(cache_key, fetcher, fallback_factory)
+        duration_ms = int((time.monotonic() - started_at) * 1000)
         if snapshot.get("lastError"):
             status = "failure"
-            error_message = f"更新失败：已回退到最近一次有效数据（{snapshot.get('lastError')}）"
-            if not snapshot.get("error"):
-                snapshot["error"] = error_message
+            error_message = _compact_error_summary(snapshot.get("lastError"))
+            snapshot["error"] = "更新失败：已回退到最近一次有效数据"
             if str(snapshot.get("source") or "").lower() not in {"fallback", "mock", "unavailable"}:
                 snapshot["fallback_used"] = True
-            raw_response: Dict[str, Any] = {"cache": "stale_or_fallback", "error": snapshot.get("lastError")}
+            raw_response: Dict[str, Any] = {"cache": "stale_or_fallback", "error": error_message}
         elif snapshot.get("isRefreshing"):
             raw_response = {"cache": "stale_refreshing"}
         else:
@@ -594,6 +635,8 @@ class MarketOverviewService:
         snapshot.setdefault("fallback_used", bool(snapshot.get("fallbackUsed") or snapshot.get("isFallback")))
         snapshot = self._with_market_meta(snapshot, self._category_for_cache_key(cache_key))
         snapshot["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), snapshot) for item in snapshot.get("items", [])]
+        snapshot["providerHealth"] = self._provider_health(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message)
+        raw_response.update(self._provider_log_meta(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message))
         log_session_id = ExecutionLogService().record_market_overview_fetch(
             panel_name=panel_name,
             endpoint_url=endpoint_url,
@@ -615,13 +658,15 @@ class MarketOverviewService:
         fallback_factory: Callable[[], Dict[str, Any]],
         actor: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
+        started_at = time.monotonic()
         status = "success"
         snapshot = self._cached_payload(cache_key, fetcher, fallback_factory)
-        error_message = snapshot.get("lastError")
+        duration_ms = int((time.monotonic() - started_at) * 1000)
+        error_message = _compact_error_summary(snapshot.get("lastError"))
         if error_message:
             status = "failure"
-            snapshot.setdefault("error", f"更新失败：已回退到可用市场快照（{error_message}）")
-            raw_response: Dict[str, Any] = {"cache": "stale_or_fallback", "error": str(error_message)}
+            snapshot["error"] = "更新失败：已回退到可用市场快照"
+            raw_response: Dict[str, Any] = {"cache": "stale_or_fallback", "error": error_message}
         elif snapshot.get("isRefreshing"):
             raw_response = {"cache": "stale_refreshing"}
         else:
@@ -633,6 +678,8 @@ class MarketOverviewService:
         snapshot.setdefault("items", [])
         snapshot = self._with_market_meta(snapshot, self._category_for_cache_key(cache_key))
         snapshot["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), snapshot) for item in snapshot.get("items", [])]
+        snapshot["providerHealth"] = self._provider_health(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message)
+        raw_response.update(self._provider_log_meta(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message))
         log_session_id = ExecutionLogService().record_market_overview_fetch(
             panel_name=panel_name,
             endpoint_url=endpoint_url,
@@ -655,10 +702,13 @@ class MarketOverviewService:
 
         def store_success() -> Dict[str, Any]:
             payload = fetcher()
-            if self._is_storable_market_snapshot(payload):
-                snapshot_payload = copy.deepcopy(payload)
-                self._market_data_cache[cache_key] = snapshot_payload
-                self._save_persistent_snapshot(cache_key, snapshot_payload)
+            if self._is_fallback_only_market_snapshot(payload):
+                raise RuntimeError("market provider unavailable")
+            if not self._is_storable_market_snapshot(payload):
+                raise RuntimeError("market provider returned no usable data")
+            snapshot_payload = copy.deepcopy(payload)
+            self._market_data_cache[cache_key] = snapshot_payload
+            self._save_persistent_snapshot(cache_key, snapshot_payload)
             return payload
 
         def fallback() -> Dict[str, Any]:
@@ -698,6 +748,22 @@ class MarketOverviewService:
         has_items = isinstance(items, list) and len(items) > 0
         has_value = any(payload.get(key) is not None for key in ("value", "price", "sentimentScore", "scores", "metrics"))
         return bool(has_items or has_value)
+
+    def _is_fallback_only_market_snapshot(self, payload: Dict[str, Any]) -> bool:
+        source = str(payload.get("source") or "").lower()
+        freshness = str(payload.get("freshness") or "").lower()
+        if payload.get("isFallback") or source in {"fallback", "mock", "unavailable"} or freshness in {"fallback", "mock"}:
+            return True
+        items = [item for item in payload.get("items", []) if isinstance(item, dict)]
+        if not items:
+            return False
+        return all(
+            item.get("isFallback")
+            or item.get("fallbackUsed")
+            or str(item.get("source") or "").lower() in {"fallback", "mock", "unavailable"}
+            or str(item.get("freshness") or "").lower() in {"fallback", "mock", "error"}
+            for item in items
+        )
 
     def _save_persistent_snapshot(self, cache_key: str, payload: Dict[str, Any]) -> None:
         try:
@@ -872,6 +938,107 @@ class MarketOverviewService:
     def _source_label(self, source: Any) -> str:
         return SOURCE_LABELS.get(str(source or "").lower(), str(source or "公开数据"))
 
+    def _provider_health_status(self, payload: Dict[str, Any]) -> str:
+        source = str(payload.get("source") or "").lower()
+        freshness = str(payload.get("freshness") or "").lower()
+        items = [item for item in payload.get("items", []) if isinstance(item, dict)]
+        fallback_items = [
+            item for item in items
+            if item.get("isFallback")
+            or item.get("fallbackUsed")
+            or str(item.get("source") or "").lower() in {"fallback", "mock", "unavailable"}
+            or str(item.get("freshness") or "").lower() in {"fallback", "mock", "error"}
+        ]
+        real_items = [item for item in items if item not in fallback_items]
+        has_error = bool(payload.get("lastError") or payload.get("refreshError") or payload.get("error"))
+        if payload.get("isRefreshing") and (payload.get("lastError") or payload.get("refreshError")) and (payload.get("isStale") or payload.get("isFromSnapshot")):
+            return "stale"
+        if payload.get("isRefreshing"):
+            return "refreshing"
+        if source == "unavailable" or (not items and freshness in {"fallback", "error"}):
+            return "unavailable"
+        if has_error and (payload.get("isStale") or payload.get("isFromSnapshot")) and items:
+            return "stale"
+        if has_error and not items:
+            return "error"
+        if real_items and fallback_items:
+            return "partial"
+        if payload.get("isFallback") or freshness in {"fallback", "mock"} or source in {"fallback", "mock"}:
+            return "fallback"
+        if payload.get("fallbackUsed") and real_items:
+            return "partial"
+        if payload.get("isStale") or freshness == "stale":
+            return "stale"
+        if freshness in {"cached", "delayed"}:
+            return "cache"
+        if freshness == "live":
+            return "live"
+        return "cache"
+
+    def _provider_health(
+        self,
+        payload: Dict[str, Any],
+        cache_key: str,
+        *,
+        duration_ms: Optional[int],
+        error_summary: Optional[str],
+    ) -> Dict[str, Any]:
+        source = str(payload.get("source") or "public")
+        status = self._provider_health_status(payload)
+        return {
+            "provider": source,
+            "status": status if status in PROVIDER_HEALTH_STATUSES else "cache",
+            "asOf": payload.get("asOf"),
+            "updatedAt": payload.get("updatedAt") or payload.get("last_update") or payload.get("last_refresh_at"),
+            "latencyMs": duration_ms if isinstance(duration_ms, int) and duration_ms >= 0 else None,
+            "errorSummary": error_summary,
+            "isFallback": bool(payload.get("isFallback") or status == "fallback"),
+            "isStale": bool(payload.get("isStale") or status == "stale"),
+            "isRefreshing": bool(payload.get("isRefreshing") or status == "refreshing"),
+            "sourceLabel": payload.get("sourceLabel") or self._source_label(source),
+            "card": cache_key,
+        }
+
+    def _provider_log_meta(
+        self,
+        payload: Dict[str, Any],
+        cache_key: str,
+        *,
+        duration_ms: Optional[int],
+        error_summary: Optional[str],
+    ) -> Dict[str, Any]:
+        health = payload.get("providerHealth") if isinstance(payload.get("providerHealth"), dict) else self._provider_health(
+            payload,
+            cache_key,
+            duration_ms=duration_ms,
+            error_summary=error_summary,
+        )
+        status = str(health.get("status") or "")
+        if error_summary:
+            event_name = "MarketProviderRefreshFailed"
+        elif status == "fallback":
+            event_name = "MarketProviderFallbackUsed"
+        elif status == "stale":
+            event_name = "MarketSnapshotServedStale"
+        elif status == "partial":
+            event_name = "MarketProviderFallbackUsed"
+        else:
+            event_name = ""
+        stale_age = payload.get("delayMinutes") if payload.get("isStale") else None
+        return {
+            "event_name": event_name or None,
+            "card": cache_key,
+            "provider": health.get("provider"),
+            "source": health.get("provider"),
+            "status": status,
+            "duration_ms": duration_ms,
+            "latency_ms": duration_ms,
+            "stale_age_minutes": stale_age,
+            "fallbackUsed": bool(payload.get("fallbackUsed") or health.get("isFallback")),
+            "isStale": bool(payload.get("isStale") or health.get("isStale")),
+            "error": error_summary,
+        }
+
     def _with_market_meta(self, payload: Dict[str, Any], category: str) -> Dict[str, Any]:
         source = str(payload.get("source") or ("fallback" if payload.get("fallbackUsed") or payload.get("fallback_used") else "mixed"))
         is_fallback = bool(payload.get("isFallback") or source.lower() in {"fallback", "mock"})
@@ -903,8 +1070,8 @@ class MarketOverviewService:
             "warning": payload.get("warning") or (REFRESH_WARNING if payload.get("lastError") else None) or freshness["warning"],
             "fallbackUsed": bool(payload.get("fallbackUsed") or freshness["isFallback"]),
             "isRefreshing": bool(payload.get("isRefreshing")),
-            "lastError": payload.get("lastError"),
-            "refreshError": payload.get("refreshError") or payload.get("lastError"),
+            "lastError": _compact_error_summary(payload.get("lastError")),
+            "refreshError": _compact_error_summary(payload.get("refreshError") or payload.get("lastError")),
             "isFromSnapshot": bool(payload.get("isFromSnapshot")),
             "lastSuccessfulAt": payload.get("lastSuccessfulAt"),
         }

@@ -76,7 +76,9 @@ class MarketCryptoApiTestCase(unittest.TestCase):
 
         self.assertTrue(payload["fallback_used"])
         self.assertEqual(payload["items"][0]["price"], 73000.0)
-        self.assertIn("binance down", payload["error"])
+        self.assertEqual(payload["error"], "更新失败：已回退到最近一次有效数据")
+        self.assertEqual(payload["providerHealth"]["errorSummary"], "数据源暂不可用")
+        self.assertNotIn("binance down", str(payload))
 
     def test_get_crypto_uses_cache_within_ttl(self) -> None:
         calls = 0
