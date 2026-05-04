@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "check:design": "node scripts/check-design-constitution.mjs",
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
