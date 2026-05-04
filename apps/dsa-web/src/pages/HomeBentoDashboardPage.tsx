@@ -299,10 +299,102 @@ function traceStatusLabel(status?: string | null): string {
   if (normalized === 'fallback') return '备用';
   if (normalized === 'stale') return '陈旧';
   if (normalized === 'missing') return '缺失';
-  if (normalized === 'partial') return '部分';
+  if (normalized === 'partial') return '部分可用';
   if (normalized === 'error') return '异常';
   if (normalized === 'unknown' || !normalized) return '未知';
   return status || '未知';
+}
+
+function traceSourceLabel(source?: string | null, locale: DashboardLocale = 'zh'): string {
+  const normalized = String(source || '').trim().toLowerCase();
+  if (locale === 'en') {
+    return source || 'unknown';
+  }
+  if (normalized === 'llm') return 'LLM';
+  if (normalized === 'rule' || normalized === 'technical_rule') return '规则';
+  if (normalized === 'frontend') return '前端';
+  if (normalized === 'blended') return '综合';
+  if (normalized === 'fallback') return '备用';
+  if (normalized === 'unknown' || !normalized) return '未知';
+  return source || '未知';
+}
+
+function traceFieldLabel(name: string, locale: DashboardLocale): string {
+  if (locale === 'en') {
+    return name;
+  }
+  const labels: Record<string, string> = {
+    action: '操作',
+    score: '评分',
+    confidence: '置信度',
+    entry: '入场',
+    target: '目标',
+    stop: '止损',
+  };
+  return labels[name.trim().toLowerCase()] || name;
+}
+
+function traceDataSourceLabel(name?: string | null, locale: DashboardLocale = 'zh'): string {
+  const value = String(name || '').trim();
+  if (locale === 'en') {
+    return value || 'source';
+  }
+  const labels: Record<string, string> = {
+    market: '行情',
+    fundamentals: '基本面',
+    fundamental: '基本面',
+    news: '新闻',
+    sentiment: '情绪',
+    technical: '技术面',
+    quote: '报价',
+  };
+  return labels[value.toLowerCase()] || value || '数据源';
+}
+
+function localizeTraceMessage(value: string | undefined, type: string | undefined, locale: DashboardLocale): string {
+  const text = String(value || '').trim();
+  if (locale === 'en') {
+    return text || type || 'trace warning';
+  }
+  const normalizedType = String(type || '').toLowerCase();
+  if (normalizedType === 'action_plan_mismatch') {
+    return '操作建议与执行计划存在不一致，已在决策来源中标注。';
+  }
+  if (!text) {
+    return '决策链路存在需要复核的提示。';
+  }
+  return containsCjk(text) ? text : '决策链路存在需要复核的提示。';
+}
+
+function localizeTraceLimitation(value: string, locale: DashboardLocale): string {
+  const text = String(value || '').trim();
+  if (locale === 'en' || containsCjk(text)) {
+    return text;
+  }
+  if (/fundamental.*partial/i.test(text)) {
+    return '基本面数据部分可用';
+  }
+  if (/fundamental.*incomplete/i.test(text)) {
+    return '基本面数据不完整';
+  }
+  if (/not investment advice/i.test(text)) {
+    return 'AI 洞察仅供参考，不构成投资建议。';
+  }
+  return '存在数据覆盖限制';
+}
+
+function localizeTraceNote(value: string | null | undefined, locale: DashboardLocale): string {
+  const text = String(value || '').trim();
+  if (!text || locale === 'en' || containsCjk(text)) {
+    return text;
+  }
+  if (/score/i.test(text)) {
+    return '评分路径已稳定';
+  }
+  if (/rule/i.test(text)) {
+    return '规则层已参与校验';
+  }
+  return '已记录来源说明';
 }
 
 function safeReportValue(value: unknown): string {
@@ -687,11 +779,11 @@ function FullDecisionReportDrawer({
                 {identity.companyWithTicker}
               </h2>
               <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 text-sm text-white/68 sm:grid-cols-2">
-                <span>Action: {dashboard.decision.signalLabel}</span>
-                <span>Score: {dashboard.decision.heroValue} / 100</span>
-                <span>Confidence: {dashboard.decision.heroValue === EMPTY_FIELD_VALUE ? '--' : `${Math.round(Number(dashboard.decision.heroValue) * 10)}%`}</span>
-                <span>Report generated: {identity.generatedAt}</span>
-                <span className="sm:col-span-2">Data status: {identity.dataStatus}</span>
+                <span>操作：{dashboard.decision.signalLabel}</span>
+                <span>评分：{dashboard.decision.heroValue}{dashboard.decision.heroUnit || ''}</span>
+                <span>置信度：{dashboard.decision.confidenceValue || '--'}</span>
+                <span>生成时间：{identity.generatedAt}</span>
+                <span className="sm:col-span-2">数据状态：{identity.dataStatus}</span>
               </div>
             </div>
             <div className="flex min-w-0 flex-wrap gap-2">
@@ -722,10 +814,10 @@ function FullDecisionReportDrawer({
             </div>
           </div>
           <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3 text-xs text-white/56 md:grid-cols-4">
-            <span>Market: {identity.market}</span>
-            <span>Currency: {identity.currency}</span>
-            <span className="min-w-0 truncate">Providers: {identity.providers}</span>
-            <span>Horizon: {identity.horizon}</span>
+            <span>市场：{identity.market}</span>
+            <span>币种：{identity.currency}</span>
+            <span className="min-w-0 truncate">数据源：{identity.providers}</span>
+            <span>周期：{identity.horizon}</span>
           </div>
           <p className="mt-4 rounded-xl border border-amber-300/18 bg-amber-300/8 px-3 py-2 text-sm text-amber-50/82">
             AI 洞察仅供参考，不构成投资建议。
@@ -814,11 +906,11 @@ function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: 
           {decisionFields.map(([name, field]) => (
             <div key={name} className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
               <div className="flex min-w-0 items-center justify-between gap-2">
-                <span className="truncate text-xs font-semibold text-white/72">{name}</span>
-                <TraceBadge>{traceStatusLabel(field.source)}</TraceBadge>
+                <span className="truncate text-xs font-semibold text-white/72">{traceFieldLabel(name, locale)}</span>
+                <TraceBadge>{traceSourceLabel(field.source, locale)}</TraceBadge>
               </div>
               <p className="mt-1 break-words text-sm text-white">{formatTraceValue(field.value)}</p>
-              {field.notes ? <p className="mt-1 line-clamp-2 text-xs text-white/42">{field.notes}</p> : null}
+              {field.notes ? <p className="mt-1 line-clamp-2 text-xs text-white/42">{localizeTraceNote(field.notes, locale)}</p> : null}
             </div>
           ))}
         </div>
@@ -829,13 +921,13 @@ function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: 
         <div className="mt-3 flex min-w-0 flex-col gap-2">
           {dataSources.length ? dataSources.map((source, index) => (
             <div key={`${source.name}-${index}`} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
-              <span className="truncate text-xs font-semibold text-white/72">{source.name || 'source'}</span>
+              <span className="truncate text-xs font-semibold text-white/72">{traceDataSourceLabel(source.name, locale)}</span>
               <div className="flex min-w-0 flex-wrap justify-end gap-2">
                 <TraceBadge tone={traceStatusTone(source.status)}>{traceStatusLabel(source.status)}</TraceBadge>
                 {source.provider ? <TraceBadge>{source.provider}</TraceBadge> : null}
               </div>
             </div>
-          )) : <p className="text-sm text-white/48">No source metadata available.</p>}
+          )) : <p className="text-sm text-white/48">{isEnglish ? 'No source metadata available.' : '暂无数据源元信息。'}</p>}
         </div>
       </div>
 
@@ -844,11 +936,11 @@ function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: 
         <div className="mt-3 flex flex-col gap-2 text-sm text-white/66">
           {conflicts.length ? conflicts.map((conflict, index) => (
             <div key={`${conflict.type}-${index}`} className="rounded-xl border border-amber-300/15 bg-amber-300/8 px-3 py-2 text-amber-50/86">
-              {conflict.message || conflict.type || 'trace warning'}
+              {localizeTraceMessage(conflict.message, conflict.type, locale)}
             </div>
           )) : <p>{locale === 'en' ? 'No obvious conflicts detected.' : '未检测到明显冲突'}</p>}
           {limitations.map((item) => (
-            <p key={item} className="text-white/46">{item}</p>
+            <p key={item} className="text-white/46">{localizeTraceLimitation(item, locale)}</p>
           ))}
         </div>
       </div>
@@ -883,9 +975,9 @@ function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: 
             {signals.length ? signals.slice(0, 8).map((signal, index) => (
               <div key={`${signal.name}-${index}`} className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm">
                 <span className="truncate text-white/72">{signal.name || 'signal'}</span>
-                <span className="break-words text-white/48">{formatTraceValue(signal.value)} · {traceStatusLabel(signal.source)}</span>
+                <span className="break-words text-white/48">{formatTraceValue(signal.value)} · {traceSourceLabel(signal.source, locale)}</span>
               </div>
-            )) : <p className="text-sm text-white/48">No signal list available.</p>}
+            )) : <p className="text-sm text-white/48">{isEnglish ? 'No signal list available.' : '暂无信号输入列表。'}</p>}
           </div>
         </div>
       </details>
@@ -1106,6 +1198,7 @@ const CONTENT: Record<DashboardLocale, {
     heroValue: string;
     heroUnit: string;
     heroLabel: string;
+    confidenceValue?: string;
     signalLabel: string;
     signalTone: SignalTone;
     scoreLabel: string;
@@ -1283,6 +1376,215 @@ const CONTENT: Record<DashboardLocale, {
 
 type DashboardPayload = (typeof CONTENT)['zh'];
 type DashboardVariant = DashboardPayload;
+
+type HomeNormalizedAnalysisResult = {
+  action?: string;
+  score?: string;
+  confidence?: string;
+  entry?: string;
+  target?: string;
+  stop?: string;
+  summary?: string;
+  scoreContext?: string;
+  badge?: string;
+  reason?: string;
+  positionBody?: string;
+  technicalFields: StandardReportField[];
+  fundamentalFields?: StandardReportField[];
+};
+
+function getDecisionTrace(report: AnalysisReport): DecisionTrace | undefined {
+  const trace = report.decisionTrace || (report as unknown as Record<string, DecisionTrace | undefined>).decision_trace;
+  const traceSymbol = normalizeTickerQuery(trace?.symbol);
+  const reportSymbol = normalizeTickerQuery(report.meta.stockCode);
+  if (traceSymbol && reportSymbol && traceSymbol !== reportSymbol) {
+    return undefined;
+  }
+  return trace;
+}
+
+function normalizeScoreValue(value: unknown): string | undefined {
+  if (value === null || value === undefined || value === '') {
+    return undefined;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(Math.round(value * 10) / 10) : undefined;
+  }
+  const text = String(value).trim();
+  return text && !isPendingMetricValue(text) ? text : undefined;
+}
+
+function normalizeDecisionAction(value: unknown, locale: DashboardLocale): string | undefined {
+  const text = String(value ?? '').trim();
+  if (!text || isPendingMetricValue(text)) {
+    return undefined;
+  }
+  const normalized = text.toLowerCase();
+  const zhLabels: Record<string, string> = {
+    buy: '买入',
+    hold: '观望',
+    sell: '卖出',
+    reduce: '减仓',
+  };
+  const enLabels: Record<string, string> = {
+    buy: 'Buy',
+    hold: 'Hold',
+    sell: 'Sell',
+    reduce: 'Reduce',
+  };
+  if (normalized in zhLabels) {
+    return locale === 'en' ? enLabels[normalized] : zhLabels[normalized];
+  }
+  return text;
+}
+
+function firstMeaningfulValue(values: unknown[]): string | undefined {
+  for (const value of values) {
+    const text = String(value ?? '').trim();
+    if (text && !isPendingMetricValue(text)) {
+      return text;
+    }
+  }
+  return undefined;
+}
+
+function findBattlePlanValue(standardReport: StandardReport | undefined, aliases: string[]): string | undefined {
+  const field = fieldValue(standardReport?.battleFields, aliases);
+  if (field && !isPendingMetricValue(field)) {
+    return field;
+  }
+  const normalizedAliases = aliases.map((alias) => normalizeDetailKey(alias));
+  const items = [
+    ...(standardReport?.battlePlanCompact?.cards || []),
+    ...(standardReport?.battlePlanCompact?.notes || []),
+  ];
+  return items
+    .find((item) => normalizedAliases.some((alias) => normalizeDetailKey(item.label).includes(alias) || alias.includes(normalizeDetailKey(item.label))))
+    ?.value;
+}
+
+function normalizeHomeAnalysisResult(report: AnalysisReport, locale: DashboardLocale): HomeNormalizedAnalysisResult {
+  const standardReport = report.details?.standardReport;
+  const summaryPanel = standardReport?.summaryPanel;
+  const decisionPanel = standardReport?.decisionPanel;
+  const decisionContext = standardReport?.decisionContext;
+  const reasonLayer = standardReport?.reasonLayer;
+  const trace = getDecisionTrace(report);
+  const traceFields = trace?.decisionFields || {};
+  const rawResult = report.details?.rawResult as Record<string, unknown> | undefined;
+  const rawDashboard = (rawResult?.dashboard as Record<string, unknown> | undefined) || {};
+  const rawDataPerspective = (rawDashboard.dataPerspective as Record<string, unknown> | undefined) || {};
+  const rawStructuredAnalysis = (rawDashboard.structuredAnalysis as Record<string, unknown> | undefined) || {};
+  const rawTechnicals = (rawStructuredAnalysis.technicals as Record<string, unknown> | undefined) || {};
+  const rawTrendStatus = (rawDataPerspective.trendStatus as Record<string, unknown> | undefined) || {};
+  const rawVolumeAnalysis = (rawDataPerspective.volumeAnalysis as Record<string, unknown> | undefined) || {};
+  const rawAlphaVantage = (rawDataPerspective.alphaVantage as Record<string, unknown> | undefined) || {};
+  const technicalFields = [...(standardReport?.technicalFields || standardReport?.tableSections?.technical?.fields || [])];
+
+  if (!findStandardField(technicalFields, ['MACD'])) {
+    const macdValue = readMetricNodeValue(rawTechnicals.macd);
+    if (macdValue !== undefined) {
+      technicalFields.push({ label: 'MACD', value: macdValue });
+    }
+  }
+  if (!findStandardField(technicalFields, ['RSI-14', 'RSI14', 'RSI'])) {
+    const rsiValue = readMetricNodeValue(rawTechnicals.rsi14)
+      ?? readMetricNodeValue(rawTechnicals.rsi)
+      ?? readMetricNodeValue(rawAlphaVantage.rsi14)
+      ?? readMetricNodeValue(rawAlphaVantage.rsi);
+    if (rsiValue !== undefined) {
+      technicalFields.push({ label: 'RSI14', value: rsiValue });
+    }
+  }
+  if (!findStandardField(technicalFields, ['MA ALIGNMENT', 'Moving Averages', '均线结构', '均线系统', '多头/空头排列'])) {
+    const maAlignment = rawTrendStatus.maAlignment;
+    if (maAlignment !== undefined) {
+      technicalFields.push({ label: '多头/空头排列', value: String(maAlignment) });
+    }
+  }
+  if (!findStandardField(technicalFields, ['VOLUME DYNAMICS', 'Volume Profile', '量价配合', '量价判断', '成交量', 'Volume'])) {
+    const volumeMeaning = rawVolumeAnalysis.volumeMeaning;
+    if (volumeMeaning !== undefined) {
+      technicalFields.push({ label: '量价判断', value: String(volumeMeaning) });
+    }
+  }
+
+  const score = normalizeScoreValue(firstMeaningfulValue([
+    traceFields.score?.value,
+    summaryPanel?.score,
+    report.summary.sentimentScore,
+    readObjectField(report, ['summary', 'score']),
+    readObjectField(rawDashboard, ['summary', 'score']),
+  ]));
+
+  return {
+    action: normalizeDecisionAction(firstMeaningfulValue([
+      traceFields.action?.value,
+      summaryPanel?.operationAdvice,
+      standardReport?.decisionPanel?.keyAction,
+      report.summary.sentimentLabel,
+      report.summary.operationAdvice,
+      readObjectField(rawDashboard, ['summary', 'operation_advice']),
+    ]), locale),
+    score,
+    confidence: firstMeaningfulValue([
+      traceFields.confidence?.value,
+      decisionPanel?.confidence,
+      readObjectField(rawDashboard, ['summary', 'confidence']),
+    ]),
+    entry: firstMeaningfulValue([
+      traceFields.entry?.value,
+      decisionPanel?.idealEntry,
+      decisionPanel?.support,
+      report.strategy?.idealBuy,
+      findBattlePlanValue(standardReport, ['entry', 'ideal', '理想', '建仓', '入场']),
+    ]),
+    target: firstMeaningfulValue([
+      traceFields.target?.value,
+      decisionPanel?.target,
+      decisionPanel?.targetZone,
+      report.strategy?.takeProfit,
+      findBattlePlanValue(standardReport, ['target', '目标']),
+    ]),
+    stop: firstMeaningfulValue([
+      traceFields.stop?.value,
+      decisionPanel?.stopLoss,
+      report.strategy?.stopLoss,
+      findBattlePlanValue(standardReport, ['stop', '止损']),
+    ]),
+    summary: firstMeaningfulValue([
+      summaryPanel?.oneSentence,
+      report.summary.analysisSummary,
+      reasonLayer?.latestKeyUpdate,
+    ]),
+    scoreContext: firstMeaningfulValue([
+      decisionContext?.shortTermView,
+      summaryPanel?.trendPrediction,
+      report.summary.trendPrediction,
+      report.summary.operationAdvice,
+    ]),
+    badge: firstMeaningfulValue([
+      summaryPanel?.operationAdvice,
+      reasonLayer?.topCatalyst,
+      reasonLayer?.newsValueTier,
+    ]),
+    reason: firstMeaningfulValue([
+      summaryPanel?.oneSentence,
+      report.summary.analysisSummary,
+      reasonLayer?.coreReasons?.[0],
+      reasonLayer?.topCatalyst,
+      reasonLayer?.latestKeyUpdate,
+    ]),
+    positionBody: firstMeaningfulValue([
+      decisionPanel?.buildStrategy,
+      decisionPanel?.holderAdvice,
+      decisionPanel?.noPositionAdvice,
+      report.summary.operationAdvice,
+    ]),
+    technicalFields,
+    fundamentalFields: standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields,
+  };
+}
 
 const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVariant>> = {
   zh: {
@@ -2266,83 +2568,25 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
   }
 
   const seed = buildInPlacePlaceholderDashboard(locale, stockCode);
-  const standardReport = report.details?.standardReport;
-  const summaryPanel = standardReport?.summaryPanel;
-  const decisionPanel = standardReport?.decisionPanel;
-  const decisionContext = standardReport?.decisionContext;
-  const reasonLayer = standardReport?.reasonLayer;
-  const rawResult = report.details?.rawResult as Record<string, unknown> | undefined;
-  const rawDashboard = (rawResult?.dashboard as Record<string, unknown> | undefined) || {};
-  const rawDataPerspective = (rawDashboard.dataPerspective as Record<string, unknown> | undefined) || {};
-  const rawStructuredAnalysis = (rawDashboard.structuredAnalysis as Record<string, unknown> | undefined) || {};
-  const rawTechnicals = (rawStructuredAnalysis.technicals as Record<string, unknown> | undefined) || {};
-  const rawTrendStatus = (rawDataPerspective.trendStatus as Record<string, unknown> | undefined) || {};
-  const rawVolumeAnalysis = (rawDataPerspective.volumeAnalysis as Record<string, unknown> | undefined) || {};
-  const rawAlphaVantage = (rawDataPerspective.alphaVantage as Record<string, unknown> | undefined) || {};
-  const technicalFieldsBase = standardReport?.technicalFields || standardReport?.tableSections?.technical?.fields || [];
-  const technicalFields = [...technicalFieldsBase];
-  if (!findStandardField(technicalFields, ['MACD'])) {
-    const macdValue = readMetricNodeValue(rawTechnicals.macd);
-    if (macdValue !== undefined) {
-      technicalFields.push({ label: 'MACD', value: macdValue });
-    }
-  }
-  if (!findStandardField(technicalFields, ['RSI-14', 'RSI14', 'RSI'])) {
-    const rsiValue = readMetricNodeValue(rawTechnicals.rsi14)
-      ?? readMetricNodeValue(rawTechnicals.rsi)
-      ?? readMetricNodeValue(rawAlphaVantage.rsi14)
-      ?? readMetricNodeValue(rawAlphaVantage.rsi);
-    if (rsiValue !== undefined) {
-      technicalFields.push({ label: 'RSI14', value: rsiValue });
-    }
-  }
-  if (!findStandardField(technicalFields, ['MA ALIGNMENT', 'Moving Averages', '均线结构', '均线系统', '多头/空头排列'])) {
-    const maAlignment = rawTrendStatus.maAlignment;
-    if (maAlignment !== undefined) {
-      technicalFields.push({ label: '多头/空头排列', value: String(maAlignment) });
-    }
-  }
-  if (!findStandardField(technicalFields, ['VOLUME DYNAMICS', 'Volume Profile', '量价配合', '量价判断', '成交量', 'Volume'])) {
-    const volumeMeaning = rawVolumeAnalysis.volumeMeaning;
-    if (volumeMeaning !== undefined) {
-      technicalFields.push({ label: '量价判断', value: String(volumeMeaning) });
-    }
-  }
-  const fundamentalFields = standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields;
-  const sentimentTone = toneFromScore(report.summary.sentimentScore);
-  const scoreText = typeof report.summary.sentimentScore === 'number'
-    ? (report.summary.sentimentScore / 10).toFixed(1)
-    : EMPTY_FIELD_VALUE;
+  const normalized = normalizeHomeAnalysisResult(report, locale);
+  const scoreNumber = normalized.score ? Number.parseFloat(normalized.score) : undefined;
+  const sentimentTone = toneFromScore(Number.isFinite(scoreNumber) ? scoreNumber : undefined);
+  const scoreText = normalized.score || EMPTY_FIELD_VALUE;
   const reasonBody = resolveInsightBody(
     locale,
     sentimentTone,
-    [
-      summaryPanel?.oneSentence,
-      report.summary.analysisSummary,
-      reasonLayer?.coreReasons?.[0],
-      reasonLayer?.topCatalyst,
-      reasonLayer?.latestKeyUpdate,
-    ],
-    technicalFields,
+    [normalized.reason],
+    normalized.technicalFields,
   );
-  const badge = [
-    summaryPanel?.operationAdvice,
-    reasonLayer?.topCatalyst,
-    reasonLayer?.newsValueTier,
-  ].filter(Boolean).slice(0, 2).join(' · ') || EMPTY_FIELD_VALUE;
   const rawCompany = getCompanyDisplayName(report);
   const companyProfile = resolveCompanyProfile(stockCode, rawCompany);
-  const rawSignalLabel = report.summary.sentimentLabel || EMPTY_FIELD_VALUE;
-  const rawScoreValue = decisionContext?.shortTermView || report.summary.trendPrediction || report.summary.operationAdvice || EMPTY_FIELD_VALUE;
-  const rawSummary = summaryPanel?.oneSentence || report.summary.analysisSummary || EMPTY_FIELD_VALUE;
-  const entryValue = decisionPanel?.idealEntry || decisionPanel?.support || report.strategy?.idealBuy || EMPTY_FIELD_VALUE;
-  const targetValue = decisionPanel?.target || decisionPanel?.targetZone || report.strategy?.takeProfit || EMPTY_FIELD_VALUE;
-  const stopValue = decisionPanel?.stopLoss || report.strategy?.stopLoss || EMPTY_FIELD_VALUE;
-  const positionBody = decisionPanel?.buildStrategy
-    || decisionPanel?.holderAdvice
-    || decisionPanel?.noPositionAdvice
-    || report.summary.operationAdvice
-    || EMPTY_FIELD_VALUE;
+  const rawSignalLabel = normalized.action || report.summary.sentimentLabel || EMPTY_FIELD_VALUE;
+  const rawScoreValue = normalized.scoreContext || EMPTY_FIELD_VALUE;
+  const rawSummary = normalized.summary || EMPTY_FIELD_VALUE;
+  const entryValue = normalized.entry || EMPTY_FIELD_VALUE;
+  const targetValue = normalized.target || EMPTY_FIELD_VALUE;
+  const stopValue = normalized.stop || EMPTY_FIELD_VALUE;
+  const positionBody = normalized.positionBody || EMPTY_FIELD_VALUE;
   const localizedEntryValue = localizeMetricValue(locale, entryValue, EMPTY_FIELD_VALUE);
   const localizedTargetValue = localizeMetricValue(locale, targetValue, EMPTY_FIELD_VALUE);
   const localizedStopValue = localizeMetricValue(locale, stopValue, EMPTY_FIELD_VALUE);
@@ -2355,13 +2599,16 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
       company: companyProfile.company,
       sector: companyProfile.sector,
       heroValue: scoreText,
+      heroUnit: scoreText === EMPTY_FIELD_VALUE ? '' : '/100',
+      heroLabel: locale === 'en' ? 'Score' : '评分',
       signalLabel: localizeSentimentLabel(locale, rawSignalLabel, EMPTY_FIELD_VALUE),
       signalTone: sentimentTone,
       scoreValue: localizeNarrativeText(locale, rawScoreValue, EMPTY_FIELD_VALUE),
-      badge: localizeNarrativeText(locale, badge, EMPTY_FIELD_VALUE),
+      badge: localizeNarrativeText(locale, normalized.badge, EMPTY_FIELD_VALUE),
       summary: localizeNarrativeText(locale, rawSummary, EMPTY_FIELD_VALUE),
       reasonTitle: locale === 'en' ? 'Latest Report Context' : '最近报告归因',
       reasonBody: localizeNarrativeText(locale, reasonBody, EMPTY_FIELD_VALUE),
+      confidenceValue: normalized.confidence,
     },
     strategy: {
       ...seed.strategy,
@@ -2388,12 +2635,12 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
       ...seed.tech,
       signals: compactDashboardSignals(
         locale,
-        mapDesiredFields(locale, technicalFields, getTechnicalFieldSpecs(locale)).map((item) => ({ ...item, tone: item.tone || 'neutral' })),
+        mapDesiredFields(locale, normalized.technicalFields, getTechnicalFieldSpecs(locale)).map((item) => ({ ...item, tone: item.tone || 'neutral' })),
       ),
     },
     fundamentals: {
       ...seed.fundamentals,
-      metrics: compactDashboardMetrics(locale, mapDesiredFields(locale, fundamentalFields, getFundamentalFieldSpecs(locale))),
+      metrics: compactDashboardMetrics(locale, mapDesiredFields(locale, normalized.fundamentalFields, getFundamentalFieldSpecs(locale))),
     },
   });
 }
@@ -2622,7 +2869,7 @@ function GuestPaywallOverlay({ registrationPath }: { registrationPath: string })
 }
 
 const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest = false }) => {
-  const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
+  const { surfaceRef } = useSafariRenderReady();
   const [searchParams] = useSearchParams();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
@@ -3210,10 +3457,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       ref={surfaceRef}
       data-testid="home-bento-dashboard"
       data-bento-surface="true"
-      aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
-      aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
+      aria-live={shouldGuardA11y ? 'polite' : undefined}
       className={getSafariReadySurfaceClassName(
-        isSafariReady,
+        true,
         `${BENTO_SURFACE_ROOT_CLASS} w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0 bg-transparent`,
       )}
     >
@@ -3284,6 +3530,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         heroValue={readyCopy.decision.heroValue}
                         heroUnit={readyCopy.decision.heroUnit}
                         heroLabel={readyCopy.decision.heroLabel}
+                        confidenceValue={readyCopy.decision.confidenceValue}
                         signalLabel={readyCopy.decision.signalLabel}
                         signalTone={readyCopy.decision.signalTone}
                         sector={readyCopy.decision.sector}

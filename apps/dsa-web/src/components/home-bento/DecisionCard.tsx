@@ -29,6 +29,7 @@ type DecisionCardProps = {
   heroLabel: string;
   heroUnit: string;
   heroValue: string;
+  confidenceValue?: string;
   locale: 'zh' | 'en';
   reason: DecisionReason;
   reportActions?: React.ReactNode;
@@ -47,7 +48,7 @@ type DecisionCardProps = {
 function resolveSignalActionKey(signalLabel: string, tone: SignalTone): SignalActionKey {
   const normalized = signalLabel.trim().toUpperCase();
 
-  if (/SELL|SHORT|BEAR|卖|空|看空/.test(normalized)) {
+  if (/SELL|SHORT|BEAR|REDUCE|TRIM|卖|空|看空|减仓/.test(normalized)) {
     return 'sell';
   }
   if (/HOLD|NEUTRAL|WAIT|WATCH|OBSERVE|持有|中性|观望/.test(normalized)) {
@@ -57,6 +58,17 @@ function resolveSignalActionKey(signalLabel: string, tone: SignalTone): SignalAc
     return 'buy';
   }
   return tone === 'bearish' ? 'sell' : tone === 'neutral' ? 'hold' : 'buy';
+}
+
+function normalizeSignalCommandLabel(locale: 'zh' | 'en', signalLabel: string): string | null {
+  const normalized = signalLabel.trim().toLowerCase();
+  if (!normalized || normalized === '-') {
+    return null;
+  }
+  if (/(reduce|trim|减仓)/i.test(signalLabel)) {
+    return locale === 'en' ? 'REDUCE' : '减仓';
+  }
+  return null;
 }
 
 function formatSectorLabel(locale: 'zh' | 'en', sector?: string): string {
@@ -89,6 +101,11 @@ function formatSectorLabel(locale: 'zh' | 'en', sector?: string): string {
 
 function getSignalCommand(locale: 'zh' | 'en', signalLabel: string, tone: SignalTone): { actionKey: SignalActionKey; bias: string; command: string } {
   const actionKey = resolveSignalActionKey(signalLabel, tone);
+  const explicitCommand = normalizeSignalCommandLabel(locale, signalLabel);
+
+  if (explicitCommand) {
+    return { actionKey, command: explicitCommand, bias: actionKey === 'sell' ? (locale === 'en' ? 'BEARISH' : '看空') : (locale === 'en' ? 'NEUTRAL' : '中性') };
+  }
 
   if (actionKey === 'sell') {
     return locale === 'en'
@@ -147,7 +164,7 @@ function getConvictionSegmentClass(tone: SignalTone, active: boolean): string {
     return 'bg-rose-300 shadow-[0_0_10px_rgba(248,113,113,0.55)]';
   }
   if (tone === 'neutral') {
-    return 'bg-slate-200 shadow-[0_0_10px_rgba(226,232,240,0.35)]';
+    return 'bg-white/70 shadow-[0_0_10px_rgba(226,232,240,0.35)]';
   }
   return 'bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.5)]';
 }
@@ -211,6 +228,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   eyebrow,
   heroUnit,
   heroValue,
+  confidenceValue,
   locale,
   reason,
   reportActions,
@@ -232,6 +250,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   const insightCopy = reason.body || summary || scoreValue || '-';
   const sectorLabel = formatSectorLabel(locale, sector);
   const convictionPercent = getConvictionPercent(heroValue, heroUnit);
+  const convictionDisplay = confidenceValue?.trim() || `${convictionPercent}%`;
   const activeConvictionSegments = Math.ceil(convictionPercent / 20);
 
   return (
@@ -312,7 +331,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
                   className="font-mono text-3xl font-semibold leading-none text-white"
                   data-testid="home-bento-decision-conviction-value"
                 >
-                  {convictionPercent}%
+                  {convictionDisplay}
                 </span>
               </div>
               <div className="mt-4 grid grid-cols-5 gap-2">
