@@ -14,12 +14,18 @@ from api.v1.schemas.quant import (
     QuantDuckDBBenchmarkResponse,
     QuantDuckDBBuildFactorsRequest,
     QuantDuckDBBuildFactorsResponse,
+    QuantDuckDBCompareRuntimeContextRequest,
+    QuantDuckDBCompareRuntimeContextResponse,
     QuantDuckDBCoverageResponse,
+    QuantDuckDBFactorSnapshotRequest,
+    QuantDuckDBFactorSnapshotResponse,
     QuantDuckDBHealthResponse,
     QuantDuckDBIngestRequest,
     QuantDuckDBIngestResponse,
     QuantDuckDBInitRequest,
     QuantDuckDBInitResponse,
+    QuantDuckDBValidateFactorPathRequest,
+    QuantDuckDBValidateFactorPathResponse,
 )
 from src.config import Config
 from src.services.quant_analytics.duckdb_service import QuantDuckDBService
@@ -107,6 +113,69 @@ def build_duckdb_factors(
         end_date=request.end_date,
     )
     return QuantDuckDBBuildFactorsResponse.model_validate(payload)
+
+
+@router.post(
+    "/duckdb/factor-snapshot",
+    response_model=QuantDuckDBFactorSnapshotResponse,
+    responses={401: {"description": "Unauthorized", "model": ErrorResponse}, 403: {"description": "Admin access required", "model": ErrorResponse}},
+    summary="Read DuckDB factor snapshots for validation",
+    description="Return read-only factor_daily snapshots for explicit scanner/backtest validation context.",
+)
+def get_duckdb_factor_snapshot(
+    request: QuantDuckDBFactorSnapshotRequest = QuantDuckDBFactorSnapshotRequest(),
+    service: QuantDuckDBService = Depends(get_quant_duckdb_service),
+    _admin: CurrentUser = Depends(require_admin_user),
+) -> QuantDuckDBFactorSnapshotResponse:
+    payload = service.get_factor_snapshot(
+        symbols=request.symbols,
+        as_of_date=request.as_of_date,
+        lookback_days=request.lookback_days,
+        factors=request.factors,
+    )
+    return QuantDuckDBFactorSnapshotResponse.model_validate(payload)
+
+
+@router.post(
+    "/duckdb/validate-factor-path",
+    response_model=QuantDuckDBValidateFactorPathResponse,
+    responses={401: {"description": "Unauthorized", "model": ErrorResponse}, 403: {"description": "Admin access required", "model": ErrorResponse}},
+    summary="Validate optional DuckDB factor path coverage",
+    description="Report read-only factor_daily coverage diagnostics without changing scanner or backtest runtime behavior.",
+)
+def validate_duckdb_factor_path(
+    request: QuantDuckDBValidateFactorPathRequest = QuantDuckDBValidateFactorPathRequest(),
+    service: QuantDuckDBService = Depends(get_quant_duckdb_service),
+    _admin: CurrentUser = Depends(require_admin_user),
+) -> QuantDuckDBValidateFactorPathResponse:
+    payload = service.validate_factor_coverage(
+        symbols=request.symbols,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        min_factor_rows=request.min_factor_rows,
+    )
+    return QuantDuckDBValidateFactorPathResponse.model_validate(payload)
+
+
+@router.post(
+    "/duckdb/compare-runtime-context",
+    response_model=QuantDuckDBCompareRuntimeContextResponse,
+    responses={401: {"description": "Unauthorized", "model": ErrorResponse}, 403: {"description": "Admin access required", "model": ErrorResponse}},
+    summary="Compare runtime context with DuckDB factors",
+    description="Return diagnostics comparing caller-provided scanner/backtest context to optional factor_daily coverage.",
+)
+def compare_duckdb_runtime_context(
+    request: QuantDuckDBCompareRuntimeContextRequest = QuantDuckDBCompareRuntimeContextRequest(),
+    service: QuantDuckDBService = Depends(get_quant_duckdb_service),
+    _admin: CurrentUser = Depends(require_admin_user),
+) -> QuantDuckDBCompareRuntimeContextResponse:
+    payload = service.compare_factor_context(
+        symbols=request.symbols,
+        scanner_snapshot=request.scanner_snapshot,
+        backtest_snapshot=request.backtest_snapshot,
+        date_range=request.date_range,
+    )
+    return QuantDuckDBCompareRuntimeContextResponse.model_validate(payload)
 
 
 @router.get(

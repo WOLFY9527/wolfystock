@@ -217,6 +217,91 @@ def test_benchmark_returns_elapsed_and_counts(tmp_path) -> None:
     assert result["topResults"]
 
 
+def test_factor_snapshot_reports_requested_symbols_and_missing_symbols(tmp_path) -> None:
+    _require_duckdb()
+    service = QuantDuckDBService(database_path=str(tmp_path / "quant.duckdb"), enabled=True)
+    service.initialize_schema()
+    service.ingest_ohlcv(_sample_rows("AAA", 25) + _sample_rows("BBB", 25))
+    service.build_basic_factors()
+
+    result = service.get_factor_snapshot(
+        symbols=["AAA", "BBB", "MISSING"],
+        as_of_date="2026-01-25",
+        lookback_days=2,
+        factors=["return_1d", "factor_score"],
+    )
+
+    assert result["status"] == "ok"
+    assert result["dataMode"] == "real"
+    assert result["rowCount"] == 4
+    assert result["coverage"]["requestedSymbols"] == 3
+    assert result["coverage"]["coveredSymbols"] == 2
+    assert result["missingSymbols"] == ["MISSING"]
+    assert result["factorDates"] == ["2026-01-24", "2026-01-25"]
+    assert set(result["factors"]) == {"return_1d", "factor_score"}
+    assert {row["symbol"] for row in result["snapshots"]} == {"AAA", "BBB"}
+    assert all(set(row["factors"]) == {"return_1d", "factor_score"} for row in result["snapshots"])
+
+
+def test_factor_snapshot_disabled_does_not_create_database_file(tmp_path) -> None:
+    db_path = tmp_path / "disabled" / "quant.duckdb"
+    service = QuantDuckDBService(database_path=str(db_path), enabled=False)
+
+    result = service.get_factor_snapshot(symbols=["AAA"], as_of_date="2026-01-01")
+
+    assert result["status"] == "disabled"
+    assert result["dataMode"] == "disabled"
+    assert result["rowCount"] == 0
+    assert result["missingSymbols"] == ["AAA"]
+    assert not db_path.exists()
+
+
+def test_validate_factor_coverage_reports_insufficient_symbols(tmp_path) -> None:
+    _require_duckdb()
+    service = QuantDuckDBService(database_path=str(tmp_path / "quant.duckdb"), enabled=True)
+    service.initialize_schema()
+    service.ingest_ohlcv(_sample_rows("AAA", 25) + _sample_rows("SHORT", 3))
+    service.build_basic_factors()
+
+    result = service.validate_factor_coverage(
+        symbols=["AAA", "SHORT", "MISSING"],
+        start_date="2026-01-01",
+        end_date="2026-01-25",
+        min_factor_rows=20,
+    )
+
+    assert result["status"] == "insufficient"
+    assert result["dataMode"] == "real"
+    assert result["coverage"]["requestedSymbols"] == 3
+    assert result["coverage"]["coveredSymbols"] == 2
+    assert result["coverage"]["sufficientSymbols"] == 1
+    assert result["missingSymbols"] == ["MISSING"]
+    assert result["insufficientSymbols"] == ["SHORT"]
+    assert result["rowCount"] == 28
+
+
+def test_compare_runtime_context_returns_diagnostics_not_decisions(tmp_path) -> None:
+    _require_duckdb()
+    service = QuantDuckDBService(database_path=str(tmp_path / "quant.duckdb"), enabled=True)
+    service.initialize_schema()
+    service.ingest_ohlcv(_sample_rows("AAA", 25))
+    service.build_basic_factors()
+
+    result = service.compare_factor_context(
+        symbols=["AAA", "MISSING"],
+        scanner_snapshot={"AAA": {"score": 88.0}},
+        backtest_snapshot={"AAA": {"returnPct": 10.0}},
+        date_range={"startDate": "2026-01-20", "endDate": "2026-01-25"},
+    )
+
+    assert result["status"] == "insufficient"
+    assert result["dataMode"] == "real"
+    assert result["runtimeContexts"] == ["scanner", "backtest"]
+    assert result["diagnostics"]["missingSymbols"] == ["MISSING"]
+    assert result["diagnostics"]["productionRuntimeChanged"] is False
+    assert "decision" not in result
+
+
 def test_empty_queries_return_clear_status(tmp_path) -> None:
     _require_duckdb()
     service = QuantDuckDBService(database_path=str(tmp_path / "quant.duckdb"), enabled=True)

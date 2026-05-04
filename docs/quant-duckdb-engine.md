@@ -48,6 +48,17 @@ Phase 1.5 adds a safe validation layer on top of the Phase 1 skeleton:
 
 This is still not production strategy signal integration. Scanner, backtest, portfolio, AI, notification, and frontend runtime paths do not consume DuckDB data.
 
+## Phase 2 Scope
+
+Phase 2 adds an optional factor validation path over existing `factor_daily` rows:
+
+- read-only factor snapshots for requested symbols and date windows
+- coverage validation for requested scanner/backtest-like symbol sets
+- runtime-context comparison diagnostics for caller-provided scanner/backtest snapshots
+- clear missing-symbol and insufficient-coverage reporting
+
+This path is disabled by default and diagnostic-only. It does not replace scanner scoring, scanner ranking, backtest calculations, portfolio accounting, AI decisions, provider logic, or notification routing. Factor context is returned only from explicit quant endpoints or direct service calls.
+
 ## Service
 
 The service lives at:
@@ -65,6 +76,9 @@ Explicit service calls:
 - `build_basic_factors(symbols=None, start_date=None, end_date=None)`
 - `get_coverage(sample_limit=20)`
 - `benchmark_factor_query(symbol_limit=None, start_date=None, end_date=None)`
+- `get_factor_snapshot(symbols, as_of_date=None, lookback_days=None, factors=None)`
+- `validate_factor_coverage(symbols, start_date=None, end_date=None, min_factor_rows=None)`
+- `compare_factor_context(symbols, scanner_snapshot=None, backtest_snapshot=None, date_range=None)`
 - `query_signal_candidates(as_of_date=None, limit=100)`
 
 The existing-store ingest reads local `StockDaily` rows through `StockRepository`. It is capped by `QUANT_MAX_BENCHMARK_SYMBOLS`, supports explicit symbol/date bounds, and does not add a new market-data dependency or trigger network downloads.
@@ -120,6 +134,9 @@ POST /api/v1/quant/duckdb/ingest-ohlcv
 POST /api/v1/quant/duckdb/build-factors
 GET  /api/v1/quant/duckdb/coverage
 POST /api/v1/quant/duckdb/benchmark
+POST /api/v1/quant/duckdb/factor-snapshot
+POST /api/v1/quant/duckdb/validate-factor-path
+POST /api/v1/quant/duckdb/compare-runtime-context
 ```
 
 Example payload ingest:
@@ -186,6 +203,27 @@ Benchmark returns:
 - `dataMode` (`real`, `empty`, or disabled/unavailable status)
 - date range
 - top result sample
+
+Factor snapshot returns:
+
+- `status`, `dataMode`, and `durationMs`
+- requested/covered/missing symbol coverage
+- `rowCount`, `factorDates`, and requested factor names
+- per-row diagnostic factors plus `factorTrend`, `factorMomentum`, `factorDataMode`, and `factorWarnings`
+
+Factor path validation returns:
+
+- `status` (`ok`, `empty`, `insufficient`, `disabled`, or `unavailable`)
+- `dataMode`, `rowCount`, and date coverage
+- `missingSymbols` and `insufficientSymbols`
+- warnings for missing or insufficient factor coverage
+
+Runtime-context comparison returns diagnostics only:
+
+- caller-provided `runtimeContexts` such as `scanner` or `backtest`
+- coverage and snapshot diagnostics from `factor_daily`
+- `diagnostics.productionRuntimeChanged=false`
+- no production decision, ranking, score replacement, or backtest result mutation
 
 ## Parquet
 

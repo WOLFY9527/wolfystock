@@ -6,7 +6,7 @@ from __future__ import annotations
 import importlib
 import logging
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
@@ -19,8 +19,21 @@ logger = logging.getLogger(__name__)
 class QuantDuckDBService:
     """Small DuckDB service for bounded quant data validation and benchmarks."""
 
-    FACTOR_COUNT = 9
     DEFAULT_RECENT_ROW_LIMIT = 252
+    FACTOR_COLUMNS = (
+        "return_1d",
+        "log_return_1d",
+        "ma5",
+        "ma10",
+        "ma20",
+        "ma60",
+        "volume_ma20",
+        "volatility_20d",
+        "momentum_20d",
+        "close_vs_ma20",
+        "factor_score",
+    )
+    FACTOR_COUNT = len(FACTOR_COLUMNS)
 
     def __init__(
         self,
@@ -596,6 +609,174 @@ class QuantDuckDBService:
             ],
         }
 
+    def get_factor_snapshot(
+        self,
+        symbols: Optional[list[str]],
+        as_of_date: Any = None,
+        lookback_days: Any = None,
+        factors: Optional[list[str]] = None,
+    ) -> dict:
+        requested_symbols = self._normalize_symbols(symbols)[: self.max_benchmark_symbols]
+        disabled = self._disabled_result()
+        if disabled:
+            return self._empty_factor_snapshot(
+                "disabled",
+                requested_symbols,
+                "DuckDB quant engine is disabled",
+                data_mode="disabled",
+            )
+        if not requested_symbols:
+            return self._empty_factor_snapshot("invalid_request", [], "symbols are required", data_mode="empty")
+        available, _version, error = self._duckdb_status()
+        if not available:
+            return self._empty_factor_snapshot("unavailable", requested_symbols, error or "DuckDB is unavailable", data_mode="unavailable")
+        if not self._database_exists():
+            return self._empty_factor_snapshot("empty", requested_symbols, "DuckDB database does not exist", data_mode="empty")
+
+        selected_factors = self._normalize_factor_columns(factors)
+        as_of = self._parse_optional_date(as_of_date)
+        lookback = self._normalize_lookback_days(lookback_days)
+        started = time.perf_counter()
+        with self._connect() as conn:
+            if not self._schema_initialized(conn):
+                return self._empty_factor_snapshot(
+                    "unavailable",
+                    requested_symbols,
+                    "DuckDB quant schema is not initialized",
+                    data_mode="unavailable",
+                )
+            if as_of is None:
+                row = conn.execute(
+                    "SELECT MAX(trade_date) FROM factor_daily WHERE symbol IN (" + ", ".join(["?"] * len(requested_symbols)) + ")",
+                    requested_symbols,
+                ).fetchone()
+                as_of = row[0] if row else None
+            if as_of is None:
+                return self._empty_factor_snapshot("empty", requested_symbols, "No factor rows are available", data_mode="empty")
+            start = as_of - timedelta(days=lookback - 1) if lookback else None
+            date_clauses = ["trade_date <= ?"]
+            params: list[Any] = [as_of]
+            if start is not None:
+                date_clauses.append("trade_date >= ?")
+                params.append(start)
+            symbol_sql = ", ".join(["?"] * len(requested_symbols))
+            select_columns = ", ".join(selected_factors)
+            rows = conn.execute(
+                f"""
+                SELECT symbol, trade_date, {select_columns}
+                FROM factor_daily
+                WHERE symbol IN ({symbol_sql}) AND {" AND ".join(date_clauses)}
+                ORDER BY symbol, trade_date
+                """,
+                [*requested_symbols, *params],
+            ).fetchall()
+
+        return self._factor_snapshot_from_rows(
+            rows,
+            requested_symbols=requested_symbols,
+            factors=selected_factors,
+            started=started,
+        )
+
+    def validate_factor_coverage(
+        self,
+        symbols: Optional[list[str]],
+        start_date: Any = None,
+        end_date: Any = None,
+        min_factor_rows: Any = None,
+    ) -> dict:
+        requested_symbols = self._normalize_symbols(symbols)[: self.max_benchmark_symbols]
+        disabled = self._disabled_result()
+        if disabled:
+            return self._empty_factor_validation(
+                "disabled",
+                requested_symbols,
+                "DuckDB quant engine is disabled",
+                data_mode="disabled",
+            )
+        if not requested_symbols:
+            return self._empty_factor_validation("invalid_request", [], "symbols are required", data_mode="empty")
+        available, _version, error = self._duckdb_status()
+        if not available:
+            return self._empty_factor_validation("unavailable", requested_symbols, error or "DuckDB is unavailable", data_mode="unavailable")
+
+        start = self._parse_optional_date(start_date)
+        end = self._parse_optional_date(end_date)
+        if start and end and start > end:
+            return self._empty_factor_validation("invalid_request", requested_symbols, "start_date must be on or before end_date")
+        if not self._database_exists():
+            return self._empty_factor_validation("empty", requested_symbols, "DuckDB database does not exist", data_mode="empty")
+
+        min_rows = max(1, int(min_factor_rows or 1))
+        where_sql, params = self._scope_filter_sql("trade_date", start, end, requested_symbols)
+        started = time.perf_counter()
+        with self._connect() as conn:
+            if not self._schema_initialized(conn):
+                return self._empty_factor_validation(
+                    "unavailable",
+                    requested_symbols,
+                    "DuckDB quant schema is not initialized",
+                    data_mode="unavailable",
+                )
+            rows = conn.execute(
+                f"""
+                SELECT symbol, COUNT(*) AS factor_rows, MIN(trade_date), MAX(trade_date)
+                FROM factor_daily
+                {where_sql}
+                GROUP BY symbol
+                ORDER BY symbol
+                """,
+                params,
+            ).fetchall()
+        return self._factor_validation_from_rows(
+            rows,
+            requested_symbols=requested_symbols,
+            min_factor_rows=min_rows,
+            started=started,
+        )
+
+    def compare_factor_context(
+        self,
+        symbols: Optional[list[str]],
+        scanner_snapshot: Optional[dict[str, Any]] = None,
+        backtest_snapshot: Optional[dict[str, Any]] = None,
+        date_range: Optional[dict[str, Any]] = None,
+    ) -> dict:
+        started = time.perf_counter()
+        range_payload = dict(date_range or {})
+        start = range_payload.get("startDate") or range_payload.get("start_date")
+        end = range_payload.get("endDate") or range_payload.get("end_date")
+        coverage = self.validate_factor_coverage(symbols=symbols, start_date=start, end_date=end)
+        snapshot = self.get_factor_snapshot(symbols=symbols, as_of_date=end, lookback_days=5)
+        runtime_contexts = []
+        if scanner_snapshot:
+            runtime_contexts.append("scanner")
+        if backtest_snapshot:
+            runtime_contexts.append("backtest")
+
+        status = coverage.get("status", "empty")
+        data_mode = coverage.get("dataMode", "empty")
+        duration_ms = round((time.perf_counter() - started) * 1000, 3)
+        return {
+            "status": status,
+            "engine": "duckdb",
+            "dataMode": data_mode,
+            "durationMs": duration_ms,
+            "runtimeContexts": runtime_contexts,
+            "coverage": coverage.get("coverage", self._factor_coverage_summary([], [])),
+            "diagnostics": {
+                "missingSymbols": coverage.get("missingSymbols", []),
+                "insufficientSymbols": coverage.get("insufficientSymbols", []),
+                "scannerSymbols": sorted(self._normalize_symbols(list((scanner_snapshot or {}).keys()))),
+                "backtestSymbols": sorted(self._normalize_symbols(list((backtest_snapshot or {}).keys()))),
+                "productionRuntimeChanged": False,
+                "diagnosticOnly": True,
+            },
+            "snapshots": snapshot.get("snapshots", []),
+            "warnings": list(dict.fromkeys([*coverage.get("warnings", []), *snapshot.get("warnings", [])])),
+            "error": coverage.get("error"),
+        }
+
     def query_signal_candidates(self, as_of_date: Any = None, limit: int = 100) -> list[dict]:
         disabled = self._disabled_result()
         if disabled:
@@ -646,6 +827,202 @@ class QuantDuckDBService:
             }
             for row in rows
         ]
+
+    def _factor_snapshot_from_rows(
+        self,
+        rows: list,
+        *,
+        requested_symbols: list[str],
+        factors: list[str],
+        started: float,
+    ) -> dict:
+        covered_symbols = sorted({row[0] for row in rows})
+        missing_symbols = [symbol for symbol in requested_symbols if symbol not in covered_symbols]
+        factor_dates = sorted({self._date_to_iso(row[1]) for row in rows if row[1] is not None})
+        snapshots = []
+        for row in rows:
+            factor_values = {factor: row[index + 2] for index, factor in enumerate(factors)}
+            snapshots.append(
+                {
+                    "symbol": row[0],
+                    "tradeDate": self._date_to_iso(row[1]),
+                    "factors": factor_values,
+                    "factorTrend": self._factor_trend(factor_values.get("factor_score")),
+                    "factorMomentum": self._factor_momentum(factor_values.get("momentum_20d")),
+                    "factorDataMode": "real",
+                    "factorWarnings": self._factor_warnings(factor_values),
+                }
+            )
+        row_count = len(rows)
+        duration_ms = round((time.perf_counter() - started) * 1000, 3)
+        warnings = []
+        if missing_symbols:
+            warnings.append("missing_factor_symbols")
+        return {
+            "status": "ok" if row_count else "empty",
+            "engine": "duckdb",
+            "dataMode": "real" if row_count else "empty",
+            "durationMs": duration_ms,
+            "rowCount": row_count,
+            "coverage": self._factor_coverage_summary(requested_symbols, covered_symbols, row_count, factor_dates),
+            "factorDates": factor_dates,
+            "missingSymbols": missing_symbols,
+            "factors": factors,
+            "snapshots": snapshots,
+            "warnings": warnings,
+            "error": None,
+        }
+
+    def _factor_validation_from_rows(
+        self,
+        rows: list,
+        *,
+        requested_symbols: list[str],
+        min_factor_rows: int,
+        started: float,
+    ) -> dict:
+        covered_by_symbol = {row[0]: int(row[1] or 0) for row in rows}
+        covered_symbols = sorted(covered_by_symbol)
+        missing_symbols = [symbol for symbol in requested_symbols if symbol not in covered_by_symbol]
+        insufficient_symbols = [symbol for symbol, count in covered_by_symbol.items() if count < min_factor_rows]
+        row_count = sum(covered_by_symbol.values())
+        factor_dates = sorted(
+            {
+                self._date_to_iso(value)
+                for row in rows
+                for value in (row[2], row[3])
+                if value is not None
+            }
+        )
+        duration_ms = round((time.perf_counter() - started) * 1000, 3)
+        status = "ok"
+        if not row_count:
+            status = "empty"
+        elif missing_symbols or insufficient_symbols:
+            status = "insufficient"
+        warnings = []
+        if missing_symbols:
+            warnings.append("missing_factor_symbols")
+        if insufficient_symbols:
+            warnings.append("insufficient_factor_coverage")
+        return {
+            "status": status,
+            "engine": "duckdb",
+            "dataMode": "real" if row_count else "empty",
+            "durationMs": duration_ms,
+            "rowCount": row_count,
+            "coverage": self._factor_coverage_summary(
+                requested_symbols,
+                covered_symbols,
+                row_count,
+                factor_dates,
+                sufficient_symbols=[symbol for symbol, count in covered_by_symbol.items() if count >= min_factor_rows],
+            ),
+            "factorDates": factor_dates,
+            "missingSymbols": missing_symbols,
+            "insufficientSymbols": insufficient_symbols,
+            "warnings": warnings,
+            "error": None,
+        }
+
+    def _empty_factor_snapshot(self, status: str, requested_symbols: list[str], reason: str, *, data_mode: str = "empty") -> dict:
+        return {
+            "status": status,
+            "engine": "duckdb",
+            "dataMode": data_mode,
+            "durationMs": 0.0,
+            "rowCount": 0,
+            "coverage": self._factor_coverage_summary(requested_symbols, []),
+            "factorDates": [],
+            "missingSymbols": requested_symbols,
+            "factors": list(self.FACTOR_COLUMNS),
+            "snapshots": [],
+            "warnings": [reason] if reason else [],
+            "error": reason if status in {"disabled", "unavailable", "invalid_request"} else None,
+        }
+
+    def _empty_factor_validation(self, status: str, requested_symbols: list[str], reason: str, *, data_mode: str = "empty") -> dict:
+        return {
+            "status": status,
+            "engine": "duckdb",
+            "dataMode": data_mode,
+            "durationMs": 0.0,
+            "rowCount": 0,
+            "coverage": self._factor_coverage_summary(requested_symbols, []),
+            "factorDates": [],
+            "missingSymbols": requested_symbols,
+            "insufficientSymbols": [],
+            "warnings": [reason] if reason else [],
+            "error": reason if status in {"disabled", "unavailable", "invalid_request"} else None,
+        }
+
+    @staticmethod
+    def _factor_coverage_summary(
+        requested_symbols: list[str],
+        covered_symbols: list[str],
+        row_count: int = 0,
+        factor_dates: Optional[list[str]] = None,
+        *,
+        sufficient_symbols: Optional[list[str]] = None,
+    ) -> dict:
+        factor_dates = factor_dates or []
+        sufficient = covered_symbols if sufficient_symbols is None else sufficient_symbols
+        return {
+            "requestedSymbols": len(requested_symbols),
+            "coveredSymbols": len(covered_symbols),
+            "missingSymbols": max(0, len(requested_symbols) - len(covered_symbols)),
+            "sufficientSymbols": len(sufficient),
+            "rowCount": row_count,
+            "minFactorDate": min(factor_dates) if factor_dates else None,
+            "maxFactorDate": max(factor_dates) if factor_dates else None,
+        }
+
+    def _database_exists(self) -> bool:
+        return Path(self.database_path).exists()
+
+    @classmethod
+    def _normalize_factor_columns(cls, factors: Optional[list[str]]) -> list[str]:
+        if not factors:
+            return list(cls.FACTOR_COLUMNS)
+        allowed = set(cls.FACTOR_COLUMNS)
+        normalized = []
+        seen = set()
+        for factor in factors:
+            value = str(factor or "").strip()
+            if value in allowed and value not in seen:
+                normalized.append(value)
+                seen.add(value)
+        return normalized or list(cls.FACTOR_COLUMNS)
+
+    @staticmethod
+    def _normalize_lookback_days(value: Any) -> Optional[int]:
+        if value is None or value == "":
+            return None
+        return max(1, min(int(value), 3660))
+
+    @staticmethod
+    def _factor_trend(value: Optional[float]) -> str:
+        if value is None:
+            return "unknown"
+        if value > 0:
+            return "positive"
+        if value < 0:
+            return "negative"
+        return "neutral"
+
+    @staticmethod
+    def _factor_momentum(value: Optional[float]) -> str:
+        if value is None:
+            return "unknown"
+        if value > 0:
+            return "positive"
+        if value < 0:
+            return "negative"
+        return "neutral"
+
+    @staticmethod
+    def _factor_warnings(values: dict[str, Any]) -> list[str]:
+        return ["partial_factor_row"] if any(value is None for value in values.values()) else []
 
     def _count_ohlcv_rows(self, start: Optional[date], end: Optional[date], limit: int) -> int:
         where_sql, params = self._date_filter_sql("trade_date", start, end, prefix="WHERE")

@@ -1,3 +1,7 @@
+## 2026-05-05
+
+- 🦆 **DuckDB Quant Engine Phase 2（可选因子验证路径）** — 可选 DuckDB quant engine 新增只读 `factor_daily` snapshot、factor path coverage validation 与 runtime context comparison 管理员接口：`/api/v1/quant/duckdb/factor-snapshot`、`validate-factor-path`、`compare-runtime-context`。响应会明确返回 `dataMode`、coverage、row count、factor dates、missing/insufficient symbols、duration 与 diagnostic labels；禁用模式继续 `QUANT_DUCKDB_ENABLED=false` 默认且不创建 DuckDB 文件。该路径只供 scanner/backtest-like symbol/date context 对照验证，不替换 scanner scoring/ranking、backtest calculation、Portfolio accounting、AI decision 或 notification routing。
+
 ## 2026-05-04
 
 - 🔔 **Admin Notification Rules 运维视图增强** — `/admin/notifications` 新增路由覆盖摘要、规则分组、覆盖事件、最近触发/失败状态和明确的“仅解除日志路由绑定”删除文案；测试发送拆出“仅验证/试运行”和真实测试发送，试运行只校验目标配置不会发送通知。后端通知规则列表补充安全的 coverage/status/target 摘要字段，并为测试接口增加 `dry_run=true`，继续保持删除规则只移除 `log_notification_association`，不删除系统通知通道或凭据。

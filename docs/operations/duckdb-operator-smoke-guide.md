@@ -4,7 +4,7 @@
 
 DuckDB is an optional analytics accelerator for local quant validation, coverage checks, research queries, and benchmark scans. PostgreSQL remains the business database for users, portfolio accounting, watchlists, admin logs, settings, analysis tasks, and backtest metadata.
 
-DuckDB is disabled by default with `QUANT_DUCKDB_ENABLED=false`. Phase 1 and Phase 1.5 do not change scanner, backtest, or portfolio runtime paths. This guide is for safe local operator smoke testing and validation only.
+DuckDB is disabled by default with `QUANT_DUCKDB_ENABLED=false`. Phase 1, Phase 1.5, and Phase 2 do not change scanner, backtest, or portfolio runtime paths. This guide is for safe local operator smoke testing and validation only.
 
 ## Safety Principles
 
@@ -46,6 +46,9 @@ All endpoints are admin-only. If admin auth is enabled, include the same authent
 | `POST /api/v1/quant/duckdb/build-factors` | Build basic daily factors from ingested OHLCV rows. | Writes only when enabled and schema exists. | Returns `status=disabled` and does not write. | `status`, `ohlcvRows`, `factorRows`, `factorCount`, `durationMs`, `error` |
 | `GET /api/v1/quant/duckdb/coverage` | Report OHLCV/factor coverage and sample symbols. | Reads only after connecting to an enabled DuckDB database. | Returns disabled/empty coverage with `emptyReason`. | `status`, `enabled`, `databasePath`, `totalOhlcvRows`, `totalFactorRows`, `symbolCount`, `minTradeDate`, `maxTradeDate`, `latestFactorDate`, `symbols`, `emptyReason` |
 | `POST /api/v1/quant/duckdb/benchmark` | Run a bounded read-only query over `factor_daily`. | Read-only after connecting to an enabled DuckDB database. | Returns `status=disabled`, empty counts, and no top results. | `durationMs`, `rowsScanned`, `symbolsScanned`, `queryType`, `dataMode`, `startDate`, `endDate`, `topResults` |
+| `POST /api/v1/quant/duckdb/factor-snapshot` | Return read-only factor rows for requested symbols/date windows. | Never writes; reads existing `factor_daily` only. | Returns `status=disabled`, `dataMode=disabled`, no rows, and no DB file. | `status`, `dataMode`, `coverage`, `rowCount`, `factorDates`, `missingSymbols`, `snapshots`, `durationMs` |
+| `POST /api/v1/quant/duckdb/validate-factor-path` | Validate factor coverage for scanner/backtest-like symbol sets. | Never writes; reads existing `factor_daily` only. | Returns disabled coverage diagnostics and no DB file. | `status`, `dataMode`, `coverage`, `rowCount`, `factorDates`, `missingSymbols`, `insufficientSymbols`, `durationMs` |
+| `POST /api/v1/quant/duckdb/compare-runtime-context` | Compare caller-provided scanner/backtest context against factor coverage. | Never writes; diagnostics only. | Returns disabled diagnostics with `productionRuntimeChanged=false`. | `status`, `dataMode`, `runtimeContexts`, `coverage`, `diagnostics`, `snapshots`, `durationMs` |
 
 ## Disabled No-Write Smoke Check
 
@@ -86,6 +89,16 @@ curl -sS -X POST -H "$AUTH_HEADER" \
   -H "Content-Type: application/json" \
   -d '{"symbolLimit":1}' \
   "$API_BASE/api/v1/quant/duckdb/benchmark"
+
+curl -sS -X POST -H "$AUTH_HEADER" \
+  -H "Content-Type: application/json" \
+  -d '{"symbols":["SMOKE"],"asOfDate":"2026-01-05","lookbackDays":2}' \
+  "$API_BASE/api/v1/quant/duckdb/factor-snapshot"
+
+curl -sS -X POST -H "$AUTH_HEADER" \
+  -H "Content-Type: application/json" \
+  -d '{"symbols":["SMOKE"],"startDate":"2026-01-01","endDate":"2026-01-05"}' \
+  "$API_BASE/api/v1/quant/duckdb/validate-factor-path"
 
 test ! -e "$DUCKDB_DATABASE_PATH"
 test ! -e "$DUCKDB_DATABASE_PATH.wal"
@@ -171,6 +184,21 @@ curl -sS -X POST -H "$AUTH_HEADER" \
   -d '{"symbolLimit":1,"startDate":"2026-01-01","endDate":"2026-01-05"}' \
   "$API_BASE/api/v1/quant/duckdb/benchmark"
 
+curl -sS -X POST -H "$AUTH_HEADER" \
+  -H "Content-Type: application/json" \
+  -d '{"symbols":["SMOKE","MISSING"],"asOfDate":"2026-01-05","lookbackDays":3,"factors":["return_1d","factor_score"]}' \
+  "$API_BASE/api/v1/quant/duckdb/factor-snapshot"
+
+curl -sS -X POST -H "$AUTH_HEADER" \
+  -H "Content-Type: application/json" \
+  -d '{"symbols":["SMOKE","MISSING"],"startDate":"2026-01-01","endDate":"2026-01-05","minFactorRows":3}' \
+  "$API_BASE/api/v1/quant/duckdb/validate-factor-path"
+
+curl -sS -X POST -H "$AUTH_HEADER" \
+  -H "Content-Type: application/json" \
+  -d '{"symbols":["SMOKE"],"scannerSnapshot":{"SMOKE":{"score":80}},"dateRange":{"startDate":"2026-01-01","endDate":"2026-01-05"}}' \
+  "$API_BASE/api/v1/quant/duckdb/compare-runtime-context"
+
 rm -f /tmp/wolfystock-smoke.duckdb /tmp/wolfystock-smoke.duckdb.wal
 ```
 
@@ -198,6 +226,14 @@ Benchmark:
 - `startDate` and `endDate`
 - `topResults`
 
+Phase 2 factor validation:
+
+- `dataMode` is `real`, `empty`, `disabled`, or `unavailable`.
+- `coverage` contains requested/covered/missing symbol counts, row count, and factor date bounds.
+- `missingSymbols` and `insufficientSymbols` are explicit diagnostics.
+- `snapshots` include diagnostic factor values and labels such as `factorTrend`, `factorMomentum`, `factorDataMode`, and `factorWarnings`.
+- `compare-runtime-context` returns `diagnostics.productionRuntimeChanged=false`; scanner and backtest runtime outputs are not changed.
+
 ## Factor Definitions
 
 Phase 1.5 factor rows include:
@@ -220,6 +256,8 @@ These are validation and benchmark factors, not production trading signals.
 ## Troubleshooting
 
 - DuckDB disabled: confirm `QUANT_DUCKDB_ENABLED=true` is exported in the same process that starts the backend.
+- Factor snapshot is empty: initialize the schema, ingest OHLCV rows, build factors, and check that requested symbols/date windows match `factor_daily`.
+- Factor validation is insufficient: inspect `missingSymbols`, `insufficientSymbols`, and `coverage` before comparing scanner/backtest snapshots.
 - `duckdb` Python dependency missing: health returns `status=unavailable`; install the project dependencies for the local environment before enabling the smoke path.
 - No OHLCV rows: initialize the schema, then run payload ingest or bounded existing-store ingest.
 - No factor rows: run `build-factors` after OHLCV ingest; an empty OHLCV table produces `status=empty`.
@@ -258,5 +296,6 @@ The quant tests validate DuckDB service/API behavior, including disabled no-writ
 - Does not alter scanner or backtest runtime results.
 - Does not change portfolio accounting.
 - Does not create production trading signals.
+- Does not silently use `factor_score` for production scanner ranking, backtest signals, AI decisions, or notifications.
 - Does not implement Parquet import/export yet.
 - Does not require full-market ingest.

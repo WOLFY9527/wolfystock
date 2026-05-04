@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -40,6 +40,33 @@ class QuantDuckDBBenchmarkRequest(BaseModel):
     symbol_limit: Optional[int] = Field(None, ge=1, alias="symbolLimit")
     start_date: Optional[str] = Field(None, alias="startDate")
     end_date: Optional[str] = Field(None, alias="endDate")
+
+
+class QuantDuckDBFactorSnapshotRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbols: list[str] = Field(default_factory=list)
+    as_of_date: Optional[str] = Field(None, alias="asOfDate")
+    lookback_days: Optional[int] = Field(None, ge=1, alias="lookbackDays")
+    factors: Optional[list[str]] = None
+
+
+class QuantDuckDBValidateFactorPathRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbols: list[str] = Field(default_factory=list)
+    start_date: Optional[str] = Field(None, alias="startDate")
+    end_date: Optional[str] = Field(None, alias="endDate")
+    min_factor_rows: Optional[int] = Field(None, ge=1, alias="minFactorRows")
+
+
+class QuantDuckDBCompareRuntimeContextRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbols: list[str] = Field(default_factory=list)
+    scanner_snapshot: Optional[dict[str, Any]] = Field(None, alias="scannerSnapshot")
+    backtest_snapshot: Optional[dict[str, Any]] = Field(None, alias="backtestSnapshot")
+    date_range: Optional[dict[str, Any]] = Field(None, alias="dateRange")
 
 
 class QuantOHLCVRow(BaseModel):
@@ -109,6 +136,78 @@ class QuantDuckDBBuildFactorsResponse(BaseModel):
     factor_rows: int = Field(0, alias="factorRows")
     factor_count: int = Field(0, alias="factorCount")
     duration_ms: float = Field(0.0, alias="durationMs")
+    error: Optional[str] = None
+
+
+class QuantDuckDBFactorCoverageSummary(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    requested_symbols: int = Field(0, alias="requestedSymbols")
+    covered_symbols: int = Field(0, alias="coveredSymbols")
+    missing_symbols: int = Field(0, alias="missingSymbols")
+    sufficient_symbols: int = Field(0, alias="sufficientSymbols")
+    row_count: int = Field(0, alias="rowCount")
+    min_factor_date: Optional[str] = Field(None, alias="minFactorDate")
+    max_factor_date: Optional[str] = Field(None, alias="maxFactorDate")
+
+
+class QuantDuckDBFactorSnapshotRow(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbol: str
+    trade_date: Optional[str] = Field(None, alias="tradeDate")
+    factors: dict[str, Optional[float]] = Field(default_factory=dict)
+    factor_trend: Optional[str] = Field(None, alias="factorTrend")
+    factor_momentum: Optional[str] = Field(None, alias="factorMomentum")
+    factor_data_mode: str = Field("empty", alias="factorDataMode")
+    factor_warnings: list[str] = Field(default_factory=list, alias="factorWarnings")
+
+
+class QuantDuckDBFactorSnapshotResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    status: str
+    engine: str = "duckdb"
+    data_mode: str = Field("empty", alias="dataMode")
+    duration_ms: float = Field(0.0, alias="durationMs")
+    row_count: int = Field(0, alias="rowCount")
+    coverage: QuantDuckDBFactorCoverageSummary = Field(default_factory=QuantDuckDBFactorCoverageSummary)
+    factor_dates: list[str] = Field(default_factory=list, alias="factorDates")
+    missing_symbols: list[str] = Field(default_factory=list, alias="missingSymbols")
+    factors: list[str] = Field(default_factory=list)
+    snapshots: list[QuantDuckDBFactorSnapshotRow] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class QuantDuckDBValidateFactorPathResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    status: str
+    engine: str = "duckdb"
+    data_mode: str = Field("empty", alias="dataMode")
+    duration_ms: float = Field(0.0, alias="durationMs")
+    row_count: int = Field(0, alias="rowCount")
+    coverage: QuantDuckDBFactorCoverageSummary = Field(default_factory=QuantDuckDBFactorCoverageSummary)
+    factor_dates: list[str] = Field(default_factory=list, alias="factorDates")
+    missing_symbols: list[str] = Field(default_factory=list, alias="missingSymbols")
+    insufficient_symbols: list[str] = Field(default_factory=list, alias="insufficientSymbols")
+    warnings: list[str] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class QuantDuckDBCompareRuntimeContextResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    status: str
+    engine: str = "duckdb"
+    data_mode: str = Field("empty", alias="dataMode")
+    duration_ms: float = Field(0.0, alias="durationMs")
+    runtime_contexts: list[str] = Field(default_factory=list, alias="runtimeContexts")
+    coverage: QuantDuckDBFactorCoverageSummary = Field(default_factory=QuantDuckDBFactorCoverageSummary)
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
+    snapshots: list[QuantDuckDBFactorSnapshotRow] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
     error: Optional[str] = None
 
 
