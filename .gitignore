@@ -58,6 +58,8 @@ repo_trash/
 *.db
 *.sqlite
 *.sqlite3
+*.duckdb
+*.duckdb.wal
 
 # 系统文件
 .DS_Store
@@ -67,6 +69,9 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+coverage/
+test-results/
+playwright-report/
 
 local/
 
