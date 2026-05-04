@@ -746,6 +746,13 @@ class Config:
     backtest_min_age_days: int = 14
     backtest_engine_version: str = "v1"
     backtest_neutral_band_pct: float = 2.0
+
+    # === Optional DuckDB quant analytics accelerator ===
+    quant_engine: str = "python"
+    duckdb_database_path: str = "data/quant/wolfystock.duckdb"
+    quant_parquet_root: str = "data/quant/parquet"
+    quant_duckdb_enabled: bool = False
+    quant_max_benchmark_symbols: int = 5000
     
     # === 日志配置 ===
     log_dir: str = "./logs"  # 日志文件目录
@@ -1517,6 +1524,16 @@ class Config:
                 2.0,
                 field_name='BACKTEST_NEUTRAL_BAND_PCT',
                 minimum=0.0,
+            ),
+            quant_engine=os.getenv('QUANT_ENGINE', 'python'),
+            duckdb_database_path=os.getenv('DUCKDB_DATABASE_PATH', 'data/quant/wolfystock.duckdb'),
+            quant_parquet_root=os.getenv('QUANT_PARQUET_ROOT', 'data/quant/parquet'),
+            quant_duckdb_enabled=os.getenv('QUANT_DUCKDB_ENABLED', 'false').lower() == 'true',
+            quant_max_benchmark_symbols=parse_env_int(
+                os.getenv('QUANT_MAX_BENCHMARK_SYMBOLS'),
+                5000,
+                field_name='QUANT_MAX_BENCHMARK_SYMBOLS',
+                minimum=1,
             ),
             log_dir=os.getenv('LOG_DIR', './logs'),
             log_level=os.getenv('LOG_LEVEL', 'INFO'),
