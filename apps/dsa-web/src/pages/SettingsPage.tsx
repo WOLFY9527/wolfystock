@@ -53,6 +53,28 @@ type QuickProviderTestState = {
   status: QuickProviderTestStatus;
   text: string;
 };
+type SystemHealthTone = 'available' | 'attention' | 'not_configured' | 'unavailable' | 'disabled' | 'unknown';
+type SystemHealthStatusCard = {
+  key: string;
+  label: string;
+  status: SystemHealthTone;
+  reason: string;
+  nextAction?: string;
+  checkedAt?: string;
+  optional?: boolean;
+};
+type SystemHealthSummaryCard = {
+  key: string;
+  label: string;
+  value: string | number;
+  detail: string;
+  status?: SystemHealthTone;
+};
+type DeveloperDetailGroup = {
+  key: string;
+  label: string;
+  detail: string;
+};
 type AdvancedNavigationContext = {
   provider: QuickProviderKey;
   channelName?: string;
@@ -178,6 +200,7 @@ const CATEGORY_TO_DOMAIN: Partial<Record<SystemConfigCategory, SettingsDomain>> 
   system: 'advanced',
   agent: 'advanced',
   backtest: 'advanced',
+  quant: 'advanced',
   base: 'advanced',
   uncategorized: 'advanced',
 };
@@ -509,6 +532,26 @@ const providerLabel = (value: string): string => {
   const normalized = normalizeGatewayKey(value);
   if (!normalized) return '';
   return PROVIDER_LABEL_MAP[normalized] || prettySourceLabel(normalized);
+};
+
+const statusFromBooleanConfig = (value: string | undefined): 'enabled' | 'disabled' | 'unknown' => {
+  if (typeof value === 'undefined') return 'unknown';
+  return isEnabledValue(value) ? 'enabled' : 'disabled';
+};
+
+const summarizeSafeConfigValue = (item: SystemConfigItem): string => {
+  const value = String(item.value ?? '').trim();
+  if (item.isMasked || item.schema?.isSensitive || /(?:API_KEYS?|TOKEN|SECRET|PASSWORD|WEBHOOK|BEARER)/i.test(item.key)) {
+    return item.rawValueExists || value ? '已遮蔽' : '未配置';
+  }
+  if (item.schema?.dataType === 'boolean') {
+    if (!value) return '未配置';
+    return isEnabledValue(value) ? '已启用' : '未启用';
+  }
+  if (!value) return '未配置';
+  if (/^(true|false)$/i.test(value)) return isEnabledValue(value) ? '已启用' : '未启用';
+  if (value.length > 24) return `${value.slice(0, 24)}...`;
+  return value;
 };
 
 const slugifyDataSourceId = (value: string): string => {
@@ -2960,6 +3003,262 @@ const SettingsPage: React.FC = () => {
         : t('settings.dataSourceNoUsableSources'),
     },
   ]), [aiSummary.configuredProviders, dataSourceLibrary, t]);
+  const systemStatusCards = useMemo<SystemHealthStatusCard[]>(() => {
+    const usableDataSources = dataSourceLibrary.filter((source) => source.usable);
+    const configuredDataSources = dataSourceLibrary.filter((source) => source.configured);
+    const configuredNotificationCount = notificationSummary.configuredChannels.length;
+    const enabledNotificationCount = notificationSummary.enabledChannels.length;
+    const duckdbState = statusFromBooleanConfig(allItemMap.get('QUANT_DUCKDB_ENABLED'));
+    const backtestState = statusFromBooleanConfig(allItemMap.get('BACKTEST_ENABLED'));
+    const scannerKey = [...allItemMap.keys()].find((key) => /^(MARKET_)?SCANNER(_AI)?_ENABLED$/i.test(key));
+    const scannerState = statusFromBooleanConfig(scannerKey ? allItemMap.get(scannerKey) : undefined);
+    const marketOverviewKey = [...allItemMap.keys()].find((key) => /^MARKET_OVERVIEW(_ENABLED)?$/i.test(key));
+    const marketOverviewState = statusFromBooleanConfig(marketOverviewKey ? allItemMap.get(marketOverviewKey) : undefined);
+    const portfolioKey = [...allItemMap.keys()].find((key) => /^PORTFOLIO(_ENABLED|_FX_UPDATE_ENABLED)?$/i.test(key));
+    const portfolioState = statusFromBooleanConfig(portfolioKey ? allItemMap.get(portfolioKey) : undefined);
+
+    const statusForToggle = (
+      state: 'enabled' | 'disabled' | 'unknown',
+      enabledReason: string,
+      disabledReason: string,
+      unknownReason: string,
+      nextAction?: string,
+    ): Pick<SystemHealthStatusCard, 'status' | 'reason' | 'nextAction'> => {
+      if (state === 'enabled') return { status: 'available', reason: enabledReason };
+      if (state === 'disabled') return { status: 'disabled', reason: disabledReason, nextAction };
+      return { status: 'unknown', reason: unknownReason };
+    };
+
+    const cards: SystemHealthStatusCard[] = [
+      {
+        key: 'data_sources',
+        label: '数据源',
+        status: usableDataSources.length ? 'available' : configuredDataSources.length ? 'attention' : 'not_configured',
+        reason: usableDataSources.length
+          ? `${usableDataSources.length} 个可用 · ${usableDataSources.slice(0, 3).map((source) => source.label).join(' · ')}`
+          : configuredDataSources.length
+            ? '已配置凭据，等待连通性验证'
+            : '未配置外部数据源；内置本地能力按需回退',
+        nextAction: usableDataSources.length ? undefined : '进入数据源配置补齐凭据或验证连通性',
+      },
+      {
+        key: 'market_overview',
+        label: '市场总览',
+        ...(
+          dataSummary.market.length
+            ? { status: 'available' as const, reason: `行情路径：${dataSummary.market.map(prettySourceLabel).join(' -> ')}` }
+            : statusForToggle(
+              marketOverviewState,
+              '总览入口已启用，等待行情路径',
+              '市场总览未启用',
+              '未发现独立总览开关；跟随数据源可用性',
+              '配置实时行情优先级',
+            )
+        ),
+      },
+      {
+        key: 'scanner',
+        label: '扫描器',
+        ...statusForToggle(
+          scannerState,
+          '扫描器开关已启用',
+          '扫描器未启用',
+          '未发现扫描器健康字段',
+          '在扫描器配置中启用后再验证',
+        ),
+      },
+      {
+        key: 'backtest',
+        label: '回测',
+        ...statusForToggle(
+          backtestState,
+          '回测服务已启用',
+          '回测未启用',
+          '未发现回测开关；保持按需能力',
+          '需要回测时启用 BACKTEST_ENABLED',
+        ),
+      },
+      {
+        key: 'portfolio',
+        label: '投资组合',
+        ...statusForToggle(
+          portfolioState,
+          '组合相关同步已启用',
+          '组合同步未启用',
+          '未发现组合健康字段',
+          '需要组合同步时再配置',
+        ),
+      },
+      {
+        key: 'ai',
+        label: 'AI 决策',
+        status: aiSummary.routeStatus === 'fully_configured'
+          ? 'available'
+          : aiSummary.routeStatus === 'not_configured'
+            ? 'not_configured'
+            : 'attention',
+        reason: aiSummary.routeStatus === 'fully_configured'
+          ? `主路由：${formatRouteLine(aiSummary.primaryChannel, aiSummary.primaryModel)}`
+          : aiSummary.routeStatus === 'credentials_only'
+            ? '已有密钥，尚未选择主路由'
+            : aiSummary.routeStatus === 'partially_configured'
+              ? '路由不完整，备用路径可能不可用'
+              : '未配置 AI 服务商密钥',
+        nextAction: aiSummary.routeStatus === 'fully_configured' ? undefined : '进入 AI 模型配置补齐主路由',
+      },
+      {
+        key: 'notification',
+        label: '通知',
+        status: enabledNotificationCount ? 'available' : configuredNotificationCount ? 'attention' : 'not_configured',
+        reason: enabledNotificationCount
+          ? `${enabledNotificationCount} 个通道已启用`
+          : configuredNotificationCount
+            ? '已有通知凭据，启用状态需确认'
+            : '未配置通知目标',
+        nextAction: enabledNotificationCount ? undefined : '仅在通知通道页检查高层状态',
+      },
+      {
+        key: 'duckdb',
+        label: 'DuckDB 量化引擎',
+        status: duckdbState === 'enabled' ? 'available' : duckdbState === 'disabled' ? 'disabled' : 'unknown',
+        reason: duckdbState === 'enabled'
+          ? '可选量化加速已启用'
+          : duckdbState === 'disabled'
+            ? '量化加速未启用；默认 Python 路径继续可用'
+            : '未发现 DuckDB 健康字段',
+        nextAction: duckdbState === 'disabled' ? '需要因子加速时再启用' : undefined,
+        optional: true,
+      },
+      {
+        key: 'logs',
+        label: '日志中心',
+        status: 'available',
+        reason: '执行日志入口可用，原始诊断保持收起',
+      },
+    ];
+
+    const optionalMissing: SystemHealthStatusCard[] = [];
+    const flake8State = statusFromBooleanConfig(allItemMap.get('FLAKE8_AVAILABLE') ?? allItemMap.get('FLAKE8_INSTALLED'));
+    if (flake8State === 'disabled') {
+      optionalMissing.push({
+        key: 'optional_flake8',
+        label: '可选代码检查',
+        status: 'attention',
+        reason: 'flake8 未安装；不影响运行时分析',
+        nextAction: '需要本地静态检查时安装 flake8',
+        optional: true,
+      });
+    }
+    const akshareState = statusFromBooleanConfig(allItemMap.get('AKSHARE_AVAILABLE') ?? allItemMap.get('AKSHARE_INSTALLED'));
+    if (akshareState === 'disabled') {
+      optionalMissing.push({
+        key: 'optional_akshare',
+        label: 'A股扩展数据源',
+        status: 'attention',
+        reason: 'akshare 未安装；外部数据源与回退路径继续可用',
+        nextAction: '需要 A股扩展数据时安装 akshare',
+        optional: true,
+      });
+    }
+
+    return [...cards, ...optionalMissing];
+  }, [
+    aiSummary.primaryChannel,
+    aiSummary.primaryModel,
+    aiSummary.routeStatus,
+    allItemMap,
+    dataSourceLibrary,
+    dataSummary.market,
+    formatRouteLine,
+    notificationSummary.configuredChannels.length,
+    notificationSummary.enabledChannels.length,
+  ]);
+  const systemHealthSummaryCards = useMemo<SystemHealthSummaryCard[]>(() => {
+    const countByStatus = (statuses: SystemHealthTone[]) => systemStatusCards
+      .filter((card) => statuses.includes(card.status))
+      .length;
+    const available = countByStatus(['available']);
+    const attention = countByStatus(['attention']);
+    const notConfigured = countByStatus(['not_configured', 'disabled']);
+    const unavailable = countByStatus(['unavailable', 'unknown']);
+    return [
+      {
+        key: 'health',
+        label: '系统健康',
+        value: attention || unavailable ? '需关注' : '正常',
+        detail: attention || unavailable ? '存在需确认项目' : '核心路径可用',
+        status: attention || unavailable ? 'attention' : 'available',
+      },
+      {
+        key: 'available',
+        label: '可用',
+        value: available,
+        detail: '核心或已启用能力',
+        status: 'available',
+      },
+      {
+        key: 'attention',
+        label: '需关注',
+        value: attention,
+        detail: '可选缺失或配置不完整',
+        status: attention ? 'attention' : 'available',
+      },
+      {
+        key: 'not_configured',
+        label: '未配置',
+        value: notConfigured,
+        detail: '未启用不等于故障',
+        status: 'not_configured',
+      },
+      {
+        key: 'unavailable',
+        label: '暂不可用',
+        value: unavailable,
+        detail: unavailable ? '缺少健康字段或不可达' : '暂无阻断',
+        status: unavailable ? 'unknown' : 'available',
+      },
+      {
+        key: 'checked',
+        label: '最近检查',
+        value: '当前快照',
+        detail: '未写入或初始化运行时',
+        status: 'unknown',
+      },
+      {
+        key: 'environment',
+        label: '环境状态',
+        value: attention ? '可选需补齐' : '稳定',
+        detail: '可选依赖按非阻断处理',
+        status: attention ? 'attention' : 'available',
+      },
+    ];
+  }, [systemStatusCards]);
+  const developerDetailGroups = useMemo<DeveloperDetailGroup[]>(() => {
+    const rawEditableCount = allItems.filter(isRawEditableConfigItem).length;
+    const hiddenCount = allItems.filter((item) => !isRawEditableConfigItem(item)).length;
+    const safeSample = allItems
+      .filter(isRawEditableConfigItem)
+      .slice(0, 4)
+      .map((item) => `${item.key}=${summarizeSafeConfigValue(item)}`)
+      .join(' · ');
+    return [
+      {
+        key: 'raw_diagnostics',
+        label: '原始诊断',
+        detail: '未展开前不显示原始配置载荷。',
+      },
+      {
+        key: 'config_keys',
+        label: '配置键',
+        detail: `${rawEditableCount} 个可安全编辑键；${hiddenCount} 个敏感/托管键已隐藏`,
+      },
+      {
+        key: 'environment_summary',
+        label: '环境摘要',
+        detail: safeSample || '暂无可展示的安全摘要',
+      },
+    ];
+  }, [allItems]);
   const configuredProvidersText = aiSummary.configuredProviders.length
     ? aiSummary.configuredProviders.map(([name, count]) => `${providerLabel(name)} (${count})`).join(' · ')
     : t('settings.notConfigured');
@@ -3249,6 +3548,9 @@ const SettingsPage: React.FC = () => {
                 <SystemControlPlane
                   t={t}
                   overviewStats={heroItems}
+                  summaryCards={systemHealthSummaryCards}
+                  statusCards={systemStatusCards}
+                  developerDetails={developerDetailGroups}
                   isRunningAdminAction={isRunningAdminAction}
                   adminActionDialog={adminActionDialog}
                   adminActionMessage={adminActionMessage}

@@ -9,6 +9,7 @@ const categoryTitleMap: Record<SystemConfigCategory, string> = {
   system: '系统设置',
   agent: 'Agent 设置',
   backtest: '回测配置',
+  quant: '量化引擎',
   uncategorized: '其他',
 };
 
@@ -20,6 +21,7 @@ const categoryDescriptionMap: Partial<Record<SystemConfigCategory, string>> = {
   system: '管理调度、日志、端口等系统级参数。',
   agent: '管理 Agent 模式、策略与多 Agent 编排配置。',
   backtest: '管理回测开关、评估窗口和引擎参数。',
+  quant: '管理 DuckDB 量化加速与因子分析参数。',
   uncategorized: '其他未归类的配置项。',
 };
 
@@ -31,6 +33,7 @@ const categoryTitleMapEn: Record<SystemConfigCategory, string> = {
   system: 'System settings',
   agent: 'Agent settings',
   backtest: 'Backtest settings',
+  quant: 'Quant engine',
   uncategorized: 'Other',
 };
 
@@ -42,6 +45,7 @@ const categoryDescriptionMapEn: Partial<Record<SystemConfigCategory, string>> = 
   system: 'Manage scheduling, logging, ports, and system-level parameters.',
   agent: 'Manage agent mode, strategies, and multi-agent orchestration settings.',
   backtest: 'Manage backtest switches, evaluation windows, and engine parameters.',
+  quant: 'Manage DuckDB quant acceleration and factor analysis settings.',
   uncategorized: 'Other uncategorized settings.',
 };
 

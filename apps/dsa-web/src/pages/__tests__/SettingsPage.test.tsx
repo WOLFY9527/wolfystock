@@ -166,6 +166,7 @@ const baseCategories = [
   { category: 'data_source', title: 'Data', description: '数据源配置', displayOrder: 4, fields: [] },
   { category: 'notification', title: 'Notification', description: '通知配置', displayOrder: 5, fields: [] },
   { category: 'agent', title: 'Agent', description: 'Agent 配置', displayOrder: 6, fields: [] },
+  { category: 'quant', title: 'Quant', description: '量化引擎', displayOrder: 7, fields: [] },
 ];
 
 type ConfigState = {
@@ -574,6 +575,74 @@ function buildSystemConfigState(overrides: ConfigOverride = {}) {
           },
         },
       ],
+      quant: [
+        {
+          key: 'QUANT_DUCKDB_ENABLED',
+          value: 'false',
+          rawValueExists: true,
+          isMasked: false,
+          rawEditable: true,
+          uiVisibility: 'advanced',
+          schema: {
+            key: 'QUANT_DUCKDB_ENABLED',
+            category: 'quant',
+            dataType: 'boolean',
+            uiControl: 'switch',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            rawEditable: true,
+            uiVisibility: 'advanced',
+            options: [],
+            validation: {},
+            displayOrder: 1,
+          },
+        },
+        {
+          key: 'FLAKE8_INSTALLED',
+          value: 'false',
+          rawValueExists: true,
+          isMasked: false,
+          rawEditable: true,
+          uiVisibility: 'advanced',
+          schema: {
+            key: 'FLAKE8_INSTALLED',
+            category: 'quant',
+            dataType: 'boolean',
+            uiControl: 'switch',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            rawEditable: true,
+            uiVisibility: 'advanced',
+            options: [],
+            validation: {},
+            displayOrder: 2,
+          },
+        },
+        {
+          key: 'AKSHARE_INSTALLED',
+          value: 'false',
+          rawValueExists: true,
+          isMasked: false,
+          rawEditable: true,
+          uiVisibility: 'advanced',
+          schema: {
+            key: 'AKSHARE_INSTALLED',
+            category: 'quant',
+            dataType: 'boolean',
+            uiControl: 'switch',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            rawEditable: true,
+            uiVisibility: 'advanced',
+            options: [],
+            validation: {},
+            displayOrder: 3,
+          },
+        },
+      ],
     },
     issueByKey: {},
     activeCategory: 'system',
@@ -825,6 +894,53 @@ describe('SettingsPage', () => {
       expect(screen.queryByText('认证与登录保护')).not.toBeInTheDocument();
       expect(screen.queryByText('修改密码')).not.toBeInTheDocument();
       expect(screen.queryByText('锁定状态下仅可浏览，无法修改系统级配置。')).not.toBeInTheDocument();
+    });
+  });
+
+  it('renders a compact Chinese system health summary with optional disabled states', async () => {
+    await withSystemSettingsPath(async () => {
+      render(<SettingsPage />);
+
+      expect(await screen.findByTestId('system-health-summary')).toHaveTextContent('系统健康');
+      expect(screen.getByTestId('system-health-summary')).toHaveTextContent('可用');
+      expect(screen.getByTestId('system-health-summary')).toHaveTextContent('需关注');
+      expect(screen.getByTestId('system-health-summary')).toHaveTextContent('未配置');
+      expect(screen.getByTestId('system-health-summary')).toHaveTextContent('暂不可用');
+      expect(screen.getByTestId('system-health-summary')).toHaveTextContent('最近检查');
+      expect(screen.getByTestId('system-health-summary')).toHaveTextContent('环境状态');
+
+      const subsystemCards = screen.getByTestId('system-subsystem-cards');
+      expect(subsystemCards).toHaveTextContent('数据源');
+      expect(subsystemCards).toHaveTextContent('市场总览');
+      expect(subsystemCards).toHaveTextContent('扫描器');
+      expect(subsystemCards).toHaveTextContent('回测');
+      expect(subsystemCards).toHaveTextContent('投资组合');
+      expect(subsystemCards).toHaveTextContent('AI 决策');
+      expect(subsystemCards).toHaveTextContent('通知');
+      expect(subsystemCards).toHaveTextContent('DuckDB 量化引擎');
+      expect(subsystemCards).toHaveTextContent('日志中心');
+      expect(subsystemCards).toHaveTextContent('量化加速未启用；默认 Python 路径继续可用');
+      expect(subsystemCards).toHaveTextContent('可选代码检查');
+      expect(subsystemCards).toHaveTextContent('flake8 未安装；不影响运行时分析');
+      expect(subsystemCards).toHaveTextContent('A股扩展数据源');
+      expect(subsystemCards).toHaveTextContent('akshare 未安装；外部数据源与回退路径继续可用');
+      expect(subsystemCards).not.toHaveTextContent('failed');
+      expect(subsystemCards).not.toHaveTextContent('false');
+    });
+  });
+
+  it('keeps secrets and raw diagnostics collapsed in the system health overview', async () => {
+    await withSystemSettingsPath(async () => {
+      render(<SettingsPage />);
+
+      expect(await screen.findByText('开发者细节')).toBeInTheDocument();
+      const developerDetails = screen.getByText('开发者细节').closest('details');
+      expect(developerDetails).not.toBeNull();
+      expect(developerDetails).not.toHaveAttribute('open');
+      expect(screen.getByText('原始诊断')).toBeInTheDocument();
+      expect(screen.queryByText('masked-vendor-key')).not.toBeInTheDocument();
+      expect(screen.queryByText('wechat-webhook-token')).not.toBeInTheDocument();
+      expect(screen.queryByText('pushover-key')).not.toBeInTheDocument();
     });
   });
 
