@@ -45,6 +45,40 @@ class AgentResult:
     error: Optional[str] = None
 
 
+def _compact_stock_evidence_summary(stock_context: Dict[str, Any]) -> str:
+    """Convert stock_context evidence into a bounded prompt summary."""
+    evidence = stock_context.get("evidence") if isinstance(stock_context.get("evidence"), dict) else {}
+    if not evidence:
+        return ""
+
+    def line(label: str, key: str, fields: List[str]) -> str:
+        item = evidence.get(key)
+        if not isinstance(item, dict):
+            return f"{label}: unknown"
+        status = str(item.get("status") or "unknown")
+        parts = [f"{label}: {status}"]
+        for field_name in fields:
+            value = item.get(field_name)
+            if value is None or value == "":
+                continue
+            if isinstance(value, list):
+                value = ",".join(str(entry) for entry in value[:6])
+            parts.append(f"{field_name}={value}")
+        return " ".join(parts)
+
+    lines = [
+        line("行情", "quote", ["price", "changePct", "currency", "provider", "updatedAt"]),
+        line("技术", "technical", ["trend", "ma5", "ma10", "ma20", "ma60", "rsi14", "support", "resistance", "provider", "updatedAt"]),
+        line("基本面", "fundamental", ["marketCap", "peTtm", "pb", "beta", "revenueTtm", "netIncomeTtm", "fcfTtm", "provider", "missingFields"]),
+        line("新闻/news", "news", ["latestHeadline", "provider"]),
+        line("持仓", "portfolio", ["hasPosition", "summary", "updatedAt"]),
+        line("观察列表", "watchlist", ["inWatchlist", "summary", "updatedAt"]),
+        line("Scanner", "scanner", ["summary", "updatedAt"]),
+        line("回测", "backtest", ["resultId", "returnPct", "summary", "updatedAt"]),
+    ]
+    return "\n".join(lines)
+
+
 # ============================================================
 # System prompt builder
 # ============================================================
@@ -393,6 +427,7 @@ class AgentExecutor:
                 route_text = json.dumps(smart_route, ensure_ascii=False) if isinstance(smart_route, dict) else ""
                 data_text = json.dumps(data_context, ensure_ascii=False) if isinstance(data_context, list) else ""
                 stock_context_text = json.dumps(stock_context, ensure_ascii=False) if isinstance(stock_context, dict) else ""
+                stock_evidence_summary = _compact_stock_evidence_summary(stock_context) if isinstance(stock_context, dict) else ""
                 sections_text = " / ".join(str(item) for item in answer_sections) if isinstance(answer_sections, list) else ""
                 context_parts.append(
                     "[Stock Chat 输出契约]\n"
@@ -405,9 +440,10 @@ class AgentExecutor:
                 if stock_context_text:
                     context_parts.append(
                         "[Stock Chat 证据摘要]\n"
-                        f"{stock_context_text}\n"
-                        "使用规则: 只能引用此处标记为 available/used/fallback 的证据；"
+                        f"{stock_evidence_summary or stock_context_text}\n"
+                        "使用规则: 只能引用此处标记为 available/partial/stale/fallback/used 的证据；"
                         "未知、缺失或未检查的数据必须明确说明，不能补写成已验证事实；"
+                        "不能声称使用了 unavailable/unknown/missing 的行情、技术、基本面或新闻数据；"
                         "如果持仓证据已知，必须区分无持仓与有持仓建议；"
                         "如果大多数数据 unknown/missing，避免强确定性结论。"
                     )

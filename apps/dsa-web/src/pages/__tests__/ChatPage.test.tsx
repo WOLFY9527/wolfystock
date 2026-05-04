@@ -24,12 +24,13 @@ const mockStartStream = vi.fn();
 const mockStopStream = vi.fn();
 const mockClearCompletionBadge = vi.fn();
 const mockStartNewChat = vi.fn();
-const { mockAddWatchlistItem, mockListWatchlistItems, mockGetSnapshot, mockGetRecentWatchlists, mockGetRuleBacktestRuns } = vi.hoisted(() => ({
+const { mockAddWatchlistItem, mockListWatchlistItems, mockGetSnapshot, mockGetRecentWatchlists, mockGetRuleBacktestRuns, mockGetStockEvidence } = vi.hoisted(() => ({
   mockAddWatchlistItem: vi.fn(),
   mockListWatchlistItems: vi.fn(),
   mockGetSnapshot: vi.fn(),
   mockGetRecentWatchlists: vi.fn(),
   mockGetRuleBacktestRuns: vi.fn(),
+  mockGetStockEvidence: vi.fn(),
 }));
 let currentLanguage: 'zh' | 'en' = 'zh';
 
@@ -109,6 +110,7 @@ vi.mock('../../api/agent', () => ({
         { id: 'local', label: 'Local', status: 'unknown' },
       ],
     }),
+    getStockEvidence: mockGetStockEvidence,
     deleteChatSession: vi.fn().mockResolvedValue(undefined),
     sendChat: vi.fn().mockResolvedValue({ success: true }),
   },
@@ -265,6 +267,45 @@ beforeEach(() => {
       { id: 34, code: 'ORCL', status: 'completed', totalReturnPct: 12.3, maxDrawdownPct: -4.2, completedAt: '2026-05-01T10:00:00Z' },
     ],
   });
+  mockGetStockEvidence.mockResolvedValue({
+    symbols: ['ORCL'],
+    items: [
+      {
+        symbol: 'ORCL',
+        market: 'US',
+        quote: {
+          status: 'available',
+          price: 128.42,
+          changePct: 0.97,
+          currency: 'USD',
+          provider: 'alpaca',
+          updatedAt: '2026-05-03T20:00:00Z',
+        },
+        technical: {
+          status: 'available',
+          trend: 'bullish',
+          ma5: 126.1,
+          ma20: 123.4,
+          rsi14: 58.2,
+          support: 121.8,
+          resistance: 130.5,
+          provider: 'stock_daily',
+          updatedAt: '2026-05-03',
+        },
+        fundamental: {
+          status: 'partial',
+          peTtm: 35.21,
+          pb: 11.13,
+          beta: 1.08,
+          provider: 'analysis_history',
+          missingFields: ['marketCap', 'revenueTtm'],
+          updatedAt: '2026-05-02T12:00:00Z',
+        },
+        news: { status: 'unknown' },
+      },
+    ],
+    meta: { source: 'read_only_evidence_v2', generatedAt: '2026-05-04T00:00:00Z' },
+  });
 });
 
 describe('ChatPage', () => {
@@ -367,6 +408,7 @@ describe('ChatPage', () => {
     });
 
     await waitFor(() => expect(mockListWatchlistItems).toHaveBeenCalled());
+    expect(mockGetStockEvidence).toHaveBeenCalledWith(['ORCL']);
     expect(mockGetSnapshot).toHaveBeenCalled();
     expect(mockGetRecentWatchlists).toHaveBeenCalledWith({ market: 'us', limitDays: 7 });
     expect(mockGetRuleBacktestRuns).toHaveBeenCalledWith({ code: 'ORCL', page: 1, limit: 1 });
@@ -381,6 +423,14 @@ describe('ChatPage', () => {
     expect(evidencePanel).toHaveTextContent('回测');
     expect(evidencePanel).toHaveTextContent('available');
     expect(evidencePanel).toHaveTextContent('行情');
+    expect(evidencePanel).toHaveTextContent('available');
+    expect(evidencePanel).toHaveTextContent('128.42');
+    expect(evidencePanel).toHaveTextContent('技术指标');
+    expect(evidencePanel).toHaveTextContent('RSI 58.2');
+    expect(evidencePanel).toHaveTextContent('基本面');
+    expect(evidencePanel).toHaveTextContent('partial');
+    expect(evidencePanel).toHaveTextContent('缺 marketCap, revenueTtm');
+    expect(evidencePanel).toHaveTextContent('新闻');
     expect(evidencePanel).toHaveTextContent('unknown');
   });
 
@@ -400,6 +450,8 @@ describe('ChatPage', () => {
     fireEvent.change(inputBox, { target: { value: 'NVDA 和 AMD 谁更强？' } });
     expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('NVDA, AMD · US · 对比');
     expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('综合判断 / 龙头策略');
+    await waitFor(() => expect(mockGetStockEvidence).toHaveBeenCalledWith(['NVDA', 'AMD']));
+    expect(screen.getByTestId('chat-evidence-panel')).toBeInTheDocument();
   });
 
   it('recommends portfolio risk and breakout lenses from wording', async () => {
@@ -472,6 +524,8 @@ describe('ChatPage', () => {
           lenses: ['综合判断', '趋势跟踪'],
           items: [
             { label: '行情', status: 'unknown' },
+            { label: '技术', status: 'available', summary: '可用' },
+            { label: '基本面', status: 'partial', summary: '部分' },
             { label: '持仓', status: 'missing', summary: '无' },
             { label: '观察列表', status: 'available', summary: '已加入' },
             { label: 'Scanner', status: 'available', summary: '最近入选' },
@@ -490,7 +544,7 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByTestId('chat-answer-evidence-footer-assistant-evidence')).toHaveTextContent('LLM: DeepSeek deepseek-chat');
-    expect(screen.getByTestId('chat-answer-evidence-footer-assistant-evidence')).toHaveTextContent('数据: 行情 UNKNOWN · 持仓 无 · 观察列表 已加入 · Scanner 最近入选 · 回测 有');
+    expect(screen.getByTestId('chat-answer-evidence-footer-assistant-evidence')).toHaveTextContent('数据: 行情 UNKNOWN · 技术 可用 · 基本面 部分 · 持仓 无 · 观察列表 已加入 · Scanner 最近入选 · 回测 有');
 
     fireEvent.change(screen.getByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
       target: { value: 'ORCL 还能买吗？' },
@@ -508,6 +562,10 @@ describe('ChatPage', () => {
                 evidence: expect.objectContaining({
                   watchlist: expect.objectContaining({ inWatchlist: true }),
                   portfolio: expect.objectContaining({ hasPosition: false }),
+                  quote: expect.objectContaining({ status: 'available', price: 128.42, provider: 'alpaca' }),
+                  technical: expect.objectContaining({ status: 'available', ma20: 123.4, rsi14: 58.2 }),
+                  fundamental: expect.objectContaining({ status: 'partial', peTtm: 35.21, missingFields: ['marketCap', 'revenueTtm'] }),
+                  news: expect.objectContaining({ status: 'unknown' }),
                   backtest: expect.objectContaining({ resultId: 34, returnPct: 12.3 }),
                 }),
               }),

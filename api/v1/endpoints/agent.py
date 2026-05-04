@@ -16,6 +16,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from api.deps import CurrentUser, get_current_user, require_admin_user
 from src.config import get_config
 from src.services.agent_model_service import list_agent_model_deployments, list_agent_provider_health
+from src.services.agent_stock_evidence_service import StockEvidenceService
 
 # Tool name -> Chinese display name mapping
 TOOL_DISPLAY_NAMES: Dict[str, str] = {
@@ -138,6 +139,35 @@ class AgentProviderHealthResponse(BaseModel):
     providers: List[AgentProviderHealthItem]
 
 
+def _parse_stock_evidence_symbols(symbols: str) -> List[str]:
+    parsed: List[str] = []
+    for raw in str(symbols or "").split(","):
+        symbol = raw.strip().upper()
+        if symbol and symbol not in parsed:
+            parsed.append(symbol)
+        if len(parsed) >= 3:
+            break
+    return parsed
+
+
+def _unknown_stock_evidence_payload(symbols: List[str], status: str = "unknown") -> Dict[str, Any]:
+    return {
+        "symbols": symbols,
+        "items": [
+            {
+                "symbol": symbol,
+                "market": "unknown",
+                "quote": {"status": status},
+                "technical": {"status": "unknown"},
+                "fundamental": {"status": "unknown"},
+                "news": {"status": "unknown"},
+            }
+            for symbol in symbols
+        ],
+        "meta": {"generatedAt": None, "source": "read_only_evidence_v2"},
+    }
+
+
 @router.get("/status", response_model=AgentStatusResponse)
 async def get_agent_status():
     """Return whether the Ask Stock experience should be exposed."""
@@ -157,6 +187,22 @@ async def get_agent_models():
 async def get_agent_provider_health():
     """Get safe Agent provider readiness without exposing credentials."""
     return AgentProviderHealthResponse(**list_agent_provider_health(get_config()))
+
+
+@router.get("/stock-evidence")
+async def get_stock_evidence(
+    symbols: str,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Return read-only quote/technical/fundamental evidence for detected symbols."""
+    parsed_symbols = _parse_stock_evidence_symbols(symbols)
+    if not parsed_symbols:
+        return _unknown_stock_evidence_payload([])
+    try:
+        return StockEvidenceService(owner_id=current_user.user_id).get_stock_evidence(symbols=parsed_symbols)
+    except Exception as exc:
+        logger.warning("Stock evidence lookup failed: %s", exc, exc_info=True)
+        return _unknown_stock_evidence_payload(parsed_symbols, status="error")
 
 
 def _build_skills_response(config) -> SkillsResponse:

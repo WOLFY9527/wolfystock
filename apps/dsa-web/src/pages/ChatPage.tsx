@@ -3,7 +3,7 @@ import { ArrowUp, Download, Lightbulb, PanelRightOpen, SendHorizontal } from 'lu
 import { useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { agentApi, type AgentModelDeployment, type AgentProviderHealthResponse, type AgentProviderHealthStatus } from '../api/agent';
+import { agentApi, type AgentModelDeployment, type AgentProviderHealthResponse, type AgentProviderHealthStatus, type AgentStockEvidenceItem } from '../api/agent';
 import { watchlistApi } from '../api/watchlist';
 import { portfolioApi } from '../api/portfolio';
 import { scannerApi } from '../api/scanner';
@@ -102,7 +102,7 @@ type SmartRouteResult = {
   confidence: 'high' | 'medium' | 'low';
 };
 
-type DataEvidenceStatus = 'used' | 'available' | 'missing' | 'stale' | 'fallback' | 'unknown' | 'error';
+type DataEvidenceStatus = 'used' | 'available' | 'partial' | 'missing' | 'stale' | 'fallback' | 'unknown' | 'error';
 
 type DataEvidenceItem = {
   key: string;
@@ -115,6 +115,25 @@ type DataEvidenceItem = {
   hasPosition?: boolean;
   resultId?: number;
   returnPct?: number;
+  price?: number;
+  changePct?: number;
+  provider?: string;
+  trend?: string;
+  ma5?: number;
+  ma10?: number;
+  ma20?: number;
+  ma60?: number;
+  rsi14?: number;
+  support?: number;
+  resistance?: number;
+  marketCap?: number;
+  peTtm?: number;
+  pb?: number;
+  beta?: number;
+  revenueTtm?: number;
+  netIncomeTtm?: number;
+  fcfTtm?: number;
+  missingFields?: string[];
 };
 
 type AnalysisLens = {
@@ -226,11 +245,101 @@ const providerStatusLabel: Record<AgentProviderHealthStatus, string> = {
 };
 
 const evidenceSummaryText = (item: DataEvidenceItem): string => {
+  if (item.key === 'quote') return item.price != null ? `${item.price}${item.changePct != null ? ` (${item.changePct}%)` : ''}` : item.status.toUpperCase();
+  if (item.key === 'technical') return item.rsi14 != null ? `RSI ${item.rsi14}${item.ma20 != null ? ` · MA20 ${item.ma20}` : ''}` : item.status === 'partial' ? '部分' : item.status.toUpperCase();
+  if (item.key === 'fundamental') return item.missingFields?.length ? `缺 ${item.missingFields.slice(0, 2).join(', ')}` : item.status === 'partial' ? '部分' : item.status.toUpperCase();
+  if (item.key === 'news') return item.status.toUpperCase();
   if (item.key === 'portfolio') return item.hasPosition ? '有持仓' : item.status === 'missing' ? '无' : item.status.toUpperCase();
   if (item.key === 'watchlist') return item.inWatchlist ? '已加入' : item.status === 'missing' ? '未加入' : item.status.toUpperCase();
   if (item.key === 'scanner') return item.summary || (item.status === 'available' ? '最近入选' : item.status.toUpperCase());
   if (item.key === 'backtest') return item.resultId ? '有' : item.status === 'missing' ? '无' : item.status.toUpperCase();
   return item.summary || item.status.toUpperCase();
+};
+
+const evidenceFooterSummaryText = (item: DataEvidenceItem): string => {
+  if (item.key === 'technical' && (item.status === 'available' || item.status === 'used')) return '可用';
+  if (item.key === 'fundamental' && item.status === 'partial') return '部分';
+  if (item.key === 'fundamental' && (item.status === 'available' || item.status === 'used')) return '可用';
+  return evidenceSummaryText(item);
+};
+
+const normalizeEvidenceStatus = (status?: string): DataEvidenceStatus => {
+  const value = String(status || 'unknown').toLowerCase();
+  if (['used', 'available', 'partial', 'missing', 'stale', 'fallback', 'unknown', 'error'].includes(value)) {
+    return value as DataEvidenceStatus;
+  }
+  return 'unknown';
+};
+
+const firstKnown = <T,>(...values: Array<T | null | undefined>): T | undefined =>
+  values.find((value): value is T => value !== null && value !== undefined);
+
+const buildStockEvidencePatch = (key: string, items: AgentStockEvidenceItem[]): Partial<DataEvidenceItem> | null => {
+  const primary = items[0];
+  if (!primary) return null;
+  if (key === 'quote') {
+    const quote = primary.quote;
+    if (!quote) return null;
+    const comparison = items
+      .map((item) => item.quote?.price != null ? `${item.symbol} ${item.quote.price}` : null)
+      .filter(Boolean)
+      .join(' · ');
+    return {
+      status: normalizeEvidenceStatus(quote.status),
+      source: quote.provider || 'stock evidence',
+      updatedAt: quote.updatedAt || undefined,
+      price: firstKnown(quote.price),
+      changePct: firstKnown(quote.changePct),
+      provider: quote.provider || undefined,
+      summary: comparison || undefined,
+    };
+  }
+  if (key === 'technical') {
+    const technical = primary.technical;
+    if (!technical) return null;
+    return {
+      status: normalizeEvidenceStatus(technical.status),
+      source: technical.provider || 'stock_daily',
+      updatedAt: technical.updatedAt || undefined,
+      trend: technical.trend || undefined,
+      ma5: firstKnown(technical.ma5),
+      ma10: firstKnown(technical.ma10),
+      ma20: firstKnown(technical.ma20),
+      ma60: firstKnown(technical.ma60),
+      rsi14: firstKnown(technical.rsi14),
+      support: firstKnown(technical.support),
+      resistance: firstKnown(technical.resistance),
+      summary: technical.rsi14 != null ? `RSI ${technical.rsi14}${technical.ma20 != null ? ` · MA20 ${technical.ma20}` : ''}` : technical.trend || undefined,
+    };
+  }
+  if (key === 'fundamental') {
+    const fundamental = primary.fundamental;
+    if (!fundamental) return null;
+    return {
+      status: normalizeEvidenceStatus(fundamental.status),
+      source: fundamental.provider || 'analysis_history',
+      updatedAt: fundamental.updatedAt || undefined,
+      marketCap: firstKnown(fundamental.marketCap),
+      peTtm: firstKnown(fundamental.peTtm),
+      pb: firstKnown(fundamental.pb),
+      beta: firstKnown(fundamental.beta),
+      revenueTtm: firstKnown(fundamental.revenueTtm),
+      netIncomeTtm: firstKnown(fundamental.netIncomeTtm),
+      fcfTtm: firstKnown(fundamental.fcfTtm),
+      missingFields: fundamental.missingFields,
+      summary: fundamental.missingFields?.length ? `缺 ${fundamental.missingFields.slice(0, 2).join(', ')}` : undefined,
+    };
+  }
+  if (key === 'news') {
+    const news = primary.news;
+    if (!news) return null;
+    return {
+      status: normalizeEvidenceStatus(news.status),
+      source: news.provider || undefined,
+      summary: news.latestHeadline || undefined,
+    };
+  }
+  return null;
 };
 
 const buildInitialEvidenceItems = (hasSymbol: boolean): DataEvidenceItem[] =>
@@ -503,12 +612,26 @@ const ChatPage: React.FC = () => {
       };
 
       Promise.allSettled([
+        agentApi.getStockEvidence(symbols),
         watchlistApi.listWatchlistItems(),
         portfolioApi.getSnapshot(),
         scannerApi.getRecentWatchlists({ market, limitDays: 7 }),
         backtestApi.getRuleBacktestRuns({ code: primary, page: 1, limit: 1 }),
-      ]).then(([watchlistResult, portfolioResult, scannerResult, backtestResult]) => {
+      ]).then(([stockEvidenceResult, watchlistResult, portfolioResult, scannerResult, backtestResult]) => {
         if (cancelled) return;
+
+        if (stockEvidenceResult.status === 'fulfilled') {
+          const stockEvidenceItems = stockEvidenceResult.value.items || [];
+          for (const key of ['quote', 'technical', 'fundamental', 'news']) {
+            const patch = buildStockEvidencePatch(key, stockEvidenceItems);
+            if (patch) setItem(key, patch);
+          }
+        } else {
+          setItem('quote', { status: 'error', source: 'stock evidence' });
+          setItem('technical', { status: 'unknown', source: 'stock evidence' });
+          setItem('fundamental', { status: 'unknown', source: 'stock evidence' });
+          setItem('news', { status: 'unknown', source: 'stock evidence' });
+        }
 
         if (watchlistResult.status === 'fulfilled') {
           const match = (watchlistResult.value.items || []).find((item) => normalizeEvidenceSymbol(item.symbol) === primary);
@@ -597,7 +720,9 @@ const ChatPage: React.FC = () => {
         }
 
         if (followUpContextRef.current?.previous_price != null) {
-          setItem('quote', { status: 'available', source: 'previous report', summary: String(followUpContextRef.current.previous_price) });
+          if (nextItems.find((item) => item.key === 'quote')?.status === 'unknown') {
+            setItem('quote', { status: 'available', source: 'previous report', summary: String(followUpContextRef.current.previous_price) });
+          }
         }
 
         setEvidenceItems(nextItems);
@@ -623,7 +748,36 @@ const ChatPage: React.FC = () => {
   const buildStructuredChatContext = useCallback(() => {
     const baseContext = followUpContextRef.current ? { ...followUpContextRef.current } : {};
     const evidenceByKey = Object.fromEntries(
-      evidenceItems.map(({ key, status, source, updatedAt, summary, inWatchlist, hasPosition, resultId, returnPct }) => [
+      evidenceItems.map(({
+        key,
+        status,
+        source,
+        updatedAt,
+        summary,
+        inWatchlist,
+        hasPosition,
+        resultId,
+        returnPct,
+        price,
+        changePct,
+        provider,
+        trend,
+        ma5,
+        ma10,
+        ma20,
+        ma60,
+        rsi14,
+        support,
+        resistance,
+        marketCap,
+        peTtm,
+        pb,
+        beta,
+        revenueTtm,
+        netIncomeTtm,
+        fcfTtm,
+        missingFields,
+      }) => [
         key,
         {
           status,
@@ -634,6 +788,25 @@ const ChatPage: React.FC = () => {
           ...(hasPosition != null ? { hasPosition } : {}),
           ...(resultId != null ? { resultId } : {}),
           ...(returnPct != null ? { returnPct } : {}),
+          ...(price != null ? { price } : {}),
+          ...(changePct != null ? { changePct } : {}),
+          ...(provider != null ? { provider } : {}),
+          ...(trend != null ? { trend } : {}),
+          ...(ma5 != null ? { ma5 } : {}),
+          ...(ma10 != null ? { ma10 } : {}),
+          ...(ma20 != null ? { ma20 } : {}),
+          ...(ma60 != null ? { ma60 } : {}),
+          ...(rsi14 != null ? { rsi14 } : {}),
+          ...(support != null ? { support } : {}),
+          ...(resistance != null ? { resistance } : {}),
+          ...(marketCap != null ? { marketCap } : {}),
+          ...(peTtm != null ? { peTtm } : {}),
+          ...(pb != null ? { pb } : {}),
+          ...(beta != null ? { beta } : {}),
+          ...(revenueTtm != null ? { revenueTtm } : {}),
+          ...(netIncomeTtm != null ? { netIncomeTtm } : {}),
+          ...(fcfTtm != null ? { fcfTtm } : {}),
+          ...(missingFields != null ? { missingFields } : {}),
         },
       ]),
     );
@@ -668,11 +841,11 @@ const ChatPage: React.FC = () => {
     model: providerHealth?.currentModel || providerHealth?.providers.find((item) => item.selected)?.model || undefined,
     lenses: smartRoute.recommendedLenses.length ? smartRoute.recommendedLenses : [selectedLens.label],
     items: evidenceItems
-      .filter((item) => ['quote', 'portfolio', 'watchlist', 'scanner', 'backtest'].includes(item.key))
+      .filter((item) => ['quote', 'technical', 'fundamental', 'news', 'portfolio', 'watchlist', 'scanner', 'backtest'].includes(item.key))
       .map((item) => ({
-        label: item.key === 'scanner' ? 'Scanner' : item.label,
+        label: item.key === 'scanner' ? 'Scanner' : item.key === 'technical' ? '技术' : item.label,
         status: item.status,
-        summary: evidenceSummaryText(item),
+        summary: evidenceFooterSummaryText(item),
       })),
   }), [evidenceItems, providerHealth, selectedLens.label, smartRoute.recommendedLenses]);
 
@@ -1136,6 +1309,8 @@ const ChatPage: React.FC = () => {
                 item.status === 'available'
                   || item.status === 'used'
                   ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]'
+                  : item.status === 'partial' || item.status === 'stale' || item.status === 'fallback'
+                    ? 'text-amber-300 drop-shadow-[0_0_8px_rgba(252,211,77,0.35)]'
                   : item.status === 'missing' || item.status === 'error'
                     ? 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'
                     : 'text-white/32'
@@ -1215,11 +1390,17 @@ const ChatPage: React.FC = () => {
     );
   };
 
+  const quoteEvidence = evidenceItems.find((item) => item.key === 'quote');
   const renderSmartRouteStrip = () => (
     <div data-testid="chat-smart-route-strip" className="mb-3 rounded-2xl border border-white/8 bg-black/35 px-3 py-2 text-xs text-white/58">
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Smart Route</span>
         <span className="font-mono text-white/80">{formatRouteLabel(smartRoute)}</span>
+        {quoteEvidence?.price != null ? (
+          <span className="rounded-md border border-emerald-400/20 bg-emerald-400/10 px-1.5 py-0.5 font-mono text-[10px] text-emerald-300">
+            {quoteEvidence.price}{quoteEvidence.changePct != null ? ` · ${quoteEvidence.changePct}%` : ''}
+          </span>
+        ) : null}
       </div>
       {smartRoute.symbols.length > 0 ? (
         <p className="mt-1 truncate text-white/42">推荐视角：{smartRoute.recommendedLenses.join(' / ')}</p>

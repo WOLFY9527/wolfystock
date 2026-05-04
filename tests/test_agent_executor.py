@@ -228,9 +228,76 @@ class TestAgentExecutor(unittest.TestCase):
         messages = adapter.call_with_tools.call_args.args[0]
         context_message = "\n".join(str(message.get("content", "")) for message in messages)
         self.assertIn("Stock Chat 证据摘要", context_message)
-        self.assertIn('"portfolio": {"status": "available", "hasPosition": false}', context_message)
-        self.assertIn('"quote": {"status": "unknown"}', context_message)
+        self.assertIn("持仓: available hasPosition=False", context_message)
+        self.assertIn("行情: unknown", context_message)
         self.assertIn("未知、缺失或未检查的数据必须明确说明", context_message)
+
+    def test_chat_injects_quote_technical_fundamental_evidence_rules(self):
+        """Quote/technical/fundamental evidence is summarized without raw prompt or secret leakage."""
+        registry = _make_registry_with_echo()
+        adapter = _make_mock_adapter()
+        adapter.call_with_tools.return_value = LLMResponse(
+            content="结论\n- 基于部分证据谨慎判断",
+            tool_calls=[],
+            usage={"total_tokens": 20},
+            provider="deepseek",
+            model="deepseek-chat",
+        )
+
+        executor = AgentExecutor(registry, adapter, max_steps=1)
+        result = executor.chat(
+            "HOOD 现在能不能买？",
+            session_id="test-stock-chat-evidence-v2",
+            context={
+                "stock_chat": {
+                    "selected_lens": "综合判断",
+                    "stock_context": {
+                        "symbols": ["HOOD"],
+                        "market": "US",
+                        "intent": "buy_or_hold",
+                        "evidence": {
+                            "quote": {"status": "available", "price": 73.67, "changePct": 0.97, "provider": "alpaca"},
+                            "technical": {"status": "available", "trend": "bearish", "ma20": 79.42, "rsi14": 43.5},
+                            "fundamental": {"status": "partial", "peTtm": 35.21, "missingFields": ["marketCap"]},
+                            "news": {"status": "unknown"},
+                        },
+                    },
+                },
+            },
+        )
+
+        self.assertTrue(result.success)
+        messages = adapter.call_with_tools.call_args.args[0]
+        context_message = "\n".join(str(message.get("content", "")) for message in messages)
+        self.assertIn("行情: available price=73.67 changePct=0.97 provider=alpaca", context_message)
+        self.assertIn("技术: available trend=bearish ma20=79.42 rsi14=43.5", context_message)
+        self.assertIn("基本面: partial peTtm=35.21 missingFields=marketCap", context_message)
+        self.assertIn("news: unknown", context_message.lower())
+        self.assertIn("available/partial/stale/fallback", context_message)
+        self.assertNotRegex(context_message.lower(), r"api[_-]?key|sk-|system prompt|raw prompt")
+
+    def test_chat_without_stock_context_still_works(self):
+        """Old callers that omit stock_context continue through the chat path."""
+        registry = _make_registry_with_echo()
+        adapter = _make_mock_adapter()
+        adapter.call_with_tools.return_value = LLMResponse(
+            content="普通回答",
+            tool_calls=[],
+            usage={"total_tokens": 10},
+            provider="openai",
+        )
+
+        executor = AgentExecutor(registry, adapter, max_steps=1)
+        result = executor.chat(
+            "hello",
+            session_id="test-stock-chat-no-context",
+            context={"stock_chat": {"selected_lens": "综合判断"}},
+        )
+
+        self.assertTrue(result.success)
+        messages = adapter.call_with_tools.call_args.args[0]
+        context_message = "\n".join(str(message.get("content", "")) for message in messages)
+        self.assertNotIn("Stock Chat 证据摘要", context_message)
 
     def test_multiple_tool_calls_in_one_step(self):
         """Agent requests multiple tool calls in a single response."""
