@@ -657,6 +657,137 @@ describe('PortfolioPage FX refresh', () => {
     expect(risk).toHaveTextContent('单一标的占比较高');
   });
 
+  it('renders portfolio risk drilldown explainability without raw debug labels', async () => {
+    const snapshot = makeSnapshot({ includePosition: true, fxStale: false });
+    snapshot.analytics.exposure.bySymbol = [
+      {
+        key: 'AAPL',
+        label: 'AAPL',
+        marketValue: 1600,
+        displayValue: 1600,
+        displayCurrency: 'USD',
+        percent: 42,
+        fxStatus: 'live' as const,
+        symbol: 'AAPL',
+        market: 'us',
+        currency: 'USD',
+        unrealizedPnl: 180,
+        unrealizedPnlPct: 12.5,
+        holdingCount: 1,
+      },
+      {
+        key: 'MSFT',
+        label: 'MSFT',
+        marketValue: 900,
+        displayValue: 900,
+        displayCurrency: 'USD',
+        percent: 24,
+        fxStatus: 'live' as const,
+        symbol: 'MSFT',
+        market: 'us',
+        currency: 'USD',
+        unrealizedPnl: 60,
+        unrealizedPnlPct: 4.2,
+        holdingCount: 1,
+      },
+      {
+        key: '00700',
+        label: '00700',
+        marketValue: 700,
+        displayValue: 700,
+        displayCurrency: 'HKD',
+        percent: 18,
+        fxStatus: 'live' as const,
+        symbol: '00700',
+        market: 'hk',
+        currency: 'HKD',
+        unrealizedPnl: -45,
+        unrealizedPnlPct: -3.1,
+        holdingCount: 1,
+      },
+    ];
+    snapshot.analytics.exposure.byCurrency = [
+      {
+        key: 'USD',
+        label: 'USD',
+        marketValue: 2500,
+        displayValue: 2500,
+        displayCurrency: 'USD',
+        percent: 66,
+        fxStatus: 'live' as const,
+        nativeValue: 2500,
+        nativeCurrency: 'USD',
+        currency: 'USD',
+        holdingCount: 2,
+      },
+      {
+        key: 'HKD',
+        label: 'HKD',
+        marketValue: 700,
+        displayValue: 700,
+        displayCurrency: 'HKD',
+        percent: 18,
+        fxStatus: 'live' as const,
+        nativeValue: 700,
+        nativeCurrency: 'HKD',
+        currency: 'HKD',
+        holdingCount: 1,
+      },
+    ];
+    snapshot.analytics.exposure.byMarket = [
+      {
+        key: 'us',
+        label: 'US',
+        marketValue: 2500,
+        displayValue: 2500,
+        displayCurrency: 'USD',
+        percent: 66,
+        fxStatus: 'live' as const,
+        market: 'us',
+        holdingCount: 2,
+      },
+      {
+        key: 'hk',
+        label: 'HK',
+        marketValue: 700,
+        displayValue: 700,
+        displayCurrency: 'HKD',
+        percent: 18,
+        fxStatus: 'live' as const,
+        market: 'hk',
+        holdingCount: 1,
+      },
+    ];
+    snapshot.analytics.risk = {
+      ...snapshot.analytics.risk,
+      largestPosition: snapshot.analytics.exposure.bySymbol[0],
+      largestCurrency: snapshot.analytics.exposure.byCurrency[0],
+      largestMarket: snapshot.analytics.exposure.byMarket[0],
+      holdingCount: 3,
+      warnings: ['single_position_gt_30', 'provider_debug_payload'],
+    };
+    getSnapshot.mockResolvedValue(snapshot);
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const risk = screen.getByTestId('portfolio-risk-card');
+    expect(within(risk).getByTestId('portfolio-concentration-label')).toHaveTextContent('集中');
+    expect(within(risk).getByTestId('portfolio-concentration-drilldown')).toHaveTextContent('持仓集中度');
+    expect(within(risk).getByTestId('portfolio-concentration-drilldown')).toHaveTextContent('AAPL');
+    expect(within(risk).getByTestId('portfolio-concentration-drilldown')).toHaveTextContent('42.0%');
+    expect(within(risk).getByTestId('portfolio-currency-exposure-drilldown')).toHaveTextContent('币种敞口');
+    expect(within(risk).getByTestId('portfolio-currency-exposure-drilldown')).toHaveTextContent('USD');
+    expect(within(risk).getByTestId('portfolio-market-exposure-drilldown')).toHaveTextContent('市场敞口');
+    expect(within(risk).getByTestId('portfolio-market-exposure-drilldown')).toHaveTextContent('美股');
+    expect(within(risk).getByTestId('portfolio-pnl-contributors')).toHaveTextContent('盈亏贡献');
+    expect(within(risk).getByTestId('portfolio-pnl-contributors')).toHaveTextContent('AAPL');
+    expect(within(risk).getByTestId('portfolio-pnl-contributors')).toHaveTextContent('00700');
+    expect(within(risk).getByTestId('portfolio-risk-hints')).toHaveTextContent('最大持仓偏高');
+    expect(risk).not.toHaveTextContent('provider_debug_payload');
+  });
+
   it('keeps native exposure visible when FX conversion is unavailable', async () => {
     getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: true }));
 
@@ -668,6 +799,40 @@ describe('PortfolioPage FX refresh', () => {
     const exposure = screen.getByTestId('portfolio-exposure-card');
     expect(exposure).toHaveTextContent('折算不可用');
     expect(exposure).toHaveTextContent('USD 1,600.00');
+    const risk = screen.getByTestId('portfolio-risk-card');
+    expect(within(risk).getByTestId('portfolio-currency-exposure-drilldown')).toHaveTextContent('汇率待确认');
+    expect(within(risk).getByTestId('portfolio-currency-exposure-drilldown')).toHaveTextContent('原币统计可用');
+    expect(within(risk).getByTestId('portfolio-risk-hints')).toHaveTextContent('汇率数据不可用');
+  });
+
+  it('renders missing market category cleanly without raw unknown text', async () => {
+    const snapshot = makeSnapshot({ includePosition: true, fxStale: false });
+    snapshot.analytics.exposure.byMarket = [
+      {
+        key: 'unknown',
+        label: 'UNKNOWN',
+        marketValue: 1600,
+        displayValue: 1600,
+        displayCurrency: 'USD',
+        percent: 100,
+        fxStatus: 'live' as const,
+        market: 'unknown',
+        holdingCount: 1,
+      },
+    ];
+    snapshot.analytics.risk = {
+      ...snapshot.analytics.risk,
+      largestMarket: snapshot.analytics.exposure.byMarket[0],
+    };
+    getSnapshot.mockResolvedValue(snapshot);
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const marketDrilldown = screen.getByTestId('portfolio-market-exposure-drilldown');
+    expect(marketDrilldown).toHaveTextContent('暂无市场分类');
+    expect(marketDrilldown).not.toHaveTextContent('UNKNOWN');
   });
 
   it('shows the disabled trade reason if the trade account is all accounts', async () => {
@@ -695,9 +860,9 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('link', { name: /在设置中修改/ })).toHaveAttribute('href', '/zh/settings');
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('USD 414.08');
     expect(screen.getByText('≈ CNY 3,000.00')).toBeInTheDocument();
-    expect(screen.getByText('USD 1,600.00')).toBeInTheDocument();
+    expect(screen.getAllByText('USD 1,600.00').length).toBeGreaterThan(0);
     expect(screen.queryByText('≈ USD 1,600.00')).not.toBeInTheDocument();
-    expect(screen.getByText('+USD 100.00')).toBeInTheDocument();
+    expect(screen.getAllByText('+USD 100.00').length).toBeGreaterThan(0);
     expect(screen.queryByText('≈ USD 100.00')).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-currency-breakdown')).toHaveTextContent('CNY 3,000.00');
   });
@@ -736,7 +901,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    expect(screen.getByText('USD 1,600.00')).toBeInTheDocument();
+    expect(screen.getAllByText('USD 1,600.00').length).toBeGreaterThan(0);
     expect(within(screen.getByTestId('portfolio-total-assets-card')).getAllByText('折算不可用').length).toBeGreaterThan(0);
     expect(screen.queryByText(/≈ CNY/)).not.toBeInTheDocument();
   });

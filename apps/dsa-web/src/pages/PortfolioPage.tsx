@@ -424,6 +424,22 @@ function formatAccountMarketLabel(value: string, language: PortfolioLanguage): s
   return translate(language, `portfolio.marketLabel.${normalized}`);
 }
 
+function isMissingMarketValue(value: string | undefined | null): boolean {
+  const normalized = String(value || '').trim().toLowerCase();
+  return !normalized || normalized === 'unknown' || normalized === 'unclassified' || normalized === '--' || normalized === 'n/a';
+}
+
+function formatExposureMarketLabel(row: PortfolioExposureItem | undefined | null, language: PortfolioLanguage): string {
+  if (!row || isMissingMarketValue(row.market || row.key || row.label)) {
+    return language === 'zh' ? '暂无市场分类' : 'No market category';
+  }
+  const marketValue = String(row.market || row.key || '').toLowerCase();
+  if (marketValue === 'cn' || marketValue === 'hk' || marketValue === 'us' || marketValue === 'global') {
+    return formatAccountMarketLabel(marketValue, language);
+  }
+  return row.label || marketValue.toUpperCase();
+}
+
 function formatPositionContext(market: string, currency: string, language: PortfolioLanguage): string {
   const marketLabel = formatAccountMarketLabel(market, language);
   return translate(language, 'portfolio.positionContext', {
@@ -1549,6 +1565,98 @@ const PortfolioPage: React.FC = () => {
       : null;
     return { display, native };
   };
+  const symbolExposureRows = [...(analytics?.exposure.bySymbol || [])]
+    .sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
+  const currencyExposureRows = [...(analytics?.exposure.byCurrency || [])]
+    .sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
+  const marketExposureRows = [...(analytics?.exposure.byMarket || [])]
+    .sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
+  const topPosition = symbolExposureRows[0] || analytics?.risk.largestPosition || null;
+  const topCurrency = currencyExposureRows[0] || analytics?.risk.largestCurrency || null;
+  const topMarket = marketExposureRows[0] || analytics?.risk.largestMarket || null;
+  const topPositionPercent = Number(topPosition?.percent || 0);
+  const concentrationLabel = !hasHoldings || !topPosition
+    ? (language === 'zh' ? '暂无持仓' : 'No holdings')
+    : topPositionPercent < 20
+      ? (language === 'zh' ? '分散' : 'Diversified')
+      : topPositionPercent < 35
+        ? (language === 'zh' ? '适中' : 'Balanced')
+        : topPositionPercent < 50
+          ? (language === 'zh' ? '集中' : 'Concentrated')
+          : (language === 'zh' ? '高度集中' : 'Highly concentrated');
+  const concentrationToneClass = topPositionPercent >= 50
+    ? 'text-rose-300'
+    : topPositionPercent >= 35
+      ? 'text-amber-300'
+      : topPositionPercent >= 20
+        ? 'text-cyan-300'
+        : 'text-emerald-300';
+  const concentrationDescription = !hasHoldings || !topPosition
+    ? (language === 'zh' ? '暂无持仓，录入交易后生成集中度。' : 'No holdings yet. Add trades to generate concentration.')
+    : language === 'zh'
+      ? `最大持仓占 ${formatPercent(topPositionPercent)}，按持仓市值占比判定为${concentrationLabel}。`
+      : `Largest holding is ${formatPercent(topPositionPercent)} of exposure, classified as ${concentrationLabel}.`;
+  const gainContributors = [...symbolExposureRows]
+    .filter((row) => Number(row.unrealizedPnl || 0) > 0)
+    .sort((a, b) => Number(b.unrealizedPnl || 0) - Number(a.unrealizedPnl || 0))
+    .slice(0, 3);
+  const lossContributors = [...symbolExposureRows]
+    .filter((row) => Number(row.unrealizedPnl || 0) < 0)
+    .sort((a, b) => Number(a.unrealizedPnl || 0) - Number(b.unrealizedPnl || 0))
+    .slice(0, 3);
+  const marketRiskHint = !marketExposureRows.length
+    ? (language === 'zh' ? '暂无市场分类' : 'No market category')
+    : marketExposureRows.length === 1
+      ? (language === 'zh' ? '单一市场集中' : 'Single-market concentration')
+      : Number(topMarket?.percent || 0) >= 80
+        ? (language === 'zh' ? '单一市场集中' : 'Single-market concentration')
+        : (language === 'zh' ? '跨市场持仓' : 'Cross-market holdings');
+  const currencyFxContext = topCurrency?.fxStatus === 'unavailable'
+    ? (language === 'zh' ? '汇率待确认' : 'FX pending')
+    : topCurrency?.nativeCurrency && topCurrency.nativeCurrency !== displayCurrency
+      ? (language === 'zh' ? '原币统计可用' : 'Native analytics available')
+      : (language === 'zh' ? '主币种' : 'Primary currency');
+  const riskHintTexts = [
+    topPositionPercent >= 35 ? (language === 'zh' ? '最大持仓偏高' : 'Largest holding elevated') : null,
+    Number(topCurrency?.percent || 0) >= 80 ? (language === 'zh' ? '币种集中' : 'Currency concentrated') : null,
+    Number(topMarket?.percent || 0) >= 80 ? (language === 'zh' ? '市场集中' : 'Market concentrated') : null,
+    hasHoldings && (analytics?.risk.holdingCount ?? positionRows.length) < 3 ? (language === 'zh' ? '持仓数量较少' : 'Few holdings') : null,
+    analytics?.risk.fxUnavailable ? (language === 'zh' ? '汇率数据不可用' : 'FX data unavailable') : null,
+  ].filter(Boolean) as string[];
+  const safeRiskWarningLabels = (analytics?.risk.warnings || [])
+    .map((warning) => riskWarningLabels[warning])
+    .filter(Boolean);
+  const renderMiniExposureRow = (
+    row: PortfolioExposureItem,
+    options: { testIdPrefix: string; label?: string; showNative?: boolean },
+  ) => {
+    const values = renderExposureValue(row);
+    return (
+      <div key={`${options.testIdPrefix}-${row.key}`} data-testid={`${options.testIdPrefix}-${row.key}`} className="min-w-0 rounded-lg bg-white/[0.025] px-3 py-2">
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-xs font-medium text-white">{options.label || row.label || row.key}</div>
+            <div className="mt-0.5 font-mono text-[11px] text-white/40">{formatPercent(row.percent)}</div>
+          </div>
+          <div className="min-w-0 shrink-0 text-right">
+            <div className="font-mono text-xs text-white tabular-nums">{values.display}</div>
+            {options.showNative && values.native ? <div className="mt-0.5 font-mono text-[10px] text-white/35">{values.native}</div> : null}
+          </div>
+        </div>
+      </div>
+    );
+  };
+  const renderContributorRow = (row: PortfolioExposureItem, toneClass: string, prefix: string) => (
+    <div key={`${prefix}-${row.key}`} data-testid={`${prefix}-${row.key}`} className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-white/[0.025] px-3 py-2">
+      <div className="min-w-0">
+        <div className="truncate text-xs font-medium text-white">{row.label || row.symbol || row.key}</div>
+        <div className="mt-0.5 font-mono text-[11px] text-white/40">{formatPercent(row.unrealizedPnlPct)}</div>
+      </div>
+      <div className={`shrink-0 font-mono text-xs tabular-nums ${toneClass}`}>
+        {formatSignedMoney(Number(row.unrealizedPnl || 0), row.displayCurrency || snapshotCurrency)}
+      </div>
+    </div>
+  );
 
   const renderTradeActions = (item: PortfolioTradeListItem, context: 'history' | 'recent') => {
     if (item.isActive === false) {
@@ -2032,22 +2140,21 @@ const PortfolioPage: React.FC = () => {
 	              data-testid="portfolio-risk-card"
 	              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-4 flex flex-col gap-3`}
 	            >
-	              <h2 className="text-xs uppercase tracking-widest text-muted-text">{riskTitle}</h2>
-	              <div className="grid grid-cols-2 gap-2">
+	              <div className="flex flex-wrap items-start justify-between gap-3">
+	                <div>
+	                  <h2 className="text-xs uppercase tracking-widest text-muted-text">{riskTitle}</h2>
+	                  <p className="mt-1 text-xs text-white/40">{language === 'zh' ? '风险概览 · 持仓集中度 · 盈亏贡献' : 'Risk overview · concentration · P&L contribution'}</p>
+	                </div>
+	                <span data-testid="portfolio-concentration-label" className={`rounded-full bg-white/[0.04] px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${hasHoldings ? concentrationToneClass : 'text-white/35'}`}>
+	                  {concentrationLabel}
+	                </span>
+	              </div>
+
+	              <div data-testid="portfolio-risk-overview" className="grid grid-cols-2 gap-2">
 	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
 	                  <div className="text-[10px] uppercase tracking-widest text-white/40">{language === 'zh' ? '最大持仓' : 'Largest Position'}</div>
-	                  <div className="mt-1 truncate text-sm text-white">{analytics?.risk.largestPosition?.label || '--'}</div>
-	                  <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(analytics?.risk.largestPosition?.percent)}</div>
-	                </div>
-	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                  <div className="text-[10px] uppercase tracking-widest text-white/40">{language === 'zh' ? '最大币种' : 'Largest Currency'}</div>
-	                  <div className="mt-1 truncate text-sm text-white">{analytics?.risk.largestCurrency?.label || '--'}</div>
-	                  <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(analytics?.risk.largestCurrency?.percent)}</div>
-	                </div>
-	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                  <div className="text-[10px] uppercase tracking-widest text-white/40">{language === 'zh' ? '最大市场' : 'Largest Market'}</div>
-	                  <div className="mt-1 truncate text-sm text-white">{analytics?.risk.largestMarket?.label || '--'}</div>
-	                  <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(analytics?.risk.largestMarket?.percent)}</div>
+	                  <div className="mt-1 truncate text-sm text-white">{topPosition?.label || '--'}</div>
+	                  <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topPosition?.percent)}</div>
 	                </div>
 	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
 	                  <div className="text-[10px] uppercase tracking-widest text-white/40">{language === 'zh' ? '持仓数量' : 'Holdings'}</div>
@@ -2055,16 +2162,96 @@ const PortfolioPage: React.FC = () => {
 	                  <div className="mt-1 font-mono text-xs text-white/45">{language === 'zh' ? '账户' : 'Accounts'} {analytics?.risk.accountCount ?? snapshot?.accountCount ?? 0}</div>
 	                </div>
 	              </div>
-	              <div className="rounded-xl bg-white/[0.025] px-3 py-3 text-xs text-white/45">
-	                {(analytics?.risk.warnings || []).length ? (
-	                  <div className="flex flex-col gap-1.5">
-	                    {(analytics?.risk.warnings || []).map((warning) => (
-	                      <span key={warning}>{riskWarningLabels[warning] || warning}</span>
-	                    ))}
+
+	              <div data-testid="portfolio-concentration-drilldown" className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                <div className="flex items-center justify-between gap-3">
+	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '持仓集中度' : 'Concentration'}</div>
+	                  <div className={`font-mono text-xs ${hasHoldings ? concentrationToneClass : 'text-white/35'}`}>{formatPercent(topPosition?.percent)}</div>
+	                </div>
+	                <p className="mt-2 text-xs leading-5 text-white/45">{concentrationDescription}</p>
+	                {symbolExposureRows.length ? (
+	                  <div className="mt-2 flex flex-col gap-1.5">
+	                    {symbolExposureRows.slice(0, 3).map((row) => renderMiniExposureRow(row, { testIdPrefix: 'portfolio-top-position' }))}
 	                  </div>
-	                ) : (
-	                  <span>{language === 'zh' ? '暂无集中度提示' : 'No concentration warnings'}</span>
-	                )}
+	                ) : null}
+	              </div>
+
+	              <div className="grid gap-2 sm:grid-cols-2">
+	                <div data-testid="portfolio-currency-exposure-drilldown" className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                  <div className="flex items-center justify-between gap-3">
+	                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '币种敞口' : 'Currency Exposure'}</div>
+	                    <span className="shrink-0 rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-cyan-200">{currencyFxContext}</span>
+	                  </div>
+	                  <div className="mt-2 text-[10px] uppercase tracking-widest text-white/35">{language === 'zh' ? '最大币种' : 'Largest Currency'}</div>
+	                  <div className="mt-2 text-sm text-white">{topCurrency?.label || '--'}</div>
+	                  <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topCurrency?.percent)}</div>
+	                  {topCurrency ? (
+	                    <div className="mt-2">{renderMiniExposureRow(topCurrency, { testIdPrefix: 'portfolio-top-currency', showNative: true })}</div>
+	                  ) : (
+	                    <div className="mt-2 text-xs text-white/40">{language === 'zh' ? '暂无币种敞口' : 'No currency exposure'}</div>
+	                  )}
+	                  {topCurrency?.fxStatus === 'unavailable' ? (
+	                    <div className="mt-2 text-[11px] text-amber-200">{language === 'zh' ? '折算值仅供参考，原币统计可用。' : 'Converted value is indicative; native analytics remain available.'}</div>
+	                  ) : null}
+	                </div>
+
+	                <div data-testid="portfolio-market-exposure-drilldown" className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                  <div className="flex items-center justify-between gap-3">
+	                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '市场敞口' : 'Market Exposure'}</div>
+	                    <span className="shrink-0 rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-cyan-200">{marketRiskHint}</span>
+	                  </div>
+	                  <div className="mt-2 text-[10px] uppercase tracking-widest text-white/35">{language === 'zh' ? '最大市场' : 'Largest Market'}</div>
+	                  <div className="mt-2 text-sm text-white">{formatExposureMarketLabel(topMarket, language)}</div>
+	                  <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topMarket?.percent)} · {language === 'zh' ? '市场数' : 'Markets'} {marketExposureRows.length}</div>
+	                  {topMarket ? (
+	                    <div className="mt-2">{renderMiniExposureRow(topMarket, { testIdPrefix: 'portfolio-top-market', label: formatExposureMarketLabel(topMarket, language) })}</div>
+	                  ) : (
+	                    <div className="mt-2 text-xs text-white/40">{language === 'zh' ? '暂无市场分类' : 'No market category'}</div>
+	                  )}
+	                </div>
+	              </div>
+
+	              <div data-testid="portfolio-pnl-contributors" className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                <div className="flex flex-wrap items-center justify-between gap-2">
+	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '盈亏贡献' : 'P&L Contribution'}</div>
+	                  <div className="font-mono text-[11px] text-white/40">
+	                    {pnlLabels.realized} {formatSignedMoney(realizedPnl, pnlSourceCurrency)} · {pnlLabels.unrealized} {formatSignedMoney(unrealizedPnl, pnlSourceCurrency)}
+	                  </div>
+	                </div>
+	                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+	                  <div className="min-w-0">
+	                    <div className="mb-1 text-[10px] text-emerald-300">{language === 'zh' ? '贡献盈利' : 'Gain contributors'}</div>
+	                    {gainContributors.length ? (
+	                      <div className="flex flex-col gap-1.5">
+	                        {gainContributors.map((row) => renderContributorRow(row, 'text-emerald-300', 'portfolio-gain-contributor'))}
+	                      </div>
+	                    ) : (
+	                      <div className="rounded-lg bg-white/[0.025] px-3 py-2 text-xs text-white/40">{language === 'zh' ? '暂无盈利贡献' : 'No gain contributor'}</div>
+	                    )}
+	                  </div>
+	                  <div className="min-w-0">
+	                    <div className="mb-1 text-[10px] text-rose-300">{language === 'zh' ? '拖累亏损' : 'Loss contributors'}</div>
+	                    {lossContributors.length ? (
+	                      <div className="flex flex-col gap-1.5">
+	                        {lossContributors.map((row) => renderContributorRow(row, 'text-rose-300', 'portfolio-loss-contributor'))}
+	                      </div>
+	                    ) : (
+	                      <div className="rounded-lg bg-white/[0.025] px-3 py-2 text-xs text-white/40">{language === 'zh' ? '暂无亏损拖累' : 'No loss contributor'}</div>
+	                    )}
+	                  </div>
+	                </div>
+	              </div>
+
+	              <div data-testid="portfolio-risk-hints" className="rounded-xl bg-white/[0.025] px-3 py-3 text-xs text-white/45">
+	                <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '风险提示' : 'Risk Hints'}</div>
+	                <div className="flex flex-wrap gap-1.5">
+	                  {(riskHintTexts.length ? riskHintTexts : [language === 'zh' ? '暂无显著集中风险' : 'No notable concentration risk']).map((hint) => (
+	                    <span key={hint} className="rounded-full bg-white/[0.04] px-2 py-1 text-[11px] text-white/55">{hint}</span>
+	                  ))}
+	                  {safeRiskWarningLabels.map((warning) => (
+	                    <span key={warning} className="rounded-full bg-white/[0.04] px-2 py-1 text-[11px] text-white/55">{warning}</span>
+	                  ))}
+	                </div>
 	              </div>
 	            </section>
             </div>
