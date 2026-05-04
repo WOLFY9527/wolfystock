@@ -744,7 +744,7 @@ describe('HomeSurfacePage', () => {
     const panel = await screen.findByTestId('home-bento-decision-trace-panel');
     const developerDetails = within(panel).getByTestId('home-bento-decision-trace-developer');
     expect(developerDetails).not.toHaveAttribute('open');
-    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('Schema 未确认');
+    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('结构未确认');
     expect(within(panel).getByText('报价')).toBeInTheDocument();
     expect(within(panel).getByText('部分可用')).toBeInTheDocument();
   });
@@ -802,6 +802,67 @@ describe('HomeSurfacePage', () => {
     expect(document.body.textContent).not.toContain('api_key');
     expect(document.body.textContent).not.toContain('sk-');
     expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
+  });
+
+  it('reads decision trace from persisted history detail raw payloads', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce(normalizeFrontendReportContract({
+      meta: defaultHistoryReport.meta,
+      summary: defaultHistoryReport.summary,
+      strategy: defaultHistoryReport.strategy,
+      details: {
+        standard_report: defaultHistoryReport.details.standardReport,
+        analysis_result: {
+          action: '持有',
+          score: 78,
+          confidence: '高',
+          entry_price: '121.80 - 124.60',
+          stop_loss: '117.40',
+          take_profit: '133.50',
+          summary: 'Cloud backlog keeps the medium-term floor intact.',
+        },
+        raw_result: {
+          persisted_report: {
+            decision_trace: {
+              engine_version: 'analysis_decision_trace_v1',
+              symbol: 'ORCL',
+              market: 'US',
+              decision_fields: {
+                action: { value: 'hold', source: 'rule' },
+                score: { value: 78, source: 'rule', scale: '0-100' },
+                confidence: { value: '高', source: 'llm' },
+              },
+              data_sources: [
+                { name: 'quote', status: 'used', provider: 'Yahoo Finance' },
+                { name: 'fundamental', status: 'partial', provider: 'FMP' },
+              ],
+              llm: {
+                used: true,
+                provider: 'openai',
+                model: 'openai/gpt-4.1-mini',
+                template: 'decision_dashboard_v2',
+                schema_validated: false,
+                prompt_exposed: false,
+              },
+            },
+          },
+        },
+      },
+    } as never));
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    expect(screen.getByTestId('home-bento-decision-source-summary')).not.toHaveTextContent('未包含决策溯源');
+    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('结构未确认');
+    expect(screen.getByTestId('home-bento-decision-conviction-value')).not.toHaveTextContent('0%');
+
+    fireEvent.click(screen.getByRole('button', { name: '决策来源' }));
+    const panel = await screen.findByTestId('home-bento-decision-trace-panel');
+    expect(panel).not.toHaveTextContent('当前分析未包含决策溯源');
+    expect(within(panel).getByText('报价')).toBeInTheDocument();
+    const developerDetails = within(panel).getByTestId('home-bento-decision-trace-developer');
+    expect(developerDetails).not.toHaveAttribute('open');
   });
 
   it('opens the decision trace fixture drawer in a narrow viewport', async () => {
@@ -901,6 +962,216 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '决策来源' }));
 
     expect(await screen.findByTestId('home-bento-decision-trace-panel')).toHaveTextContent('当前分析未包含决策溯源');
+    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('未包含决策溯源');
+    expect(screen.getByTestId('home-bento-decision-trace-developer')).not.toHaveAttribute('open');
+  });
+
+  it('shows compact report quality chips for complete, usable, legacy, and failed history records', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValueOnce({
+      total: 4,
+      page: 1,
+      limit: 20,
+      items: [
+        {
+          id: 41,
+          queryId: 'q41',
+          stockCode: 'ORCL',
+          stockName: 'Oracle',
+          companyName: 'Oracle',
+          createdAt: '2026-05-04T08:00:00Z',
+          generatedAt: '2026-05-04T08:03:00Z',
+          isTest: false,
+          reportQuality: {
+            level: 'complete',
+            schemaStatus: 'ok',
+            traceStatus: 'present',
+            summaryStatus: 'complete',
+            reportStatus: 'complete',
+            hasDecisionTrace: true,
+            hasStandardReport: true,
+            hasAnalysisResult: true,
+            hasAction: true,
+            hasScore: true,
+            hasConfidence: true,
+            hasTradingPlan: true,
+            missingFields: [],
+            userLabel: '完整',
+            userHint: '结构化摘要与决策溯源完整。',
+          },
+        },
+        {
+          id: 42,
+          queryId: 'q42',
+          stockCode: 'AMD',
+          stockName: 'AMD',
+          companyName: 'AMD',
+          createdAt: '2026-05-04T07:00:00Z',
+          generatedAt: '2026-05-04T07:03:00Z',
+          isTest: false,
+          reportQuality: {
+            level: 'usable',
+            schemaStatus: 'unconfirmed',
+            traceStatus: 'missing',
+            summaryStatus: 'partial',
+            reportStatus: 'complete',
+            hasDecisionTrace: false,
+            hasStandardReport: true,
+            hasAnalysisResult: true,
+            hasAction: true,
+            hasScore: true,
+            hasConfidence: false,
+            hasTradingPlan: true,
+            missingFields: ['决策溯源', '置信度'],
+            userLabel: '可用',
+            userHint: '报告内容可用，但部分溯源或结构字段缺失。',
+          },
+        },
+        {
+          id: 43,
+          queryId: 'q43',
+          stockCode: 'IBM',
+          stockName: 'IBM',
+          companyName: 'IBM',
+          createdAt: '2026-05-04T06:00:00Z',
+          generatedAt: '2026-05-04T06:03:00Z',
+          isTest: false,
+          reportQuality: {
+            level: 'legacy',
+            schemaStatus: 'unknown',
+            traceStatus: 'missing',
+            summaryStatus: 'partial',
+            reportStatus: 'partial',
+            hasDecisionTrace: false,
+            hasStandardReport: false,
+            hasAnalysisResult: false,
+            hasAction: true,
+            hasScore: false,
+            hasConfidence: false,
+            hasTradingPlan: false,
+            missingFields: ['决策溯源', '标准报告'],
+            userLabel: '旧版记录',
+            userHint: '旧版历史记录可阅读，但结构化字段不完整。',
+          },
+        },
+        {
+          id: 44,
+          queryId: 'q44',
+          stockCode: 'SNOW',
+          stockName: 'Snowflake',
+          companyName: 'Snowflake',
+          createdAt: '2026-05-04T05:00:00Z',
+          generatedAt: '2026-05-04T05:03:00Z',
+          isTest: false,
+          reportQuality: {
+            level: 'failed',
+            schemaStatus: 'missing',
+            traceStatus: 'missing',
+            summaryStatus: 'missing',
+            reportStatus: 'missing',
+            hasDecisionTrace: false,
+            hasStandardReport: false,
+            hasAnalysisResult: true,
+            hasAction: false,
+            hasScore: false,
+            hasConfidence: false,
+            hasTradingPlan: false,
+            missingFields: ['决策溯源', '标准报告', '摘要'],
+            userLabel: '分析失败',
+            userHint: '本次分析未完整生成，可重新分析。',
+          },
+        },
+      ],
+    });
+
+    renderSurface();
+    fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
+
+    const complete = await screen.findByTestId('home-bento-history-quality-41');
+    expect(within(complete).getByText('完整')).toBeInTheDocument();
+    expect(within(complete).getByText('溯源完整')).toBeInTheDocument();
+    expect(within(complete).getByText('报告完整')).toBeInTheDocument();
+    expect(within(complete).getByText('结构确认')).toBeInTheDocument();
+    const usable = screen.getByTestId('home-bento-history-quality-42');
+    expect(within(usable).getByText('可用')).toBeInTheDocument();
+    expect(within(usable).getByText('未包含决策溯源')).toBeInTheDocument();
+    expect(within(usable).getByText('结构未确认')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-history-quality-43')).toHaveTextContent('旧版记录');
+    expect(screen.getByTestId('home-bento-history-quality-44')).toHaveTextContent('分析失败');
+  });
+
+  it('keeps incomplete reports readable and offers explicit re-analysis without fabricating confidence', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      decisionTrace: undefined,
+      summary: {
+        ...defaultHistoryReport.summary,
+        sentimentScore: 61,
+      },
+      details: {
+        ...defaultHistoryReport.details,
+        standardReport: {
+          ...defaultHistoryReport.details.standardReport,
+          decisionPanel: {
+            ...defaultHistoryReport.details.standardReport.decisionPanel,
+            confidence: undefined,
+          },
+        },
+      },
+    });
+
+    renderSurface();
+
+    await screen.findByText('Oracle Corporation');
+    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('可用');
+    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('未包含决策溯源');
+    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('结构未确认');
+    expect(screen.getByTestId('home-bento-decision-conviction-value')).toHaveTextContent('-');
+    expect(screen.queryByText('0%')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '重新分析' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: '完整报告' }));
+    const report = await screen.findByTestId('home-bento-full-report-drawer');
+    expect(within(report).getByText('投资结论')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /关闭|Close/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '决策来源' }));
+    const panel = await screen.findByTestId('home-bento-decision-trace-panel');
+    expect(panel).toHaveTextContent('当前分析未包含决策溯源');
+    expect(within(panel).getByTestId('home-bento-decision-trace-developer')).not.toHaveAttribute('open');
+  });
+
+  it('disables safe re-analysis when the selected report has no symbol', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValueOnce({
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [
+        { id: 55, queryId: 'q55', stockCode: '', stockName: '', companyName: '', createdAt: '2026-05-04T04:00:00Z', generatedAt: '2026-05-04T04:03:00Z', isTest: false },
+      ],
+    });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      meta: {
+        ...defaultHistoryReport.meta,
+        id: 55,
+        queryId: 'q55',
+        stockCode: '',
+        stockName: '',
+        companyName: '',
+      },
+      decisionTrace: undefined,
+    });
+
+    renderSurface();
+
+    const disabledRerun = await screen.findByRole('button', { name: '缺少股票代码' });
+    expect(disabledRerun).toBeDisabled();
+    expect(disabledRerun).toHaveAttribute('title', '缺少股票代码');
+    expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
   });
 
   it('keeps the full bento card layout when there is no non-test history', async () => {

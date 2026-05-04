@@ -4,6 +4,7 @@ import type {
   FrontendReportContractMeta,
   ReportDetails,
   ReportMeta,
+  ReportQuality,
   ReportSummary,
   ReportStandardSource,
   StandardReport,
@@ -39,6 +40,180 @@ const toFiniteNumber = (value: unknown): number | undefined => {
   return undefined;
 };
 
+const isNonEmptyText = (value: unknown): boolean => {
+  const text = String(value ?? '').trim();
+  return Boolean(text && text !== '-' && !/^n\/?a$/i.test(text) && !text.startsWith('NA（'));
+};
+
+const hasObjectContent = (value: unknown): boolean => {
+  const record = toRecord(value);
+  return Boolean(record && Object.keys(record).length > 0);
+};
+
+const hasFailedAnalysisText = (value: unknown): boolean => (
+  typeof value === 'string'
+  && /all llm models failed|serviceunavailable|rate limit|ratelimiterror|timeout|timed out|分析过程出错|llm.*failed|分析失败/i.test(value)
+);
+
+const hasVisibleFailureMarker = (report: AnalysisReport): boolean => [
+  report.summary?.analysisSummary,
+  report.summary?.operationAdvice,
+  report.summary?.trendPrediction,
+  report.details?.analysisResult ? (report.details.analysisResult as Record<string, unknown>).error : undefined,
+  report.details?.analysisResult ? (report.details.analysisResult as Record<string, unknown>).status : undefined,
+].some(hasFailedAnalysisText);
+
+const readAnalysisResultField = (analysisResult: Record<string, unknown> | undefined, fields: string[]): unknown => {
+  if (!analysisResult) {
+    return undefined;
+  }
+  for (const field of fields) {
+    const value = analysisResult[field];
+    if (isNonEmptyText(value) || typeof value === 'number') {
+      return value;
+    }
+  }
+  return undefined;
+};
+
+export const normalizeReportQuality = (report: AnalysisReport): ReportQuality => {
+  const standardReport = report.details?.standardReport;
+  const analysisResult = toRecord(report.details?.analysisResult);
+  const trace = report.decisionTrace;
+  const traceFieldCount = Object.keys(trace?.decisionFields || {}).length;
+  const traceSourceCount = trace?.dataSources?.length || 0;
+  const hasDecisionTrace = hasObjectContent(trace);
+  const hasStandardReport = hasObjectContent(standardReport);
+  const hasAnalysisResult = hasObjectContent(analysisResult);
+  const hasAction = Boolean(
+    isNonEmptyText(trace?.decisionFields?.action?.value)
+    || isNonEmptyText(standardReport?.summaryPanel?.operationAdvice)
+    || isNonEmptyText(standardReport?.decisionPanel?.keyAction)
+    || isNonEmptyText(report.summary?.operationAdvice)
+    || isNonEmptyText(readAnalysisResultField(analysisResult, ['action', 'decision'])),
+  );
+  const hasScore = Boolean(
+    isNonEmptyText(trace?.decisionFields?.score?.value)
+    || standardReport?.summaryPanel?.score !== undefined
+    || report.contractMeta?.hasExplicitSentimentScore === true
+    || isNonEmptyText(readAnalysisResultField(analysisResult, ['score', 'sentimentScore'])),
+  );
+  const hasConfidence = Boolean(
+    isNonEmptyText(trace?.decisionFields?.confidence?.value)
+    || isNonEmptyText(standardReport?.decisionPanel?.confidence)
+    || isNonEmptyText(readAnalysisResultField(analysisResult, ['confidence', 'confidenceLevel'])),
+  );
+  const hasTradingPlan = Boolean(
+    isNonEmptyText(trace?.decisionFields?.entry?.value)
+    || isNonEmptyText(trace?.decisionFields?.target?.value)
+    || isNonEmptyText(trace?.decisionFields?.stop?.value)
+    || isNonEmptyText(standardReport?.decisionPanel?.idealEntry)
+    || isNonEmptyText(standardReport?.decisionPanel?.target)
+    || isNonEmptyText(standardReport?.decisionPanel?.stopLoss)
+    || isNonEmptyText(report.strategy?.idealBuy)
+    || isNonEmptyText(report.strategy?.takeProfit)
+    || isNonEmptyText(report.strategy?.stopLoss)
+    || isNonEmptyText(readAnalysisResultField(analysisResult, ['entryPrice', 'takeProfit', 'stopLoss'])),
+  );
+  const summaryFields = [
+    report.summary?.analysisSummary,
+    report.summary?.operationAdvice,
+    report.summary?.trendPrediction,
+    standardReport?.summaryPanel?.oneSentence,
+    standardReport?.decisionContext?.shortTermView,
+    readAnalysisResultField(analysisResult, ['summary', 'fullReasoning']),
+  ].filter(isNonEmptyText).length;
+  const summaryStatus = summaryFields >= 3 ? 'complete' : summaryFields > 0 ? 'partial' : 'missing';
+  const reportSectionCount = [
+    standardReport?.summaryPanel,
+    standardReport?.decisionPanel,
+    standardReport?.technicalFields?.length,
+    standardReport?.fundamentalFields?.length,
+    standardReport?.reasonLayer,
+    standardReport?.coverageNotes,
+    standardReport?.battlePlanCompact,
+    report.details?.newsContent,
+  ].filter((value) => (typeof value === 'number' ? value > 0 : hasObjectContent(value) || isNonEmptyText(value))).length;
+  const reportStatus = hasStandardReport && reportSectionCount >= 3
+    ? 'complete'
+    : hasStandardReport || hasAnalysisResult || summaryStatus !== 'missing'
+      ? 'partial'
+      : 'missing';
+  const traceStatus = hasDecisionTrace
+    ? traceFieldCount > 0 || traceSourceCount > 0
+      ? 'present'
+      : 'partial'
+    : 'missing';
+  const schemaStatus = trace?.llm?.schemaValidated === true
+    ? 'ok'
+    : hasDecisionTrace
+      ? 'unconfirmed'
+      : hasStandardReport
+        ? 'unconfirmed'
+        : reportStatus === 'missing'
+          ? 'missing'
+          : 'unknown';
+  const missingFields: string[] = [];
+  if (!hasDecisionTrace) missingFields.push('决策溯源');
+  if (!hasStandardReport) missingFields.push('标准报告');
+  if (!hasAction) missingFields.push('操作建议');
+  if (!hasScore) missingFields.push('评分');
+  if (!hasConfidence) missingFields.push('置信度');
+  if (!hasTradingPlan) missingFields.push('交易计划');
+  if (summaryStatus === 'missing') missingFields.push('摘要');
+
+  const failed = hasVisibleFailureMarker(report) || reportStatus === 'missing' && summaryStatus === 'missing' && hasAnalysisResult && hasFailedAnalysisText(analysisResult?.status);
+  const level = failed
+    ? 'failed'
+    : hasDecisionTrace && hasStandardReport && hasAction && hasScore && hasConfidence && hasTradingPlan
+      ? 'complete'
+      : hasStandardReport && (hasAction || hasScore || hasTradingPlan || hasAnalysisResult)
+        ? 'usable'
+        : reportStatus !== 'missing' || summaryStatus !== 'missing'
+          ? 'legacy'
+          : hasAnalysisResult
+            ? 'partial'
+            : 'unknown';
+
+  const userLabel = {
+    complete: '完整',
+    usable: '可用',
+    partial: '部分信息',
+    legacy: '旧版记录',
+    failed: '分析失败',
+    unknown: '状态未知',
+  }[level];
+  const userHint = failed
+    ? '本次分析未完整生成，可重新分析。'
+    : level === 'complete'
+      ? '结构化摘要与决策溯源完整。'
+      : level === 'usable'
+        ? '报告内容可用，但部分溯源或结构字段缺失。'
+        : level === 'legacy'
+          ? '旧版历史记录可阅读，但结构化字段不完整。'
+          : level === 'partial'
+            ? '仅保留部分报告信息。'
+            : '暂未确认报告完整性。';
+
+  return {
+    level,
+    schemaStatus,
+    traceStatus,
+    summaryStatus,
+    reportStatus,
+    hasDecisionTrace,
+    hasStandardReport,
+    hasAnalysisResult,
+    hasAction,
+    hasScore,
+    hasConfidence,
+    hasTradingPlan,
+    missingFields,
+    userLabel,
+    userHint,
+  };
+};
+
 const toCamelKey = (key: string): string =>
   key.replace(/_([a-z])/g, (_match, char: string) => char.toUpperCase());
 
@@ -62,7 +237,9 @@ const normalizeAnalysisReport = (
   const meta = report.meta || ({} as ReportMeta);
   const summary = report.summary || ({} as ReportSummary);
   const details = toRecord(report.details);
-  const rawResult = toRecord(details?.rawResult);
+  const rawResult = toRecord(details?.rawResult) ?? toRecord(details?.raw_result);
+  const persistedReport = toRecord(rawResult?.persistedReport) ?? toRecord(rawResult?.persisted_report);
+  const nestedReport = toRecord(rawResult?.report);
   const dashboard = toRecord(rawResult?.dashboard);
 
   const standardReportCandidates: Array<{ source: ReportStandardSource; value: unknown }> = [
@@ -82,6 +259,14 @@ const normalizeAnalysisReport = (
   const decisionTraceCandidates = [
     report.decisionTrace,
     toRecord((report as unknown as Record<string, unknown>).decision_trace),
+    details?.decisionTrace,
+    toRecord(details?.decision_trace),
+    rawResult?.decisionTrace,
+    toRecord(rawResult?.decision_trace),
+    persistedReport?.decisionTrace,
+    toRecord(persistedReport?.decision_trace),
+    nestedReport?.decisionTrace,
+    toRecord(nestedReport?.decision_trace),
   ];
   const decisionTraceMatch = decisionTraceCandidates.find((candidate) => toRecord(candidate));
   const normalizedDecisionTrace = (
@@ -97,6 +282,8 @@ const normalizeAnalysisReport = (
       ? 'legacy_only'
       : 'legacy_empty';
 
+  const hasExplicitSentimentScore = toFiniteNumber(summary.sentimentScore) !== undefined
+    || toFiniteNumber((summary as unknown as Record<string, unknown>).sentiment_score) !== undefined;
   const sentimentScore = toFiniteNumber(summary.sentimentScore) ?? DEFAULT_SENTIMENT_SCORE;
   const normalizedDetails: ReportDetails | undefined = report.details
     ? {
@@ -106,7 +293,7 @@ const normalizeAnalysisReport = (
       }
     : report.details;
 
-  return {
+  const normalizedReport = {
     ...report,
     meta: {
       ...meta,
@@ -129,7 +316,12 @@ const normalizeAnalysisReport = (
     contractMeta: {
       payloadVariant,
       standardReportSource,
+      hasExplicitSentimentScore,
     },
+  };
+  return {
+    ...normalizedReport,
+    reportQuality: normalizeReportQuality(normalizedReport),
   };
 };
 

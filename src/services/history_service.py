@@ -12,6 +12,7 @@ Responsibilities:
 from __future__ import annotations
 import json
 import logging
+import re
 from datetime import date, datetime, timedelta
 from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING
 
@@ -86,6 +87,200 @@ def _first_present(*values: Any) -> Any:
             continue
         return value
     return None
+
+
+def _has_meaningful_text(value: Any) -> bool:
+    text = str(value or "").strip()
+    return bool(text and text not in {"-", "--", "N/A", "NA"} and not text.startswith("NA（"))
+
+
+def _has_dict_content(value: Any) -> bool:
+    return isinstance(value, dict) and bool(value)
+
+
+def _has_failed_analysis_text(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    return bool(
+        re.search(
+            r"all llm models failed|serviceunavailable|rate limit|ratelimiterror|timeout|timed out|分析过程出错|llm.*failed|分析失败",
+            value,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _read_nested(payload: Any, *path: str) -> Any:
+    current = payload
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _extract_decision_trace_from_payload(raw_result: Any, persisted_report: Any) -> Any:
+    candidates = [
+        _read_nested(persisted_report, "decision_trace"),
+        _read_nested(persisted_report, "decisionTrace"),
+        _read_nested(raw_result, "persisted_report", "decision_trace"),
+        _read_nested(raw_result, "persisted_report", "decisionTrace"),
+        _read_nested(raw_result, "report", "decision_trace"),
+        _read_nested(raw_result, "report", "decisionTrace"),
+        _read_nested(raw_result, "decision_trace"),
+        _read_nested(raw_result, "decisionTrace"),
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, dict) and candidate:
+            return candidate
+    return None
+
+
+def _build_report_quality_summary(
+    *,
+    summary: Dict[str, Any],
+    strategy: Dict[str, Any],
+    details: Dict[str, Any],
+    standard_report: Any,
+    analysis_result: Any,
+    decision_trace: Any,
+) -> Dict[str, Any]:
+    trace_fields = decision_trace.get("decision_fields") if isinstance(decision_trace, dict) else None
+    if not isinstance(trace_fields, dict):
+        trace_fields = decision_trace.get("decisionFields") if isinstance(decision_trace, dict) else None
+    if not isinstance(trace_fields, dict):
+        trace_fields = {}
+    llm = decision_trace.get("llm") if isinstance(decision_trace, dict) else {}
+    if not isinstance(llm, dict):
+        llm = {}
+    has_decision_trace = _has_dict_content(decision_trace)
+    has_standard_report = _has_dict_content(standard_report)
+    has_analysis_result = _has_dict_content(analysis_result)
+    summary_panel = standard_report.get("summary_panel") or standard_report.get("summaryPanel") if isinstance(standard_report, dict) else {}
+    decision_panel = standard_report.get("decision_panel") or standard_report.get("decisionPanel") if isinstance(standard_report, dict) else {}
+    if not isinstance(summary_panel, dict):
+        summary_panel = {}
+    if not isinstance(decision_panel, dict):
+        decision_panel = {}
+
+    has_action = any(_has_meaningful_text(value) for value in [
+        _read_nested(trace_fields, "action", "value"),
+        summary_panel.get("operation_advice") or summary_panel.get("operationAdvice"),
+        decision_panel.get("key_action") or decision_panel.get("keyAction"),
+        summary.get("operation_advice") or summary.get("operationAdvice"),
+        analysis_result.get("action") if isinstance(analysis_result, dict) else None,
+        analysis_result.get("decision") if isinstance(analysis_result, dict) else None,
+    ])
+    has_score = any(value is not None and _has_meaningful_text(value) for value in [
+        _read_nested(trace_fields, "score", "value"),
+        summary_panel.get("score"),
+        analysis_result.get("score") if isinstance(analysis_result, dict) else None,
+    ])
+    has_confidence = any(_has_meaningful_text(value) for value in [
+        _read_nested(trace_fields, "confidence", "value"),
+        decision_panel.get("confidence"),
+        analysis_result.get("confidence") if isinstance(analysis_result, dict) else None,
+        analysis_result.get("confidence_level") if isinstance(analysis_result, dict) else None,
+    ])
+    has_trading_plan = any(_has_meaningful_text(value) for value in [
+        _read_nested(trace_fields, "entry", "value"),
+        _read_nested(trace_fields, "target", "value"),
+        _read_nested(trace_fields, "stop", "value"),
+        decision_panel.get("ideal_entry") or decision_panel.get("idealEntry"),
+        decision_panel.get("target"),
+        decision_panel.get("stop_loss") or decision_panel.get("stopLoss"),
+        strategy.get("ideal_buy") or strategy.get("idealBuy"),
+        strategy.get("take_profit") or strategy.get("takeProfit"),
+        strategy.get("stop_loss") or strategy.get("stopLoss"),
+        analysis_result.get("entry_price") if isinstance(analysis_result, dict) else None,
+        analysis_result.get("take_profit") if isinstance(analysis_result, dict) else None,
+        analysis_result.get("stop_loss") if isinstance(analysis_result, dict) else None,
+    ])
+    summary_count = sum(1 for value in [
+        summary.get("analysis_summary") or summary.get("analysisSummary"),
+        summary.get("operation_advice") or summary.get("operationAdvice"),
+        summary.get("trend_prediction") or summary.get("trendPrediction"),
+        summary_panel.get("one_sentence") or summary_panel.get("oneSentence"),
+        analysis_result.get("summary") if isinstance(analysis_result, dict) else None,
+    ] if _has_meaningful_text(value))
+    summary_status = "complete" if summary_count >= 3 else "partial" if summary_count else "missing"
+    report_status = (
+        "complete"
+        if has_standard_report and sum(1 for value in [
+            summary_panel,
+            decision_panel,
+            standard_report.get("technical_fields") or standard_report.get("technicalFields") if isinstance(standard_report, dict) else None,
+            standard_report.get("fundamental_fields") or standard_report.get("fundamentalFields") if isinstance(standard_report, dict) else None,
+            standard_report.get("reason_layer") or standard_report.get("reasonLayer") if isinstance(standard_report, dict) else None,
+        ] if bool(value)) >= 3
+        else "partial" if has_standard_report or has_analysis_result or summary_status != "missing" else "missing"
+    )
+    schema_validated = llm.get("schema_validated") if "schema_validated" in llm else llm.get("schemaValidated")
+    schema_status = "ok" if schema_validated is True else "unconfirmed" if has_decision_trace or has_standard_report else "missing" if report_status == "missing" else "unknown"
+    trace_status = "present" if has_decision_trace and (trace_fields or decision_trace.get("data_sources") or decision_trace.get("dataSources")) else "partial" if has_decision_trace else "missing"
+    failed = any(_has_failed_analysis_text(value) for value in [
+        summary.get("analysis_summary") or summary.get("analysisSummary"),
+        summary.get("operation_advice") or summary.get("operationAdvice"),
+        details.get("news_content") if isinstance(details, dict) else None,
+        analysis_result.get("status") if isinstance(analysis_result, dict) else None,
+        analysis_result.get("error") if isinstance(analysis_result, dict) else None,
+    ])
+    level = (
+        "failed" if failed
+        else "complete" if has_decision_trace and has_standard_report and has_action and has_score and has_confidence and has_trading_plan
+        else "usable" if has_standard_report and (has_action or has_score or has_trading_plan or has_analysis_result)
+        else "legacy" if report_status != "missing" or summary_status != "missing"
+        else "partial" if has_analysis_result
+        else "unknown"
+    )
+    missing_fields = []
+    if not has_decision_trace:
+        missing_fields.append("决策溯源")
+    if not has_standard_report:
+        missing_fields.append("标准报告")
+    if not has_action:
+        missing_fields.append("操作建议")
+    if not has_score:
+        missing_fields.append("评分")
+    if not has_confidence:
+        missing_fields.append("置信度")
+    if not has_trading_plan:
+        missing_fields.append("交易计划")
+    if summary_status == "missing":
+        missing_fields.append("摘要")
+    labels = {
+        "complete": "完整",
+        "usable": "可用",
+        "partial": "部分信息",
+        "legacy": "旧版记录",
+        "failed": "分析失败",
+        "unknown": "状态未知",
+    }
+    hints = {
+        "complete": "结构化摘要与决策溯源完整。",
+        "usable": "报告内容可用，但部分溯源或结构字段缺失。",
+        "partial": "仅保留部分报告信息。",
+        "legacy": "旧版历史记录可阅读，但结构化字段不完整。",
+        "failed": "本次分析未完整生成，可重新分析。",
+        "unknown": "暂未确认报告完整性。",
+    }
+    return {
+        "level": level,
+        "schema_status": schema_status,
+        "trace_status": trace_status,
+        "summary_status": summary_status,
+        "report_status": report_status,
+        "has_decision_trace": has_decision_trace,
+        "has_standard_report": has_standard_report,
+        "has_analysis_result": has_analysis_result,
+        "has_action": has_action,
+        "has_score": has_score,
+        "has_confidence": has_confidence,
+        "has_trading_plan": has_trading_plan,
+        "missing_fields": missing_fields,
+        "user_label": labels[level],
+        "user_hint": hints[level],
+    }
 
 
 class MarkdownReportGenerationError(Exception):
@@ -186,6 +381,37 @@ class HistoryService:
                     if isinstance(persisted_report, dict) and isinstance(persisted_report.get("meta"), dict)
                     else {}
                 )
+                persisted_summary = (
+                    persisted_report.get("summary")
+                    if isinstance(persisted_report, dict) and isinstance(persisted_report.get("summary"), dict)
+                    else {}
+                )
+                persisted_strategy = (
+                    persisted_report.get("strategy")
+                    if isinstance(persisted_report, dict) and isinstance(persisted_report.get("strategy"), dict)
+                    else {}
+                )
+                persisted_details = (
+                    persisted_report.get("details")
+                    if isinstance(persisted_report, dict) and isinstance(persisted_report.get("details"), dict)
+                    else {}
+                )
+                standard_report = persisted_details.get("standard_report") if isinstance(persisted_details.get("standard_report"), dict) else None
+                analysis_result = persisted_details.get("analysis_result") if isinstance(persisted_details.get("analysis_result"), dict) else None
+                decision_trace = _extract_decision_trace_from_payload(raw_result, persisted_report)
+                report_quality = _build_report_quality_summary(
+                    summary={
+                        "analysis_summary": persisted_summary.get("analysis_summary") or getattr(record, "analysis_summary", None),
+                        "operation_advice": persisted_summary.get("operation_advice") or getattr(record, "operation_advice", None),
+                        "trend_prediction": persisted_summary.get("trend_prediction") or getattr(record, "trend_prediction", None),
+                        "sentiment_score": persisted_summary.get("sentiment_score", getattr(record, "sentiment_score", None)),
+                    },
+                    strategy=persisted_strategy,
+                    details=persisted_details,
+                    standard_report=standard_report,
+                    analysis_result=analysis_result,
+                    decision_trace=decision_trace,
+                )
                 stock_name, company_name = _resolve_history_display_names(
                     persisted_meta,
                     stock_code=record.code,
@@ -211,6 +437,7 @@ class HistoryService:
                         if persisted_meta.get("is_test") is not None
                         else getattr(record, "is_test", False)
                     ),
+                    "report_quality": report_quality,
                 })
             
             return {
@@ -817,6 +1044,7 @@ class HistoryService:
         persisted_summary = persisted_report.get("summary") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("summary"), dict) else {}
         persisted_strategy = persisted_report.get("strategy") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("strategy"), dict) else {}
         persisted_details = persisted_report.get("details") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("details"), dict) else {}
+        decision_trace = _extract_decision_trace_from_payload(raw_result, persisted_report)
         standard_report = None
         if isinstance(persisted_details.get("standard_report"), dict):
             standard_report = persisted_details.get("standard_report")
@@ -924,6 +1152,19 @@ class HistoryService:
                     raw_result.get("summary"),
                 ),
             }
+        report_quality = _build_report_quality_summary(
+            summary={
+                "analysis_summary": persisted_summary.get("analysis_summary") or record.analysis_summary,
+                "operation_advice": persisted_summary.get("operation_advice") or record.operation_advice,
+                "trend_prediction": persisted_summary.get("trend_prediction") or record.trend_prediction,
+                "sentiment_score": persisted_summary.get("sentiment_score", record.sentiment_score),
+            },
+            strategy=persisted_strategy,
+            details=persisted_details,
+            standard_report=standard_report,
+            analysis_result=analysis_result_detail,
+            decision_trace=decision_trace,
+        )
         raw_ai_response = None
         if isinstance(persisted_details.get("raw_ai_response"), (dict, list, str)):
             raw_ai_response = persisted_details.get("raw_ai_response")
@@ -971,6 +1212,8 @@ class HistoryService:
             "news_content": persisted_details.get("news_content") or persisted_details.get("news_summary") or record.news_content,
             "raw_result": raw_result,
             "analysis_result": analysis_result_detail or None,
+            "decision_trace": decision_trace,
+            "report_quality": report_quality,
             "raw_ai_response": raw_ai_response,
             "context_snapshot": context_snapshot,
             "standard_report": standard_report,

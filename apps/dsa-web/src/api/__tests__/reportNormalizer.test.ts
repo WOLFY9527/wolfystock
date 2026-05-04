@@ -30,7 +30,10 @@ describe('normalizeFrontendReportContract', () => {
     expect(normalized.contractMeta).toEqual({
       payloadVariant: 'legacy_empty',
       standardReportSource: 'none',
+      hasExplicitSentimentScore: false,
     });
+    expect(normalized.reportQuality?.level).toBe('unknown');
+    expect(normalized.reportQuality?.traceStatus).toBe('missing');
   });
 
   it('uses top-level fallback metadata when report.meta fields are missing', () => {
@@ -65,6 +68,7 @@ describe('normalizeFrontendReportContract', () => {
     expect(normalized.contractMeta).toEqual({
       payloadVariant: 'legacy_empty',
       standardReportSource: 'none',
+      hasExplicitSentimentScore: true,
     });
   });
 
@@ -99,6 +103,7 @@ describe('normalizeFrontendReportContract', () => {
     expect(normalized.contractMeta).toEqual({
       payloadVariant: 'legacy_only',
       standardReportSource: 'none',
+      hasExplicitSentimentScore: true,
     });
     expect(normalized.details?.standardReport).toBeUndefined();
   });
@@ -132,6 +137,7 @@ describe('normalizeFrontendReportContract', () => {
     expect(normalized.contractMeta).toEqual({
       payloadVariant: 'standard_report',
       standardReportSource: 'details.rawResult.standardReport',
+      hasExplicitSentimentScore: true,
     });
   });
 
@@ -179,7 +185,109 @@ describe('normalizeFrontendReportContract', () => {
     expect(normalized.contractMeta).toEqual({
       payloadVariant: 'standard_report',
       standardReportSource: 'details.standardReport',
+      hasExplicitSentimentScore: true,
     });
+    expect(normalized.reportQuality?.level).toBe('usable');
+    expect(normalized.reportQuality?.traceStatus).toBe('missing');
+    expect(normalized.reportQuality?.missingFields).toContain('决策溯源');
+  });
+
+  it('marks modern reports with standard report and decision trace as complete quality', () => {
+    const report = {
+      meta: {
+        queryId: 'q-quality-complete',
+        stockCode: 'ORCL',
+        stockName: 'Oracle',
+        reportType: 'full',
+        createdAt: '2026-05-04T00:00:00Z',
+      },
+      summary: {
+        analysisSummary: '结构化摘要可用',
+        operationAdvice: '观望',
+        trendPrediction: '震荡',
+        sentimentScore: 62,
+      },
+      details: {
+        standard_report: {
+          summary_panel: {
+            ticker: 'ORCL',
+            score: 62,
+            operation_advice: '观望',
+            one_sentence: '结构化摘要可用',
+          },
+          decision_panel: {
+            confidence: '中',
+            ideal_entry: '120',
+            target: '130',
+            stop_loss: '115',
+          },
+          technical_fields: [{ label: 'RSI14', value: '56' }],
+          fundamental_fields: [{ label: 'ROE', value: '18%' }],
+          reason_layer: { core_reasons: ['趋势仍需确认'] },
+        },
+        analysis_result: {
+          action: '观望',
+          score: 62,
+          confidence: '中',
+          entry_price: '120',
+          take_profit: '130',
+          stop_loss: '115',
+        },
+      },
+      decision_trace: {
+        symbol: 'ORCL',
+        decision_fields: {
+          action: { value: 'hold', source: 'rule' },
+          score: { value: 62, source: 'rule' },
+          confidence: { value: '中', source: 'llm' },
+          entry: { value: '120', source: 'llm' },
+          target: { value: '130', source: 'llm' },
+          stop: { value: '115', source: 'llm' },
+        },
+        data_sources: [{ name: 'quote', status: 'used' }],
+        llm: { schema_validated: true },
+      },
+    } as unknown as AnalysisReport;
+
+    const normalized = normalizeFrontendReportContract(report);
+
+    expect(normalized.reportQuality).toEqual(expect.objectContaining({
+      level: 'complete',
+      schemaStatus: 'ok',
+      traceStatus: 'present',
+      summaryStatus: 'complete',
+      reportStatus: 'complete',
+      userLabel: '完整',
+    }));
+    expect(normalized.reportQuality?.missingFields).toEqual([]);
+  });
+
+  it('classifies legacy prose records without standard structure as old records', () => {
+    const report = {
+      meta: {
+        queryId: 'q-quality-legacy',
+        stockCode: 'IBM',
+        stockName: 'IBM',
+        reportType: 'detailed',
+        createdAt: '2026-05-04T00:00:00Z',
+      },
+      summary: {
+        analysisSummary: '旧版正文仍可阅读',
+        operationAdvice: '持有',
+        trendPrediction: '',
+        sentimentScore: undefined,
+      },
+      details: {
+        newsContent: '旧版新闻摘要',
+      },
+    } as unknown as AnalysisReport;
+
+    const normalized = normalizeFrontendReportContract(report);
+
+    expect(normalized.reportQuality?.level).toBe('legacy');
+    expect(normalized.reportQuality?.userLabel).toBe('旧版记录');
+    expect(normalized.reportQuality?.missingFields).toContain('决策溯源');
+    expect(normalized.reportQuality?.missingFields).toContain('标准报告');
   });
 
   it('camelizes snake_case standard_report payloads from history and API detail responses', () => {
@@ -276,6 +384,7 @@ describe('normalizeFrontendReportContract', () => {
     expect(normalized.contractMeta).toEqual({
       payloadVariant: 'standard_report',
       standardReportSource: 'details.standard_report',
+      hasExplicitSentimentScore: true,
     });
   });
 

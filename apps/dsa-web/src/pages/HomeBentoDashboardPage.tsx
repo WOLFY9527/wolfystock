@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Copy, Download, FileSearch, Lock, Printer, RefreshCw, Search } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { publicAnalysisApi } from '../api/publicAnalysis';
+import { normalizeReportQuality } from '../api/reportNormalizer';
 import { withFallback } from '../api/withFallback';
 import {
   BentoCard,
@@ -24,7 +25,7 @@ import {
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
-import type { AnalysisReport, DecisionTrace, HistoryItem, StandardReport, StandardReportChecklistItem, StandardReportField, TaskProgressModule } from '../types/analysis';
+import type { AnalysisReport, DecisionTrace, HistoryItem, ReportQuality, StandardReport, StandardReportChecklistItem, StandardReportField, TaskProgressModule } from '../types/analysis';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
 import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
 import {
@@ -863,9 +864,89 @@ function FullDecisionReportDrawer({
   );
 }
 
-function buildTraceSummary(trace?: DecisionTrace): string {
+function reportQualityFallback(): ReportQuality {
+  return {
+    level: 'unknown',
+    schemaStatus: 'unknown',
+    traceStatus: 'unknown',
+    summaryStatus: 'missing',
+    reportStatus: 'missing',
+    hasDecisionTrace: false,
+    hasStandardReport: false,
+    hasAnalysisResult: false,
+    hasAction: false,
+    hasScore: false,
+    hasConfidence: false,
+    hasTradingPlan: false,
+    missingFields: [],
+    userLabel: '状态未知',
+    userHint: '暂未确认报告完整性。',
+  };
+}
+
+function getReportQuality(report: AnalysisReport | null | undefined): ReportQuality {
+  if (!report) {
+    return reportQualityFallback();
+  }
+  return report.reportQuality || normalizeReportQuality(report);
+}
+
+function traceQualityLabel(status: ReportQuality['traceStatus']): string {
+  if (status === 'present') return '溯源完整';
+  if (status === 'partial') return '溯源部分';
+  if (status === 'missing') return '未包含决策溯源';
+  return '溯源未知';
+}
+
+function schemaQualityLabel(status: ReportQuality['schemaStatus']): string {
+  if (status === 'ok') return '结构确认';
+  if (status === 'unconfirmed') return '结构未确认';
+  if (status === 'missing') return '结构缺失';
+  return '结构未知';
+}
+
+function summaryQualityLabel(status: ReportQuality['summaryStatus']): string {
+  if (status === 'complete') return '摘要完整';
+  if (status === 'partial') return '摘要部分可用';
+  return '摘要缺失';
+}
+
+function reportQualityLabel(status: ReportQuality['reportStatus']): string {
+  if (status === 'complete') return '报告完整';
+  if (status === 'partial') return '报告部分可用';
+  return '报告缺失';
+}
+
+function qualityChipTone(label: string): 'neutral' | 'used' | 'warning' | 'missing' {
+  if (/完整|确认|可用/.test(label) && !/部分|未确认/.test(label)) {
+    return 'used';
+  }
+  if (/缺失|失败|未包含/.test(label)) {
+    return 'missing';
+  }
+  if (/部分|旧版|未确认|未知/.test(label)) {
+    return 'warning';
+  }
+  return 'neutral';
+}
+
+function ReportQualityChip({ label }: { label: string }) {
+  return <TraceBadge tone={qualityChipTone(label)}>{label}</TraceBadge>;
+}
+
+function buildQualityStatusSummary(quality: ReportQuality): string {
+  return [
+    quality.userLabel,
+    traceQualityLabel(quality.traceStatus),
+    schemaQualityLabel(quality.schemaStatus),
+    summaryQualityLabel(quality.summaryStatus),
+  ].join(' · ');
+}
+
+function buildTraceSummary(trace?: DecisionTrace, quality?: ReportQuality): string {
+  const qualitySummary = quality ? buildQualityStatusSummary(quality) : '';
   if (!trace) {
-    return '来源：未包含决策溯源';
+    return qualitySummary || '未包含决策溯源';
   }
   const hasRule = Object.values(trace.decisionFields || {}).some((field) => /rule/.test(String(field.source || '').toLowerCase()));
   const hasLlm = Boolean(trace.llm?.used) || Object.values(trace.decisionFields || {}).some((field) => /llm/.test(String(field.source || '').toLowerCase()));
@@ -873,18 +954,36 @@ function buildTraceSummary(trace?: DecisionTrace): string {
   const sourceCount = trace.dataSources?.length || 0;
   const usedCount = (trace.dataSources || []).filter((source) => String(source.status || '').toLowerCase() === 'used').length;
   const conflictCount = trace.conflicts?.length || 0;
-  const schemaLabel = trace.llm?.schemaValidated ? 'Schema OK' : 'Schema 未确认';
-  return `来源：${sourceLabel} · 数据 ${usedCount}/${sourceCount} · 冲突 ${conflictCount} · ${schemaLabel}`;
+  const schemaLabel = trace.llm?.schemaValidated ? '结构确认' : '结构未确认';
+  return [
+    qualitySummary,
+    `来源：${sourceLabel}`,
+    `数据 ${usedCount}/${sourceCount}`,
+    `冲突 ${conflictCount}`,
+    schemaLabel,
+  ].filter(Boolean).join(' · ');
 }
 
-function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: DashboardLocale }) {
+function DecisionTracePanel({ trace, locale, quality }: { trace?: DecisionTrace; locale: DashboardLocale; quality?: ReportQuality }) {
   if (!trace) {
     return (
-      <div
-        className="min-w-0 rounded-2xl border border-white/8 bg-white/[0.025] p-4 text-sm text-white/56"
-        data-testid="home-bento-decision-trace-panel"
-      >
-        当前分析未包含决策溯源
+      <div className="min-w-0 space-y-3" data-testid="home-bento-decision-trace-panel">
+        <div className="min-w-0 rounded-2xl border border-white/8 bg-white/[0.025] p-4 text-sm text-white/56">
+          当前分析未包含决策溯源
+        </div>
+        {quality ? (
+          <details
+            className="group rounded-2xl border border-white/8 bg-white/[0.025] p-4"
+            data-testid="home-bento-decision-trace-developer"
+          >
+            <summary className="cursor-pointer text-[11px] font-semibold tracking-[0] text-white/62 transition-colors hover:text-white">
+              开发者细节
+            </summary>
+            <p className="mt-3 text-sm text-white/54">
+              缺失字段：{quality.missingFields.length ? quality.missingFields.join('、') : '暂无明确缺失字段'}
+            </p>
+          </details>
+        ) : null}
       </div>
     );
   }
@@ -980,6 +1079,14 @@ function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: 
             )) : <p className="text-sm text-white/48">{isEnglish ? 'No signal list available.' : '暂无信号输入列表。'}</p>}
           </div>
         </div>
+        {quality ? (
+          <div className="mt-4 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">missing_fields</p>
+            <p className="mt-1 break-words text-sm text-white/76">
+              {quality.missingFields.length ? quality.missingFields.join('、') : '暂无明确缺失字段'}
+            </p>
+          </div>
+        ) : null}
       </details>
     </div>
   );
@@ -1545,7 +1652,7 @@ function normalizeHomeAnalysisResult(report: AnalysisReport, locale: DashboardLo
     traceFields.score?.value,
     summaryPanel?.score,
     titleScore,
-    report.summary.sentimentScore,
+    report.contractMeta?.hasExplicitSentimentScore === true ? report.summary.sentimentScore : undefined,
     analysisResult?.score,
     readObjectField(report, ['summary', 'score']),
     readObjectField(rawDashboard, ['summary', 'score']),
@@ -3081,7 +3188,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   ), [locale]);
   const activeDrawerPayload = activeDrawer && copy ? buildDrawerPayload(locale, copy, activeDrawer) : null;
   const activeDecisionTrace = useMemo(() => (activeTraceReport ? getDecisionTrace(activeTraceReport) : undefined), [activeTraceReport]);
-  const sourceSummary = useMemo(() => buildTraceSummary(activeDecisionTrace), [activeDecisionTrace]);
+  const activeReportQuality = useMemo(() => getReportQuality(activeTraceReport), [activeTraceReport]);
+  const sourceSummary = useMemo(() => buildTraceSummary(activeDecisionTrace, activeReportQuality), [activeDecisionTrace, activeReportQuality]);
+  const reanalysisTicker = useMemo(() => {
+    const candidate = normalizeTickerQuery(activeTraceReport?.meta.stockCode) || normalizeTickerQuery(dashboardData.ticker);
+    return TICKER_FORMAT_RE.test(candidate) ? candidate : '';
+  }, [activeTraceReport?.meta.stockCode, dashboardData.ticker]);
   const shouldRenderDashboardPanels = !isGuest || Boolean(guestPreview || pendingAnalysisTicker);
   const guestPaywall = isGuest ? <GuestPaywallOverlay registrationPath={registrationPath} /> : null;
   const deleteCopy = useMemo(() => ({
@@ -3432,11 +3544,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       <button
         type="button"
         className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/8 bg-transparent px-3 py-2 text-xs font-semibold text-white/52 transition-colors hover:border-white/12 hover:bg-white/[0.04] hover:text-white disabled:cursor-wait disabled:text-white/35"
-        disabled={isBusy}
-        onClick={() => { void handleAnalyze(dashboardData.ticker); }}
+        disabled={isBusy || !reanalysisTicker}
+        title={!reanalysisTicker ? '缺少股票代码' : undefined}
+        onClick={() => { void handleAnalyze(reanalysisTicker); }}
       >
         <RefreshCw className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">{locale === 'en' ? 'Rerun' : '重新分析'}</span>
+        <span className="truncate">{!reanalysisTicker ? '缺少股票代码' : locale === 'en' ? 'Rerun' : '重新分析'}</span>
       </button>
     </>
   ) : null;
@@ -3682,7 +3795,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         zIndex={90}
         bodyClassName="overflow-x-hidden"
       >
-        <DecisionTracePanel trace={activeDecisionTrace} locale={locale} />
+        <DecisionTracePanel trace={activeDecisionTrace} locale={locale} quality={activeReportQuality} />
       </Drawer>
 
       <Drawer
@@ -3724,6 +3837,15 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             const generatedAt = resolveHistoryGeneratedAt(item, locale);
             const companyLabel = resolveHistoryCompanyLabel(item);
             const shouldShowTickerMeta = ticker && companyLabel.toUpperCase() !== ticker;
+            const itemQuality = item.reportQuality || reportQualityFallback();
+            const historyQualityLabels = [
+              itemQuality.userLabel,
+              traceQualityLabel(itemQuality.traceStatus),
+              reportQualityLabel(itemQuality.reportStatus),
+              itemQuality.schemaStatus === 'ok' || itemQuality.schemaStatus === 'unconfirmed'
+                ? schemaQualityLabel(itemQuality.schemaStatus)
+                : null,
+            ].filter(Boolean) as string[];
             return (
               <div
                 key={item.id}
@@ -3749,6 +3871,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         {generatedAt}
                       </p>
                     ) : null}
+                    <div className="mt-2 flex min-w-0 max-w-full flex-wrap gap-1.5" data-testid={`home-bento-history-quality-${item.id}`}>
+                      {historyQualityLabels.map((label) => (
+                        <ReportQualityChip key={`${item.id}-${label}`} label={label} />
+                      ))}
+                    </div>
                   </div>
                   <span className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-white/35">
                     {isSelected ? (locale === 'en' ? 'Loaded' : '当前') : (locale === 'en' ? 'Open' : '打开')}

@@ -446,6 +446,31 @@ export type ReportPayloadVariant =
 export interface FrontendReportContractMeta {
   payloadVariant: ReportPayloadVariant;
   standardReportSource: ReportStandardSource;
+  hasExplicitSentimentScore?: boolean;
+}
+
+export type ReportQualityLevel = 'complete' | 'usable' | 'partial' | 'legacy' | 'failed' | 'unknown';
+export type ReportQualitySchemaStatus = 'ok' | 'unconfirmed' | 'missing' | 'unknown';
+export type ReportQualityTraceStatus = 'present' | 'missing' | 'partial' | 'unknown';
+export type ReportQualitySummaryStatus = 'complete' | 'partial' | 'missing';
+export type ReportQualityReportStatus = 'complete' | 'partial' | 'missing';
+
+export interface ReportQuality {
+  level: ReportQualityLevel;
+  schemaStatus: ReportQualitySchemaStatus;
+  traceStatus: ReportQualityTraceStatus;
+  summaryStatus: ReportQualitySummaryStatus;
+  reportStatus: ReportQualityReportStatus;
+  hasDecisionTrace: boolean;
+  hasStandardReport: boolean;
+  hasAnalysisResult: boolean;
+  hasAction: boolean;
+  hasScore: boolean;
+  hasConfidence: boolean;
+  hasTradingPlan: boolean;
+  missingFields: string[];
+  userLabel: string;
+  userHint: string;
 }
 
 /** Full analysis report */
@@ -456,6 +481,7 @@ export interface AnalysisReport {
   details?: ReportDetails;
   decisionTrace?: DecisionTrace;
   contractMeta?: FrontendReportContractMeta;
+  reportQuality?: ReportQuality;
 }
 
 // ============ Analysis Result Types ============
@@ -585,6 +611,7 @@ export interface HistoryRecordSummary {
   createdAt: string;
   generatedAt?: string;
   isTest?: boolean;
+  reportQuality?: ReportQuality;
 }
 
 /** History record detail used to restore the full home analysis surface. */

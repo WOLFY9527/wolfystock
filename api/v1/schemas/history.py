@@ -51,6 +51,7 @@ class HistoryItem(BaseModel):
     created_at: Optional[str] = Field(None, description="创建时间")
     generated_at: Optional[str] = Field(None, description="持久化报告生成时间")
     is_test: bool = Field(False, description="是否为测试/临时历史记录")
+    report_quality: Optional[Any] = Field(None, description="历史报告完整性/溯源状态摘要（可选）")
 
 
 class HistoryListResponse(BaseModel):
@@ -217,6 +218,7 @@ class AnalysisReport(BaseModel):
     strategy: Optional[ReportStrategy] = Field(None, description="策略点位区")
     details: Optional[ReportDetails] = Field(None, description="详情区")
     decision_trace: Optional[Any] = Field(None, description="决策溯源元数据（可选）")
+    report_quality: Optional[Any] = Field(None, description="报告完整性/溯源状态摘要（可选）")
 
 
 class MarkdownReportResponse(BaseModel):

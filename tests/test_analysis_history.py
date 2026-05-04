@@ -320,6 +320,19 @@ class AnalysisHistoryTestCase(unittest.TestCase):
                 "details": {
                     "news_summary": "持久化新闻摘要",
                 },
+                "decision_trace": {
+                    "engine_version": "analysis_decision_trace_v1",
+                    "symbol": "600519",
+                    "market": "CN",
+                    "decision_fields": {
+                        "action": {"value": "hold", "source": "rule"},
+                        "score": {"value": 78, "source": "rule"},
+                    },
+                    "data_sources": [
+                        {"name": "quote", "status": "used", "provider": "test"},
+                    ],
+                    "llm": {"used": True, "schema_validated": False},
+                },
             },
         )
         self.assertEqual(attached, 1)
@@ -340,6 +353,10 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertTrue(persisted_report.get("meta", {}).get("is_test"))
         self.assertEqual(persisted_report.get("meta", {}).get("strategy_type"), "hold")
         self.assertEqual(persisted_report.get("summary", {}).get("strategy_summary"), "等待确认后按节奏执行")
+        self.assertEqual(
+            persisted_report.get("decision_trace", {}).get("engine_version"),
+            "analysis_decision_trace_v1",
+        )
 
         service = HistoryService(self.db)
         history_list = service.get_history_list(page=1, limit=10)
@@ -352,6 +369,13 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertEqual(detail.get("report_generated_at"), generated_at)
         self.assertEqual(detail.get("company_name"), "贵州茅台")
         self.assertTrue(detail.get("is_test"))
+        self.assertEqual(detail.get("decision_trace", {}).get("symbol"), "600519")
+        self.assertEqual(detail.get("decision_trace", {}).get("llm", {}).get("schema_validated"), False)
+
+        if get_history_detail is not None:
+            report = get_history_detail(str(row.id), db_manager=self.db)
+            self.assertEqual(report.decision_trace.get("symbol"), "600519")
+            self.assertEqual(report.decision_trace.get("llm", {}).get("schema_validated"), False)
 
     def test_history_detail_accepts_dict_raw_result(self) -> None:
         """_record_to_detail_dict should handle dict raw_result without json.loads errors."""
@@ -569,6 +593,8 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         report = get_history_detail(str(record_id), db_manager=self.db)
         self.assertIsNone(report.details.financial_report)
         self.assertIsNone(report.details.dividend_metrics)
+        self.assertIsNone(report.decision_trace)
+        self.assertNotEqual((report.report_quality or {}).get("schema_status"), "ok")
 
     def test_history_detail_rebuilds_standard_report_from_context_snapshot(self) -> None:
         result = AnalysisResult(

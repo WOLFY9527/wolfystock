@@ -142,6 +142,7 @@ def get_history_list(
                 created_at=item.get("created_at"),
                 generated_at=item.get("generated_at"),
                 is_test=bool(item.get("is_test")),
+                report_quality=item.get("report_quality"),
             )
             for item in result.get("items", [])
         ]
@@ -387,7 +388,9 @@ def get_history_detail(
             meta=meta,
             summary=summary,
             strategy=strategy,
-            details=details
+            details=details,
+            decision_trace=result.get("decision_trace"),
+            report_quality=result.get("report_quality"),
         )
         
     except HTTPException:
