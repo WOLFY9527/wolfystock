@@ -89,7 +89,8 @@ function makeRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBacktest
     avgHoldingBars: 18,
     avgHoldingCalendarDays: 20,
     finalEquity: 124600,
-    summary: {},
+    sharpeRatio: 1.24,
+    summary: { volatilityPct: 18.6 },
     dataQuality: {
       symbol: 'ORCL',
       benchmarkSymbol: 'QQQ',
@@ -219,12 +220,14 @@ describe('BacktestResultReport', () => {
     expect(screen.getByTestId('backtest-report-execution-assumptions')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-report-advanced-details')).toBeInTheDocument();
     expect(simpleReport).toHaveTextContent('核心指标');
+    expect(simpleReport).toHaveTextContent('策略诊断');
     expect(simpleReport).toHaveTextContent('基准收益');
     expect(simpleReport).toHaveTextContent('交易摘要');
     expect(simpleReport).toHaveTextContent('数据质量');
     expect(simpleReport).not.toHaveTextContent('Key Metrics');
     expect(simpleReport).not.toHaveTextContent('Trade Summary');
     expect(simpleReport).not.toHaveTextContent('Execution Assumptions');
+    expect(simpleReport).not.toHaveTextContent('Advanced Details');
 
     render(<BacktestResultReport run={makeRun({ id: 78 })} mode="professional" />);
     expect(screen.getAllByTestId('backtest-result-report')[1]).toHaveAttribute('data-report-mode', 'professional');
@@ -247,7 +250,9 @@ describe('BacktestResultReport', () => {
 
     expect(screen.getByText('ORCL · 回测完成')).toBeInTheDocument();
     expect(screen.getAllByText('--').length).toBeGreaterThan(4);
-    expect(screen.getByText('基准数据不足，无法计算超额收益。')).toBeInTheDocument();
+    expect(screen.getByText('暂无基准数据；不影响策略自身回测结果。')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('--');
+    expect(screen.getByTestId('backtest-diagnosis-risk')).toHaveTextContent('--');
     expect(screen.getByText('数据质量信息不足：当前结果未返回复权/分红/拆股元数据。')).toBeInTheDocument();
     expect(screen.getByText('执行假设信息不足：当前结果未返回成交时点/撮合规则。')).toBeInTheDocument();
   });
@@ -256,22 +261,70 @@ describe('BacktestResultReport', () => {
     render(<BacktestResultReport run={makeRun()} mode="simple" />);
 
     const panel = screen.getByTestId('backtest-report-data-quality');
-    expect(within(panel).getByText('Local US Parquet')).toBeInTheDocument();
-    expect(within(panel).getByText('1d')).toBeInTheDocument();
+    expect(within(panel).getByText('本地美股 Parquet')).toBeInTheDocument();
+    expect(within(panel).getByText('日线')).toBeInTheDocument();
     expect(within(panel).getByText('64 / 64')).toBeInTheDocument();
-    expect(within(panel).getByText('unknown / unknown / unknown')).toBeInTheDocument();
-    expect(within(panel).getByTestId('backtest-data-quality-warning-0')).toHaveTextContent('Adjustment status unknown.');
+    expect(within(panel).getByText('未提供 / 未提供 / 未提供')).toBeInTheDocument();
+    expect(within(panel).getByTestId('backtest-data-quality-warning-0')).toHaveTextContent('复权状态未知');
   });
 
   it('renders enriched execution assumptions and compact warnings', () => {
     render(<BacktestResultReport run={makeRun()} mode="professional" />);
 
     const panel = screen.getByTestId('backtest-report-execution-assumptions');
-    expect(within(panel).getByText('deterministic')).toBeInTheDocument();
-    expect(within(panel).getByText('bar close -> next bar open')).toBeInTheDocument();
+    expect(within(panel).getByText('确定性引擎')).toBeInTheDocument();
+    expect(within(panel).getByText('收盘信号 -> 次日开盘')).toBeInTheDocument();
     expect(within(panel).getByText('2bp / 1bp')).toBeInTheDocument();
-    expect(within(panel).getByText('fractional / lot 1')).toBeInTheDocument();
-    expect(within(panel).getByTestId('backtest-execution-warning-0')).toHaveTextContent('Limit and halt handling are not modeled.');
+    expect(within(panel).getByText('允许碎股 / lot 1')).toBeInTheDocument();
+    expect(within(panel).getByTestId('backtest-execution-warning-0')).toHaveTextContent('涨跌停/停牌未建模');
+  });
+
+  it('renders diagnosis summary and benchmark verdicts from existing metrics', () => {
+    const { rerender } = render(<BacktestResultReport run={makeRun()} mode="professional" />);
+
+    expect(screen.getByTestId('backtest-report-diagnosis')).toHaveTextContent('收益质量');
+    expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('跑赢基准');
+    expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('+24.60%');
+    expect(screen.getByTestId('backtest-diagnosis-risk')).toHaveTextContent('回撤受控');
+    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('明显跑赢');
+    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('策略 +24.60% · 基准 +19.40% · 超额 +5.20%');
+
+    rerender(<BacktestResultReport run={makeRun({
+      id: 79,
+      totalReturnPct: 3,
+      benchmarkReturnPct: 9,
+      excessReturnVsBenchmarkPct: -6,
+    })} mode="professional" />);
+
+    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('弱于基准');
+    expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('弱于基准');
+
+    rerender(<BacktestResultReport run={makeRun({
+      id: 80,
+      benchmarkReturnPct: null,
+      excessReturnVsBenchmarkPct: null,
+      benchmarkSummary: { resolvedMode: 'none', unavailableReason: 'missing benchmark' },
+    })} mode="professional" />);
+
+    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('基准缺失');
+    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('不影响策略自身回测结果');
+  });
+
+  it('renders compact drawdown and risk explanation labels without inventing unavailable values', () => {
+    render(<BacktestResultReport run={makeRun({
+      maxDrawdownPct: null,
+      summary: {},
+      auditRows: [],
+      trades: [],
+    })} mode="professional" />);
+
+    const risk = screen.getByTestId('backtest-report-risk-diagnostics');
+    expect(within(risk).getByText('回撤与压力解释')).toBeInTheDocument();
+    expect(within(risk).getByText('最大回撤')).toBeInTheDocument();
+    expect(within(risk).getByText('波动压力')).toBeInTheDocument();
+    expect(within(risk).getByText('极端亏损日')).toBeInTheDocument();
+    expect(within(risk).getAllByText('--').length).toBeGreaterThanOrEqual(3);
+    expect(within(risk).getByText(/不代表真实成交或未来表现/)).toBeInTheDocument();
   });
 
   it('marks report diagnostic panels as narrow-safe stacked grids', () => {
@@ -385,20 +438,35 @@ describe('BacktestResultReport', () => {
     })} mode="professional" />);
 
     expect(screen.getByTestId('backtest-report-attribution')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-attribution-exit-reason')).toHaveTextContent('signal exit');
-    expect(screen.getByTestId('backtest-attribution-exit-reason')).toHaveTextContent('stop loss');
+    expect(screen.getByTestId('backtest-attribution-exit-reason')).toHaveTextContent('信号离场');
+    expect(screen.getByTestId('backtest-attribution-exit-reason')).toHaveTextContent('止损离场');
     expect(screen.getByTestId('backtest-attribution-month')).toHaveTextContent('2026-03');
     expect(screen.getByTestId('backtest-attribution-year')).toHaveTextContent('2026');
-    expect(screen.getByTestId('backtest-attribution-holding-bucket')).toHaveTextContent('0-7d');
+    expect(screen.getByTestId('backtest-attribution-holding-bucket')).toHaveTextContent('0-7 天');
 
     const timeline = screen.getByTestId('backtest-report-event-timeline');
     expect(timeline).toHaveAttribute('data-visible-events', '4');
-    expect(within(timeline).getAllByText('ENTRY')).toHaveLength(2);
-    expect(within(timeline).getAllByText('EXIT')).toHaveLength(2);
+    expect(within(timeline).getAllByText('买入')).toHaveLength(2);
+    expect(within(timeline).getAllByText('卖出')).toHaveLength(2);
 
     const risk = screen.getByTestId('backtest-report-risk-diagnostics');
     expect(within(risk).getByText('最差交易')).toBeInTheDocument();
     expect(within(risk).getByText('-5.02%')).toBeInTheDocument();
     expect(within(risk).getByText('最大回撤区间')).toBeInTheDocument();
+  });
+
+  it('keeps developer details collapsed by default and hides raw enum copy in the default report', () => {
+    render(<BacktestResultReport run={makeRun()} mode="professional" />);
+
+    const report = screen.getByTestId('backtest-result-report');
+    expect(report).toHaveTextContent('开发者细节');
+    expect(report).toHaveTextContent('原始执行轨迹');
+    expect(report).not.toHaveTextContent('signal_exit');
+    expect(report).not.toHaveTextContent('stop_loss');
+    expect(report).not.toHaveTextContent('Full metrics');
+    expect(screen.queryByText(/扩展指标在上方折叠区展示/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /开发者细节/ }));
+    expect(screen.getByText(/扩展指标在上方折叠区展示/)).toBeInTheDocument();
   });
 });

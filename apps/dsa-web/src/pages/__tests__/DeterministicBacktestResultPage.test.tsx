@@ -1247,7 +1247,7 @@ describe('DeterministicBacktestResultPage', () => {
     expect(compareRuleBacktestRuns).toHaveBeenCalledWith({ runIds: [99, 123] });
     expect(screen.getByRole('navigation', { name: '比较区块导航' })).toBeInTheDocument();
 
-    const parameterSummary = screen.getByText('toggle / parameter + metrics');
+    const parameterSummary = screen.getByText('展开 / 参数与指标');
     const parameterDisclosure = parameterSummary.closest('details');
     expect(parameterDisclosure).toHaveAttribute('open');
     fireEvent.click(parameterSummary.closest('summary') ?? parameterSummary);
@@ -1257,15 +1257,15 @@ describe('DeterministicBacktestResultPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '复制摘要' }));
     await waitFor(() => {
-      expect(writeTextMock).toHaveBeenCalledWith('compare 99,123 | baseline #99 ORCL | overall partially_comparable | profile same_code_different_periods | comparable 2/2');
+      expect(writeTextMock).toHaveBeenCalledWith('比较运行 99,123 | 基准 #99 ORCL | 整体 部分可比 | 画像 同标的不同区间 | 可比 2/2');
     });
     expect(screen.getByText('已复制比较摘要')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '设为 baseline 123' }));
+    fireEvent.click(screen.getByRole('button', { name: '设为基准 123' }));
     await waitFor(() => {
       expect(compareRuleBacktestRuns).toHaveBeenLastCalledWith({ runIds: [123, 99] });
     });
-    expect(screen.getByRole('columnheader', { name: /#123 baseline/ })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /#123 基准/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '移除运行 99' }));
     expect(await screen.findByText('至少需要 2 条已完成运行才能打开比较工作台。')).toBeInTheDocument();

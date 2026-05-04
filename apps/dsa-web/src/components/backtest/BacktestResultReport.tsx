@@ -33,6 +33,15 @@ type MetricItem = {
   tone?: 'positive' | 'negative' | 'neutral';
 };
 
+type DiagnosisItem = {
+  key: string;
+  title: string;
+  label: string;
+  value: string;
+  tone: MetricItem['tone'];
+  note: string;
+};
+
 type TradeSummary = {
   totalTrades: number;
   winningTrades: number | null;
@@ -180,14 +189,53 @@ function compactToken(value: unknown): string {
   return text === 'unknown' ? '--' : text;
 }
 
+function humanToken(value: unknown): string {
+  const raw = safeText(typeof value === 'string' ? value : value == null ? null : String(value));
+  if (!raw) return '未提供';
+  const normalized = raw.toLowerCase().replaceAll('-', '_').replace(/\s+/g, '_');
+  const labels: Record<string, string> = {
+    adjustment_status_unknown: '复权状态未知',
+    market_rules_not_modeled: '涨跌停/停牌未建模',
+    signal_entry: '信号入场',
+    signal_exit: '信号离场',
+    stop_loss: '止损离场',
+    take_profit: '止盈离场',
+    forced_close: '期末平仓',
+    moving_average_crossover: '均线交叉',
+    bar_close: '收盘信号',
+    next_bar_open: '次日开盘',
+    open: '开盘价',
+    close: '收盘价',
+    deterministic: '确定性引擎',
+    fractional: '允许碎股',
+    whole_shares: '整股',
+    not_modeled: '未建模',
+    disabled: '禁用',
+    unknown: '未提供',
+    local_us_parquet: '本地美股 Parquet',
+    benchmark_security: '基准证券',
+    daily: '日线',
+    '1d': '日线',
+  };
+  return labels[normalized] || raw.replaceAll('_', ' ');
+}
+
+function holdingBucketLabel(bucket: string): string {
+  if (bucket === '0-7d') return '0-7 天';
+  if (bucket === '8-30d') return '8-30 天';
+  if (bucket === '31-90d') return '31-90 天';
+  if (bucket === '90d+') return '90 天以上';
+  return '未提供';
+}
+
 function formatBps(value: unknown): string {
   const parsed = safeNumber(value);
-  if (parsed == null) return 'unknown';
+  if (parsed == null) return '未提供';
   return Number.isInteger(parsed) ? String(parsed) : formatNumber(parsed, 2);
 }
 
 function warningText(warning: BacktestDiagnosticWarning | Record<string, unknown>): string {
-  return safeText(warning.message) || safeText(warning.code) || 'metadata warning';
+  return safeText(warning.code) ? humanToken(warning.code) : safeText(warning.message) || '元数据提示';
 }
 
 function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]> {
@@ -195,14 +243,14 @@ function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]
   const feeModel = (recordValue(source, 'feeModel', 'fee_model') || {}) as Record<string, unknown>;
   const slippageModel = (recordValue(source, 'slippageModel', 'slippage_model') || {}) as Record<string, unknown>;
   const structured: Array<[string, string | null]> = [
-    ['Engine', safeText(recordValue(source, 'engine') as string) || null],
-    ['Signal / Fill', `${displayToken(recordValue(source, 'signalTiming', 'signal_timing', 'signalEvaluationTiming', 'signal_evaluation_timing'))} -> ${displayToken(recordValue(source, 'fillTiming', 'fill_timing', 'entryFillTiming', 'entry_fill_timing'))}`],
-    ['Fill Price', displayToken(recordValue(source, 'fillPrice', 'fill_price', 'defaultFillPriceBasis', 'default_fill_price_basis'))],
-    ['Fee / Slippage', `${formatBps(recordValue(feeModel, 'commissionBps', 'commission_bps') ?? run.feeBps)}bp / ${formatBps(recordValue(slippageModel, 'slippageBps', 'slippage_bps') ?? run.slippageBps)}bp`],
-    ['Fractional / Lot', `${recordValue(source, 'allowFractionalShares', 'allow_fractional_shares') === false ? 'whole shares' : 'fractional'} / lot ${displayToken(recordValue(source, 'lotSize', 'lot_size') ?? 1)}`],
-    ['Volume Limit', displayToken(recordValue(source, 'volumeParticipationLimit', 'volume_participation_limit'))],
-    ['Market Rules', `${displayToken(recordValue(source, 'limitUpDownHandling', 'limit_up_down_handling'))} / ${displayToken(recordValue(source, 'haltHandling', 'halt_handling'))}`],
-    ['Short Selling', displayToken(recordValue(source, 'shortSelling', 'short_selling'))],
+    ['执行引擎', safeText(recordValue(source, 'engine') as string) ? humanToken(recordValue(source, 'engine')) : null],
+    ['信号 / 成交', `${humanToken(recordValue(source, 'signalTiming', 'signal_timing', 'signalEvaluationTiming', 'signal_evaluation_timing'))} -> ${humanToken(recordValue(source, 'fillTiming', 'fill_timing', 'entryFillTiming', 'entry_fill_timing'))}`],
+    ['成交价假设', humanToken(recordValue(source, 'fillPrice', 'fill_price', 'defaultFillPriceBasis', 'default_fill_price_basis'))],
+    ['手续费 / 滑点', `${formatBps(recordValue(feeModel, 'commissionBps', 'commission_bps') ?? run.feeBps)}bp / ${formatBps(recordValue(slippageModel, 'slippageBps', 'slippage_bps') ?? run.slippageBps)}bp`],
+    ['成交单位', `${recordValue(source, 'allowFractionalShares', 'allow_fractional_shares') === false ? '整股' : '允许碎股'} / lot ${displayToken(recordValue(source, 'lotSize', 'lot_size') ?? 1)}`],
+    ['成交量限制', humanToken(recordValue(source, 'volumeParticipationLimit', 'volume_participation_limit'))],
+    ['市场规则', `${humanToken(recordValue(source, 'limitUpDownHandling', 'limit_up_down_handling'))} / ${humanToken(recordValue(source, 'haltHandling', 'halt_handling'))}`],
+    ['做空规则', humanToken(recordValue(source, 'shortSelling', 'short_selling'))],
   ];
   const hasStructured = Boolean(recordValue(source, 'engine', 'feeModel', 'fee_model', 'slippageModel', 'slippage_model'));
   if (hasStructured) {
@@ -214,15 +262,15 @@ function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]
   const explicit = Object.entries(source)
     .map(([key, value]): [string, string] | null => {
       if (value == null || value === '') return null;
-      return [key, typeof value === 'object' ? JSON.stringify(value) : String(value)];
+      return [humanToken(key), typeof value === 'object' ? JSON.stringify(value) : humanToken(value)];
     })
     .filter((entry): entry is [string, string] => entry != null);
   if (explicit.length) return explicit;
 
   const inferred: Array<[string, string | number | null | undefined]> = [
-    ['timeframe', run.timeframe],
-    ['fee_bps_per_side', run.feeBps],
-    ['slippage_bps_per_side', run.slippageBps],
+    ['周期', run.timeframe],
+    ['单边手续费', run.feeBps],
+    ['单边滑点', run.slippageBps],
   ];
   return inferred
     .filter(([, value]) => value != null && value !== '')
@@ -236,12 +284,13 @@ function dataQualityEntries(run: RuleBacktestRunResponse, normalized: Determinis
     const expected = safeNumber(explicit.expectedBarCount);
     const warnings = Array.isArray(explicit.warnings) ? explicit.warnings.length : 0;
     const entries: Array<[string, string | number | null]> = [
-      ['Source', safeText(explicit.provider || '') || safeText(explicit.source || '')],
-      ['Frequency', safeText(explicit.frequency || '')],
-      ['Bar Coverage', `${barCount ?? '--'} / ${expected ?? '--'}`],
-      ['Actual Range', explicit.actualStart || explicit.actualEnd ? `${explicit.actualStart || '--'} -> ${explicit.actualEnd || '--'}` : null],
-      ['Adjust / Div / Split', `${displayToken(explicit.adjustmentMode)} / ${displayToken(explicit.dividendsHandled)} / ${displayToken(explicit.splitsHandled)}`],
-      ['Warnings', warnings],
+      ['价格源', humanToken(explicit.provider || explicit.source)],
+      ['样本频率', humanToken(explicit.frequency)],
+      ['样本覆盖', `${barCount ?? '--'} / ${expected ?? '--'}`],
+      ['实际区间', explicit.actualStart || explicit.actualEnd ? `${explicit.actualStart || '--'} -> ${explicit.actualEnd || '--'}` : null],
+      ['复权 / 分红 / 拆股', `${humanToken(explicit.adjustmentMode)} / ${humanToken(explicit.dividendsHandled)} / ${humanToken(explicit.splitsHandled)}`],
+      ['缺失交易日', safeNumber(explicit.missingBarCount) ?? 0],
+      ['质量提示', warnings],
     ];
     return entries
       .filter(([, value]) => value != null && value !== '')
@@ -272,6 +321,117 @@ function dataQualityEntries(run: RuleBacktestRunResponse, normalized: Determinis
     .map(([key, value]) => [key, String(value)]);
 }
 
+function getBenchmarkVerdict(totalReturnPct: number | null, benchmarkReturnPct: number | null, excessReturnPct: number | null): { label: string; tone: MetricItem['tone']; note: string } {
+  if (benchmarkReturnPct == null || totalReturnPct == null || excessReturnPct == null) {
+    return { label: '基准缺失', tone: 'neutral', note: '暂无基准数据；不影响策略自身回测结果。' };
+  }
+  if (excessReturnPct >= 5) return { label: '明显跑赢', tone: 'positive', note: `策略相对基准多获得 ${signedPct(excessReturnPct)}。` };
+  if (excessReturnPct > 1) return { label: '小幅跑赢', tone: 'positive', note: `策略相对基准多获得 ${signedPct(excessReturnPct)}。` };
+  if (excessReturnPct >= -1) return { label: '接近基准', tone: 'neutral', note: `策略与基准差距 ${signedPct(excessReturnPct)}。` };
+  return { label: '弱于基准', tone: 'negative', note: `策略相对基准落后 ${signedPct(Math.abs(excessReturnPct))}。` };
+}
+
+function getBenchmarkSentence(normalized: DeterministicBacktestNormalizedResult): string {
+  const { totalReturnPct, benchmarkReturnPct, excessReturnVsBenchmarkPct, maxDrawdownPct } = normalized.metrics;
+  const verdict = getBenchmarkVerdict(totalReturnPct, benchmarkReturnPct, excessReturnVsBenchmarkPct);
+  if (verdict.label === '基准缺失') return verdict.note;
+  const parts = [
+    `策略 ${signedPct(totalReturnPct)}`,
+    `基准 ${signedPct(benchmarkReturnPct)}`,
+    `超额 ${signedPct(excessReturnVsBenchmarkPct)}`,
+  ];
+  if (maxDrawdownPct != null) parts.push(`策略最大回撤 ${signedPct(displayDrawdown(maxDrawdownPct))}`);
+  return `${verdict.label}：${parts.join(' · ')}。`;
+}
+
+function getDiagnosisItems(
+  normalized: DeterministicBacktestNormalizedResult,
+  tradeSummary: TradeSummary,
+  dataQualityWarnings: string[],
+  executionWarnings: string[],
+  hasExplicitAssumptions: boolean,
+): DiagnosisItem[] {
+  const metrics = normalized.metrics;
+  const benchmarkVerdict = getBenchmarkVerdict(metrics.totalReturnPct, metrics.benchmarkReturnPct, metrics.excessReturnVsBenchmarkPct);
+  const drawdownAbs = metrics.maxDrawdownPct == null ? null : Math.abs(metrics.maxDrawdownPct);
+  const rowCount = normalized.viewerMeta.rowCount;
+  const tradeCount = tradeSummary.totalTrades;
+  const returnLabel = metrics.totalReturnPct == null
+    ? '收益未提供'
+    : metrics.benchmarkReturnPct == null
+      ? (metrics.totalReturnPct >= 0 ? '策略收益为正' : '策略收益为负')
+      : benchmarkVerdict.label === '弱于基准'
+        ? '弱于基准'
+        : benchmarkVerdict.label === '基准缺失'
+          ? '基准缺失'
+          : '跑赢基准';
+  const riskLabel = drawdownAbs == null
+    ? '回撤未提供'
+    : drawdownAbs >= 20
+      ? '回撤偏高'
+      : drawdownAbs >= 10
+        ? '回撤需跟踪'
+        : '回撤受控';
+  const tradeLabel = tradeCount < 5
+    ? '交易样本偏少'
+    : tradeSummary.winRatePct == null
+      ? '胜率未提供'
+      : tradeSummary.winRatePct < 45
+        ? '胜率偏低'
+        : '交易效率正常';
+  const sharpeLabel = metrics.sharpeRatio == null
+    ? '夏普未提供'
+    : metrics.sharpeRatio >= 1
+      ? '夏普稳健'
+      : metrics.sharpeRatio >= 0
+        ? '夏普通常'
+        : '夏普承压';
+  const dataLabel = dataQualityWarnings.length || rowCount < 30 ? '数据样本有限' : '数据覆盖正常';
+  const executionLabel = executionWarnings.length || !hasExplicitAssumptions ? '执行假设需谨慎' : '执行假设完整';
+  return [
+    {
+      key: 'return',
+      title: '收益质量',
+      label: returnLabel,
+      value: signedPct(metrics.totalReturnPct),
+      tone: metrics.totalReturnPct == null ? 'neutral' : benchmarkVerdict.tone,
+      note: sharpeLabel,
+    },
+    {
+      key: 'risk',
+      title: '风险压力',
+      label: riskLabel,
+      value: signedPct(displayDrawdown(metrics.maxDrawdownPct)),
+      tone: drawdownAbs == null ? 'neutral' : drawdownAbs >= 10 ? 'negative' : 'positive',
+      note: '最大回撤',
+    },
+    {
+      key: 'trade',
+      title: '交易效率',
+      label: tradeLabel,
+      value: `${tradeCount} 笔`,
+      tone: tradeCount < 5 || (tradeSummary.winRatePct != null && tradeSummary.winRatePct < 45) ? 'negative' : 'neutral',
+      note: `胜率 ${signedPct(tradeSummary.winRatePct)}`,
+    },
+    {
+      key: 'data',
+      title: '数据可信度',
+      label: dataLabel,
+      value: `${rowCount} 行`,
+      tone: dataQualityWarnings.length ? 'negative' : 'neutral',
+      note: dataQualityWarnings.length ? `${dataQualityWarnings.length} 条提示` : '样本覆盖',
+    },
+    {
+      key: 'execution',
+      title: '执行口径',
+      label: executionLabel,
+      value: executionWarnings.length ? `${executionWarnings.length} 条提示` : '已披露',
+      tone: executionWarnings.length || !hasExplicitAssumptions ? 'negative' : 'neutral',
+      note: '非真实成交记录',
+    },
+  ];
+}
+
 function getMetricItems(normalized: DeterministicBacktestNormalizedResult): MetricItem[] {
   const metrics = normalized.metrics;
   return [
@@ -280,7 +440,7 @@ function getMetricItems(normalized: DeterministicBacktestNormalizedResult): Metr
     { key: 'excess', label: '超额收益', value: signedPct(metrics.excessReturnVsBenchmarkPct), rawValue: metrics.excessReturnVsBenchmarkPct, tone: toneFor(metrics.excessReturnVsBenchmarkPct) },
     { key: 'drawdown', label: '最大回撤', value: signedPct(displayDrawdown(metrics.maxDrawdownPct)), rawValue: metrics.maxDrawdownPct, tone: 'negative' },
     { key: 'cagr', label: 'CAGR', value: signedPct(metrics.annualizedReturnPct), rawValue: metrics.annualizedReturnPct, tone: toneFor(metrics.annualizedReturnPct) },
-    { key: 'sharpe', label: 'Sharpe', value: signedNumber(metrics.sharpeRatio), rawValue: metrics.sharpeRatio, tone: toneFor(metrics.sharpeRatio) },
+    { key: 'sharpe', label: '夏普', value: signedNumber(metrics.sharpeRatio), rawValue: metrics.sharpeRatio, tone: toneFor(metrics.sharpeRatio) },
     { key: 'winRate', label: '胜率', value: signedPct(metrics.winRatePct), rawValue: metrics.winRatePct, tone: toneFor(metrics.winRatePct) },
     { key: 'trades', label: '交易次数', value: String(metrics.tradeCount ?? 0), rawValue: metrics.tradeCount, tone: 'neutral' },
   ];
@@ -312,18 +472,6 @@ function getMoreMetricItems(run: RuleBacktestRunResponse, summary: TradeSummary)
     rawValue: value,
     tone: toneFor(value),
   }));
-}
-
-function getBenchmarkSentence(normalized: DeterministicBacktestNormalizedResult): string {
-  const { benchmarkReturnPct, excessReturnVsBenchmarkPct, maxDrawdownPct, sharpeRatio } = normalized.metrics;
-  if (benchmarkReturnPct == null || excessReturnVsBenchmarkPct == null) {
-    return '基准数据不足，无法计算超额收益。';
-  }
-  const result = excessReturnVsBenchmarkPct >= 0 ? '策略跑赢基准' : '策略未跑赢基准';
-  const parts = [`${result} ${signedPct(excessReturnVsBenchmarkPct)}`];
-  if (maxDrawdownPct != null) parts.push(`最大回撤 ${signedPct(displayDrawdown(maxDrawdownPct))}`);
-  if (sharpeRatio != null) parts.push(`Sharpe ${signedNumber(sharpeRatio)}`);
-  return `${parts.join(' · ')}。`;
 }
 
 type AttributionRow = {
@@ -414,7 +562,7 @@ function buildEvents(trades: RuleBacktestTradeItem[]): EventRow[] {
       events.push({
         date: trade.entryDate,
         type: 'ENTRY',
-        label: compactToken(trade.entryReason || trade.entrySignal || trade.entryTrigger),
+        label: humanToken(trade.entryReason || trade.entrySignal || trade.entryTrigger),
         tone: 'neutral',
       });
     }
@@ -422,7 +570,7 @@ function buildEvents(trades: RuleBacktestTradeItem[]): EventRow[] {
       events.push({
         date: trade.exitDate,
         type: 'EXIT',
-        label: compactToken(trade.exitReason || trade.exitSignal || trade.exitTrigger),
+        label: humanToken(trade.exitReason || trade.exitSignal || trade.exitTrigger),
         tone: toneFor(getTradeReturn(trade)),
       });
     }
@@ -473,7 +621,7 @@ function drawdownPeriod(rows: DeterministicBacktestNormalizedRow[]): { start: st
   return { start: peakDate, trough, recovery, value: minDrawdown || null };
 }
 
-function AttributionList({ rows, testId }: { rows: AttributionRow[]; testId: string }) {
+function AttributionList({ rows, testId, formatKey = compactToken }: { rows: AttributionRow[]; testId: string; formatKey?: (key: string) => string }) {
   return (
     <div data-testid={testId} className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3">
       <div className="space-y-2">
@@ -481,7 +629,7 @@ function AttributionList({ rows, testId }: { rows: AttributionRow[]; testId: str
           const contribution = row.netPnl != null ? signedNumber(row.netPnl) : signedPct(row.returnPct);
           return (
             <div key={row.key} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 text-xs">
-              <span className="truncate text-white/62">{compactToken(row.key)}</span>
+              <span className="truncate text-white/62">{formatKey(row.key)}</span>
               <span className={`font-mono ${valueToneClass(toneFor(row.netPnl ?? row.returnPct))}`}>{contribution}</span>
               <span className="font-mono text-white/42">{row.trades}x</span>
             </div>
@@ -497,6 +645,21 @@ function MetricCard({ item }: { item: MetricItem }) {
     <div className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3">
       <p className={LABEL_CLASS}>{item.label}</p>
       <p className="mt-2 truncate">{renderValue(item.value, item.tone)}</p>
+    </div>
+  );
+}
+
+function DiagnosisCard({ item }: { item: DiagnosisItem }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3" data-testid={`backtest-diagnosis-${item.key}`}>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <p className={LABEL_CLASS}>{item.title}</p>
+        <span className={`max-w-[60%] truncate rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] ${valueToneClass(item.tone)}`}>
+          {item.label}
+        </span>
+      </div>
+      <p className="mt-2 truncate font-mono text-sm text-white">{item.value}</p>
+      <p className="mt-1 truncate text-xs text-white/42">{item.note}</p>
     </div>
   );
 }
@@ -553,6 +716,25 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
     return Array.isArray(warnings) ? warnings.map(warningText) : [];
   }, [run.executionAssumptions]);
   const hasExplicitAssumptions = Object.keys(run.executionAssumptions || {}).length > 0;
+  const diagnosisItems = useMemo(
+    () => getDiagnosisItems(normalized, tradeSummary, dataQualityWarnings, executionWarnings, hasExplicitAssumptions),
+    [dataQualityWarnings, executionWarnings, hasExplicitAssumptions, normalized, tradeSummary],
+  );
+  const benchmarkVerdict = useMemo(
+    () => getBenchmarkVerdict(
+      normalized.metrics.totalReturnPct,
+      normalized.metrics.benchmarkReturnPct,
+      normalized.metrics.excessReturnVsBenchmarkPct,
+    ),
+    [normalized.metrics.benchmarkReturnPct, normalized.metrics.excessReturnVsBenchmarkPct, normalized.metrics.totalReturnPct],
+  );
+  const volatilityPct = safeNumber(run.summary?.volatilityPct ?? run.summary?.volatility);
+  const worstDailyReturn = useMemo(() => {
+    const values = normalized.rows
+      .map((row) => row.dailyReturn)
+      .filter((value): value is number => value != null && Number.isFinite(value));
+    return values.length ? Math.min(...values) : null;
+  }, [normalized.rows]);
   const visibleTrades = trades.slice(0, TRADE_ROW_LIMIT);
   const visibleLedgerRows = normalized.rows.slice(0, LEDGER_ROW_LIMIT);
   const statusLabel = getRuleRunStatusLabel(run.status, language);
@@ -611,7 +793,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
       data-report-mode={mode}
     >
       <div className="flex min-w-0 flex-col gap-4 text-sm text-white/70">
-        <nav className="flex min-w-0 gap-2 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="Backtest result sections">
+        <nav className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="Backtest result sections">
           {['概览', '曲线', '交易', '归因', '风险', '数据质量', '执行假设', '账本'].map((item) => (
             <a key={item} href={`#backtest-report-${item}`} className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/60 hover:bg-white/10">
               {item}
@@ -634,11 +816,20 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
               </div>
               <div className="mt-2 flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-xs text-white/50">
                 <span>最大回撤 {renderValue(signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), 'negative')}</span>
-                <span>Sharpe {renderValue(signedNumber(normalized.metrics.sharpeRatio), toneFor(normalized.metrics.sharpeRatio))}</span>
+                <span>夏普 {renderValue(signedNumber(normalized.metrics.sharpeRatio), toneFor(normalized.metrics.sharpeRatio))}</span>
                 <span>交易 <span className="font-mono text-white">{normalized.metrics.tradeCount}</span> 次</span>
               </div>
             </div>
             <div className="font-mono text-xs text-white/38">{formatDateTime(run.completedAt || run.runAt)}</div>
+          </div>
+          <div className="mt-4" data-testid="backtest-report-diagnosis">
+            <div className="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
+              <p className={LABEL_CLASS}>策略诊断</p>
+              <span className="text-xs text-white/42">由已有收益、风险、交易、数据与执行字段生成</span>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              {diagnosisItems.map((item) => <DiagnosisCard key={item.key} item={item} />)}
+            </div>
           </div>
         </div>
 
@@ -675,13 +866,21 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         </div>
 
         <div id="backtest-report-benchmark" data-testid="backtest-report-benchmark" className={GHOST_SECTION_CLASS}>
-          <p className={LABEL_CLASS}>基准对比</p>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className={LABEL_CLASS}>基准对比</p>
+              <h3 className={`mt-1 text-sm font-semibold ${valueToneClass(benchmarkVerdict.tone)}`}>{benchmarkVerdict.label}</h3>
+            </div>
+            {benchmarkVerdict.label === '基准缺失' ? (
+              <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-white/50">不影响策略自身回测结果</span>
+            ) : null}
+          </div>
           <p className="mt-2 text-sm text-white/78">{getBenchmarkSentence(normalized)}</p>
           <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <MetricCard item={{ key: 'strategy', label: '策略', value: signedPct(normalized.metrics.totalReturnPct), tone: toneFor(normalized.metrics.totalReturnPct) }} />
-            <MetricCard item={{ key: 'bench', label: normalized.benchmarkMeta.benchmarkLabel || 'Benchmark', value: signedPct(normalized.metrics.benchmarkReturnPct), tone: toneFor(normalized.metrics.benchmarkReturnPct) }} />
-            <MetricCard item={{ key: 'excess', label: '超额', value: signedPct(normalized.metrics.excessReturnVsBenchmarkPct), tone: toneFor(normalized.metrics.excessReturnVsBenchmarkPct) }} />
-            <MetricCard item={{ key: 'dd', label: '回撤', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
+            <MetricCard item={{ key: 'strategy', label: '策略收益', value: signedPct(normalized.metrics.totalReturnPct), tone: toneFor(normalized.metrics.totalReturnPct) }} />
+            <MetricCard item={{ key: 'bench', label: normalized.benchmarkMeta.benchmarkLabel || '基准收益', value: signedPct(normalized.metrics.benchmarkReturnPct), tone: toneFor(normalized.metrics.benchmarkReturnPct) }} />
+            <MetricCard item={{ key: 'excess', label: '超额收益', value: signedPct(normalized.metrics.excessReturnVsBenchmarkPct), tone: toneFor(normalized.metrics.excessReturnVsBenchmarkPct) }} />
+            <MetricCard item={{ key: 'dd', label: '策略回撤', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
           </div>
         </div>
 
@@ -715,11 +914,11 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             </div>
             <div>
               <p className={`${LABEL_CLASS} mb-2`}>按退出原因</p>
-              <AttributionList rows={attributionByExitReason} testId="backtest-attribution-exit-reason" />
+              <AttributionList rows={attributionByExitReason} testId="backtest-attribution-exit-reason" formatKey={humanToken} />
             </div>
             <div>
               <p className={`${LABEL_CLASS} mb-2`}>按持有周期</p>
-              <AttributionList rows={attributionByHoldingBucket} testId="backtest-attribution-holding-bucket" />
+              <AttributionList rows={attributionByHoldingBucket} testId="backtest-attribution-holding-bucket" formatKey={holdingBucketLabel} />
             </div>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -741,7 +940,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {tradeEvents.length ? tradeEvents.map((event, index) => (
               <div key={`${event.date}-${event.type}-${index}`} className="grid min-w-0 grid-cols-[auto_1fr] gap-3 rounded-xl border border-white/5 bg-black/20 p-3">
-                <div className={`font-mono text-[10px] font-bold ${valueToneClass(event.tone)}`}>{event.type}</div>
+                <div className={`font-mono text-[10px] font-bold ${valueToneClass(event.tone)}`}>{event.type === 'ENTRY' ? '买入' : '卖出'}</div>
                 <div className="min-w-0">
                   <p className="truncate font-mono text-xs text-white/72">{event.date}</p>
                   <p className="mt-1 truncate text-xs text-white/42">{event.label}</p>
@@ -752,37 +951,49 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         </div>
 
         <div id="backtest-report-风险" data-testid="backtest-report-risk-diagnostics" className={GHOST_SECTION_CLASS}>
-          <p className={LABEL_CLASS}>风险诊断</p>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className={LABEL_CLASS}>风险诊断</p>
+              <h3 className="mt-1 text-sm font-semibold text-white">回撤与压力解释</h3>
+            </div>
+            <span className="text-xs text-white/42">仅使用已返回指标与日账本摘要</span>
+          </div>
           <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <MetricCard item={{ key: 'max-drawdown', label: '最大回撤', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
+            <MetricCard item={{ key: 'volatility', label: '波动压力', value: signedPct(volatilityPct), tone: toneFor(volatilityPct == null ? null : -volatilityPct) }} />
+            <MetricCard item={{ key: 'worst-day', label: '极端亏损日', value: signedPct(worstDailyReturn), tone: toneFor(worstDailyReturn) }} />
+            <MetricCard item={{ key: 'losses', label: '连续亏损', value: String(consecutiveLosses), tone: consecutiveLosses > 0 ? 'negative' : 'neutral' }} />
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
             <MetricCard item={{ key: 'best-trade', label: '最佳交易', value: signedPct(getTradeReturn(bestTrade || {} as RuleBacktestTradeItem)), tone: toneFor(getTradeReturn(bestTrade || {} as RuleBacktestTradeItem)) }} />
             <MetricCard item={{ key: 'worst-trade', label: '最差交易', value: signedPct(getTradeReturn(worstTrade || {} as RuleBacktestTradeItem)), tone: toneFor(getTradeReturn(worstTrade || {} as RuleBacktestTradeItem)) }} />
-            <MetricCard item={{ key: 'wins', label: '连续盈利', value: String(consecutiveWins), tone: 'positive' }} />
-            <MetricCard item={{ key: 'losses', label: '连续亏损', value: String(consecutiveLosses), tone: 'negative' }} />
+            <MetricCard item={{ key: 'wins', label: '连续盈利', value: String(consecutiveWins), tone: consecutiveWins > 0 ? 'positive' : 'neutral' }} />
           </div>
           <div className="mt-3 rounded-xl border border-white/5 bg-black/20 p-3">
             <p className={LABEL_CLASS}>最大回撤区间</p>
             <p className="mt-2 truncate font-mono text-xs text-white/70">
               {(drawdown.start || '--')} {'->'} {(drawdown.trough || '--')} · {signedPct(drawdown.value)}
-              {drawdown.recovery ? ` · recovered ${drawdown.recovery}` : ''}
+              {drawdown.recovery ? ` · 修复 ${drawdown.recovery}` : ''}
             </p>
+            <p className="mt-2 text-xs text-white/45">风险提示：回撤、波动和极端日只说明历史压力，不代表真实成交或未来表现。</p>
           </div>
         </div>
 
         <div data-testid="backtest-report-trade-table" data-visible-rows={visibleTrades.length} data-total-rows={trades.length} className={GHOST_SECTION_CLASS}>
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
             <div>
-              <p className={LABEL_CLASS}>Trade Table</p>
+              <p className={LABEL_CLASS}>交易明细</p>
               <p className="mt-1 text-xs text-white/42">默认显示 {TRADE_ROW_LIMIT} 行 · 共 {trades.length} 行</p>
             </div>
             <button type="button" className={PRIMARY_BUTTON_CLASS} onClick={exportTrades} disabled={!trades.length}>
               导出交易CSV
             </button>
           </div>
-          <div className="mt-3 overflow-x-auto rounded-xl border border-white/5 [scrollbar-width:none]">
+          <div className="no-scrollbar mt-3 overflow-x-auto rounded-xl border border-white/5 [scrollbar-width:none]">
             <table className="min-w-[1220px] w-full text-left text-xs">
               <thead className="sticky top-0 bg-black/70 text-white/42">
                 <tr>
-                  {['Entry Date', 'Exit Date', 'Symbol', 'Qty', 'Entry', 'Exit', 'Gross', 'Net', 'Return', 'Fees', 'Slip', 'Holding', 'Exit Reason', 'Signal Reason'].map((label) => (
+                  {['入场日期', '退出日期', '标的', '数量', '入场价', '退出价', '毛盈亏', '净盈亏', '收益率', '费用', '滑点', '持有', '退出原因', '信号原因'].map((label) => (
                     <th key={label} className="px-3 py-2 font-semibold">{label}</th>
                   ))}
                 </tr>
@@ -802,8 +1013,8 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                     <td className="px-3 py-2 font-mono">{formatNumber(tradeFees(trade), 2)}</td>
                     <td className="px-3 py-2 font-mono">{formatNumber(tradeSlippage(trade), 2)}</td>
                     <td className="px-3 py-2 font-mono">{formatNumber(trade.holdingDays ?? trade.holdingCalendarDays ?? trade.holdingBars, 0)}</td>
-                    <td className="max-w-[180px] truncate px-3 py-2">{compactToken(trade.exitReason || trade.exitTrigger || trade.exitSignal)}</td>
-                    <td className="max-w-[220px] truncate px-3 py-2">{compactToken(trade.signalReason || trade.entrySignal || trade.entryTrigger)}</td>
+                    <td className="max-w-[180px] truncate px-3 py-2">{humanToken(trade.exitReason || trade.exitTrigger || trade.exitSignal)}</td>
+                    <td className="max-w-[220px] truncate px-3 py-2">{humanToken(trade.signalReason || trade.entrySignal || trade.entryTrigger)}</td>
                   </tr>
                 )) : (
                   <tr><td colSpan={14} className="px-3 py-6 text-center text-white/42">暂无交易记录</td></tr>
@@ -887,8 +1098,8 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         <div id="backtest-report-账本" data-testid="backtest-report-advanced-details" className={GHOST_SECTION_CLASS}>
           <button type="button" className="flex w-full items-center justify-between gap-3 text-left" onClick={() => setAdvancedOpen((value) => !value)}>
             <span>
-              <span className={LABEL_CLASS}>Advanced Details</span>
-              <span className="ml-2 text-xs text-white/42">Full metrics · Daily ledger · Raw trace</span>
+              <span className={LABEL_CLASS}>开发者细节</span>
+              <span className="ml-2 text-xs text-white/42">完整指标 · 每日账本 · 原始执行轨迹</span>
             </span>
             <span className="text-xs text-white/45">{advancedOpen ? '收起' : '展开'}</span>
           </button>
@@ -912,15 +1123,15 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             </div>
             {advancedOpen ? (
               <div className="rounded-xl border border-white/5 bg-black/20 p-3 text-xs text-white/48">
-                Full metrics use the More Metrics panel above. Raw execution trace exports stay available without rendering every stored row.
+                扩展指标在上方折叠区展示；原始执行轨迹仅提供导出，不默认渲染全部存储行。
               </div>
             ) : null}
               {ledgerOpen ? (
-                <div data-testid="backtest-report-ledger-table" data-visible-rows={visibleLedgerRows.length} data-total-rows={normalized.rows.length} className="max-h-[420px] overflow-auto rounded-xl border border-white/5 [scrollbar-width:none]">
+                <div data-testid="backtest-report-ledger-table" data-visible-rows={visibleLedgerRows.length} data-total-rows={normalized.rows.length} className="no-scrollbar max-h-[420px] overflow-auto rounded-xl border border-white/5 [scrollbar-width:none]">
                   <table className="min-w-[1100px] w-full text-left text-xs">
                     <thead className="sticky top-0 bg-black/85 text-white/42">
                       <tr>
-                        {['Date', 'Action', 'Close', 'Benchmark', 'Fill', 'Shares', 'Cash', 'Equity', 'Daily PnL', 'Daily Return', 'Strategy Return'].map((label) => (
+                        {['日期', '动作', '收盘', '基准', '成交价', '股数', '现金', '权益', '日盈亏', '日收益', '策略收益'].map((label) => (
                           <th key={label} className="px-3 py-2 font-semibold">{label}</th>
                         ))}
                       </tr>
