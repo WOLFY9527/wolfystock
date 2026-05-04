@@ -1143,6 +1143,8 @@ describe('UserScannerPage', () => {
 
     renderUserScannerPage();
 
+    expect(await screen.findByTestId('scanner-history-empty-state')).toHaveTextContent('暂无历史扫描');
+    expect(screen.getByTestId('scanner-history-empty-state')).toHaveTextContent('运行一次扫描后可查看对比');
     expect(await screen.findByText('当前无匹配的扫描结果')).toBeInTheDocument();
     expect(screen.getByText('请调整左侧参数或稍后再试')).toBeInTheDocument();
 
@@ -1578,19 +1580,29 @@ describe('UserScannerPage', () => {
     getRun.mockImplementation((runId: number) => Promise.resolve(runId === 10 ? previousRun : currentRun));
     renderUserScannerPage();
 
+    const historySummary = await screen.findByTestId('scanner-result-history-summary');
+    await waitFor(() => {
+      expect(historySummary).toHaveTextContent(/本次扫描|Current scan/);
+      expect(historySummary).toHaveTextContent(/最近扫描|Latest scan/);
+      expect(historySummary).toHaveTextContent(/上次扫描|Previous scan/);
+    });
+    expect(screen.getByTestId('scanner-run-comparison-compact')).toHaveTextContent(/候选减少|最佳候选变化|分数变化|候选变化|Candidates|Best changed|Score|Candidate/);
+
     const comparison = await screen.findByTestId('scanner-run-comparison-strip');
     await waitFor(() => {
-      expect(comparison).toHaveTextContent(/WULF.*继续入选|WULF.*retained/i);
+      expect(comparison).toHaveTextContent(/WULF.*连续入选|WULF.*Retained selected/i);
     });
     fireEvent.click(within(comparison).getByRole('button', { name: /展开.*历史对比|Expand.*History comparison/i }));
     await waitFor(() => {
-      expect(screen.getByTestId('scanner-run-comparison-strip')).toHaveTextContent(/WULF.*继续入选|WULF.*retained/i);
-      expect(screen.getByTestId('scanner-run-comparison-strip')).toHaveTextContent(/MARA.*由入选转淘汰|MARA.*selected to rejected/i);
+      expect(screen.getByTestId('scanner-run-comparison-strip')).toHaveTextContent(/WULF.*连续入选|WULF.*Retained selected/i);
+      expect(screen.getByTestId('scanner-run-comparison-strip')).toHaveTextContent(/MARA.*上次入选|MARA.*Selected last run/i);
     });
 
     fireEvent.click(screen.getByRole('button', { name: /候选池|Candidate pool/i }));
     expect(await screen.findByTestId('scanner-candidate-row-WULF')).toHaveTextContent(/\+4/);
+    expect(screen.getByTestId('scanner-candidate-row-WULF')).toHaveTextContent(/连续入选|Retained selected/i);
     expect(screen.getByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/-6/);
+    expect(screen.getByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/上次入选|Selected last run/i);
   });
 
   it('shows compact empty comparison state when no previous comparable run exists', async () => {
@@ -1605,6 +1617,53 @@ describe('UserScannerPage', () => {
     expect(comparison).not.toHaveAttribute('open');
     fireEvent.click(within(comparison).getByRole('button', { name: /展开.*历史对比|Expand.*History comparison/i }));
     expect(comparison).toHaveTextContent(/暂无上次扫描对比|No previous comparable run/);
+    expect(screen.getByTestId('scanner-previous-empty-state')).toHaveTextContent(/暂无历史扫描|No previous scan/);
+  });
+
+  it('maps scanner failure and no-data states to compact Chinese labels without raw provider enums by default', async () => {
+    const failedRun = makeRunDetail({
+      status: 'failed',
+      failureReason: 'provider_error',
+      shortlist: [],
+      selected: [],
+      candidates: [],
+      summary: {
+        universeCount: 20,
+        submittedCount: 20,
+        evaluatedCount: 0,
+        selectedCount: 0,
+        rejectedCount: 0,
+        dataFailedCount: 20,
+        skippedCount: 0,
+        errorCount: 1,
+        limitedByResultCap: false,
+      },
+      diagnostics: {
+        providerDiagnostics: {
+          configuredPrimaryProvider: 'provider_down',
+          quoteSourceUsed: 'provider_down',
+          snapshotSourceUsed: 'provider_error',
+          historySourceUsed: 'unknown',
+          providersUsed: ['provider_down', 'provider_error', 'unknown'],
+          fallbackOccurred: true,
+          fallbackCount: 1,
+          providerFailureCount: 3,
+          missingDataSymbolCount: 20,
+          providerWarnings: ['provider_down raw detail'],
+        },
+      },
+    });
+    getRun.mockResolvedValue(failedRun);
+
+    renderUserScannerPage();
+
+    const summary = await screen.findByTestId('scanner-result-history-summary');
+    expect(summary).toHaveTextContent(/失败|Failed/);
+    expect(summary).toHaveTextContent(/数据源异常|Provider issue/);
+    expect(summary).not.toHaveTextContent('provider_down');
+    expect(summary).not.toHaveTextContent('provider_error');
+    expect(summary).not.toHaveTextContent('unknown');
+    expect(screen.queryByTestId('scanner-diagnostics-panel')).not.toBeInTheDocument();
   });
 
   it('adds official and preview candidates through batch watchlist actions with duplicate accounting', async () => {
@@ -1923,6 +1982,9 @@ describe('UserScannerPage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /run scanner|运行扫描/i }));
 
+    expect(await screen.findByTestId('scanner-page-error-summary')).toHaveTextContent(/数据不足|Insufficient data/);
+    expect(screen.queryByText('A 股全市场快照不可用。')).not.toBeInTheDocument();
+    fireEvent.click(within(screen.getByTestId('scanner-page-error-summary')).getByRole('button', { name: /展开.*开发者细节|Expand.*Developer details/i }));
     expect(await screen.findByText('A 股全市场快照不可用。')).toBeInTheDocument();
     expect(screen.queryByText('Tesla')).not.toBeInTheDocument();
     expect(screen.queryByText('Meta')).not.toBeInTheDocument();

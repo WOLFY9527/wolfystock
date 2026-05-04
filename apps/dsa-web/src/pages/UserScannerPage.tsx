@@ -95,9 +95,22 @@ type ScannerComparisonState = {
 };
 type CandidateComparison = {
   scoreDelta: number | null;
+  rankDelta: number | null;
   previousStatus: ScannerCandidateDiagnosticStatus | null;
   currentStatus: ScannerCandidateDiagnosticStatus;
   label: string;
+};
+type ScannerRunSummary = {
+  title: string;
+  statusLabel: string;
+  bestCandidate: string;
+  candidateCount: number;
+  rejectedCount: number;
+  failedCount: number;
+  dataStatusLabel: string;
+  durationLabel: string;
+  runTimeLabel: string;
+  errorSummary: string | null;
 };
 type ScannerValidationErrors = {
   run?: string;
@@ -236,6 +249,59 @@ function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): s
   }).format(date);
 }
 
+function formatDurationMs(startedAt?: string | null, completedAt?: string | null): string {
+  if (!startedAt || !completedAt) return '--';
+  const started = new Date(startedAt).getTime();
+  const completed = new Date(completedAt).getTime();
+  if (!Number.isFinite(started) || !Number.isFinite(completed) || completed < started) return '--';
+  const durationMs = completed - started;
+  if (durationMs < 1000) return `${durationMs}ms`;
+  const seconds = Math.round(durationMs / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
+function normalizeRunState(value?: string | null): string {
+  return String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+function compactScannerStateLabel(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  const normalized = normalizeRunState(value);
+  if (['success', 'succeeded', 'completed', 'complete', 'ready'].includes(normalized)) return language === 'en' ? 'Completed' : '完成';
+  if (['failed', 'failure', 'error', 'data_failed'].includes(normalized)) return language === 'en' ? 'Failed' : '失败';
+  if (normalized === 'timeout' || normalized === 'timed_out' || normalized.includes('timeout')) return language === 'en' ? 'Timeout' : '超时';
+  if (['empty', 'no_candidates', 'no_candidate', 'no_shortlist'].includes(normalized)) return language === 'en' ? 'No candidates' : '无候选';
+  if (['insufficient_data', 'data_insufficient', 'not_enough_history', 'missing_history'].includes(normalized)) return language === 'en' ? 'Insufficient data' : '数据不足';
+  if (['provider_down', 'provider_error', 'provider_failed', 'data_source_error'].includes(normalized)) return language === 'en' ? 'Provider issue' : '数据源异常';
+  if (['local_data', 'local', 'local_cache', 'local_snapshot'].includes(normalized)) return language === 'en' ? 'Local data' : '本地数据';
+  if (['fallback', 'fallback_data', 'degraded'].includes(normalized)) return language === 'en' ? 'Fallback data' : '备用数据';
+  if (['partial', 'partial_data', 'partial_success'].includes(normalized)) return language === 'en' ? 'Partial data' : '部分数据';
+  if (!normalized || normalized === 'unknown') return language === 'en' ? 'Unconfirmed' : '未确认';
+  return language === 'en' ? 'Unconfirmed' : '未确认';
+}
+
+function sanitizeScannerErrorSummary(value?: string | null, language: 'zh' | 'en' = 'zh'): string | null {
+  const normalized = normalizeRunState(value);
+  if (!normalized) return null;
+  if (normalized.includes('timeout')) return language === 'en' ? 'Timeout' : '超时';
+  if (String(value || '').includes('超时')) return language === 'en' ? 'Timeout' : '超时';
+  if (normalized.includes('provider')) return language === 'en' ? 'Provider issue' : '数据源异常';
+  if (normalized.includes('history') || normalized.includes('missing') || normalized.includes('insufficient') || normalized.includes('not_enough')) {
+    return language === 'en' ? 'Insufficient data' : '数据不足';
+  }
+  if (String(value || '').includes('不可用') || String(value || '').includes('缺失') || String(value || '').includes('不足')) {
+    return language === 'en' ? 'Insufficient data' : '数据不足';
+  }
+  if (normalized.includes('candidate') || normalized.includes('shortlist') || normalized === 'empty') return language === 'en' ? 'No candidates' : '无候选';
+  if (normalized.includes('fallback')) return language === 'en' ? 'Fallback data' : '备用数据';
+  if (normalized.includes('local')) return language === 'en' ? 'Local data' : '本地数据';
+  if (normalized.includes('partial')) return language === 'en' ? 'Partial data' : '部分数据';
+  if (normalized.includes('failed') || normalized.includes('error')) return language === 'en' ? 'Failed' : '失败';
+  return compactScannerStateLabel(value, language);
+}
+
 function formatDateOnly(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   if (!value) return '--';
   const date = new Date(value);
@@ -302,7 +368,8 @@ function getSourceBadge(candidate: ScannerCandidate, runDetail: ScannerRunDetail
   const runProvider = runDetail ? getRunProviderDiagnostics(runDetail)?.quoteSourceUsed
     || getRunProviderDiagnostics(runDetail)?.snapshotSourceUsed
     || getRunProviderDiagnostics(runDetail)?.historySourceUsed : null;
-  return candidateProvider || runProvider || runDetail?.sourceSummary || (language === 'en' ? 'scanner payload' : '扫描载荷');
+  const friendly = formatFriendlyProvider(candidateProvider || runProvider || runDetail?.sourceSummary || null, language);
+  return friendly === '--' ? (language === 'en' ? 'scanner payload' : '扫描载荷') : friendly;
 }
 
 function getRunCoverageSummary(runDetail: ScannerRunDetail): ScannerCoverageSummary | null {
@@ -325,6 +392,89 @@ function getAiDiagnostics(runDetail: ScannerRunDetail): Record<string, unknown> 
   return isRecord(diagnostics.aiInterpretation) ? diagnostics.aiInterpretation : null;
 }
 
+function getRunSummaryCount(runDetail: ScannerRunDetail, key: keyof NonNullable<ScannerRunDetail['summary']>, fallback = 0): number {
+  const value = runDetail.summary?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function getRunBestCandidate(runDetail: ScannerRunDetail, language: 'zh' | 'en'): string {
+  const best = runDetail.shortlist?.[0] || runDetail.selected?.[0] || null;
+  if (!best) return language === 'en' ? 'None' : '暂无';
+  const score = best.score != null && Number.isFinite(best.score) ? ` · ${best.score}/100` : '';
+  return `${normalizeCandidateSymbol(best.symbol) || best.symbol || '--'}${score}`;
+}
+
+function getRunDataStatusLabel(runDetail: ScannerRunDetail, language: 'zh' | 'en'): string {
+  const provider = getRunProviderDiagnostics(runDetail);
+  const status = normalizeRunState(runDetail.status);
+  const failureReason = normalizeRunState(runDetail.failureReason);
+  const failedCount = getRunSummaryCount(runDetail, 'dataFailedCount', 0) + getRunSummaryCount(runDetail, 'errorCount', 0);
+  const selectedCount = getRunSummaryCount(runDetail, 'selectedCount', runDetail.shortlist?.length || 0);
+  const providerText = [
+    provider?.fallbackOccurred ? 'fallback' : null,
+    provider?.providerFailureCount ? 'provider_error' : null,
+    provider?.missingDataSymbolCount ? 'partial' : null,
+    provider?.quoteSourceUsed,
+    provider?.snapshotSourceUsed,
+    provider?.historySourceUsed,
+  ].filter(Boolean).join(' ');
+  const text = normalizeRunState([status, failureReason, providerText].join(' '));
+  if (status === 'empty' || selectedCount === 0 && runDetail.status === 'empty') return compactScannerStateLabel('no_candidates', language);
+  if (failedCount > 0 && provider?.providerFailureCount) return compactScannerStateLabel('provider_error', language);
+  if (failedCount > 0) return compactScannerStateLabel('insufficient_data', language);
+  if (text.includes('provider_error') || text.includes('provider_down')) return compactScannerStateLabel('provider_error', language);
+  if (text.includes('fallback')) return compactScannerStateLabel('fallback', language);
+  if (text.includes('local')) return compactScannerStateLabel('local_data', language);
+  if (text.includes('partial')) return compactScannerStateLabel('partial', language);
+  if (status === 'failed' || status === 'error') return compactScannerStateLabel('failed', language);
+  if (status === 'completed' || status === 'success') return language === 'en' ? 'Verified' : '已验证';
+  return compactScannerStateLabel('unknown', language);
+}
+
+function buildScannerRunSummary(
+  title: string,
+  runDetail: ScannerRunDetail | null,
+  language: 'zh' | 'en',
+): ScannerRunSummary | null {
+  if (!runDetail) return null;
+  const selectedCount = getRunSummaryCount(runDetail, 'selectedCount', runDetail.shortlist?.length || 0);
+  const rejectedCount = getRunSummaryCount(runDetail, 'rejectedCount', Math.max(0, (runDetail.evaluatedSize || 0) - selectedCount));
+  const failedCount = getRunSummaryCount(runDetail, 'dataFailedCount', 0) + getRunSummaryCount(runDetail, 'errorCount', 0);
+  return {
+    title,
+    statusLabel: compactScannerStateLabel(runDetail.status, language),
+    bestCandidate: getRunBestCandidate(runDetail, language),
+    candidateCount: selectedCount,
+    rejectedCount,
+    failedCount,
+    dataStatusLabel: getRunDataStatusLabel(runDetail, language),
+    durationLabel: formatDurationMs(runDetail.runAt, runDetail.completedAt),
+    runTimeLabel: formatTimestamp(runDetail.runAt || runDetail.completedAt, language),
+    errorSummary: sanitizeScannerErrorSummary(runDetail.failureReason, language),
+  };
+}
+
+function buildHistoryItemSummary(
+  title: string,
+  item: ScannerRunHistoryItem | null,
+  language: 'zh' | 'en',
+): ScannerRunSummary | null {
+  if (!item) return null;
+  const failedCount = item.status === 'failed' ? 1 : 0;
+  return {
+    title,
+    statusLabel: compactScannerStateLabel(item.status, language),
+    bestCandidate: item.topSymbols?.[0] || (language === 'en' ? 'None' : '暂无'),
+    candidateCount: item.shortlistSize || item.topSymbols?.length || 0,
+    rejectedCount: Math.max(0, (item.evaluatedSize || 0) - (item.shortlistSize || item.topSymbols?.length || 0)),
+    failedCount,
+    dataStatusLabel: sanitizeScannerErrorSummary(item.failureReason, language) || compactScannerStateLabel(item.status === 'empty' ? 'no_candidates' : item.status, language),
+    durationLabel: formatDurationMs(item.runAt, item.completedAt),
+    runTimeLabel: formatTimestamp(item.runAt || item.completedAt, language),
+    errorSummary: sanitizeScannerErrorSummary(item.failureReason, language),
+  };
+}
+
 function getCandidateDiagnostics(runDetail: ScannerRunDetail | null): ScannerCandidateDiagnostic[] {
   return Array.isArray(runDetail?.candidates) ? runDetail.candidates : [];
 }
@@ -343,6 +493,9 @@ function normalizeDiagnosticText(value?: string | null): string {
 function formatFriendlyProvider(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   const normalized = normalizeDiagnosticText(value);
   if (!normalized) return '--';
+  if (normalized.includes('provider down') || normalized.includes('provider error') || normalized.includes('provider failed')) return compactScannerStateLabel('provider_error', language);
+  if (normalized === 'unknown') return compactScannerStateLabel('unknown', language);
+  if (normalized.includes('fallback')) return compactScannerStateLabel('fallback', language);
   if (normalized.includes('local db') || normalized.includes('local')) return language === 'en' ? 'Local data' : '本地数据';
   if (normalized.includes('alpaca')) return 'Alpaca';
   return String(value || '').trim();
@@ -750,29 +903,34 @@ function buildRunComparison(
     const currentStatus = normalizeDiagnosticStatus(candidate.status);
     const previousStatus = previous ? normalizeDiagnosticStatus(previous.status) : null;
     const scoreDelta = previous?.score != null && candidate.score != null ? Math.round(candidate.score - previous.score) : null;
+    const rankDelta = previous?.rank != null && candidate.rank != null ? previous.rank - candidate.rank : null;
     let label = previous
-      ? (language === 'en' ? 'Still in candidates' : '继续候选')
-      : (language === 'en' ? 'New candidate' : '新增候选');
+      ? (language === 'en' ? 'Still a candidate' : '连续候选')
+      : (language === 'en' ? 'First seen' : '首次出现');
     if (!previous) {
       label = isOfficialSelected(candidate)
-        ? (language === 'en' ? 'New selected' : '新入选')
-        : (language === 'en' ? 'New candidate' : '新增候选');
+        ? (language === 'en' ? 'New candidate' : '新晋候选')
+        : (language === 'en' ? 'First seen' : '首次出现');
     } else if (previousStatus === 'selected' && currentStatus === 'selected') {
-      label = language === 'en' ? 'retained selected' : '继续入选';
+      label = language === 'en' ? 'Retained selected' : '连续入选';
     } else if (previousStatus === 'selected' && currentStatus !== 'selected') {
-      label = language === 'en' ? 'selected to rejected' : '由入选转淘汰';
+      label = language === 'en' ? 'Selected last run' : '上次入选';
     } else if (previousStatus !== 'selected' && currentStatus === 'selected') {
-      label = language === 'en' ? 'New selected' : '新入选';
+      label = language === 'en' ? 'Failed last run' : '上次未通过';
+    } else if (rankDelta != null && rankDelta > 0) {
+      label = language === 'en' ? 'Rank up' : '排名上升';
+    } else if (rankDelta != null && rankDelta < 0) {
+      label = language === 'en' ? 'Rank down' : '排名下降';
     } else if (scoreDelta != null && scoreDelta > 0) {
-      label = language === 'en' ? 'score up' : '评分上升';
+      label = language === 'en' ? 'Score up' : '评分上升';
     } else if (scoreDelta != null && scoreDelta < 0) {
-      label = language === 'en' ? 'score down' : '评分下降';
+      label = language === 'en' ? 'Score down' : '评分下降';
     } else if (isPreviewSelected(candidate, threshold) && !isPreviewSelected(previous, threshold)) {
       label = language === 'en' ? 'New preview selected' : '新预览入选';
     } else if (!isPreviewSelected(candidate, threshold) && isPreviewSelected(previous, threshold)) {
-      label = language === 'en' ? 'preview to rejected' : '由预览入选转淘汰';
+      label = language === 'en' ? 'Preview dropped' : '预览转淘汰';
     }
-    bySymbol.set(symbol, { scoreDelta, previousStatus, currentStatus, label });
+    bySymbol.set(symbol, { scoreDelta, rankDelta, previousStatus, currentStatus, label });
   });
 
   currentCandidates.slice(0, 8).forEach((candidate) => {
@@ -780,14 +938,60 @@ function buildRunComparison(
     const comparison = symbol ? bySymbol.get(symbol) : null;
     if (!symbol || !comparison) return;
     const delta = formatScoreDelta(comparison.scoreDelta);
-    chips.push([symbol, comparison.label, delta ? `score ${delta}` : null].filter(Boolean).join(' · '));
+    chips.push([symbol, comparison.label, delta ? (language === 'en' ? `score ${delta}` : `分数 ${delta}`) : null].filter(Boolean).join(' · '));
   });
   previousBySymbol.forEach((_previous, symbol) => {
     if (!symbol || currentCandidates.some((candidate) => normalizeCandidateSymbol(candidate.symbol) === symbol)) return;
-    chips.push(`${symbol} · ${language === 'en' ? 'removed candidate' : '移出候选'}`);
+    chips.push(`${symbol} · ${language === 'en' ? 'Dropped candidate' : '移出候选'}`);
   });
 
   return { previousRun, bySymbol, chips: chips.slice(0, 8) };
+}
+
+function buildRunComparisonHighlights(
+  currentRun: ScannerRunDetail | null,
+  previousRun: ScannerRunDetail | null,
+  comparisonState: ScannerComparisonState,
+  language: 'zh' | 'en',
+): ScannerLabeledValue[] {
+  if (!currentRun || !previousRun) return [];
+  const currentCount = getRunSummaryCount(currentRun, 'selectedCount', currentRun.shortlist?.length || 0);
+  const previousCount = getRunSummaryCount(previousRun, 'selectedCount', previousRun.shortlist?.length || 0);
+  const currentBest = normalizeCandidateSymbol(currentRun.shortlist?.[0]?.symbol);
+  const previousBest = normalizeCandidateSymbol(previousRun.shortlist?.[0]?.symbol);
+  const currentScore = currentRun.shortlist?.[0]?.score;
+  const previousScore = previousRun.shortlist?.[0]?.score;
+  const scoreDelta = currentScore != null && previousScore != null ? Math.round(currentScore - previousScore) : null;
+  const currentDataStatus = getRunDataStatusLabel(currentRun, language);
+  const previousDataStatus = getRunDataStatusLabel(previousRun, language);
+  const items: ScannerLabeledValue[] = [];
+
+  const countDelta = currentCount - previousCount;
+  if (countDelta > 0) {
+    items.push({ label: language === 'en' ? 'Candidates' : '候选增加', value: `+${countDelta}` });
+  } else if (countDelta < 0) {
+    items.push({ label: language === 'en' ? 'Candidates' : '候选减少', value: String(countDelta) });
+  }
+  if (currentBest && previousBest && currentBest !== previousBest) {
+    items.push({ label: language === 'en' ? 'Best changed' : '最佳候选变化', value: `${previousBest} -> ${currentBest}` });
+  }
+  if (scoreDelta != null && scoreDelta !== 0) {
+    items.push({ label: language === 'en' ? 'Score' : '分数变化', value: formatScoreDelta(scoreDelta) || '0' });
+  }
+  if (currentDataStatus !== previousDataStatus) {
+    items.push({ label: language === 'en' ? 'Data status' : '数据状态变化', value: `${previousDataStatus} -> ${currentDataStatus}` });
+  }
+  if (normalizeRunState(currentRun.status) === 'failed') {
+    items.push({ label: language === 'en' ? 'Run state' : '运行状态', value: language === 'en' ? 'Run failed' : '运行失败' });
+  } else if (currentCount === 0) {
+    items.push({ label: language === 'en' ? 'Run state' : '运行状态', value: language === 'en' ? 'No candidates' : '无候选' });
+  } else if (currentDataStatus === (language === 'en' ? 'Insufficient data' : '数据不足')) {
+    items.push({ label: language === 'en' ? 'Run state' : '运行状态', value: language === 'en' ? 'Insufficient data' : '数据不足' });
+  }
+  comparisonState.chips.slice(0, 3).forEach((chip) => {
+    items.push({ label: language === 'en' ? 'Candidate' : '候选变化', value: chip });
+  });
+  return items.slice(0, 8);
 }
 
 function findPreviousComparableRunId(
@@ -816,7 +1020,9 @@ function formatProviderDiagnostics(provider: ScannerProviderDiagnostics | null, 
     provider.snapshotSourceUsed,
     provider.historySourceUsed,
     ...(provider.providersUsed || []),
-  ].filter((item): item is string => Boolean(item));
+  ]
+    .map((item) => formatFriendlyProvider(item, language))
+    .filter((item): item is string => Boolean(item) && item !== '--');
   const sourceCopy = Array.from(new Set(sources)).slice(0, 3).join(' / ');
   const fallbackCopy = provider.fallbackOccurred
     ? (language === 'en' ? `fallback ${provider.fallbackCount}` : `降级 ${provider.fallbackCount}`)
@@ -1137,6 +1343,84 @@ function FieldChip({ label, value }: { label: string; value: string }) {
       <span className="shrink-0 text-white/36">{label}</span>
       <span className="min-w-0 truncate">{value}</span>
     </span>
+  );
+}
+
+function ScannerRunSummaryCard({ summary }: { summary: ScannerRunSummary }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-2.5" data-testid={`scanner-run-summary-${summary.title}`}>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <span className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{summary.title}</span>
+        <span className="shrink-0 rounded border border-white/8 bg-white/[0.035] px-1.5 py-0.5 text-[10px] text-white/62">{summary.statusLabel}</span>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px] sm:grid-cols-3">
+        <FieldChip label="最佳候选" value={summary.bestCandidate} />
+        <FieldChip label="候选数量" value={String(summary.candidateCount)} />
+        <FieldChip label="淘汰数量" value={String(summary.rejectedCount)} />
+        <FieldChip label="失败数量" value={String(summary.failedCount)} />
+        <FieldChip label="数据状态" value={summary.dataStatusLabel} />
+        <FieldChip label="耗时" value={summary.durationLabel} />
+      </div>
+      <p className="mt-2 truncate text-[11px] text-white/42">
+        运行时间：<span className="font-mono text-white/58">{summary.runTimeLabel}</span>
+        {summary.errorSummary ? <span className="text-rose-200/80"> · {summary.errorSummary}</span> : null}
+      </p>
+    </div>
+  );
+}
+
+function ScannerResultHistorySummary({
+  currentSummary,
+  recentSummary,
+  previousSummary,
+  comparisonItems,
+  hasHistory,
+  language,
+}: {
+  currentSummary: ScannerRunSummary | null;
+  recentSummary: ScannerRunSummary | null;
+  previousSummary: ScannerRunSummary | null;
+  comparisonItems: ScannerLabeledValue[];
+  hasHistory: boolean;
+  language: 'zh' | 'en';
+}) {
+  const visibleSummaries = [currentSummary, recentSummary, previousSummary]
+    .filter((item, index, array): item is ScannerRunSummary => Boolean(item) && array.findIndex((other) => other?.title === item?.title) === index);
+
+  return (
+    <section data-testid="scanner-result-history-summary" className="shrink-0 border-b border-white/5 px-3 py-2">
+      <div className="grid gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-2.5 backdrop-blur-md">
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'en' ? 'Result history' : '结果历史'}</h3>
+            <p className="mt-0.5 truncate text-[11px] text-white/42">{language === 'en' ? 'Current run, latest run, and previous comparable run' : '本次扫描、最近扫描与上次扫描对比'}</p>
+          </div>
+        </div>
+        {visibleSummaries.length ? (
+          <div className="grid gap-2 xl:grid-cols-3">
+            {visibleSummaries.map((summary) => <ScannerRunSummaryCard key={summary.title} summary={summary} />)}
+          </div>
+        ) : null}
+        {!hasHistory && !currentSummary ? (
+          <div data-testid="scanner-history-empty-state" className="rounded-xl border border-white/5 bg-black/20 px-3 py-2">
+            <p className="text-sm font-medium text-white/70">{language === 'en' ? 'No scan history yet' : '暂无历史扫描'}</p>
+            <p className="mt-1 text-xs text-white/38">{language === 'en' ? 'Run one scan to compare results.' : '运行一次扫描后可查看对比'}</p>
+          </div>
+        ) : null}
+        {currentSummary && !previousSummary ? (
+          <div data-testid="scanner-previous-empty-state" className="rounded-xl border border-white/5 bg-black/20 px-3 py-2 text-xs text-white/46">
+            {language === 'en' ? 'No previous scan · run once more to compare.' : '暂无历史扫描 · 运行一次扫描后可查看对比'}
+          </div>
+        ) : null}
+        {comparisonItems.length ? (
+          <div data-testid="scanner-run-comparison-compact" className="flex min-w-0 flex-wrap gap-1.5">
+            {comparisonItems.map((item) => (
+              <FieldChip key={`${item.label}-${item.value}`} label={item.label} value={item.value} />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -2432,6 +2716,22 @@ const UserScannerPage: React.FC = () => {
     () => buildRunComparison(runDetail, previousRunDetail, previewThreshold, language),
     [language, previewThreshold, previousRunDetail, runDetail],
   );
+  const currentRunSummary = useMemo(
+    () => buildScannerRunSummary(language === 'en' ? 'Current scan' : '本次扫描', runDetail, language),
+    [language, runDetail],
+  );
+  const recentRunSummary = useMemo(
+    () => buildHistoryItemSummary(language === 'en' ? 'Latest scan' : '最近扫描', historyItems[0] || null, language),
+    [historyItems, language],
+  );
+  const previousRunSummary = useMemo(
+    () => buildScannerRunSummary(language === 'en' ? 'Previous scan' : '上次扫描', previousRunDetail, language),
+    [language, previousRunDetail],
+  );
+  const comparisonHighlights = useMemo(
+    () => buildRunComparisonHighlights(runDetail, previousRunDetail, comparisonState, language),
+    [comparisonState, language, previousRunDetail, runDetail],
+  );
   const inspectorCandidate = useMemo(
     () => getSelectedDiagnosticCandidate(diagnosticCandidates, sortedCandidates, inspectorSymbol),
     [diagnosticCandidates, inspectorSymbol, sortedCandidates],
@@ -2658,6 +2958,7 @@ const UserScannerPage: React.FC = () => {
   const backtestUnavailableLabel = language === 'en'
     ? 'Backtest handoff requires a candidate symbol.'
     : '回测交接需要候选标的代码。';
+  const pageErrorSummary = pageError ? sanitizeScannerErrorSummary(pageError.message, language) || compactScannerStateLabel('failed', language) : null;
   const primarySelectedCandidate = sortedCandidates[0] || (inspectorCandidate ? diagnosticToCandidate(inspectorCandidate) : null);
   const singleSelectedSymbol = sortedCandidates.length === 1 ? normalizeCandidateSymbol(sortedCandidates[0]?.symbol) : null;
   const primaryBacktestItem = primarySelectedCandidate ? backtestItemsBySymbol[normalizeCandidateSymbol(primarySelectedCandidate.symbol) || ''] : undefined;
@@ -2859,7 +3160,22 @@ const UserScannerPage: React.FC = () => {
 	          data-testid="user-scanner-workspace"
 	          className="w-full flex-1 flex flex-col min-w-0"
 	        >
-          {pageError ? <ApiErrorAlert error={pageError} /> : null}
+	          {pageError ? (
+	            <div className="mx-3 mt-3 rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-100" role="alert" data-testid="scanner-page-error-summary">
+	              <div className="flex flex-wrap items-center gap-2">
+	                <span className="font-medium">{language === 'en' ? 'Scan did not complete' : '扫描未完成'}</span>
+	                <span className="rounded border border-rose-300/20 bg-black/20 px-1.5 py-0.5 text-[11px]">{pageErrorSummary}</span>
+	              </div>
+	              <AdvancedDisclosure
+	                testId="scanner-page-error-developer-details"
+	                title={language === 'en' ? 'Developer details' : '开发者细节'}
+	                summary={language === 'en' ? 'Raw failure message is collapsed' : '原始失败信息已折叠'}
+	                icon="more"
+	              >
+	                <ApiErrorAlert error={pageError} />
+	              </AdvancedDisclosure>
+	            </div>
+	          ) : null}
           {actionNotice ? (
             <div
               role={actionNotice.tone === 'danger' ? 'alert' : 'status'}
@@ -3251,6 +3567,15 @@ const UserScannerPage: React.FC = () => {
                 </div>
               </div>
 
+              <ScannerResultHistorySummary
+                currentSummary={currentRunSummary}
+                recentSummary={recentRunSummary}
+                previousSummary={previousRunSummary}
+                comparisonItems={comparisonHighlights}
+                hasHistory={historyItems.length > 0}
+                language={language}
+              />
+
               {runDetail ? (
                 <div className="shrink-0 border-b border-white/5 px-3 py-2" data-testid="scanner-diagnostic-summary">
                   <div data-testid="scanner-summary-counters" className="flex flex-wrap items-center gap-1.5 rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 backdrop-blur-md">
@@ -3479,10 +3804,11 @@ const UserScannerPage: React.FC = () => {
                                 <p className={`truncate font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white/86'}`}>{candidate.symbol || '--'}</p>
                                 <p className="truncate text-[11px] text-white/32">{candidate.name || candidate.symbol || '--'}</p>
                               </div>
-                              <div className={`font-mono text-xs font-semibold ${isSelectedCandidate ? 'text-emerald-100' : 'text-white/78'}`}>
-                                {candidate.score == null ? '--' : `${candidate.score}/100`}
-                                {scoreDelta ? <span className="ml-1 text-[10px] text-white/42">{scoreDelta}</span> : null}
-                              </div>
+	                              <div className={`font-mono text-xs font-semibold ${isSelectedCandidate ? 'text-emerald-100' : 'text-white/78'}`}>
+	                                {candidate.score == null ? '--' : `${candidate.score}/100`}
+	                                {scoreDelta ? <span className="ml-1 text-[10px] text-white/42">{scoreDelta}</span> : null}
+	                                {comparison?.label ? <span className="ml-1 rounded border border-white/8 bg-white/[0.035] px-1 py-0.5 font-sans text-[10px] font-medium text-white/58">{comparison.label}</span> : null}
+	                              </div>
                               <div className="min-w-0">
                                 <p className="truncate text-xs text-white/68" title={getDiagnosticReason(candidate, language)}>
                                   {friendlyReason}
@@ -3597,10 +3923,11 @@ const UserScannerPage: React.FC = () => {
                       const isTrackPending = pendingWatchlistIdentity === candidateWatchlistIdentity;
                       const backtestItem = backtestItemsBySymbol[normalizeCandidateSymbol(candidate.symbol) || ''];
                       const entryRange = getEntryRange(candidate);
-                      const targetPrice = getTargetPrice(candidate);
-                      const stopLoss = getStopLoss(candidate);
-                      const sourceBadge = getSourceBadge(candidate, runDetail, language);
-                      return (
+	                      const targetPrice = getTargetPrice(candidate);
+	                      const stopLoss = getStopLoss(candidate);
+	                      const sourceBadge = getSourceBadge(candidate, runDetail, language);
+	                      const comparison = comparisonState.bySymbol.get(normalizeCandidateSymbol(candidate.symbol) || '');
+	                      return (
                         <article
                           key={`watchlist-${candidateIdentity}`}
                           data-testid={`scanner-result-card-${candidateIdentity}`}
@@ -3629,12 +3956,17 @@ const UserScannerPage: React.FC = () => {
                                     {candidate.aiInterpretation.provider ? ` · ${candidate.aiInterpretation.provider}` : ''}
                                   </span>
                                 ) : null}
-                                {sourceBadge ? (
-                                  <span className="inline-flex max-w-[220px] truncate rounded border border-white/8 bg-white/[0.035] px-1.5 py-0.5 text-[10px] text-white/45">
-                                    {sourceBadge}
-                                  </span>
-                                ) : null}
-                                {isTracked ? (
+	                                {sourceBadge ? (
+	                                  <span className="inline-flex max-w-[220px] truncate rounded border border-white/8 bg-white/[0.035] px-1.5 py-0.5 text-[10px] text-white/45">
+	                                    {sourceBadge}
+	                                  </span>
+	                                ) : null}
+	                                {comparison?.label ? (
+	                                  <span className="inline-flex rounded border border-cyan-300/15 bg-cyan-300/[0.07] px-1.5 py-0.5 text-[10px] font-semibold text-cyan-100/80">
+	                                    {comparison.label}
+	                                  </span>
+	                                ) : null}
+	                                {isTracked ? (
                                   <span className="inline-flex rounded border border-emerald-400/20 bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-100">
                                     {language === 'en' ? 'Tracked' : '已追踪'}
                                   </span>
@@ -3963,7 +4295,7 @@ const UserScannerPage: React.FC = () => {
                   title={runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length ? (language === 'en' ? 'No selected candidates' : '本次无入选候选') : emptyStateTitle}
                   body={runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length
                     ? (language === 'en' ? 'Open Candidate pool or All to inspect rejected and data-failed candidates.' : '切换到候选池或全部查看淘汰与数据失败原因。')
-                    : pageError?.message || emptyStateBody}
+	                    : pageErrorSummary || emptyStateBody}
                 />
               )}
                     {runDetail && inspectorCandidate ? (() => {
@@ -4150,7 +4482,7 @@ const UserScannerPage: React.FC = () => {
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <PillBadge variant={marketVariant(item.market)}>{item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}</PillBadge>
-                          <PillBadge variant={statusVariant(item.status)}>{t(`scanner.status.${item.status}`)}</PillBadge>
+	                          <PillBadge variant={statusVariant(item.status)}>{compactScannerStateLabel(item.status, language)}</PillBadge>
                           {item.watchlistDate ? <PillBadge variant="history">{formatDateOnly(item.watchlistDate, language)}</PillBadge> : null}
                           <PillBadge variant="history">{item.profileLabel || item.profile}</PillBadge>
                         </div>
