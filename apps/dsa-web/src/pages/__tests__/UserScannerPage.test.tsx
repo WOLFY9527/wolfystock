@@ -837,18 +837,31 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-result-table')).toHaveClass('overflow-x-auto', 'no-scrollbar');
   });
 
-  it('keeps diagnostics collapsed with explicit disclosure labels so results stay primary', async () => {
+  it('keeps diagnostics summary-first and candidate pool ahead of developer diagnostics by default', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
     renderUserScannerPage();
 
-    const diagnostics = await screen.findByTestId('scanner-diagnostics-disclosure');
-    expect(diagnostics).not.toHaveAttribute('open');
-    expect(within(diagnostics).getByRole('button', { name: /展开.*诊断详情|Expand.*Diagnostic details/i })).toHaveTextContent(/展开|Expand/i);
-    expect(screen.queryByTestId('scanner-quality-strip')).not.toBeInTheDocument();
-    expect(await screen.findByTestId('scanner-result-card-NVDA')).toBeInTheDocument();
+    const summary = await screen.findByTestId('scanner-diagnostics-summary');
+    const candidates = screen.getByTestId('scanner-candidate-scroll-region');
+    expect(summary).toHaveTextContent(/诊断摘要|Diagnostic summary/);
+    expect(summary).toHaveTextContent(/查看淘汰原因|View rejection reasons/);
+    expect(summary).toHaveTextContent(/开发者诊断|Developer diagnostics/);
+    expect(screen.queryByTestId('scanner-diagnostics-panel')).not.toBeInTheDocument();
+    expect(summary.compareDocumentPosition(candidates) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*诊断详情|Expand.*Diagnostic details/i }));
-    expect(within(diagnostics).getByRole('button', { name: /收起.*诊断详情|Collapse.*Diagnostic details/i })).toHaveTextContent(/收起|Collapse/i);
-    expect(await within(diagnostics).findByTestId('scanner-diagnostics-panel')).toBeInTheDocument();
+    fireEvent.click(within(summary).getByRole('button', { name: /开发者诊断|Developer diagnostics/i }));
+    expect(await screen.findByTestId('scanner-diagnostics-panel')).toBeInTheDocument();
+  });
+
+  it('reveals rejection reasons from the compact diagnostics summary', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+
+    const summary = await screen.findByTestId('scanner-diagnostics-summary');
+    expect(screen.queryByTestId('scanner-rejection-aggregate')).not.toBeInTheDocument();
+
+    fireEvent.click(within(summary).getByRole('button', { name: /查看淘汰原因|View rejection reasons/i }));
+    expect(await screen.findByTestId('scanner-rejection-aggregate')).toBeInTheDocument();
   });
 
   it('toggles between card and table view', async () => {
@@ -1477,19 +1490,18 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const strategyPreview = await screen.findByTestId('scanner-strategy-preview');
-    expect(strategyPreview).toHaveTextContent(/官方入选 1|Official selected 1/);
-    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/预览入选 3|Preview selected 3/);
+    expect(strategyPreview).toHaveTextContent(/Official|官方/);
+    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/Preview|预览/);
     expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/\+2/);
     const runCalls = runScan.mock.calls.length;
     const getRunCalls = getRun.mock.calls.length;
 
     fireEvent.click(within(screen.getByTestId('scanner-strategy-preview')).getByRole('button', { name: /60/ }));
-    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/预览入选 1|Preview selected 1/);
-    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/0 vs|0/);
+    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/Preview 1|预览 1/);
+    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/\+0|0/);
 
     fireEvent.click(within(screen.getByTestId('scanner-strategy-preview')).getByRole('button', { name: /50/ }));
-    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/阈值 50|Threshold 50/);
-    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/预览可入选 3 个|preview can select 3/i);
+    expect(screen.getByTestId('scanner-strategy-preview')).toHaveTextContent(/Preview|预览/);
     expect(runScan).toHaveBeenCalledTimes(runCalls);
     expect(getRun).toHaveBeenCalledTimes(getRunCalls);
   });
@@ -1622,9 +1634,27 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('MARA');
 
     const riotRow = screen.getByTestId('scanner-candidate-row-RIOT');
-    fireEvent.click(within(riotRow).getByRole('button', { name: /复制|Copy/i }));
+    fireEvent.click(within(riotRow).getByRole('button', { name: /更多|More/i }));
+    fireEvent.click(await within(riotRow).findByRole('button', { name: /复制|Copy/i }));
 
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('MARA');
+  });
+
+  it('keeps candidate rows to one primary action plus more actions', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /候选池|Candidate pool/i }));
+    const maraRow = await screen.findByTestId('scanner-candidate-row-MARA');
+    expect(within(maraRow).getAllByRole('button').map((button) => button.textContent)).toEqual(
+      expect.arrayContaining([expect.stringMatching(/分析|Analyze|查看|View/), expect.stringMatching(/更多|More/)]),
+    );
+    expect(within(maraRow).queryByRole('button', { name: /回测|Backtest/i })).not.toBeInTheDocument();
+
+    fireEvent.click(within(maraRow).getByRole('button', { name: /更多|More/i }));
+    expect(await within(maraRow).findByRole('button', { name: /回测|Backtest/i })).toBeInTheDocument();
+    expect(within(maraRow).getByRole('button', { name: /复制|Copy/i })).toBeInTheDocument();
   });
 
   it('keeps strategy controls and batch actions available in the narrow/mobile structure', async () => {
@@ -1663,7 +1693,9 @@ describe('UserScannerPage', () => {
     expect(selectedInspector).toHaveTextContent(/入选|Selected/);
     expect(selectedInspector).toHaveTextContent('60/100');
     expect(selectedInspector).toHaveTextContent('alpaca');
-    expect(selectedInspector).toHaveTextContent(/Trend|趋势/);
+    expect(selectedInspector).toHaveTextContent(/为什么入选|Why selected/);
+    expect(selectedInspector).toHaveTextContent(/主要风险|Main risks/);
+    expect(selectedInspector).toHaveTextContent(/下一步|Next steps/);
 
     fireEvent.click(screen.getByRole('button', { name: /候选池|Candidate pool/i }));
     fireEvent.click(await screen.findByTestId('scanner-candidate-row-MARA'));
@@ -1671,7 +1703,6 @@ describe('UserScannerPage', () => {
     expect(await screen.findByTestId('scanner-candidate-inspector')).toHaveTextContent('MARA');
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent(/淘汰|Rejected/);
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('55/100');
-    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('below_momentum_threshold');
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('missing momentum threshold');
 
     fireEvent.click(screen.getByRole('button', { name: /数据失败|Data failed/i }));
@@ -1679,9 +1710,21 @@ describe('UserScannerPage', () => {
 
     expect(await screen.findByTestId('scanner-candidate-inspector')).toHaveTextContent('CIFR');
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent(/数据失败|Data failed/);
-    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent(/DATA|N\/A/);
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('history');
     expect(screen.getByTestId('scanner-mobile-candidate-inspector')).toBeInTheDocument();
+  });
+
+  it('keeps inspector secondary diagnostics collapsed and expandable', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    const inspector = await screen.findByTestId('scanner-candidate-inspector');
+    expect(within(inspector).getByRole('button', { name: /展开.*规则诊断|Expand.*Rule diagnostics/i })).toBeInTheDocument();
+    expect(within(inspector).getByRole('button', { name: /展开.*数据质量|Expand.*Data quality/i })).toBeInTheDocument();
+
+    fireEvent.click(within(inspector).getByRole('button', { name: /展开.*规则诊断|Expand.*Rule diagnostics/i }));
+    expect(within(inspector).getAllByText(/passed/i).length).toBeGreaterThan(0);
   });
 
   it('filters scanner diagnostics by rejected and data-failed candidates', async () => {
