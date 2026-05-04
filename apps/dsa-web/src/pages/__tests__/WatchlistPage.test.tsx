@@ -302,14 +302,52 @@ describe('WatchlistPage', () => {
     expect(listWatchlistItems).toHaveBeenCalledTimes(1);
   });
 
-  it('shows summary totals for total, markets, scanner source, and recently added candidates', async () => {
+  it('shows intelligence coverage summary totals', async () => {
     renderWatchlist();
 
     await screen.findByTestId('watchlist-row-NVDA');
-    expect(screen.getByText('追踪总数').nextElementSibling).toHaveTextContent('3');
-    expect(screen.getByText('覆盖市场').nextElementSibling).toHaveTextContent('3');
-    expect(screen.getByText('扫描来源').nextElementSibling).toHaveTextContent('3');
-    expect(screen.getByText('近期新增').nextElementSibling).toHaveTextContent('2');
+    expect(screen.getByText('观察标的数').nextElementSibling).toHaveTextContent('3');
+    expect(screen.getByText('已有扫描结果').nextElementSibling).toHaveTextContent('3');
+    expect(screen.getByText('已有回测结果').nextElementSibling).toHaveTextContent('3');
+    expect(screen.getByText('情报过期').nextElementSibling).toHaveTextContent('0');
+    expect(screen.getByText('失败 / 无数据').nextElementSibling).toHaveTextContent('0');
+    expect(screen.getByText('最近更新时间').nextElementSibling).toHaveTextContent('05/01');
+  });
+
+  it('renders the intelligence command bar, coverage summary, and selected scope controls', async () => {
+    renderWatchlist();
+    const row = await screen.findByTestId('watchlist-row-NVDA');
+
+    expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('扫描当前筛选');
+    expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('回测当前筛选');
+    expect(screen.getByRole('button', { name: '仅选中' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '清除选择' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '刷新情报' })).toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-action-scope')).toHaveTextContent('当前筛选 3 个标的');
+    expect(screen.getByText('观察标的数').nextElementSibling).toHaveTextContent('3');
+    expect(screen.getByText('已有扫描结果').nextElementSibling).toHaveTextContent('3');
+    expect(screen.getByText('已有回测结果').nextElementSibling).toHaveTextContent('3');
+    expect(screen.getByText('情报过期').nextElementSibling).toHaveTextContent('0');
+    expect(screen.getByText('失败 / 无数据').nextElementSibling).toHaveTextContent('0');
+    expect(screen.getByText('最近更新时间').nextElementSibling).toHaveTextContent('05/01');
+
+    fireEvent.click(within(row).getByRole('checkbox', { name: '选择 NVDA' }));
+
+    expect(screen.getByRole('button', { name: '仅选中' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('watchlist-action-scope')).toHaveTextContent('已选中 1 个标的');
+    expect(screen.getByRole('button', { name: '清除选择' })).not.toBeDisabled();
+  });
+
+  it('disables intelligence actions for an empty filtered set with a compact reason', async () => {
+    renderWatchlist();
+    await screen.findByTestId('watchlist-row-NVDA');
+
+    fireEvent.change(screen.getByLabelText('搜索'), { target: { value: 'ZZZZ' } });
+
+    expect(screen.getByTestId('watchlist-action-scope')).toHaveTextContent('当前筛选为空');
+    expect(screen.getByRole('button', { name: /扫描当前筛选/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /回测当前筛选/ })).toBeDisabled();
+    expect(screen.getByText('无匹配标的')).toBeInTheDocument();
   });
 
   it('filters rows by symbol or name search', async () => {
@@ -355,15 +393,63 @@ describe('WatchlistPage', () => {
     expect(within(rows[2] as HTMLElement).getByText('600519')).toBeInTheDocument();
   });
 
-  it('renders compact scanner, strategy simulation, and backtest intelligence chips', async () => {
+  it('renders compact scanner, strategy simulation, and backtest intelligence chips in Chinese', async () => {
     renderWatchlist();
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
     expect(within(row).getByText('分数 94.0')).toBeInTheDocument();
-    expect(within(row).getByText(/扫描 入选/)).toBeInTheDocument();
+    expect(within(row).getByText('已验证')).toBeInTheDocument();
+    expect(within(row).getByText('排名 #1')).toBeInTheDocument();
+    expect(within(row).getByText('Latest scanner score.')).toBeInTheDocument();
+    expect(within(row).getAllByText('今日').length).toBeGreaterThan(0);
     expect(within(row).getByText(/HIST \+3.2% · HIT 56%/)).toBeInTheDocument();
-    expect(within(row).getByText(/BT \+24.6% · DD -8.2% · SH 1.34/)).toBeInTheDocument();
+    expect(within(row).getByText('已回测')).toBeInTheDocument();
+    expect(within(row).getByText(/收益 \+24.6% · 回撤 -8.2% · Sharpe 1.34 · 交易 6/)).toBeInTheDocument();
     expect(within(row).getByRole('link', { name: /结果 33/ })).toHaveAttribute('href', '/zh/backtest/results/33');
+  });
+
+  it('maps raw scanner and backtest failure statuses to compact Chinese labels', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          id: 9,
+          symbol: 'MARA',
+          scannerScore: null,
+          scannerRank: null,
+          lastScoredAt: null,
+          scoreStatus: 'provider_down',
+          scoreError: 'provider_down critical debug payload',
+          intelligence: {
+            scanner: {
+              lastScore: null,
+              lastRank: null,
+              status: 'provider_error',
+              reason: 'provider_down critical debug payload',
+              lastScannedAt: null,
+            },
+            strategySimulation: { status: 'insufficient_history' },
+            backtest: {
+              lastResultId: null,
+              totalReturnPct: null,
+              maxDrawdownPct: null,
+              sharpe: null,
+              tradeCount: null,
+              testedAt: null,
+            },
+          },
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-MARA');
+    expect(within(row).getByText('扫描失败')).toBeInTheDocument();
+    expect(within(row).getByText('样本不足')).toBeInTheDocument();
+    expect(within(row).getByText('时间未知')).toBeInTheDocument();
+    expect(within(row).getByText('服务暂不可用')).toBeInTheDocument();
+    expect(row).not.toHaveTextContent(/provider_down|provider_error|unknown|critical|debug/i);
+    expect(within(row).queryByText(/收益/)).not.toBeInTheDocument();
   });
 
   it('renders compact empty intelligence for old payloads without evidence', async () => {
@@ -443,6 +529,8 @@ describe('WatchlistPage', () => {
     fireEvent.click(batchButton);
 
     await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('watchlist-batch-progress')).toHaveTextContent('1 / 1');
+    expect(screen.getByTestId('watchlist-batch-progress')).toHaveTextContent('成功 1');
     expect(runRuleBacktest).toHaveBeenCalledWith(expect.objectContaining({
       code: 'NVDA',
       strategyText: '观察列表单标的回测',
@@ -453,8 +541,23 @@ describe('WatchlistPage', () => {
       waitForCompletion: true,
     }));
     const row = await screen.findByTestId('watchlist-row-NVDA');
-    expect(within(row).getByText(/BT \+14.2% · DD -3.2% · SH 1.50/)).toBeInTheDocument();
+    expect(within(row).getByText(/收益 \+14.2% · 回撤 -3.2% · Sharpe 1.50 · 交易 5/)).toBeInTheDocument();
     expect(within(row).getByRole('link', { name: /结果 701/ })).toHaveAttribute('href', '/zh/backtest/results/701');
+  });
+
+  it('shows compact Chinese failure reasons during failed batch actions', async () => {
+    runRuleBacktest.mockRejectedValue(new Error('provider_error timeout critical stack'));
+    renderWatchlist();
+    await screen.findByTestId('watchlist-row-NVDA');
+
+    fireEvent.change(screen.getByLabelText('市场'), { target: { value: 'us' } });
+    fireEvent.click(screen.getByRole('button', { name: /回测当前筛选/ }));
+
+    await waitFor(() => expect(screen.getByTestId('watchlist-batch-progress')).toHaveTextContent('失败 1'));
+    const row = screen.getByTestId('watchlist-row-NVDA');
+    expect(within(row).getByText('服务暂不可用')).toBeInTheDocument();
+    expect(within(row).getByText('开发者细节')).toBeInTheDocument();
+    expect(row).not.toHaveTextContent(/provider_error|critical|stack/i);
   });
 
   it('keeps the filter controls overflow-safe with long labels', async () => {

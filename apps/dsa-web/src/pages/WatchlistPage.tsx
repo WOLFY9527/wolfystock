@@ -2,6 +2,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
+  CheckSquare,
   Clipboard,
   Copy,
   ExternalLink,
@@ -27,9 +28,21 @@ type SortKey = 'newest' | 'scannerScore' | 'backtestReturn' | 'historicalHitRate
 type EvidenceFilter = 'all' | 'hasScanner' | 'hasBacktest' | 'scannerSelected' | 'staleIntelligence';
 type BatchStatus = 'requested' | 'running' | 'completed' | 'failed' | 'skipped';
 type Notice = { tone: 'success' | 'warning' | 'danger'; message: string } | null;
+type FailureReason = '数据不足' | '行情缺失' | '服务暂不可用' | '回测失败' | '扫描失败' | '超时' | '未知错误';
+type BatchFailure = { label: FailureReason; detail?: string };
+type BatchProgress = {
+  kind: 'scan' | 'backtest';
+  total: number;
+  completed: number;
+  succeeded: number;
+  failed: number;
+  currentSymbol: string | null;
+  failures: Record<string, BatchFailure>;
+} | null;
 
 const ACTION_BUTTON_CLASS = 'inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-white/70 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45';
 const ICON_BUTTON_CLASS = 'inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/55 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45';
+const CHIP_CLASS = 'rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-white/60';
 
 function normalizeText(value?: string | null): string {
   return String(value || '').trim();
@@ -96,7 +109,7 @@ function getTime(value?: string | null): number {
 }
 
 function getScannerScore(item: WatchlistItem): number | null {
-  return item.intelligence?.scanner?.lastScore ?? item.scannerScore ?? null;
+  return item.scannerScore ?? item.intelligence?.scanner?.lastScore ?? null;
 }
 
 function getScannerStatus(item: WatchlistItem): string {
@@ -105,6 +118,14 @@ function getScannerStatus(item: WatchlistItem): string {
 
 function getBacktestReturn(item: WatchlistItem): number | null {
   return item.intelligence?.backtest?.totalReturnPct ?? null;
+}
+
+function hasBacktestMetrics(item: WatchlistItem): boolean {
+  const backtest = item.intelligence?.backtest;
+  return typeof backtest?.totalReturnPct === 'number'
+    || typeof backtest?.maxDrawdownPct === 'number'
+    || typeof backtest?.sharpe === 'number'
+    || typeof backtest?.tradeCount === 'number';
 }
 
 function getHitRate(item: WatchlistItem): number | null {
@@ -116,12 +137,75 @@ function hasScannerEvidence(item: WatchlistItem): boolean {
 }
 
 function hasBacktestEvidence(item: WatchlistItem): boolean {
-  return item.intelligence?.backtest?.lastResultId != null;
+  return item.intelligence?.backtest?.lastResultId != null || hasBacktestMetrics(item);
 }
 
 function isStaleIntelligence(item: WatchlistItem): boolean {
   return normalizeText(item.scoreStatus).toLowerCase() === 'stale'
     || normalizeText(item.intelligence?.strategySimulation?.status).toLowerCase() === 'partial';
+}
+
+function hasFailureOrNoData(item: WatchlistItem): boolean {
+  const scannerStatus = normalizeText(item.intelligence?.scanner?.status || item.scoreStatus).toLowerCase();
+  const simulationStatus = normalizeText(item.intelligence?.strategySimulation?.status).toLowerCase();
+  return ['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical'].includes(scannerStatus)
+    || ['insufficient_history', 'data_failed', 'no_data', 'missing_data', 'partial'].includes(simulationStatus)
+    || (!hasScannerEvidence(item) && !hasBacktestEvidence(item));
+}
+
+function getLatestIntelligenceTime(item: WatchlistItem): string | null {
+  const values = [
+    item.intelligence?.backtest?.testedAt,
+    item.intelligence?.scanner?.lastScannedAt,
+    item.lastScoredAt,
+    item.updatedAt,
+  ].filter(Boolean) as string[];
+  return values.sort((left, right) => getTime(right) - getTime(left))[0] || null;
+}
+
+function formatFreshness(value?: string | null): string {
+  if (!value) return '时间未知';
+  const parsed = new Date(value).getTime();
+  if (Number.isNaN(parsed)) return '时间未知';
+  const ageMs = Date.now() - parsed;
+  if (ageMs < 0) return '刚刚';
+  if (ageMs <= 60 * 60 * 1000) return '刚刚';
+  if (ageMs <= 24 * 60 * 60 * 1000) return '今日';
+  if (ageMs <= 7 * 24 * 60 * 60 * 1000) return '今日';
+  return '已过期';
+}
+
+function formatScannerStatus(item: WatchlistItem): string {
+  const status = normalizeText(item.intelligence?.scanner?.status || item.scoreStatus).toLowerCase();
+  const simulationStatus = normalizeText(item.intelligence?.strategySimulation?.status).toLowerCase();
+  if (['selected', 'verified', 'ready', 'fresh'].includes(status)) return '已验证';
+  if (['preview', 'candidate', 'passed'].includes(status)) return '通过筛选';
+  if (['rejected', 'not_selected', 'failed_filter'].includes(status)) return '未通过';
+  if (['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical'].includes(status)) return '扫描失败';
+  if (simulationStatus === 'insufficient_history' || status === 'insufficient_history') return '数据不足';
+  if (!hasScannerEvidence(item)) return '未扫描';
+  return '通过筛选';
+}
+
+function formatBacktestStatus(item: WatchlistItem, failure?: BatchFailure): string {
+  if (failure) return failure.label;
+  const simulationStatus = normalizeText(item.intelligence?.strategySimulation?.status).toLowerCase();
+  if (hasBacktestEvidence(item)) return '已回测';
+  if (simulationStatus === 'insufficient_history') return '样本不足';
+  if (['data_failed', 'no_data', 'missing_data'].includes(simulationStatus)) return '数据缺失';
+  return '未回测';
+}
+
+function sanitizeFailureReason(error: unknown, fallback: FailureReason): BatchFailure {
+  const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  const value = raw.toLowerCase();
+  let label: FailureReason = fallback;
+  if (value.includes('provider') || value.includes('service') || value.includes('unavailable') || value.includes('down')) label = '服务暂不可用';
+  else if (value.includes('timeout') || value.includes('timed out')) label = '超时';
+  else if (value.includes('quote') || value.includes('market') || value.includes('missing')) label = '行情缺失';
+  else if (value.includes('insufficient') || value.includes('sample')) label = '数据不足';
+  else if (!raw) label = fallback;
+  return { label, detail: raw || undefined };
 }
 
 function formatDateInput(date: Date): string {
@@ -192,6 +276,12 @@ function getCopy(language: 'zh' | 'en') {
       marketsRepresented: 'Markets represented',
       scannerSourced: 'Scanner-sourced',
       recentlyAdded: 'Recently added',
+      trackedSymbols: 'Tracked symbols',
+      scannerCoverage: 'Scanner results',
+      backtestCoverage: 'Backtest results',
+      staleCoverage: 'Stale intelligence',
+      failureCoverage: 'Failed / no data',
+      latestUpdate: 'Latest update',
       search: 'Search',
       searchPlaceholder: 'Symbol or name',
       market: 'Market',
@@ -213,6 +303,15 @@ function getCopy(language: 'zh' | 'en') {
       intelligence: 'Intelligence',
       noEvidence: 'No strategy evidence',
       batchBacktestFilter: 'Backtest current filter',
+      batchScanFilter: 'Scan current filter',
+      selectedOnly: 'Selected only',
+      clearSelection: 'Clear selection',
+      refreshIntelligence: 'Refresh intelligence',
+      scopeSelected: 'selected symbols',
+      scopeFiltered: 'filtered symbols',
+      emptyFilteredSet: 'Current filter is empty',
+      noMatchedSymbols: 'No matching symbols',
+      scanComplete: 'Scanner refresh completed.',
       batchBacktesting: 'Backtesting...',
       batchBacktestComplete: 'Watchlist backtest completed.',
       batchBacktestLabel: 'Single-symbol watchlist backtest',
@@ -262,6 +361,12 @@ function getCopy(language: 'zh' | 'en') {
     marketsRepresented: '覆盖市场',
     scannerSourced: '扫描来源',
     recentlyAdded: '近期新增',
+    trackedSymbols: '观察标的数',
+    scannerCoverage: '已有扫描结果',
+    backtestCoverage: '已有回测结果',
+    staleCoverage: '情报过期',
+    failureCoverage: '失败 / 无数据',
+    latestUpdate: '最近更新时间',
     search: '搜索',
     searchPlaceholder: '代码或名称',
     market: '市场',
@@ -283,6 +388,15 @@ function getCopy(language: 'zh' | 'en') {
     intelligence: '策略证据',
     noEvidence: '暂无策略证据',
     batchBacktestFilter: '回测当前筛选',
+    batchScanFilter: '扫描当前筛选',
+    selectedOnly: '仅选中',
+    clearSelection: '清除选择',
+    refreshIntelligence: '刷新情报',
+    scopeSelected: '已选中',
+    scopeFiltered: '当前筛选',
+    emptyFilteredSet: '当前筛选为空',
+    noMatchedSymbols: '无匹配标的',
+    scanComplete: '扫描刷新完成。',
     batchBacktesting: '回测中...',
     batchBacktestComplete: '观察列表回测完成。',
     batchBacktestLabel: '观察列表单标的回测',
@@ -347,8 +461,13 @@ const WatchlistPage: React.FC = () => {
   const [refreshStatus, setRefreshStatus] = useState<{ enabled: boolean; usTime: string; cnTime: string; hkTime: string } | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [batchStatuses, setBatchStatuses] = useState<Record<string, BatchStatus>>({});
+  const [batchFailures, setBatchFailures] = useState<Record<string, BatchFailure>>({});
+  const [batchProgress, setBatchProgress] = useState<BatchProgress>(null);
   const [isBatchBacktesting, setIsBatchBacktesting] = useState(false);
+  const [isBatchScanning, setIsBatchScanning] = useState(false);
   const [backtestSessionKeys, setBacktestSessionKeys] = useState<Set<string>>(() => new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const [useSelectedScope, setUseSelectedScope] = useState(false);
 
   useEffect(() => {
     document.title = language === 'en' ? 'Watchlist - WolfyStock' : '观察列表 - WolfyStock';
@@ -424,11 +543,17 @@ const WatchlistPage: React.FC = () => {
   const summary = useMemo(() => {
     const markets = new Set(items.map((item) => normalizeText(item.market).toLowerCase()).filter(Boolean));
     const scannerSourced = items.filter((item) => normalizeText(item.source).toLowerCase() === 'scanner').length;
+    const latestTime = items.map(getLatestIntelligenceTime).filter(Boolean).sort((left, right) => getTime(right) - getTime(left))[0] || null;
     return {
       total: items.length,
       markets: markets.size,
       scannerSourced,
       recent: items.filter(isRecentlyAdded).length,
+      scannerResults: items.filter(hasScannerEvidence).length,
+      backtestResults: items.filter(hasBacktestEvidence).length,
+      stale: items.filter(isStaleIntelligence).length,
+      failedOrNoData: items.filter(hasFailureOrNoData).length,
+      latestTime,
     };
   }, [items]);
 
@@ -469,6 +594,40 @@ const WatchlistPage: React.FC = () => {
       return getItemTime(right) - getItemTime(left);
     });
   }, [contextFilter, evidenceFilter, items, marketFilter, query, sortKey, sourceFilter]);
+
+  useEffect(() => {
+    setSelectedIds((current) => {
+      const validIds = new Set(items.map((item) => item.id));
+      const next = new Set(Array.from(current).filter((id) => validIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [items]);
+
+  useEffect(() => {
+    if (selectedIds.size === 0 && useSelectedScope) {
+      setUseSelectedScope(false);
+    }
+  }, [selectedIds.size, useSelectedScope]);
+
+  const selectedItems = useMemo(
+    () => filteredItems.filter((item) => selectedIds.has(item.id)),
+    [filteredItems, selectedIds],
+  );
+  const actionItems = useSelectedScope && selectedItems.length > 0 ? selectedItems : filteredItems;
+  const actionScopeLabel = actionItems.length === 0
+    ? copy.emptyFilteredSet
+    : `${useSelectedScope && selectedItems.length > 0 ? copy.scopeSelected : copy.scopeFiltered} ${actionItems.length} ${language === 'zh' ? '个标的' : 'symbols'}`;
+  const isActionDisabled = actionItems.length === 0 || isBatchBacktesting || isBatchScanning;
+
+  const toggleSelected = useCallback((item: WatchlistItem) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(item.id)) next.delete(item.id);
+      else next.add(item.id);
+      setUseSelectedScope(next.size > 0);
+      return next;
+    });
+  }, []);
 
   const handleAnalyze = useCallback(async (item: WatchlistItem) => {
     setPendingAnalyzeId(item.id);
@@ -522,28 +681,86 @@ const WatchlistPage: React.FC = () => {
     }
   }, [copy.clipboardUnavailable, copy.copied, copy.copyFailed]);
 
-  const handleRefreshScores = useCallback(async () => {
-    setRefreshingScores(true);
+  const handleRefreshIntelligence = useCallback(async () => {
     setNotice(null);
     try {
-      const response = await watchlistApi.refreshScores({ force: true });
-      const listResponse = await watchlistApi.listWatchlistItems();
+      const [listResponse, statusResponse] = await Promise.all([
+        watchlistApi.listWatchlistItems(),
+        watchlistApi.getRefreshStatus().catch(() => null),
+      ]);
       setItems(listResponse.items || []);
-      setNotice({
-        tone: response.failedCount > 0 ? 'warning' : 'success',
-        message: `${copy.scoreRefreshComplete} ${response.updatedCount}/${response.updatedCount + response.skippedCount + response.failedCount}`,
-      });
+      setRefreshStatus(statusResponse);
     } catch (err) {
       setNotice({ tone: 'danger', message: getParsedApiError(err).message });
+    }
+  }, []);
+
+  const handleRefreshScores = useCallback(async (targetItems?: WatchlistItem[]) => {
+    const targets = targetItems || items;
+    if (targets.length === 0 || isBatchScanning) return;
+    setRefreshingScores(true);
+    setIsBatchScanning(true);
+    setBatchFailures({});
+    setBatchProgress({
+      kind: 'scan',
+      total: targets.length,
+      completed: 0,
+      succeeded: 0,
+      failed: 0,
+      currentSymbol: targets[0]?.symbol || null,
+      failures: {},
+    });
+    setNotice(null);
+    try {
+      const response = await watchlistApi.refreshScores(targetItems ? {
+        force: true,
+        symbols: targets.map((item) => item.symbol).filter(Boolean),
+      } : { force: true });
+      const listResponse = await watchlistApi.listWatchlistItems();
+      const failures = Object.fromEntries(
+        (response.results || [])
+          .filter((result) => normalizeText(result.status).toLowerCase() === 'failed')
+          .map((result) => [result.symbol, sanitizeFailureReason(result.message || '', '扫描失败')]),
+      );
+      setItems(listResponse.items || []);
+      setBatchFailures(failures);
+      setBatchProgress({
+        kind: 'scan',
+        total: targets.length,
+        completed: targets.length,
+        succeeded: Math.max(0, targets.length - Object.keys(failures).length),
+        failed: Object.keys(failures).length,
+        currentSymbol: null,
+        failures,
+      });
+      setNotice({
+        tone: response.failedCount > 0 ? 'warning' : 'success',
+        message: `${targetItems ? copy.scanComplete : copy.scoreRefreshComplete} ${response.updatedCount}/${response.updatedCount + response.skippedCount + response.failedCount}`,
+      });
+    } catch (err) {
+      const failure = sanitizeFailureReason(err, '扫描失败');
+      const failures = Object.fromEntries(targets.map((item) => [item.symbol, failure]));
+      setBatchFailures(failures);
+      setBatchProgress({
+        kind: 'scan',
+        total: targets.length,
+        completed: targets.length,
+        succeeded: 0,
+        failed: targets.length,
+        currentSymbol: null,
+        failures,
+      });
+      setNotice({ tone: 'danger', message: failure.label });
     } finally {
       setRefreshingScores(false);
+      setIsBatchScanning(false);
     }
-  }, [copy.scoreRefreshComplete]);
+  }, [copy.scanComplete, copy.scoreRefreshComplete, isBatchScanning, items]);
 
   const handleBatchBacktestCurrentFilter = useCallback(async () => {
     if (isBatchBacktesting) return;
     const uniqueItems = Array.from(
-      new Map(filteredItems.map((item) => [normalizeText(item.symbol).toUpperCase(), item])).values(),
+      new Map(actionItems.map((item) => [normalizeText(item.symbol).toUpperCase(), item])).values(),
     ).filter((item) => normalizeText(item.symbol));
     if (uniqueItems.length === 0) return;
 
@@ -563,6 +780,16 @@ const WatchlistPage: React.FC = () => {
 
     setIsBatchBacktesting(true);
     setNotice(null);
+    setBatchFailures({});
+    setBatchProgress({
+      kind: 'backtest',
+      total: pendingItems.length,
+      completed: 0,
+      succeeded: 0,
+      failed: 0,
+      currentSymbol: pendingItems[0]?.symbol || null,
+      failures: {},
+    });
     setBatchStatuses((current) => ({
       ...current,
       ...Object.fromEntries(pendingItems.map((item) => [item.symbol, 'requested' as BatchStatus])),
@@ -576,6 +803,7 @@ const WatchlistPage: React.FC = () => {
       const key = `${symbol}:${startDate}:${endDate}:watchlist-default`;
       setBacktestSessionKeys((current) => new Set(current).add(key));
       setBatchStatuses((current) => ({ ...current, [item.symbol]: 'running' }));
+      setBatchProgress((current) => current ? { ...current, currentSymbol: item.symbol } : current);
       try {
         const run = await backtestApi.runRuleBacktest({
           code: item.symbol,
@@ -602,9 +830,24 @@ const WatchlistPage: React.FC = () => {
             : row
         )));
         setBatchStatuses((current) => ({ ...current, [item.symbol]: 'completed' }));
-      } catch {
+        setBatchProgress((current) => current ? {
+          ...current,
+          completed: current.completed + 1,
+          succeeded: current.succeeded + 1,
+          currentSymbol: null,
+        } : current);
+      } catch (err) {
         failed += 1;
+        const failure = sanitizeFailureReason(err, '回测失败');
+        setBatchFailures((current) => ({ ...current, [item.symbol]: failure }));
         setBatchStatuses((current) => ({ ...current, [item.symbol]: 'failed' }));
+        setBatchProgress((current) => current ? {
+          ...current,
+          completed: current.completed + 1,
+          failed: current.failed + 1,
+          currentSymbol: null,
+          failures: { ...current.failures, [item.symbol]: failure },
+        } : current);
       }
     };
 
@@ -625,7 +868,7 @@ const WatchlistPage: React.FC = () => {
     } finally {
       setIsBatchBacktesting(false);
     }
-  }, [backtestSessionKeys, copy.batchBacktestComplete, copy.batchBacktestLabel, filteredItems, isBatchBacktesting]);
+  }, [actionItems, backtestSessionKeys, copy.batchBacktestComplete, copy.batchBacktestLabel, isBatchBacktesting]);
 
   if (isGuest) {
     return (
@@ -642,8 +885,8 @@ const WatchlistPage: React.FC = () => {
       : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100';
 
   return (
-    <main className="w-full flex-1 px-4 py-6 md:px-8 xl:px-12" data-testid="watchlist-page">
-      <div className="flex w-full flex-col gap-5">
+    <main className="w-full flex-1 px-4 py-6 xl:px-8" data-testid="watchlist-page">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
         <header className="flex flex-col gap-3 rounded-[24px] border border-white/5 bg-white/[0.02] px-5 py-5 backdrop-blur-sm md:flex-row md:items-end md:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-bold tracking-[0.24em] text-white/35">{language === 'zh' ? '扫描候选' : 'Scanner candidates'}</p>
@@ -659,16 +902,18 @@ const WatchlistPage: React.FC = () => {
           </Link>
         </header>
 
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="watchlist summary">
+        <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label="watchlist summary">
           {[
-            { label: copy.totalTracked, value: summary.total },
-            { label: copy.marketsRepresented, value: summary.markets },
-            { label: copy.scannerSourced, value: summary.scannerSourced },
-            { label: copy.recentlyAdded, value: summary.recent },
+            { label: copy.trackedSymbols, value: summary.total },
+            { label: copy.scannerCoverage, value: summary.scannerResults || (summary.total ? copy.noEvidence : copy.noEvidence) },
+            { label: copy.backtestCoverage, value: summary.backtestResults || (summary.total ? copy.noEvidence : copy.noEvidence) },
+            { label: copy.staleCoverage, value: summary.stale },
+            { label: copy.failureCoverage, value: summary.failedOrNoData },
+            { label: copy.latestUpdate, value: summary.latestTime ? formatDateTime(summary.latestTime, language) : (language === 'zh' ? '暂无情报' : 'No intelligence') },
           ].map((card) => (
             <div key={card.label} className="rounded-[20px] border border-white/5 bg-white/[0.02] px-4 py-4">
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/35">{card.label}</p>
-              <p className="mt-3 text-2xl font-semibold text-white">{card.value}</p>
+              <p className="mt-3 truncate text-2xl font-semibold text-white">{card.value}</p>
             </div>
           ))}
         </section>
@@ -752,20 +997,67 @@ const WatchlistPage: React.FC = () => {
             />
           </div>
 
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 backdrop-blur-md">
-            <div className="min-w-0">
+          <div data-testid="watchlist-command-bar" className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 backdrop-blur-md">
+            <div className="min-w-0 space-y-1">
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.batchBacktestLabel}</p>
-              <p className="mt-1 truncate text-xs text-white/45">{filteredItems.length} {language === 'zh' ? copy.batchBacktestMeta : 'symbols · concurrency 2'}</p>
+              <p data-testid="watchlist-action-scope" className="truncate text-xs text-white/45">{actionScopeLabel} · {language === 'zh' ? '并发 2' : 'concurrency 2'}</p>
+              {actionItems.length === 0 ? <p className="text-xs text-amber-300">{copy.noMatchedSymbols}</p> : null}
+              {batchProgress ? (
+                <p data-testid="watchlist-batch-progress" className="text-xs text-white/55">
+                  {batchProgress.completed} / {batchProgress.total}
+                  {batchProgress.currentSymbol ? ` · ${batchProgress.currentSymbol}` : ''}
+                  {' · '}
+                  {language === 'zh' ? '成功' : 'Success'} {batchProgress.succeeded}
+                  {' · '}
+                  {language === 'zh' ? '失败' : 'Failed'} {batchProgress.failed}
+                </p>
+              ) : null}
             </div>
-            <button
-              type="button"
-              onClick={() => void handleBatchBacktestCurrentFilter()}
-              disabled={isBatchBacktesting || filteredItems.length === 0}
-              className="inline-flex h-8 shrink-0 items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-3 text-xs font-semibold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition hover:from-blue-500 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              <BarChart3 className="h-3.5 w-3.5" />
-              {isBatchBacktesting ? copy.batchBacktesting : copy.batchBacktestFilter}
-            </button>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleRefreshScores(actionItems)}
+                disabled={isActionDisabled}
+                className={ACTION_BUTTON_CLASS}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isBatchScanning ? 'animate-spin' : ''}`} />
+                {copy.batchScanFilter}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBatchBacktestCurrentFilter()}
+                disabled={isActionDisabled}
+                className="inline-flex h-8 shrink-0 items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-3 text-xs font-semibold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition hover:from-blue-500 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+                {isBatchBacktesting ? copy.batchBacktesting : copy.batchBacktestFilter}
+              </button>
+              <button
+                type="button"
+                aria-pressed={useSelectedScope && selectedItems.length > 0}
+                onClick={() => setUseSelectedScope((current) => selectedItems.length > 0 ? !current : current)}
+                disabled={selectedItems.length === 0}
+                className={ACTION_BUTTON_CLASS}
+              >
+                <CheckSquare className="h-3.5 w-3.5" />
+                {copy.selectedOnly}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedIds(new Set());
+                  setUseSelectedScope(false);
+                }}
+                disabled={selectedIds.size === 0}
+                className={ACTION_BUTTON_CLASS}
+              >
+                {copy.clearSelection}
+              </button>
+              <button type="button" onClick={() => void handleRefreshIntelligence()} className={ACTION_BUTTON_CLASS}>
+                <RefreshCw className="h-3.5 w-3.5" />
+                {copy.refreshIntelligence}
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto no-scrollbar rounded-2xl border border-white/5">
@@ -791,7 +1083,6 @@ const WatchlistPage: React.FC = () => {
                   const strategySimulation = item.intelligence?.strategySimulation;
                   const backtest = item.intelligence?.backtest;
                   const score = getScannerScore(item);
-                  const status = getScannerStatus(item);
                   const hitRate = strategySimulation?.hitRate;
                   const avgForward = strategySimulation?.avgForwardReturnPct;
                   const returnPct = backtest?.totalReturnPct;
@@ -799,10 +1090,29 @@ const WatchlistPage: React.FC = () => {
                     || strategySimulation?.status === 'ready'
                     || hasBacktestEvidence(item);
                   const batchStatus = batchStatuses[item.symbol];
+                  const batchFailure = batchFailures[item.symbol];
+                  const scannerFailure = item.scoreError || scanner?.reason
+                    ? sanitizeFailureReason(item.scoreError || scanner?.reason || '', '扫描失败')
+                    : null;
+                  const latestTime = getLatestIntelligenceTime(item);
+                  const scannerStatusLabel = formatScannerStatus(item);
+                  const backtestStatusLabel = formatBacktestStatus(item, batchFailure);
                   return (
                   <tr key={item.id} data-testid={`watchlist-row-${item.symbol}`} className="bg-white/[0.01] text-white/70">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={selectedIds.has(item.id)}
+                          aria-label={`${language === 'zh' ? '选择' : 'Select'} ${item.symbol}`}
+                          onClick={() => toggleSelected(item)}
+                          className={`h-4 w-4 rounded border transition ${
+                            selectedIds.has(item.id)
+                              ? 'border-cyan-300 bg-cyan-300/30 shadow-[0_0_10px_rgba(103,232,249,0.25)]'
+                              : 'border-white/15 bg-white/[0.03] hover:border-white/30'
+                          }`}
+                        />
                         <Clipboard className="h-4 w-4 text-white/30" />
                         <span className="font-semibold text-white">{item.symbol}</span>
                       </div>
@@ -811,7 +1121,7 @@ const WatchlistPage: React.FC = () => {
                     <td className="px-4 py-3">{item.name || '--'}</td>
                     <td className="px-4 py-3">
                       <span className="inline-flex min-w-[3.5rem] justify-center rounded-full border border-sky-400/20 bg-sky-400/10 px-2 py-1 text-xs font-semibold text-sky-100">
-                        {formatScore(item.scannerScore)}
+                        {formatScore(score)}
                       </span>
                     </td>
                     <td className="px-4 py-3">{item.scannerRank ? `#${item.scannerRank}` : '--'}</td>
@@ -824,22 +1134,34 @@ const WatchlistPage: React.FC = () => {
                             : item.scoreStatus === 'stale'
                               ? 'border-amber-400/20 bg-amber-400/10 text-amber-100'
                               : 'border-white/10 bg-white/[0.04] text-white/40'
-                        }`} title={item.scoreError || item.scoreReason || undefined}>
-                          {item.scoreStatus === 'fresh' ? copy.fresh : item.scoreStatus === 'stale' ? copy.stale : '--'}
+                        }`}>
+                          {formatFreshness(item.lastScoredAt || scanner?.lastScannedAt)}
                         </span>
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex max-w-[360px] flex-wrap items-center gap-1.5 text-[11px]" title={[scanner?.themeLabel || scanner?.theme, scanner?.profile, scanner?.reason].filter(Boolean).join(' · ') || undefined}>
+                      <div className="flex max-w-[420px] flex-wrap items-center gap-1.5 text-[11px]">
                         {!hasAnyEvidence ? (
                           <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-white/40">{copy.noEvidence}</span>
+                        ) : null}
+                        <span className={`rounded-lg border px-2 py-1 ${
+                          scannerStatusLabel === '已验证' || scannerStatusLabel === '通过筛选'
+                            ? 'border-cyan-300/20 bg-cyan-300/10 text-cyan-100'
+                            : scannerStatusLabel === '扫描失败'
+                              ? 'border-rose-400/20 bg-rose-400/10 text-rose-100'
+                            : 'border-white/10 bg-white/[0.04] text-white/55'
+                        }`}>{scannerStatusLabel}</span>
+                        {scannerStatusLabel === '扫描失败' && scannerFailure ? (
+                          <span className="rounded-lg border border-rose-400/20 bg-rose-400/10 px-2 py-1 text-rose-100">{scannerFailure.label}</span>
                         ) : null}
                         {score !== null ? (
                           <span className="rounded-lg border border-sky-400/20 bg-sky-400/10 px-2 py-1 font-mono text-sky-100">{language === 'zh' ? '分数' : 'SCORE'} {formatScore(score)}</span>
                         ) : null}
-                        {status !== 'unknown' ? (
-                          <span className="max-w-[140px] truncate rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-white/60">{language === 'zh' ? '扫描' : 'SCANNER'} {status === 'selected' && language === 'zh' ? '入选' : status}</span>
+                        {(scanner?.lastRank ?? item.scannerRank) ? <span className={CHIP_CLASS}>{language === 'zh' ? '排名' : 'Rank'} #{scanner?.lastRank ?? item.scannerRank}</span> : null}
+                        {scanner?.reason && !['provider_down', 'provider_error', 'critical', 'debug', 'unknown'].some((token) => scanner.reason?.toLowerCase().includes(token)) ? (
+                          <span className="max-w-[180px] truncate rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-white/55">{scanner.reason}</span>
                         ) : null}
+                        <span className={CHIP_CLASS}>{formatFreshness(latestTime)}</span>
                         {typeof avgForward === 'number' || typeof hitRate === 'number' ? (
                           <span className={`rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono ${
                             (avgForward ?? 0) >= 0
@@ -849,22 +1171,39 @@ const WatchlistPage: React.FC = () => {
                             HIST {formatPct(avgForward)} · HIT {typeof hitRate === 'number' ? `${Math.round(hitRate * 100)}%` : '--'}
                           </span>
                         ) : null}
-                        {backtest?.lastResultId != null ? (
+                        <span className={`rounded-lg border px-2 py-1 ${
+                          backtestStatusLabel === '已回测'
+                            ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+                            : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(backtestStatusLabel)
+                              ? 'border-rose-400/20 bg-rose-400/10 text-rose-100'
+                              : 'border-white/10 bg-white/[0.04] text-white/45'
+                        }`}>{backtestStatusLabel}</span>
+                        {hasBacktestMetrics(item) ? (
                           <>
                             <span className={`rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono ${
                               (returnPct ?? 0) >= 0
                                 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]'
                                 : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'
                             }`}>
-                              BT {formatPct(returnPct)} · DD {formatPct(backtest.maxDrawdownPct)} · SH {formatRatio(backtest.sharpe)}
+                              {language === 'zh' ? '收益' : 'Return'} {formatPct(returnPct)} · {language === 'zh' ? '回撤' : 'DD'} {formatPct(backtest?.maxDrawdownPct)} · Sharpe {formatRatio(backtest?.sharpe)} · {language === 'zh' ? '交易' : 'Trades'} {backtest?.tradeCount ?? '--'}
                             </span>
-                            <Link className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-white/55 transition hover:text-white" to={buildLocalizedPath(`/backtest/results/${backtest.lastResultId}`, language)}>
-                              {copy.resultPrefix} {backtest.lastResultId}
-                            </Link>
+                            {backtest?.lastResultId != null ? (
+                              <Link className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-white/55 transition hover:text-white" to={buildLocalizedPath(`/backtest/results/${backtest.lastResultId}`, language)}>
+                                {copy.resultPrefix} {backtest.lastResultId}
+                              </Link>
+                            ) : null}
                           </>
                         ) : null}
+                        {batchFailure?.detail ? (
+                          <details className="max-w-[180px] rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-white/45">
+                            <summary className="cursor-pointer list-none">{language === 'zh' ? '开发者细节' : 'Developer details'}</summary>
+                            <p className="mt-1 truncate text-[10px] text-white/35">{language === 'zh' ? '原始错误已隐藏' : 'Raw error hidden'}</p>
+                          </details>
+                        ) : null}
                         {batchStatus ? (
-                          <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono uppercase text-white/45">{batchStatus}</span>
+                          <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-white/45">
+                            {batchStatus === 'running' ? '运行中' : batchStatus === 'completed' ? '完成' : batchStatus === 'failed' ? '失败' : batchStatus === 'skipped' ? '已跳过' : '等待'}
+                          </span>
                         ) : null}
                       </div>
                     </td>
