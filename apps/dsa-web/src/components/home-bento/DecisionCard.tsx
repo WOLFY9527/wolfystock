@@ -1,11 +1,8 @@
 import type React from 'react';
-import { PanelRightOpen } from 'lucide-react';
 import { Label } from '../common';
-import { useSafariWarmActivation } from '../../hooks/useSafariInteractionReady';
 import { useUiPreferences } from '../../contexts/UiPreferencesContext';
 import { BentoCard } from './BentoCard';
 import {
-  CARD_BUTTON_CLASS,
   SYSTEM_ACCENT_GLOW_CLASS,
   type SignalTone,
   getToneTextClass,
@@ -28,13 +25,11 @@ type SignalActionKey = 'buy' | 'sell' | 'hold';
 type DecisionCardProps = {
   badge: string;
   company: string;
-  detailLabel: string;
   eyebrow: string;
   heroLabel: string;
   heroUnit: string;
   heroValue: string;
   locale: 'zh' | 'en';
-  onOpenDetails: () => void;
   reason: DecisionReason;
   reportActions?: React.ReactNode;
   scoreLabel: string;
@@ -185,12 +180,10 @@ function getSupportingIndicators(locale: 'zh' | 'en', tone: SignalTone): Support
 
 export const DecisionCard: React.FC<DecisionCardProps> = ({
   company,
-  detailLabel,
   eyebrow,
   heroUnit,
   heroValue,
   locale,
-  onOpenDetails,
   reason,
   reportActions,
   scoreValue,
@@ -203,11 +196,6 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   isGuest = false,
   guestPaywall,
 }) => {
-  const {
-    ref: openDetailsButtonRef,
-    onClick: handleOpenDetailsClick,
-    onPointerUp: handleOpenDetailsPointerUp,
-  } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
   const { marketColorConvention } = useUiPreferences();
   const signalCommand = getSignalCommand(locale, signalLabel, signalTone);
   const actionTone = getActionTone(signalCommand.actionKey);
@@ -227,20 +215,11 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
       className="w-full overflow-visible rounded-[24px] xl:flex xl:h-full xl:flex-col xl:overflow-hidden"
       contentClassName="h-auto xl:h-full xl:min-h-0"
       testId="home-bento-card-decision"
-      action={(
-        <button
-          ref={openDetailsButtonRef}
-          type="button"
-          aria-label={isEnglish ? 'Open full report' : '打开完整报告'}
-          className={CARD_BUTTON_CLASS}
-          data-testid="home-bento-drawer-trigger-decision"
-          onClick={handleOpenDetailsClick}
-          onPointerUp={handleOpenDetailsPointerUp}
-        >
-          <PanelRightOpen className="h-3.5 w-3.5" />
-          <span>{detailLabel}</span>
-        </button>
-      )}
+      action={reportActions ? (
+        <div className="flex max-w-[min(100%,16rem)] flex-wrap items-center justify-end gap-2 sm:max-w-[min(100%,28rem)]" data-testid="home-bento-decision-header-actions">
+          {reportActions}
+        </div>
+      ) : undefined}
     >
       <div className="flex h-auto flex-col gap-5 xl:h-full xl:min-h-0">
         <div className="flex flex-wrap items-start justify-between gap-3" data-testid="home-bento-decision-company-header">
@@ -257,6 +236,11 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             </div>
           </div>
         </div>
+        {sourceSummary ? (
+          <p className="min-w-0 rounded-xl border border-white/[0.05] bg-white/[0.018] px-3 py-2 text-xs leading-5 text-white/46" data-testid="home-bento-decision-source-summary">
+            {sourceSummary}
+          </p>
+        ) : null}
 
         <div
           className="overflow-visible pr-2 pb-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:no-scrollbar xl:[&::-webkit-scrollbar]:hidden xl:[-ms-overflow-style:none] xl:[scrollbar-width:none]"
@@ -328,21 +312,6 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
               {insightCopy}
             </p>
           </div>
-
-          {sourceSummary || reportActions ? (
-            <div className="mb-6 flex min-w-0 flex-col gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-3" data-testid="home-bento-decision-action-row">
-              {sourceSummary ? (
-                <p className="min-w-0 text-xs leading-5 text-white/46" data-testid="home-bento-decision-source-summary">
-                  {sourceSummary}
-                </p>
-              ) : null}
-              {reportActions ? (
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  {reportActions}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
 
           <div className="relative flex flex-col overflow-hidden rounded-[28px] border border-white/[0.06] bg-black/10 px-5 py-4 backdrop-blur-xl md:px-6">
             <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-3">

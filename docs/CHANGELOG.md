@@ -1,5 +1,7 @@
 ## 2026-05-04
 
+- 🧾 **Home AI Report UX v3 身份与完整报告映射** — `/zh?fixture=analysis-trace` 的 Home AI 决策卡不再把 `待确认股票` 当作用户可见公司名；公司身份统一走 `companyName / stockName / quote / profile / fundamentals / overview / metadata / standardReport` 等字段的去重 fallback，最后只回退到 ticker 或 `--`。独立来源/动作卡彻底移除，`完整报告 / 决策来源 / 复制报告 / 重新分析` 现在位于 AI 决策卡右上动作区，紧凑来源行留在卡片内部。完整报告抽屉与 Markdown/PDF 导出补齐重要信息速览、风险警报、利好催化、当日行情、数据透视、技术透视、基本面摘要、作战计划、检查清单和数据说明，并对 provider 列表按顺序去重；Trace 抽屉继续默认折叠开发者细节且不暴露 raw prompt / system prompt / API key。
+
 - 🧭 **Scanner 候选优先工作台 v3 收口** — `/scanner` 结果区进一步收口为 candidate-first 工作流：顶部改为紧凑扫描命令条与单行阈值预览，候选池默认提前到诊断/历史对比/策略实验之前，移动端也保持“控制 -> 摘要 -> 候选池 -> 选中候选 -> 次级面板”的顺序。候选行改为终端式结构，只保留一个主动作和 `更多` 二级动作；右侧 Inspector 改为“为什么入选 / 主要风险 / 下一步”的决策卡，并把规则诊断、数据质量、开发者字段收进默认折叠区。此次仅调整 `apps/dsa-web` 前端展示与交互层次，不改变 scanner selection logic、threshold preview 计算、strategy simulation、backtest 计算或后端 endpoint。
 
 - 🧾 **Home AI 完整报告升级为正式投研报告与导出动作** — `/zh?fixture=analysis-trace` 的 Home AI 决策卡现在统一展示公司全称与代码（如 `Tempus AI (TEM)`），历史记录标题会去重重复 ticker；原独立来源/动作卡已移除，`完整报告 / 决策来源 / 复制报告 / 重新分析` 收进主 AI 决策卡。`完整报告` 抽屉升级为正式金融研究报告格式，覆盖投资结论、执行计划、核心证据、风险、催化、市场、技术、基本面、检查清单和数据说明，并支持 Markdown 导出与浏览器打印/PDF；`决策来源` 继续保持紧凑 trace，开发者细节默认折叠且不暴露 raw prompt / system prompt / API key。

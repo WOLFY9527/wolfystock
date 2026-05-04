@@ -308,7 +308,18 @@ function getReportSource(report: AnalysisReport | null): StandardReport | undefi
 }
 
 function listOrMissing(items?: Array<string | undefined | null>, fallback = '暂无明确记录'): string[] {
-  const values = (items || []).map((item) => String(item || '').trim()).filter(Boolean);
+  const seen = new Set<string>();
+  const values = (items || [])
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .filter((item) => {
+      const key = item.toLowerCase();
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
   return values.length ? values : [fallback];
 }
 
@@ -378,9 +389,18 @@ function buildReportIdentity(report: AnalysisReport | null, dashboard?: Dashboar
     || report?.decisionTrace?.generatedAt
     || '';
   const dataSources = report?.decisionTrace?.dataSources || [];
+  const providerSeen = new Set<string>();
   const providers = dataSources
-    .map((source) => source.provider || source.name)
+    .map((source) => String(source.provider || source.name || '').trim())
     .filter(Boolean)
+    .filter((provider) => {
+      const key = provider.toLowerCase();
+      if (providerSeen.has(key)) {
+        return false;
+      }
+      providerSeen.add(key);
+      return true;
+    })
     .join(', ');
   const statuses = dataSources.map((source) => source.status).filter(Boolean);
   const schemaStatus = report?.decisionTrace?.llm?.schemaValidated ? 'schema ok' : 'schema unverified';
@@ -388,7 +408,7 @@ function buildReportIdentity(report: AnalysisReport | null, dashboard?: Dashboar
   return {
     companyName,
     ticker,
-    companyWithTicker: companyName.toUpperCase() === ticker ? ticker : `${companyName} (${ticker})`,
+    companyWithTicker: getCompanyWithTicker(report || { companyName, symbol: ticker }),
     generatedAt: formatReportDateTime(generatedAt),
     market: override?.market || report?.decisionTrace?.market || '--',
     currency: override?.currency || safeReportValue(readObjectField(report, ['details', 'standardReport', 'summaryPanel', 'currency']) || readObjectField(report, ['details', 'standardReport', 'market', 'currency'])),
@@ -411,15 +431,18 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
     ...(market?.extendedFields || []),
   ];
   const technicalFields = standardReport?.technicalFields || standardReport?.tableSections?.technical?.fields || [];
+  const fundamentalFields = standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields || [];
+  const earningsFields = standardReport?.earningsFields || standardReport?.tableSections?.earnings?.fields || [];
+  const sentimentFields = standardReport?.sentimentFields || [];
+  const battleFields = standardReport?.battleFields || [];
   const coverageNotes = standardReport?.coverageNotes;
   const checklistItems = (standardReport?.checklistItems || standardReport?.checklist || []).map(normalizeChecklistStatus);
-  const evidenceBullets = listOrMissing([
-    ...(reasonLayer?.coreReasons || []),
-    fieldValue(technicalFields, ['MA ALIGNMENT', 'Moving Averages', '均线']),
-    fieldValue(standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields, ['Revenue', 'Revenue Growth', '收入', '营收']),
-    highlights?.sentimentSummary || reasonLayer?.sentimentSummary || report?.summary.sentimentLabel,
-    fieldValue(technicalFields, ['VOLUME DYNAMICS', 'Volume', '量价', '成交量']),
-  ], '暂无足够证据字段');
+  const alphaVantage = readObjectField(report, ['details', 'rawResult', 'dashboard', 'data_perspective', 'alpha_vantage']);
+  const alphaRows = alphaVantage && typeof alphaVantage === 'object'
+    ? Object.entries(alphaVantage as Record<string, unknown>).map(([label, value]) => ({ label, value: safeReportValue(value) }))
+    : [];
+  const battleCards = standardReport?.battlePlanCompact?.cards || [];
+  const battleNotes = standardReport?.battlePlanCompact?.notes || [];
 
   return [
     {
@@ -434,23 +457,14 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
       ],
     },
     {
-      id: 'trading-plan',
-      title: '执行计划',
+      id: 'important-brief',
+      title: '重要信息速览',
       rows: [
-        { label: '理想买点', value: safeReportValue(decisionPanel?.idealEntry || report?.strategy?.idealBuy) },
-        { label: '次级买点', value: safeReportValue(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy) },
-        { label: '目标', value: safeReportValue(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit) },
-        { label: '止损', value: safeReportValue(decisionPanel?.stopLoss || report?.strategy?.stopLoss) },
-        { label: '仓位', value: safeReportValue(decisionPanel?.positionSizing) },
-        { label: '持仓/空仓建议', value: safeReportValue(decisionPanel?.holderAdvice || decisionPanel?.noPositionAdvice || decisionPanel?.buildStrategy || report?.summary.operationAdvice) },
-        { label: '风控策略', value: safeReportValue(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason) },
+        { label: '舆情情绪', value: safeReportValue(highlights?.sentimentSummary || reasonLayer?.sentimentSummary || fieldValue(sentimentFields, ['sentiment', '舆情', '情绪']) || report?.summary.sentimentLabel) },
+        { label: '业绩预期', value: safeReportValue(highlights?.earningsOutlook || fieldValue(earningsFields, ['earnings', '业绩', 'eps'])) },
+        { label: '最新动态', value: safeReportValue(reasonLayer?.latestKeyUpdate || highlights?.latestNews?.[0]) },
       ],
-      bullets: decisionPanel?.executionReminders,
-    },
-    {
-      id: 'evidence',
-      title: '核心证据',
-      bullets: evidenceBullets,
+      bullets: listOrMissing(highlights?.latestNews, '暂无最新动态字段'),
     },
     {
       id: 'risks',
@@ -472,7 +486,7 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
     },
     {
       id: 'market',
-      title: '市场快照',
+      title: '当日行情',
       rows: [
         { label: '开盘', value: fieldValue(marketFields, ['open', '开盘']) || safeReportValue(market?.regularMetrics?.open) },
         { label: '最高', value: fieldValue(marketFields, ['high', '最高']) || safeReportValue(market?.regularMetrics?.high) },
@@ -482,6 +496,23 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
         { label: '成交量', value: fieldValue(marketFields, ['volume', '成交量']) || safeReportValue(market?.regularMetrics?.volume) },
         { label: '成交额', value: fieldValue(marketFields, ['turnover', 'amount', '成交额']) || safeReportValue(market?.regularMetrics?.amount) },
         { label: '来源', value: safeReportValue(coverageNotes?.dataSources?.[0] || summaryPanel?.priceBasis || summaryPanel?.priceBasisDetail) },
+      ],
+    },
+    {
+      id: 'data-lens',
+      title: '数据透视',
+      rows: [
+        { label: 'MA alignment', value: fieldValue(technicalFields, ['MA ALIGNMENT', 'Moving Averages', '均线']) },
+        { label: 'Current price', value: safeReportValue(summaryPanel?.currentPrice || decisionPanel?.analysisPrice) },
+        { label: 'MA5', value: fieldValue(technicalFields, ['MA5', '5日']) },
+        { label: 'MA10', value: fieldValue(technicalFields, ['MA10', '10日']) },
+        { label: 'MA20', value: fieldValue(technicalFields, ['MA20', '20日']) },
+        { label: 'MA60', value: fieldValue(technicalFields, ['MA60', '60日']) },
+        { label: 'Support', value: safeReportValue(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy) },
+        { label: 'Resistance', value: safeReportValue(decisionPanel?.resistance || decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit) },
+        { label: 'Volume / turnover', value: fieldValue(technicalFields, ['VOLUME DYNAMICS', 'Volume', '量价', '成交量']) || fieldValue(marketFields, ['volume', 'turnover', 'amount', '成交']) },
+        { label: 'Chip notes', value: safeReportValue(fieldValue(technicalFields, ['chip', '筹码']) || standardReport?.decisionContext?.compositeView) },
+        ...alphaRows,
       ],
     },
     {
@@ -500,12 +531,28 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
       id: 'fundamentals',
       title: '基本面摘要',
       rows: [
-        { label: '营收', value: fieldValue(standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields, ['Revenue', 'Revenue Growth', '收入', '营收']) || '--' },
-        { label: 'ROE', value: fieldValue(standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields, ['ROE']) || '--' },
-        { label: '利润率', value: fieldValue(standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields, ['Margin', 'EBITDA MARGIN', '毛利率', '利润率']) || '--' },
-        { label: 'EPS', value: fieldValue(standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields, ['EPS', 'LATEST EPS']) || '--' },
-        { label: '估值', value: fieldValue(standardReport?.fundamentalFields || standardReport?.tableSections?.fundamental?.fields, ['PE', 'Forward PE', '市盈率', '估值']) || '--' },
+        { label: '营收', value: fieldValue(fundamentalFields, ['Revenue', 'Revenue Growth', '收入', '营收']) || '--' },
+        { label: 'ROE', value: fieldValue(fundamentalFields, ['ROE']) || '--' },
+        { label: '利润率', value: fieldValue(fundamentalFields, ['Margin', 'EBITDA MARGIN', '毛利率', '利润率']) || '--' },
+        { label: 'EPS', value: fieldValue(fundamentalFields, ['EPS', 'LATEST EPS']) || '--' },
+        { label: '估值', value: fieldValue(fundamentalFields, ['PE', 'Forward PE', '市盈率', '估值']) || '--' },
       ],
+    },
+    {
+      id: 'trading-plan',
+      title: '作战计划',
+      rows: [
+        { label: '理想买点', value: safeReportValue(decisionPanel?.idealEntry || report?.strategy?.idealBuy || fieldValue(battleFields, ['ideal', '理想'])) },
+        { label: '次级买点', value: safeReportValue(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy || fieldValue(battleFields, ['secondary', '次级'])) },
+        { label: '止损', value: safeReportValue(decisionPanel?.stopLoss || report?.strategy?.stopLoss || fieldValue(battleFields, ['stop', '止损'])) },
+        { label: '目标', value: safeReportValue(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || fieldValue(battleFields, ['target', '目标'])) },
+        { label: '仓位', value: safeReportValue(decisionPanel?.positionSizing || battleCards.find((item) => /position|仓位/i.test(item.label))?.value) },
+        { label: '入场策略', value: safeReportValue(decisionPanel?.buildStrategy || battleNotes.find((item) => /entry|建仓|入场/i.test(item.label))?.value) },
+        { label: '风控策略', value: safeReportValue(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason) },
+        { label: '空仓建议', value: safeReportValue(decisionPanel?.noPositionAdvice) },
+        { label: '持仓建议', value: safeReportValue(decisionPanel?.holderAdvice) },
+      ],
+      bullets: decisionPanel?.executionReminders,
     },
     {
       id: 'checklist',
@@ -3211,8 +3258,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         summary={readyCopy.decision.summary}
                         locale={locale}
                         reason={{ title: readyCopy.decision.reasonTitle, body: readyCopy.decision.reasonBody }}
-                        detailLabel={locale === 'en' ? 'Report' : '完整报告'}
-                        onOpenDetails={() => setFullReportDrawerOpen(true)}
                         sourceSummary={!isGuest ? sourceSummary : undefined}
                         reportActions={reportActionButtons}
                         isGuest={isGuest}
@@ -3343,6 +3388,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             const isSelected = selectedReport?.meta.id === item.id;
             const generatedAt = resolveHistoryGeneratedAt(item, locale);
             const companyLabel = resolveHistoryCompanyLabel(item);
+            const shouldShowTickerMeta = ticker && companyLabel.toUpperCase() !== ticker;
             return (
               <div
                 key={item.id}
@@ -3361,7 +3407,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">{companyLabel}</p>
                     <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-white/40">
-                      {ticker} · {locale === 'en' ? 'Recent analysis' : '最近分析'}
+                      {shouldShowTickerMeta ? `${ticker} · ` : ''}{locale === 'en' ? 'Recent analysis' : '最近分析'}
                     </p>
                     {generatedAt ? (
                       <p className="mt-1 truncate text-[11px] text-white/45">

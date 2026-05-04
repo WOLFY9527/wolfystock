@@ -8,7 +8,7 @@ import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
 import { stocksApi } from '../../api/stocks';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { useStockPoolStore } from '../../stores';
-import { buildInstitutionalReportMarkdown } from '../../utils/homeReportIdentity';
+import { buildInstitutionalReportMarkdown, getCompanyWithTicker } from '../../utils/homeReportIdentity';
 import HomeSurfacePage from '../HomeSurfacePage';
 
 const { useProductSurfaceMock } = vi.hoisted(() => ({
@@ -273,7 +273,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByRole('link', { name: /持仓/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /回测/i })).not.toBeInTheDocument();
     expect(screen.getByText('WOLFY AI 决策')).toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-drawer-trigger-decision')).toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-decision-header-actions')).toHaveTextContent('完整报告');
     expect(screen.getByTestId('home-bento-drawer-trigger-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-fundamentals')).toBeInTheDocument();
@@ -399,6 +399,9 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByRole('button', { name: '决策来源' })).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-decision-trace-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-decision-actions')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-decision-action-row')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-decision-header-actions')).toHaveTextContent('完整报告');
+    expect(screen.getByTestId('home-bento-decision-header-actions')).toHaveTextContent('决策来源');
     expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('完整报告');
     expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('决策来源');
     expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('复制报告');
@@ -410,13 +413,14 @@ describe('HomeSurfacePage', () => {
     const report = await screen.findByTestId('home-bento-full-report-drawer');
     [
       '投资结论',
-      '执行计划',
-      '核心证据',
+      '重要信息速览',
       '风险警报',
       '利好催化',
-      '市场快照',
+      '当日行情',
+      '数据透视',
       '技术透视',
       '基本面摘要',
+      '作战计划',
       '检查清单',
       '数据说明',
     ].forEach((sectionTitle) => {
@@ -434,7 +438,18 @@ describe('HomeSurfacePage', () => {
   });
 
   it('builds markdown export with company identity and disclaimer', () => {
-    const markdown = buildInstitutionalReportMarkdown(defaultHistoryReport, {
+    const reportWithDuplicateProviders = {
+      ...defaultHistoryReport,
+      decisionTrace: {
+        ...defaultHistoryReport.decisionTrace,
+        dataSources: [
+          ...defaultHistoryReport.decisionTrace.dataSources,
+          { name: 'news-duplicate', status: 'used', provider: 'Finnhub' },
+          { name: 'news-duplicate-2', status: 'used', provider: 'Finnhub' },
+        ],
+      },
+    };
+    const markdown = buildInstitutionalReportMarkdown(reportWithDuplicateProviders, {
       companyName: 'Tempus AI',
       ticker: 'TEM',
       generatedAt: '2026-05-04T02:02:00+08:00',
@@ -443,7 +458,21 @@ describe('HomeSurfacePage', () => {
     expect(markdown).toContain('# Wolfy AI Equity Research: Tempus AI (TEM)');
     expect(markdown).toContain('AI 洞察仅供参考，不构成投资建议。');
     expect(markdown).toContain('## 投资结论 / Investment Thesis');
+    expect(markdown).toContain('## 重要信息速览 / Important Brief');
+    expect(markdown).toContain('## 当日行情 / Market Snapshot');
+    expect(markdown).toContain('## 数据透视 / Data Lens');
+    expect(markdown).toContain('## 作战计划 / Trading Plan');
     expect(markdown).toContain('## 数据说明 / Data Notes');
+    expect(markdown).toContain('- Data providers: Yahoo Finance, FMP, news, Finnhub');
+    expect(markdown).not.toContain('Finnhub, Finnhub');
+  });
+
+  it('uses ticker-only fallback for placeholder or duplicated company identities', () => {
+    expect(getCompanyWithTicker({ companyName: 'Robinhood Markets', symbol: 'HOOD' })).toBe('Robinhood Markets (HOOD)');
+    expect(getCompanyWithTicker({ companyName: 'HOOD', symbol: 'HOOD' })).toBe('HOOD');
+    expect(getCompanyWithTicker({ stockName: '待确认股票', symbol: 'HOOD' })).toBe('HOOD');
+    expect(getCompanyWithTicker({ companyName: 'HOOD (HOOD)', symbol: 'HOOD' })).toBe('HOOD');
+    expect(getCompanyWithTicker({ companyName: 'Tempus AI', symbol: 'TEM' })).toBe('Tempus AI (TEM)');
   });
 
   it('opens the compact decision trace drawer with collapsed developer details', async () => {
@@ -495,6 +524,9 @@ describe('HomeSurfacePage', () => {
     expect(await screen.findByText(/Fixture result only; not investment advice/i)).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('Fixture result only; not investment advice.');
     expect(screen.queryByTestId('home-bento-decision-actions')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-decision-action-row')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-bento-decision-header-actions')).toHaveTextContent('完整报告');
+    expect(screen.getByTestId('home-bento-decision-header-actions')).toHaveTextContent('决策来源');
     expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('完整报告');
     expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('决策来源');
     expect(screen.getByTestId('home-bento-card-decision')).toHaveTextContent('复制报告');
@@ -610,7 +642,7 @@ describe('HomeSurfacePage', () => {
     const drawer = await screen.findByTestId('home-bento-history-drawer');
 
     expect(within(drawer).getAllByText('Tempus AI (TEM)').length).toBeGreaterThanOrEqual(2);
-    expect(within(drawer).getByTestId('home-bento-history-item-12')).toHaveTextContent(/^TEMTEM ·/);
+    expect(within(drawer).getByTestId('home-bento-history-item-12')).toHaveTextContent(/^TEM最近分析/);
     expect(drawer).not.toHaveTextContent('TEM (TEM) (TEM)');
   });
 
