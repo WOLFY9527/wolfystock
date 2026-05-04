@@ -218,6 +218,13 @@ describe('BacktestResultReport', () => {
     expect(screen.getByTestId('backtest-report-data-quality')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-report-execution-assumptions')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-report-advanced-details')).toBeInTheDocument();
+    expect(simpleReport).toHaveTextContent('核心指标');
+    expect(simpleReport).toHaveTextContent('基准收益');
+    expect(simpleReport).toHaveTextContent('交易摘要');
+    expect(simpleReport).toHaveTextContent('数据质量');
+    expect(simpleReport).not.toHaveTextContent('Key Metrics');
+    expect(simpleReport).not.toHaveTextContent('Trade Summary');
+    expect(simpleReport).not.toHaveTextContent('Execution Assumptions');
 
     render(<BacktestResultReport run={makeRun({ id: 78 })} mode="professional" />);
     expect(screen.getAllByTestId('backtest-result-report')[1]).toHaveAttribute('data-report-mode', 'professional');
@@ -390,8 +397,8 @@ describe('BacktestResultReport', () => {
     expect(within(timeline).getAllByText('EXIT')).toHaveLength(2);
 
     const risk = screen.getByTestId('backtest-report-risk-diagnostics');
-    expect(within(risk).getByText('Worst Trade')).toBeInTheDocument();
+    expect(within(risk).getByText('最差交易')).toBeInTheDocument();
     expect(within(risk).getByText('-5.02%')).toBeInTheDocument();
-    expect(within(risk).getByText('Max Drawdown Period')).toBeInTheDocument();
+    expect(within(risk).getByText('最大回撤区间')).toBeInTheDocument();
   });
 });

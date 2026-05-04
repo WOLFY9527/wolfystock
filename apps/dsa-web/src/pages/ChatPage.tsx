@@ -241,19 +241,34 @@ const providerStatusLabel: Record<AgentProviderHealthStatus, string> = {
   not_configured: '未配置',
   disabled: '停用',
   offline: '离线',
-  unknown: 'UNKNOWN',
+  unknown: '未知',
 };
 
+const DATA_EVIDENCE_STATUS_LABEL: Record<string, string> = {
+  available: '可用',
+  used: '可用',
+  partial: '部分',
+  stale: '陈旧',
+  fallback: '备用',
+  missing: '缺失',
+  error: '异常',
+  unknown: '未知',
+};
+
+const formatDataEvidenceStatus = (status?: string): string => (
+  DATA_EVIDENCE_STATUS_LABEL[String(status || '').toLowerCase()] || '未知'
+);
+
 const evidenceSummaryText = (item: DataEvidenceItem): string => {
-  if (item.key === 'quote') return item.price != null ? `${item.price}${item.changePct != null ? ` (${item.changePct}%)` : ''}` : item.status.toUpperCase();
-  if (item.key === 'technical') return item.rsi14 != null ? `RSI ${item.rsi14}${item.ma20 != null ? ` · MA20 ${item.ma20}` : ''}` : item.status === 'partial' ? '部分' : item.status.toUpperCase();
-  if (item.key === 'fundamental') return item.missingFields?.length ? `缺 ${item.missingFields.slice(0, 2).join(', ')}` : item.status === 'partial' ? '部分' : item.status.toUpperCase();
-  if (item.key === 'news') return item.status.toUpperCase();
-  if (item.key === 'portfolio') return item.hasPosition ? '有持仓' : item.status === 'missing' ? '无' : item.status.toUpperCase();
-  if (item.key === 'watchlist') return item.inWatchlist ? '已加入' : item.status === 'missing' ? '未加入' : item.status.toUpperCase();
-  if (item.key === 'scanner') return item.summary || (item.status === 'available' ? '最近入选' : item.status.toUpperCase());
-  if (item.key === 'backtest') return item.resultId ? '有' : item.status === 'missing' ? '无' : item.status.toUpperCase();
-  return item.summary || item.status.toUpperCase();
+  if (item.key === 'quote') return item.price != null ? `${item.price}${item.changePct != null ? ` (${item.changePct}%)` : ''}` : formatDataEvidenceStatus(item.status);
+  if (item.key === 'technical') return item.rsi14 != null ? `RSI ${item.rsi14}${item.ma20 != null ? ` · MA20 ${item.ma20}` : ''}` : formatDataEvidenceStatus(item.status);
+  if (item.key === 'fundamental') return item.missingFields?.length ? `缺 ${item.missingFields.slice(0, 2).join(', ')}` : formatDataEvidenceStatus(item.status);
+  if (item.key === 'news') return formatDataEvidenceStatus(item.status);
+  if (item.key === 'portfolio') return item.hasPosition ? '有持仓' : item.status === 'missing' ? '无' : formatDataEvidenceStatus(item.status);
+  if (item.key === 'watchlist') return item.inWatchlist ? '已加入' : item.status === 'missing' ? '未加入' : formatDataEvidenceStatus(item.status);
+  if (item.key === 'scanner') return item.summary || (item.status === 'available' ? '最近入选' : formatDataEvidenceStatus(item.status));
+  if (item.key === 'backtest') return item.resultId ? '有' : item.status === 'missing' ? '无' : formatDataEvidenceStatus(item.status);
+  return item.summary || formatDataEvidenceStatus(item.status);
 };
 
 const evidenceFooterSummaryText = (item: DataEvidenceItem): string => {
@@ -837,7 +852,7 @@ const ChatPage: React.FC = () => {
   }, [evidenceItems, selectedLens.label, smartRoute]);
 
   const buildEvidenceFooter = useCallback(() => ({
-    provider: providerHealth?.currentProvider || providerHealth?.providers.find((item) => item.selected)?.label || 'AUTO/UNKNOWN',
+    provider: providerHealth?.currentProvider || providerHealth?.providers.find((item) => item.selected)?.label || '自动/未知',
     model: providerHealth?.currentModel || providerHealth?.providers.find((item) => item.selected)?.model || undefined,
     lenses: smartRoute.recommendedLenses.length ? smartRoute.recommendedLenses : [selectedLens.label],
     items: evidenceItems
@@ -1083,7 +1098,7 @@ const ChatPage: React.FC = () => {
     const footer = msg.evidenceFooter;
     if (!footer) return null;
     const dataText = (footer.items || [])
-      .map((item) => `${item.label} ${item.summary || item.status.toUpperCase()}`)
+      .map((item) => `${item.label} ${item.summary || formatDataEvidenceStatus(item.status)}`)
       .join(' · ');
     return (
       <details
@@ -1094,9 +1109,9 @@ const ChatPage: React.FC = () => {
           本次使用
         </summary>
         <div className="mt-2 space-y-1">
-          <p>LLM: <span className="font-mono text-white/72">{footer.provider || 'AUTO/UNKNOWN'} {footer.model || ''}</span></p>
+          <p>LLM: <span className="font-mono text-white/72">{footer.provider || '自动/未知'} {footer.model || ''}</span></p>
           <p>视角: {(footer.lenses || []).join(' / ') || '综合判断'}</p>
-          <p>数据: {dataText || 'UNKNOWN'}</p>
+          <p>数据: {dataText || '未知'}</p>
         </div>
       </details>
     );
@@ -1315,10 +1330,10 @@ const ChatPage: React.FC = () => {
                     ? 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'
                     : 'text-white/32'
               }`}>
-                {item.status}
+                {formatDataEvidenceStatus(item.status)}
               </span>
             </div>
-            <p className="mt-1 truncate text-[10px] text-white/30">{item.summary || item.source || 'UNKNOWN'}</p>
+            <p className="mt-1 truncate text-[10px] text-white/30">{item.summary || item.source || '未知'}</p>
           </div>
         ))}
       </div>
@@ -1502,7 +1517,7 @@ const ChatPage: React.FC = () => {
           <div className="flex flex-wrap gap-1.5">
             {evidenceItems.map((item) => (
               <span key={item.key} className="rounded-full border border-white/8 bg-black/25 px-2 py-1 text-[10px] text-white/52">
-                {item.label} · <span className="font-mono uppercase text-white/32">{item.status}</span>
+                {item.label} · <span className="text-white/36">{formatDataEvidenceStatus(item.status)}</span>
               </span>
             ))}
           </div>

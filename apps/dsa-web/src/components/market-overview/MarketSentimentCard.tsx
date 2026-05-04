@@ -73,7 +73,7 @@ export const MarketSentimentCard: React.FC<{
         {panel?.errorMessage ? (
           <div className="flex min-w-0 items-center gap-2" title={panel.errorMessage}>
             <span data-testid="market-overview-compact-error-badge" className="rounded-md border border-amber-300/20 bg-amber-400/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-100/78">
-              {panel.isStale || panel.isFromSnapshot ? 'STALE' : 'ERROR'}
+              {panel.isStale || panel.isFromSnapshot ? '陈旧' : '异常'}
             </span>
             <span className="min-w-0 truncate text-[10px] text-white/38">刷新异常，保留最近快照</span>
           </div>
@@ -83,7 +83,7 @@ export const MarketSentimentCard: React.FC<{
           <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2">
             <div className="flex min-w-0 items-center justify-between gap-3">
               <div className="min-w-0 flex items-baseline gap-2">
-                <p className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/40">SENTIMENT</p>
+                <p className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/40">情绪</p>
                 <p className="truncate font-mono text-lg font-bold leading-none text-white">{formatMetricValue(primary, 0)}</p>
                 <p className="truncate text-xs font-semibold text-white/45">{describeSentiment(primary.value, t)}</p>
               </div>

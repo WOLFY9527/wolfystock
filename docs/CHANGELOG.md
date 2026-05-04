@@ -1,5 +1,7 @@
 ## 2026-05-04
 
+- 🧼 **中文界面抛光与调试文案收口** — `/zh`、`/chat`、`/market-overview`、`/scanner`、`/portfolio`、`/watchlist`、`/backtest` 与回测结果页统一清理中文界面中的英文状态/章节标签，Watchlist、Market Overview、Home、Portfolio、Backtest 的默认 UI 不再暴露 `SCANNER CANDIDATES`、`UNKNOWN`、`LOCAL/ERRORS`、`MARKET STATE`、`Trade Station`、`Key Metrics` 等调试式或英文 chrome。Scanner 开发者诊断仍保持折叠，保留 ticker、provider、API/格式与专业指标缩写；同时收紧卡片 padding、表格行间距和窄屏换行，不改变 scanner selection、backtest 计算、portfolio 会计公式、AI 决策算法或后端 API。
+
 - 🧠 **Decision Desk Evidence v2** — `/chat` 检测到股票代码后新增只读 `/api/v1/agent/stock-evidence` 证据查询，合并轻量实时行情、已有本地日线技术指标和已持久化分析/行情中的基本面字段，不调用 LLM、不自动运行 scanner/backtest/analysis。数据上下文现在可显示行情价格/provider、技术 MA/RSI/支撑压力、基本面 partial/missing 字段和新闻 UNKNOWN；发送给 AgentExecutor 的 `stock_context.evidence` 改为紧凑证据摘要，并明确要求只使用 available/partial/stale/fallback 证据、UNKNOWN/MISSING 必须如实说明。回答 footer 同步展示行情、技术、基本面、持仓、观察列表、Scanner 与回测状态，不暴露 raw prompt / system prompt / API key。
 
 - 📊 **Market Overview Relevant Depth v3** — `/market-overview` 的美股页签新增基于 Yahoo/yfinance proxy 的 sector ETF breadth proxy，展示上涨/下跌行业数、最强/最弱行业 ETF 与 RSP/SPY、IWM/SPY、QQQ/SPY 相对压力；加密页签把 Binance 公开行情扩展到 BTC/ETH/SOL/BNB，并在可用时展示 Binance Futures funding rate。稳定币流动性、dominance、真实美股 advance/decline、A股/HK 北向南向实时源仍按未接入/备用状态紧凑展示，不冒充实时数据；新增 `/api/v1/market/us-breadth` 继续复用 MarketCache、SWR 与 last-known-good snapshot 元数据。

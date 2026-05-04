@@ -390,7 +390,7 @@ describe('ChatPage', () => {
     expect(engineSection).toHaveTextContent('DeepSeek 可用');
     expect(engineSection).toHaveTextContent('OpenAI 未配置');
     expect(engineSection).toHaveTextContent('Gemini 离线');
-    expect(engineSection).toHaveTextContent('Local UNKNOWN');
+    expect(engineSection).toHaveTextContent('Local 未知');
     expect(engineSection.textContent).not.toMatch(/api[_-]?key|secret|sk-/i);
   });
 
@@ -415,23 +415,23 @@ describe('ChatPage', () => {
 
     const evidencePanel = screen.getByTestId('chat-evidence-panel');
     expect(evidencePanel).toHaveTextContent('持仓');
-    expect(evidencePanel).toHaveTextContent('missing');
+    expect(evidencePanel).toHaveTextContent('缺失');
     expect(evidencePanel).toHaveTextContent('观察列表');
-    expect(evidencePanel).toHaveTextContent('available');
+    expect(evidencePanel).toHaveTextContent('可用');
     expect(evidencePanel).toHaveTextContent('扫描器');
-    expect(evidencePanel).toHaveTextContent('available');
+    expect(evidencePanel).toHaveTextContent('可用');
     expect(evidencePanel).toHaveTextContent('回测');
-    expect(evidencePanel).toHaveTextContent('available');
+    expect(evidencePanel).toHaveTextContent('可用');
     expect(evidencePanel).toHaveTextContent('行情');
-    expect(evidencePanel).toHaveTextContent('available');
+    expect(evidencePanel).toHaveTextContent('可用');
     expect(evidencePanel).toHaveTextContent('128.42');
     expect(evidencePanel).toHaveTextContent('技术指标');
     expect(evidencePanel).toHaveTextContent('RSI 58.2');
     expect(evidencePanel).toHaveTextContent('基本面');
-    expect(evidencePanel).toHaveTextContent('partial');
+    expect(evidencePanel).toHaveTextContent('部分');
     expect(evidencePanel).toHaveTextContent('缺 marketCap, revenueTtm');
     expect(evidencePanel).toHaveTextContent('新闻');
-    expect(evidencePanel).toHaveTextContent('unknown');
+    expect(evidencePanel).toHaveTextContent('未知');
   });
 
   it('detects CN symbols and compare intent for multiple symbols', async () => {
@@ -544,7 +544,8 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByTestId('chat-answer-evidence-footer-assistant-evidence')).toHaveTextContent('LLM: DeepSeek deepseek-chat');
-    expect(screen.getByTestId('chat-answer-evidence-footer-assistant-evidence')).toHaveTextContent('数据: 行情 UNKNOWN · 技术 可用 · 基本面 部分 · 持仓 无 · 观察列表 已加入 · Scanner 最近入选 · 回测 有');
+    expect(screen.getByTestId('chat-answer-evidence-footer-assistant-evidence')).toHaveTextContent('数据: 行情 未知 · 技术 可用 · 基本面 部分 · 持仓 无 · 观察列表 已加入 · Scanner 最近入选 · 回测 有');
+    expect(screen.getByTestId('chat-answer-evidence-footer-assistant-evidence')).not.toHaveTextContent('UNKNOWN');
 
     fireEvent.change(screen.getByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
       target: { value: 'ORCL 还能买吗？' },

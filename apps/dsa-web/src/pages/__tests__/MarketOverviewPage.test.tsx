@@ -815,10 +815,10 @@ describe('MarketOverviewPage', () => {
     expect(getPulseText()).toMatch(/Solana/);
     expect(getPulseText()).toMatch(/BNB/);
     expect(getPulseText()).not.toMatch(/标普500|沪深300|恒生指数|道琼斯/);
-    expect(screen.getByTestId('market-overview-module-cryptoCore')).toHaveTextContent(/Crypto Core/);
-    expect(screen.getByTestId('market-overview-module-cryptoMomentum')).toHaveTextContent(/Crypto Momentum/);
-    expect(screen.getByTestId('market-overview-module-cryptoLiquidity')).toHaveTextContent(/BTC Funding|未接入/);
-    expect(screen.getByTestId('market-overview-module-cryptoRiskContext')).toHaveTextContent(/Macro Pressure|Crypto Risk Context/);
+    expect(screen.getByTestId('market-overview-module-cryptoCore')).toHaveTextContent(/加密核心/);
+    expect(screen.getByTestId('market-overview-module-cryptoMomentum')).toHaveTextContent(/加密动量/);
+    expect(screen.getByTestId('market-overview-module-cryptoLiquidity')).toHaveTextContent(/BTC 资金费率|未接入/);
+    expect(screen.getByTestId('market-overview-module-cryptoRiskContext')).toHaveTextContent(/宏观压力|加密风险上下文/);
     expect(screen.queryByTestId('market-overview-module-cnHkIndices')).not.toBeInTheDocument();
     expect(screen.queryByTestId('market-overview-module-usIndices')).not.toBeInTheDocument();
   });
@@ -881,11 +881,11 @@ describe('MarketOverviewPage', () => {
     expect(await screen.findByText(/信号可信：高/i)).toBeInTheDocument();
     expect(screen.getByTestId('market-decision-strip')).toBeInTheDocument();
     expect(screen.getByTestId('market-decision-strip')).toHaveAttribute('data-command-bar', 'market-state');
-    expect(screen.getByTestId('market-decision-strip')).toHaveTextContent(/MARKET STATE/);
-    expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/RISK/);
-    expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/LIQUIDITY/);
-    expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/BREADTH/);
-    expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/WATCH/);
+    expect(screen.getByTestId('market-decision-strip')).toHaveTextContent(/市场状态/);
+    expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/风险/);
+    expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/流动性/);
+    expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/宽度/);
+    expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/观察/);
     expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/风险|数据不足/);
     expect(screen.getByTestId('market-temperature-strip')).toBeInTheDocument();
     expect(screen.getByText(/信号可信：高/i)).toBeInTheDocument();
@@ -959,7 +959,8 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     expect((await screen.findAllByText('5,111.11')).length).toBeGreaterThan(0);
-    expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/LOCAL CACHE/i);
+    expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/本地缓存/i);
+    expect(screen.getByTestId('market-overview-cache-status')).not.toHaveTextContent(/LOCAL CACHE/i);
     expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/正在刷新|缓存/i);
     expect(screen.queryByText(/indices request timed out/i)).not.toBeInTheDocument();
   });
@@ -989,7 +990,8 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     expect((await screen.findAllByText('5,111.11')).length).toBeGreaterThan(0);
-    await waitFor(() => expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/REFRESH FAILED|CACHE|STALE/i));
+    await waitFor(() => expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/刷新失败|缓存|陈旧/i));
+    expect(screen.getByTestId('market-overview-cache-status')).not.toHaveTextContent(/REFRESH FAILED|CACHE|STALE/i);
     expect(screen.getAllByText('标普500').length).toBeGreaterThan(0);
     expect(screen.queryByText(/更新失败：indices request timed out/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('market-overview-refresh-error-count')).toHaveTextContent(/[1-9]/);
@@ -1379,7 +1381,7 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     const indicesCard = await screen.findByTestId('market-overview-card-indices');
-    const firstQuote = within(indicesCard).getAllByTestId('market-overview-dense-quote-item')[0];
+    const firstQuote = await waitFor(() => within(indicesCard).getAllByTestId('market-overview-dense-quote-item')[0]);
     expect(firstQuote).toHaveAttribute('data-quote-item-layout', 'compact-grid');
     expect(firstQuote).toHaveClass('grid', 'min-w-0', 'grid-cols-[minmax(96px,1fr)_minmax(104px,0.9fr)_76px_minmax(82px,max-content)_minmax(92px,max-content)]');
     expect(within(firstQuote).getByTestId('market-overview-quote-metadata')).toHaveClass('col-start-2');
@@ -1613,8 +1615,8 @@ describe('MarketOverviewPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '美股' }));
 
     const breadthCard = await screen.findByTestId('market-overview-card-usBreadth');
-    expect(within(breadthCard).getByRole('heading', { name: /US Breadth|Breadth Proxy/i })).toBeInTheDocument();
-    expect(breadthCard).toHaveTextContent(/Sector ETF proxy|proxy/i);
+    expect(within(breadthCard).getByRole('heading', { name: /美股宽度|宽度代理/i })).toBeInTheDocument();
+    expect(breadthCard).toHaveTextContent(/行业 ETF 代理/);
     expect(breadthCard).toHaveTextContent(/Sectors Up|Strongest XLK|RSP vs SPY/);
     expect(breadthCard).not.toHaveTextContent(/未接入/);
 
@@ -1645,8 +1647,8 @@ describe('MarketOverviewPage', () => {
     expect(await screen.findByTestId('market-overview-card-cryptoCore')).toHaveTextContent(/Bitcoin|Ethereum|Solana|BNB/);
     expect(screen.getByTestId('market-overview-card-cryptoMomentum')).toHaveTextContent(/Bitcoin|Ethereum|Solana|BNB/);
     const liquidityCard = screen.getByTestId('market-overview-card-cryptoLiquidity');
-    expect(liquidityCard).toHaveTextContent(/Funding|BTC Funding/);
-    expect(liquidityCard).toHaveTextContent(/Stablecoin liquidity.*未接入|Dominance.*未接入/);
+    expect(liquidityCard).toHaveTextContent(/资金费率|BTC Funding|BTC 资金费率/);
+    expect(liquidityCard).toHaveTextContent(/稳定币流动性.*未接入|BTC 占比.*未接入/);
     expect(screen.getByTestId('market-overview-card-cryptoRiskContext')).toHaveTextContent(/DXY|US 10Y|VIX/);
     expect(screen.queryByTestId('market-overview-module-cnHkIndices')).not.toBeInTheDocument();
     expect(screen.queryByTestId('market-overview-module-usIndices')).not.toBeInTheDocument();
@@ -1823,7 +1825,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByRole('heading', { name: /US Index Core/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /波动率与风险压力/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /US Rates/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Macro Pressure/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /宏观压力/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /情绪与资金面/i })).toBeInTheDocument();
     expect(screen.queryByText('CSI 300')).not.toBeInTheDocument();
     expect(screen.queryByText('Shanghai Composite')).not.toBeInTheDocument();
@@ -1897,7 +1899,7 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
-    expect(await screen.findByRole('heading', { name: /Crypto Core/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /加密核心/i })).toBeInTheDocument();
     expect((await screen.findAllByText(/75,800/)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/3,120/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/590/).length).toBeGreaterThan(0);
@@ -1918,7 +1920,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getAllByText('ETH').length).toBeGreaterThan(0);
     expect(screen.getAllByText('BNB').length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole('button', { name: /刷新 Crypto Core/i }));
+    fireEvent.click(screen.getByRole('button', { name: /刷新 加密核心/i }));
 
     await waitFor(() => expect(marketApi.getCrypto).toHaveBeenCalledTimes(2));
     expect(screen.getAllByText('BTC').length).toBeGreaterThan(0);
@@ -1971,7 +1973,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-briefing-summary')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '美股' }));
     expandPendingDataSourceSection();
-    expect(screen.getByRole('heading', { name: /US Breadth/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /美股宽度/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
     expandPendingDataSourceSection();
     expect(screen.getByRole('heading', { name: /A股短线情绪/i })).toBeInTheDocument();

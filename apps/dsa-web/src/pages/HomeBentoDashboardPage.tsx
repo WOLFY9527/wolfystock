@@ -293,6 +293,18 @@ function traceStatusTone(status?: string): 'neutral' | 'used' | 'warning' | 'mis
   return 'neutral';
 }
 
+function traceStatusLabel(status?: string | null): string {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === 'used' || normalized === 'available') return '可用';
+  if (normalized === 'fallback') return '备用';
+  if (normalized === 'stale') return '陈旧';
+  if (normalized === 'missing') return '缺失';
+  if (normalized === 'partial') return '部分';
+  if (normalized === 'error') return '异常';
+  if (normalized === 'unknown' || !normalized) return '未知';
+  return status || '未知';
+}
+
 function safeReportValue(value: unknown): string {
   const text = String(value ?? '').trim();
   return text && text !== '-' && !/^n\/?a$/i.test(text) ? text : '--';
@@ -345,7 +357,7 @@ type ReportIdentity = {
 
 function normalizeChecklistStatus(item: StandardReportChecklistItem | string): { label: string; status: string } {
   if (typeof item === 'string') {
-    return { label: item, status: 'UNKNOWN' };
+    return { label: item, status: '未知' };
   }
   const status = String(item.status || '').toLowerCase();
   const normalized = status === 'pass'
@@ -356,7 +368,7 @@ function normalizeChecklistStatus(item: StandardReportChecklistItem | string): {
         ? 'WARN'
         : status === 'na'
           ? 'N/A'
-          : 'UNKNOWN';
+          : '未知';
   return { label: item.text || '--', status: normalized };
 }
 
@@ -558,11 +570,11 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
       id: 'checklist',
       title: '检查清单',
       checklist: checklistItems.length ? checklistItems : [
-        { label: '趋势与行动一致', status: 'UNKNOWN' },
-        { label: '入场区间明确', status: 'UNKNOWN' },
-        { label: '止损纪律明确', status: 'UNKNOWN' },
-        { label: '数据覆盖充分', status: 'UNKNOWN' },
-        { label: '冲突已标注', status: 'UNKNOWN' },
+        { label: '趋势与行动一致', status: '未知' },
+        { label: '入场区间明确', status: '未知' },
+        { label: '止损纪律明确', status: '未知' },
+        { label: '数据覆盖充分', status: '未知' },
+        { label: '冲突已标注', status: '未知' },
       ],
     },
     {
@@ -803,7 +815,7 @@ function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: 
             <div key={name} className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
               <div className="flex min-w-0 items-center justify-between gap-2">
                 <span className="truncate text-xs font-semibold text-white/72">{name}</span>
-                <TraceBadge>{field.source || 'unknown'}</TraceBadge>
+                <TraceBadge>{traceStatusLabel(field.source)}</TraceBadge>
               </div>
               <p className="mt-1 break-words text-sm text-white">{formatTraceValue(field.value)}</p>
               {field.notes ? <p className="mt-1 line-clamp-2 text-xs text-white/42">{field.notes}</p> : null}
@@ -819,7 +831,7 @@ function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: 
             <div key={`${source.name}-${index}`} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
               <span className="truncate text-xs font-semibold text-white/72">{source.name || 'source'}</span>
               <div className="flex min-w-0 flex-wrap justify-end gap-2">
-                <TraceBadge tone={traceStatusTone(source.status)}>{String(source.status || 'unknown').toUpperCase()}</TraceBadge>
+                <TraceBadge tone={traceStatusTone(source.status)}>{traceStatusLabel(source.status)}</TraceBadge>
                 {source.provider ? <TraceBadge>{source.provider}</TraceBadge> : null}
               </div>
             </div>
@@ -871,7 +883,7 @@ function DecisionTracePanel({ trace, locale }: { trace?: DecisionTrace; locale: 
             {signals.length ? signals.slice(0, 8).map((signal, index) => (
               <div key={`${signal.name}-${index}`} className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm">
                 <span className="truncate text-white/72">{signal.name || 'signal'}</span>
-                <span className="break-words text-white/48">{formatTraceValue(signal.value)} · {signal.source || 'unknown'}</span>
+                <span className="break-words text-white/48">{formatTraceValue(signal.value)} · {traceStatusLabel(signal.source)}</span>
               </div>
             )) : <p className="text-sm text-white/48">No signal list available.</p>}
           </div>
@@ -1173,10 +1185,10 @@ const CONTENT: Record<DashboardLocale, {
     tech: {
       title: '技术形态',
       signals: [
-        { label: 'MA ALIGNMENT', value: '多头排列 (Bullish Alignment)', tone: 'bullish' },
+        { label: '均线结构', value: '多头排列', tone: 'bullish' },
         { label: 'RSI-14', value: '65.4 (强势区)', tone: 'neutral' },
-        { label: 'MACD', value: '零轴上方金叉 (Bullish Crossover)', tone: 'bullish' },
-        { label: 'VOLUME DYNAMICS', value: '放量突破 (High Vol Breakout)', tone: 'bullish' },
+        { label: 'MACD', value: '零轴上方金叉', tone: 'bullish' },
+        { label: '量价动态', value: '放量突破', tone: 'bullish' },
       ],
       detailLabel: '查看结构细节',
     },
@@ -1184,11 +1196,11 @@ const CONTENT: Record<DashboardLocale, {
       title: '基本面画像',
       metrics: [
         { label: 'ROE', value: '31.8%', tone: 'bullish' },
-        { label: 'EBITDA MARGIN', value: '42.5%', tone: 'bullish' },
-        { label: 'LATEST EPS', value: '$1.24 (超预期 +12%)', tone: 'bullish' },
-        { label: 'REVENUE', value: '$26.0B (不及预期 -2%)', tone: 'neutral' },
-        { label: 'FORWARD PE', value: '35.2x', tone: 'neutral' },
-        { label: 'PEG RATIO', value: '1.15', tone: 'neutral' },
+        { label: 'EBITDA 利润率', value: '42.5%', tone: 'bullish' },
+        { label: '最新 EPS', value: '$1.24 (超预期 +12%)', tone: 'bullish' },
+        { label: '营收', value: '$26.0B (不及预期 -2%)', tone: 'neutral' },
+        { label: '预期 P/E', value: '35.2x', tone: 'neutral' },
+        { label: 'PEG 比率', value: '1.15', tone: 'neutral' },
       ],
       detailLabel: '查看基本面细节',
     },
@@ -1307,21 +1319,21 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
       tech: {
         ...CONTENT.zh.tech,
         signals: [
-          { label: 'MA ALIGNMENT', value: '多头排列 (Bullish Alignment)', tone: 'bullish' },
+          { label: '均线结构', value: '多头排列', tone: 'bullish' },
           { label: 'RSI-14', value: '61.2 (强势区)', tone: 'neutral' },
           { label: 'MACD', value: '零轴上方二次扩张', tone: 'bullish' },
-          { label: 'VOLUME DYNAMICS', value: '突破后量能维持', tone: 'bullish' },
+          { label: '量价动态', value: '突破后量能维持', tone: 'bullish' },
         ],
       },
       fundamentals: {
         ...CONTENT.zh.fundamentals,
         metrics: [
           { label: 'ROE', value: '109.3%', tone: 'bullish' },
-          { label: 'EBITDA MARGIN', value: '46.1%', tone: 'bullish' },
-          { label: 'LATEST EPS', value: '$1.47 (超预期 +9%)', tone: 'bullish' },
-          { label: 'REVENUE', value: '$14.1B (超预期 +3%)', tone: 'bullish' },
-          { label: 'FORWARD PE', value: '31.2x', tone: 'neutral' },
-          { label: 'PEG RATIO', value: '1.08', tone: 'neutral' },
+          { label: 'EBITDA 利润率', value: '46.1%', tone: 'bullish' },
+          { label: '最新 EPS', value: '$1.47 (超预期 +9%)', tone: 'bullish' },
+          { label: '营收', value: '$14.1B (超预期 +3%)', tone: 'bullish' },
+          { label: '预期 P/E', value: '31.2x', tone: 'neutral' },
+          { label: 'PEG 比率', value: '1.08', tone: 'neutral' },
         ],
       },
     },
@@ -1355,21 +1367,21 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
       tech: {
         ...CONTENT.zh.tech,
         signals: [
-          { label: 'MA ALIGNMENT', value: '跌破生命线 (Below MA60)', tone: 'bearish' },
+          { label: '均线结构', value: '跌破 MA60', tone: 'bearish' },
           { label: 'RSI-14', value: '54.8 (修复区)', tone: 'neutral' },
           { label: 'MACD', value: '零轴下方收敛', tone: 'neutral' },
-          { label: 'VOLUME DYNAMICS', value: '反弹放量，续航待定', tone: 'neutral' },
+          { label: '量价动态', value: '反弹放量，续航待定', tone: 'neutral' },
         ],
       },
       fundamentals: {
         ...CONTENT.zh.fundamentals,
         metrics: [
           { label: 'ROE', value: '18.9%', tone: 'neutral' },
-          { label: 'EBITDA MARGIN', value: '12.8%', tone: 'bearish' },
-          { label: 'LATEST EPS', value: '$0.52 (不及预期 -6%)', tone: 'bearish' },
-          { label: 'REVENUE', value: '$25.2B (不及预期 -2%)', tone: 'neutral' },
-          { label: 'FORWARD PE', value: '55.8x', tone: 'neutral' },
-          { label: 'PEG RATIO', value: '2.04', tone: 'bearish' },
+          { label: 'EBITDA 利润率', value: '12.8%', tone: 'bearish' },
+          { label: '最新 EPS', value: '$0.52 (不及预期 -6%)', tone: 'bearish' },
+          { label: '营收', value: '$25.2B (不及预期 -2%)', tone: 'neutral' },
+          { label: '预期 P/E', value: '55.8x', tone: 'neutral' },
+          { label: 'PEG 比率', value: '2.04', tone: 'bearish' },
         ],
       },
     },
@@ -1719,18 +1731,39 @@ function deriveMaAlignment(locale: DashboardLocale, fields: StandardReportField[
         ? 'Bearish Alignment'
         : 'Mixed Alignment'
     : isBullish
-      ? '多头排列 (Bullish Alignment)'
+      ? '多头排列'
       : isBearish
-        ? '空头排列 (Bearish Alignment)'
-        : '均线混合 (Mixed Alignment)';
+        ? '空头排列'
+        : '均线混合';
 
   return {
-    label: 'MA ALIGNMENT',
+    label: locale === 'en' ? 'MA ALIGNMENT' : '均线结构',
     value,
     rawValue: value,
     tone,
     details: value,
   };
+}
+
+function localizeDashboardFieldLabel(locale: DashboardLocale, label: string): string {
+  if (locale === 'en') {
+    return label;
+  }
+
+  const key = normalizeDetailKey(label);
+  const labels: Record<string, string> = {
+    ebitdamargin: 'EBITDA 利润率',
+    forwardpe: '预期 P/E',
+    latesteps: '最新 EPS',
+    maalignment: '均线结构',
+    pegratio: 'PEG 比率',
+    revenue: '营收',
+    revenuegrowth: '收入增速',
+    volumedynamics: '量价动态',
+    volumeprofile: '量价动态',
+  };
+
+  return labels[key] || label;
 }
 
 function formatDesiredMetricValue(label: string, value: string): string {
@@ -1859,17 +1892,19 @@ function compactDashboardSignals(locale: DashboardLocale, signals: DashboardSign
     const compactValue = compactTechSignalValue(locale, signal.label, signal.value);
     return {
       ...signal,
+      label: localizeDashboardFieldLabel(locale, signal.label),
       value: compactValue,
       rawValue: signal.rawValue || signal.value,
     };
   });
 }
 
-function compactDashboardMetrics(metrics: DashboardField[]): DashboardField[] {
+function compactDashboardMetrics(locale: DashboardLocale, metrics: DashboardField[]): DashboardField[] {
   return metrics.map((metric) => {
     const compactValue = compactFundamentalMetricValue(metric.value);
     return {
       ...metric,
+      label: localizeDashboardFieldLabel(locale, metric.label),
       value: compactValue,
       rawValue: compactValue,
     };
@@ -1881,7 +1916,7 @@ function getTechnicalFieldSpecs(locale: DashboardLocale): DesiredFieldSpec[] {
   return [
     {
       aliases: ['MA ALIGNMENT', 'Moving Averages', '均线结构', '均线系统', '多头/空头排列'],
-      fallback: { label: 'MA ALIGNMENT', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
+      fallback: { label: isEnglish ? 'MA ALIGNMENT' : '均线结构', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
     },
     {
       aliases: ['RSI-14', 'RSI14', 'RSI'],
@@ -1894,7 +1929,7 @@ function getTechnicalFieldSpecs(locale: DashboardLocale): DesiredFieldSpec[] {
     {
       aliases: ['VOLUME DYNAMICS', 'Volume Profile', '量价配合', '量价判断', '成交量', 'Volume'],
       fallback: {
-        label: 'VOLUME DYNAMICS',
+        label: isEnglish ? 'VOLUME DYNAMICS' : '量价动态',
         value: EMPTY_FIELD_VALUE,
         rawValue: EMPTY_FIELD_VALUE,
         tone: 'neutral',
@@ -1913,23 +1948,23 @@ function getFundamentalFieldSpecs(locale: DashboardLocale): DesiredFieldSpec[] {
     },
     {
       aliases: ['EBITDA Margin', 'EBITDA MARGIN', 'EBITDA利润率'],
-      fallback: { label: 'EBITDA MARGIN', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
+      fallback: { label: isEnglish ? 'EBITDA MARGIN' : 'EBITDA 利润率', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
     },
     {
       aliases: ['Latest EPS', 'LATEST EPS', 'EPS', '最新季报'],
-      fallback: { label: 'LATEST EPS', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
+      fallback: { label: isEnglish ? 'LATEST EPS' : '最新 EPS', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
     },
     {
       aliases: ['Revenue', 'Revenue Growth', '营收', '收入增速'],
-      fallback: { label: 'REVENUE', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
+      fallback: { label: isEnglish ? 'REVENUE' : '营收', value: EMPTY_FIELD_VALUE, rawValue: EMPTY_FIELD_VALUE, tone: 'neutral', details: EMPTY_FIELD_VALUE },
     },
     {
       aliases: ['Forward PE', 'Forward P/E', '远期市盈率', '预期市盈率', 'PE一致预期'],
-      fallback: { label: 'FORWARD PE', value: isEnglish ? 'N/A' : 'N/A', rawValue: 'N/A', tone: 'neutral', details: 'N/A' },
+      fallback: { label: isEnglish ? 'FORWARD PE' : '预期 P/E', value: isEnglish ? 'N/A' : 'N/A', rawValue: 'N/A', tone: 'neutral', details: 'N/A' },
     },
     {
       aliases: ['PEG Ratio', 'PEG RATIO', 'PEG'],
-      fallback: { label: 'PEG RATIO', value: 'N/A', rawValue: 'N/A', tone: 'neutral', details: 'N/A' },
+      fallback: { label: isEnglish ? 'PEG RATIO' : 'PEG 比率', value: 'N/A', rawValue: 'N/A', tone: 'neutral', details: 'N/A' },
     },
   ];
 }
@@ -2358,7 +2393,7 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
     },
     fundamentals: {
       ...seed.fundamentals,
-      metrics: compactDashboardMetrics(mapDesiredFields(locale, fundamentalFields, getFundamentalFieldSpecs(locale))),
+      metrics: compactDashboardMetrics(locale, mapDesiredFields(locale, fundamentalFields, getFundamentalFieldSpecs(locale))),
     },
   });
 }

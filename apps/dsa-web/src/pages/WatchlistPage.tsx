@@ -216,6 +216,7 @@ function getCopy(language: 'zh' | 'en') {
       batchBacktesting: 'Backtesting...',
       batchBacktestComplete: 'Watchlist backtest completed.',
       batchBacktestLabel: 'Single-symbol watchlist backtest',
+      batchBacktestMeta: 'symbols · concurrency 2',
       resultPrefix: 'Result',
       symbol: 'Symbol',
       name: 'Name',
@@ -256,7 +257,7 @@ function getCopy(language: 'zh' | 'en') {
   }
   return {
     title: '观察列表',
-    subtitle: 'Track scanner candidates and continue analysis/backtesting',
+    subtitle: '跟踪扫描候选，继续分析与回测',
     totalTracked: '追踪总数',
     marketsRepresented: '覆盖市场',
     scannerSourced: '扫描来源',
@@ -285,6 +286,7 @@ function getCopy(language: 'zh' | 'en') {
     batchBacktesting: '回测中...',
     batchBacktestComplete: '观察列表回测完成。',
     batchBacktestLabel: '观察列表单标的回测',
+    batchBacktestMeta: '个标的 · 并发 2',
     resultPrefix: '结果',
     symbol: '代码',
     name: '名称',
@@ -644,7 +646,7 @@ const WatchlistPage: React.FC = () => {
       <div className="flex w-full flex-col gap-5">
         <header className="flex flex-col gap-3 rounded-[24px] border border-white/5 bg-white/[0.02] px-5 py-5 backdrop-blur-sm md:flex-row md:items-end md:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-white/35">Scanner candidates</p>
+            <p className="text-xs font-bold tracking-[0.24em] text-white/35">{language === 'zh' ? '扫描候选' : 'Scanner candidates'}</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-normal text-white md:text-3xl">{copy.title}</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-white/50">{copy.subtitle}</p>
           </div>
@@ -753,7 +755,7 @@ const WatchlistPage: React.FC = () => {
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 backdrop-blur-md">
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.batchBacktestLabel}</p>
-              <p className="mt-1 truncate text-xs text-white/45">{filteredItems.length} symbols · concurrency 2</p>
+              <p className="mt-1 truncate text-xs text-white/45">{filteredItems.length} {language === 'zh' ? copy.batchBacktestMeta : 'symbols · concurrency 2'}</p>
             </div>
             <button
               type="button"
@@ -833,10 +835,10 @@ const WatchlistPage: React.FC = () => {
                           <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-white/40">{copy.noEvidence}</span>
                         ) : null}
                         {score !== null ? (
-                          <span className="rounded-lg border border-sky-400/20 bg-sky-400/10 px-2 py-1 font-mono text-sky-100">SCORE {formatScore(score)}</span>
+                          <span className="rounded-lg border border-sky-400/20 bg-sky-400/10 px-2 py-1 font-mono text-sky-100">{language === 'zh' ? '分数' : 'SCORE'} {formatScore(score)}</span>
                         ) : null}
                         {status !== 'unknown' ? (
-                          <span className="max-w-[140px] truncate rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono uppercase text-white/60">SCANNER {status}</span>
+                          <span className="max-w-[140px] truncate rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-white/60">{language === 'zh' ? '扫描' : 'SCANNER'} {status === 'selected' && language === 'zh' ? '入选' : status}</span>
                         ) : null}
                         {typeof avgForward === 'number' || typeof hitRate === 'number' ? (
                           <span className={`rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono ${

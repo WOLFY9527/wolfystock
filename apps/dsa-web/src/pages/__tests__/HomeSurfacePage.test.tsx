@@ -310,7 +310,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('最近报告归因')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('买');
     expect(screen.getByTestId('home-bento-decision-company-header')).toHaveTextContent('Oracle Corporation');
-    expect(screen.getByTestId('home-bento-decision-sector')).toHaveTextContent('TECHNOLOGY');
+    expect(screen.getByTestId('home-bento-decision-sector')).toHaveTextContent('科技');
     expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('7.8');
     expect(screen.queryByTestId('home-bento-decision-direction')).not.toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-sibling-row')).not.toBeInTheDocument();
@@ -344,7 +344,7 @@ describe('HomeSurfacePage', () => {
     expect(macdSignalValue).not.toBeUndefined();
     expect(macdSignal).toHaveClass('flex', 'flex-col', 'gap-1', 'py-2', 'border-b', 'border-white/5');
     expect(macdSignalValue).toHaveClass('text-xs', 'font-medium', 'text-right');
-    expect(screen.getByTestId('home-bento-fundamental-metric-REVENUE')).toHaveTextContent('+9.4%');
+    expect(screen.getByTestId('home-bento-fundamental-metric-营收')).toHaveTextContent('+9.4%');
     expect(screen.getByText('121.80 - 124.60').className).not.toContain('text-2xl');
     expect(screen.getByText('+9.4%').className).not.toContain('text-2xl');
     expect(screen.getByText('+9.4%').className).not.toContain('text-3xl');
@@ -356,10 +356,10 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveAttribute('title', '零轴上方，动能再扩张。');
     expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveTextContent('零轴上方，动能再扩张。');
     expect(screen.queryByText('Second expansion above zero')).not.toBeInTheDocument();
-    expect(screen.getByText('MA20 > MA60')).toBeInTheDocument();
+    expect(screen.getByText('均线结构')).toBeInTheDocument();
     expect(screen.getByText('+9.4%').getAttribute('style') || '').toBe('');
     expect(screen.getByText('ROE')).toBeInTheDocument();
-    expect(screen.getByText('EBITDA MARGIN')).toBeInTheDocument();
+    expect(screen.getByText('EBITDA 利润率')).toBeInTheDocument();
     expect(screen.queryByText('$12.1B')).not.toBeInTheDocument();
     expect(primaryStack.compareDocumentPosition(secondaryStack) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByTestId('home-bento-card-decision').compareDocumentPosition(omnibar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -490,7 +490,7 @@ describe('HomeSurfacePage', () => {
     expect(within(panel).getAllByText('rule').length).toBeGreaterThan(0);
     expect(within(panel).getByText('使用的数据')).toBeInTheDocument();
     expect(within(panel).getByText('quote')).toBeInTheDocument();
-    expect(within(panel).getByText('FALLBACK')).toBeInTheDocument();
+    expect(within(panel).getByText('备用')).toBeInTheDocument();
     expect(within(panel).getByText('冲突与限制')).toBeInTheDocument();
     expect(within(panel).getByText('Action says sell but plan includes entry/accumulation.')).toBeInTheDocument();
     const developerDetails = within(panel).getByTestId('home-bento-decision-trace-developer');
@@ -542,9 +542,9 @@ describe('HomeSurfacePage', () => {
     expect(within(panel).getByText('wait_pullback')).toBeInTheDocument();
     expect(within(panel).getAllByText('technical_rule').length).toBeGreaterThan(0);
     expect(within(panel).getByText('使用的数据')).toBeInTheDocument();
-    expect(within(panel).getByText('USED')).toBeInTheDocument();
-    expect(within(panel).getByText('MISSING')).toBeInTheDocument();
-    expect(within(panel).getByText('UNKNOWN')).toBeInTheDocument();
+    expect(within(panel).getByText('可用')).toBeInTheDocument();
+    expect(within(panel).getByText('缺失')).toBeInTheDocument();
+    expect(within(panel).getByText('未知')).toBeInTheDocument();
     const developerDetails = within(panel).getByTestId('home-bento-decision-trace-developer');
     expect(developerDetails).not.toHaveAttribute('open');
     fireEvent.click(within(developerDetails).getByText('开发者细节'));
@@ -1014,8 +1014,8 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('home-bento-decision-insight-copy').textContent).toContain('The saved report succeeded after a fallback model attempt.');
       expect(screen.getByTestId('home-bento-tech-signal-MACD')).toHaveTextContent('0.2934');
-      expect(screen.getByTestId('home-bento-tech-signal-MA ALIGNMENT')).toHaveTextContent('MA5 下穿 MA10，均线缠绕。');
-      expect(screen.getByTestId('home-bento-tech-signal-VOLUME DYNAMICS')).toHaveTextContent('缩量，追价意愿偏弱。');
+      expect(screen.getByTestId('home-bento-tech-signal-均线结构')).toHaveTextContent('MA5 下穿 MA10，均线缠绕。');
+      expect(screen.getByTestId('home-bento-tech-signal-量价动态')).toHaveTextContent('缩量，追价意愿偏弱。');
       expect(screen.getByTestId('home-bento-strategy-metric-建仓区间')).toHaveTextContent('20.80');
     });
   });
@@ -1491,7 +1491,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-fundamentals'));
     expect(await screen.findByText('TSLA 基本面下钻')).toBeInTheDocument();
     expect(screen.getAllByText('+2.7%').length).toBeGreaterThan(0);
-    expect(screen.getByText('REVENUE 当前为 +2.7%，支撑说明需要继续绑定在这条基本面观测本身。')).toBeInTheDocument();
+    expect(screen.getByText('营收 当前为 +2.7%，支撑说明需要继续绑定在这条基本面观测本身。')).toBeInTheDocument();
     expect(screen.queryByText(/将接入盈利质量与估值弹性描述卡/)).not.toBeInTheDocument();
   });
 
@@ -1711,7 +1711,7 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => {
       const finalCard = screen.getByTestId('home-bento-analysis-result-card');
       expect(finalCard).toHaveTextContent('Netflix Inc.');
-      expect(finalCard).toHaveTextContent('COMMUNICATION SERVICES');
+      expect(finalCard).toHaveTextContent('通信服务');
       expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('买');
       expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('7.4');
       expect(screen.queryByTestId('home-bento-decision-direction')).not.toBeInTheDocument();

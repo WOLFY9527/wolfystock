@@ -1776,13 +1776,13 @@ function ScannerStrategySimulationPanel({
   disabled: boolean;
 }) {
   const statusLabel = result?.status === 'ready'
-    ? (language === 'en' ? 'ready' : 'ready')
+    ? (language === 'en' ? 'ready' : '就绪')
     : result?.status === 'partial'
-      ? (language === 'en' ? 'partial' : 'partial')
+      ? (language === 'en' ? 'partial' : '部分')
       : result?.status === 'insufficient_history'
         ? (language === 'en' ? 'insufficient history' : '历史不足')
         : result?.status === 'failed'
-          ? (language === 'en' ? 'failed' : 'failed')
+          ? (language === 'en' ? 'failed' : '失败')
           : (language === 'en' ? 'idle' : '待运行');
   const summary = result?.summary;
   const compactMessage = disabled
@@ -1799,7 +1799,7 @@ function ScannerStrategySimulationPanel({
       <div className="flex min-w-0 items-center gap-2">
         <Clock className="h-3.5 w-3.5 text-white/38" aria-hidden="true" />
         <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">
-          {language === 'en' ? `History sim · ${lookbackDays}D · Forward ${forwardDays}D` : `历史模拟 · ${lookbackDays}D · Forward ${forwardDays}D`}
+                          {language === 'en' ? `History sim · ${lookbackDays}D · Forward ${forwardDays}D` : `历史模拟 · 回看 ${lookbackDays}D · 持有 ${forwardDays}D`}
         </h3>
       </div>
       <div className="mt-2 grid gap-3" data-testid="scanner-strategy-simulation-body">
@@ -3255,12 +3255,12 @@ const UserScannerPage: React.FC = () => {
                 <div className="shrink-0 border-b border-white/5 px-3 py-2" data-testid="scanner-diagnostic-summary">
                   <div data-testid="scanner-summary-counters" className="flex flex-wrap items-center gap-1.5 rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 backdrop-blur-md">
                     {[
-                      ['UNIVERSE', runDetail.summary?.universeCount ?? runDetail.acceptedSymbolsCount ?? runDetail.universeSize],
-                      ['EVALUATED', runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize],
-                      ['SELECTED', runDetail.summary?.selectedCount ?? shortlistCount],
-                      ['REJECTED', runDetail.summary?.rejectedCount ?? 0],
-                      ['DATA FAILED', runDetail.summary?.dataFailedCount ?? 0],
-                      ['SKIPPED', runDetail.summary?.skippedCount ?? 0],
+                      [language === 'en' ? 'UNIVERSE' : '候选范围', runDetail.summary?.universeCount ?? runDetail.acceptedSymbolsCount ?? runDetail.universeSize],
+                      [language === 'en' ? 'EVALUATED' : '已评估', runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize],
+                      [language === 'en' ? 'SELECTED' : '入选', runDetail.summary?.selectedCount ?? shortlistCount],
+                      [language === 'en' ? 'REJECTED' : '淘汰', runDetail.summary?.rejectedCount ?? 0],
+                      [language === 'en' ? 'DATA FAILED' : '数据失败', runDetail.summary?.dataFailedCount ?? 0],
+                      [language === 'en' ? 'SKIPPED' : '跳过', runDetail.summary?.skippedCount ?? 0],
                     ].map(([label, value]) => (
                       <span key={label} className="inline-flex items-baseline gap-1 rounded-lg border border-white/5 bg-black/20 px-2 py-1">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{label}</span>

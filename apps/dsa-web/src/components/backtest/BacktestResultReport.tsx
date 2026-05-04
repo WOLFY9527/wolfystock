@@ -275,14 +275,14 @@ function dataQualityEntries(run: RuleBacktestRunResponse, normalized: Determinis
 function getMetricItems(normalized: DeterministicBacktestNormalizedResult): MetricItem[] {
   const metrics = normalized.metrics;
   return [
-    { key: 'total', label: 'Total Return', value: signedPct(metrics.totalReturnPct), rawValue: metrics.totalReturnPct, tone: toneFor(metrics.totalReturnPct) },
-    { key: 'benchmark', label: 'Benchmark Return', value: signedPct(metrics.benchmarkReturnPct), rawValue: metrics.benchmarkReturnPct, tone: toneFor(metrics.benchmarkReturnPct) },
-    { key: 'excess', label: 'Excess Return', value: signedPct(metrics.excessReturnVsBenchmarkPct), rawValue: metrics.excessReturnVsBenchmarkPct, tone: toneFor(metrics.excessReturnVsBenchmarkPct) },
-    { key: 'drawdown', label: 'Max Drawdown', value: signedPct(displayDrawdown(metrics.maxDrawdownPct)), rawValue: metrics.maxDrawdownPct, tone: 'negative' },
+    { key: 'total', label: '总收益', value: signedPct(metrics.totalReturnPct), rawValue: metrics.totalReturnPct, tone: toneFor(metrics.totalReturnPct) },
+    { key: 'benchmark', label: '基准收益', value: signedPct(metrics.benchmarkReturnPct), rawValue: metrics.benchmarkReturnPct, tone: toneFor(metrics.benchmarkReturnPct) },
+    { key: 'excess', label: '超额收益', value: signedPct(metrics.excessReturnVsBenchmarkPct), rawValue: metrics.excessReturnVsBenchmarkPct, tone: toneFor(metrics.excessReturnVsBenchmarkPct) },
+    { key: 'drawdown', label: '最大回撤', value: signedPct(displayDrawdown(metrics.maxDrawdownPct)), rawValue: metrics.maxDrawdownPct, tone: 'negative' },
     { key: 'cagr', label: 'CAGR', value: signedPct(metrics.annualizedReturnPct), rawValue: metrics.annualizedReturnPct, tone: toneFor(metrics.annualizedReturnPct) },
     { key: 'sharpe', label: 'Sharpe', value: signedNumber(metrics.sharpeRatio), rawValue: metrics.sharpeRatio, tone: toneFor(metrics.sharpeRatio) },
-    { key: 'winRate', label: 'Win Rate', value: signedPct(metrics.winRatePct), rawValue: metrics.winRatePct, tone: toneFor(metrics.winRatePct) },
-    { key: 'trades', label: 'Trades', value: String(metrics.tradeCount ?? 0), rawValue: metrics.tradeCount, tone: 'neutral' },
+    { key: 'winRate', label: '胜率', value: signedPct(metrics.winRatePct), rawValue: metrics.winRatePct, tone: toneFor(metrics.winRatePct) },
+    { key: 'trades', label: '交易次数', value: String(metrics.tradeCount ?? 0), rawValue: metrics.tradeCount, tone: 'neutral' },
   ];
 }
 
@@ -291,17 +291,17 @@ function getMoreMetricItems(run: RuleBacktestRunResponse, summary: TradeSummary)
   const items: Array<[string, string, number | null]> = [
     ['sortino', 'Sortino', safeNumber(lookup.sortino ?? lookup.sortinoRatio)],
     ['calmar', 'Calmar', safeNumber(lookup.calmar ?? lookup.calmarRatio)],
-    ['volatility', 'Volatility', safeNumber(lookup.volatilityPct ?? lookup.volatility)],
-    ['profitFactor', 'Profit Factor', summary.profitFactor],
-    ['avgHolding', 'Average Holding Days', summary.avgHoldingDays],
-    ['avgWin', 'Average Win', summary.avgWinPct],
-    ['avgLoss', 'Average Loss', summary.avgLossPct],
-    ['maxLosses', 'Max Consecutive Losses', safeNumber(lookup.maxConsecutiveLosses)],
-    ['maxWins', 'Max Consecutive Wins', safeNumber(lookup.maxConsecutiveWins)],
+    ['volatility', '波动率', safeNumber(lookup.volatilityPct ?? lookup.volatility)],
+    ['profitFactor', '盈亏比', summary.profitFactor],
+    ['avgHolding', '平均持有天数', summary.avgHoldingDays],
+    ['avgWin', '平均盈利', summary.avgWinPct],
+    ['avgLoss', '平均亏损', summary.avgLossPct],
+    ['maxLosses', '最大连亏', safeNumber(lookup.maxConsecutiveLosses)],
+    ['maxWins', '最大连赢', safeNumber(lookup.maxConsecutiveWins)],
     ['alpha', 'Alpha', safeNumber(lookup.alpha)],
     ['beta', 'Beta', safeNumber(lookup.beta)],
-    ['info', 'Information Ratio', safeNumber(lookup.informationRatio)],
-    ['tracking', 'Tracking Error', safeNumber(lookup.trackingError)],
+    ['info', '信息比率', safeNumber(lookup.informationRatio)],
+    ['tracking', '跟踪误差', safeNumber(lookup.trackingError)],
   ];
   return items.map(([key, label, value]) => ({
     key,
@@ -644,9 +644,9 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
 
         <div id="backtest-report-key-metrics" data-testid="backtest-report-key-metrics" className={GHOST_SECTION_CLASS}>
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-white">Key Metrics</h3>
+            <h3 className="text-sm font-semibold text-white">核心指标</h3>
             <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => setMoreMetricsOpen((value) => !value)}>
-              {moreMetricsOpen ? '收起 More Metrics' : '展开 More Metrics'}
+              {moreMetricsOpen ? '收起扩展指标' : '展开扩展指标'}
             </button>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -662,81 +662,81 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         <div id="backtest-report-曲线" data-testid="backtest-report-chart" className={GHOST_SECTION_CLASS}>
           <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-3">
             <div>
-              <p className={LABEL_CLASS}>Equity / Drawdown Chart</p>
-              <h3 className="mt-1 text-sm font-semibold text-white">Strategy vs Benchmark</h3>
+              <p className={LABEL_CLASS}>收益 / 回撤图</p>
+              <h3 className="mt-1 text-sm font-semibold text-white">策略对比基准</h3>
             </div>
             <div className="flex flex-wrap gap-2 text-[11px] text-white/45">
-              <span>Strategy</span>
-              <span>Benchmark</span>
-              <span>Daily P&L</span>
+              <span>策略</span>
+              <span>基准</span>
+              <span>每日盈亏</span>
             </div>
           </div>
           {chartNode ?? <DeterministicBacktestResultView run={run} normalized={normalized} densityConfig={densityConfig} />}
         </div>
 
         <div id="backtest-report-benchmark" data-testid="backtest-report-benchmark" className={GHOST_SECTION_CLASS}>
-          <p className={LABEL_CLASS}>Benchmark Comparison</p>
+          <p className={LABEL_CLASS}>基准对比</p>
           <p className="mt-2 text-sm text-white/78">{getBenchmarkSentence(normalized)}</p>
           <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <MetricCard item={{ key: 'strategy', label: 'Strategy', value: signedPct(normalized.metrics.totalReturnPct), tone: toneFor(normalized.metrics.totalReturnPct) }} />
+            <MetricCard item={{ key: 'strategy', label: '策略', value: signedPct(normalized.metrics.totalReturnPct), tone: toneFor(normalized.metrics.totalReturnPct) }} />
             <MetricCard item={{ key: 'bench', label: normalized.benchmarkMeta.benchmarkLabel || 'Benchmark', value: signedPct(normalized.metrics.benchmarkReturnPct), tone: toneFor(normalized.metrics.benchmarkReturnPct) }} />
-            <MetricCard item={{ key: 'excess', label: 'Excess', value: signedPct(normalized.metrics.excessReturnVsBenchmarkPct), tone: toneFor(normalized.metrics.excessReturnVsBenchmarkPct) }} />
-            <MetricCard item={{ key: 'dd', label: 'Drawdown', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
+            <MetricCard item={{ key: 'excess', label: '超额', value: signedPct(normalized.metrics.excessReturnVsBenchmarkPct), tone: toneFor(normalized.metrics.excessReturnVsBenchmarkPct) }} />
+            <MetricCard item={{ key: 'dd', label: '回撤', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
           </div>
         </div>
 
         <div id="backtest-report-交易" data-testid="backtest-report-trade-summary" className={GHOST_SECTION_CLASS}>
-          <p className={LABEL_CLASS}>Trade Summary</p>
+          <p className={LABEL_CLASS}>交易摘要</p>
           <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-5">
-            <MetricCard item={{ key: 'total', label: 'Total Trades', value: String(tradeSummary.totalTrades), tone: 'neutral' }} />
-            <MetricCard item={{ key: 'wins', label: 'Winning Trades', value: tradeSummary.winningTrades == null ? '--' : String(tradeSummary.winningTrades), tone: 'positive' }} />
-            <MetricCard item={{ key: 'losses', label: 'Losing Trades', value: tradeSummary.losingTrades == null ? '--' : String(tradeSummary.losingTrades), tone: 'negative' }} />
-            <MetricCard item={{ key: 'avg', label: 'Avg Trade', value: signedPct(tradeSummary.avgTradeReturnPct), tone: toneFor(tradeSummary.avgTradeReturnPct) }} />
-            <MetricCard item={{ key: 'pf', label: 'Profit Factor', value: signedNumber(tradeSummary.profitFactor), tone: toneFor(tradeSummary.profitFactor) }} />
+            <MetricCard item={{ key: 'total', label: '交易总数', value: String(tradeSummary.totalTrades), tone: 'neutral' }} />
+            <MetricCard item={{ key: 'wins', label: '盈利交易', value: tradeSummary.winningTrades == null ? '--' : String(tradeSummary.winningTrades), tone: 'positive' }} />
+            <MetricCard item={{ key: 'losses', label: '亏损交易', value: tradeSummary.losingTrades == null ? '--' : String(tradeSummary.losingTrades), tone: 'negative' }} />
+            <MetricCard item={{ key: 'avg', label: '单笔均值', value: signedPct(tradeSummary.avgTradeReturnPct), tone: toneFor(tradeSummary.avgTradeReturnPct) }} />
+            <MetricCard item={{ key: 'pf', label: '盈亏比', value: signedNumber(tradeSummary.profitFactor), tone: toneFor(tradeSummary.profitFactor) }} />
           </div>
         </div>
 
         <div id="backtest-report-归因" data-testid="backtest-report-attribution" className={GHOST_SECTION_CLASS}>
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
             <div>
-              <p className={LABEL_CLASS}>Trade Attribution</p>
-              <h3 className="mt-1 text-sm font-semibold text-white">PnL Contribution</h3>
+              <p className={LABEL_CLASS}>交易归因</p>
+              <h3 className="mt-1 text-sm font-semibold text-white">盈亏贡献</h3>
             </div>
-            <div className="font-mono text-xs text-white/38">{trades.length} trades</div>
+            <div className="font-mono text-xs text-white/38">{trades.length} 笔交易</div>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div>
-              <p className={`${LABEL_CLASS} mb-2`}>By Month</p>
+              <p className={`${LABEL_CLASS} mb-2`}>按月份</p>
               <AttributionList rows={attributionByMonth} testId="backtest-attribution-month" />
             </div>
             <div>
-              <p className={`${LABEL_CLASS} mb-2`}>By Year</p>
+              <p className={`${LABEL_CLASS} mb-2`}>按年份</p>
               <AttributionList rows={attributionByYear} testId="backtest-attribution-year" />
             </div>
             <div>
-              <p className={`${LABEL_CLASS} mb-2`}>By Exit Reason</p>
+              <p className={`${LABEL_CLASS} mb-2`}>按退出原因</p>
               <AttributionList rows={attributionByExitReason} testId="backtest-attribution-exit-reason" />
             </div>
             <div>
-              <p className={`${LABEL_CLASS} mb-2`}>By Holding Duration</p>
+              <p className={`${LABEL_CLASS} mb-2`}>按持有周期</p>
               <AttributionList rows={attributionByHoldingBucket} testId="backtest-attribution-holding-bucket" />
             </div>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <MetricCard item={{ key: 'gross', label: 'Gross PnL', value: signedNumber(grossPnlTotal), tone: toneFor(grossPnlTotal) }} />
-            <MetricCard item={{ key: 'net', label: 'Net PnL', value: signedNumber(netPnlTotal), tone: toneFor(netPnlTotal) }} />
-            <MetricCard item={{ key: 'fees', label: 'Fees', value: signedNumber(feesTotal), tone: feesTotal && feesTotal > 0 ? 'negative' : 'neutral' }} />
-            <MetricCard item={{ key: 'slippage', label: 'Slippage', value: signedNumber(slippageTotal), tone: slippageTotal && slippageTotal > 0 ? 'negative' : 'neutral' }} />
+            <MetricCard item={{ key: 'gross', label: '毛盈亏', value: signedNumber(grossPnlTotal), tone: toneFor(grossPnlTotal) }} />
+            <MetricCard item={{ key: 'net', label: '净盈亏', value: signedNumber(netPnlTotal), tone: toneFor(netPnlTotal) }} />
+            <MetricCard item={{ key: 'fees', label: '费用', value: signedNumber(feesTotal), tone: feesTotal && feesTotal > 0 ? 'negative' : 'neutral' }} />
+            <MetricCard item={{ key: 'slippage', label: '滑点', value: signedNumber(slippageTotal), tone: slippageTotal && slippageTotal > 0 ? 'negative' : 'neutral' }} />
           </div>
         </div>
 
         <div data-testid="backtest-report-event-timeline" data-visible-events={tradeEvents.length} data-total-events={trades.length * 2} className={GHOST_SECTION_CLASS}>
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
             <div>
-              <p className={LABEL_CLASS}>Holding Timeline</p>
-              <h3 className="mt-1 text-sm font-semibold text-white">Entry / Exit Events</h3>
+              <p className={LABEL_CLASS}>持仓时间线</p>
+              <h3 className="mt-1 text-sm font-semibold text-white">买入 / 卖出事件</h3>
             </div>
-            <span className="font-mono text-xs text-white/38">top {EVENT_ROW_LIMIT}</span>
+            <span className="font-mono text-xs text-white/38">前 {EVENT_ROW_LIMIT} 条</span>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {tradeEvents.length ? tradeEvents.map((event, index) => (
@@ -752,15 +752,15 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         </div>
 
         <div id="backtest-report-风险" data-testid="backtest-report-risk-diagnostics" className={GHOST_SECTION_CLASS}>
-          <p className={LABEL_CLASS}>Risk Diagnostics</p>
+          <p className={LABEL_CLASS}>风险诊断</p>
           <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <MetricCard item={{ key: 'best-trade', label: 'Best Trade', value: signedPct(getTradeReturn(bestTrade || {} as RuleBacktestTradeItem)), tone: toneFor(getTradeReturn(bestTrade || {} as RuleBacktestTradeItem)) }} />
-            <MetricCard item={{ key: 'worst-trade', label: 'Worst Trade', value: signedPct(getTradeReturn(worstTrade || {} as RuleBacktestTradeItem)), tone: toneFor(getTradeReturn(worstTrade || {} as RuleBacktestTradeItem)) }} />
-            <MetricCard item={{ key: 'wins', label: 'Consecutive Wins', value: String(consecutiveWins), tone: 'positive' }} />
-            <MetricCard item={{ key: 'losses', label: 'Consecutive Losses', value: String(consecutiveLosses), tone: 'negative' }} />
+            <MetricCard item={{ key: 'best-trade', label: '最佳交易', value: signedPct(getTradeReturn(bestTrade || {} as RuleBacktestTradeItem)), tone: toneFor(getTradeReturn(bestTrade || {} as RuleBacktestTradeItem)) }} />
+            <MetricCard item={{ key: 'worst-trade', label: '最差交易', value: signedPct(getTradeReturn(worstTrade || {} as RuleBacktestTradeItem)), tone: toneFor(getTradeReturn(worstTrade || {} as RuleBacktestTradeItem)) }} />
+            <MetricCard item={{ key: 'wins', label: '连续盈利', value: String(consecutiveWins), tone: 'positive' }} />
+            <MetricCard item={{ key: 'losses', label: '连续亏损', value: String(consecutiveLosses), tone: 'negative' }} />
           </div>
           <div className="mt-3 rounded-xl border border-white/5 bg-black/20 p-3">
-            <p className={LABEL_CLASS}>Max Drawdown Period</p>
+            <p className={LABEL_CLASS}>最大回撤区间</p>
             <p className="mt-2 truncate font-mono text-xs text-white/70">
               {(drawdown.start || '--')} {'->'} {(drawdown.trough || '--')} · {signedPct(drawdown.value)}
               {drawdown.recovery ? ` · recovered ${drawdown.recovery}` : ''}
@@ -815,7 +815,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
 
         <div id="backtest-report-数据质量" data-testid="backtest-report-data-quality" className={GHOST_SECTION_CLASS}>
           <button type="button" className="flex w-full items-center justify-between gap-3 text-left" onClick={() => setDataQualityOpen((value) => !value)}>
-            <span><span className={LABEL_CLASS}>Data Quality</span></span>
+            <span><span className={LABEL_CLASS}>数据质量</span></span>
             <span className="text-xs text-white/45">{dataQualityOpen ? '收起' : '展开'}</span>
           </button>
           {dataQualityOpen || mode === 'simple' ? (
@@ -849,7 +849,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
 
         <div id="backtest-report-执行假设" data-testid="backtest-report-execution-assumptions" className={GHOST_SECTION_CLASS}>
           <button type="button" className="flex w-full items-center justify-between gap-3 text-left" onClick={() => setAssumptionsOpen((value) => !value)}>
-            <span><span className={LABEL_CLASS}>Execution Assumptions</span></span>
+            <span><span className={LABEL_CLASS}>执行假设</span></span>
             <span className="text-xs text-white/45">{assumptionsOpen ? '收起' : '展开'}</span>
           </button>
           {assumptionsOpen || mode === 'simple' ? (

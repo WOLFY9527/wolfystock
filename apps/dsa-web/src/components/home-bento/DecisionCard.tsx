@@ -59,6 +59,34 @@ function resolveSignalActionKey(signalLabel: string, tone: SignalTone): SignalAc
   return tone === 'bearish' ? 'sell' : tone === 'neutral' ? 'hold' : 'buy';
 }
 
+function formatSectorLabel(locale: 'zh' | 'en', sector?: string): string {
+  const normalized = String(sector || '').trim();
+  const lower = normalized.toLowerCase();
+
+  if (locale === 'en') {
+    return (normalized || 'UNCLASSIFIED').toUpperCase();
+  }
+
+  if (!normalized || lower === 'unclassified') {
+    return '未分类';
+  }
+
+  const sectorLabels: Record<string, string> = {
+    'communication services': '通信服务',
+    'consumer cyclical': '可选消费',
+    'consumer defensive': '必需消费',
+    energy: '能源',
+    financials: '金融',
+    healthcare: '医疗保健',
+    industrials: '工业',
+    'real estate': '房地产',
+    technology: '科技',
+    utilities: '公用事业',
+  };
+
+  return sectorLabels[lower] || normalized;
+}
+
 function getSignalCommand(locale: 'zh' | 'en', signalLabel: string, tone: SignalTone): { actionKey: SignalActionKey; bias: string; command: string } {
   const actionKey = resolveSignalActionKey(signalLabel, tone);
 
@@ -202,7 +230,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   const supportingIndicators = getSupportingIndicators(locale, signalTone);
   const isEnglish = locale === 'en';
   const insightCopy = reason.body || summary || scoreValue || '-';
-  const sectorLabel = (sector || (isEnglish ? 'UNCLASSIFIED' : '未分类')).toUpperCase();
+  const sectorLabel = formatSectorLabel(locale, sector);
   const convictionPercent = getConvictionPercent(heroValue, heroUnit);
   const activeConvictionSegments = Math.ceil(convictionPercent / 20);
 

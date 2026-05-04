@@ -1458,7 +1458,7 @@ const PortfolioPage: React.FC = () => {
     : copy.fxFresh;
   const fxProviderLabel = fxRateRows.find((item) => item.source && item.source !== 'missing')?.source || 'frankfurter';
   const historyHasNextPage = currentEventCount >= DEFAULT_PAGE_SIZE;
-  const totalAssetsTitle = '总资产 Total Assets';
+  const totalAssetsTitle = language === 'zh' ? '总资产' : 'Total Assets';
   const historyDrawerTitle = language === 'en' ? 'Order History' : '历史记录';
   const zeroAssetStatus = language === 'zh' ? '等待交易录入' : 'Awaiting trade entry';
   const currencyBreakdownTitle = language === 'zh' ? '按币种' : 'By currency';
@@ -1887,7 +1887,7 @@ const PortfolioPage: React.FC = () => {
 	              </div>
 	              <div className="flex min-w-0 flex-col justify-between gap-3">
 	                <Select
-	                  label="ASSET SCOPE"
+	                  label={language === 'zh' ? '资产范围' : 'ASSET SCOPE'}
 	                  labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
 	                  value={String(selectedAccount)}
 	                  onChange={(value) => setSelectedAccount(value === 'all' ? 'all' : Number(value))}
@@ -2077,7 +2077,7 @@ const PortfolioPage: React.FC = () => {
 	              >
 	                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 pb-4">
 	                  <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
-		                    当前持仓（共 {positionRows.length} 项）
+		                    {language === 'zh' ? `当前持仓（共 ${positionRows.length} 项）` : `Current Holdings (${positionRows.length})`}
 	                  </h2>
 	                </div>
 
@@ -2173,12 +2173,12 @@ const PortfolioPage: React.FC = () => {
             <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-sm text-muted-text uppercase tracking-widest">Trade Station</h2>
+                  <h2 className="text-sm text-muted-text uppercase tracking-widest">{language === 'zh' ? '交易工作台' : 'Trade Station'}</h2>
                 </div>
               </div>
               <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <Select
-                  label="TRADE ACCOUNT"
+                  label={language === 'zh' ? '交易账户' : 'TRADE ACCOUNT'}
                   labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                   value={String(selectedTradeAccount)}
                   onChange={(value) => setSelectedTradeAccount(value === 'all' ? 'all' : Number(value))}
@@ -2190,7 +2190,7 @@ const PortfolioPage: React.FC = () => {
                   controlClassName="rounded-lg"
                 />
                 <Select
-                  label="COST METHOD"
+                  label={language === 'zh' ? '成本方法' : 'COST METHOD'}
                   labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                   value={costMethod}
                   onChange={(value) => setCostMethod(value as PortfolioCostMethod)}

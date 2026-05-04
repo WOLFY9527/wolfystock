@@ -1208,12 +1208,12 @@ describe('UserScannerPage', () => {
       }));
     });
     expect(screen.getAllByText(/入选 1|1 selected/).length).toBeGreaterThan(0);
-    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/UNIVERSE/);
+    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/候选范围|UNIVERSE/);
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/11/);
-    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/EVALUATED/);
+    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/已评估|EVALUATED/);
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/9/);
-    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/DATA FAILED/);
-    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/SKIPPED/);
+    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/数据失败|DATA FAILED/);
+    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/跳过|SKIPPED/);
     expect(screen.getByTestId('scanner-summary-counters')).toHaveTextContent(/SELECTED/);
     expect(screen.getByTestId('scanner-summary-counters')).toHaveTextContent(/REJECTED/);
     expect(screen.getByTestId('scanner-decision-summary')).toHaveTextContent(/本次扫描：1 个入选 \/ 9 个评估|Scan: 1 selected \/ 9 evaluated/);

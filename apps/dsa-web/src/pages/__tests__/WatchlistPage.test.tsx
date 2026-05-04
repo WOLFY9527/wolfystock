@@ -282,6 +282,9 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     expect(await screen.findByTestId('watchlist-row-NVDA')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '观察列表' })).toBeInTheDocument();
+    expect(screen.getByText('跟踪扫描候选，继续分析与回测')).toBeInTheDocument();
+    expect(screen.queryByText(/Track scanner candidates/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-TSM')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-600519')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-filter-grid')).toHaveClass('min-w-0', 'grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-6');
@@ -356,8 +359,8 @@ describe('WatchlistPage', () => {
     renderWatchlist();
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
-    expect(within(row).getByText('SCORE 94.0')).toBeInTheDocument();
-    expect(within(row).getByText(/SCANNER selected/i)).toBeInTheDocument();
+    expect(within(row).getByText('分数 94.0')).toBeInTheDocument();
+    expect(within(row).getByText(/扫描 入选/)).toBeInTheDocument();
     expect(within(row).getByText(/HIST \+3.2% · HIT 56%/)).toBeInTheDocument();
     expect(within(row).getByText(/BT \+24.6% · DD -8.2% · SH 1.34/)).toBeInTheDocument();
     expect(within(row).getByRole('link', { name: /结果 33/ })).toHaveAttribute('href', '/zh/backtest/results/33');

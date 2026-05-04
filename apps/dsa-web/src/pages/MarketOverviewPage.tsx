@@ -567,12 +567,12 @@ function unavailableMarketItem(symbol: string, label: string, message: string): 
 
 function buildCryptoLiquidityPanel(sourcePanel: MarketOverviewPanel | undefined): MarketOverviewPanel {
   const fallbackItems = [
-    unavailableMarketItem('BTC_FUNDING', 'BTC Funding', '暂不可用'),
-    unavailableMarketItem('ETH_FUNDING', 'ETH Funding', '暂不可用'),
-    unavailableMarketItem('SOL_FUNDING', 'SOL Funding', '暂不可用'),
-    unavailableMarketItem('BNB_FUNDING', 'BNB Funding', '暂不可用'),
-    unavailableMarketItem('STABLECOIN_LIQUIDITY', 'Stablecoin liquidity', '未接入'),
-    unavailableMarketItem('BTC_DOMINANCE', 'Dominance', '未接入'),
+    unavailableMarketItem('BTC_FUNDING', 'BTC 资金费率', '暂不可用'),
+    unavailableMarketItem('ETH_FUNDING', 'ETH 资金费率', '暂不可用'),
+    unavailableMarketItem('SOL_FUNDING', 'SOL 资金费率', '暂不可用'),
+    unavailableMarketItem('BNB_FUNDING', 'BNB 资金费率', '暂不可用'),
+    unavailableMarketItem('STABLECOIN_LIQUIDITY', '稳定币流动性', '未接入'),
+    unavailableMarketItem('BTC_DOMINANCE', 'BTC 占比', '未接入'),
   ];
   const panel = buildFilteredPanel(
     sourcePanel,
@@ -893,7 +893,7 @@ function summarizeDataQuality(panels: PanelState): DataQualitySummary {
 }
 
 type DecisionChip = {
-  label: 'RISK' | 'LIQUIDITY' | 'BREADTH' | 'WATCH';
+  label: '风险' | '流动性' | '宽度' | '观察';
   value: string;
   tone?: string;
 };
@@ -946,10 +946,10 @@ function buildMarketDecision(params: {
     return {
       text: '数据不足 · 等待更多实时源',
       chips: [
-        { label: 'RISK', value: '数据不足', tone: 'border-amber-300/20 text-amber-200' },
-        { label: 'LIQUIDITY', value: 'N/A', tone: 'border-white/10 text-white/45' },
-        { label: 'BREADTH', value: 'N/A', tone: 'border-white/10 text-white/45' },
-        { label: 'WATCH', value: watchSignals, tone: 'border-white/10 text-white/60' },
+        { label: '风险', value: '数据不足', tone: 'border-amber-300/20 text-amber-200' },
+        { label: '流动性', value: 'N/A', tone: 'border-white/10 text-white/45' },
+        { label: '宽度', value: 'N/A', tone: 'border-white/10 text-white/45' },
+        { label: '观察', value: watchSignals, tone: 'border-white/10 text-white/60' },
       ],
     };
   }
@@ -970,10 +970,10 @@ function buildMarketDecision(params: {
     .slice(0, 3)
     .join(' / ') || '实时源';
   const chips: DecisionChip[] = [
-    { label: 'RISK', value: riskLabel, tone: reliable ? buildDecisionChipTone(temperature.scores.overall.value) : 'border-amber-300/20 text-amber-200' },
-    { label: 'LIQUIDITY', value: liquidityLabel, tone: reliable ? buildDecisionChipTone(temperature.scores.liquidity.value) : 'border-white/10 text-white/45' },
-    { label: 'BREADTH', value: breadthLabel, tone: reliable ? buildDecisionChipTone(temperature.scores.cnMoneyEffect.value) : 'border-white/10 text-white/45' },
-    { label: 'WATCH', value: watchSignals, tone: 'border-white/10 text-white/60' },
+    { label: '风险', value: riskLabel, tone: reliable ? buildDecisionChipTone(temperature.scores.overall.value) : 'border-amber-300/20 text-amber-200' },
+    { label: '流动性', value: liquidityLabel, tone: reliable ? buildDecisionChipTone(temperature.scores.liquidity.value) : 'border-white/10 text-white/45' },
+    { label: '宽度', value: breadthLabel, tone: reliable ? buildDecisionChipTone(temperature.scores.cnMoneyEffect.value) : 'border-white/10 text-white/45' },
+    { label: '观察', value: watchSignals, tone: 'border-white/10 text-white/60' },
   ];
 
   if (!reliable) {
@@ -1021,7 +1021,7 @@ const MarketDecisionStrip: React.FC<{
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-blue-500/0 via-blue-400/45 to-purple-500/0" aria-hidden="true" />
       <div className="flex min-w-0 flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">MARKET STATE</p>
+          <p className="text-[10px] font-bold tracking-widest text-white/40">市场状态</p>
           <p data-testid="market-decision-text" className="mt-1 line-clamp-2 font-mono text-base font-semibold leading-6 text-white/88 md:truncate">
             {decision.text}
           </p>
@@ -1086,7 +1086,7 @@ const CategoryCoverageSummary: React.FC<{
   <CompactRailCard
     railKey="coverage"
     testId="market-overview-rail-coverage"
-    eyebrow="COVERAGE"
+    eyebrow="覆盖"
     title={`${label}数据覆盖`}
     value={`${summary.real}/${summary.real + summary.mixed + summary.fallback}`}
     lines={[
@@ -1108,7 +1108,7 @@ const SignalWatchRailCard: React.FC<{ panels: PanelState; activeCategory: Market
     >
       <div data-testid="market-overview-rail-signal-watch" className="flex h-full min-w-0 flex-col gap-2">
         <div className="min-w-0">
-          <p className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">SIGNAL WATCH</p>
+          <p className="truncate text-[10px] font-bold tracking-widest text-white/40">信号观察</p>
           <p className="mt-1 truncate text-sm font-semibold text-white/80">关键观测</p>
         </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 overflow-hidden">
@@ -1171,7 +1171,7 @@ const MarketTemperatureCompactSummary: React.FC<{ data: MarketTemperatureRespons
   return (
     <CompactStatusTile
       testId="market-overview-temperature-summary"
-      eyebrow="TEMPERATURE"
+      eyebrow="温度"
       title="市场温度"
       value={reliable ? formatNumber(score.value, 0) : 'N/A'}
       tone={reliable ? scoreTone(score) : 'text-white/45'}
@@ -1190,7 +1190,7 @@ const MarketTemperatureCompactSummary: React.FC<{ data: MarketTemperatureRespons
 const DataQualityCompactSummary: React.FC<{ summary: DataQualitySummary }> = ({ summary }) => (
   <CompactStatusTile
     testId="market-overview-data-quality-summary"
-    eyebrow="QUALITY"
+    eyebrow="质量"
     title={`数据质量：${summary.status}`}
     value={`${summary.counts.live + summary.counts.delayed + summary.counts.cached}`}
     tone={summary.hasConcern ? 'text-amber-200' : 'text-emerald-300'}
@@ -1208,7 +1208,7 @@ const MarketBriefingCompactSummary: React.FC<{ data: MarketBriefingResponse }> =
   return (
     <CompactStatusTile
       testId="market-overview-briefing-summary"
-      eyebrow="BRIEFING"
+      eyebrow="简报"
       title="今日市场解读"
       value={confidenceLabel(data.confidence)}
       tone={data.isReliable === false || data.isFallback ? 'text-amber-200' : 'text-white'}
@@ -1246,14 +1246,14 @@ const MarketOverviewCacheStatus: React.FC<{
   dataQuality: DataQualitySummary;
 }> = ({ hasLocalSnapshot, localSnapshotSavedAt, loading, refreshingPanel, refreshErrorCount, dataQuality }) => {
   const statusLabel = refreshErrorCount > 0
-    ? 'REFRESH FAILED'
+    ? '刷新失败'
     : loading && hasLocalSnapshot
-      ? 'LOCAL CACHE'
+      ? '本地缓存'
       : dataQuality.counts.stale > 0
-        ? 'STALE'
+        ? '陈旧'
         : dataQuality.counts.fallback > 0
-          ? 'CACHE'
-          : 'LIVE';
+          ? '缓存'
+          : '实时';
   const message = refreshErrorCount > 0
     ? '部分数据源刷新失败，当前显示最近成功快照'
     : loading && hasLocalSnapshot
@@ -1277,11 +1277,11 @@ const MarketOverviewCacheStatus: React.FC<{
           {statusLabel}
         </span>
         <span className="min-w-0 truncate">{message}</span>
-        {refreshingPanel ? <span className="font-mono text-[10px] uppercase text-white/45">refreshing {String(refreshingPanel)}</span> : null}
+        {refreshingPanel ? <span className="font-mono text-[10px] text-white/45">刷新 {String(refreshingPanel)}</span> : null}
       </div>
-      <div className="flex shrink-0 items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-white/42">
-        {timestamp ? <span>LOCAL {timestamp}</span> : null}
-        <span data-testid="market-overview-refresh-error-count">ERRORS {refreshErrorCount}</span>
+      <div className="flex shrink-0 items-center gap-2 font-mono text-[10px] tracking-widest text-white/42">
+        {timestamp ? <span>本地 {timestamp}</span> : null}
+        <span data-testid="market-overview-refresh-error-count">错误 {refreshErrorCount}</span>
       </div>
     </section>
   );
@@ -1404,7 +1404,7 @@ const DataQualityCompactRailCard: React.FC<{ summary: DataQualitySummary }> = ({
   <CompactRailCard
     railKey="quality"
     testId="market-overview-rail-quality"
-    eyebrow="QUALITY"
+    eyebrow="质量"
     title={`数据质量：${summary.status}`}
     value={`${summary.counts.live + summary.counts.delayed + summary.counts.cached}`}
     tone={summary.hasConcern ? 'text-amber-200' : 'text-emerald-300'}
@@ -1947,8 +1947,8 @@ const MarketOverviewPage: React.FC = () => {
     cryptoCore: (
       <ContextMetricModuleCard
         moduleId="cryptoCore"
-        title="Crypto Core"
-        eyebrow="CRYPTO ONLY"
+        title="加密核心"
+        eyebrow="加密资产"
         description="BTC / ETH / SOL / BNB"
         panel={buildMetricPanel(panels, 'CryptoCoreModule', ['BTC', 'ETH', 'SOL', 'BNB'])}
         sourceLabel={t('marketOverviewPage.cards.crypto.source')}
@@ -2061,15 +2061,15 @@ const MarketOverviewPage: React.FC = () => {
     usBreadth: (
       <ContextMetricModuleCard
         moduleId="usBreadth"
-        title="US Breadth"
-        eyebrow="BREADTH PROXY"
-        description="Sector ETF proxy / RSP vs SPY / IWM vs SPY"
+        title="美股宽度"
+        eyebrow="宽度代理"
+        description="行业 ETF 代理 / RSP vs SPY / IWM vs SPY"
         panel={buildFilteredPanel(
           panels.usBreadth,
           'UsBreadthProxyModule',
           ['SECTORS_UP', 'SECTORS_DOWN', 'STRONGEST_SECTOR', 'WEAKEST_SECTOR', 'RSP_SPY', 'IWM_SPY', 'QQQ_SPY', 'SECTOR_PROXY_UNAVAILABLE'],
         )}
-        sourceLabel="Sector ETF proxy"
+        sourceLabel="行业 ETF 代理"
         refreshing={refreshingPanel === 'usBreadth'}
         onRefresh={() => {
           void refreshPanel('usBreadth', marketApi.getUsBreadth);
@@ -2079,9 +2079,9 @@ const MarketOverviewPage: React.FC = () => {
     usSectorRotation: (
       <ContextMetricModuleCard
         moduleId="usSectorRotation"
-        title="Sector Health"
-        eyebrow="SECTOR ETF"
-        description="Strongest / weakest US sector ETF proxies"
+        title="行业健康度"
+        eyebrow="行业 ETF"
+        description="美股行业 ETF 强弱代理"
         panel={buildFilteredPanel(
           panels.usBreadth,
           'UsSectorHealthModule',
@@ -2097,11 +2097,11 @@ const MarketOverviewPage: React.FC = () => {
     macroContext: (
       <ContextMetricModuleCard
         moduleId="macroContext"
-        title="Macro Pressure"
-        eyebrow="AUX CONTEXT"
+        title="宏观压力"
+        eyebrow="辅助上下文"
         description="DXY / US10Y / VIX / BTC"
         panel={buildMetricPanel(panels, 'UsMacroContextModule', ['DXY', 'US10Y', 'VIX', 'BTC'])}
-        sourceLabel="Macro context"
+        sourceLabel="宏观上下文"
       />
     ),
     cnBreadth: (
@@ -2169,8 +2169,8 @@ const MarketOverviewPage: React.FC = () => {
     macroRates: (
       <ContextMetricModuleCard
         moduleId="macroRates"
-        title="Rates Core"
-        eyebrow="GLOBAL MACRO"
+        title="利率核心"
+        eyebrow="全球宏观"
         description="US10Y / US2Y / US30Y"
         panel={buildMetricPanel(panels, 'MacroRatesModule', ['US10Y', 'US2Y', 'US30Y'])}
         sourceLabel={t('marketOverviewPage.cards.rates.source')}
@@ -2183,8 +2183,8 @@ const MarketOverviewPage: React.FC = () => {
     macroFxCommodities: (
       <ContextMetricModuleCard
         moduleId="macroFxCommodities"
-        title="FX / Commodities"
-        eyebrow="DOLLAR / REAL ASSETS"
+        title="外汇 / 商品"
+        eyebrow="美元 / 实物资产"
         description="DXY / USDJPY / USDCNH / GOLD / WTI"
         panel={buildMetricPanel(panels, 'MacroFxCommoditiesModule', ['DXY', 'USDJPY', 'USDCNH', 'GOLD', 'WTI'])}
         sourceLabel={t('marketOverviewPage.cards.fxCommodities.source')}
@@ -2197,19 +2197,19 @@ const MarketOverviewPage: React.FC = () => {
     globalRisk: (
       <ContextMetricModuleCard
         moduleId="globalRisk"
-        title="Global Risk"
-        eyebrow="RISK ASSETS"
+        title="全球风险"
+        eyebrow="风险资产"
         description="VIX / BTC / SPX"
         panel={buildMetricPanel(panels, 'GlobalRiskModule', ['VIX', 'BTC', 'SPX'])}
-        sourceLabel="Risk context"
+        sourceLabel="风险上下文"
       />
     ),
     cryptoMomentum: (
       <ContextMetricModuleCard
         moduleId="cryptoMomentum"
-        title="Crypto Momentum"
-        eyebrow="TREND"
-        description="24H momentum for BTC / ETH / SOL / BNB"
+        title="加密动量"
+        eyebrow="趋势"
+        description="BTC / ETH / SOL / BNB 的 24H 动量"
         panel={buildMetricPanel(panels, 'CryptoMomentumModule', ['BTC', 'ETH', 'SOL', 'BNB'])}
         sourceLabel={t('marketOverviewPage.cards.crypto.source')}
         refreshing={refreshingPanel === 'crypto'}
@@ -2221,11 +2221,11 @@ const MarketOverviewPage: React.FC = () => {
     cryptoLiquidity: (
       <ContextMetricModuleCard
         moduleId="cryptoLiquidity"
-        title="Crypto Liquidity"
-        eyebrow="FUNDING / LIQUIDITY"
-        description="Funding rates; stablecoin and dominance stay unavailable until a reliable source exists"
+        title="加密流动性"
+        eyebrow="资金费率 / 流动性"
+        description="资金费率；稳定币与占比在可靠数据源接入前保持不可用"
         panel={buildCryptoLiquidityPanel(panels.crypto)}
-        sourceLabel="Binance Futures / unavailable context"
+        sourceLabel="Binance Futures / 未接入上下文"
         refreshing={refreshingPanel === 'crypto'}
         onRefresh={() => {
           void refreshPanel('crypto', marketApi.getCrypto);
@@ -2235,11 +2235,11 @@ const MarketOverviewPage: React.FC = () => {
     cryptoRiskContext: (
       <ContextMetricModuleCard
         moduleId="cryptoRiskContext"
-        title="Crypto Risk Context"
-        eyebrow="MACRO PRESSURE"
-        description="DXY / US10Y / VIX as auxiliary risk pressure"
+        title="加密风险上下文"
+        eyebrow="宏观压力"
+        description="DXY / US10Y / VIX 作为辅助风险压力"
         panel={buildMetricPanel(panels, 'CryptoRiskContextModule', ['DXY', 'US10Y', 'VIX'])}
-        sourceLabel="Macro pressure"
+        sourceLabel="宏观压力"
       />
     ),
     cryptoSentiment: (
@@ -2402,7 +2402,7 @@ const MarketOverviewPage: React.FC = () => {
           >
             <div className="flex min-w-0 items-center gap-2">
               <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[10px] font-semibold text-white/42">
-                Filter
+                筛选
               </span>
               <div className="ui-scroll-x-quiet min-w-0">
                 <div className="flex w-max gap-2">

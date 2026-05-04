@@ -489,7 +489,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('max-w-[1920px]', 'mx-auto', 'px-4', 'py-2');
     expect(screen.queryByTestId('portfolio-bento-hero')).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-card')).toHaveClass('xl:col-span-12');
-    expect(screen.getByRole('heading', { name: '总资产 Total Assets' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /总资产|Total Assets/ })).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(within(screen.getByTestId('portfolio-total-assets-card')).queryByLabelText('DISPLAY CURRENCY')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('portfolio-total-assets-card')).getByTestId('portfolio-display-currency-status')).toHaveTextContent('显示货币 CNY');
@@ -522,15 +522,15 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-left-tab-switcher').className).toContain('bg-white/[0.05]');
     expect(getLeftTabButton('交易').className).toContain('bg-white/10');
     expect(getLeftTabButton('账户').className).not.toContain('border-white');
-    expect(screen.queryByRole('heading', { name: /Current Holdings/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /^Current Holdings(?: \(|$)/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-start-card')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '历史记录 ↗' })).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-recent-activity')).toBeInTheDocument();
     expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
     expect(screen.getByRole('option', { name: translate('zh', 'portfolio.costFutuDiluted') })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: translate('zh', 'portfolio.costThsPnl') })).toBeInTheDocument();
-    const accountSelect = screen.getByLabelText('TRADE ACCOUNT') as HTMLSelectElement;
-    const costMethodSelect = screen.getByLabelText('COST METHOD') as HTMLSelectElement;
+    const accountSelect = screen.getByLabelText(/交易账户|TRADE ACCOUNT/) as HTMLSelectElement;
+    const costMethodSelect = screen.getByLabelText(/成本方法|COST METHOD/) as HTMLSelectElement;
     expect(accountSelect).toHaveClass('select-surface', 'absolute', 'inset-0', 'opacity-0');
     expect(accountSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
     expect(accountSelect.closest('.select-field__control')?.querySelector('.select-field__overlay')).toHaveAttribute('aria-hidden', 'true');
@@ -544,7 +544,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(costMethodSelect).getByRole('option', { name: translate('zh', 'portfolio.costFifo') })).toBeInTheDocument();
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
     const holdingsPanel = screen.getByTestId('portfolio-empty-workflow-column');
-    const tradeStationSection = screen.getByRole('heading', { name: 'Trade Station' }).closest('section');
+    const tradeStationSection = screen.getByRole('heading', { name: /交易工作台|Trade Station/ }).closest('section');
     expect(Boolean(totalAssetsCard.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(totalAssetsCard.compareDocumentPosition(holdingsPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(holdingsPanel.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
@@ -562,7 +562,7 @@ describe('PortfolioPage FX refresh', () => {
     const startCard = screen.getByTestId('portfolio-start-card');
     const exposureCard = screen.getByTestId('portfolio-exposure-card');
     const riskCard = screen.getByTestId('portfolio-risk-card');
-    const tradeStationSection = screen.getByRole('heading', { name: 'Trade Station' }).closest('section') as HTMLElement;
+    const tradeStationSection = screen.getByRole('heading', { name: /交易工作台|Trade Station/ }).closest('section') as HTMLElement;
     const recentActivity = screen.getByTestId('portfolio-recent-activity');
 
     expect(Boolean(totalAssetsCard.compareDocumentPosition(pnlSummary) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
@@ -611,7 +611,7 @@ describe('PortfolioPage FX refresh', () => {
 
     const tradeStation = screen.getByTestId('portfolio-trade-station-card');
     expect(within(tradeStation).getByRole('button', { name: '交易' }).className).toContain('bg-white/10');
-    expect(screen.getByLabelText('TRADE ACCOUNT')).toHaveValue('1');
+    expect(screen.getByLabelText(/交易账户|TRADE ACCOUNT/)).toHaveValue('1');
     expect(within(tradeStation).getByRole('button', { name: translate('zh', 'portfolio.submitTrade') })).not.toBeDisabled();
   });
 
@@ -675,7 +675,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.change(screen.getByLabelText('TRADE ACCOUNT'), { target: { value: 'all' } });
+    fireEvent.change(screen.getByLabelText(/交易账户|TRADE ACCOUNT/), { target: { value: 'all' } });
 
     const tradeStation = screen.getByTestId('portfolio-trade-station-card');
     expect(within(tradeStation).getByText('请选择具体账户后录入交易')).toBeInTheDocument();
@@ -868,8 +868,8 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(getLeftTabButton('汇率'));
     expect(screen.getByTestId('portfolio-fx-panel')).toBeInTheDocument();
     expect(screen.getByText('实时汇率引擎')).toBeInTheDocument();
-    expect(screen.getByLabelText('Base Currency')).toHaveValue('USD');
-    expect(screen.getByLabelText('Quote Currency')).toHaveValue('CNY');
+    expect(screen.getByLabelText('基准币种')).toHaveValue('USD');
+    expect(screen.getByLabelText('报价币种')).toHaveValue('CNY');
     expect(screen.getByText('USD/CNY')).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-fx-rate-value')).toHaveTextContent('1 USD = 7.2450 CNY');
     const refreshFxButton = openFxPanel();
@@ -889,7 +889,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText('TRADE ACCOUNT') as HTMLSelectElement;
+    const accountSelect = screen.getByLabelText(/交易账户|TRADE ACCOUNT/) as HTMLSelectElement;
     fireEvent.change(accountSelect, { target: { value: '1' } });
     fireEvent.click(getLeftTabButton('账户'));
     fireEvent.click(screen.getByRole('button', { name: '删除 Main' }));
@@ -898,7 +898,7 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.deleteConfirm') }));
 
     await waitFor(() => expect(deleteAccount).toHaveBeenCalledWith(1));
-    await waitFor(() => expect((screen.getByLabelText('TRADE ACCOUNT') as HTMLSelectElement).value).toBe('2'));
+    await waitFor(() => expect((screen.getByLabelText(/交易账户|TRADE ACCOUNT/) as HTMLSelectElement).value).toBe('2'));
     expect(await screen.findByText(translate('zh', 'portfolio.accountArchived'))).toBeInTheDocument();
   });
 
@@ -928,7 +928,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText('ASSET SCOPE');
+    const accountSelect = screen.getByLabelText(/资产范围|ASSET SCOPE/);
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 1, costMethod: 'fifo' }));
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
@@ -977,7 +977,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText('ASSET SCOPE');
+    const accountSelect = screen.getByLabelText(/资产范围|ASSET SCOPE/);
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(getLeftTabButton('同步'));
@@ -1108,7 +1108,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText('ASSET SCOPE');
+    const accountSelect = screen.getByLabelText(/资产范围|ASSET SCOPE/);
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(getLeftTabButton('同步'));
@@ -1150,7 +1150,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText('ASSET SCOPE');
+    const accountSelect = screen.getByLabelText(/资产范围|ASSET SCOPE/);
     fireEvent.change(accountSelect, { target: { value: '1' } });
 
     await waitFor(() => {
@@ -1270,7 +1270,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText('ASSET SCOPE');
+    const accountSelect = screen.getByLabelText(/资产范围|ASSET SCOPE/);
     fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 1, costMethod: 'fifo' }));
 
@@ -1318,7 +1318,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const costMethodSelect = screen.getByLabelText('COST METHOD');
+    const costMethodSelect = screen.getByLabelText(/成本方法|COST METHOD/);
 
     fireEvent.click(openFxPanel());
     expect(await screen.findByRole('button', { name: translate('zh', 'portfolio.refreshingFx') })).toBeDisabled();
@@ -1358,7 +1358,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    expect(screen.getByRole('heading', { name: '总资产 Total Assets' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /总资产|Total Assets/ })).toBeInTheDocument();
     expect(getLeftTabButton('Trade')).toBeInTheDocument();
     expect(getLeftTabButton('Account')).toBeInTheDocument();
     expect(getLeftTabButton('Sync')).toBeInTheDocument();
@@ -1424,7 +1424,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.change(screen.getByLabelText('TRADE ACCOUNT'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText(/交易账户|TRADE ACCOUNT/), { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(getLeftTabButton('Sync'));
     fireEvent.change(
@@ -1475,7 +1475,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.change(screen.getByLabelText('TRADE ACCOUNT'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText(/交易账户|TRADE ACCOUNT/), { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(getLeftTabButton('同步'));
     fireEvent.change(
@@ -1501,7 +1501,7 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(screen.queryByTestId('portfolio-attribution-dashboard')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Trade Station' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /交易工作台|Trade Station/ })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /Current Holdings/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-start-card')).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
