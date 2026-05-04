@@ -2,6 +2,8 @@
 
 WolfyStock keeps PostgreSQL as the business database for users, portfolio accounting, watchlists, admin logs, settings, analysis tasks, and backtest metadata. DuckDB is an optional quant analytics accelerator for factor validation, coverage checks, research queries, and benchmark scans.
 
+For safe local operator validation, see [DuckDB Operator Smoke Guide](operations/duckdb-operator-smoke-guide.md).
+
 DuckDB remains standalone:
 
 - it does not replace PostgreSQL
