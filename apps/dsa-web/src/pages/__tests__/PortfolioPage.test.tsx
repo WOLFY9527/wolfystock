@@ -1362,7 +1362,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(getLeftTabButton('Trade')).toBeInTheDocument();
     expect(getLeftTabButton('Account')).toBeInTheDocument();
     expect(getLeftTabButton('Sync')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /当前持仓/ })).toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-current-holdings-panel')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'History ↗' })).not.toBeInTheDocument();
     expect(screen.getByText('No current holdings')).toBeInTheDocument();
     expect(openFxPanel('en')).toBeInTheDocument();
