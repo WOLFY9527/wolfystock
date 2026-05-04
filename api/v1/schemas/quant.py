@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class QuantDuckDBHealthResponse(BaseModel):
@@ -42,15 +42,136 @@ class QuantDuckDBBenchmarkRequest(BaseModel):
     end_date: Optional[str] = Field(None, alias="endDate")
 
 
+class QuantOHLCVRow(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbol: str = Field(..., min_length=1)
+    trade_date: str = Field(..., alias="tradeDate")
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    amount: Optional[float] = None
+    adj_close: Optional[float] = Field(None, alias="adjClose")
+    source: Optional[str] = None
+    market: Optional[str] = None
+
+
+class QuantDuckDBIngestRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbols: Optional[list[str]] = None
+    start_date: Optional[str] = Field(None, alias="startDate")
+    end_date: Optional[str] = Field(None, alias="endDate")
+    max_symbols: Optional[int] = Field(None, ge=1, alias="maxSymbols")
+    dry_run: bool = Field(False, alias="dryRun")
+    source: str = "existing_store"
+    rows: Optional[list[QuantOHLCVRow]] = None
+
+    @model_validator(mode="after")
+    def validate_source_has_rows(self) -> "QuantDuckDBIngestRequest":
+        if self.source == "payload" and not self.rows:
+            raise ValueError("rows are required when source is payload")
+        return self
+
+
+class QuantDuckDBIngestResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    status: str
+    engine: str = "duckdb"
+    source: Optional[str] = None
+    ingested_rows: int = Field(0, alias="ingestedRows")
+    available_rows: int = Field(0, alias="availableRows")
+    symbol_count: int = Field(0, alias="symbolCount")
+    symbols_requested: int = Field(0, alias="symbolsRequested")
+    start_date: Optional[str] = Field(None, alias="startDate")
+    end_date: Optional[str] = Field(None, alias="endDate")
+    duration_ms: float = Field(0.0, alias="durationMs")
+    error: Optional[str] = None
+
+
+class QuantDuckDBBuildFactorsRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbols: Optional[list[str]] = None
+    start_date: Optional[str] = Field(None, alias="startDate")
+    end_date: Optional[str] = Field(None, alias="endDate")
+
+
+class QuantDuckDBBuildFactorsResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    status: str
+    engine: str = "duckdb"
+    ohlcv_rows: int = Field(0, alias="ohlcvRows")
+    factor_rows: int = Field(0, alias="factorRows")
+    factor_count: int = Field(0, alias="factorCount")
+    duration_ms: float = Field(0.0, alias="durationMs")
+    error: Optional[str] = None
+
+
+class QuantDuckDBCoverageSymbol(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbol: str
+    ohlcv_rows: int = Field(0, alias="ohlcvRows")
+    min_trade_date: Optional[str] = Field(None, alias="minTradeDate")
+    max_trade_date: Optional[str] = Field(None, alias="maxTradeDate")
+    factor_rows: int = Field(0, alias="factorRows")
+    latest_factor_date: Optional[str] = Field(None, alias="latestFactorDate")
+
+
+class QuantDuckDBCoverageResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    status: str
+    engine: str = "duckdb"
+    enabled: bool = False
+    database_path: str = Field("", alias="databasePath")
+    total_ohlcv_rows: int = Field(0, alias="totalOhlcvRows")
+    total_factor_rows: int = Field(0, alias="totalFactorRows")
+    symbol_count: int = Field(0, alias="symbolCount")
+    min_trade_date: Optional[str] = Field(None, alias="minTradeDate")
+    max_trade_date: Optional[str] = Field(None, alias="maxTradeDate")
+    latest_factor_date: Optional[str] = Field(None, alias="latestFactorDate")
+    symbols: list[QuantDuckDBCoverageSymbol] = Field(default_factory=list)
+    empty_reason: Optional[str] = Field(None, alias="emptyReason")
+    error: Optional[str] = None
+
+
+class QuantDuckDBBenchmarkTopResult(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbol: str
+    trade_date: Optional[str] = Field(None, alias="tradeDate")
+    close: Optional[float] = None
+    return_1d: Optional[float] = Field(None, alias="return1d")
+    ma20: Optional[float] = None
+    momentum_20d: Optional[float] = Field(None, alias="momentum20d")
+    volatility_20d: Optional[float] = Field(None, alias="volatility20d")
+    close_vs_ma20: Optional[float] = Field(None, alias="closeVsMa20")
+    factor_score: Optional[float] = Field(None, alias="factorScore")
+
+
 class QuantDuckDBBenchmarkResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     status: str
     engine: str = "duckdb"
     elapsed_ms: float = Field(0.0, alias="elapsedMs")
+    duration_ms: float = Field(0.0, alias="durationMs")
     ohlcv_rows: int = Field(0, alias="ohlcvRows")
     factor_rows: int = Field(0, alias="factorRows")
+    rows_scanned: int = Field(0, alias="rowsScanned")
+    symbols_scanned: int = Field(0, alias="symbolsScanned")
     symbol_count: int = Field(0, alias="symbolCount")
     date_count: int = Field(0, alias="dateCount")
     factor_count: int = Field(0, alias="factorCount")
+    query_type: str = Field("factor_daily_top_scores", alias="queryType")
+    data_mode: str = Field("empty", alias="dataMode")
+    start_date: Optional[str] = Field(None, alias="startDate")
+    end_date: Optional[str] = Field(None, alias="endDate")
+    top_results: list[QuantDuckDBBenchmarkTopResult] = Field(default_factory=list, alias="topResults")
     error: Optional[str] = None

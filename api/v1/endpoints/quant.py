@@ -12,7 +12,12 @@ from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.quant import (
     QuantDuckDBBenchmarkRequest,
     QuantDuckDBBenchmarkResponse,
+    QuantDuckDBBuildFactorsRequest,
+    QuantDuckDBBuildFactorsResponse,
+    QuantDuckDBCoverageResponse,
     QuantDuckDBHealthResponse,
+    QuantDuckDBIngestRequest,
+    QuantDuckDBIngestResponse,
     QuantDuckDBInitRequest,
     QuantDuckDBInitResponse,
 )
@@ -55,6 +60,68 @@ def initialize_duckdb_schema(
 ) -> QuantDuckDBInitResponse:
     payload = service.initialize_schema(force=request.allow_when_disabled)
     return QuantDuckDBInitResponse.model_validate(payload)
+
+
+@router.post(
+    "/duckdb/ingest-ohlcv",
+    response_model=QuantDuckDBIngestResponse,
+    responses={401: {"description": "Unauthorized", "model": ErrorResponse}, 403: {"description": "Admin access required", "model": ErrorResponse}},
+    summary="Ingest bounded OHLCV rows into DuckDB",
+    description="Explicitly ingest normalized payload rows or bounded local StockDaily rows into the optional DuckDB quant store.",
+)
+def ingest_duckdb_ohlcv(
+    request: QuantDuckDBIngestRequest = QuantDuckDBIngestRequest(),
+    service: QuantDuckDBService = Depends(get_quant_duckdb_service),
+    _admin: CurrentUser = Depends(require_admin_user),
+) -> QuantDuckDBIngestResponse:
+    if request.source == "payload":
+        rows = [row.model_dump(by_alias=True) for row in request.rows or []]
+        payload = service.ingest_ohlcv(rows)
+        payload.setdefault("source", "payload")
+    else:
+        payload = service.ingest_ohlcv_from_existing_store(
+            symbols=request.symbols,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            max_symbols=request.max_symbols,
+            dry_run=request.dry_run,
+        )
+    return QuantDuckDBIngestResponse.model_validate(payload)
+
+
+@router.post(
+    "/duckdb/build-factors",
+    response_model=QuantDuckDBBuildFactorsResponse,
+    responses={401: {"description": "Unauthorized", "model": ErrorResponse}, 403: {"description": "Admin access required", "model": ErrorResponse}},
+    summary="Build basic DuckDB daily factors",
+    description="Build conservative factor_daily rows from already-ingested ohlcv_daily rows.",
+)
+def build_duckdb_factors(
+    request: QuantDuckDBBuildFactorsRequest = QuantDuckDBBuildFactorsRequest(),
+    service: QuantDuckDBService = Depends(get_quant_duckdb_service),
+    _admin: CurrentUser = Depends(require_admin_user),
+) -> QuantDuckDBBuildFactorsResponse:
+    payload = service.build_basic_factors(
+        symbols=request.symbols,
+        start_date=request.start_date,
+        end_date=request.end_date,
+    )
+    return QuantDuckDBBuildFactorsResponse.model_validate(payload)
+
+
+@router.get(
+    "/duckdb/coverage",
+    response_model=QuantDuckDBCoverageResponse,
+    responses={401: {"description": "Unauthorized", "model": ErrorResponse}, 403: {"description": "Admin access required", "model": ErrorResponse}},
+    summary="Get DuckDB quant data coverage",
+    description="Report OHLCV/factor rows, symbol counts, date ranges, and a bounded per-symbol coverage sample.",
+)
+def get_duckdb_coverage(
+    service: QuantDuckDBService = Depends(get_quant_duckdb_service),
+    _admin: CurrentUser = Depends(require_admin_user),
+) -> QuantDuckDBCoverageResponse:
+    payload = service.get_coverage()
+    return QuantDuckDBCoverageResponse.model_validate(payload)
 
 
 @router.post(

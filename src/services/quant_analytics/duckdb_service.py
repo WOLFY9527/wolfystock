@@ -1,21 +1,26 @@
 # -*- coding: utf-8 -*-
-"""Optional DuckDB quant analytics accelerator skeleton."""
+"""Optional, explicitly invoked DuckDB quant analytics accelerator."""
 
 from __future__ import annotations
 
 import importlib
+import logging
 import time
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
 
 from src.config import Config, get_config
+from src.repositories.stock_repo import StockRepository
+
+logger = logging.getLogger(__name__)
 
 
 class QuantDuckDBService:
-    """Small, explicitly-invoked DuckDB service for quant research data."""
+    """Small DuckDB service for bounded quant data validation and benchmarks."""
 
-    FACTOR_COUNT = 8
+    FACTOR_COUNT = 9
+    DEFAULT_RECENT_ROW_LIMIT = 252
 
     def __init__(
         self,
@@ -67,6 +72,9 @@ class QuantDuckDBService:
             payload["error"] = str(exc)
         return payload
 
+    def init_database(self, *, force: bool = False) -> dict:
+        return self.initialize_schema(force=force)
+
     def initialize_schema(self, *, force: bool = False) -> dict:
         disabled = self._disabled_result()
         if disabled and not force:
@@ -79,17 +87,19 @@ class QuantDuckDBService:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS ohlcv_daily(
-                  symbol TEXT,
-                  trade_date DATE,
+                  symbol TEXT NOT NULL,
+                  trade_date DATE NOT NULL,
                   open DOUBLE,
                   high DOUBLE,
                   low DOUBLE,
                   close DOUBLE,
                   volume DOUBLE,
                   amount DOUBLE,
+                  adj_close DOUBLE,
                   market TEXT,
                   sector TEXT,
                   source TEXT,
+                  ingested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   updated_at TIMESTAMP,
                   PRIMARY KEY(symbol, trade_date)
                 )
@@ -98,35 +108,64 @@ class QuantDuckDBService:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS factor_daily(
-                  symbol TEXT,
-                  trade_date DATE,
+                  symbol TEXT NOT NULL,
+                  trade_date DATE NOT NULL,
                   close DOUBLE,
+                  return_1d DOUBLE,
+                  log_return_1d DOUBLE,
                   ma5 DOUBLE,
+                  ma10 DOUBLE,
                   ma20 DOUBLE,
                   ma60 DOUBLE,
-                  momentum20 DOUBLE,
-                  momentum60 DOUBLE,
-                  vol20 DOUBLE,
-                  dollar_volume20 DOUBLE,
+                  volume_ma20 DOUBLE,
+                  volatility_20d DOUBLE,
+                  momentum_20d DOUBLE,
+                  close_vs_ma20 DOUBLE,
                   factor_score DOUBLE,
+                  built_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   updated_at TIMESTAMP,
                   PRIMARY KEY(symbol, trade_date)
                 )
                 """
             )
+            for table_name, column_name, column_type in (
+                ("ohlcv_daily", "adj_close", "DOUBLE"),
+                ("ohlcv_daily", "ingested_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+                ("factor_daily", "return_1d", "DOUBLE"),
+                ("factor_daily", "log_return_1d", "DOUBLE"),
+                ("factor_daily", "ma10", "DOUBLE"),
+                ("factor_daily", "volume_ma20", "DOUBLE"),
+                ("factor_daily", "volatility_20d", "DOUBLE"),
+                ("factor_daily", "momentum_20d", "DOUBLE"),
+                ("factor_daily", "close_vs_ma20", "DOUBLE"),
+                ("factor_daily", "built_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+            ):
+                self._ensure_column(conn, table_name, column_name, column_type)
         return {"status": "ok", "engine": "duckdb", "version": version, "schemaInitialized": True}
 
-    def ingest_ohlcv_rows(self, rows: list[dict]) -> dict:
+    def ingest_ohlcv(self, rows: Any) -> dict:
+        return self.ingest_ohlcv_rows(rows)
+
+    def ingest_ohlcv_rows(self, rows: Any) -> dict:
         disabled = self._disabled_result()
         if disabled:
             return disabled
         available, _version, error = self._duckdb_status()
         if not available:
             return self._unavailable_result(error)
-        if not rows:
-            return {"status": "empty", "ingestedRows": 0, "symbolCount": 0}
 
-        parsed_rows = [self._normalize_ohlcv_row(row) for row in rows]
+        records = self._records_from_rows(rows)
+        if not records:
+            return {"status": "empty", "engine": "duckdb", "ingestedRows": 0, "symbolCount": 0, "durationMs": 0.0}
+
+        started = time.perf_counter()
+        parsed_rows = [self._normalize_ohlcv_row(row) for row in records]
+        logger.info(
+            "DuckDBIngestStarted symbols_count=%s rows=%s source=%s",
+            len({row[0] for row in parsed_rows}),
+            len(parsed_rows),
+            self._compact_source(records),
+        )
         with self._connect(create_parent=True) as conn:
             if not self._schema_initialized(conn):
                 return self._schema_missing_result()
@@ -140,23 +179,102 @@ class QuantDuckDBService:
                     """
                     INSERT INTO ohlcv_daily (
                         symbol, trade_date, open, high, low, close, volume, amount,
-                        market, sector, source, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        adj_close, market, sector, source, ingested_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     parsed_rows,
                 )
                 conn.execute("COMMIT")
             except Exception:
                 conn.execute("ROLLBACK")
+                logger.exception("DuckDBIngestFailed rows=%s", len(parsed_rows))
                 raise
 
+        duration_ms = round((time.perf_counter() - started) * 1000, 3)
+        logger.info(
+            "DuckDBIngestCompleted symbols_count=%s rows_ingested=%s duration_ms=%s",
+            len({row[0] for row in parsed_rows}),
+            len(parsed_rows),
+            duration_ms,
+        )
         return {
             "status": "ok",
+            "engine": "duckdb",
             "ingestedRows": len(parsed_rows),
             "symbolCount": len({row[0] for row in parsed_rows}),
+            "durationMs": duration_ms,
         }
 
-    def build_basic_factors(self, start_date: Any = None, end_date: Any = None) -> dict:
+    def ingest_ohlcv_from_existing_store(
+        self,
+        *,
+        symbols: Optional[list[str]] = None,
+        start_date: Any = None,
+        end_date: Any = None,
+        max_symbols: Any = None,
+        dry_run: bool = False,
+        stock_repository: Any = None,
+    ) -> dict:
+        disabled = self._disabled_result()
+        if disabled:
+            return {**disabled, "ingestedRows": 0, "symbolCount": 0, "availableRows": 0}
+        start = self._parse_optional_date(start_date)
+        end = self._parse_optional_date(end_date)
+        if start and end and start > end:
+            return self._invalid_range_result(ingest=True)
+
+        repo = stock_repository or StockRepository()
+        selected_symbols = self._normalize_symbols(symbols)
+        if not selected_symbols:
+            selected_symbols = self._normalize_symbols(repo.list_distinct_codes())
+        selected_symbols = selected_symbols[: self._normalize_symbol_limit(max_symbols)]
+        if not selected_symbols:
+            return {
+                "status": "empty",
+                "engine": "duckdb",
+                "source": "existing_store",
+                "ingestedRows": 0,
+                "symbolCount": 0,
+                "availableRows": 0,
+            }
+
+        rows: list[dict] = []
+        for symbol in selected_symbols:
+            if start is not None and end is not None:
+                source_rows = repo.get_range(symbol, start, end)
+            else:
+                source_rows = repo.get_recent_daily_rows(code=symbol, limit=self.DEFAULT_RECENT_ROW_LIMIT)
+            for source_row in source_rows:
+                record = self._ohlcv_record_from_stock_daily(source_row, fallback_symbol=symbol)
+                if start is not None and record["trade_date"] < start:
+                    continue
+                if end is not None and record["trade_date"] > end:
+                    continue
+                rows.append(record)
+
+        base_payload = {
+            "engine": "duckdb",
+            "source": "existing_store",
+            "ingestedRows": 0,
+            "symbolCount": len(selected_symbols),
+            "availableRows": len(rows),
+            "symbolsRequested": len(selected_symbols),
+            "startDate": self._date_to_iso(start),
+            "endDate": self._date_to_iso(end),
+        }
+        if dry_run:
+            return {**base_payload, "status": "dry_run"}
+        if not rows:
+            return {**base_payload, "status": "empty"}
+        result = self.ingest_ohlcv(rows)
+        return {**base_payload, **result, "source": "existing_store", "availableRows": len(rows)}
+
+    def build_basic_factors(
+        self,
+        start_date: Any = None,
+        end_date: Any = None,
+        symbols: Optional[list[str]] = None,
+    ) -> dict:
         disabled = self._disabled_result()
         if disabled:
             return disabled
@@ -166,13 +284,23 @@ class QuantDuckDBService:
 
         start = self._parse_optional_date(start_date)
         end = self._parse_optional_date(end_date)
-        where_sql, params = self._date_filter_sql("trade_date", start, end)
+        if start and end and start > end:
+            return self._invalid_range_result()
+        normalized_symbols = self._normalize_symbols(symbols)
+        where_sql, params = self._scope_filter_sql("trade_date", start, end, normalized_symbols)
+        started = time.perf_counter()
+        logger.info(
+            "DuckDBFactorBuildStarted symbols_count=%s start_date=%s end_date=%s",
+            len(normalized_symbols),
+            self._date_to_iso(start),
+            self._date_to_iso(end),
+        )
         with self._connect(create_parent=True) as conn:
             if not self._schema_initialized(conn):
                 return self._schema_missing_result()
             ohlcv_rows = conn.execute(f"SELECT COUNT(*) FROM ohlcv_daily {where_sql}", params).fetchone()[0]
             if int(ohlcv_rows or 0) == 0:
-                return {"status": "empty", "engine": "duckdb", "ohlcvRows": 0, "factorRows": 0}
+                return {"status": "empty", "engine": "duckdb", "ohlcvRows": 0, "factorRows": 0, "factorCount": self.FACTOR_COUNT}
 
             conn.execute("BEGIN TRANSACTION")
             try:
@@ -180,19 +308,26 @@ class QuantDuckDBService:
                 conn.execute(
                     f"""
                     INSERT INTO factor_daily (
-                        symbol, trade_date, close, ma5, ma20, ma60,
-                        momentum20, momentum60, vol20, dollar_volume20,
-                        factor_score, updated_at
+                        symbol, trade_date, close, return_1d, log_return_1d,
+                        ma5, ma10, ma20, ma60, volume_ma20, volatility_20d,
+                        momentum_20d, close_vs_ma20, factor_score, built_at, updated_at
                     )
-                    WITH computed AS (
+                    WITH base AS (
                         SELECT
                             symbol,
                             trade_date,
                             close,
+                            volume,
+                            LAG(close) OVER (PARTITION BY symbol ORDER BY trade_date) AS prev_close,
+                            close / NULLIF(LAG(close, 20) OVER (PARTITION BY symbol ORDER BY trade_date), 0) - 1 AS momentum_20d,
                             AVG(close) OVER (
                                 PARTITION BY symbol ORDER BY trade_date
                                 ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
                             ) AS ma5,
+                            AVG(close) OVER (
+                                PARTITION BY symbol ORDER BY trade_date
+                                ROWS BETWEEN 9 PRECEDING AND CURRENT ROW
+                            ) AS ma10,
                             AVG(close) OVER (
                                 PARTITION BY symbol ORDER BY trade_date
                                 ROWS BETWEEN 19 PRECEDING AND CURRENT ROW
@@ -201,36 +336,50 @@ class QuantDuckDBService:
                                 PARTITION BY symbol ORDER BY trade_date
                                 ROWS BETWEEN 59 PRECEDING AND CURRENT ROW
                             ) AS ma60,
-                            close - LAG(close, 20) OVER (
-                                PARTITION BY symbol ORDER BY trade_date
-                            ) AS momentum20,
-                            close - LAG(close, 60) OVER (
-                                PARTITION BY symbol ORDER BY trade_date
-                            ) AS momentum60,
-                            STDDEV_SAMP(close) OVER (
+                            AVG(volume) OVER (
                                 PARTITION BY symbol ORDER BY trade_date
                                 ROWS BETWEEN 19 PRECEDING AND CURRENT ROW
-                            ) AS vol20,
-                            AVG(close * volume) OVER (
-                                PARTITION BY symbol ORDER BY trade_date
-                                ROWS BETWEEN 19 PRECEDING AND CURRENT ROW
-                            ) AS dollar_volume20
+                            ) AS volume_ma20
                         FROM ohlcv_daily
+                    ),
+                    computed AS (
+                        SELECT
+                            *,
+                            close / NULLIF(prev_close, 0) - 1 AS return_1d,
+                            CASE
+                                WHEN prev_close > 0 AND close > 0 THEN LN(close / prev_close)
+                                ELSE NULL
+                            END AS log_return_1d
+                        FROM base
+                    ),
+                    windowed AS (
+                        SELECT
+                            *,
+                            STDDEV_SAMP(return_1d) OVER (
+                                PARTITION BY symbol ORDER BY trade_date
+                                ROWS BETWEEN 19 PRECEDING AND CURRENT ROW
+                            ) AS volatility_20d,
+                            close / NULLIF(ma20, 0) - 1 AS close_vs_ma20
+                        FROM computed
                     )
                     SELECT
                         symbol,
                         trade_date,
                         close,
+                        return_1d,
+                        log_return_1d,
                         ma5,
+                        ma10,
                         ma20,
                         ma60,
-                        momentum20,
-                        momentum60,
-                        vol20,
-                        dollar_volume20,
-                        COALESCE(momentum20, 0) - COALESCE(vol20, 0) AS factor_score,
+                        volume_ma20,
+                        volatility_20d,
+                        momentum_20d,
+                        close_vs_ma20,
+                        COALESCE(momentum_20d, 0) + COALESCE(close_vs_ma20, 0) - COALESCE(volatility_20d, 0) AS factor_score,
+                        CURRENT_TIMESTAMP,
                         CURRENT_TIMESTAMP
-                    FROM computed
+                    FROM windowed
                     {where_sql}
                     """,
                     params,
@@ -238,15 +387,87 @@ class QuantDuckDBService:
                 conn.execute("COMMIT")
             except Exception:
                 conn.execute("ROLLBACK")
+                logger.exception("DuckDBFactorBuildFailed")
                 raise
 
             factor_rows = conn.execute(f"SELECT COUNT(*) FROM factor_daily {where_sql}", params).fetchone()[0]
+        duration_ms = round((time.perf_counter() - started) * 1000, 3)
+        logger.info("DuckDBFactorBuildCompleted rows_built=%s duration_ms=%s", int(factor_rows or 0), duration_ms)
         return {
             "status": "ok",
             "engine": "duckdb",
             "ohlcvRows": int(ohlcv_rows or 0),
             "factorRows": int(factor_rows or 0),
             "factorCount": self.FACTOR_COUNT,
+            "durationMs": duration_ms,
+        }
+
+    def get_coverage(self, *, sample_limit: int = 20) -> dict:
+        disabled = self._disabled_result()
+        if disabled:
+            return self._empty_coverage("disabled", "DuckDB quant engine is disabled")
+        available, _version, error = self._duckdb_status()
+        if not available:
+            return self._empty_coverage("unavailable", error or "DuckDB is unavailable")
+
+        limit = max(1, min(int(sample_limit or 20), 100))
+        with self._connect(create_parent=True) as conn:
+            if not self._schema_initialized(conn):
+                return self._empty_coverage("unavailable", "DuckDB quant schema is not initialized")
+            totals = conn.execute(
+                """
+                SELECT COUNT(*), COUNT(DISTINCT symbol), MIN(trade_date), MAX(trade_date)
+                FROM ohlcv_daily
+                """
+            ).fetchone()
+            factor_totals = conn.execute("SELECT COUNT(*), MAX(trade_date) FROM factor_daily").fetchone()
+            symbol_rows = conn.execute(
+                """
+                SELECT
+                    o.symbol,
+                    COUNT(*) AS ohlcv_rows,
+                    MIN(o.trade_date) AS min_date,
+                    MAX(o.trade_date) AS max_date,
+                    COALESCE(f.factor_rows, 0) AS factor_rows,
+                    f.latest_factor_date
+                FROM ohlcv_daily o
+                LEFT JOIN (
+                    SELECT symbol, COUNT(*) AS factor_rows, MAX(trade_date) AS latest_factor_date
+                    FROM factor_daily
+                    GROUP BY symbol
+                ) f ON f.symbol = o.symbol
+                GROUP BY o.symbol, f.factor_rows, f.latest_factor_date
+                ORDER BY o.symbol
+                LIMIT ?
+                """,
+                [limit],
+            ).fetchall()
+
+        total_ohlcv = int(totals[0] or 0)
+        total_factor = int(factor_totals[0] or 0)
+        return {
+            "status": "ok" if total_ohlcv or total_factor else "empty",
+            "engine": "duckdb",
+            "enabled": self.enabled,
+            "databasePath": self._safe_path(self.database_path),
+            "totalOhlcvRows": total_ohlcv,
+            "totalFactorRows": total_factor,
+            "symbolCount": int(totals[1] or 0),
+            "minTradeDate": self._date_to_iso(totals[2]),
+            "maxTradeDate": self._date_to_iso(totals[3]),
+            "latestFactorDate": self._date_to_iso(factor_totals[1]),
+            "symbols": [
+                {
+                    "symbol": row[0],
+                    "ohlcvRows": int(row[1] or 0),
+                    "minTradeDate": self._date_to_iso(row[2]),
+                    "maxTradeDate": self._date_to_iso(row[3]),
+                    "factorRows": int(row[4] or 0),
+                    "latestFactorDate": self._date_to_iso(row[5]),
+                }
+                for row in symbol_rows
+            ],
+            "emptyReason": None if total_ohlcv or total_factor else "No OHLCV or factor rows have been ingested",
         }
 
     def benchmark_factor_query(self, symbol_limit: Any = None, start_date: Any = None, end_date: Any = None) -> dict:
@@ -262,6 +483,10 @@ class QuantDuckDBService:
         limit = self._normalize_symbol_limit(symbol_limit)
         start = self._parse_optional_date(start_date)
         end = self._parse_optional_date(end_date)
+        if start and end and start > end:
+            result = self._benchmark_disabled_result("invalid_request")
+            result["error"] = "start_date must be on or before end_date"
+            return result
         where_sql, params = self._date_filter_sql("trade_date", start, end, prefix="WHERE")
         started = time.perf_counter()
         with self._connect(create_parent=True) as conn:
@@ -287,12 +512,36 @@ class QuantDuckDBService:
                     COUNT(*) AS factor_rows,
                     COUNT(DISTINCT symbol) AS symbol_count,
                     COUNT(DISTINCT trade_date) AS date_count,
-                    AVG(factor_score) AS avg_factor_score
+                    AVG(factor_score) AS avg_factor_score,
+                    MIN(trade_date) AS min_date,
+                    MAX(trade_date) AS max_date
                 FROM scoped
                 {where_sql}
                 """,
                 [limit, *params],
             ).fetchone()
+            top_rows = conn.execute(
+                f"""
+                WITH selected_symbols AS (
+                    SELECT symbol
+                    FROM factor_daily
+                    GROUP BY symbol
+                    ORDER BY symbol
+                    LIMIT ?
+                ),
+                scoped AS (
+                    SELECT *
+                    FROM factor_daily
+                    WHERE symbol IN (SELECT symbol FROM selected_symbols)
+                )
+                SELECT symbol, trade_date, close, return_1d, ma20, momentum_20d, volatility_20d, close_vs_ma20, factor_score
+                FROM scoped
+                {where_sql}
+                ORDER BY factor_score DESC NULLS LAST, symbol, trade_date DESC
+                LIMIT 5
+                """,
+                [limit, *params],
+            ).fetchall()
         elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
         factor_rows = int(row[0] or 0)
         if factor_rows == 0:
@@ -300,21 +549,51 @@ class QuantDuckDBService:
                 "status": "empty",
                 "engine": "duckdb",
                 "elapsedMs": elapsed_ms,
+                "durationMs": elapsed_ms,
                 "ohlcvRows": 0,
                 "factorRows": 0,
+                "rowsScanned": 0,
+                "symbolsScanned": 0,
                 "symbolCount": 0,
                 "dateCount": 0,
                 "factorCount": self.FACTOR_COUNT,
+                "queryType": "factor_daily_top_scores",
+                "dataMode": "empty",
+                "startDate": self._date_to_iso(start),
+                "endDate": self._date_to_iso(end),
+                "topResults": [],
             }
+        symbols_scanned = int(row[1] or 0)
         return {
             "status": "ok",
             "engine": "duckdb",
             "elapsedMs": elapsed_ms,
+            "durationMs": elapsed_ms,
             "ohlcvRows": self._count_ohlcv_rows(start, end, limit),
             "factorRows": factor_rows,
-            "symbolCount": int(row[1] or 0),
+            "rowsScanned": factor_rows,
+            "symbolsScanned": symbols_scanned,
+            "symbolCount": symbols_scanned,
             "dateCount": int(row[2] or 0),
             "factorCount": self.FACTOR_COUNT,
+            "queryType": "factor_daily_top_scores",
+            "dataMode": "real",
+            "startDate": self._date_to_iso(start or row[4]),
+            "endDate": self._date_to_iso(end or row[5]),
+            "topResults": [
+                {
+                    "symbol": top[0],
+                    "tradeDate": self._date_to_iso(top[1]),
+                    "close": top[2],
+                    "return1d": top[3],
+                    "ma20": top[4],
+                    "momentum20d": top[5],
+                    "volatility20d": top[6],
+                    "closeVsMa20": top[7],
+                    "factorScore": top[8],
+                }
+                for top in top_rows
+            ],
         }
 
     def query_signal_candidates(self, as_of_date: Any = None, limit: int = 100) -> list[dict]:
@@ -338,9 +617,9 @@ class QuantDuckDBService:
             rows = conn.execute(
                 """
                 SELECT
-                    symbol, trade_date, close, ma5, ma20, ma60,
-                    momentum20, momentum60, vol20, dollar_volume20,
-                    factor_score
+                    symbol, trade_date, close, return_1d, log_return_1d,
+                    ma5, ma10, ma20, ma60, volume_ma20, volatility_20d,
+                    momentum_20d, close_vs_ma20, factor_score
                 FROM factor_daily
                 WHERE trade_date = ?
                 ORDER BY factor_score DESC NULLS LAST, symbol
@@ -351,16 +630,19 @@ class QuantDuckDBService:
         return [
             {
                 "symbol": row[0],
-                "tradeDate": row[1].isoformat() if hasattr(row[1], "isoformat") else str(row[1]),
+                "tradeDate": self._date_to_iso(row[1]),
                 "close": row[2],
-                "ma5": row[3],
-                "ma20": row[4],
-                "ma60": row[5],
-                "momentum20": row[6],
-                "momentum60": row[7],
-                "vol20": row[8],
-                "dollarVolume20": row[9],
-                "factorScore": row[10],
+                "return1d": row[3],
+                "logReturn1d": row[4],
+                "ma5": row[5],
+                "ma10": row[6],
+                "ma20": row[7],
+                "ma60": row[8],
+                "volumeMa20": row[9],
+                "volatility20d": row[10],
+                "momentum20d": row[11],
+                "closeVsMa20": row[12],
+                "factorScore": row[13],
             }
             for row in rows
         ]
@@ -416,6 +698,10 @@ class QuantDuckDBService:
         return {row[0] for row in rows} == {"ohlcv_daily", "factor_daily"}
 
     @staticmethod
+    def _ensure_column(conn: Any, table_name: str, column_name: str, column_type_sql: str) -> None:
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {column_name} {column_type_sql}")
+
+    @staticmethod
     def _safe_path(value: str) -> str:
         path = Path(value)
         return str(path) if not path.is_absolute() else path.name
@@ -438,10 +724,10 @@ class QuantDuckDBService:
 
     @classmethod
     def _normalize_ohlcv_row(cls, row: dict) -> tuple:
-        symbol = str(row.get("symbol") or "").strip().upper()
+        symbol = str(row.get("symbol") or row.get("code") or "").strip().upper()
         if not symbol:
             raise ValueError("OHLCV row is missing symbol")
-        trade_date = cls._parse_date(row.get("trade_date") or row.get("tradeDate"))
+        trade_date = cls._parse_date(row.get("trade_date") or row.get("tradeDate") or row.get("date"))
         close = cls._float_or_none(row.get("close"))
         volume = cls._float_or_none(row.get("volume"))
         amount = cls._float_or_none(row.get("amount"))
@@ -456,9 +742,11 @@ class QuantDuckDBService:
             close,
             volume,
             amount,
+            cls._float_or_none(row.get("adj_close") or row.get("adjClose")),
             str(row.get("market") or "").strip().upper() or None,
             str(row.get("sector") or "").strip() or None,
             str(row.get("source") or "").strip() or None,
+            row.get("ingested_at") or row.get("ingestedAt") or datetime.now(),
             datetime.now(),
         )
 
@@ -488,10 +776,101 @@ class QuantDuckDBService:
             return "", []
         return f"{prefix} " + " AND ".join(clauses), params
 
+    @classmethod
+    def _scope_filter_sql(
+        cls,
+        column_name: str,
+        start: Optional[date],
+        end: Optional[date],
+        symbols: list[str],
+        *,
+        prefix: str = "WHERE",
+    ) -> tuple[str, list]:
+        date_sql, params = cls._date_filter_sql(column_name, start, end, prefix="")
+        clauses = []
+        if date_sql:
+            clauses.append(date_sql.strip())
+        if symbols:
+            clauses.append("symbol IN (" + ", ".join(["?"] * len(symbols)) + ")")
+            params.extend(symbols)
+        if not clauses:
+            return "", []
+        return f"{prefix} " + " AND ".join(clauses), params
+
     def _normalize_symbol_limit(self, value: Any) -> int:
         if value is None or value == "":
             return self.max_benchmark_symbols
         return max(1, min(int(value), self.max_benchmark_symbols))
+
+    @staticmethod
+    def _normalize_symbols(symbols: Optional[list[str]]) -> list[str]:
+        if not symbols:
+            return []
+        normalized = []
+        seen = set()
+        for symbol in symbols:
+            value = str(symbol or "").strip().upper()
+            if value and value not in seen:
+                normalized.append(value)
+                seen.add(value)
+        return normalized
+
+    @staticmethod
+    def _records_from_rows(rows: Any) -> list[dict]:
+        if rows is None:
+            return []
+        if hasattr(rows, "to_dict"):
+            try:
+                records = rows.to_dict(orient="records")
+            except TypeError:
+                records = rows.to_dict()
+            if isinstance(records, list):
+                return [dict(row) for row in records]
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def _compact_source(records: list[dict]) -> str:
+        sources = sorted({str(row.get("source") or "").strip() for row in records if row.get("source")})
+        return ",".join(sources[:3]) or "payload"
+
+    @classmethod
+    def _ohlcv_record_from_stock_daily(cls, row: Any, *, fallback_symbol: str) -> dict:
+        return {
+            "symbol": getattr(row, "code", None) or fallback_symbol,
+            "trade_date": cls._parse_date(getattr(row, "date", None)),
+            "open": getattr(row, "open", None),
+            "high": getattr(row, "high", None),
+            "low": getattr(row, "low", None),
+            "close": getattr(row, "close", None),
+            "volume": getattr(row, "volume", None),
+            "amount": getattr(row, "amount", None),
+            "source": getattr(row, "data_source", None) or "stock_daily",
+        }
+
+    def _empty_coverage(self, status: str, reason: Optional[str]) -> dict:
+        return {
+            "status": status,
+            "engine": "duckdb",
+            "enabled": self.enabled,
+            "databasePath": self._safe_path(self.database_path),
+            "totalOhlcvRows": 0,
+            "totalFactorRows": 0,
+            "symbolCount": 0,
+            "minTradeDate": None,
+            "maxTradeDate": None,
+            "latestFactorDate": None,
+            "symbols": [],
+            "emptyReason": reason,
+            "error": reason if status in {"unavailable", "disabled"} else None,
+        }
+
+    @staticmethod
+    def _date_to_iso(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if hasattr(value, "isoformat"):
+            return value.isoformat()[:10]
+        return str(value)[:10]
 
     def _disabled_result(self) -> Optional[dict]:
         if self.enabled:
@@ -506,14 +885,30 @@ class QuantDuckDBService:
     def _schema_missing_result() -> dict:
         return {"status": "unavailable", "engine": "duckdb", "error": "DuckDB quant schema is not initialized"}
 
+    def _invalid_range_result(self, *, ingest: bool = False) -> dict:
+        payload = {"status": "invalid_request", "engine": "duckdb", "error": "start_date must be on or before end_date"}
+        if ingest:
+            payload.update({"ingestedRows": 0, "symbolCount": 0, "availableRows": 0})
+        else:
+            payload.update({"ohlcvRows": 0, "factorRows": 0, "factorCount": self.FACTOR_COUNT})
+        return payload
+
     def _benchmark_disabled_result(self, status: str) -> dict:
         return {
             "status": status,
             "engine": "duckdb",
             "elapsedMs": 0.0,
+            "durationMs": 0.0,
             "ohlcvRows": 0,
             "factorRows": 0,
+            "rowsScanned": 0,
+            "symbolsScanned": 0,
             "symbolCount": 0,
             "dateCount": 0,
             "factorCount": self.FACTOR_COUNT,
+            "queryType": "factor_daily_top_scores",
+            "dataMode": "empty",
+            "startDate": None,
+            "endDate": None,
+            "topResults": [],
         }

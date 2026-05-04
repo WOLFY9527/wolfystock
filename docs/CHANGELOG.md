@@ -1,5 +1,7 @@
 ## 2026-05-04
 
+- 🦆 **DuckDB Quant Engine Phase 1.5（验证层）** — 可选 DuckDB quant engine 新增显式 OHLCV ingest、`StockDaily` 本地存储 bounded ingest、`factor_daily` 基础日频因子构建、coverage 报告与 richer benchmark metadata。新增 `/api/v1/quant/duckdb/ingest-ohlcv`、`build-factors`、`coverage`，并增强 `benchmark` 返回 `durationMs / rowsScanned / symbolsScanned / dataMode / topResults`。DuckDB 继续默认 `QUANT_DUCKDB_ENABLED=false`，禁用时不会创建数据库文件；PostgreSQL 仍是业务数据库，不使用 `pg_duckdb`，不改变 scanner selection、backtest 计算、Portfolio accounting、AI 决策或通知路由。
+
 - 🦆 **DuckDB Quant Engine Phase 1（可选骨架）** — 新增只读 DuckDB quant analytics skeleton：`QuantDuckDBService` 可显式初始化 `ohlcv_daily / factor_daily`、写入小批量 OHLCV 样本、用 SQL window function 生成 MA/momentum/volatility/dollar-volume 基础因子，并通过管理员接口 `/api/v1/quant/duckdb/health|init|benchmark` 返回安全 health 与 benchmark 计数。DuckDB 默认 `QUANT_DUCKDB_ENABLED=false`、懒加载依赖且不参与 app startup；PostgreSQL 仍是业务数据库，现有 Python backtest、scanner selection、backtest 计算与 Portfolio accounting 均不接入也不改变。
 
 - 🧼 **剩余系统页面中文界面抛光** — `/backtest/compare`、`/settings/system`、`/admin/logs` 与 `/admin/notifications` 继续清理中文 UI 里的英文标题、状态、角色与调试式 backend key。回测比较页把 `metric strip`、`comparison_highlights`、`baseline/candidate/unavailable` 等可见文案映射为中文，管理员通知把 `critical/warning/info` 渲染为中文严重级别，系统设置把 Provider/Runtime/Fallback/Quick API 等界面标签收口为服务商、运行时、备用模型与快速接口；仅调整展示文案和测试断言，不新增功能、不改变 AI 路由、数据源、回测或通知规则逻辑。

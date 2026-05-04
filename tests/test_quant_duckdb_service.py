@@ -84,16 +84,45 @@ def test_ingest_ohlcv_sample_rows(tmp_path) -> None:
     service = QuantDuckDBService(database_path=str(tmp_path / "quant.duckdb"), enabled=True)
     service.initialize_schema()
 
-    result = service.ingest_ohlcv_rows(_sample_rows(days=5))
+    result = service.ingest_ohlcv(_sample_rows(days=5))
 
-    assert result == {"status": "ok", "ingestedRows": 5, "symbolCount": 1}
+    assert result["status"] == "ok"
+    assert result["ingestedRows"] == 5
+    assert result["symbolCount"] == 1
+    assert result["durationMs"] >= 0
+
+
+def test_duplicate_ingest_replaces_rows_without_double_counting(tmp_path) -> None:
+    _require_duckdb()
+    service = QuantDuckDBService(database_path=str(tmp_path / "quant.duckdb"), enabled=True)
+    service.initialize_schema()
+
+    rows = _sample_rows(days=5)
+    first = service.ingest_ohlcv(rows)
+    second = service.ingest_ohlcv(rows)
+    coverage = service.get_coverage()
+
+    assert first["ingestedRows"] == 5
+    assert second["ingestedRows"] == 5
+    assert coverage["totalOhlcvRows"] == 5
+    assert coverage["symbolCount"] == 1
+
+
+def test_disabled_ingest_does_not_create_database_file(tmp_path) -> None:
+    db_path = tmp_path / "quant" / "disabled.duckdb"
+    service = QuantDuckDBService(database_path=str(db_path), enabled=False)
+
+    result = service.ingest_ohlcv(_sample_rows(days=2))
+
+    assert result["status"] == "disabled"
+    assert not db_path.exists()
 
 
 def test_build_basic_factors_and_ma_values_are_deterministic(tmp_path) -> None:
     _require_duckdb()
     service = QuantDuckDBService(database_path=str(tmp_path / "quant.duckdb"), enabled=True)
     service.initialize_schema()
-    service.ingest_ohlcv_rows(_sample_rows(days=25))
+    service.ingest_ohlcv(_sample_rows(days=25))
 
     result = service.build_basic_factors()
 
@@ -104,13 +133,72 @@ def test_build_basic_factors_and_ma_values_are_deterministic(tmp_path) -> None:
     assert rows[0]["symbol"] == "AAA"
     assert rows[0]["ma5"] == pytest.approx(18.0)
     assert rows[0]["ma20"] == pytest.approx(10.5)
+    assert rows[0]["return1d"] == pytest.approx(1 / 19)
+    assert rows[0]["closeVsMa20"] == pytest.approx(20.0 / 10.5 - 1)
+
+
+def test_coverage_reports_ohlcv_and_factor_state(tmp_path) -> None:
+    _require_duckdb()
+    service = QuantDuckDBService(database_path=str(tmp_path / "quant.duckdb"), enabled=True)
+    service.initialize_schema()
+    service.ingest_ohlcv(_sample_rows("AAA", 25) + _sample_rows("BBB", 10))
+    service.build_basic_factors()
+
+    result = service.get_coverage(sample_limit=2)
+
+    assert result["status"] == "ok"
+    assert result["totalOhlcvRows"] == 35
+    assert result["totalFactorRows"] == 35
+    assert result["symbolCount"] == 2
+    assert result["minTradeDate"] == "2026-01-01"
+    assert result["maxTradeDate"] == "2026-01-25"
+    assert result["latestFactorDate"] == "2026-01-25"
+    assert len(result["symbols"]) == 2
+
+
+def test_ingest_ohlcv_from_existing_store_is_bounded_and_dry_run_safe(tmp_path) -> None:
+    _require_duckdb()
+    service = QuantDuckDBService(database_path=str(tmp_path / "quant.duckdb"), enabled=True, max_benchmark_symbols=1)
+    service.initialize_schema()
+
+    class FakeRow:
+        def __init__(self, code: str, offset: int) -> None:
+            self.code = code
+            self.date = date(2026, 1, 1) + timedelta(days=offset)
+            self.open = 10.0 + offset
+            self.high = 11.0 + offset
+            self.low = 9.0 + offset
+            self.close = 10.5 + offset
+            self.volume = 1000 + offset
+            self.amount = self.close * self.volume
+            self.data_source = "stock_daily"
+
+    class FakeRepo:
+        def list_distinct_codes(self) -> list[str]:
+            return ["AAA", "BBB"]
+
+        def get_recent_daily_rows(self, *, code: str, limit: int) -> list[FakeRow]:
+            return [FakeRow(code, 1), FakeRow(code, 0)]
+
+    dry_run = service.ingest_ohlcv_from_existing_store(stock_repository=FakeRepo(), dry_run=True)
+    coverage_after_dry_run = service.get_coverage()
+    ingested = service.ingest_ohlcv_from_existing_store(stock_repository=FakeRepo())
+    coverage_after_ingest = service.get_coverage()
+
+    assert dry_run["status"] == "dry_run"
+    assert dry_run["symbolCount"] == 1
+    assert dry_run["availableRows"] == 2
+    assert coverage_after_dry_run["totalOhlcvRows"] == 0
+    assert ingested["status"] == "ok"
+    assert ingested["ingestedRows"] == 2
+    assert coverage_after_ingest["totalOhlcvRows"] == 2
 
 
 def test_benchmark_returns_elapsed_and_counts(tmp_path) -> None:
     _require_duckdb()
     service = QuantDuckDBService(database_path=str(tmp_path / "quant.duckdb"), enabled=True)
     service.initialize_schema()
-    service.ingest_ohlcv_rows(_sample_rows("AAA", 25) + _sample_rows("BBB", 25))
+    service.ingest_ohlcv(_sample_rows("AAA", 25) + _sample_rows("BBB", 25))
     service.build_basic_factors()
 
     result = service.benchmark_factor_query(symbol_limit=1)
@@ -118,9 +206,15 @@ def test_benchmark_returns_elapsed_and_counts(tmp_path) -> None:
     assert result["status"] == "ok"
     assert result["engine"] == "duckdb"
     assert result["elapsedMs"] >= 0
+    assert result["durationMs"] >= 0
     assert result["factorRows"] == 25
+    assert result["rowsScanned"] == 25
+    assert result["symbolsScanned"] == 1
     assert result["symbolCount"] == 1
     assert result["dateCount"] == 25
+    assert result["dataMode"] == "real"
+    assert result["queryType"] == "factor_daily_top_scores"
+    assert result["topResults"]
 
 
 def test_empty_queries_return_clear_status(tmp_path) -> None:
