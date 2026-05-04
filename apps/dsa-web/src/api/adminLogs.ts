@@ -231,18 +231,29 @@ export interface BusinessEventListResponse {
 
 export interface AdminLogStorageSummary {
   totalLogCount: number;
+  eventCount?: number;
+  sessionCount?: number;
   totalEventCount: number;
   oldestLogTimestamp?: string | null;
+  oldestEventAt?: string | null;
   newestLogTimestamp?: string | null;
+  newestEventAt?: string | null;
   retentionDays: number;
   minimumRetentionDays: number;
   retentionCutoff?: string | null;
   logsOlderThanRetentionCount: number;
   estimatedStorageBytes?: number | null;
+  sizeBytes?: number | null;
   storageSizeBytes?: number | null;
+  sizeLabel?: string | null;
   storageSizeLabel?: string | null;
   storageSizeAvailable: boolean;
+  measurementScope?: 'postgres_tables' | 'sqlite_database_file' | 'unavailable' | string;
+  measurementStatus?: 'available' | 'unavailable' | string;
+  measurementReason?: string | null;
+  softLimitBytes?: number | null;
   storageSoftLimitBytes: number;
+  hardLimitBytes?: number | null;
   storageHardLimitBytes: number;
   usedPercentageOfSoftLimit?: number | null;
   usedPercentageOfHardLimit?: number | null;
@@ -315,6 +326,7 @@ export const adminLogsApi = {
       status?: string;
       query?: string;
       since?: string;
+      minLevel?: string;
       limit?: number;
       offset?: number;
     },
@@ -329,6 +341,7 @@ export const adminLogsApi = {
           backtest_id: params.backtestId,
           request_id: params.requestId,
           user_id: params.userId,
+          min_level: params.minLevel,
         },
       },
     );
@@ -361,19 +374,30 @@ export const adminLogsApi = {
     const normalized = toCamelCase<AdminLogStorageSummary>(response.data);
     return {
       totalLogCount: Number(normalized.totalLogCount || 0),
+      eventCount: Number(normalized.eventCount || normalized.totalEventCount || 0),
+      sessionCount: Number(normalized.sessionCount || normalized.totalLogCount || 0),
       totalEventCount: Number(normalized.totalEventCount || 0),
       oldestLogTimestamp: normalized.oldestLogTimestamp || null,
+      oldestEventAt: normalized.oldestEventAt || normalized.oldestLogTimestamp || null,
       newestLogTimestamp: normalized.newestLogTimestamp || null,
+      newestEventAt: normalized.newestEventAt || normalized.newestLogTimestamp || null,
       retentionDays: Number(normalized.retentionDays || 90),
       minimumRetentionDays: Number(normalized.minimumRetentionDays || 7),
       retentionCutoff: normalized.retentionCutoff || null,
       logsOlderThanRetentionCount: Number(normalized.logsOlderThanRetentionCount || 0),
       estimatedStorageBytes: typeof normalized.estimatedStorageBytes === 'number' ? normalized.estimatedStorageBytes : null,
-      storageSizeBytes: typeof normalized.storageSizeBytes === 'number' ? normalized.storageSizeBytes : null,
-      storageSizeLabel: normalized.storageSizeLabel || null,
-      storageSizeAvailable: Boolean(normalized.storageSizeAvailable),
-      storageSoftLimitBytes: Number(normalized.storageSoftLimitBytes || 512 * 1024 * 1024),
-      storageHardLimitBytes: Number(normalized.storageHardLimitBytes || 1024 * 1024 * 1024),
+      sizeBytes: typeof normalized.sizeBytes === 'number' ? normalized.sizeBytes : (typeof normalized.storageSizeBytes === 'number' ? normalized.storageSizeBytes : null),
+      storageSizeBytes: typeof normalized.storageSizeBytes === 'number' ? normalized.storageSizeBytes : (typeof normalized.sizeBytes === 'number' ? normalized.sizeBytes : null),
+      sizeLabel: normalized.sizeLabel || normalized.storageSizeLabel || null,
+      storageSizeLabel: normalized.storageSizeLabel || normalized.sizeLabel || null,
+      storageSizeAvailable: Boolean(normalized.storageSizeAvailable || normalized.measurementStatus === 'available'),
+      measurementScope: normalized.measurementScope || 'unavailable',
+      measurementStatus: normalized.measurementStatus || (normalized.storageSizeAvailable ? 'available' : 'unavailable'),
+      measurementReason: normalized.measurementReason || null,
+      softLimitBytes: typeof normalized.softLimitBytes === 'number' ? normalized.softLimitBytes : null,
+      storageSoftLimitBytes: Number(normalized.storageSoftLimitBytes || normalized.softLimitBytes || 512 * 1024 * 1024),
+      hardLimitBytes: typeof normalized.hardLimitBytes === 'number' ? normalized.hardLimitBytes : null,
+      storageHardLimitBytes: Number(normalized.storageHardLimitBytes || normalized.hardLimitBytes || 1024 * 1024 * 1024),
       usedPercentageOfSoftLimit: typeof normalized.usedPercentageOfSoftLimit === 'number' ? normalized.usedPercentageOfSoftLimit : null,
       usedPercentageOfHardLimit: typeof normalized.usedPercentageOfHardLimit === 'number' ? normalized.usedPercentageOfHardLimit : null,
       capacityCleanupRecommended: Boolean(normalized.capacityCleanupRecommended),

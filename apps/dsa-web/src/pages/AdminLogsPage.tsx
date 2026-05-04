@@ -393,8 +393,26 @@ function formatStorageBytes(value: unknown): string {
 
 function storageBytes(summary: AdminLogStorageSummary | null): number | null {
   if (!summary?.storageSizeAvailable) return null;
-  const value = typeof summary.storageSizeBytes === 'number' ? summary.storageSizeBytes : summary.estimatedStorageBytes;
+  const value = typeof summary.sizeBytes === 'number' ? summary.sizeBytes : (typeof summary.storageSizeBytes === 'number' ? summary.storageSizeBytes : summary.estimatedStorageBytes);
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function storageMeasurementLabel(summary: AdminLogStorageSummary | null, locale: AdminLogsLanguage): string {
+  const scope = String(summary?.measurementScope || '').trim();
+  if (scope === 'postgres_tables') return locale === 'zh' ? 'PostgreSQL 表容量' : 'PostgreSQL table size';
+  if (scope === 'sqlite_database_file') return locale === 'zh' ? 'SQLite 数据库文件' : 'SQLite database file';
+  return locale === 'zh' ? '容量来源不可用' : 'Measurement unavailable';
+}
+
+function storageUnavailableReason(summary: AdminLogStorageSummary | null, locale: AdminLogsLanguage): string {
+  const raw = String(summary?.measurementReason || '').trim();
+  if (!raw) return locale === 'zh' ? '未返回容量测量原因' : 'No measurement reason returned';
+  if (locale !== 'zh') return raw;
+  if (/database path unavailable/i.test(raw)) return '数据库路径不可用';
+  if (/permission denied/i.test(raw)) return '没有权限读取容量';
+  if (/unsupported dialect/i.test(raw)) return '当前数据库类型暂不支持表级容量';
+  if (/database engine unavailable/i.test(raw)) return '数据库引擎不可用';
+  return raw;
 }
 
 function clampPercent(value: unknown): number {
@@ -857,6 +875,7 @@ const AdminLogsPage: React.FC = () => {
         const category = activeTab === 'business' ? undefined : activeTab;
         const response: BusinessEventListResponse = await adminLogsApi.listBusinessEvents({
           category,
+          minLevel: activeTab === 'scanner' ? 'INFO' : undefined,
           symbol: activeTab === 'analysis' ? searchQuery.trim() || undefined : undefined,
           status: statusFilter === 'all' ? undefined : statusFilter,
           query: activeTab === 'analysis' ? undefined : searchQuery.trim() || undefined,
@@ -1158,6 +1177,14 @@ const AdminLogsPage: React.FC = () => {
     if (activeTab === 'raw') return summary?.healthSummary || fallback;
     return businessHealth || fallback;
   }, [activeTab, businessHealth, businessTotal, computedSummary, filteredSessions.length, summary]);
+  const scannerSummary = useMemo(() => {
+    const scannerEvents = businessEvents.filter((item) => item.category === 'scanner');
+    const latest = scannerEvents[0] || null;
+    const failed = scannerEvents.filter((item) => ['failed', 'error'].includes(normalizeStatus(item.status))).length;
+    const success = scannerEvents.filter((item) => normalizeStatus(item.status) === 'success').length;
+    const latestError = scannerEvents.find((item) => ['failed', 'error'].includes(normalizeStatus(item.status)));
+    return { latest, failed, success, latestError };
+  }, [businessEvents]);
   const topCategory = healthSummary.failuresByCategory?.[0];
   const latestCriticalError = healthSummary.latestCriticalError || healthSummary.topRecentErrors?.[0] || null;
   const currentStorageBytes = storageBytes(storageSummary);
@@ -1302,18 +1329,18 @@ const AdminLogsPage: React.FC = () => {
         <div className={`rounded-lg border px-3 py-2 ${storageStatusTone(storageSummary?.status)}`}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? '日志存储' : 'LOG STORAGE'}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? '日志容量' : 'LOG STORAGE'}</p>
               {storageSummary?.storageSizeAvailable ? (
                 <>
                   <p className="mt-1 text-base font-semibold">
-                    {formatStorageBytes(currentStorageBytes)} / {formatStorageBytes(softLimitBytes)} {locale === 'zh' ? '软限制' : 'soft'}
+                    {locale === 'zh' ? '日志容量 ' : ''}{storageSummary.storageSizeLabel || storageSummary.sizeLabel || formatStorageBytes(currentStorageBytes)}
                   </p>
-                  <p className="text-[11px] opacity-80">{formatStorageBytes(hardLimitBytes)} {locale === 'zh' ? '硬限制' : 'hard limit'}</p>
+                  <p className="text-[11px] opacity-80">{storageMeasurementLabel(storageSummary, locale)} · {formatStorageBytes(softLimitBytes)} {locale === 'zh' ? '软限制' : 'soft'} · {formatStorageBytes(hardLimitBytes)} {locale === 'zh' ? '硬限制' : 'hard limit'}</p>
                 </>
               ) : (
                 <>
-                  <p className="mt-1 text-base font-semibold">{locale === 'zh' ? '大小暂不可用' : 'Size unavailable'}</p>
-                  <p className="text-[11px] opacity-80">{locale === 'zh' ? '保留期检查仍在生效' : 'Retention checks active'}</p>
+                  <p className="mt-1 text-base font-semibold">{locale === 'zh' ? '容量暂不可用' : 'Size unavailable'}</p>
+                  <p className="text-[11px] opacity-80">{storageUnavailableReason(storageSummary, locale)} · {locale === 'zh' ? '保留期检查仍在生效' : 'Retention checks active'}</p>
                 </>
               )}
             </div>
@@ -1386,7 +1413,7 @@ const AdminLogsPage: React.FC = () => {
             disabled={isCleanupBusy || !storageSummary || (cleanupPreview?.matchedLogCount ?? storageSummary.logsOlderThanRetentionCount) <= 0 || (cleanupPreview?.mode === 'capacity' && !canRunCapacityCleanup)}
           >
             {cleanupPreview?.mode === 'capacity'
-              ? (locale === 'zh' ? '运行容量清理' : 'Run capacity cleanup')
+              ? (locale === 'zh' ? '按容量清理日志' : 'Run capacity cleanup')
               : (locale === 'zh' ? '清理超过保留期的日志' : 'Clean logs older than retention')}
           </button>
         </div>
@@ -1427,6 +1454,34 @@ const AdminLogsPage: React.FC = () => {
         </div>
       </section>
 
+      {activeTab === 'scanner' ? (
+        <section
+          data-testid="admin-logs-scanner-summary"
+          className="grid grid-cols-1 gap-2 rounded-xl border border-white/8 bg-black/20 p-2.5 sm:grid-cols-2 lg:grid-cols-4"
+        >
+          <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '最近一次扫描' : 'Latest scan'}</p>
+            <p className="mt-1 truncate text-sm font-semibold text-foreground">{text(scannerSummary.latest?.event, locale === 'zh' ? '暂无扫描' : 'No scan')}</p>
+            <p className="text-[11px] text-muted-text">{formatDateTime(scannerSummary.latest?.startedAt, locale)} · {formatDuration(scannerSummary.latest?.durationMs)}</p>
+          </div>
+          <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '成功 / 失败' : 'Success / failed'}</p>
+            <p className="mt-1 text-base font-semibold text-foreground">{scannerSummary.success} / {scannerSummary.failed}</p>
+            <p className="text-[11px] text-muted-text">{locale === 'zh' ? '包含 INFO 生命周期记录' : 'Includes INFO lifecycle records'}</p>
+          </div>
+          <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '最近错误' : 'Latest error'}</p>
+            <p className="mt-1 truncate text-sm font-semibold text-foreground">{friendlyRawStatusLabel(scannerSummary.latestError?.errorSummary || scannerSummary.latestError?.reason, locale)}</p>
+            <p className="text-[11px] text-muted-text">{text(scannerSummary.latestError?.event, locale === 'zh' ? '暂无失败扫描' : 'No failed scan')}</p>
+          </div>
+          <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '运行耗时' : 'Run duration'}</p>
+            <p className="mt-1 text-base font-semibold text-foreground">{formatDuration(scannerSummary.latest?.durationMs)}</p>
+            <p className="text-[11px] text-muted-text">{locale === 'zh' ? '开始、完成、失败均进入日志中心' : 'Start, completion, and failure are logged'}</p>
+          </div>
+        </section>
+      ) : null}
+
       <GlassCard as="section" className="min-h-0 p-4">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -1438,21 +1493,25 @@ const AdminLogsPage: React.FC = () => {
         {activeTab !== 'raw' ? (
           businessEvents.length === 0 ? (
             <div className="rounded-2xl bg-white/[0.02] px-4 py-6">
-              <p className="text-sm font-medium text-foreground">{t('adminLogs.noSessionsTitle')}</p>
-              <p className="mt-1 text-sm text-muted-text">{t('adminLogs.noSessionsBody')}</p>
+              <p className="text-sm font-medium text-foreground">{activeTab === 'scanner' && locale === 'zh' ? '暂无扫描器日志' : t('adminLogs.noSessionsTitle')}</p>
+              <p className="mt-1 text-sm text-muted-text">
+                {activeTab === 'scanner' && locale === 'zh'
+                  ? '暂无扫描器日志。运行一次扫描后，这里会显示扫描开始、完成、失败和耗时。'
+                  : t('adminLogs.noSessionsBody')}
+              </p>
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-white/6 bg-black/15">
-              <div data-testid="business-events-table-shell" className="overflow-x-auto no-scrollbar">
-                <div className="min-w-[1040px]">
-                  <div className="grid grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+              <div data-testid="business-events-table-shell" className="min-w-0">
+                <div className="min-w-0">
+                  <div className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
                     <div>{locale === 'zh' ? '时间' : 'Time'}</div>
                     <div>{locale === 'zh' ? '事件' : 'Event'}</div>
                     <div>{locale === 'zh' ? '状态 / 严重度' : 'Status / Severity'}</div>
                     <div>{locale === 'zh' ? '原因' : 'Reason'}</div>
-                    <div>{locale === 'zh' ? '操作者' : 'Actor'}</div>
-                    <div>{locale === 'zh' ? '上下文' : 'Context'}</div>
-                    <div>{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}</div>
+                    <div className="hidden xl:block">{locale === 'zh' ? '操作者' : 'Actor'}</div>
+                    <div className="hidden xl:block">{locale === 'zh' ? '上下文' : 'Context'}</div>
+                    <div className="hidden xl:block">{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}</div>
                     <div>{locale === 'zh' ? '操作' : 'Action'}</div>
                   </div>
                   <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto no-scrollbar">
@@ -1477,7 +1536,7 @@ const AdminLogsPage: React.FC = () => {
                       const traceValue = item.traceId || item.requestId;
                       const stepLabel = stepStatsLabel(item, locale);
                       return (
-                        <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem] items-center gap-3 px-3 py-2.5">
+                        <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] items-center gap-3 px-3 py-2.5 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
                           <p className="truncate text-xs text-secondary-text" title={formatDateTime(item.startedAt, locale)}>{formatDateTime(item.startedAt, locale)}</p>
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-foreground" title={text(item.event || item.symbol)}>{text(item.event || item.symbol)}</p>
@@ -1493,16 +1552,16 @@ const AdminLogsPage: React.FC = () => {
                             <p className="line-clamp-2 text-xs font-medium leading-5 text-foreground" title={errorSummary || reason || stepLabel}>{errorSummary || reason || stepLabel}</p>
                             <p className="mt-1 truncate text-[11px] text-muted-text" title={stepLabel}>{stepLabel}</p>
                           </div>
-                          <div className="min-w-0">
+                          <div className="hidden min-w-0 xl:block">
                             <span className="inline-flex w-fit rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-100">{actorType}</span>
                             <p className="mt-1 truncate text-[11px] text-muted-text" title={actorSecondary}>{actorSecondary}</p>
                           </div>
-                          <div className="min-w-0">
+                          <div className="hidden min-w-0 xl:block">
                             <p className="truncate text-xs font-medium text-foreground" title={contextPrimary}>{contextPrimary}</p>
                             <p className="mt-1 truncate text-[11px] text-muted-text" title={contextSecondary || text(item.summary)}>{contextSecondary || text(item.summary)}</p>
                             <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(traceValue)}>{traceValue ? `trace ${shortIdentifier(traceValue)}` : '--'}</p>
                           </div>
-                          <div className="min-w-0">
+                          <div className="hidden min-w-0 xl:block">
                             <p className="truncate text-xs text-secondary-text" title={sourcePrimary}>{sourcePrimary}</p>
                             <p className="mt-1 truncate text-[11px] text-muted-text" title={sourceSecondary}>{sourceSecondary || '--'}</p>
                           </div>
@@ -1604,7 +1663,7 @@ const AdminLogsPage: React.FC = () => {
                 </div>
                 <div className="grid gap-2 text-xs text-secondary-text">
                   <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => void copyTextValue(buildBusinessDebugSummary(businessDetail))}>
-                    {locale === 'zh' ? '复制调试摘要' : 'Copy debug summary'}
+                    {locale === 'zh' ? '复制执行摘要' : 'Copy execution summary'}
                   </button>
                   <span>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(businessDetail.durationMs)}</span></span>
                   <span>{locale === 'zh' ? '步骤统计' : 'Step stats'}: <span className="text-foreground">{stepStatsLabel(businessDetail, locale)}</span></span>
@@ -1638,10 +1697,26 @@ const AdminLogsPage: React.FC = () => {
                 </section>
               </div>
               <div className="mt-4">
-                <p className="text-[10px] uppercase tracking-[0.18em] text-white/36">{locale === 'zh' ? '元数据' : 'metadata'}</p>
-                <JsonBlock value={businessDetail.metadata || {}} />
+                <details className="rounded-2xl border border-white/6 bg-black/20 px-3 py-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-foreground">{locale === 'zh' ? '元数据' : 'Metadata'}</summary>
+                  <JsonBlock value={businessDetail.metadata || {}} />
+                </details>
               </div>
             </section>
+
+            {businessDetail.category === 'scanner' ? (
+              <section data-testid="scanner-execution-summary" className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
+                <h3 className="text-sm font-semibold text-foreground">{locale === 'zh' ? '扫描器执行摘要' : 'Scanner execution summary'}</h3>
+                <div className="mt-4 grid gap-3 text-sm text-secondary-text md:grid-cols-3">
+                  <p>{locale === 'zh' ? '市场 / 配置' : 'Market / config'}: <span className="text-foreground">{text([businessDetail.market, businessDetail.metadata?.configName || businessDetail.subject].filter(Boolean).join(' · '))}</span></p>
+                  <p>{locale === 'zh' ? '评估 / 入选' : 'Evaluated / selected'}: <span className="text-foreground">{text(businessDetail.metadata?.evaluatedCount ?? businessDetail.metadata?.matchedCount ?? businessDetail.stepCount)} / {text(businessDetail.metadata?.selectedCount ?? businessDetail.metadata?.matchedCount ?? businessDetail.successStepCount)}</span></p>
+                  <p>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(businessDetail.metadata?.durationMs ?? businessDetail.durationMs)}</span></p>
+                  <p>{locale === 'zh' ? '数据失败 / 跳过' : 'Data failed / skipped'}: <span className="text-foreground">{text(businessDetail.metadata?.dataFailedCount ?? 0)} / {text(businessDetail.metadata?.skippedCount ?? businessDetail.skippedStepCount ?? 0)}</span></p>
+                  <p>{locale === 'zh' ? 'Top 标的' : 'Top symbol'}: <span className="text-foreground">{text(businessDetail.metadata?.topSymbol)}</span></p>
+                  <p>{locale === 'zh' ? '数据源摘要' : 'Provider summary'}: <span className="text-foreground">{text(businessDetail.metadata?.sourceProviderSummary || businessDetail.source)}</span></p>
+                </div>
+              </section>
+            ) : null}
 
             <section className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
               <h3 className="text-sm font-semibold text-foreground">{locale === 'zh' ? '调用链时间线' : 'Call-chain timeline'}</h3>
@@ -1697,7 +1772,7 @@ const AdminLogsPage: React.FC = () => {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => void copyTextValue(buildRawDebugSummary(drawerDetail))}>
-                    {locale === 'zh' ? '复制调试摘要' : 'Copy debug summary'}
+                    {locale === 'zh' ? '复制执行摘要' : 'Copy execution summary'}
                   </button>
                   <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => void copyLogJson(drawerDetail)}>
                     {t('adminLogs.copyDetails')}
@@ -1809,7 +1884,7 @@ const AdminLogsPage: React.FC = () => {
               </div>
             </details>
 
-            <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5" open>
+            <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
               <summary className="cursor-pointer text-sm font-semibold text-foreground">{locale === 'zh' ? '元数据详情' : 'Metadata detail'}</summary>
               <div className="mt-4 space-y-3">
                 {drawerDetail.events.length ? drawerDetail.events.map((event) => (
@@ -1825,7 +1900,7 @@ const AdminLogsPage: React.FC = () => {
               </div>
             </details>
 
-            <details className="rounded-3xl border border-rose-400/15 bg-rose-500/[0.025] p-5" open>
+            <details className="rounded-3xl border border-rose-400/15 bg-rose-500/[0.025] p-5">
               <summary className="cursor-pointer text-sm font-semibold text-foreground">{t('adminLogs.diagnosticsTitle')}</summary>
               <div className="mt-4 space-y-2">
                 {diagnostics.length ? diagnostics.map((item, index) => (

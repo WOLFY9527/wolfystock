@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timedelta
+from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -30,6 +32,15 @@ def _admin_logs_config(**overrides):
     }
     values.update(overrides)
     return SimpleNamespace(**values)
+
+
+def _storage_measurement(size: int):
+    return {
+        "size_bytes": size,
+        "measurement_scope": "postgres_tables",
+        "measurement_status": "available",
+        "measurement_reason": None,
+    }
 
 
 def _admin_user() -> CurrentUser:
@@ -478,6 +489,93 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.items[0].scannerId, "scanner-mainland")
         self.assertEqual(payload.items[0].skippedStepCount, 0)
 
+    def test_scanner_run_records_started_and_completed_lifecycle_events(self) -> None:
+        run_started = datetime.now() - timedelta(seconds=3)
+        run_completed = datetime.now()
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            session_id = service.record_scanner_run(
+                run_detail={
+                    "id": 42,
+                    "market": "us",
+                    "profile": "us_preopen_v1",
+                    "profile_label": "US Pre-open Scanner v1",
+                    "status": "completed",
+                    "run_at": run_started.isoformat(),
+                    "completed_at": run_completed.isoformat(),
+                    "universe_size": 120,
+                    "evaluated_size": 30,
+                    "shortlist_size": 5,
+                    "source_summary": "scanner=local_db",
+                    "selected": [{"symbol": "NVDA"}],
+                    "diagnostics": {
+                        "coverage_summary": {
+                            "input_universe_size": 120,
+                            "ranked_candidate_count": 30,
+                            "shortlisted_count": 5,
+                            "excluded_total": 90,
+                        },
+                        "provider_diagnostics": {
+                            "providers_used": ["local_db", "yfinance"],
+                            "provider_failure_count": 0,
+                            "missing_data_symbol_count": 2,
+                        },
+                    },
+                },
+                actor={"actor_type": "admin", "user_id": "bootstrap-admin"},
+            )
+            detail = admin_logs.get_execution_log_session_detail(session_id, _=_admin_user())
+            scanner_tab = admin_logs.list_execution_log_sessions(category="scanner", min_level="INFO", since="", _=_admin_user())
+            global_default = admin_logs.list_execution_log_sessions(since="", _=_admin_user())
+
+        event_names = [event.event_name for event in detail.events]
+        self.assertIn("ScannerRunStarted", event_names)
+        self.assertIn("ScannerRunCompleted", event_names)
+        completed = next(event for event in detail.events if event.event_name == "ScannerRunCompleted")
+        self.assertEqual(completed.level, "INFO")
+        self.assertEqual(completed.category, "scanner")
+        self.assertEqual(completed.detail["market"], "us")
+        self.assertEqual(completed.detail["configName"], "US Pre-open Scanner v1")
+        self.assertEqual(completed.detail["evaluatedCount"], 30)
+        self.assertEqual(completed.detail["selectedCount"], 5)
+        self.assertGreaterEqual(completed.detail["durationMs"], 0)
+        self.assertEqual(completed.detail["topSymbol"], "NVDA")
+        self.assertEqual(scanner_tab.total, 1)
+        self.assertEqual(global_default.total, 0)
+
+    def test_failed_scanner_run_records_failed_lifecycle_event(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            session_id = service.record_scanner_run(
+                run_detail={
+                    "id": 43,
+                    "market": "cn",
+                    "profile": "cn_preopen_v1",
+                    "profile_label": "A 股盘前 Scanner v1",
+                    "status": "failed",
+                    "run_at": datetime.now().isoformat(),
+                    "completed_at": datetime.now().isoformat(),
+                    "universe_size": 0,
+                    "evaluated_size": 0,
+                    "shortlist_size": 0,
+                    "source_summary": "scanner=failed",
+                    "diagnostics": {
+                        "failure": {"message": "snapshot provider timeout token=SECRET"},
+                        "provider_diagnostics": {"provider_failure_count": 1, "providers_used": ["akshare"]},
+                    },
+                },
+                actor={"actor_type": "admin", "user_id": "bootstrap-admin"},
+            )
+            detail = admin_logs.get_execution_log_session_detail(session_id, _=_admin_user())
+            scanner_tab = admin_logs.list_execution_log_sessions(category="scanner", min_level="INFO", since="", _=_admin_user())
+
+        failed = next(event for event in detail.events if event.event_name == "ScannerRunFailed")
+        self.assertEqual(failed.level, "ERROR")
+        self.assertEqual(failed.category, "scanner")
+        self.assertIn("snapshot provider timeout", failed.detail["errorMessage"])
+        self.assertNotIn("SECRET", str(failed.model_dump()))
+        self.assertEqual(scanner_tab.total, 1)
+
     def test_root_health_summary_groups_failures_and_sanitizes_top_errors(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()
@@ -577,12 +675,49 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.minimum_retention_days, 7)
         self.assertEqual(payload.logs_older_than_retention_count, 1)
         self.assertFalse(payload.storage_size_available)
+        self.assertEqual(payload.measurement_status, "unavailable")
+        self.assertIsNotNone(payload.measurement_reason)
         self.assertEqual(payload.storage_soft_limit_bytes, 512 * 1024 * 1024)
         self.assertEqual(payload.storage_hard_limit_bytes, 1024 * 1024 * 1024)
         self.assertIsNotNone(payload.oldest_log_timestamp)
         self.assertIsNotNone(payload.newest_log_timestamp)
         self.assertEqual(payload.status, "warning")
         self.assertIn("cleanup", payload.recommended_cleanup_action)
+
+    def test_storage_summary_uses_sqlite_database_file_size_when_available(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "logs.db"
+            DatabaseManager.reset_instance()
+            file_db = DatabaseManager(db_url=f"sqlite:///{db_path}")
+            file_db.create_execution_log_session(
+                session_id="sqlite-size",
+                task_id="AnalysisCompleted",
+                code="AAPL",
+                name="AnalysisCompleted",
+                overall_status="completed",
+                truth_level="actual",
+                summary={},
+                started_at=datetime.now(),
+            )
+            file_db.append_execution_log_event(
+                session_id="sqlite-size",
+                phase="analysis",
+                step="AnalysisCompleted",
+                target="AAPL",
+                status="completed",
+                truth_level="actual",
+                message="ok",
+                detail={"level": "INFO", "category": "analysis", "event_name": "AnalysisCompleted"},
+                event_at=datetime.now(),
+            )
+            with patch("src.services.admin_logs_service.get_db", return_value=file_db):
+                payload = admin_logs.get_log_storage_summary(_=_admin_user())
+
+            self.assertTrue(payload.storage_size_available)
+            self.assertEqual(payload.measurement_scope, "sqlite_database_file")
+            self.assertEqual(payload.measurement_status, "available")
+            self.assertEqual(payload.storage_size_bytes, db_path.stat().st_size)
+            DatabaseManager.reset_instance()
 
     def test_storage_summary_marks_ok_warning_and_critical_by_quota(self) -> None:
         self._record_event(
@@ -598,19 +733,19 @@ class AdminLogsApiTestCase(unittest.TestCase):
         with (
             patch("src.services.admin_logs_service.get_db", return_value=self.db),
             patch("src.services.admin_logs_service.get_config", return_value=_admin_logs_config()),
-            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_bytes", return_value=128 * 1024 * 1024),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_measurement", return_value=_storage_measurement(128 * 1024 * 1024)),
         ):
             ok_payload = admin_logs.get_log_storage_summary(_=_admin_user())
         with (
             patch("src.services.admin_logs_service.get_db", return_value=self.db),
             patch("src.services.admin_logs_service.get_config", return_value=_admin_logs_config()),
-            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_bytes", return_value=690 * 1024 * 1024),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_measurement", return_value=_storage_measurement(690 * 1024 * 1024)),
         ):
             warning_payload = admin_logs.get_log_storage_summary(_=_admin_user())
         with (
             patch("src.services.admin_logs_service.get_db", return_value=self.db),
             patch("src.services.admin_logs_service.get_config", return_value=_admin_logs_config()),
-            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_bytes", return_value=1200 * 1024 * 1024),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_measurement", return_value=_storage_measurement(1200 * 1024 * 1024)),
         ):
             critical_payload = admin_logs.get_log_storage_summary(_=_admin_user())
 
@@ -707,7 +842,7 @@ class AdminLogsApiTestCase(unittest.TestCase):
         with (
             patch("src.services.admin_logs_service.get_db", return_value=self.db),
             patch("src.services.admin_logs_service.get_config", return_value=_admin_logs_config(admin_logs_storage_soft_limit_mb=1, admin_logs_storage_hard_limit_mb=2)),
-            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_bytes", return_value=3 * 1024 * 1024),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_measurement", return_value=_storage_measurement(3 * 1024 * 1024)),
         ):
             payload = admin_logs.cleanup_admin_logs(
                 admin_logs.AdminLogCleanupRequest(mode="capacity", dry_run=True),
@@ -745,7 +880,7 @@ class AdminLogsApiTestCase(unittest.TestCase):
         with (
             patch("src.services.admin_logs_service.get_db", return_value=self.db),
             patch("src.services.admin_logs_service.get_config", return_value=_admin_logs_config(admin_logs_storage_soft_limit_mb=1, admin_logs_storage_hard_limit_mb=2, admin_logs_min_retention_days=7)),
-            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_bytes", return_value=3 * 1024 * 1024),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_measurement", return_value=_storage_measurement(3 * 1024 * 1024)),
         ):
             payload = admin_logs.cleanup_admin_logs(
                 admin_logs.AdminLogCleanupRequest(mode="capacity", dry_run=False),

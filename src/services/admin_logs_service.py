@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, delete, func, select, text
@@ -118,27 +119,101 @@ class AdminLogsRetentionService:
 
         return None, None, None
 
-    def _storage_bytes(self) -> Optional[int]:
+    def _storage_measurement(self) -> Dict[str, Any]:
         engine, session_table, event_table = self._storage_relation_scope()
-        if engine is None or not session_table or not event_table:
-            return None
+        if engine is not None and session_table and event_table:
+            try:
+                with engine.connect() as conn:
+                    value = conn.execute(
+                        text(
+                            "SELECT "
+                            "COALESCE(pg_total_relation_size(COALESCE(to_regclass(:session_table), to_regclass('public.' || :session_table))), 0) + "
+                            "COALESCE(pg_total_relation_size(COALESCE(to_regclass(:event_table), to_regclass('public.' || :event_table))), 0)"
+                        ),
+                        {
+                            "session_table": session_table,
+                            "event_table": event_table,
+                        },
+                    ).scalar()
+                return {
+                    "size_bytes": int(value) if value is not None else None,
+                    "measurement_scope": "postgres_tables",
+                    "measurement_status": "available",
+                    "measurement_reason": None,
+                }
+            except PermissionError:
+                logger.warning("admin log PostgreSQL storage size lookup failed: permission denied")
+                return {
+                    "size_bytes": None,
+                    "measurement_scope": "unavailable",
+                    "measurement_status": "unavailable",
+                    "measurement_reason": "permission denied",
+                }
+            except Exception as exc:
+                logger.warning("admin log PostgreSQL storage size lookup failed: %s", exc)
+                return {
+                    "size_bytes": None,
+                    "measurement_scope": "unavailable",
+                    "measurement_status": "unavailable",
+                    "measurement_reason": str(exc)[:160] or "postgres size lookup failed",
+                }
+
+        sqlite_engine = getattr(self.db, "_engine", None)
+        if sqlite_engine is None:
+            return {
+                "size_bytes": None,
+                "measurement_scope": "unavailable",
+                "measurement_status": "unavailable",
+                "measurement_reason": "database engine unavailable",
+            }
+        dialect = getattr(sqlite_engine.dialect, "name", "")
+        if dialect != "sqlite":
+            return {
+                "size_bytes": None,
+                "measurement_scope": "unavailable",
+                "measurement_status": "unavailable",
+                "measurement_reason": f"unsupported dialect: {dialect or 'unknown'}",
+            }
+        db_path = getattr(getattr(sqlite_engine, "url", None), "database", None)
+        if not db_path or str(db_path) == ":memory:":
+            return {
+                "size_bytes": None,
+                "measurement_scope": "unavailable",
+                "measurement_status": "unavailable",
+                "measurement_reason": "database path unavailable",
+            }
         try:
-            with engine.connect() as conn:
-                value = conn.execute(
-                    text(
-                        "SELECT "
-                        "COALESCE(pg_total_relation_size(COALESCE(to_regclass(:session_table), to_regclass('public.' || :session_table))), 0) + "
-                        "COALESCE(pg_total_relation_size(COALESCE(to_regclass(:event_table), to_regclass('public.' || :event_table))), 0)"
-                    ),
-                    {
-                        "session_table": session_table,
-                        "event_table": event_table,
-                    },
-                ).scalar()
-            return int(value) if value is not None else None
+            if not os.path.exists(str(db_path)):
+                return {
+                    "size_bytes": None,
+                    "measurement_scope": "unavailable",
+                    "measurement_status": "unavailable",
+                    "measurement_reason": "database path unavailable",
+                }
+            return {
+                "size_bytes": int(os.path.getsize(str(db_path))),
+                "measurement_scope": "sqlite_database_file",
+                "measurement_status": "available",
+                "measurement_reason": None,
+            }
+        except PermissionError:
+            return {
+                "size_bytes": None,
+                "measurement_scope": "unavailable",
+                "measurement_status": "unavailable",
+                "measurement_reason": "permission denied",
+            }
         except Exception as exc:
-            logger.warning("admin log PostgreSQL storage size lookup failed: %s", exc)
-            return None
+            return {
+                "size_bytes": None,
+                "measurement_scope": "unavailable",
+                "measurement_status": "unavailable",
+                "measurement_reason": str(exc)[:160] or "sqlite file size lookup failed",
+            }
+
+    def _storage_bytes(self) -> Optional[int]:
+        value = self._storage_measurement().get("size_bytes")
+        return int(value) if value is not None else None
 
     @staticmethod
     def _format_bytes(value: Optional[int]) -> Optional[str]:
@@ -189,7 +264,8 @@ class AdminLogsRetentionService:
         policy = self._policy()
         now = datetime.now()
         min_retention_cutoff = now - timedelta(days=policy.min_retention_days)
-        storage_bytes = self._storage_bytes()
+        measurement = self._storage_measurement()
+        storage_bytes = measurement.get("size_bytes")
         storage_available = storage_bytes is not None
         hard_limit_exceeded = bool(storage_available and storage_bytes >= policy.storage_hard_limit_bytes)
         with self.db.get_session() as session:
@@ -227,6 +303,9 @@ class AdminLogsRetentionService:
             "cleanup_safe": cleanup_safe,
             "reason": reason,
             "storage_size_available": storage_available,
+            "measurement_scope": measurement.get("measurement_scope"),
+            "measurement_status": measurement.get("measurement_status"),
+            "measurement_reason": measurement.get("measurement_reason"),
             "estimated_bytes_per_session": estimated_bytes_per_session,
             "estimated_reclaimable_bytes": estimated_reclaimable_bytes,
             "batch_size": policy.cleanup_batch_size,
@@ -247,7 +326,8 @@ class AdminLogsRetentionService:
                 ).scalar()
                 or 0
             )
-        storage_bytes = self._storage_bytes()
+        measurement = self._storage_measurement()
+        storage_bytes = measurement.get("size_bytes")
         storage_available = storage_bytes is not None
         used_soft_pct = self._percentage(storage_bytes, policy.storage_soft_limit_bytes)
         used_hard_pct = self._percentage(storage_bytes, policy.storage_hard_limit_bytes)
@@ -315,18 +395,29 @@ class AdminLogsRetentionService:
             auto_cleanup_message = "Automatic cleanup was recently attempted; waiting before the next batch."
         summary = {
             "total_log_count": total_logs,
+            "session_count": total_logs,
             "total_event_count": total_events,
+            "event_count": total_events,
             "oldest_log_timestamp": self._iso(oldest),
+            "oldest_event_at": self._iso(oldest),
             "newest_log_timestamp": self._iso(newest),
+            "newest_event_at": self._iso(newest),
             "retention_days": policy.retention_days,
             "minimum_retention_days": policy.min_retention_days,
             "retention_cutoff": self._iso(retention_cutoff),
             "logs_older_than_retention_count": older_than_retention,
             "estimated_storage_bytes": storage_bytes,
+            "size_bytes": storage_bytes,
             "storage_size_bytes": storage_bytes,
+            "size_label": self._format_bytes(storage_bytes),
             "storage_size_label": self._format_bytes(storage_bytes),
             "storage_size_available": storage_available,
+            "measurement_scope": measurement.get("measurement_scope"),
+            "measurement_status": measurement.get("measurement_status"),
+            "measurement_reason": measurement.get("measurement_reason"),
+            "soft_limit_bytes": policy.storage_soft_limit_bytes,
             "storage_soft_limit_bytes": policy.storage_soft_limit_bytes,
+            "hard_limit_bytes": policy.storage_hard_limit_bytes,
             "storage_hard_limit_bytes": policy.storage_hard_limit_bytes,
             "used_percentage_of_soft_limit": used_soft_pct,
             "used_percentage_of_hard_limit": used_hard_pct,

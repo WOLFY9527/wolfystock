@@ -165,6 +165,8 @@ const businessEvents = [
     summary: '扫描器运行：大盘单机游戏',
     subject: '大盘单机游戏',
     scannerId: 'scanner-mainland',
+    market: 'US',
+    source: 'local_db / yfinance',
     startedAt: '2026-04-30T11:20:00Z',
     durationMs: 2200,
     stepCount: 3,
@@ -172,7 +174,19 @@ const businessEvents = [
     skippedStepCount: 1,
     failedStepCount: 0,
     unknownStepCount: 0,
-    metadata: { matchedCount: 18 },
+    metadata: {
+      eventNames: ['ScannerRunStarted', 'ScannerRunCompleted'],
+      configName: 'US Pre-open Scanner v1',
+      universeCount: 120,
+      evaluatedCount: 30,
+      selectedCount: 5,
+      rejectedCount: 25,
+      dataFailedCount: 2,
+      skippedCount: 90,
+      topSymbol: 'NVDA',
+      durationMs: 2200,
+      sourceProviderSummary: 'local_db / yfinance',
+    },
   },
   {
     id: 'backtest-ma20',
@@ -382,9 +396,14 @@ describe('AdminLogsPage', () => {
       retentionCutoff: '2026-01-30T00:00:00Z',
       logsOlderThanRetentionCount: 120,
       estimatedStorageBytes: 690 * 1024 * 1024,
+      sizeBytes: 690 * 1024 * 1024,
       storageSizeBytes: 690 * 1024 * 1024,
+      sizeLabel: '690.0 MB',
       storageSizeLabel: '690.0 MB',
       storageSizeAvailable: true,
+      measurementScope: 'postgres_tables',
+      measurementStatus: 'available',
+      measurementReason: null,
       storageSoftLimitBytes: 512 * 1024 * 1024,
       storageHardLimitBytes: 1024 * 1024 * 1024,
       usedPercentageOfSoftLimit: 134.77,
@@ -435,8 +454,8 @@ describe('AdminLogsPage', () => {
     expect(await screen.findByTestId('admin-logs-health-summary')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('120,000 会话');
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('180,000 事件');
-    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('690.0 MB / 512.0 MB 软限制');
-    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('1.0 GB 硬限制');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('日志容量 690.0 MB');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('PostgreSQL 表容量');
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('90');
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('最少 7 天 · 120 条超期');
     expect(screen.getByRole('link', { name: '配置管理员通知通道' })).toHaveAttribute('href', '/admin/notifications');
@@ -472,7 +491,7 @@ describe('AdminLogsPage', () => {
     expect(screen.queryByText('成功 0 · 跳过 0 · 失败 0 · 未确认 0')).not.toBeInTheDocument();
     expect(screen.getByText('Scanner: 大盘单机游戏')).toBeInTheDocument();
     expect(screen.getByText('Backtest: MA20 Breakout')).toBeInTheDocument();
-    expect(screen.getByTestId('business-events-table-shell')).toHaveClass('overflow-x-auto');
+    expect(screen.getByTestId('business-events-table-shell')).not.toHaveClass('overflow-x-auto');
     expect(screen.getByTestId('admin-logs-pagination')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '上一页' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '下一页' })).toBeInTheDocument();
@@ -536,9 +555,14 @@ describe('AdminLogsPage', () => {
       retentionCutoff: '2026-01-30T00:00:00Z',
       logsOlderThanRetentionCount: 0,
       estimatedStorageBytes: null,
+      sizeBytes: null,
       storageSizeBytes: null,
+      sizeLabel: null,
       storageSizeLabel: null,
       storageSizeAvailable: false,
+      measurementScope: 'unavailable',
+      measurementStatus: 'unavailable',
+      measurementReason: 'database path unavailable',
       storageSoftLimitBytes: 512 * 1024 * 1024,
       storageHardLimitBytes: 1024 * 1024 * 1024,
       usedPercentageOfSoftLimit: null,
@@ -560,8 +584,9 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
-    expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('大小暂不可用');
-    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('保留期检查仍在生效');
+    expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('容量暂不可用');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('数据库路径不可用');
+    expect(screen.queryByText('大小不可用')).not.toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('7,441 会话');
     expect(screen.getByRole('button', { name: '预览容量清理' })).toBeDisabled();
   });
@@ -577,9 +602,14 @@ describe('AdminLogsPage', () => {
       retentionCutoff: '2026-01-30T00:00:00Z',
       logsOlderThanRetentionCount: 120,
       estimatedStorageBytes: 1200 * 1024 * 1024,
+      sizeBytes: 1200 * 1024 * 1024,
       storageSizeBytes: 1200 * 1024 * 1024,
+      sizeLabel: '1.2 GB',
       storageSizeLabel: '1.2 GB',
       storageSizeAvailable: true,
+      measurementScope: 'postgres_tables',
+      measurementStatus: 'available',
+      measurementReason: null,
       storageSoftLimitBytes: 512 * 1024 * 1024,
       storageHardLimitBytes: 1024 * 1024 * 1024,
       usedPercentageOfSoftLimit: 234.38,
@@ -631,13 +661,13 @@ describe('AdminLogsPage', () => {
     render(<AdminLogsPage />);
 
     expect(await screen.findByText('严重')).toBeInTheDocument();
-    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('1.2 GB / 512.0 MB 软限制');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('日志容量 1.2 GB');
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('需要自动清理');
     fireEvent.click(screen.getByRole('button', { name: '预览容量清理' }));
     await waitFor(() => expect(cleanupLogs).toHaveBeenCalledWith({ mode: 'capacity', dryRun: true }));
     expect(await screen.findByText(/容量清理预览：将删除 80 个会话和 160 个事件/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '运行容量清理' }));
+    fireEvent.click(screen.getByRole('button', { name: '按容量清理日志' }));
     await waitFor(() => expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('运行容量清理')));
     await waitFor(() => expect(cleanupLogs).toHaveBeenLastCalledWith({ mode: 'capacity', dryRun: false }));
     expect(await screen.findByText(/已删除 80 个会话/)).toBeInTheDocument();
@@ -683,7 +713,7 @@ describe('AdminLogsPage', () => {
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('overflow-x-hidden');
-    expect(screen.getByTestId('business-events-table-shell')).toHaveClass('overflow-x-auto');
+    expect(screen.getByTestId('business-events-table-shell')).not.toHaveClass('overflow-x-auto');
     expect(screen.getByText('调用链时间线')).toBeInTheDocument();
     expect(screen.getByTestId('root-cause-section')).toBeInTheDocument();
     expect(screen.queryByText('Root Cause')).not.toBeInTheDocument();
@@ -723,7 +753,7 @@ describe('AdminLogsPage', () => {
     expect(summarySection).toHaveClass('border-amber-300/16');
     expect(summarySection).not.toHaveClass('border-rose-300/12');
 
-    fireEvent.click(screen.getByRole('button', { name: '复制调试摘要' }));
+    fireEvent.click(screen.getByRole('button', { name: '复制执行摘要' }));
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
     const copied = String((navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] || '');
     expect(copied).toContain('"event": "ProviderFallbackServed"');
@@ -879,10 +909,98 @@ describe('AdminLogsPage', () => {
     render(<AdminLogsPage />);
 
     fireEvent.click(await screen.findByRole('tab', { name: '扫描器' }));
-    await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'scanner' })));
+    await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'scanner', minLevel: 'INFO' })));
+    expect(await screen.findByTestId('admin-logs-scanner-summary')).toHaveTextContent('最近一次扫描');
+    expect(screen.getByTestId('admin-logs-scanner-summary')).toHaveTextContent('包含 INFO 生命周期记录');
 
     fireEvent.click(screen.getByRole('tab', { name: '回测' }));
     await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'backtest' })));
+  });
+
+  it('renders scanner empty state with specific Chinese copy', async () => {
+    listBusinessEvents.mockResolvedValue({
+      total: 0,
+      limit: 20,
+      offset: 0,
+      hasMore: false,
+      items: [],
+      healthSummary: null,
+    });
+
+    render(<AdminLogsPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '扫描器' }));
+    expect(await screen.findByText('暂无扫描器日志')).toBeInTheDocument();
+    expect(screen.getByText('暂无扫描器日志。运行一次扫描后，这里会显示扫描开始、完成、失败和耗时。')).toBeInTheDocument();
+  });
+
+  it('renders SQLite database-file capacity source', async () => {
+    getStorageSummary.mockResolvedValueOnce({
+      totalLogCount: 10,
+      totalEventCount: 20,
+      oldestLogTimestamp: '2026-04-17T18:27:00Z',
+      newestLogTimestamp: '2026-04-30T13:21:00Z',
+      retentionDays: 90,
+      minimumRetentionDays: 7,
+      retentionCutoff: '2026-01-30T00:00:00Z',
+      logsOlderThanRetentionCount: 0,
+      estimatedStorageBytes: 123456,
+      sizeBytes: 123456,
+      storageSizeBytes: 123456,
+      sizeLabel: '120.6 KB',
+      storageSizeLabel: '120.6 KB',
+      storageSizeAvailable: true,
+      measurementScope: 'sqlite_database_file',
+      measurementStatus: 'available',
+      measurementReason: null,
+      storageSoftLimitBytes: 512 * 1024 * 1024,
+      storageHardLimitBytes: 1024 * 1024 * 1024,
+      usedPercentageOfSoftLimit: 0.02,
+      usedPercentageOfHardLimit: 0.01,
+      capacityCleanupRecommended: false,
+      autoCleanupEnabled: true,
+      autoCleanupPerformed: false,
+      autoCleanupMessage: null,
+      capacityCleanupPlan: {},
+      postgresVacuumNote: null,
+      warningThresholdCount: 50000,
+      criticalThresholdCount: 100000,
+      warningThresholdStorageBytes: null,
+      statusReasons: [],
+      status: 'ok',
+      recommendedCleanupAction: 'No cleanup needed.',
+      lastCleanupTimestamp: null,
+    });
+
+    render(<AdminLogsPage />);
+
+    expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('日志容量 120.6 KB');
+    expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('SQLite 数据库文件');
+  });
+
+  it('shows scanner execution summary and keeps raw metadata collapsed by default', async () => {
+    getBusinessEventDetail.mockResolvedValueOnce({
+      ...businessEvents[4],
+      steps: [
+        { name: 'ScannerRunStarted', label: '扫描启动', status: 'success', durationMs: 0, metadata: {} },
+        { name: 'ScannerRunCompleted', label: '扫描完成', status: 'success', durationMs: 2200, metadata: businessEvents[4].metadata },
+      ],
+    });
+    render(<AdminLogsPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '扫描器' }));
+    const row = (await screen.findAllByText('Scanner: 大盘单机游戏')).find((item) => item.closest('[data-testid="business-event-row"]'));
+    const rowContainer = row.closest('[data-testid="business-event-row"]');
+    expect(rowContainer).not.toBeNull();
+    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+
+    expect(await screen.findByTestId('scanner-execution-summary')).toHaveTextContent('扫描器执行摘要');
+    expect(screen.getByTestId('scanner-execution-summary')).toHaveTextContent('US · US Pre-open Scanner v1');
+    expect(screen.getByTestId('scanner-execution-summary')).toHaveTextContent('30 / 5');
+    const metadataSummary = screen.getAllByText('元数据').find((item) => item.tagName.toLowerCase() === 'summary');
+    expect(metadataSummary).toBeTruthy();
+    expect(metadataSummary.closest('details')).not.toHaveAttribute('open');
+    expect(screen.queryByText('DEBUG')).not.toBeInTheDocument();
   });
 
   it('keeps raw logs available in the advanced raw tab', async () => {

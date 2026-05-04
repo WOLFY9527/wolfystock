@@ -1254,10 +1254,12 @@ class ExecutionLogService:
         session_kind: str = "user_activity",
     ) -> str:
         session_id = uuid.uuid4().hex
-        started_at = datetime.now()
+        started_at = _parse_iso_datetime(run_detail.get("run_at")) or datetime.now()
+        finished_at = _parse_iso_datetime(run_detail.get("completed_at")) or datetime.now()
         diagnostics = run_detail.get("diagnostics") if isinstance(run_detail.get("diagnostics"), dict) else {}
         coverage = diagnostics.get("coverage_summary") if isinstance(diagnostics.get("coverage_summary"), dict) else {}
         providers = diagnostics.get("provider_diagnostics") if isinstance(diagnostics.get("provider_diagnostics"), dict) else {}
+        failure = diagnostics.get("failure") if isinstance(diagnostics.get("failure"), dict) else {}
         provider_list = [
             str(item)
             for item in (providers.get("providers_used") or [])
@@ -1265,11 +1267,49 @@ class ExecutionLogService:
         ]
         provider_failure_count = int(providers.get("provider_failure_count") or 0)
         status_text = _normalize_business_status(run_detail.get("status") or "completed")
+        failed_run = status_text == "failed"
         profile_label = _as_str(run_detail.get("profile_label") or run_detail.get("profile") or "scanner")
+        universe_count = int(run_detail.get("universe_size") or coverage.get("input_universe_size") or 0)
+        evaluated_count = int(run_detail.get("evaluated_size") or coverage.get("ranked_candidate_count") or 0)
+        selected_count = int(run_detail.get("shortlist_size") or coverage.get("shortlisted_count") or 0)
+        rejected_count = max(0, evaluated_count - selected_count)
+        data_failed_count = int(providers.get("missing_data_symbol_count") or 0)
+        skipped_count = int(coverage.get("excluded_total") or 0)
+        duration_ms = int(max(0.0, (finished_at - started_at).total_seconds() * 1000))
+        selected = run_detail.get("selected") if isinstance(run_detail.get("selected"), list) else run_detail.get("shortlist")
+        top_symbol = None
+        if isinstance(selected, list) and selected:
+            first = selected[0] if isinstance(selected[0], dict) else {}
+            top_symbol = _as_str(first.get("symbol") or first.get("code")) or None
         coverage_summary = (
-            f"Scanned {int(coverage.get('input_universe_size') or 0)} symbols, "
-            f"shortlisted {int(coverage.get('shortlisted_count') or 0)}."
+            f"Scanned {universe_count} symbols, evaluated {evaluated_count}, shortlisted {selected_count}."
         )
+        source_provider_summary = " / ".join(provider_list[:5]) or _as_str(run_detail.get("source_summary")) or None
+        error_message = _masked_message(failure.get("message") or run_detail.get("failure_reason"))
+        lifecycle_metadata = _sanitize_metadata({
+            "route": "/scanner",
+            "endpoint": "/api/v1/scanner/run",
+            "market": run_detail.get("market"),
+            "configName": profile_label,
+            "profile": run_detail.get("profile"),
+            "universeCount": universe_count,
+            "evaluatedCount": evaluated_count,
+            "selectedCount": selected_count,
+            "rejectedCount": rejected_count,
+            "dataFailedCount": data_failed_count,
+            "skippedCount": skipped_count,
+            "topSymbol": top_symbol,
+            "durationMs": duration_ms,
+            "scannerRunId": run_detail.get("id"),
+            "scanner_run_id": run_detail.get("id"),
+            "traceId": session_id,
+            "trace_id": session_id,
+            "shortlist_count": selected_count,
+            "providers_used": provider_list,
+            "sourceProviderSummary": source_provider_summary,
+            "sourceSummary": run_detail.get("source_summary"),
+            "errorMessage": error_message,
+        })
         business_event = {
             "id": session_id,
             "event": f"Scanner: {profile_label}",
@@ -1280,25 +1320,37 @@ class ExecutionLogService:
             "subject": profile_label,
             "symbol": None,
             "market": _as_str(run_detail.get("market")) or None,
+            "route": "/scanner",
+            "endpoint": "/api/v1/scanner/run",
+            "source": source_provider_summary,
             "scannerId": _as_str(run_detail.get("id")) or None,
             "strategyId": None,
             "backtestId": None,
             "recordId": _as_str(run_detail.get("id")) or None,
-            "requestId": None,
+            "requestId": session_id,
             "userId": None,
             "startedAt": started_at.isoformat(),
-            "finishedAt": started_at.isoformat(),
-            "durationMs": 0,
-            "stepCount": 3,
-            "successStepCount": 3,
-            "failedStepCount": 0,
+            "finishedAt": finished_at.isoformat(),
+            "durationMs": duration_ms,
+            "stepCount": 3 if failed_run else 4,
+            "successStepCount": 1 if failed_run else 4,
+            "failedStepCount": 1 if failed_run else 0,
             "skippedStepCount": 0,
             "unknownStepCount": 0,
             "metadata": _sanitize_metadata({
-                "universeSize": coverage.get("input_universe_size"),
-                "matchedCount": run_detail.get("shortlist_size"),
+                "eventNames": ["ScannerRunStarted", "ScannerRunFailed" if failed_run else "ScannerRunCompleted"],
+                "universeCount": universe_count,
+                "evaluatedCount": evaluated_count,
+                "selectedCount": selected_count,
+                "rejectedCount": rejected_count,
+                "dataFailedCount": data_failed_count,
+                "skippedCount": skipped_count,
+                "topSymbol": top_symbol,
+                "durationMs": duration_ms,
+                "configName": profile_label,
                 "providersUsed": provider_list,
                 "providerFailureCount": provider_failure_count,
+                "sourceProviderSummary": source_provider_summary,
             }),
         }
         summary = self._merge_summary(
@@ -1314,11 +1366,15 @@ class ExecutionLogService:
                     "shortlist_count": run_detail.get("shortlist_size"),
                     "coverage_summary": coverage_summary,
                     "coverage": coverage,
+                    "lifecycle": lifecycle_metadata,
+                    "duration_ms": duration_ms,
+                    "top_symbol": top_symbol,
                     "providers_used": provider_list,
                     "provider_diagnostics": providers,
                     "fallback_count": int(providers.get("fallback_count") or 0),
                     "provider_failure_count": provider_failure_count,
                     "warning_summary": list(providers.get("provider_warnings") or []),
+                    "error_message": error_message,
                 }
             },
             self._summary_meta(
@@ -1342,29 +1398,43 @@ class ExecutionLogService:
         self.db.append_execution_log_event(
             session_id=session_id,
             phase="scanner",
-            step="scanner_run",
+            step="ScannerRunStarted",
             target=profile_label,
-            status=business_event["status"],
+            status="started",
             truth_level="actual",
-            message=coverage_summary,
+            message=f"扫描器启动：{profile_label}",
             detail={
+                "level": "INFO",
                 "category": "scanner",
-                "action": "scanner_run",
-                "outcome": _outcome_from_status(run_detail.get("status")),
-                "scanner_run_id": run_detail.get("id"),
-                "market": run_detail.get("market"),
-                "shortlist_count": run_detail.get("shortlist_size"),
-                "coverage": coverage,
-                "providers_used": provider_list,
-                "fallback_count": int(providers.get("fallback_count") or 0),
-                "provider_failure_count": provider_failure_count,
-                "warnings": list(providers.get("provider_warnings") or []),
+                "event_name": "ScannerRunStarted",
+                "action": "scanner_run_started",
+                "outcome": "unknown",
+                **lifecycle_metadata,
             },
             event_at=started_at,
         )
+        completion_event_name = "ScannerRunFailed" if failed_run else "ScannerRunCompleted"
+        self.db.append_execution_log_event(
+            session_id=session_id,
+            phase="scanner",
+            step=completion_event_name,
+            target=profile_label,
+            status="failed" if failed_run else "completed",
+            truth_level="actual",
+            message=error_message or coverage_summary,
+            detail={
+                "level": "ERROR" if failed_run else "INFO",
+                "category": "scanner",
+                "event_name": completion_event_name,
+                "action": "scanner_run_failed" if failed_run else "scanner_run_completed",
+                "outcome": "failed" if failed_run else "ok",
+                **lifecycle_metadata,
+            },
+            event_at=finished_at,
+        )
         for step_name, label, metadata in [
-            ("load_universe", "加载股票池", {"universeSize": coverage.get("input_universe_size")}),
-            ("run_screen", "执行扫描", {"matchedCount": run_detail.get("shortlist_size")}),
+            ("load_universe", "加载股票池", {"universeCount": universe_count}),
+            ("run_screen", "执行扫描", {"evaluatedCount": evaluated_count, "selectedCount": selected_count}),
             ("save_scan_result", "保存扫描结果", {"scannerRunId": run_detail.get("id")}),
         ]:
             self._append_business_step(
@@ -1373,18 +1443,18 @@ class ExecutionLogService:
                 name=step_name,
                 label=label,
                 category="compute" if step_name != "save_scan_result" else "database",
-                status="success",
+                status="failed" if failed_run and step_name == "run_screen" else ("skipped" if failed_run and step_name == "save_scan_result" else "success"),
                 critical=step_name != "save_scan_result",
                 metadata=metadata,
                 started_at=started_at,
-                finished_at=started_at,
+                finished_at=finished_at,
             )
         self.db.finalize_execution_log_session(
             session_id=session_id,
             overall_status=business_event["status"],
             truth_level="actual",
             summary=summary,
-            ended_at=started_at,
+            ended_at=finished_at,
         )
         return session_id
 

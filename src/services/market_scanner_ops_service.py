@@ -204,6 +204,7 @@ class MarketScannerOperationsService:
                     scope=_trigger_scope(trigger_mode),
                 )
                 if raise_on_failure:
+                    self._record_scanner_observability(detail, trigger_mode=trigger_mode)
                     raise
         except Exception as exc:
             detail = self.scanner_service.record_failed_run(
@@ -220,6 +221,7 @@ class MarketScannerOperationsService:
                 scope=_trigger_scope(trigger_mode),
             )
             if raise_on_failure:
+                self._record_scanner_observability(detail, trigger_mode=trigger_mode)
                 raise
 
         updated_detail = self.scanner_service.update_run_operation_metadata(

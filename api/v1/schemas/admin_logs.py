@@ -175,18 +175,29 @@ class BusinessEventListResponse(BaseModel):
 
 class AdminLogStorageSummaryModel(BaseModel):
     total_log_count: int = 0
+    event_count: int = 0
+    session_count: int = 0
     total_event_count: int = 0
     oldest_log_timestamp: Optional[str] = None
+    oldest_event_at: Optional[str] = None
     newest_log_timestamp: Optional[str] = None
+    newest_event_at: Optional[str] = None
     retention_days: int = 90
     minimum_retention_days: int = 7
     retention_cutoff: Optional[str] = None
     logs_older_than_retention_count: int = 0
     estimated_storage_bytes: Optional[int] = None
+    size_bytes: Optional[int] = None
     storage_size_bytes: Optional[int] = None
+    size_label: Optional[str] = None
     storage_size_label: Optional[str] = None
     storage_size_available: bool = False
+    measurement_scope: str = "unavailable"
+    measurement_status: str = "unavailable"
+    measurement_reason: Optional[str] = None
+    soft_limit_bytes: Optional[int] = None
     storage_soft_limit_bytes: int = 512 * 1024 * 1024
+    hard_limit_bytes: Optional[int] = None
     storage_hard_limit_bytes: int = 1024 * 1024 * 1024
     used_percentage_of_soft_limit: Optional[float] = None
     used_percentage_of_hard_limit: Optional[float] = None
