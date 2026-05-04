@@ -22,6 +22,7 @@ type NotificationChannelsConfigProps = {
   items: SystemConfigItem[];
   disabled: boolean;
   isSaving: boolean;
+  language?: 'zh' | 'en';
   onSaveItems: (items: SystemConfigUpdateItem[], successMessage: string) => Promise<void> | void;
 };
 
@@ -135,10 +136,44 @@ const isConfiguredValue = (value: string | undefined): boolean => Boolean(String
 
 export const NOTIFICATION_CHANNEL_KEYS = new Set(CHANNELS.flatMap((channel) => channel.fields.map((field) => field.key)));
 
+const ZH_CHANNEL_DESCRIPTIONS: Record<string, string> = {
+  feishu: '飞书 Webhook 或应用机器人凭据。',
+  telegram: '机器人 Token、目标聊天和可选话题线程。',
+  dingtalk: '用于机器人投递的钉钉应用凭据。',
+  email: 'SMTP 发件凭据和收件人路由。',
+  discord: '面向频道投递的 Webhook 或机器人 Token。',
+  slack: 'Slack 机器人 Token 或 incoming webhook 设置。',
+  wechat: '企业微信机器人 Webhook。',
+  pushplus: 'PushPlus Token 与可选主题路由。',
+  pushover: 'Pushover 用户 Key 和应用 Token。',
+  serverchan: 'ServerChan 3 SendKey 投递。',
+  custom_webhook: '通用 Webhook 端点和可选 Bearer Token。',
+};
+
+const ZH_FIELD_LABELS: Record<string, string> = {
+  Sender: '发件人',
+  'Password / App Code': '密码 / 应用码',
+  Receivers: '收件人',
+  'Bot Token': '机器人 Token',
+  'Thread ID': '话题线程 ID',
+  'Main Channel ID': '主频道 ID',
+  'Channel ID': '频道 ID',
+  'Webhook URLs': 'Webhook 地址',
+  'Verify SSL': '校验 SSL',
+  'User Key': '用户 Key',
+};
+
+const ZH_FIELD_HINTS: Record<string, string> = {
+  'Optional for forum topics.': '论坛话题可选。',
+  'Comma-separated addresses. Empty keeps sender fallback behavior.': '多个地址用逗号分隔；留空则保留发件人回退行为。',
+  'Comma-separated URLs.': '多个地址用逗号分隔。',
+};
+
 export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProps> = ({
   items,
   disabled,
   isSaving,
+  language = 'en',
   onSaveItems,
 }) => {
   const itemByKey = useMemo(() => new Map(items.map((item) => [item.key, item])), [items]);
@@ -180,25 +215,66 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
 
     setSavingChannelId(channel.id);
     try {
-      await onSaveItems(changedItems, `${channel.label} notification channel saved`);
+      await onSaveItems(
+        changedItems,
+        language === 'zh' ? `${channel.label} 通知通道已保存` : `${channel.label} notification channel saved`,
+      );
     } finally {
       setSavingChannelId(null);
     }
   };
 
+  const copy = language === 'zh'
+    ? {
+      title: '通知通道',
+      description: '通知凭据在这里专用管理，并从原始系统设置中隐藏。',
+      surfaceTitle: '专用凭据面',
+      body: '通知凭据在这里专用管理，并从原始系统设置中隐藏。',
+      secretBody: '密钥在界面中保持脱敏。保留脱敏值不变会继续使用后端已有密钥。',
+      configured: '已配置',
+      notConfigured: '未配置',
+      testUnavailable: '测试发送暂不可用',
+      save: '保存',
+      saving: '保存中',
+      maskedPlaceholder: '已配置时显示脱敏值',
+    }
+    : {
+      title: 'Notification Channels',
+      description: 'Notification credentials are managed here and kept out of raw system settings.',
+      surfaceTitle: 'Curated credential surface',
+      body: 'Notification credentials are managed here and kept out of raw system settings.',
+      secretBody: 'Secrets stay masked in the UI. Leaving a masked value unchanged preserves the existing backend secret.',
+      configured: 'Configured',
+      notConfigured: 'Not configured',
+      testUnavailable: 'Test send not available yet',
+      save: 'Save',
+      saving: 'Saving',
+      maskedPlaceholder: 'Masked when configured',
+    };
+
+  const channelDescription = (channel: NotificationChannelDefinition) => (
+    language === 'zh' ? ZH_CHANNEL_DESCRIPTIONS[channel.id] || channel.description : channel.description
+  );
+  const fieldLabel = (field: NotificationChannelField) => (
+    language === 'zh' ? ZH_FIELD_LABELS[field.label] || field.label : field.label
+  );
+  const fieldHint = (field: NotificationChannelField) => (
+    language === 'zh' && field.hint ? ZH_FIELD_HINTS[field.hint] || field.hint : field.hint
+  );
+
   return (
     <SettingsSectionCard
-      title="Notification Channels"
-      description="Notification credentials are managed here and kept out of raw system settings."
+      title={copy.title}
+      description={copy.description}
       className="border-white/6 bg-white/[0.025]"
     >
       <div className="rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
-        <p className="text-sm font-semibold text-foreground">Curated credential surface</p>
+        <p className="text-sm font-semibold text-foreground">{copy.surfaceTitle}</p>
         <p className="mt-1 text-xs leading-5 text-secondary-text">
-          Notification credentials are managed here and kept out of raw system settings.
+          {copy.body}
         </p>
         <p className="mt-1 text-xs leading-5 text-secondary-text">
-          Secrets stay masked in the UI. Leaving a masked value unchanged preserves the existing backend secret.
+          {copy.secretBody}
         </p>
       </div>
 
@@ -212,7 +288,7 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
             const current = String(itemByKey.get(field.key)?.value ?? '');
             return String(draft[field.key] ?? '') !== current;
           }).length;
-          const statusText = configuredCount > 0 ? 'Configured' : 'Not configured';
+          const statusText = configuredCount > 0 ? copy.configured : copy.notConfigured;
           const canSave = changedCount > 0 && !disabled && !isSaving;
 
           return (
@@ -225,7 +301,7 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-foreground">{channel.label}</p>
-                    <p className="mt-1 text-xs leading-5 text-secondary-text">{channel.description}</p>
+                    <p className="mt-1 text-xs leading-5 text-secondary-text">{channelDescription(channel)}</p>
                   </div>
                   <span
                     className={configuredCount > 0
@@ -243,7 +319,7 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
                     if (field.kind === 'textarea') {
                       return (
                         <div key={field.key} className="block">
-                          <label htmlFor={fieldId} className="theme-field-label mb-2 block">{field.label}</label>
+                          <label htmlFor={fieldId} className="theme-field-label mb-2 block">{fieldLabel(field)}</label>
                           <textarea
                             id={fieldId}
                             className="input-surface input-focus-glow min-h-[84px] w-full resize-y rounded-xl border px-4 py-3 text-sm text-foreground transition-all placeholder:text-muted-text focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
@@ -251,7 +327,7 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
                             disabled={disabled || isSaving}
                             onChange={(event) => setFieldValue(field.key, event.target.value)}
                           />
-                          {field.hint ? <span className="mt-2 block text-xs leading-5 text-secondary-text">{field.hint}</span> : null}
+                          {fieldHint(field) ? <span className="mt-2 block text-xs leading-5 text-secondary-text">{fieldHint(field)}</span> : null}
                         </div>
                       );
                     }
@@ -259,7 +335,7 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
                       const checked = fieldValue.trim().toLowerCase() !== 'false';
                       return (
                         <label key={field.key} className="inline-flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-black/20 px-3 py-2">
-                          <span className="text-xs font-medium text-secondary-text">{field.label}</span>
+                          <span className="text-xs font-medium text-secondary-text">{fieldLabel(field)}</span>
                           <input
                             id={fieldId}
                             type="checkbox"
@@ -274,14 +350,14 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
                       <Input
                         key={field.key}
                         id={fieldId}
-                        label={field.label}
+                        label={fieldLabel(field)}
                         type={field.kind === 'secret' ? 'password' : 'text'}
                         iconType={field.kind === 'secret' ? 'key' : 'none'}
                         allowTogglePassword={field.kind === 'secret'}
                         value={fieldValue}
                         disabled={disabled || isSaving}
-                        hint={field.hint}
-                        placeholder={field.kind === 'secret' ? 'Masked when configured' : undefined}
+                        hint={fieldHint(field)}
+                        placeholder={field.kind === 'secret' ? copy.maskedPlaceholder : undefined}
                         onChange={(event) => setFieldValue(field.key, event.target.value)}
                       />
                     );
@@ -290,7 +366,7 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3">
-                <span className="text-xs text-muted-text">Test send not available yet</span>
+                <span className="text-xs text-muted-text">{copy.testUnavailable}</span>
                 <Button
                   type="button"
                   size="sm"
@@ -298,10 +374,10 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
                   className="rounded-lg px-3 py-1.5 text-xs"
                   disabled={!canSave}
                   isLoading={savingChannelId === channel.id}
-                  loadingText="Saving"
+                  loadingText={copy.saving}
                   onClick={() => void saveChannel(channel)}
                 >
-                  Save
+                  {copy.save}
                 </Button>
               </div>
             </GlassCard>

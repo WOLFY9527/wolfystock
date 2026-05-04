@@ -317,27 +317,27 @@ describe('RuleBacktestComparePage', () => {
     expect(await screen.findByRole('heading', { name: '规则回测比较工作台' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '比较区块导航' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '比较摘要' })).toHaveAttribute('href', '#compare-summary');
-    expect(screen.getByRole('link', { name: 'metric strip' })).toHaveAttribute('href', '#compare-chart-strip');
-    expect(screen.getByRole('link', { name: 'comparison_highlights' })).toHaveAttribute('href', '#compare-highlights');
-    expect(screen.getByRole('link', { name: 'compact metric matrix' })).toHaveAttribute('href', '#compare-metric-matrix');
-    expect(screen.getByRole('link', { name: 'robustness + profile' })).toHaveAttribute('href', '#compare-robustness');
-    expect(screen.getByRole('link', { name: 'market / period context' })).toHaveAttribute('href', '#compare-market-period');
-    expect(screen.getByRole('link', { name: 'parameter + metrics' })).toHaveAttribute('href', '#compare-parameter-metrics');
+    expect(screen.getByRole('link', { name: '指标条带' })).toHaveAttribute('href', '#compare-chart-strip');
+    expect(screen.getByRole('link', { name: '比较亮点' })).toHaveAttribute('href', '#compare-highlights');
+    expect(screen.getByRole('link', { name: '指标矩阵' })).toHaveAttribute('href', '#compare-metric-matrix');
+    expect(screen.getByRole('link', { name: '稳健性画像' })).toHaveAttribute('href', '#compare-robustness');
+    expect(screen.getByRole('link', { name: '市场与区间' })).toHaveAttribute('href', '#compare-market-period');
+    expect(screen.getByRole('link', { name: '参数与指标' })).toHaveAttribute('href', '#compare-parameter-metrics');
     expect(screen.getByRole('link', { name: '参与运行' })).toHaveAttribute('href', '#compare-items');
-    const parameterSummary = screen.getByText('toggle / parameter + metrics');
+    const parameterSummary = screen.getByText('展开 / 参数与指标');
     const parameterDisclosure = parameterSummary.closest('details');
     expect(parameterDisclosure).not.toBeNull();
     expect(parameterDisclosure).toHaveAttribute('open');
-    expect(screen.getAllByText('same_code_different_periods').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('partially_comparable').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('limited_context_winner').length).toBeGreaterThan(0);
-    expect(screen.getByText('same_family_comparable')).toBeInTheDocument();
-    expect(screen.getAllByText('metric_unavailable').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('同标的不同区间').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('部分可比').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('有限上下文领先').length).toBeGreaterThan(0);
+    expect(screen.getByText('同类可比')).toBeInTheDocument();
+    expect(screen.getAllByText('指标不可用').length).toBeGreaterThan(0);
     expect(screen.getByTestId('compare-metric-matrix')).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: /#101 baseline/ })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: /#202 candidate/ })).toBeInTheDocument();
-    expect(screen.getByText('delta +6.00%')).toBeInTheDocument();
-    expect(screen.getAllByText('unavailable').length).toBeGreaterThan(0);
+    expect(screen.getByRole('columnheader', { name: /#101 基准/ })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /#202 候选/ })).toBeInTheDocument();
+    expect(screen.getByText('差异 +6.00%')).toBeInTheDocument();
+    expect(screen.getAllByText('不可用').length).toBeGreaterThan(0);
     expect(screen.getByTestId('compare-metric-summary-totalReturnPct')).toHaveAttribute('data-tone', 'limited');
     expect(screen.getByTestId('compare-metric-state-totalReturnPct-202')).toHaveAttribute('data-tone', 'best');
     expect(screen.getByTestId('compare-metric-delta-totalReturnPct-202')).toHaveAttribute('data-tone', 'positive');
@@ -752,15 +752,15 @@ describe('RuleBacktestComparePage', () => {
     });
     expect(await screen.findByText('已复制当前比较链接')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '复制 runIds' }));
+    fireEvent.click(screen.getByRole('button', { name: '复制运行 ID' }));
     await waitFor(() => {
       expect(writeTextMock).toHaveBeenNthCalledWith(2, '101,202');
     });
-    expect(await screen.findByText('已复制当前 runIds')).toBeInTheDocument();
+    expect(await screen.findByText('已复制当前运行 ID')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '复制摘要' }));
     await waitFor(() => {
-      expect(writeTextMock).toHaveBeenNthCalledWith(3, 'compare 101,202 | baseline #101 ORCL | overall partially_comparable | profile same_code_different_periods | comparable 2/2');
+      expect(writeTextMock).toHaveBeenNthCalledWith(3, '比较运行 101,202 | 基准 #101 ORCL | 整体 部分可比 | 画像 同标的不同区间 | 可比 2/2');
     });
     expect(await screen.findByText('已复制比较摘要')).toBeInTheDocument();
   });
@@ -1168,17 +1168,17 @@ describe('RuleBacktestComparePage', () => {
     await waitFor(() => {
       expect(compareRuleBacktestRuns).toHaveBeenCalledWith({ runIds: [101, 202] });
     });
-    expect(await screen.findByRole('columnheader', { name: /#101 baseline/ })).toBeInTheDocument();
+    expect(await screen.findByRole('columnheader', { name: /#101 基准/ })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '设为 baseline 202' }));
+    fireEvent.click(screen.getByRole('button', { name: '设为基准 202' }));
 
     await waitFor(() => {
       expect(compareRuleBacktestRuns).toHaveBeenLastCalledWith({ runIds: [202, 101] });
     });
 
     const leadingHeaders = screen.getAllByRole('columnheader').slice(0, 4).map((node) => node.textContent);
-    expect(leadingHeaders).toEqual(['指标', '摘要', '#202 baselineORCL', '#101 candidateORCL']);
-    expect(screen.getByRole('button', { name: '设为 baseline 101' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '设为 baseline 202' })).not.toBeInTheDocument();
+    expect(leadingHeaders).toEqual(['指标', '摘要', '#202 基准ORCL', '#101 候选ORCL']);
+    expect(screen.getByRole('button', { name: '设为基准 101' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '设为基准 202' })).not.toBeInTheDocument();
   });
 });

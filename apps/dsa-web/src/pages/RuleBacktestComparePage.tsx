@@ -30,12 +30,12 @@ const COMPARE_METRIC_LABELS: Record<string, string> = {
 
 const COMPARE_SECTION_LINKS = [
   { id: 'compare-summary', label: '比较摘要' },
-  { id: 'compare-chart-strip', label: 'metric strip' },
-  { id: 'compare-highlights', label: 'comparison_highlights' },
-  { id: 'compare-metric-matrix', label: 'compact metric matrix' },
-  { id: 'compare-robustness', label: 'robustness + profile' },
-  { id: 'compare-market-period', label: 'market / period context' },
-  { id: 'compare-parameter-metrics', label: 'parameter + metrics' },
+  { id: 'compare-chart-strip', label: '指标条带' },
+  { id: 'compare-highlights', label: '比较亮点' },
+  { id: 'compare-metric-matrix', label: '指标矩阵' },
+  { id: 'compare-robustness', label: '稳健性画像' },
+  { id: 'compare-market-period', label: '市场与区间' },
+  { id: 'compare-parameter-metrics', label: '参数与指标' },
   { id: 'compare-items', label: '参与运行' },
 ] as const;
 
@@ -57,7 +57,47 @@ function parseRunIdsParam(value: string | null): number[] {
 }
 
 function renderBooleanLabel(value: boolean | undefined): string {
-  return value ? 'yes' : 'no';
+  return value ? '是' : '否';
+}
+
+function formatCompareStateLabel(value?: string | null): string {
+  const key = String(value || '').trim();
+  if (!key) return '--';
+  const normalized = key.toLowerCase();
+  const labels: Record<string, string> = {
+    available: '可用',
+    unavailable: '不可用',
+    partial: '部分',
+    limited: '有限',
+    comparable: '可比',
+    direct: '直接可比',
+    winner: '领先',
+    baseline: '基准',
+    candidate: '候选',
+    partially_comparable: '部分可比',
+    same_family_comparable: '同类可比',
+    limited_context_winner: '有限上下文领先',
+    metric_unavailable: '指标不可用',
+    partial_metric_deltas: '部分指标差异',
+    partially_comparable_context: '部分可比上下文',
+    same_code: '同一标的',
+    overlapping: '区间重叠',
+    same_code_different_periods: '同标的不同区间',
+    same_parameter: '参数一致',
+    different_parameter: '参数不同',
+    missing_parameter: '参数缺失',
+  };
+  return labels[normalized] || key.replaceAll('_', ' ');
+}
+
+function formatCompareRoleLabel(isBaseline: boolean): string {
+  return isBaseline ? '基准' : '候选';
+}
+
+function formatCompareStateWithRaw(value?: string | null): string {
+  const raw = String(value || '').trim();
+  const label = formatCompareStateLabel(raw);
+  return raw && label !== raw.replaceAll('_', ' ') ? label : label;
 }
 
 function DiagnosticChipList({ diagnostics }: { diagnostics?: string[] }) {
@@ -68,7 +108,7 @@ function DiagnosticChipList({ diagnostics }: { diagnostics?: string[] }) {
   return (
     <div className="product-chip-list">
       {diagnostics.map((diagnostic) => (
-        <span key={diagnostic} className="product-chip">{diagnostic}</span>
+        <span key={diagnostic} className="product-chip" title={diagnostic}>{formatCompareStateLabel(diagnostic)}</span>
       ))}
     </div>
   );
@@ -77,7 +117,7 @@ function DiagnosticChipList({ diagnostics }: { diagnostics?: string[] }) {
 function HighlightCards({ highlights }: { highlights: Record<string, RuleBacktestCompareHighlightItem> }) {
   const entries = Object.entries(highlights || {});
   if (entries.length === 0) {
-    return <div className="product-empty-state product-empty-state--compact">当前比较没有可展示的 highlight。</div>;
+    return <div className="product-empty-state product-empty-state--compact">当前比较没有可展示的亮点。</div>;
   }
 
   return (
@@ -85,10 +125,10 @@ function HighlightCards({ highlights }: { highlights: Record<string, RuleBacktes
       {entries.map(([metricKey, item]) => (
         <div key={metricKey} className="preview-card">
           <p className="metric-card__label">{item.metric || metricKey}</p>
-          <p className="preview-card__text">{item.state}</p>
-          <p className="product-footnote">winner_run_ids: {item.winnerRunIds.length ? item.winnerRunIds.join(', ') : '--'}</p>
-          <p className="product-footnote">winner_value: {item.winnerValue == null ? '--' : formatNumber(item.winnerValue)}</p>
-          <p className="product-footnote">candidate_count: {item.candidateCount}</p>
+          <p className="preview-card__text">{formatCompareStateWithRaw(item.state)}</p>
+          <p className="product-footnote">领先运行：{item.winnerRunIds.length ? item.winnerRunIds.join(', ') : '--'}</p>
+          <p className="product-footnote">领先值：{item.winnerValue == null ? '--' : formatNumber(item.winnerValue)}</p>
+          <p className="product-footnote">候选数：{item.candidateCount}</p>
           <DiagnosticChipList diagnostics={item.diagnostics} />
         </div>
       ))}
@@ -105,10 +145,10 @@ function RobustnessDimensionCards({ dimensions }: { dimensions: Record<string, R
       {entries.map(([dimensionKey, dimension]) => (
         <div key={dimensionKey} className="preview-card">
           <p className="metric-card__label">{dimensionKey}</p>
-          <p className="preview-card__text">{dimension.state}</p>
-          <p className="product-footnote">relationship: {dimension.relationship || '--'}</p>
-          <p className="product-footnote">source_state: {dimension.sourceState || '--'}</p>
-          <p className="product-footnote">directly_comparable: {dimension.directlyComparable == null ? '--' : renderBooleanLabel(dimension.directlyComparable)}</p>
+          <p className="preview-card__text">{formatCompareStateWithRaw(dimension.state)}</p>
+          <p className="product-footnote">关系：{formatCompareStateWithRaw(dimension.relationship)}</p>
+          <p className="product-footnote">来源状态：{formatCompareStateWithRaw(dimension.sourceState)}</p>
+          <p className="product-footnote">可直接比较：{dimension.directlyComparable == null ? '--' : renderBooleanLabel(dimension.directlyComparable)}</p>
           <DiagnosticChipList diagnostics={dimension.diagnostics} />
         </div>
       ))}
@@ -119,7 +159,7 @@ function RobustnessDimensionCards({ dimensions }: { dimensions: Record<string, R
 function MetricDeltaTable({ metricDeltas }: { metricDeltas: Record<string, RuleBacktestCompareMetricDelta> }) {
   const entries = Object.entries(metricDeltas || {});
   if (entries.length === 0) {
-    return <div className="product-empty-state product-empty-state--compact">当前比较没有可展示的 metric delta。</div>;
+    return <div className="product-empty-state product-empty-state--compact">当前比较没有可展示的指标差异。</div>;
   }
 
   return (
@@ -128,17 +168,17 @@ function MetricDeltaTable({ metricDeltas }: { metricDeltas: Record<string, RuleB
         <thead>
           <tr>
             <th>指标</th>
-            <th>state</th>
-            <th className="product-table__align-right">baseline</th>
-            <th>available</th>
-            <th>deltas</th>
+            <th>状态</th>
+            <th className="product-table__align-right">基准</th>
+            <th>可用运行</th>
+            <th>差异</th>
           </tr>
         </thead>
         <tbody>
           {entries.map(([metricKey, metric]) => (
             <tr key={metricKey}>
               <td>{metricKey}</td>
-              <td>{metric.state}</td>
+              <td>{formatCompareStateWithRaw(metric.state)}</td>
               <td className="product-table__align-right">{pct(metric.baselineValue)}</td>
               <td>{metric.availableRunIds.join(', ') || '--'}</td>
               <td>
@@ -226,11 +266,11 @@ function buildCompareShareSummary({
   requestedCount?: number;
 }): string {
   return [
-    `compare ${runIds.join(',') || '--'}`,
-    `baseline #${baselineRunId ?? '--'} ${baselineCode || '--'}`,
-    `overall ${overallState || '--'}`,
-    `profile ${primaryProfile || '--'}`,
-    `comparable ${comparableCount ?? 0}/${requestedCount ?? 0}`,
+    `比较运行 ${runIds.join(',') || '--'}`,
+    `基准 #${baselineRunId ?? '--'} ${baselineCode || '--'}`,
+    `整体 ${formatCompareStateWithRaw(overallState)}`,
+    `画像 ${formatCompareStateWithRaw(primaryProfile)}`,
+    `可比 ${comparableCount ?? 0}/${requestedCount ?? 0}`,
   ].join(' | ');
 }
 
@@ -263,7 +303,7 @@ function CompareMetricMatrix({
             <th>摘要</th>
             {items.map((item) => {
               const runId = item.metadata.id;
-              const roleLabel = runId === baselineRunId ? 'baseline' : 'candidate';
+              const roleLabel = formatCompareRoleLabel(runId === baselineRunId);
               return (
                 <th key={runId} scope="col">
                   <div className="product-table__stack">
@@ -283,7 +323,7 @@ function CompareMetricMatrix({
                 <td>
                   <div className="product-table__stack">
                     <span>{formatMetricLabel(metricKey, metric.label)}</span>
-                    <span className="compare-metric-badge" data-tone={getMetricSummaryTone(metric.state)}>{metric.state}</span>
+                    <span className="compare-metric-badge" data-tone={getMetricSummaryTone(metric.state)}>{formatCompareStateWithRaw(metric.state)}</span>
                   </div>
                 </td>
                 <td>
@@ -293,9 +333,9 @@ function CompareMetricMatrix({
                       data-testid={`compare-metric-summary-${metricKey}`}
                       data-tone={getMetricSummaryTone(highlight?.state || metric.state)}
                     >
-                      {highlight?.state || metric.state}
+                      {formatCompareStateWithRaw(highlight?.state || metric.state)}
                     </span>
-                    <span className="product-footnote">{`context ${overallState || '--'} · profile ${primaryProfile || '--'}`}</span>
+                    <span className="product-footnote">{`上下文 ${formatCompareStateWithRaw(overallState)} · 画像 ${formatCompareStateWithRaw(primaryProfile)}`}</span>
                   </div>
                 </td>
                 {items.map((item) => {
@@ -313,9 +353,9 @@ function CompareMetricMatrix({
                             data-testid={`compare-metric-state-${metricKey}-${runId}`}
                             data-tone="unavailable"
                           >
-                            unavailable
+                            不可用
                           </span>
-                          <span className="product-footnote">{highlight?.state || metric.state}</span>
+                          <span className="product-footnote">{formatCompareStateWithRaw(highlight?.state || metric.state)}</span>
                         </div>
                       ) : (
                         <div className="product-table__stack">
@@ -326,7 +366,7 @@ function CompareMetricMatrix({
                               data-testid={`compare-metric-delta-${metricKey}-${runId}`}
                               data-tone={getMetricDeltaTone(deltaItem.deltaVsBaseline, true)}
                             >
-                              baseline
+                              基准
                             </span>
                           ) : (
                             <span
@@ -334,7 +374,7 @@ function CompareMetricMatrix({
                               data-testid={`compare-metric-delta-${metricKey}-${runId}`}
                               data-tone={getMetricDeltaTone(deltaItem.deltaVsBaseline)}
                             >
-                              {`delta ${formatSignedPct(deltaItem.deltaVsBaseline)}`}
+                              {`差异 ${formatSignedPct(deltaItem.deltaVsBaseline)}`}
                             </span>
                           )}
                           <span
@@ -346,7 +386,7 @@ function CompareMetricMatrix({
                               isUnavailable: false,
                             })}
                           >
-                            {highlightApplies ? (highlight?.state || 'winner') : (highlight?.state || metric.state)}
+                            {formatCompareStateWithRaw(highlightApplies ? (highlight?.state || 'winner') : (highlight?.state || metric.state))}
                           </span>
                         </div>
                       )}
@@ -380,7 +420,7 @@ function CompareMetricChartStrip({
   }, []);
 
   if (!metricEntries.length || !items.length) {
-    return <div className="product-empty-state product-empty-state--compact">当前比较没有足够的 trusted metrics 来生成可视化条带。</div>;
+    return <div className="product-empty-state product-empty-state--compact">当前比较没有足够的已校验指标来生成可视化条带。</div>;
   }
 
   return (
@@ -395,7 +435,7 @@ function CompareMetricChartStrip({
             <div className="compare-chart-strip__label">
               <span>{formatMetricLabel(metricKey, metric.label)}</span>
               <span className="compare-metric-badge" data-tone={getMetricSummaryTone(highlight?.state || metric.state)}>
-                {highlight?.state || metric.state}
+                {formatCompareStateWithRaw(highlight?.state || metric.state)}
               </span>
             </div>
             <div className="compare-chart-strip__lanes">
@@ -418,7 +458,7 @@ function CompareMetricChartStrip({
                     data-state={state}
                   >
                     <div className="compare-chart-strip__meta">
-                      <span>{`#${runId} ${isBaseline ? 'baseline' : 'candidate'}`}</span>
+                      <span>{`#${runId} ${formatCompareRoleLabel(isBaseline)}`}</span>
                       <span>{item.metadata.code || '--'}</span>
                     </div>
                     {deltaItem ? (
@@ -428,11 +468,11 @@ function CompareMetricChartStrip({
                         </div>
                         <div className="compare-chart-strip__value">
                           <span>{pct(deltaItem.value)}</span>
-                          {!isBaseline ? <span className="product-footnote">{`vs baseline ${formatSignedPct(deltaItem.deltaVsBaseline)}`}</span> : null}
+                          {!isBaseline ? <span className="product-footnote">{`相对基准 ${formatSignedPct(deltaItem.deltaVsBaseline)}`}</span> : null}
                         </div>
                       </>
                     ) : (
-                      <span className="compare-metric-badge" data-tone="unavailable">unavailable</span>
+                      <span className="compare-metric-badge" data-tone="unavailable">不可用</span>
                     )}
                   </div>
                 );
@@ -467,7 +507,7 @@ function CompareItemsTable({
       <table className="product-table">
         <thead>
           <tr>
-            <th>run</th>
+            <th>运行</th>
             <th>代码 / 状态</th>
             <th>区间</th>
             <th className="product-table__align-right">总收益</th>
@@ -487,7 +527,7 @@ function CompareItemsTable({
                 <td>
                   <div className="product-table__stack">
                     <span>#{metadata.id}</span>
-                    <span>{isBaseline ? 'baseline' : 'candidate'}</span>
+                    <span>{formatCompareRoleLabel(isBaseline)}</span>
                   </div>
                 </td>
                 <td>
@@ -512,11 +552,11 @@ function CompareItemsTable({
                       打开结果页
                     </Button>
                     {isBaseline ? (
-                      <span className="product-footnote">当前 baseline</span>
+                      <span className="product-footnote">当前基准</span>
                     ) : (
                       <>
-                        <Button size="sm" variant="ghost" aria-label={`设为 baseline ${metadata.id}`} onClick={() => onMakeBaseline(metadata.id)}>
-                          设为 baseline
+                        <Button size="sm" variant="ghost" aria-label={`设为基准 ${metadata.id}`} onClick={() => onMakeBaseline(metadata.id)}>
+                          设为基准
                         </Button>
                         <Button size="sm" variant="ghost" aria-label={`移除运行 ${metadata.id}`} onClick={() => onRemoveRun(metadata.id)}>
                           移除运行
@@ -688,7 +728,7 @@ const RuleBacktestComparePage: React.FC = () => {
 
       {runIds.length >= 2 && isLoading && !response ? (
         <section className="backtest-display-section">
-          <Card title="加载比较结果" subtitle="正在调用 stored-first compare API" className="product-section-card product-section-card--backtest-result">
+          <Card title="加载比较结果" subtitle="正在调用存储优先比较接口" className="product-section-card product-section-card--backtest-result">
             <div className="product-empty-state product-empty-state--compact">正在拉取比较结果…</div>
           </Card>
         </section>
@@ -696,7 +736,7 @@ const RuleBacktestComparePage: React.FC = () => {
 
       {runIds.length >= 2 && error ? (
         <section className="backtest-display-section">
-          <Card title="比较加载失败" subtitle="compare API 返回了错误" className="product-section-card product-section-card--backtest-result">
+          <Card title="比较加载失败" subtitle="比较接口返回了错误" className="product-section-card product-section-card--backtest-result">
             <ApiErrorAlert error={error} />
           </Card>
         </section>
@@ -719,22 +759,22 @@ const RuleBacktestComparePage: React.FC = () => {
               <SummaryStrip
                 items={[
                   {
-                    label: 'baseline_run_id',
+                    label: '基准运行',
                     value: baselineRunId == null ? '--' : `#${baselineRunId}`,
                     note: baselineItem?.metadata.code || comparisonSummary?.baseline.code || '--',
                   },
                   {
-                    label: 'overall_state',
-                    value: robustnessSummary?.overallState || '--',
-                    note: `requested ${response.requestedRunIds.length} / comparable ${response.comparableRunIds.length}`,
+                    label: '整体状态',
+                    value: formatCompareStateWithRaw(robustnessSummary?.overallState),
+                    note: `请求 ${response.requestedRunIds.length} / 可比 ${response.comparableRunIds.length}`,
                   },
                   {
-                    label: 'primary_profile',
-                    value: comparisonProfile?.primaryProfile || '--',
-                    note: comparisonProfile?.drivingDimensions.join(', ') || 'no driving dimensions',
+                    label: '主要画像',
+                    value: formatCompareStateWithRaw(comparisonProfile?.primaryProfile),
+                    note: comparisonProfile?.drivingDimensions.map(formatCompareStateWithRaw).join(', ') || '无驱动维度',
                   },
                   {
-                    label: 'comparison_source',
+                    label: '比较来源',
                     value: response.comparisonSource,
                     note: response.readMode,
                   },
@@ -742,25 +782,25 @@ const RuleBacktestComparePage: React.FC = () => {
               />
               <div className="compare-share-actions">
                 <Button size="sm" variant="ghost" onClick={() => void handleCopyText(compareUrl, '已复制当前比较链接')}>复制链接</Button>
-                <Button size="sm" variant="ghost" onClick={() => void handleCopyText(runIds.join(','), '已复制当前 runIds')}>复制 runIds</Button>
+                <Button size="sm" variant="ghost" onClick={() => void handleCopyText(runIds.join(','), '已复制当前运行 ID')}>复制运行 ID</Button>
                 <Button size="sm" variant="ghost" onClick={() => void handleCopyText(compareSummaryText, '已复制比较摘要')}>复制摘要</Button>
                 {copyFeedback ? <span className="product-footnote compare-share-actions__feedback">{copyFeedback}</span> : null}
               </div>
               <div className="preview-grid">
                 <div className="preview-card">
-                  <p className="metric-card__label">baseline</p>
-                  <p className="preview-card__text">#{baselineRunId ?? '--'} · {comparisonSummary?.baseline.strategyType || '--'}</p>
+                  <p className="metric-card__label">基准</p>
+                  <p className="preview-card__text">#{baselineRunId ?? '--'} · {formatCompareStateWithRaw(comparisonSummary?.baseline.strategyType)}</p>
                 </div>
                 <div className="preview-card">
-                  <p className="metric-card__label">timeframe / code</p>
+                  <p className="metric-card__label">周期 / 代码</p>
                   <p className="preview-card__text">{comparisonSummary?.baseline.timeframe || '--'} · {comparisonSummary?.baseline.code || '--'}</p>
                 </div>
                 <div className="preview-card">
-                  <p className="metric-card__label">missing_run_ids</p>
+                  <p className="metric-card__label">缺失运行</p>
                   <p className="preview-card__text">{response.missingRunIds.length ? response.missingRunIds.join(', ') : '--'}</p>
                 </div>
                 <div className="preview-card">
-                  <p className="metric-card__label">field_groups</p>
+                  <p className="metric-card__label">字段分组</p>
                   <p className="preview-card__text">{response.fieldGroups.join(', ') || '--'}</p>
                 </div>
               </div>
@@ -768,7 +808,7 @@ const RuleBacktestComparePage: React.FC = () => {
                 <div className="mt-4">
                   <Banner
                     tone="warning"
-                    title="存在 unavailable runs"
+                    title="存在不可用运行"
                     body={response.unavailableRuns.map((item) => `#${item.runId}: ${item.reason}`).join(' | ')}
                   />
                 </div>
@@ -777,7 +817,7 @@ const RuleBacktestComparePage: React.FC = () => {
           </section>
 
           <section id="compare-chart-strip" className="backtest-display-section">
-            <Card title="metric strip" subtitle="只取最小 trusted metric 子集，先用轻量条带看 baseline 与 candidate 的相对位置" className="product-section-card product-section-card--backtest-secondary">
+            <Card title="指标条带" subtitle="只取最小已校验指标子集，先用轻量条带看基准与候选的相对位置" className="product-section-card product-section-card--backtest-secondary">
               <CompareMetricChartStrip
                 items={orderedItems}
                 baselineRunId={baselineRunId}
@@ -788,19 +828,19 @@ const RuleBacktestComparePage: React.FC = () => {
           </section>
 
           <section id="compare-highlights" className="backtest-display-section">
-            <Card title="comparison_highlights" subtitle="只展示 backend 已信任的 highlights" className="product-section-card product-section-card--backtest-secondary">
-              <Disclosure defaultOpen summary="toggle / comparison_highlights" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
+            <Card title="比较亮点" subtitle="只展示后端已标记可信的比较亮点" className="product-section-card product-section-card--backtest-secondary">
+              <Disclosure defaultOpen summary="展开 / 比较亮点" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
                 <SummaryStrip
                   items={[
                     {
-                      label: 'primary_profile',
-                      value: comparisonHighlights?.primaryProfile || '--',
+                      label: '主要画像',
+                      value: formatCompareStateWithRaw(comparisonHighlights?.primaryProfile),
                       note: comparisonHighlights?.selectionRule || '--',
                     },
                     {
-                      label: 'overall_context_state',
-                      value: comparisonHighlights?.overallContextState || '--',
-                      note: `baseline #${comparisonHighlights?.baselineRunId ?? '--'}`,
+                      label: '整体上下文',
+                      value: formatCompareStateWithRaw(comparisonHighlights?.overallContextState),
+                      note: `基准 #${comparisonHighlights?.baselineRunId ?? '--'}`,
                     },
                   ]}
                 />
@@ -815,21 +855,21 @@ const RuleBacktestComparePage: React.FC = () => {
           </section>
 
           <section id="compare-metric-matrix" className="backtest-display-section">
-            <Card title="compact metric matrix" subtitle="把 baseline、delta、winner 与 unavailable 压到一张易扫读的比较表" className="product-section-card product-section-card--backtest-secondary">
+            <Card title="指标矩阵" subtitle="把基准、差异、领先项与不可用状态压到一张易扫读的比较表" className="product-section-card product-section-card--backtest-secondary">
               <SummaryStrip
                 items={[
                   {
-                    label: 'baseline',
+                    label: '基准',
                     value: baselineRunId == null ? '--' : `#${baselineRunId}`,
                     note: baselineItem?.metadata.code || '--',
                   },
                   {
-                    label: 'overall_state',
-                    value: robustnessSummary?.overallState || '--',
-                    note: comparisonProfile?.primaryProfile || '--',
+                    label: '整体状态',
+                    value: formatCompareStateWithRaw(robustnessSummary?.overallState),
+                    note: formatCompareStateWithRaw(comparisonProfile?.primaryProfile),
                   },
                   {
-                    label: 'metrics',
+                    label: '指标数',
                     value: String(Object.keys(comparisonSummary?.metricDeltas || {}).length),
                     note: response.comparableRunIds.map((id) => `#${id}`).join(', ') || '--',
                   },
@@ -849,46 +889,46 @@ const RuleBacktestComparePage: React.FC = () => {
           </section>
 
           <section id="compare-robustness" className="backtest-display-section">
-            <Card title="robustness + profile" subtitle="明确显示 partial / limited / unavailable，而不是静默吞掉" className="product-section-card product-section-card--backtest-secondary">
+            <Card title="稳健性画像" subtitle="明确显示部分、有限、不可用状态，而不是静默吞掉" className="product-section-card product-section-card--backtest-secondary">
               <SummaryStrip
                 items={[
                   {
-                    label: 'robustness',
-                    value: robustnessSummary?.overallState || '--',
-                    note: `directly_comparable ${robustnessSummary?.directlyComparable == null ? '--' : renderBooleanLabel(robustnessSummary.directlyComparable)}`,
+                    label: '稳健性',
+                    value: formatCompareStateWithRaw(robustnessSummary?.overallState),
+                    note: `可直接比较 ${robustnessSummary?.directlyComparable == null ? '--' : renderBooleanLabel(robustnessSummary.directlyComparable)}`,
                   },
                   {
-                    label: 'aligned_dimensions',
+                    label: '一致维度',
                     value: String(robustnessSummary?.alignedDimensions.length ?? 0),
                     note: robustnessSummary?.alignedDimensions.join(', ') || '--',
                   },
                   {
-                    label: 'partial_dimensions',
+                    label: '部分维度',
                     value: String(robustnessSummary?.partialDimensions.length ?? 0),
                     note: robustnessSummary?.partialDimensions.join(', ') || '--',
                   },
                   {
-                    label: 'primary_profile',
-                    value: comparisonProfile?.primaryProfile || '--',
+                    label: '主要画像',
+                    value: formatCompareStateWithRaw(comparisonProfile?.primaryProfile),
                     note: comparisonProfile?.diagnostics.join(', ') || '--',
                   },
                 ]}
               />
               <div className="preview-grid">
                 <div className="preview-card">
-                  <p className="metric-card__label">sameCode</p>
+                  <p className="metric-card__label">同一标的</p>
                   <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.sameCode)}</p>
                 </div>
                 <div className="preview-card">
-                  <p className="metric-card__label">sameMarket</p>
+                  <p className="metric-card__label">同一市场</p>
                   <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.sameMarket)}</p>
                 </div>
                 <div className="preview-card">
-                  <p className="metric-card__label">parameterDifferencesPresent</p>
+                  <p className="metric-card__label">存在参数差异</p>
                   <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.parameterDifferencesPresent)}</p>
                 </div>
                 <div className="preview-card">
-                  <p className="metric-card__label">periodDifferencesPresent</p>
+                  <p className="metric-card__label">存在区间差异</p>
                   <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.periodDifferencesPresent)}</p>
                 </div>
               </div>
@@ -899,21 +939,21 @@ const RuleBacktestComparePage: React.FC = () => {
           </section>
 
           <section id="compare-market-period" className="backtest-display-section">
-            <Card title="market / period context" subtitle="比较边界直接展示 backend state，不二次推断" className="product-section-card product-section-card--backtest-secondary">
-              <Disclosure defaultOpen summary="toggle / market / period context" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
+            <Card title="市场与区间上下文" subtitle="比较边界直接展示后端判定，不二次推断" className="product-section-card product-section-card--backtest-secondary">
+              <Disclosure defaultOpen summary="展开 / 市场与区间上下文" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
                 <div className="preview-grid">
                   <div className="preview-card">
-                    <p className="metric-card__label">market_code_comparison</p>
-                    <p className="preview-card__text">{marketCodeComparison?.state || '--'}</p>
-                    <p className="product-footnote">relationship: {marketCodeComparison?.relationship || '--'}</p>
-                    <p className="product-footnote">directly_comparable: {marketCodeComparison?.directlyComparable == null ? '--' : renderBooleanLabel(marketCodeComparison.directlyComparable)}</p>
+                    <p className="metric-card__label">市场 / 代码比较</p>
+                    <p className="preview-card__text">{formatCompareStateWithRaw(marketCodeComparison?.state)}</p>
+                    <p className="product-footnote">关系：{formatCompareStateWithRaw(marketCodeComparison?.relationship)}</p>
+                    <p className="product-footnote">可直接比较：{marketCodeComparison?.directlyComparable == null ? '--' : renderBooleanLabel(marketCodeComparison.directlyComparable)}</p>
                     <DiagnosticChipList diagnostics={marketCodeComparison?.diagnostics} />
                   </div>
                   <div className="preview-card">
-                    <p className="metric-card__label">period_comparison</p>
-                    <p className="preview-card__text">{periodComparison?.state || '--'}</p>
-                    <p className="product-footnote">relationship: {periodComparison?.relationship || '--'}</p>
-                    <p className="product-footnote">meaningfully_comparable: {periodComparison?.meaningfullyComparable == null ? '--' : renderBooleanLabel(periodComparison.meaningfullyComparable)}</p>
+                    <p className="metric-card__label">区间比较</p>
+                    <p className="preview-card__text">{formatCompareStateWithRaw(periodComparison?.state)}</p>
+                    <p className="product-footnote">关系：{formatCompareStateWithRaw(periodComparison?.relationship)}</p>
+                    <p className="product-footnote">有意义可比：{periodComparison?.meaningfullyComparable == null ? '--' : renderBooleanLabel(periodComparison.meaningfullyComparable)}</p>
                     <DiagnosticChipList diagnostics={periodComparison?.diagnostics} />
                   </div>
                 </div>
@@ -922,21 +962,21 @@ const RuleBacktestComparePage: React.FC = () => {
           </section>
 
           <section id="compare-parameter-metrics" className="backtest-display-section">
-            <Card title="parameter + metrics" subtitle="参数差异与 trusted metric delta 放在同一工作台里读" className="product-section-card product-section-card--backtest-secondary">
-              <Disclosure defaultOpen summary="toggle / parameter + metrics" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
+            <Card title="参数与指标" subtitle="参数差异与已校验指标差异放在同一工作台里读" className="product-section-card product-section-card--backtest-secondary">
+              <Disclosure defaultOpen summary="展开 / 参数与指标" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
                 <div className="preview-grid">
                   <div className="preview-card">
-                    <p className="metric-card__label">parameter_comparison</p>
-                    <p className="preview-card__text">{parameterComparison?.state || '--'}</p>
-                    <p className="product-footnote">shared: {parameterComparison?.sharedParameterKeys.length ?? 0}</p>
-                    <p className="product-footnote">differing: {parameterComparison?.differingParameterKeys.length ?? 0}</p>
-                    <p className="product-footnote">missing: {parameterComparison?.missingParameterKeys.length ?? 0}</p>
+                    <p className="metric-card__label">参数比较</p>
+                    <p className="preview-card__text">{formatCompareStateWithRaw(parameterComparison?.state)}</p>
+                    <p className="product-footnote">共享：{parameterComparison?.sharedParameterKeys.length ?? 0}</p>
+                    <p className="product-footnote">不同：{parameterComparison?.differingParameterKeys.length ?? 0}</p>
+                    <p className="product-footnote">缺失：{parameterComparison?.missingParameterKeys.length ?? 0}</p>
                   </div>
                   <div className="preview-card">
-                    <p className="metric-card__label">summary context</p>
-                    <p className="preview-card__text">all_same_code: {renderBooleanLabel(comparisonSummary?.context.allSameCode)}</p>
-                    <p className="product-footnote">all_same_timeframe: {renderBooleanLabel(comparisonSummary?.context.allSameTimeframe)}</p>
-                    <p className="product-footnote">all_same_date_range: {renderBooleanLabel(comparisonSummary?.context.allSameDateRange)}</p>
+                    <p className="metric-card__label">摘要上下文</p>
+                    <p className="preview-card__text">全部同标的：{renderBooleanLabel(comparisonSummary?.context.allSameCode)}</p>
+                    <p className="product-footnote">全部同周期：{renderBooleanLabel(comparisonSummary?.context.allSameTimeframe)}</p>
+                    <p className="product-footnote">全部同日期区间：{renderBooleanLabel(comparisonSummary?.context.allSameDateRange)}</p>
                   </div>
                 </div>
                 <div className="mt-4">
@@ -947,8 +987,8 @@ const RuleBacktestComparePage: React.FC = () => {
           </section>
 
           <section id="compare-items" className="backtest-display-section">
-            <Card title="参与运行" subtitle="保留 compact run table，方便 AI / 人快速对照 baseline 与候选" className="product-section-card product-section-card--backtest-secondary">
-              <Disclosure defaultOpen summary="toggle / 参与运行" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
+            <Card title="参与运行" subtitle="保留紧凑运行表，方便 AI / 人快速对照基准与候选" className="product-section-card product-section-card--backtest-secondary">
+              <Disclosure defaultOpen summary="展开 / 参与运行" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
                 <CompareItemsTable
                   items={orderedItems}
                   baselineRunId={baselineRunId}

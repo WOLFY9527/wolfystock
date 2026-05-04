@@ -623,7 +623,7 @@ async function openAiRoutingDrawer() {
 async function openAdvancedConfigDrawer() {
   fireEvent.click(screen.getByRole('button', { name: '打开高级设置' }));
   await waitFor(() => {
-    expect(screen.getByRole('dialog', { name: '高级 Provider / Channel 编辑' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '高级服务商 / 渠道编辑' })).toBeInTheDocument();
   });
   expect(screen.getByTestId('llm-provider-scope')).toHaveTextContent('');
 }
@@ -1122,7 +1122,7 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    expect(await screen.findByText('Provider 快速配置')).toBeInTheDocument();
+    expect(await screen.findByText('服务商快速配置')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('raw-fields-drawer-trigger'));
 
     const drawer = await screen.findByRole('dialog', { name: zh('settings.rawFieldsSectionTitle') });
@@ -1161,15 +1161,15 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    expect(await screen.findByRole('heading', { name: 'Notification Channels' })).toBeInTheDocument();
-    expect(screen.getByText('Notification credentials are managed here and kept out of raw system settings.')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '通知通道' })).toBeInTheDocument();
+    expect(screen.getAllByText('通知凭据在这里专用管理，并从原始系统设置中隐藏。').length).toBeGreaterThan(0);
 
     const wechatCard = screen.getByTestId('notification-channel-card-wechat');
-    expect(within(wechatCard).getByText('Configured')).toBeInTheDocument();
+    expect(within(wechatCard).getByText('已配置')).toBeInTheDocument();
     const webhookInput = within(wechatCard).getByLabelText('Webhook URL') as HTMLInputElement;
     expect(webhookInput.type).toBe('password');
     expect(webhookInput.value).toBe('wechat-webhook-token');
-    expect(within(wechatCard).getByText('Test send not available yet')).toBeInTheDocument();
+    expect(within(wechatCard).getByText('测试发送暂不可用')).toBeInTheDocument();
   });
 
   it('saves notification channel fields through the existing masked config update flow', async () => {
@@ -1179,15 +1179,15 @@ describe('SettingsPage', () => {
     render(<SettingsPage />);
 
     const emailCard = await screen.findByTestId('notification-channel-card-email');
-    fireEvent.change(within(emailCard).getByLabelText('Receivers'), {
+    fireEvent.change(within(emailCard).getByLabelText('收件人'), {
       target: { value: 'alerts@example.com' },
     });
-    fireEvent.click(within(emailCard).getByRole('button', { name: 'Save' }));
+    fireEvent.click(within(emailCard).getByRole('button', { name: '保存' }));
 
     await waitFor(() => {
       expect(saveExternalItems).toHaveBeenCalledWith(
         [{ key: 'EMAIL_RECEIVERS', value: 'alerts@example.com' }],
-        'Email notification channel saved',
+        'Email 通知通道已保存',
       );
     });
   });
@@ -1210,8 +1210,8 @@ describe('SettingsPage', () => {
     render(<SettingsPage />);
 
     const pushplusCard = await screen.findByTestId('notification-channel-card-pushplus');
-    expect(within(pushplusCard).getByText('Not configured')).toBeInTheDocument();
-    expect(within(pushplusCard).getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(within(pushplusCard).getByText('未配置')).toBeInTheDocument();
+    expect(within(pushplusCard).getByRole('button', { name: '保存' })).toBeDisabled();
   });
 
   it('refreshes server state after intelligent import merges stock list', async () => {
@@ -1266,7 +1266,7 @@ describe('SettingsPage', () => {
     expect(primaryGateway).not.toBeDisabled();
     expect(primaryGateway.querySelector('option[value="aihubmix"]')).not.toBeNull();
     expect(backupGateway).toBeDisabled();
-    expect(screen.getByText('备用路由需要至少两个已配置 AI Provider。')).toBeInTheDocument();
+    expect(screen.getByText('备用路由需要至少两个已配置 AI 服务商。')).toBeInTheDocument();
   });
 
   it('treats AIHUBMIX_API_KEY as credential-ready for gateway selection', async () => {
@@ -1462,8 +1462,8 @@ describe('SettingsPage', () => {
 
     expect(primaryGateway).toBeDisabled();
     expect(backupGateway).toBeDisabled();
-    expect(within(aiSection).getByText('无主路由网关。请先配置 AI Provider 凭据。')).toBeInTheDocument();
-    expect(within(aiSection).getByText('备用路由需要至少两个已配置 AI Provider。')).toBeInTheDocument();
+    expect(within(aiSection).getByText('无主路由网关。请先配置 AI 服务商凭据。')).toBeInTheDocument();
+    expect(within(aiSection).getByText('备用路由需要至少两个已配置 AI 服务商。')).toBeInTheDocument();
   });
 
   it('saves primary-only AI route and keeps legacy channel list stable', async () => {
@@ -1842,9 +1842,9 @@ describe('SettingsPage', () => {
     await openAiRoutingDrawer();
     expect(screen.getByRole('dialog', { name: '任务路由编辑' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '编辑任务路由' })).toBeInTheDocument();
-    expect(screen.getByText('Provider 快速配置')).toBeInTheDocument();
+    expect(screen.getByText('服务商快速配置')).toBeInTheDocument();
     expect(screen.getByText('1. 任务路由')).toBeInTheDocument();
-    expect(screen.getByText('2. Provider Library')).toBeInTheDocument();
+    expect(screen.getByText('2. 服务商库')).toBeInTheDocument();
     expect(screen.getByText('3. 高级配置（可选）')).toBeInTheDocument();
     expect(screen.getByText('LLM PROVIDERS')).toBeInTheDocument();
     expect(screen.getByText('高级渠道配置')).toBeInTheDocument();
@@ -1880,9 +1880,9 @@ describe('SettingsPage', () => {
     expect(within(aiSummary).getByTestId('ai-task-row-analysis')).toBeInTheDocument();
     expect(within(aiSummary).getByTestId('ai-task-row-stock_chat')).toBeInTheDocument();
     expect(within(aiSummary).getByTestId('ai-task-row-backtest')).toBeInTheDocument();
-    expect(within(aiSummary).getAllByText('Analysis').length).toBeGreaterThan(0);
-    expect(within(aiSummary).getByText('Stock Chat')).toBeInTheDocument();
-    expect(within(aiSummary).getByText('Backtesting')).toBeInTheDocument();
+    expect(within(aiSummary).getAllByText('股票分析').length).toBeGreaterThan(0);
+    expect(within(aiSummary).getByText('问股')).toBeInTheDocument();
+    expect(within(aiSummary).getByText('回测')).toBeInTheDocument();
     expect(within(aiSummary).getAllByText(/Gemini \/ gemini\/gemini-2\.5-flash/).length).toBeGreaterThan(0);
     expect(screen.queryByText('按任务配置模型')).toBeNull();
   });
@@ -1909,7 +1909,7 @@ describe('SettingsPage', () => {
     expect(aiSection).not.toBeNull();
 
     expect(
-      within(aiSection as HTMLElement).getAllByText(/回测路由：当前继承 Analysis 路由/).length,
+      within(aiSection as HTMLElement).getAllByText(/回测路由：当前继承分析路由/).length,
     ).toBe(1);
   });
 
@@ -2245,7 +2245,7 @@ describe('SettingsPage', () => {
 
     fireEvent.change(within(drawer).getByLabelText(/Alpaca Key ID/i), { target: { value: 'alpaca-key-id' } });
     fireEvent.change(within(drawer).getByLabelText(/Secret Key/i), { target: { value: 'alpaca-secret-key' } });
-    fireEvent.change(within(drawer).getByLabelText(/Feed/i), { target: { value: 'sip' } });
+    fireEvent.change(within(drawer).getByLabelText(/数据通道/i), { target: { value: 'sip' } });
     fireEvent.click(within(drawer).getByRole('button', { name: '保存更改' }));
 
     await waitFor(() => {
@@ -2525,7 +2525,7 @@ describe('SettingsPage', () => {
 
     const providerSection = screen.getByTestId('ai-provider-quick-section');
     const geminiCard = within(providerSection).getByTestId('ai-provider-card-gemini');
-    expect(within(geminiCard as HTMLElement).getByText(/Quick API/)).toBeInTheDocument();
+    expect(within(geminiCard as HTMLElement).getByText(/快速接口/)).toBeInTheDocument();
     expect(within(geminiCard as HTMLElement).getByText(/高级渠道数: 0/)).toBeInTheDocument();
 
     const aihubmixCard = within(providerSection).getByTestId('ai-provider-card-aihubmix');
@@ -2554,10 +2554,10 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '管理 GLM / Zhipu 高级配置' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: '高级 Provider / Channel 编辑' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: '高级服务商 / 渠道编辑' })).toBeInTheDocument();
     });
-    const advancedDrawer = screen.getByRole('dialog', { name: '高级 Provider / Channel 编辑' });
-    expect(within(advancedDrawer).getByText('GLM / Zhipu 的 Quick API 已配置，但尚未创建独立高级渠道。')).toBeInTheDocument();
+    const advancedDrawer = screen.getByRole('dialog', { name: '高级服务商 / 渠道编辑' });
+    expect(within(advancedDrawer).getByText('GLM / Zhipu 的快速接口已配置，但尚未创建独立高级渠道。')).toBeInTheDocument();
     expect(within(advancedDrawer).getByRole('button', { name: '创建 GLM / Zhipu 高级渠道' })).toBeInTheDocument();
     expect(screen.getByTestId('llm-provider-scope')).toHaveTextContent('zhipu');
   });
@@ -2586,7 +2586,7 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '管理 Gemini 高级配置' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: '高级 Provider / Channel 编辑' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: '高级服务商 / 渠道编辑' })).toBeInTheDocument();
     });
     expect(screen.getAllByText('已定位到 Gemini 的高级渠道：gemini。').length).toBeGreaterThan(0);
     expect(screen.getByTestId('llm-provider-scope')).toHaveTextContent('gemini');
@@ -2799,7 +2799,7 @@ describe('SettingsPage', () => {
 
     await openAiRoutingDrawer();
     const stockTaskRow = screen.getByTestId('ai-task-row-stock_chat');
-    expect(within(stockTaskRow).getByText('Stock Chat')).toBeInTheDocument();
+    expect(within(stockTaskRow).getByText('问股')).toBeInTheDocument();
     expect(within(stockTaskRow).getByText('与分析共用')).toBeInTheDocument();
     expect(within(stockTaskRow).getByText('Gemini / gemini/gemini-2.5-flash')).toBeInTheDocument();
     expect(within(stockTaskRow).getByText(/问股路由：继承分析主路由/)).toBeInTheDocument();
@@ -2840,7 +2840,7 @@ describe('SettingsPage', () => {
 
     await openAiRoutingDrawer();
     const stockTaskRow = screen.getByTestId('ai-task-row-stock_chat');
-    expect(within(stockTaskRow).getByText('Stock Chat')).toBeInTheDocument();
+    expect(within(stockTaskRow).getByText('问股')).toBeInTheDocument();
     expect(within(stockTaskRow).getByText('独立模型')).toBeInTheDocument();
     expect(within(stockTaskRow).getByText('OpenAI / openai/gpt-4.1-mini')).toBeInTheDocument();
     expect(within(stockTaskRow).getByText(/问股路由：使用独立模型（openai\/gpt-4\.1-mini）/)).toBeInTheDocument();
@@ -2922,13 +2922,13 @@ describe('SettingsPage', () => {
     const aiSection = screen.getByRole('dialog', { name: '任务路由编辑' });
     const backtestTaskCard = within(aiSection).getByTestId('ai-task-card-backtest');
 
-    fireEvent.click(within(backtestTaskCard as HTMLElement).getByRole('button', { name: '继承 Analysis' }));
+    fireEvent.click(within(backtestTaskCard as HTMLElement).getByRole('button', { name: '继承分析路由' }));
     fireEvent.click(within(backtestTaskCard as HTMLElement).getByRole('button', { name: '保存任务模型' }));
 
     await waitFor(() => {
       expect(saveExternalItems).toHaveBeenCalledWith([
         { key: 'BACKTEST_LITELLM_MODEL', value: '' },
-      ], '已恢复继承 Analysis 主路由');
+      ], '已恢复继承分析主路由');
     });
   });
 

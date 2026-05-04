@@ -219,7 +219,7 @@ describe('PersonalSettingsPage', () => {
     expect(screen.getByRole('button', { name: zh('settings.personalNotificationSaveAction') })).toHaveClass('bg-white/5', 'border-white/10', 'text-white');
     expect(screen.getByTestId('change-password-card')).toBeInTheDocument();
     expect(screen.getByTestId('font-size-card')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /紧凑 Compact/ }));
+    fireEvent.click(screen.getByRole('button', { name: '紧凑' }));
     fireEvent.click(screen.getByRole('button', { name: /完整数字/ }));
     expect(setDataDensity).toHaveBeenCalledWith('compact');
     expect(setNumberFormat).toHaveBeenCalledWith('full');

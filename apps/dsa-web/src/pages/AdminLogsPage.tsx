@@ -553,9 +553,27 @@ function healthStatusTone(status: unknown): string {
   return 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100';
 }
 
-function compactHealthList(items: AdminLogHealthSummary['failuresByProvider'] | undefined): string {
+function friendlyRawStatusLabel(value: unknown, locale: AdminLogsLanguage): string {
+  const raw = text(value, '');
+  if (!raw || locale !== 'zh') return raw || '--';
+  const normalized = raw.trim().toLowerCase().replace(/[-\s]+/g, '_');
+  const labels: Record<string, string> = {
+    unknown: '未确认',
+    provider_error: '服务商错误',
+    provider_down: '服务商不可用',
+    source_error: '数据源错误',
+    request_timeout: '请求超时',
+    timeout: '超时',
+    unavailable: '不可用',
+    fallback: '已回退',
+    cache: '缓存',
+  };
+  return labels[normalized] || raw;
+}
+
+function compactHealthList(items: AdminLogHealthSummary['failuresByProvider'] | undefined, locale: AdminLogsLanguage): string {
   if (!items?.length) return '--';
-  return items.slice(0, 3).map((item) => `${text(item.label || item.key)} ${item.count}`).join(' · ');
+  return items.slice(0, 3).map((item) => `${friendlyRawStatusLabel(item.label || item.key, locale)} ${item.count}`).join(' · ');
 }
 
 function localizedRecommendedCleanupAction(value: string | null | undefined, locale: AdminLogsLanguage): string {
@@ -738,7 +756,7 @@ function CallCard({
 }) {
   const name = type === 'llm' ? text(item.model) : text(item.api || item.source);
   const status = normalizeStatus(String(item.status || ''));
-  const reason = text(item.reason || item.error || item.failureReason, '');
+  const reason = friendlyRawStatusLabel(item.reason || item.error || item.failureReason, locale);
   const fallback = text(item.fallback || item.fallbackChain || item.retryFallback, '');
   return (
     <details className="rounded-2xl border border-white/6 bg-white/[0.025] p-4" open={index === 0}>
@@ -1155,7 +1173,7 @@ const AdminLogsPage: React.FC = () => {
         <div className="relative px-4 py-4 sm:px-5">
           <div className="relative flex min-w-0 flex-col gap-4">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-emerald-200/70">WolfyStock Ops Trace</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-emerald-200/70">{locale === 'zh' ? 'WolfyStock 运维追踪' : 'WolfyStock Ops Trace'}</p>
               <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{t('adminLogs.pageTitle')}</h1>
               <p className="mt-1 max-w-4xl text-xs leading-5 text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
               <div role="tablist" aria-label={locale === 'zh' ? '日志视图' : 'Log views'} className="mt-4 flex max-w-full gap-2 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap sm:overflow-visible">
@@ -1211,7 +1229,7 @@ const AdminLogsPage: React.FC = () => {
                 id="admin-logs-search"
                 aria-label={locale === 'zh' ? '搜索日志' : 'Search logs'}
                 className="input-surface h-9 w-full min-w-0 rounded-lg px-3 text-sm"
-                placeholder={activeTab === 'analysis' ? 'TSLA / AAPL / NVDA' : (locale === 'zh' ? '事件 / request id / symbol / source / user' : 'Event / request id / symbol / source / user')}
+                placeholder={activeTab === 'analysis' ? 'TSLA / AAPL / NVDA' : (locale === 'zh' ? '事件 / 请求 ID / 标的 / 来源 / 用户' : 'Event / request id / symbol / source / user')}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
               />
@@ -1394,18 +1412,18 @@ const AdminLogsPage: React.FC = () => {
         </div>
         <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '主要失败功能' : 'Top failing feature'}</p>
-          <p className="mt-1 truncate text-sm font-semibold text-foreground" title={text(topCategory?.label || topCategory?.key)}>{text(topCategory?.label || topCategory?.key)}</p>
+          <p className="mt-1 truncate text-sm font-semibold text-foreground" title={friendlyRawStatusLabel(topCategory?.label || topCategory?.key, locale)}>{friendlyRawStatusLabel(topCategory?.label || topCategory?.key, locale)}</p>
           <p className="text-[11px] text-muted-text">{topCategory ? countLabel(topCategory.count, 'event', 'events', '事件', locale) : '--'}</p>
         </div>
         <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '供应商 / 原因' : 'Provider / reason'}</p>
-          <p className="mt-1 truncate text-sm text-foreground" title={compactHealthList(healthSummary.failuresByProvider)}>{compactHealthList(healthSummary.failuresByProvider)}</p>
-          <p className="truncate text-[11px] text-muted-text" title={compactHealthList(healthSummary.failuresByReason)}>{compactHealthList(healthSummary.failuresByReason)}</p>
+          <p className="mt-1 truncate text-sm text-foreground" title={compactHealthList(healthSummary.failuresByProvider, locale)}>{compactHealthList(healthSummary.failuresByProvider, locale)}</p>
+          <p className="truncate text-[11px] text-muted-text" title={compactHealthList(healthSummary.failuresByReason, locale)}>{compactHealthList(healthSummary.failuresByReason, locale)}</p>
         </div>
         <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '最新严重错误' : 'Latest critical error'}</p>
           <p className="mt-1 truncate text-sm font-semibold text-foreground" title={text(latestCriticalError?.event || latestCriticalError?.category)}>{text(latestCriticalError?.event || latestCriticalError?.category)}</p>
-          <p className="truncate text-[11px] text-muted-text" title={text(latestCriticalError?.errorSummary || latestCriticalError?.reason)}>{text(latestCriticalError?.errorSummary || latestCriticalError?.reason)}</p>
+          <p className="truncate text-[11px] text-muted-text" title={friendlyRawStatusLabel(latestCriticalError?.errorSummary || latestCriticalError?.reason, locale)}>{friendlyRawStatusLabel(latestCriticalError?.errorSummary || latestCriticalError?.reason, locale)}</p>
         </div>
       </section>
 
@@ -1454,8 +1472,8 @@ const AdminLogsPage: React.FC = () => {
                         .filter((value, index, values) => values.indexOf(value) === index)
                         .join(' · ');
                       const severity = businessEventSeverity(item);
-                      const reason = text(item.reason, isFailedStatus(item.status) ? 'unknown' : '--');
-                      const errorSummary = text(item.errorSummary || item.rootCauseSummary, '');
+                      const reason = friendlyRawStatusLabel(item.reason || (isFailedStatus(item.status) ? 'unknown' : '--'), locale);
+                      const errorSummary = friendlyRawStatusLabel(item.errorSummary || item.rootCauseSummary, locale);
                       const traceValue = item.traceId || item.requestId;
                       const stepLabel = stepStatsLabel(item, locale);
                       return (
@@ -1597,7 +1615,7 @@ const AdminLogsPage: React.FC = () => {
                   <h3 className="text-sm font-semibold text-foreground">{summaryTitle(businessSeverity, locale)}</h3>
                   <div className="mt-3 grid gap-2 text-xs text-secondary-text md:grid-cols-2">
                     <p>{locale === 'zh' ? '状态' : 'Status'}: <span className="text-foreground">{statusLabel(drawerStatus, locale)}</span></p>
-                    <p>{locale === 'zh' ? '原因' : 'Reason'}: <span className="text-foreground">{text(businessDetail.reason, locale === 'zh' ? '原因未确认' : 'Reason unknown')}</span></p>
+                    <p>{locale === 'zh' ? '原因' : 'Reason'}: <span className="text-foreground">{friendlyRawStatusLabel(businessDetail.reason || (locale === 'zh' ? '原因未确认' : 'Reason unknown'), locale)}</span></p>
                     <p>{locale === 'zh' ? '操作者' : 'Actor'}: <span className="text-foreground">{actorBadgeDisplay(businessDetail.actorType, locale)} · {businessActorLabel}</span></p>
                     <p>{locale === 'zh' ? '上下文' : 'Context'}: <span className="text-foreground">{businessContextLabel}</span></p>
                     <p>{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}: <span className="text-foreground">{businessSourceLabel}</span></p>
@@ -1701,7 +1719,7 @@ const AdminLogsPage: React.FC = () => {
               <h3 className="text-sm font-semibold text-foreground">{summaryTitle(rawSeverity, locale)}</h3>
               <div className="mt-4 grid gap-2 text-sm text-secondary-text md:grid-cols-2">
                 <p>{locale === 'zh' ? '状态' : 'Status'}: <span className="text-foreground">{statusLabel(drawerStatus, locale)}</span></p>
-                <p>{locale === 'zh' ? '原因' : 'Reason'}: <span className="text-foreground">{text(readable.reason || readable.topFailureReason, locale === 'zh' ? '原因未确认' : 'Reason unknown')}</span></p>
+                <p>{locale === 'zh' ? '原因' : 'Reason'}: <span className="text-foreground">{friendlyRawStatusLabel(readable.reason || readable.topFailureReason || (locale === 'zh' ? '原因未确认' : 'Reason unknown'), locale)}</span></p>
                 <p>{locale === 'zh' ? '操作者' : 'Actor'}: <span className="text-foreground">{actorBadgeDisplay(readable.actorType || readable.actorRole, locale)} · {text(readable.actorDisplay || readable.actorUsername || readable.actorSessionId, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                 <p>{locale === 'zh' ? '上下文' : 'Context'}: <span className="text-foreground">{text(readable.contextLabel || readable.operationTarget || drawerDetail.code || drawerDetail.name, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                 <p>{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}: <span className="text-foreground">{text([readable.provider, readable.source].filter(Boolean).join(' / '), locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
@@ -1731,7 +1749,7 @@ const AdminLogsPage: React.FC = () => {
                   <p className="text-secondary-text"><span>{locale === 'zh' ? '操作用户:' : 'Operation user:'}</span> <span className="text-foreground">{text(systemOperation.actor || readable.actorDisplay || readable.actorUsername, 'admin')}</span></p>
                   <p className="text-secondary-text"><span>{locale === 'zh' ? '操作时间:' : 'Operation time:'}</span> <span className="text-foreground">{formatDateTime(systemOperation.time || drawerDetail.startedAt, locale)}</span></p>
                   <p className="text-secondary-text"><span>{locale === 'zh' ? '执行结果:' : 'Result:'}</span> <span className="text-foreground">{text(systemOperation.status || operationDetail.finalResult || operationDetail.status || readable.operationStatus)}</span></p>
-                  <p className="text-secondary-text md:col-span-2"><span>{locale === 'zh' ? '失败原因:' : 'Failure reason:'}</span> <span className="text-foreground">{text(systemOperation.reason || readable.topFailureReason, '--')}</span></p>
+                  <p className="text-secondary-text md:col-span-2"><span>{locale === 'zh' ? '失败原因:' : 'Failure reason:'}</span> <span className="text-foreground">{friendlyRawStatusLabel(systemOperation.reason || readable.topFailureReason || '--', locale)}</span></p>
                 </div>
               </section>
             ) : null}

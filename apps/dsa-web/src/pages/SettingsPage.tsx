@@ -997,15 +997,15 @@ const SettingsPage: React.FC = () => {
     },
     {
       domain: 'notifications' as const,
-      title: 'Notification Channels',
-      desc: 'Curated notification credentials',
+      title: language === 'zh' ? '通知通道' : 'Notification Channels',
+      desc: language === 'zh' ? '专用通知凭据' : 'Curated notification credentials',
     },
     {
       domain: 'advanced' as const,
       title: t('settings.domainAdvancedTitle'),
       desc: t('settings.domainAdvancedDesc'),
     },
-  ]), [t]);
+  ]), [language, t]);
 
   const aiRoutingKeys = useMemo(() => {
     const keys = [...allItemMap.keys()];
@@ -3306,6 +3306,7 @@ const SettingsPage: React.FC = () => {
                       items={itemsByCategory.notification || []}
                       disabled={adminLocked}
                       isSaving={isSaving}
+                      language={language}
                       onSaveItems={saveExternalItems}
                     />
                   ) : null}

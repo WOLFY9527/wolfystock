@@ -52,6 +52,27 @@ const severityTone: Record<NotificationSeverity, string> = {
   critical: 'border-rose-300/35 bg-rose-500/14 text-rose-100',
 };
 
+function severityLabel(value: NotificationSeverity, language: 'zh' | 'en'): string {
+  if (language === 'en') return value;
+  const labels: Record<NotificationSeverity, string> = {
+    info: '信息',
+    warning: '警告',
+    critical: '严重',
+  };
+  return labels[value] || value;
+}
+
+function displayEventMessage(message: string | null | undefined, language: 'zh' | 'en'): string {
+  const raw = String(message || '').trim();
+  if (!raw || language !== 'zh') return raw;
+  const normalized = raw.toLowerCase().replace(/[-\s]+/g, '_');
+  if (normalized.includes('provider_timeout')) return '服务商请求超时';
+  if (normalized.includes('provider_down')) return '服务商不可用';
+  if (normalized.includes('provider_error')) return '服务商错误';
+  if (normalized.includes('api_key')) return raw.replace(/api_key=\S+/gi, '凭据已脱敏');
+  return raw;
+}
+
 function isSslDeliveryError(message?: string | null, code?: string | null): boolean {
   const text = `${code || ''} ${message || ''}`.toLowerCase();
   return /ssl_certificate_verify_failed|certificate verify failed|ssl certificate verification failed|ssl 证书|证书.*验证失败|证书校验失败/.test(text);
@@ -551,7 +572,7 @@ const AdminNotificationsPage: React.FC = () => {
                       ) : null}
                     </div>
                     <div>
-                      <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold', severityTone[channel.severityMin])}>{channel.severityMin}</span>
+                      <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold', severityTone[channel.severityMin])}>{severityLabel(channel.severityMin, language as 'zh' | 'en')}</span>
                       <p className={cn('mt-1 text-[11px]', channel.enabled ? 'text-emerald-100' : 'text-white/45')}>{channel.enabled ? text('Enabled', '已启用') : text('Disabled', '已禁用')}</p>
                     </div>
                     <div className="text-[11px] text-muted-text">
@@ -613,10 +634,10 @@ const AdminNotificationsPage: React.FC = () => {
                     <p className="text-xs text-secondary-text">{formatDate(event.createdAt)}</p>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-foreground">{event.title}</p>
-                      <p className="mt-1 truncate text-[11px] text-muted-text" title={event.message}>{event.eventType} · {deliveryStatusLabel(event.deliveryStatus, language as 'zh' | 'en')}</p>
+                      <p className="mt-1 truncate text-[11px] text-muted-text" title={displayEventMessage(event.message, language as 'zh' | 'en')}>{event.eventType} · {deliveryStatusLabel(event.deliveryStatus, language as 'zh' | 'en')}</p>
                     </div>
                     <div>
-                      <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold', severityTone[event.severity])}>{event.severity}</span>
+                      <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold', severityTone[event.severity])}>{severityLabel(event.severity, language as 'zh' | 'en')}</span>
                       <p className="mt-1 text-[11px] text-muted-text">{acknowledgedLabel(event.acknowledgedAt, language as 'zh' | 'en')}</p>
                     </div>
                     <div className="md:text-right">

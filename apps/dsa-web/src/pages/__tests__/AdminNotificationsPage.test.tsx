@@ -123,6 +123,8 @@ describe('AdminNotificationsPage', () => {
     expect(screen.getByRole('button', { name: '创建通道' })).toBeInTheDocument();
     expect(screen.getByText('通知通道')).toBeInTheDocument();
     expect(screen.getByText('通知事件')).toBeInTheDocument();
+    expect(screen.getAllByText('严重').length).toBeGreaterThan(0);
+    expect(screen.queryByText('critical')).not.toBeInTheDocument();
   });
 
   it('validates required create form fields before submitting', async () => {
