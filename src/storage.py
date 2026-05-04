@@ -984,12 +984,16 @@ class PortfolioTrade(Base):
     tax = Column(Float, default=0.0)
     note = Column(String(255))
     dedup_hash = Column(String(64), index=True)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    voided_at = Column(DateTime, index=True)
     created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     __table_args__ = (
         UniqueConstraint('account_id', 'trade_uid', name='uix_portfolio_trade_uid'),
         UniqueConstraint('account_id', 'dedup_hash', name='uix_portfolio_trade_dedup_hash'),
         Index('ix_portfolio_trade_account_date', 'account_id', 'trade_date'),
+        Index('ix_portfolio_trade_account_active_date', 'account_id', 'is_active', 'trade_date'),
     )
 
 
@@ -1546,6 +1550,9 @@ class DatabaseManager:
             self._add_column_if_missing(conn, "backtest_runs", "owner_id", "VARCHAR(64)")
             self._add_column_if_missing(conn, "rule_backtest_runs", "owner_id", "VARCHAR(64)")
             self._add_column_if_missing(conn, "market_scanner_runs", "owner_id", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "portfolio_trades", "is_active", "BOOLEAN NOT NULL DEFAULT 1")
+            self._add_column_if_missing(conn, "portfolio_trades", "voided_at", "DATETIME")
+            self._add_column_if_missing(conn, "portfolio_trades", "updated_at", "DATETIME")
             self._add_column_if_missing(conn, "user_watchlist_items", "last_scored_at", "DATETIME")
             self._add_column_if_missing(conn, "user_watchlist_items", "score_source", "VARCHAR(32)")
             self._add_column_if_missing(conn, "user_watchlist_items", "score_profile", "VARCHAR(64)")
@@ -1607,6 +1614,12 @@ class DatabaseManager:
                 "market_scanner_runs",
                 "owner_id, run_at",
             )
+            self._create_index_if_missing(
+                conn,
+                "ix_portfolio_trade_account_active_date",
+                "portfolio_trades",
+                "account_id, is_active, trade_date",
+            )
 
             self._migrate_backtest_summaries_table(conn, bootstrap_user_id=bootstrap_user_id)
 
@@ -1634,6 +1647,14 @@ class DatabaseManager:
                 "UPDATE rule_backtest_runs SET owner_id = :owner_id "
                 "WHERE owner_id IS NULL OR TRIM(owner_id) = ''",
                 {"owner_id": bootstrap_user_id},
+            )
+            conn.exec_driver_sql(
+                "UPDATE portfolio_trades SET is_active = 1 "
+                "WHERE is_active IS NULL"
+            )
+            conn.exec_driver_sql(
+                "UPDATE portfolio_trades SET updated_at = created_at "
+                "WHERE updated_at IS NULL"
             )
 
             self._backfill_market_scanner_ownership(conn, bootstrap_user_id=bootstrap_user_id)

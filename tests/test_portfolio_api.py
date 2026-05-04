@@ -949,6 +949,138 @@ class PortfolioApiTestCase(unittest.TestCase):
         detail = resp.json()
         self.assertEqual(detail.get("error"), "portfolio_busy")
 
+    def test_update_trade_recalculates_snapshot_and_returns_trade_payload(self) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Main", "broker": "Demo", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+
+        cash_resp = self.client.post(
+            "/api/v1/portfolio/cash-ledger",
+            json={
+                "account_id": account_id,
+                "event_date": "2026-01-01",
+                "direction": "in",
+                "amount": 5000,
+                "currency": "USD",
+            },
+        )
+        self.assertEqual(cash_resp.status_code, 200)
+
+        trade_resp = self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "AAPL",
+                "trade_date": "2026-01-02",
+                "side": "buy",
+                "quantity": 10,
+                "price": 100,
+                "market": "us",
+                "currency": "USD",
+            },
+        )
+        self.assertEqual(trade_resp.status_code, 200)
+        trade_id = trade_resp.json()["id"]
+        self._save_close("AAPL", date(2026, 1, 3), 125.0)
+
+        update_resp = self.client.patch(
+            f"/api/v1/portfolio/trades/{trade_id}",
+            json={
+                "quantity": 5,
+                "price": 120,
+            },
+        )
+        self.assertEqual(update_resp.status_code, 200)
+        updated_payload = update_resp.json()
+        self.assertEqual(updated_payload["id"], trade_id)
+        self.assertEqual(updated_payload["quantity"], 5.0)
+        self.assertEqual(updated_payload["price"], 120.0)
+        self.assertTrue(updated_payload["is_active"])
+        self.assertIsNone(updated_payload["voided_at"])
+
+        snapshot_resp = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"account_id": account_id, "as_of": "2026-01-03"},
+        )
+        self.assertEqual(snapshot_resp.status_code, 200)
+        account_snapshot = snapshot_resp.json()["accounts"][0]
+        self.assertEqual(account_snapshot["positions"][0]["quantity"], 5.0)
+        self.assertEqual(account_snapshot["positions"][0]["avg_cost"], 120.0)
+
+    def test_update_trade_invalid_payload_returns_400_and_missing_trade_returns_404(self) -> None:
+        missing_resp = self.client.patch("/api/v1/portfolio/trades/999999", json={"quantity": 5})
+        self.assertEqual(missing_resp.status_code, 404)
+
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Main", "broker": "Demo", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        trade_resp = self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_resp.json()["id"],
+                "symbol": "AAPL",
+                "trade_date": "2026-01-02",
+                "side": "buy",
+                "quantity": 10,
+                "price": 100,
+                "market": "us",
+                "currency": "USD",
+            },
+        )
+        self.assertEqual(trade_resp.status_code, 200)
+
+        invalid_resp = self.client.patch(
+            f"/api/v1/portfolio/trades/{trade_resp.json()['id']}",
+            json={"quantity": 0},
+        )
+        self.assertEqual(invalid_resp.status_code, 422)
+
+    def test_delete_trade_soft_voids_record_and_excludes_it_from_active_trade_list(self) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Main", "broker": "Demo", "market": "cn", "base_currency": "CNY"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+        trade_resp = self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "600519",
+                "trade_date": "2026-01-02",
+                "side": "buy",
+                "quantity": 1,
+                "price": 100,
+                "market": "cn",
+                "currency": "CNY",
+            },
+        )
+        self.assertEqual(trade_resp.status_code, 200)
+        trade_id = trade_resp.json()["id"]
+
+        delete_resp = self.client.delete(f"/api/v1/portfolio/trades/{trade_id}")
+        self.assertEqual(delete_resp.status_code, 200)
+        self.assertEqual(delete_resp.json()["deleted"], 1)
+        self.assertEqual(delete_resp.json()["delete_mode"], "soft")
+
+        trade_list_resp = self.client.get("/api/v1/portfolio/trades", params={"account_id": account_id})
+        self.assertEqual(trade_list_resp.status_code, 200)
+        self.assertEqual(trade_list_resp.json()["items"], [])
+
+        trade_list_all_resp = self.client.get(
+            "/api/v1/portfolio/trades",
+            params={"account_id": account_id, "include_voided": True},
+        )
+        self.assertEqual(trade_list_all_resp.status_code, 200)
+        self.assertEqual(len(trade_list_all_resp.json()["items"]), 1)
+        self.assertFalse(trade_list_all_resp.json()["items"][0]["is_active"])
+        self.assertIsNotNone(trade_list_all_resp.json()["items"][0]["voided_at"])
+
     def test_create_cash_ledger_busy_returns_409(self) -> None:
         with patch(
             "api.v1.endpoints.portfolio.PortfolioService.record_cash_ledger",

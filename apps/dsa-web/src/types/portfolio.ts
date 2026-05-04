@@ -241,6 +241,20 @@ export interface PortfolioTradeCreateRequest {
   note?: string;
 }
 
+export interface PortfolioTradeUpdateRequest {
+  accountId?: number;
+  symbol?: string;
+  tradeDate?: string;
+  side?: PortfolioSide;
+  quantity?: number;
+  price?: number;
+  fee?: number;
+  tax?: number;
+  market?: 'cn' | 'hk' | 'us';
+  currency?: string;
+  note?: string;
+}
+
 export interface PortfolioCashLedgerCreateRequest {
   accountId: number;
   eventDate: string;
@@ -268,6 +282,7 @@ export interface PortfolioEventCreatedResponse {
 
 export interface PortfolioDeleteResponse {
   deleted: number;
+  deleteMode?: 'soft' | 'hard' | null;
 }
 
 export interface PortfolioTradeListItem {
@@ -284,7 +299,10 @@ export interface PortfolioTradeListItem {
   fee: number;
   tax: number;
   note?: string | null;
+  isActive?: boolean;
+  voidedAt?: string | null;
   createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface PortfolioTradeListResponse {

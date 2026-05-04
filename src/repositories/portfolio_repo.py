@@ -961,9 +961,31 @@ class PortfolioRepository:
             from_date=row.trade_date,
         )
         self._mark_phase_f_account_sync_in_session(session=session, account_id=int(row.account_id))
-        session.delete(row)
+        row.is_active = False
+        row.voided_at = datetime.now()
+        row.updated_at = datetime.now()
         session.flush()
         return True
+
+    def get_trade_in_session(
+        self,
+        *,
+        session: Any,
+        trade_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+        include_voided: bool = False,
+    ) -> Optional[PortfolioTrade]:
+        query = (
+            select(PortfolioTrade)
+            .join(PortfolioAccount, PortfolioAccount.id == PortfolioTrade.account_id)
+            .where(PortfolioTrade.id == trade_id)
+        )
+        if not include_voided:
+            query = query.where(PortfolioTrade.is_active.is_(True))
+        if not include_all_owners:
+            query = query.where(PortfolioAccount.owner_id == self.db.require_user_id(owner_id))
+        return session.execute(query.limit(1)).scalar_one_or_none()
 
     def delete_cash_ledger_in_session(
         self,
@@ -1024,9 +1046,14 @@ class PortfolioRepository:
     # ------------------------------------------------------------------
     # Event reads
     # ------------------------------------------------------------------
-    def list_trades(self, account_id: int, as_of: date) -> List[PortfolioTrade]:
+    def list_trades(self, account_id: int, as_of: date, *, include_voided: bool = False) -> List[PortfolioTrade]:
         with self.db.get_session() as session:
-            return self.list_trades_in_session(session=session, account_id=account_id, as_of=as_of)
+            return self.list_trades_in_session(
+                session=session,
+                account_id=account_id,
+                as_of=as_of,
+                include_voided=include_voided,
+            )
 
     def list_trades_in_session(
         self,
@@ -1034,15 +1061,17 @@ class PortfolioRepository:
         session: Any,
         account_id: int,
         as_of: date,
+        include_voided: bool = False,
     ) -> List[PortfolioTrade]:
+        conditions = [
+            PortfolioTrade.account_id == account_id,
+            PortfolioTrade.trade_date <= as_of,
+        ]
+        if not include_voided:
+            conditions.append(PortfolioTrade.is_active.is_(True))
         rows = session.execute(
             select(PortfolioTrade)
-            .where(
-                and_(
-                    PortfolioTrade.account_id == account_id,
-                    PortfolioTrade.trade_date <= as_of,
-                )
-            )
+            .where(and_(*conditions))
             .order_by(PortfolioTrade.trade_date.asc(), PortfolioTrade.id.asc())
         ).scalars().all()
         return list(rows)
@@ -1100,6 +1129,7 @@ class PortfolioRepository:
                 select(func.min(PortfolioTrade.trade_date)).where(
                     and_(
                         PortfolioTrade.account_id == account_id,
+                        PortfolioTrade.is_active.is_(True),
                         PortfolioTrade.trade_date <= as_of,
                     )
                 )
@@ -1136,11 +1166,14 @@ class PortfolioRepository:
         side: Optional[str],
         page: int,
         page_size: int,
+        include_voided: bool = False,
         owner_id: Optional[str] = None,
         include_all_owners: bool = False,
     ) -> Tuple[List[PortfolioTrade], int]:
         with self.db.get_session() as session:
             conditions = []
+            if not include_voided:
+                conditions.append(PortfolioTrade.is_active.is_(True))
             if account_id is not None:
                 conditions.append(PortfolioTrade.account_id == account_id)
             if date_from is not None:

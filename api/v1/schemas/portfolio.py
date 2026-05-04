@@ -133,6 +133,20 @@ class PortfolioTradeCreateRequest(BaseModel):
     note: Optional[str] = Field(None, max_length=255)
 
 
+class PortfolioTradeUpdateRequest(BaseModel):
+    account_id: Optional[int] = None
+    symbol: Optional[str] = Field(None, min_length=1, max_length=16)
+    trade_date: Optional[date] = None
+    side: Optional[Literal["buy", "sell"]] = None
+    quantity: Optional[float] = Field(None, gt=0)
+    price: Optional[float] = Field(None, gt=0)
+    fee: Optional[float] = Field(None, ge=0)
+    tax: Optional[float] = Field(None, ge=0)
+    market: Optional[Literal["cn", "hk", "us"]] = None
+    currency: Optional[str] = Field(None, min_length=3, max_length=8)
+    note: Optional[str] = Field(None, max_length=255)
+
+
 class PortfolioCashLedgerCreateRequest(BaseModel):
     account_id: int
     event_date: date
@@ -160,6 +174,7 @@ class PortfolioEventCreatedResponse(BaseModel):
 
 class PortfolioDeleteResponse(BaseModel):
     deleted: int
+    delete_mode: Optional[Literal["soft", "hard"]] = None
 
 
 class PortfolioAccountDeleteResponse(BaseModel):
@@ -183,7 +198,10 @@ class PortfolioTradeListItem(BaseModel):
     fee: float
     tax: float
     note: Optional[str] = None
+    is_active: bool = True
+    voided_at: Optional[str] = None
     created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
 
 class PortfolioTradeListResponse(BaseModel):

@@ -37,8 +37,10 @@ from api.v1.schemas.portfolio import (
     PortfolioIbkrSyncResponse,
     PortfolioRiskResponse,
     PortfolioSnapshotResponse,
-    PortfolioTradeListResponse,
     PortfolioTradeCreateRequest,
+    PortfolioTradeListItem,
+    PortfolioTradeListResponse,
+    PortfolioTradeUpdateRequest,
 )
 from src.services.fx_rate_service import default_fx_rate_service
 from src.services.portfolio_import_service import PortfolioImportService
@@ -528,6 +530,7 @@ def list_trades(
     date_to: Optional[date] = Query(None, description="Trade date to"),
     symbol: Optional[str] = Query(None, description="Optional stock symbol filter"),
     side: Optional[str] = Query(None, description="Optional side filter: buy/sell"),
+    include_voided: bool = Query(False, description="Whether to include voided trades"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_user),
@@ -540,6 +543,7 @@ def list_trades(
             date_to=date_to,
             symbol=symbol,
             side=side,
+            include_voided=include_voided,
             page=page,
             page_size=page_size,
         )
@@ -568,13 +572,79 @@ def delete_trade(
                 status_code=404,
                 detail={"error": "not_found", "message": f"Trade not found: {trade_id}"},
             )
-        return PortfolioDeleteResponse(deleted=1)
+        _record_portfolio_audit(
+            action="void_trade",
+            message=f"Portfolio trade voided: {trade_id}",
+            current_user=current_user,
+            account_id=None,
+            record_id=trade_id,
+        )
+        return PortfolioDeleteResponse(deleted=1, delete_mode="soft")
     except PortfolioBusyError as exc:
         raise _conflict_error(error="portfolio_busy", message=str(exc))
     except HTTPException:
         raise
     except Exception as exc:
         raise _internal_error("Delete trade event failed", exc)
+
+
+@router.patch(
+    "/trades/{trade_id}",
+    response_model=PortfolioTradeListItem,
+    responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Update trade event",
+)
+def update_trade(
+    trade_id: int,
+    request: PortfolioTradeUpdateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioTradeListItem:
+    service = _get_portfolio_service(current_user)
+    try:
+        updated = service.update_trade_event(
+            trade_id,
+            account_id=request.account_id,
+            symbol=request.symbol,
+            trade_date=request.trade_date,
+            side=request.side,
+            quantity=request.quantity,
+            price=request.price,
+            fee=request.fee,
+            tax=request.tax,
+            market=request.market,
+            currency=request.currency,
+            note=request.note,
+        )
+        if updated is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "not_found", "message": f"Trade not found: {trade_id}"},
+            )
+        _record_portfolio_audit(
+            action="update_trade",
+            message=f"Portfolio trade updated: {trade_id}",
+            current_user=current_user,
+            account_id=updated.get("account_id"),
+            symbol=updated.get("symbol"),
+            currency=updated.get("currency"),
+            record_id=trade_id,
+            detail={
+                "side": updated.get("side"),
+                "quantity": updated.get("quantity"),
+                "price": updated.get("price"),
+            },
+        )
+        return PortfolioTradeListItem(**updated)
+    except PortfolioBusyError as exc:
+        raise _conflict_error(error="portfolio_busy", message=str(exc))
+    except PortfolioOversellError as exc:
+        raise _conflict_error(error="portfolio_oversell", message=str(exc))
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise _bad_request(exc)
+    except Exception as exc:
+        raise _internal_error("Update trade event failed", exc)
 
 
 @router.post(

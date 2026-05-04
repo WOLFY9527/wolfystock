@@ -24,6 +24,8 @@ import type {
   PortfolioSnapshotResponse,
   PortfolioTradeCreateRequest,
   PortfolioTradeListResponse,
+  PortfolioTradeListItem,
+  PortfolioTradeUpdateRequest,
 } from '../types/portfolio';
 
 type SnapshotQuery = {
@@ -53,6 +55,7 @@ type EventQuery = {
 type TradeListQuery = EventQuery & {
   symbol?: string;
   side?: 'buy' | 'sell';
+  includeVoided?: boolean;
 };
 
 type CashListQuery = EventQuery & {
@@ -198,6 +201,23 @@ export const portfolioApi = {
     return toCamelCase<PortfolioDeleteResponse>(response.data);
   },
 
+  async updateTrade(tradeId: number, payload: PortfolioTradeUpdateRequest): Promise<PortfolioTradeListItem> {
+    const response = await apiClient.patch<Record<string, unknown>>(`/api/v1/portfolio/trades/${tradeId}`, {
+      account_id: payload.accountId,
+      symbol: payload.symbol,
+      trade_date: payload.tradeDate,
+      side: payload.side,
+      quantity: payload.quantity,
+      price: payload.price,
+      fee: payload.fee,
+      tax: payload.tax,
+      market: payload.market,
+      currency: payload.currency,
+      note: payload.note,
+    });
+    return toCamelCase<PortfolioTradeListItem>(response.data);
+  },
+
   async createCashLedger(payload: PortfolioCashLedgerCreateRequest): Promise<PortfolioEventCreatedResponse> {
     const response = await apiClient.post<Record<string, unknown>>('/api/v1/portfolio/cash-ledger', {
       account_id: payload.accountId,
@@ -242,6 +262,9 @@ export const portfolioApi = {
     }
     if (query.side) {
       params.side = query.side;
+    }
+    if (query.includeVoided != null) {
+      params.include_voided = String(query.includeVoided);
     }
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/trades', { params });
     return toCamelCase<PortfolioTradeListResponse>(response.data);

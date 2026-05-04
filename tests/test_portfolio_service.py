@@ -989,9 +989,187 @@ class PortfolioServiceTestCase(unittest.TestCase):
             lot_rows = session.execute(
                 select(PortfolioPositionLot).where(PortfolioPositionLot.account_id == aid)
             ).scalars().all()
-        self.assertEqual(len(trade_rows), 0)
+        self.assertEqual(len(trade_rows), 1)
+        self.assertFalse(trade_rows[0].is_active)
+        self.assertIsNotNone(trade_rows[0].voided_at)
         self.assertEqual(len(snapshot_rows), 0)
         self.assertEqual(len(lot_rows), 0)
+
+    def test_update_trade_recalculates_holdings_and_keeps_trade_active(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="us", base_currency="USD")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=5000,
+            currency="USD",
+        )
+        trade = self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("AAPL", date(2026, 1, 3), 125.0)
+
+        self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 3), cost_method="fifo")
+
+        updated = self.service.update_trade_event(
+            trade["id"],
+            quantity=5,
+            price=120,
+        )
+
+        self.assertEqual(updated["id"], trade["id"])
+        self.assertEqual(updated["quantity"], 5.0)
+        self.assertEqual(updated["price"], 120.0)
+        self.assertTrue(updated["is_active"])
+        self.assertIsNone(updated["voided_at"])
+
+        snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 3), cost_method="fifo")
+        account_snapshot = snapshot["accounts"][0]
+        self.assertEqual(len(account_snapshot["positions"]), 1)
+        self.assertAlmostEqual(account_snapshot["positions"][0]["quantity"], 5.0, places=6)
+        self.assertAlmostEqual(account_snapshot["positions"][0]["avg_cost"], 120.0, places=6)
+        self.assertAlmostEqual(account_snapshot["total_cash"], 4400.0, places=6)
+
+    def test_update_trade_can_move_symbol_and_currency_without_changing_cost_method_semantics(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="global", base_currency="USD")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=10000,
+            currency="USD",
+        )
+        trade = self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("00700", date(2026, 1, 3), 400.0)
+
+        updated = self.service.update_trade_event(
+            trade["id"],
+            symbol="00700",
+            market="hk",
+            currency="HKD",
+            quantity=20,
+            price=50,
+        )
+
+        self.assertEqual(updated["symbol"], "00700")
+        self.assertEqual(updated["market"], "hk")
+        self.assertEqual(updated["currency"], "HKD")
+
+        for method in ("fifo", "avg", "futu_diluted", "ths_pnl"):
+            snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 3), cost_method=method)
+            account_snapshot = snapshot["accounts"][0]
+            self.assertEqual([position["symbol"] for position in account_snapshot["positions"]], ["00700"])
+            self.assertAlmostEqual(account_snapshot["positions"][0]["quantity"], 20.0, places=6)
+
+    def test_delete_buy_trade_soft_void_removes_active_holding(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=1000,
+            currency="CNY",
+        )
+        trade = self.service.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="cn",
+            currency="CNY",
+        )
+        self._save_close("600519", date(2026, 1, 3), 100.0)
+
+        self.assertTrue(self.service.delete_trade_event(trade["id"]))
+
+        snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 3), cost_method="fifo")
+        self.assertEqual(snapshot["accounts"][0]["positions"], [])
+
+        with self.db.get_session() as session:
+            row = session.execute(select(PortfolioTrade).where(PortfolioTrade.id == trade["id"])).scalar_one()
+        self.assertFalse(row.is_active)
+        self.assertIsNotNone(row.voided_at)
+
+    def test_delete_sell_trade_restores_prior_quantity(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=5000,
+            currency="CNY",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="cn",
+            currency="CNY",
+        )
+        sell_trade = self.service.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=date(2026, 1, 2),
+            side="sell",
+            quantity=4,
+            price=110,
+            market="cn",
+            currency="CNY",
+        )
+        self._save_close("600519", date(2026, 1, 3), 100.0)
+
+        self.assertTrue(self.service.delete_trade_event(sell_trade["id"]))
+
+        snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 3), cost_method="fifo")
+        self.assertAlmostEqual(snapshot["accounts"][0]["positions"][0]["quantity"], 10.0, places=6)
+
+    def test_update_trade_invalid_id_returns_none(self) -> None:
+        self.assertIsNone(self.service.update_trade_event(999999, quantity=5))
+
+    def test_update_trade_rejects_invalid_quantity_and_price(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="us", base_currency="USD")
+        aid = account["id"]
+        trade = self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="us",
+            currency="USD",
+        )
+
+        with self.assertRaises(ValueError):
+            self.service.update_trade_event(trade["id"], quantity=0)
+
+        with self.assertRaises(ValueError):
+            self.service.update_trade_event(trade["id"], price=-1)
 
     def test_concurrent_sell_race_allows_only_one_write(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")

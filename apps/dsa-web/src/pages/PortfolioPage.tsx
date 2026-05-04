@@ -1,10 +1,10 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Settings, RefreshCw, Trash2 } from 'lucide-react';
+import { MoreHorizontal, PenSquare, Settings, RefreshCw, Trash2 } from 'lucide-react';
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Input, PillBadge, SectionShell, Select } from '../components/common';
+import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Drawer, Input, PillBadge, SectionShell, Select } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
   getSafariReadySurfaceClassName,
@@ -41,6 +41,7 @@ import type {
   PortfolioSide,
   PortfolioSnapshotResponse,
   PortfolioTradeListItem,
+  PortfolioTradeUpdateRequest,
 } from '../types/portfolio';
 
 const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
@@ -99,9 +100,23 @@ type ConvertedMoney = {
 } | null;
 
 type PendingDelete =
-  | { eventType: 'trade'; id: number; message: string }
+  | { eventType: 'trade'; id: number; title: string; message: string; confirmText: string }
   | { eventType: 'cash'; id: number; message: string }
   | { eventType: 'corporate'; id: number; message: string };
+
+type EditingTrade = {
+  id: number;
+  accountId: number;
+  symbol: string;
+  side: PortfolioSide;
+  quantity: string;
+  price: string;
+  tradeDate: string;
+  currency: string;
+  fee: string;
+  tax: string;
+  note: string;
+};
 
 type FxRefreshFeedback = {
   tone: 'neutral' | 'success' | 'warning';
@@ -531,6 +546,13 @@ const PortfolioPage: React.FC = () => {
   const [showEmptyFullHistory, setShowEmptyFullHistory] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [editingTrade, setEditingTrade] = useState<EditingTrade | null>(null);
+  const [tradeEditSubmitting, setTradeEditSubmitting] = useState(false);
+  const [tradeEditCurrencyManuallyEdited, setTradeEditCurrencyManuallyEdited] = useState(false);
+  const [openTradeActionMenuId, setOpenTradeActionMenuId] = useState<number | null>(null);
+  const [isNarrowViewport, setIsNarrowViewport] = useState(() => (
+    typeof window !== 'undefined' ? window.innerWidth <= 390 : false
+  ));
 
   const [tradeForm, setTradeForm] = useState({
     symbol: '',
@@ -577,6 +599,7 @@ const PortfolioPage: React.FC = () => {
   const writableAccount = selectedTradeAccount === 'all' ? undefined : writableAccounts.find((item) => item.id === selectedTradeAccount);
   const writableAccountId = writableAccount?.id;
   const writeBlocked = !writableAccountId;
+  const editingAccount = editingTrade ? activeAccounts.find((item) => item.id === editingTrade.accountId) : undefined;
   const ibkrConnection = useMemo(
     () => brokerConnections.find((item) => item.brokerType === 'ibkr') || null,
     [brokerConnections],
@@ -607,6 +630,23 @@ const PortfolioPage: React.FC = () => {
     ? '自动按标的市场推断，可手动覆盖；交易会保留该结算币种。'
     : 'Auto-inferred from the symbol market; manual override keeps the trade settlement currency.';
   const settingsPath = buildLocalizedPath('/settings', language);
+  const editTradeTitle = language === 'zh' ? '编辑交易' : 'Edit Trade';
+  const saveTradeChangesLabel = language === 'zh' ? '保存修改' : 'Save Changes';
+  const updateTradeSuccessLabel = language === 'zh' ? '交易已更新 · 持仓已刷新' : 'Trade updated · holdings refreshed';
+  const voidTradeSuccessLabel = language === 'zh' ? '交易已作废 · 持仓已刷新' : 'Trade voided · holdings refreshed';
+  const deleteTradeTitle = language === 'zh' ? '确认作废交易？' : 'Void this trade?';
+  const deleteTradeMessage = language === 'zh'
+    ? '该操作会从持仓与现金计算中排除此交易，但保留历史记录。'
+    : 'This removes the trade from holdings and cash calculations while preserving the audit trail.';
+  const voidTradeConfirmLabel = language === 'zh' ? '确认作废' : 'Confirm Void';
+  const voidedTradeLabel = language === 'zh' ? '已作废' : 'Voided';
+  const editTradeActionLabel = language === 'zh' ? '编辑' : 'Edit';
+  const deleteTradeActionLabel = language === 'zh' ? '作废' : 'Void';
+  const moreTradeActionsLabel = language === 'zh' ? '更多' : 'More';
+  const inferredEditTradeCurrency = useMemo(
+    () => inferSettlementCurrency(editingTrade?.symbol || '', editingAccount?.baseCurrency),
+    [editingAccount?.baseCurrency, editingTrade?.symbol],
+  );
 
   useEffect(() => {
     savePortfolioDisplayCurrency(displayCurrency);
@@ -636,6 +676,16 @@ const PortfolioPage: React.FC = () => {
       window.removeEventListener(PORTFOLIO_DISPLAY_CURRENCY_CHANGED_EVENT, handleDisplayCurrencyChange);
       window.removeEventListener('storage', handleStorage);
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+    const handleResize = () => setIsNarrowViewport(window.innerWidth <= 390);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const isActiveRefreshContext = (requestedViewKey: string, requestedRequestId: number) => {
@@ -748,6 +798,7 @@ const PortfolioPage: React.FC = () => {
           dateTo: eventDateTo || undefined,
           symbol: eventSymbol || undefined,
           side: eventSide || undefined,
+          includeVoided: true,
           page,
           pageSize: DEFAULT_PAGE_SIZE,
         });
@@ -838,6 +889,7 @@ const PortfolioPage: React.FC = () => {
 
   useEffect(() => {
     setEventPage(1);
+    setOpenTradeActionMenuId(null);
   }, [eventType, queryAccountId, eventDateFrom, eventDateTo, eventSymbol, eventSide, eventDirection, eventActionType]);
 
   useEffect(() => {
@@ -851,6 +903,20 @@ const PortfolioPage: React.FC = () => {
       setTradeForm((prev) => ({ ...prev, currency: inferredTradeCurrency }));
     }
   }, [inferredTradeCurrency, tradeCurrencyManuallyEdited]);
+
+  useEffect(() => {
+    if (!editingTrade || tradeEditCurrencyManuallyEdited) {
+      return;
+    }
+    if (editingTrade.currency === inferredEditTradeCurrency) {
+      return;
+    }
+    setEditingTrade((prev) => (
+      prev
+        ? { ...prev, currency: inferredEditTradeCurrency }
+        : prev
+    ));
+  }, [editingTrade, inferredEditTradeCurrency, tradeEditCurrencyManuallyEdited]);
 
   const positionRows: FlatPosition[] = useMemo(() => {
     if (!snapshot) return [];
@@ -1004,6 +1070,7 @@ const PortfolioPage: React.FC = () => {
       setWriteWarning(null);
       if (pendingDelete.eventType === 'trade') {
         await portfolioApi.deleteTrade(pendingDelete.id);
+        setTradeFeedback({ tone: 'success', text: voidTradeSuccessLabel });
       } else if (pendingDelete.eventType === 'cash') {
         await portfolioApi.deleteCashLedger(pendingDelete.id);
       } else {
@@ -1018,6 +1085,67 @@ const PortfolioPage: React.FC = () => {
       setError(getParsedApiError(err));
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  const openTradeEditor = useCallback((item: PortfolioTradeListItem) => {
+    setOpenTradeActionMenuId(null);
+    setTradeEditCurrencyManuallyEdited(false);
+    setEditingTrade({
+      id: item.id,
+      accountId: item.accountId,
+      symbol: item.symbol,
+      side: item.side,
+      quantity: String(item.quantity),
+      price: String(item.price),
+      tradeDate: item.tradeDate,
+      currency: item.currency,
+      fee: String(item.fee ?? 0),
+      tax: String(item.tax ?? 0),
+      note: item.note || '',
+    });
+  }, []);
+
+  const openTradeVoidDialog = useCallback((item: PortfolioTradeListItem) => {
+    setOpenTradeActionMenuId(null);
+    setPendingDelete({
+      eventType: 'trade',
+      id: item.id,
+      title: deleteTradeTitle,
+      message: deleteTradeMessage,
+      confirmText: voidTradeConfirmLabel,
+    });
+  }, [deleteTradeMessage, deleteTradeTitle, voidTradeConfirmLabel]);
+
+  const handleTradeEditSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingTrade || tradeEditSubmitting) {
+      return;
+    }
+    const payload: PortfolioTradeUpdateRequest = {
+      accountId: editingTrade.accountId,
+      symbol: editingTrade.symbol,
+      side: editingTrade.side,
+      quantity: Number(editingTrade.quantity),
+      price: Number(editingTrade.price),
+      tradeDate: editingTrade.tradeDate,
+      currency: editingTrade.currency,
+      fee: Number(editingTrade.fee || 0),
+      tax: Number(editingTrade.tax || 0),
+      note: editingTrade.note || undefined,
+    };
+    try {
+      setTradeEditSubmitting(true);
+      setTradeFeedback(null);
+      await portfolioApi.updateTrade(editingTrade.id, payload);
+      await refreshPortfolioData();
+      setEditingTrade(null);
+      setTradeEditCurrencyManuallyEdited(false);
+      setTradeFeedback({ tone: 'success', text: updateTradeSuccessLabel });
+    } catch (err) {
+      setError(getParsedApiError(err));
+    } finally {
+      setTradeEditSubmitting(false);
     }
   };
 
@@ -1343,6 +1471,62 @@ const PortfolioPage: React.FC = () => {
     return converted ? `≈ ${formatMoney(converted.value, displayCurrency)}` : fxUnavailableLabel;
   };
 
+  const renderTradeActions = (item: PortfolioTradeListItem, context: 'history' | 'recent') => {
+    if (item.isActive === false) {
+      return (
+        <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">
+          {voidedTradeLabel}
+        </span>
+      );
+    }
+
+    if (isNarrowViewport) {
+      const menuKey = `${context}-trade-${item.id}`;
+      const isOpen = openTradeActionMenuId === item.id;
+      return (
+        <div className="relative shrink-0">
+          <Button
+            type="button"
+            variant="ghost"
+            className={PORTFOLIO_TEXT_BUTTON_CLASS}
+            onClick={() => setOpenTradeActionMenuId((prev) => (prev === item.id ? null : item.id))}
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+            {moreTradeActionsLabel}
+          </Button>
+          {isOpen ? (
+            <div
+              data-testid={`${menuKey}-menu`}
+              className="absolute right-0 z-20 mt-2 flex min-w-[132px] flex-col gap-1 rounded-xl border border-white/10 bg-[#0f1726] p-2 shadow-2xl"
+            >
+              <Button type="button" variant="ghost" className="justify-start rounded-lg px-2 text-xs text-white/75" onClick={() => openTradeEditor(item)}>
+                <PenSquare className="h-3.5 w-3.5" aria-hidden="true" />
+                {editTradeActionLabel}
+              </Button>
+              <Button type="button" variant="ghost" className="justify-start rounded-lg px-2 text-xs text-red-300 hover:text-red-200" onClick={() => openTradeVoidDialog(item)}>
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                {deleteTradeActionLabel}
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex shrink-0 items-center gap-1">
+        <Button type="button" variant="ghost" className={PORTFOLIO_TEXT_BUTTON_CLASS} onClick={() => openTradeEditor(item)}>
+          <PenSquare className="h-3.5 w-3.5" aria-hidden="true" />
+          {editTradeActionLabel}
+        </Button>
+        <Button type="button" variant="ghost" className={`${PORTFOLIO_TEXT_BUTTON_CLASS} text-red-300 hover:text-red-200`} onClick={() => openTradeVoidDialog(item)}>
+          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+          {deleteTradeActionLabel}
+        </Button>
+      </div>
+    );
+  };
+
   const historyPanelContent = (
     <div className="flex h-full min-h-0 flex-col bg-[var(--surface-1)] lg:bg-transparent">
       <div className="flex items-center justify-between gap-3 border-b border-white/5 px-0 pb-4">
@@ -1396,13 +1580,19 @@ const PortfolioPage: React.FC = () => {
               tradeEvents.map((item) => (
                 <div key={`trade-${item.id}`} className="border-b border-white/5 px-1 py-4 transition-colors hover:bg-white/[0.03]">
                   <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-foreground">{item.symbol} <span className="text-xs text-muted-text">{formatSideLabel(item.side, language)}</span></div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 text-foreground">
+                        <span>{item.symbol}</span>
+                        <span className="text-xs text-muted-text">{formatSideLabel(item.side, language)}</span>
+                        {item.isActive === false ? (
+                          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/35">
+                            {voidedTradeLabel}
+                          </span>
+                        ) : null}
+                      </div>
                       <div className="mt-1 text-xs text-muted-text">{item.tradeDate} · {item.quantity} @ {item.price}</div>
                     </div>
-                    <Button type="button" variant="ghost" className={PORTFOLIO_DANGER_GHOST_CLASS} onClick={() => setPendingDelete({ eventType: 'trade', id: item.id, message: copy.tradeDeleteMessage(item) })} aria-label={copy.deleteConfirm} title={copy.deleteConfirm}>
-                      <Trash2 className="h-4 w-4" aria-hidden="true" />
-                    </Button>
+                    {renderTradeActions(item, 'history')}
                   </div>
                 </div>
               ))
@@ -1498,7 +1688,10 @@ const PortfolioPage: React.FC = () => {
                 <div className="truncate text-sm text-foreground">{item.symbol} <span className="text-xs text-muted-text">{formatSideLabel(item.side, language)}</span></div>
                 <div className="mt-1 truncate text-xs text-muted-text">{item.tradeDate} · {item.quantity} @ {item.price}</div>
               </div>
-              <span className="shrink-0 font-mono text-xs text-white/45">{item.currency}</span>
+              <div className="flex shrink-0 items-start gap-2">
+                <span className="font-mono text-xs text-white/45">{item.currency}</span>
+                {renderTradeActions(item, 'recent')}
+              </div>
             </div>
           ))}
           {cashEvents.slice(0, Math.max(0, 5 - tradeEvents.length)).map((item) => (
@@ -2169,11 +2362,152 @@ const PortfolioPage: React.FC = () => {
         </section>
       </div>
 
+      <Drawer
+        isOpen={Boolean(editingTrade)}
+        onClose={() => {
+          if (tradeEditSubmitting) {
+            return;
+          }
+          setEditingTrade(null);
+          setTradeEditCurrencyManuallyEdited(false);
+        }}
+        title={editTradeTitle}
+        width="max-w-[min(96vw,38rem)]"
+        bodyClassName="gap-4"
+      >
+        {editingTrade ? (
+          <form className="flex flex-col gap-4" onSubmit={handleTradeEditSubmit}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Select
+                label="ACCOUNT"
+                labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                className={PORTFOLIO_SELECT_CLASS}
+                value={String(editingTrade.accountId)}
+                onChange={(value) => setEditingTrade((prev) => (prev ? { ...prev, accountId: Number(value) } : prev))}
+                options={writableAccounts.map((account) => ({ value: String(account.id), label: account.name }))}
+              />
+              <Input
+                label="SYMBOL"
+                labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                className={PORTFOLIO_INPUT_CLASS}
+                value={editingTrade.symbol}
+                onChange={(e) => setEditingTrade((prev) => (
+                  prev
+                    ? {
+                      ...prev,
+                      symbol: e.target.value,
+                      currency: tradeEditCurrencyManuallyEdited
+                        ? prev.currency
+                        : inferSettlementCurrency(e.target.value, editingAccount?.baseCurrency),
+                    }
+                    : prev
+                ))}
+                required
+              />
+              <Select
+                label="SIDE"
+                labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                className={PORTFOLIO_SELECT_CLASS}
+                value={editingTrade.side}
+                onChange={(value) => setEditingTrade((prev) => (prev ? { ...prev, side: value as PortfolioSide } : prev))}
+                options={[{ value: 'buy', label: copy.buy }, { value: 'sell', label: copy.sell }]}
+              />
+              <Input
+                label="TRADE DATE"
+                labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                className={PORTFOLIO_INPUT_CLASS}
+                type="date"
+                value={editingTrade.tradeDate}
+                onChange={(e) => setEditingTrade((prev) => (prev ? { ...prev, tradeDate: e.target.value } : prev))}
+                required
+              />
+              <Input
+                label="QUANTITY"
+                labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                className={PORTFOLIO_INPUT_CLASS}
+                type="number"
+                min="0"
+                step="0.0001"
+                value={editingTrade.quantity}
+                onChange={(e) => setEditingTrade((prev) => (prev ? { ...prev, quantity: e.target.value } : prev))}
+                required
+              />
+              <Input
+                label="PRICE"
+                labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                className={PORTFOLIO_INPUT_CLASS}
+                type="number"
+                min="0"
+                step="0.0001"
+                value={editingTrade.price}
+                onChange={(e) => setEditingTrade((prev) => (prev ? { ...prev, price: e.target.value } : prev))}
+                required
+              />
+              <Select
+                label={language === 'zh' ? '结算货币' : 'Settlement Currency'}
+                labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                className={PORTFOLIO_SELECT_CLASS}
+                value={editingTrade.currency}
+                onChange={(value) => {
+                  setTradeEditCurrencyManuallyEdited(true);
+                  setEditingTrade((prev) => (prev ? { ...prev, currency: value } : prev));
+                }}
+                options={FX_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
+              />
+              <Input
+                label="FEE"
+                labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                className={PORTFOLIO_INPUT_CLASS}
+                type="number"
+                min="0"
+                step="0.0001"
+                value={editingTrade.fee}
+                onChange={(e) => setEditingTrade((prev) => (prev ? { ...prev, fee: e.target.value } : prev))}
+              />
+              <Input
+                label="TAX"
+                labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                className={PORTFOLIO_INPUT_CLASS}
+                type="number"
+                min="0"
+                step="0.0001"
+                value={editingTrade.tax}
+                onChange={(e) => setEditingTrade((prev) => (prev ? { ...prev, tax: e.target.value } : prev))}
+              />
+            </div>
+            <Input
+              label="NOTE"
+              labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+              className={PORTFOLIO_INPUT_CLASS}
+              value={editingTrade.note}
+              onChange={(e) => setEditingTrade((prev) => (prev ? { ...prev, note: e.target.value } : prev))}
+            />
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                className={PORTFOLIO_TEXT_BUTTON_CLASS}
+                onClick={() => {
+                  setEditingTrade(null);
+                  setTradeEditCurrencyManuallyEdited(false);
+                }}
+                disabled={tradeEditSubmitting}
+              >
+                {copy.cancel}
+              </Button>
+              <Button type="submit" variant="primary" className={PORTFOLIO_PRIMARY_BUTTON_CLASS} disabled={tradeEditSubmitting}>
+                {saveTradeChangesLabel}
+              </Button>
+            </div>
+          </form>
+        ) : null}
+      </Drawer>
+
       <ConfirmDialog
         isOpen={Boolean(pendingDelete)}
-        title={copy.deleteTitle}
+        title={pendingDelete?.eventType === 'trade' ? pendingDelete.title : copy.deleteTitle}
         message={pendingDelete?.message || copy.deleteMessage}
-        confirmText={deleteLoading ? copy.deleteInProgress : copy.deleteConfirm}
+        confirmText={deleteLoading ? copy.deleteInProgress : (pendingDelete?.eventType === 'trade' ? pendingDelete.confirmText : copy.deleteConfirm)}
         cancelText={copy.cancel}
         isDanger
         onConfirm={() => void handleConfirmDelete()}

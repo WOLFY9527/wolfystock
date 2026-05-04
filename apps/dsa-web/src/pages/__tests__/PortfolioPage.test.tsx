@@ -23,6 +23,7 @@ const {
   listCashLedger,
   listCorporateActions,
   createTrade,
+  updateTrade,
   deleteTrade,
   createCashLedger,
   deleteCashLedger,
@@ -45,6 +46,7 @@ const {
   listCashLedger: vi.fn(),
   listCorporateActions: vi.fn(),
   createTrade: vi.fn(),
+  updateTrade: vi.fn(),
   deleteTrade: vi.fn(),
   createCashLedger: vi.fn(),
   deleteCashLedger: vi.fn(),
@@ -70,6 +72,7 @@ vi.mock('../../api/portfolio', () => ({
     listCashLedger,
     listCorporateActions,
     createTrade,
+    updateTrade,
     deleteTrade,
     createCashLedger,
     deleteCashLedger,
@@ -361,6 +364,24 @@ describe('PortfolioPage FX refresh', () => {
     listCashLedger.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 });
     listCorporateActions.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 });
     createTrade.mockResolvedValue({ id: 1 });
+    updateTrade.mockResolvedValue({
+      id: 1,
+      accountId: 1,
+      symbol: 'AAPL',
+      market: 'us',
+      currency: 'USD',
+      tradeDate: '2026-03-18',
+      side: 'buy',
+      quantity: 2,
+      price: 101,
+      fee: 0,
+      tax: 0,
+      note: 'seed',
+      isActive: true,
+      voidedAt: null,
+      createdAt: '2026-03-18T00:00:00Z',
+      updatedAt: '2026-03-19T00:00:00Z',
+    });
     deleteTrade.mockResolvedValue({ deleted: 1 });
     createCashLedger.mockResolvedValue({ id: 1 });
     deleteCashLedger.mockResolvedValue({ deleted: 1 });
@@ -1462,6 +1483,252 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(historyPanel).getByRole('button', { name: translate('zh', 'portfolio.cashLedger') })).toBeInTheDocument();
     expect(within(historyPanel).getByRole('button', { name: translate('zh', 'portfolio.corporateLedger') })).toBeInTheDocument();
     expect(within(historyPanel).getByRole('button', { name: translate('zh', 'portfolio.refreshLedger') })).toBeInTheDocument();
+  });
+
+  it('renders trade history actions while non-trade ledgers do not expose edit actions', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true }));
+    listTrades.mockResolvedValueOnce({
+      items: [
+        {
+          id: 7,
+          accountId: 1,
+          symbol: 'AAPL',
+          market: 'us',
+          tradeDate: '2026-03-18',
+          side: 'buy',
+          quantity: 1,
+          price: 100,
+          fee: 0,
+          tax: 0,
+          currency: 'USD',
+          note: 'seed',
+          isActive: true,
+          voidedAt: null,
+          createdAt: '2026-03-18T00:00:00Z',
+          updatedAt: '2026-03-18T00:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+    listCashLedger.mockResolvedValueOnce({
+      items: [
+        { id: 3, accountId: 1, eventDate: '2026-03-17', direction: 'in', amount: 1000, currency: 'USD', note: 'seed', createdAt: '2026-03-17T00:00:00Z' },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const historyPanel = screen.getByTestId('portfolio-history-full');
+    expect(within(historyPanel).getByRole('button', { name: '编辑' })).toBeInTheDocument();
+    expect(within(historyPanel).getByRole('button', { name: '作废' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: translate('zh', 'portfolio.cashLedger') })[0]);
+    await waitFor(() => expect(listCashLedger).toHaveBeenCalled());
+    expect(within(historyPanel).queryByRole('button', { name: '编辑' })).not.toBeInTheDocument();
+  });
+
+  it('opens the edit drawer with prefilled trade values and updates the trade successfully', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true }));
+    listTrades.mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          accountId: 1,
+          symbol: 'AAPL',
+          market: 'us',
+          tradeDate: '2026-03-18',
+          side: 'buy',
+          quantity: 1,
+          price: 100,
+          fee: 0,
+          tax: 0,
+          currency: 'USD',
+          note: 'seed',
+          isActive: true,
+          voidedAt: null,
+          createdAt: '2026-03-18T00:00:00Z',
+          updatedAt: '2026-03-18T00:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByDisplayValue('AAPL')).toBeInTheDocument();
+    expect(within(dialog).getByDisplayValue('2026-03-18')).toBeInTheDocument();
+    expect(within(dialog).getByDisplayValue('USD')).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText('QUANTITY'), { target: { value: '2' } });
+    fireEvent.change(within(dialog).getByLabelText('PRICE'), { target: { value: '101' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '保存修改' }));
+
+    await waitFor(() => expect(updateTrade).toHaveBeenCalledWith(7, expect.objectContaining({
+      quantity: 2,
+      price: 101,
+    })));
+    await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('交易已更新 · 持仓已刷新')).toBeInTheDocument();
+  });
+
+  it('keeps the edit drawer open when trade update fails', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true }));
+    listTrades.mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          accountId: 1,
+          symbol: 'AAPL',
+          market: 'us',
+          tradeDate: '2026-03-18',
+          side: 'buy',
+          quantity: 1,
+          price: 100,
+          fee: 0,
+          tax: 0,
+          currency: 'USD',
+          note: 'seed',
+          isActive: true,
+          voidedAt: null,
+          createdAt: '2026-03-18T00:00:00Z',
+          updatedAt: '2026-03-18T00:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+    updateTrade.mockRejectedValueOnce(
+      createApiError(
+        createParsedApiError({
+          title: '更新失败',
+          message: '无法保存修改',
+        }),
+      ),
+    );
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('QUANTITY'), { target: { value: '2' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '保存修改' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('更新失败');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).getByDisplayValue('2')).toBeInTheDocument();
+  });
+
+  it('opens delete confirmation, refreshes after success, and reports delete failures', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true }));
+    listTrades.mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          accountId: 1,
+          symbol: 'AAPL',
+          market: 'us',
+          tradeDate: '2026-03-18',
+          side: 'buy',
+          quantity: 1,
+          price: 100,
+          fee: 0,
+          tax: 0,
+          currency: 'USD',
+          note: 'seed',
+          isActive: true,
+          voidedAt: null,
+          createdAt: '2026-03-18T00:00:00Z',
+          updatedAt: '2026-03-18T00:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.click(screen.getByRole('button', { name: '作废' }));
+    expect(await screen.findByText('确认作废交易？')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确认作废' }));
+
+    await waitFor(() => expect(deleteTrade).toHaveBeenCalledWith(7));
+    await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('交易已作废 · 持仓已刷新')).toBeInTheDocument();
+
+    deleteTrade.mockRejectedValueOnce(
+      createApiError(
+        createParsedApiError({
+          title: '作废失败',
+          message: '该交易无法作废',
+        }),
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '作废' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认作废' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('作废失败');
+  });
+
+  it('exposes compact recent-activity actions and mobile more-menu edit path', async () => {
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: false }));
+    listTrades.mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          accountId: 1,
+          symbol: 'AAPL',
+          market: 'us',
+          tradeDate: '2026-03-18',
+          side: 'buy',
+          quantity: 1,
+          price: 100,
+          fee: 0,
+          tax: 0,
+          currency: 'USD',
+          note: 'seed',
+          isActive: true,
+          voidedAt: null,
+          createdAt: '2026-03-18T00:00:00Z',
+          updatedAt: '2026-03-18T00:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const recentActivity = screen.getByTestId('portfolio-recent-activity');
+    expect(within(recentActivity).getByRole('button', { name: '更多' })).toBeInTheDocument();
+    fireEvent.click(within(recentActivity).getByRole('button', { name: '更多' }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '保存修改' })).toBeInTheDocument();
   });
 
   it('switches order-history event type filters inside the drawer without restoring the old attribution surface', async () => {

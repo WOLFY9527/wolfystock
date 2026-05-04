@@ -688,6 +688,107 @@ class PortfolioService:
                 **self._owner_kwargs(),
             )
 
+    def update_trade_event(
+        self,
+        trade_id: int,
+        *,
+        account_id: Optional[int] = None,
+        symbol: Optional[str] = None,
+        trade_date: Optional[date] = None,
+        side: Optional[str] = None,
+        quantity: Optional[float] = None,
+        price: Optional[float] = None,
+        fee: Optional[float] = None,
+        tax: Optional[float] = None,
+        market: Optional[str] = None,
+        currency: Optional[str] = None,
+        note: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        if all(
+            value is None
+            for value in (account_id, symbol, trade_date, side, quantity, price, fee, tax, market, currency, note)
+        ):
+            raise ValueError("No fields provided for update")
+        with self.repo.portfolio_write_session() as session:
+            row = self.repo.get_trade_in_session(
+                session=session,
+                trade_id=trade_id,
+                include_voided=False,
+                **self._owner_kwargs(),
+            )
+            if row is None:
+                return None
+
+            current_account_id = int(row.account_id)
+            next_account_id = int(account_id) if account_id is not None else current_account_id
+            account = self._require_active_account_in_session(session=session, account_id=next_account_id)
+
+            side_norm = (side or row.side or "").strip().lower()
+            if side_norm not in VALID_SIDES:
+                raise ValueError("side must be buy or sell")
+
+            quantity_value = float(row.quantity if quantity is None else quantity)
+            if quantity_value <= 0:
+                raise ValueError("quantity must be > 0")
+
+            price_value = float(row.price if price is None else price)
+            if price_value <= 0:
+                raise ValueError("price must be > 0")
+
+            fee_value = float(row.fee if fee is None else fee)
+            tax_value = float(row.tax if tax is None else tax)
+            if fee_value < 0 or tax_value < 0:
+                raise ValueError("fee and tax must be >= 0")
+
+            symbol_norm = canonical_stock_code(symbol if symbol is not None else row.symbol)
+            if not symbol_norm:
+                raise ValueError("symbol is required")
+
+            trade_date_value = trade_date or row.trade_date
+            market_hint = market if market is not None else row.market
+            if str(account.market or "").strip().lower() == "global" and market is None and symbol is not None:
+                market_hint = self._infer_market_from_symbol(symbol_norm)
+            market_norm = self._normalize_event_market(market_hint or account.market)
+            currency_norm = self._normalize_currency(currency or row.currency or self._default_currency_for_market(market_norm))
+
+            original_trade_date = row.trade_date
+            row.account_id = next_account_id
+            row.symbol = symbol_norm
+            row.trade_date = trade_date_value
+            row.side = side_norm
+            row.quantity = quantity_value
+            row.price = price_value
+            row.fee = fee_value
+            row.tax = tax_value
+            row.market = market_norm
+            row.currency = currency_norm
+            if note is not None:
+                row.note = (note or "").strip() or None
+            row.updated_at = datetime.now()
+
+            self.repo._invalidate_account_cache_in_session(
+                session=session,
+                account_id=current_account_id,
+                from_date=min(original_trade_date, trade_date_value),
+            )
+            self.repo._mark_phase_f_account_sync_in_session(session=session, account_id=current_account_id)
+            if next_account_id != current_account_id:
+                self.repo._invalidate_account_cache_in_session(
+                    session=session,
+                    account_id=next_account_id,
+                    from_date=trade_date_value,
+                )
+                self.repo._mark_phase_f_account_sync_in_session(session=session, account_id=next_account_id)
+
+            session.flush()
+            self._validate_trade_sequence_in_session(session=session, account_id=current_account_id)
+            if next_account_id != current_account_id:
+                self._validate_trade_sequence_in_session(session=session, account_id=next_account_id)
+            else:
+                self._validate_trade_sequence_in_session(session=session, account_id=next_account_id)
+            session.refresh(row)
+            return self._trade_row_to_dict(row)
+
     def delete_cash_ledger_event(self, entry_id: int) -> bool:
         with self.repo.portfolio_write_session() as session:
             return self.repo.delete_cash_ledger_in_session(
@@ -714,6 +815,7 @@ class PortfolioService:
         side: Optional[str] = None,
         page: int = 1,
         page_size: int = 20,
+        include_voided: bool = False,
     ) -> Dict[str, Any]:
         if account_id is not None:
             self._require_active_account(account_id)
@@ -741,6 +843,7 @@ class PortfolioService:
             side=side_norm,
             page=page,
             page_size=page_size,
+            include_voided=include_voided,
             **self._owner_kwargs(),
         )
         result = {
@@ -749,7 +852,7 @@ class PortfolioService:
             "page": page,
             "page_size": page_size,
         }
-        if self._phase_f_trade_list_comparison_enabled():
+        if self._phase_f_trade_list_comparison_enabled() and not include_voided:
             self._maybe_run_phase_f_trade_list_comparison(
                 request_context={
                     "account_id": int(account_id) if account_id is not None else None,
@@ -2683,6 +2786,72 @@ class PortfolioService:
 
         return quantity_held
 
+    def _validate_trade_sequence_in_session(self, *, session: Any, account_id: int) -> None:
+        trades = self.repo.list_trades_in_session(
+            session=session,
+            account_id=account_id,
+            as_of=date.max,
+        )
+        corporate_actions = self.repo.list_corporate_actions_in_session(
+            session=session,
+            account_id=account_id,
+            as_of=date.max,
+        )
+
+        events = []
+        for row in corporate_actions:
+            events.append(("corp", row.effective_date, row.id, row))
+        for row in trades:
+            events.append(("trade", row.trade_date, row.id, row))
+
+        event_priority = {"corp": 1, "trade": 2}
+        events.sort(key=lambda item: (item[1], event_priority[item[0]], item[2]))
+
+        quantity_held: Dict[Tuple[str, str, str], float] = defaultdict(float)
+        for event_type, event_date, _, event in events:
+            if event_type == "corp":
+                action_type = (event.action_type or "").strip().lower()
+                if action_type != "split_adjustment":
+                    continue
+                split_ratio = float(event.split_ratio or 0.0)
+                if split_ratio <= 0:
+                    raise ValueError(f"Invalid split_ratio for {event.symbol}")
+                if abs(split_ratio - 1.0) <= EPS:
+                    continue
+                key = (
+                    canonical_stock_code(event.symbol),
+                    self._normalize_event_market(event.market),
+                    self._normalize_currency(event.currency),
+                )
+                quantity_held[key] *= split_ratio
+                continue
+
+            key = (
+                canonical_stock_code(event.symbol),
+                self._normalize_event_market(event.market),
+                self._normalize_currency(event.currency),
+            )
+            qty = float(event.quantity or 0.0)
+            if qty <= 0:
+                raise ValueError(f"Invalid trade quantity for {event.symbol}")
+            side = (event.side or "").strip().lower()
+            if side == "buy":
+                quantity_held[key] += qty
+                continue
+            if side != "sell":
+                raise ValueError(f"Unsupported trade side: {event.side}")
+            available_quantity = quantity_held[key]
+            if available_quantity + EPS < qty:
+                raise PortfolioOversellError(
+                    symbol=key[0],
+                    trade_date=event_date,
+                    requested_quantity=qty,
+                    available_quantity=available_quantity,
+                )
+            quantity_held[key] -= qty
+            if quantity_held[key] <= EPS:
+                quantity_held[key] = 0.0
+
     def _replay_account(self, *, account: Any, as_of_date: date, cost_method: str) -> Dict[str, Any]:
         trades = self.repo.list_trades(account.id, as_of=as_of_date)
         cash_ledger = self.repo.list_cash_ledger(account.id, as_of=as_of_date)
@@ -3728,7 +3897,10 @@ class PortfolioService:
             "fee": float(row.fee),
             "tax": float(row.tax),
             "note": row.note,
+            "is_active": bool(getattr(row, "is_active", True)),
+            "voided_at": row.voided_at.isoformat() if getattr(row, "voided_at", None) else None,
             "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if getattr(row, "updated_at", None) else None,
         }
 
     @staticmethod
