@@ -998,13 +998,13 @@ const ChatPage: React.FC = () => {
         symbol,
         market: market === 'unknown' ? 'us' : market.toLowerCase(),
         source: 'scanner',
-        notes: 'From Stock Chat smart route',
+        notes: language === 'zh' ? '来自问股智能路由' : 'From Stock Chat smart route',
       });
       setWatchlistAction({ symbol, type: 'success', message: `${symbol} 已加入观察列表` });
     } catch {
       setWatchlistAction({ symbol, type: 'error', message: `${symbol} 加入观察列表失败` });
     }
-  }, []);
+  }, [language]);
 
   const toggleThinking = (msgId: string) => {
     setExpandedThinking((prev) => {

@@ -402,7 +402,7 @@ describe('WatchlistPage', () => {
     expect(within(row).getByText('排名 #1')).toBeInTheDocument();
     expect(within(row).getByText('Latest scanner score.')).toBeInTheDocument();
     expect(within(row).getAllByText('今日').length).toBeGreaterThan(0);
-    expect(within(row).getByText(/HIST \+3.2% · HIT 56%/)).toBeInTheDocument();
+    expect(within(row).getByText(/历史 \+3.2% · 命中 56%/)).toBeInTheDocument();
     expect(within(row).getByText('已回测')).toBeInTheDocument();
     expect(within(row).getByText(/收益 \+24.6% · 回撤 -8.2% · Sharpe 1.34 · 交易 6/)).toBeInTheDocument();
     expect(within(row).getByRole('link', { name: /结果 33/ })).toHaveAttribute('href', '/zh/backtest/results/33');

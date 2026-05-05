@@ -581,6 +581,8 @@ describe('ChatPage', () => {
   });
 
   it('shows evidence status safely and can add a detected symbol to watchlist', async () => {
+    mockListWatchlistItems.mockResolvedValueOnce({ items: [] });
+
     render(
       <MemoryRouter initialEntries={['/chat']}>
         <ShellRailHarness>
@@ -594,10 +596,19 @@ describe('ChatPage', () => {
     fireEvent.change(screen.getByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
       target: { value: 'ORCL 还能买吗？' },
     });
-    await waitFor(() => expect(screen.getAllByRole('button', { name: '已在观察列表 ORCL' }).length).toBeGreaterThan(0));
-    fireEvent.click(screen.getAllByRole('button', { name: '已在观察列表 ORCL' })[0]);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '加入观察列表 ORCL' }).length).toBeGreaterThan(0));
+    fireEvent.click(screen.getAllByRole('button', { name: '加入观察列表 ORCL' })[0]);
 
-    expect(mockAddWatchlistItem).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mockAddWatchlistItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          symbol: 'ORCL',
+          market: 'us',
+          source: 'scanner',
+          notes: '来自问股智能路由',
+        }),
+      );
+    });
   });
 
   it('renders the compact mobile console content without desktop assumptions', async () => {

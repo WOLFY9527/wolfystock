@@ -10,6 +10,8 @@ import {
 } from '../../utils/portfolioPreferences';
 import PortfolioPage from '../PortfolioPage';
 
+const p = (key: string) => translate('zh', `portfolio.${key}`);
+
 const {
   getAccounts,
   getSnapshot,
@@ -930,9 +932,9 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.change(screen.getByLabelText('SYMBOL'), { target: { value: 'AAPL' } });
-    fireEvent.change(screen.getByLabelText('QUANTITY'), { target: { value: '10' } });
-    fireEvent.change(screen.getByLabelText('PRICE'), { target: { value: '160' } });
+    fireEvent.change(screen.getByLabelText(p('stockCode')), { target: { value: 'AAPL' } });
+    fireEvent.change(screen.getByLabelText(p('quantity')), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText(p('price')), { target: { value: '160' } });
 
     const snapshotCallsBeforeSubmit = getSnapshot.mock.calls.length;
     const tradeCallsBeforeSubmit = listTrades.mock.calls.length;
@@ -951,7 +953,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitFor(() => expect(getSnapshot.mock.calls.length).toBeGreaterThan(snapshotCallsBeforeSubmit));
     await waitFor(() => expect(listTrades.mock.calls.length).toBeGreaterThan(tradeCallsBeforeSubmit));
     expect(await screen.findByTestId('portfolio-trade-feedback')).toHaveTextContent('AAPL 买入已记录 · 已刷新持仓');
-    expect(screen.getByLabelText('SYMBOL')).toHaveValue('');
+    expect(screen.getByLabelText(p('stockCode'))).toHaveValue('');
   });
 
   it('infers settlement currency from US, HK, A-share, and crypto symbols with manual override', async () => {
@@ -965,8 +967,8 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const symbolInput = screen.getByLabelText('SYMBOL');
-    const settlementSelect = screen.getByLabelText('结算货币') as HTMLSelectElement;
+    const symbolInput = screen.getByLabelText(p('stockCode'));
+    const settlementSelect = screen.getByLabelText(p('currency')) as HTMLSelectElement;
 
     for (const symbol of ['AAPL', 'NVDA', 'ORCL', 'WULF']) {
       fireEvent.change(symbolInput, { target: { value: symbol } });
@@ -1005,13 +1007,13 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.change(screen.getByLabelText('SYMBOL'), { target: { value: 'AAPL' } });
-    fireEvent.change(screen.getByLabelText('QUANTITY'), { target: { value: '10' } });
-    fireEvent.change(screen.getByLabelText('PRICE'), { target: { value: '160' } });
+    fireEvent.change(screen.getByLabelText(p('stockCode')), { target: { value: 'AAPL' } });
+    fireEvent.change(screen.getByLabelText(p('quantity')), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText(p('price')), { target: { value: '160' } });
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') }));
 
     expect(await screen.findByTestId('portfolio-trade-feedback')).toHaveTextContent('余额不足');
-    expect(screen.getByLabelText('SYMBOL')).toHaveValue('AAPL');
+    expect(screen.getByLabelText(p('stockCode'))).toHaveValue('AAPL');
   });
 
   it('switches left tabs between trade, account, sync, and fx surfaces', async () => {
@@ -1709,7 +1711,16 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.manualCash'))).not.toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.manualCorporate'))).not.toBeInTheDocument();
-    expect(screen.getByLabelText('SYMBOL')).toHaveClass('rounded-lg');
+    expect(screen.getByLabelText(p('stockCode'))).toHaveClass('rounded-lg');
+    expect(screen.getByLabelText(p('tradeDate'))).toBeInTheDocument();
+    expect(screen.getByLabelText(p('sideLabel'))).toBeInTheDocument();
+    expect(screen.getByLabelText(p('quantity'))).toBeInTheDocument();
+    expect(screen.getByLabelText(p('price'))).toBeInTheDocument();
+    expect(screen.getByLabelText(p('currency'))).toBeInTheDocument();
+    expect(screen.getByLabelText(p('feeOptional'))).toBeInTheDocument();
+    expect(screen.getByLabelText(p('taxOptional'))).toBeInTheDocument();
+    expect(screen.getByLabelText(p('reference'))).toBeInTheDocument();
+    expect(screen.getByLabelText(p('note'))).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '资金划转' }));
     expect(screen.getByText(translate('zh', 'portfolio.manualCash'))).toBeInTheDocument();
@@ -1727,14 +1738,22 @@ describe('PortfolioPage FX refresh', () => {
     expect(cashCurrencySelect.tagName).toBe('SELECT');
     expect(cashCurrencySelect.className).toContain('select-surface');
 
-    const amountInput = screen.getByLabelText('AMOUNT');
+    const amountInput = screen.getByLabelText(p('amount'));
     expect(amountInput.className).toContain('input-surface');
     expect(amountInput.className).toContain('rounded-lg');
+    expect(screen.getByLabelText(p('eventDate'))).toBeInTheDocument();
+    expect(screen.getByLabelText(p('direction'))).toBeInTheDocument();
+    expect(screen.getByLabelText(p('currency'))).toBeInTheDocument();
+    expect(screen.getByLabelText(p('note'))).toBeInTheDocument();
 
     fireEvent.click(within(screen.getByTestId('portfolio-trade-type-switcher')).getByRole('button', { name: '公司行为' }));
     expect(screen.getByText(translate('zh', 'portfolio.manualCorporate'))).toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.manualTrade'))).not.toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.manualCash'))).not.toBeInTheDocument();
+    expect(screen.getByLabelText(p('effectiveDate'))).toBeInTheDocument();
+    expect(screen.getByLabelText(p('actionType'))).toBeInTheDocument();
+    expect(screen.getByLabelText(p('stockCode'))).toBeInTheDocument();
+    expect(screen.getByLabelText(p('note'))).toBeInTheDocument();
   });
 
   it('renders the full-width order history panel and shows event filters', async () => {
@@ -1841,9 +1860,17 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(dialog).getByDisplayValue('AAPL')).toBeInTheDocument();
     expect(within(dialog).getByDisplayValue('2026-03-18')).toBeInTheDocument();
     expect(within(dialog).getByDisplayValue('USD')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(p('tradeDate'))).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(p('sideLabel'))).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(p('quantity'))).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(p('price'))).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(p('currency'))).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(p('feeOptional'))).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(p('taxOptional'))).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(p('note'))).toBeInTheDocument();
 
-    fireEvent.change(within(dialog).getByLabelText('QUANTITY'), { target: { value: '2' } });
-    fireEvent.change(within(dialog).getByLabelText('PRICE'), { target: { value: '101' } });
+    fireEvent.change(within(dialog).getByLabelText(p('quantity')), { target: { value: '2' } });
+    fireEvent.change(within(dialog).getByLabelText(p('price')), { target: { value: '101' } });
     fireEvent.click(within(dialog).getByRole('button', { name: '保存修改' }));
 
     await waitFor(() => expect(updateTrade).toHaveBeenCalledWith(7, expect.objectContaining({
@@ -1896,7 +1923,7 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
     const dialog = await screen.findByRole('dialog');
-    fireEvent.change(within(dialog).getByLabelText('QUANTITY'), { target: { value: '2' } });
+    fireEvent.change(within(dialog).getByLabelText(p('quantity')), { target: { value: '2' } });
     fireEvent.click(within(dialog).getByRole('button', { name: '保存修改' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('更新失败');

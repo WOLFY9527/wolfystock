@@ -294,6 +294,8 @@ function getCopy(language: 'zh' | 'en') {
       staleCoverage: 'Stale intelligence',
       failureCoverage: 'Failed / no data',
       latestUpdate: 'Latest update',
+      historyPrefix: 'HIST',
+      hitPrefix: 'HIT',
       search: 'Search',
       searchPlaceholder: 'Symbol or name',
       market: 'Market',
@@ -379,6 +381,8 @@ function getCopy(language: 'zh' | 'en') {
     staleCoverage: '情报过期',
     failureCoverage: '失败 / 无数据',
     latestUpdate: '最近更新时间',
+    historyPrefix: '历史',
+    hitPrefix: '命中',
     search: '搜索',
     searchPlaceholder: '代码或名称',
     market: '市场',
@@ -1216,7 +1220,7 @@ const WatchlistPage: React.FC = () => {
                                 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]'
                                 : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'
                             }`}>
-                              HIST {formatPct(avgForward)} · HIT {typeof hitRate === 'number' ? `${Math.round(hitRate * 100)}%` : '--'}
+                              {copy.historyPrefix} {formatPct(avgForward)} · {copy.hitPrefix} {typeof hitRate === 'number' ? `${Math.round(hitRate * 100)}%` : '--'}
                             </Badge>
                           ) : null}
                           <StatusBadge status={backtestStatus} label={backtestStatusLabel} variant="soft" size="sm" />

@@ -958,8 +958,8 @@ describe('BacktestPage', () => {
     expect(await screen.findByDisplayValue('MSFT')).toBeInTheDocument();
     expect(screen.getByText(/来自扫描器|From scanner/i)).toBeInTheDocument();
     expect(screen.getAllByText(/MSFT/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Run #42/i)).toBeInTheDocument();
-    expect(screen.getByText(/Rank #1/i)).toBeInTheDocument();
+    expect(screen.getByText(/扫描批次 #42/)).toBeInTheDocument();
+    expect(screen.getByText(/排名 #1/)).toBeInTheDocument();
   });
 
   it('ignores invalid scanner query params without crashing', async () => {

@@ -309,23 +309,33 @@ function getPortfolioCopy(
     manualAdjustments: t('portfolio.manualAdjustments'),
     manualTrade: t('portfolio.manualTrade'),
     symbolPlaceholder: t('portfolio.symbolPlaceholder'),
+    tradeDate: t('portfolio.tradeDate'),
+    sideLabel: t('portfolio.sideLabel'),
     buy: t('portfolio.buy'),
     sell: t('portfolio.sell'),
     quantity: t('portfolio.quantity'),
     price: t('portfolio.price'),
     feeOptional: t('portfolio.feeOptional'),
     taxOptional: t('portfolio.taxOptional'),
+    optional: t('portfolio.optional'),
+    reference: t('portfolio.reference'),
+    note: t('portfolio.note'),
     submitTrade: t('portfolio.submitTrade'),
     manualCash: t('portfolio.manualCash'),
+    eventDate: t('portfolio.eventDate'),
+    direction: t('portfolio.direction'),
     cashIn: t('portfolio.cashIn'),
     cashOut: t('portfolio.cashOut'),
     amount: t('portfolio.amount'),
     currencyOptional: (currency: string) => t('portfolio.currencyOptional', {
       currency: currency || t('portfolio.accountBaseCurrencyFallback'),
     }),
+    currency: t('portfolio.currency'),
     submitCash: t('portfolio.submitCash'),
     manualCorporate: t('portfolio.manualCorporate'),
     stockCode: t('portfolio.stockCode'),
+    effectiveDate: t('portfolio.effectiveDate'),
+    actionType: t('portfolio.actionType'),
     cashDividend: t('portfolio.cashDividend'),
     splitAdjustment: t('portfolio.splitAdjustment'),
     dividendPerShare: t('portfolio.dividendPerShare'),
@@ -361,8 +371,8 @@ function getPortfolioCopy(
       actionLabel: formatCorporateActionLabel(item.actionType, language),
       symbol: item.symbol,
     }),
-    tradeUidPlaceholder: language === 'en' ? 'Trade reference (optional)' : '交易引用 (可选)',
-    notePlaceholder: language === 'en' ? 'Note (optional)' : '备注 (可选)',
+    tradeUidPlaceholder: language === 'en' ? 'Trade reference (optional)' : '交易引用（可选）',
+    notePlaceholder: language === 'en' ? 'Note (optional)' : '备注（可选）',
   };
 
   return copy;
@@ -2453,11 +2463,11 @@ const PortfolioPage: React.FC = () => {
                       <form onSubmit={handleTradeSubmit}>
                         <div className={PORTFOLIO_FORM_GRID_CLASS}>
                           <Input
-                            label="SYMBOL"
+                            label={copy.stockCode}
                             labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                             containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS}
                             className={PORTFOLIO_INPUT_CLASS}
-                            placeholder="AAPL"
+                            placeholder={copy.symbolPlaceholder}
                             value={tradeForm.symbol}
                             onChange={(e) => {
                               const symbol = e.target.value;
@@ -2471,10 +2481,10 @@ const PortfolioPage: React.FC = () => {
                             }}
                             required
                           />
-                          <Input label="TRADE DATE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
-                          <Select label="SIDE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side} onChange={(value) => setTradeForm((prev) => ({ ...prev, side: value as PortfolioSide }))} options={[{ value: 'buy', label: copy.buy }, { value: 'sell', label: copy.sell }]} />
+                          <Input label={copy.tradeDate} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
+                          <Select label={copy.sideLabel} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={tradeForm.side} onChange={(value) => setTradeForm((prev) => ({ ...prev, side: value as PortfolioSide }))} options={[{ value: 'buy', label: copy.buy }, { value: 'sell', label: copy.sell }]} />
                           <Select
-                            label={language === 'zh' ? '结算货币' : 'SETTLEMENT CURRENCY'}
+                            label={copy.currency}
                             labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                             className={PORTFOLIO_SELECT_CLASS}
                             value={tradeForm.currency}
@@ -2484,11 +2494,11 @@ const PortfolioPage: React.FC = () => {
                             }}
                             options={PORTFOLIO_DISPLAY_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
                           />
-                          <Input label="QUANTITY" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
-                          <Input label="PRICE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
-                          <Input label="FEE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="optional" value={tradeForm.fee} onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
-                          <Input label="TAX" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="optional" value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
-                          <Input label="REFERENCE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="text" placeholder="optional" value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
+                          <Input label={copy.quantity} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.quantity} onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
+                          <Input label={copy.price} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={tradeForm.price} onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
+                          <Input label={copy.feeOptional} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.optional} value={tradeForm.fee} onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
+                          <Input label={copy.taxOptional} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder={copy.optional} value={tradeForm.tax} onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
+                          <Input label={copy.reference} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="text" placeholder={copy.optional} value={tradeForm.tradeUid} onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeUid: e.target.value }))} />
                         </div>
                         <div className="mt-3 rounded-lg bg-white/[0.025] px-3 py-2 text-xs leading-5 text-white/45">
                           {tradeCurrencyHint}
@@ -2496,7 +2506,7 @@ const PortfolioPage: React.FC = () => {
                             <span className="mt-1 block text-amber-200">{tradeCurrencyWarning}</span>
                           ) : null}
                         </div>
-                        <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <Input label={copy.note} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.optional} value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
                         {!writableAccountId ? (
                           <div className="mt-3 rounded-lg border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-xs text-amber-200">
                             {language === 'zh' ? '请选择具体账户后录入交易' : 'Select a specific account before recording trades'}
@@ -2521,12 +2531,12 @@ const PortfolioPage: React.FC = () => {
                       <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualCash}</p>
                       <form onSubmit={handleCashSubmit}>
                         <div data-testid="portfolio-cash-amount-currency-grid" className={PORTFOLIO_FORM_GRID_CLASS}>
-                          <Input label="EVENT DATE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={cashForm.eventDate} onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
-                          <Select label="DIRECTION" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={cashForm.direction} onChange={(value) => setCashForm((prev) => ({ ...prev, direction: value as PortfolioCashDirection }))} options={[{ value: 'in', label: copy.cashIn }, { value: 'out', label: copy.cashOut }]} />
-                          <Input label="AMOUNT" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.01" placeholder="0.00" value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
+                          <Input label={copy.eventDate} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={cashForm.eventDate} onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
+                          <Select label={copy.direction} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={cashForm.direction} onChange={(value) => setCashForm((prev) => ({ ...prev, direction: value as PortfolioCashDirection }))} options={[{ value: 'in', label: copy.cashIn }, { value: 'out', label: copy.cashOut }]} />
+                          <Input label={copy.amount} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.01" placeholder="0.00" value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
                           <Select
                             data-testid="portfolio-cash-currency-select"
-                            label="CURRENCY"
+                            label={copy.currency}
                             labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                             className={PORTFOLIO_SELECT_CLASS}
                             value={cashForm.currency}
@@ -2535,7 +2545,7 @@ const PortfolioPage: React.FC = () => {
                             placeholder={copy.currencyOptional(snapshotCurrency)}
                           />
                         </div>
-                        <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={cashForm.note} onChange={(e) => setCashForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <Input label={copy.note} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.optional} value={cashForm.note} onChange={(e) => setCashForm((prev) => ({ ...prev, note: e.target.value }))} />
                         <Button type="submit" variant="primary" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId}>{copy.submitCash}</Button>
                       </form>
                     </SectionShell>
@@ -2546,13 +2556,13 @@ const PortfolioPage: React.FC = () => {
                       <p className="text-xs uppercase tracking-[0.18em] text-muted-text">{copy.manualCorporate}</p>
                       <form onSubmit={handleCorporateSubmit}>
                         <div className={PORTFOLIO_FORM_GRID_CLASS}>
-                          <Input label="SYMBOL" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder="AAPL" value={corpForm.symbol} onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-                          <Input label="EFFECTIVE DATE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={corpForm.effectiveDate} onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
-                          <Select label="ACTION TYPE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={corpForm.actionType} onChange={(value) => setCorpForm((prev) => ({ ...prev, actionType: value as PortfolioCorporateActionType }))} options={[{ value: 'cash_dividend', label: copy.cashDividend }, { value: 'split_adjustment', label: copy.splitAdjustment }]} />
-                          <Input label="DIVIDEND" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={corpForm.cashDividendPerShare} onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value }))} />
-                          <Input label="SPLIT RATIO" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="1.0000" value={corpForm.splitRatio} onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value }))} />
+                          <Input label={copy.stockCode} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.symbolPlaceholder} value={corpForm.symbol} onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                          <Input label={copy.effectiveDate} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="date" value={corpForm.effectiveDate} onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
+                          <Select label={copy.actionType} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={corpForm.actionType} onChange={(value) => setCorpForm((prev) => ({ ...prev, actionType: value as PortfolioCorporateActionType }))} options={[{ value: 'cash_dividend', label: copy.cashDividend }, { value: 'split_adjustment', label: copy.splitAdjustment }]} />
+                          <Input label={copy.dividendPerShare} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="0.0000" value={corpForm.cashDividendPerShare} onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value }))} />
+                          <Input label={copy.splitRatio} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="1.0000" value={corpForm.splitRatio} onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value }))} />
                         </div>
-                        <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={corpForm.note} onChange={(e) => setCorpForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        <Input label={copy.note} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.optional} value={corpForm.note} onChange={(e) => setCorpForm((prev) => ({ ...prev, note: e.target.value }))} />
                         <Button type="submit" variant="primary" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId}>{copy.submitCorporate}</Button>
                       </form>
                     </SectionShell>
@@ -2777,7 +2787,7 @@ const PortfolioPage: React.FC = () => {
           <form className="flex flex-col gap-4" onSubmit={handleTradeEditSubmit}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Select
-                label="ACCOUNT"
+                label={language === 'zh' ? '账户' : 'Account'}
                 labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                 className={PORTFOLIO_SELECT_CLASS}
                 value={String(editingTrade.accountId)}
@@ -2785,7 +2795,7 @@ const PortfolioPage: React.FC = () => {
                 options={writableAccounts.map((account) => ({ value: String(account.id), label: account.name }))}
               />
               <Input
-                label="SYMBOL"
+                label={copy.stockCode}
                 labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                 className={PORTFOLIO_INPUT_CLASS}
                 value={editingTrade.symbol}
@@ -2803,7 +2813,7 @@ const PortfolioPage: React.FC = () => {
                 required
               />
               <Select
-                label="SIDE"
+                label={copy.sideLabel}
                 labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                 className={PORTFOLIO_SELECT_CLASS}
                 value={editingTrade.side}
@@ -2811,7 +2821,7 @@ const PortfolioPage: React.FC = () => {
                 options={[{ value: 'buy', label: copy.buy }, { value: 'sell', label: copy.sell }]}
               />
               <Input
-                label="TRADE DATE"
+                label={copy.tradeDate}
                 labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                 className={PORTFOLIO_INPUT_CLASS}
                 type="date"
@@ -2820,7 +2830,7 @@ const PortfolioPage: React.FC = () => {
                 required
               />
               <Input
-                label="QUANTITY"
+                label={copy.quantity}
                 labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                 className={PORTFOLIO_INPUT_CLASS}
                 type="number"
@@ -2831,7 +2841,7 @@ const PortfolioPage: React.FC = () => {
                 required
               />
               <Input
-                label="PRICE"
+                label={copy.price}
                 labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                 className={PORTFOLIO_INPUT_CLASS}
                 type="number"
@@ -2842,7 +2852,7 @@ const PortfolioPage: React.FC = () => {
                 required
               />
               <Select
-                label={language === 'zh' ? '结算货币' : 'Settlement Currency'}
+                label={copy.currency}
                 labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                 className={PORTFOLIO_SELECT_CLASS}
                 value={editingTrade.currency}
@@ -2853,7 +2863,7 @@ const PortfolioPage: React.FC = () => {
                 options={FX_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
               />
               <Input
-                label="FEE"
+                label={copy.feeOptional}
                 labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                 className={PORTFOLIO_INPUT_CLASS}
                 type="number"
@@ -2863,7 +2873,7 @@ const PortfolioPage: React.FC = () => {
                 onChange={(e) => setEditingTrade((prev) => (prev ? { ...prev, fee: e.target.value } : prev))}
               />
               <Input
-                label="TAX"
+                label={copy.taxOptional}
                 labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                 className={PORTFOLIO_INPUT_CLASS}
                 type="number"
@@ -2874,7 +2884,7 @@ const PortfolioPage: React.FC = () => {
               />
             </div>
             <Input
-              label="NOTE"
+              label={copy.note}
               labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
               className={PORTFOLIO_INPUT_CLASS}
               value={editingTrade.note}

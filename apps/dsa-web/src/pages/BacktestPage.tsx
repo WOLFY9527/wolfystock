@@ -1250,8 +1250,8 @@ const BacktestPage: React.FC = () => {
               <span className="font-semibold">{language === 'en' ? 'From scanner' : '来自扫描器'}</span>
               <span>{scannerHandoff.symbol}</span>
               {scannerHandoff.market ? <span className="text-sky-100/75">· {scannerHandoff.market}</span> : null}
-              {scannerHandoff.scannerRunId ? <span className="text-sky-100/75">· Run #{scannerHandoff.scannerRunId}</span> : null}
-              {scannerHandoff.scannerRank ? <span className="text-sky-100/75">· Rank #{scannerHandoff.scannerRank}</span> : null}
+              {scannerHandoff.scannerRunId ? <span className="text-sky-100/75">· {bt(language, 'scannerRunMeta', { runId: scannerHandoff.scannerRunId })}</span> : null}
+              {scannerHandoff.scannerRank ? <span className="text-sky-100/75">· {bt(language, 'scannerRankMeta', { rank: scannerHandoff.scannerRank })}</span> : null}
               {scannerHandoff.scannerProfile ? <span className="text-sky-100/75">· {scannerHandoff.scannerProfile}</span> : null}
             </div>
           </section>
