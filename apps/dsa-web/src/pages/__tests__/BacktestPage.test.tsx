@@ -1264,8 +1264,8 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-report-trade-table')).toBeInTheDocument();
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
     expect(screen.getByText('已完成')).toHaveAttribute('data-status', 'success');
-    expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toBeInTheDocument();
-    expect(screen.getByLabelText(bt('zh', 'resultPage.chartWorkspace.cumulativeReturnChartAria'))).toBeInTheDocument();
+    expect(await screen.findByTestId('deterministic-backtest-chart-workspace')).toBeInTheDocument();
+    expect(await screen.findByLabelText(bt('zh', 'resultPage.chartWorkspace.cumulativeReturnChartAria'))).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.overview') })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.audit') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.trades') })).toBeInTheDocument();
@@ -1420,7 +1420,7 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('heading', { name: /ORCL/i })).toBeInTheDocument();
     expect(within(screen.getByTestId('deterministic-result-page-hero')).getByText(/2026\/04\/08/)).toBeInTheDocument();
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '123');
-    expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
+    expect(await screen.findByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
   }, 10000);
 
   it('renders English canonical result-page copy on localized result routes', async () => {

@@ -113,13 +113,13 @@ function makeViewerRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBa
 }
 
 describe('DeterministicBacktestResultView', () => {
-  it('renders a non-empty KPI and chart-centered overview from normalized data', () => {
+  it('renders a non-empty KPI and chart-centered overview from normalized data', async () => {
     render(<DeterministicBacktestResultView run={makeViewerRun()} />);
 
     const resultView = screen.getByTestId('deterministic-backtest-result-view');
     const dashboard = screen.getByTestId('deterministic-result-dashboard');
-    const workspace = screen.getByTestId('deterministic-backtest-chart-workspace');
-    const chartCanvas = screen.getByLabelText(translate('zh', 'backtest.resultPage.chartWorkspace.cumulativeReturnChartAria'));
+    const workspace = await screen.findByTestId('deterministic-backtest-chart-workspace');
+    const chartCanvas = await screen.findByLabelText(translate('zh', 'backtest.resultPage.chartWorkspace.cumulativeReturnChartAria'));
 
     expect(resultView).toHaveAttribute('data-row-count', '70');
     expect(resultView).toHaveAttribute('data-main-series-length', '70');
@@ -140,14 +140,14 @@ describe('DeterministicBacktestResultView', () => {
     expect(chartCanvas).toBeInTheDocument();
   });
 
-  it('applies one shared density level to KPI sizing and chart sizing together', () => {
+  it('applies one shared density level to KPI sizing and chart sizing together', async () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1680 });
     window.dispatchEvent(new Event('resize'));
 
     render(<DeterministicBacktestResultView run={makeViewerRun()} />);
 
     const resultView = screen.getByTestId('deterministic-backtest-result-view');
-    const workspace = screen.getByTestId('deterministic-backtest-chart-workspace');
+    const workspace = await screen.findByTestId('deterministic-backtest-chart-workspace');
 
     expect(resultView).toHaveAttribute('data-density', 'comfortable');
     expect(workspace).toHaveAttribute('data-chart-engine', 'echarts');
@@ -156,10 +156,10 @@ describe('DeterministicBacktestResultView', () => {
     window.dispatchEvent(new Event('resize'));
   });
 
-  it('renders the new sidebar and meta strip workspace shell', () => {
+  it('renders the new sidebar and meta strip workspace shell', async () => {
     render(<DeterministicBacktestResultView run={makeViewerRun()} />);
 
-    const workspace = screen.getByTestId('deterministic-backtest-chart-workspace');
+    const workspace = await screen.findByTestId('deterministic-backtest-chart-workspace');
     expect(screen.getByTestId('deterministic-chart-meta-strip')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /回测参数/ })).toBeInTheDocument();
     expect(screen.getByText('三图联动')).toBeInTheDocument();

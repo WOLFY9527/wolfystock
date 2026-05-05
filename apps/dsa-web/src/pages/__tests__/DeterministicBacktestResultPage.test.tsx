@@ -365,6 +365,9 @@ describe('DeterministicBacktestResultPage', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
 
     expect(screen.getByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
     expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
@@ -392,7 +395,7 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByTestId('deterministic-result-dashboard')).toBeInTheDocument();
     expect(screen.queryByText('结果指标')).not.toBeInTheDocument();
     expect(screen.queryByText('联动结果图表')).not.toBeInTheDocument();
-    expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
+    expect(await screen.findByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
     expect(screen.getByRole('tab', { name: '概览' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.queryByText('日级审计 / 对账')).not.toBeInTheDocument();
     expect(screen.queryByText('交易 / 事件日志')).not.toBeInTheDocument();
@@ -948,7 +951,7 @@ describe('DeterministicBacktestResultPage', () => {
       expect(screen.getByRole('heading', { name: '确定性回测结果 #123' })).toBeInTheDocument();
     });
     expect(screen.getByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '123');
-    expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
+    expect(await screen.findByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
   }, 10000);
 
   it('supports side-by-side comparison from the history tab', async () => {
