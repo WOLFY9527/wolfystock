@@ -820,6 +820,24 @@ describe('UserScannerPage', () => {
     expect(screen.queryByRole('heading', { name: /MARKET SCANNER|市场扫描/ })).not.toBeInTheDocument();
   });
 
+  it('loads scanner run history once on initial route entry', async () => {
+    renderUserScannerPage();
+
+    expect(await screen.findByTestId('scanner-result-card-NVDA')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(getRun).toHaveBeenCalledWith(11);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(getRuns).toHaveBeenCalledTimes(1);
+    expect(getRuns).toHaveBeenCalledWith({
+      market: 'cn',
+      profile: 'cn_preopen_v1',
+      page: 1,
+      limit: 8,
+    });
+  });
+
   it('keeps scanner page wrappers scroll-safe for natural document scrolling', async () => {
     renderUserScannerPage();
 

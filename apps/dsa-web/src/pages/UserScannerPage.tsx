@@ -2377,6 +2377,7 @@ const UserScannerPage: React.FC = () => {
   const [strategySimulationError, setStrategySimulationError] = useState<string | null>(null);
   const inFlightBacktestKeysRef = useRef<Set<string>>(new Set());
   const completedBacktestKeysRef = useRef<Map<string, ScannerBacktestItem>>(new Map());
+  const selectedRunIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     document.title = t('scanner.documentTitle');
@@ -2467,6 +2468,7 @@ const UserScannerPage: React.FC = () => {
     try {
       const response = await scannerApi.getRun(runId);
       setRunDetail(response);
+      selectedRunIdRef.current = response.id;
       setSelectedRunId(response.id);
       setExpandedSymbol(null);
       setPageError(null);
@@ -2489,15 +2491,17 @@ const UserScannerPage: React.FC = () => {
       setHistoryPage(response.page);
       setHistoryError(null);
 
+      const currentSelectedRunId = selectedRunIdRef.current;
       const targetRunId = preferredRunId
-        || (selectedRunId && response.items.some((item) => item.id === selectedRunId) ? selectedRunId : null)
+        || (currentSelectedRunId && response.items.some((item) => item.id === currentSelectedRunId) ? currentSelectedRunId : null)
         || response.items[0]?.id
         || null;
-      if (targetRunId && targetRunId !== selectedRunId) {
+      if (targetRunId && targetRunId !== currentSelectedRunId) {
         void loadRun(targetRunId);
       }
       if (!targetRunId) {
         setRunDetail(null);
+        selectedRunIdRef.current = null;
         setSelectedRunId(null);
       }
     } catch (error) {
@@ -2505,10 +2509,11 @@ const UserScannerPage: React.FC = () => {
     } finally {
       setIsLoadingHistory(false);
     }
-  }, [loadRun, market, profile, selectedRunId]);
+  }, [loadRun, market, profile]);
 
   useEffect(() => {
     setRunDetail(null);
+    selectedRunIdRef.current = null;
     setSelectedRunId(null);
     setExpandedSymbol(null);
     setStrategySimulation(null);
@@ -2562,6 +2567,7 @@ const UserScannerPage: React.FC = () => {
         ...(scanScope === 'symbols' ? { symbols: parsedCustomSymbols } : {}),
       });
       setRunDetail(response);
+      selectedRunIdRef.current = response.id;
       setSelectedRunId(response.id);
       setExpandedSymbol(null);
       setValidationErrors({});
