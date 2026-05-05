@@ -2791,59 +2791,6 @@ textarea {
   border-radius: var(--theme-panel-radius-lg);
 }
 
-.dashboard-card {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--theme-panel-radius-lg);
-  border-width: var(--theme-border-width);
-  border-style: var(--theme-border-style);
-  border-color: hsl(0 0% 100% / 0.08);
-  background: hsl(var(--card) / 0.78);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
-  clip-path: var(--theme-panel-clip-path);
-}
-
-.dashboard-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: var(--theme-panel-radius-lg);
-  padding: 1px;
-  background: linear-gradient(
-    135deg,
-    hsl(0 0% 100% / 0.12) 0%,
-    hsl(var(--primary) / 0.12) 42%,
-    hsl(0 0% 100% / 0.05) 100%
-  );
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-}
-
-.dashboard-card::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 14%;
-  right: 14%;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    hsl(0 0% 100% / 0.12) 50%,
-    transparent 100%
-  );
-  pointer-events: none;
-}
-
 .home-mobile-overlay {
   background-color: var(--home-mobile-overlay-bg);
 }
@@ -4007,13 +3954,11 @@ html[data-theme] button[data-variant="settings-primary"]:hover {
 
 html[data-theme] .gradient-border-card,
 html[data-theme] .gradient-border-card-inner,
-html[data-theme] .dashboard-card,
 html[data-theme] .home-subpanel {
   border-radius: var(--cohere-radius-signature);
   box-shadow: none;
 }
 
-html[data-theme] .dashboard-card,
 html[data-theme] .home-subpanel {
   border-color: var(--theme-panel-solid-border);
   background: var(--theme-panel-solid-bg);
