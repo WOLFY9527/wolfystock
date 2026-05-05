@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketOverviewPage from '../MarketOverviewPage';
@@ -998,6 +999,68 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-refresh-error-count')).toHaveTextContent(/[1-9]/);
   });
 
+  it('stages noncritical market overview panels after the primary route data starts loading', async () => {
+    vi.useFakeTimers();
+
+    render(<MarketOverviewPage />);
+
+    expect(marketOverviewApi.getIndices).toHaveBeenCalledTimes(1);
+    expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(1);
+    expect(marketApi.getCrypto).toHaveBeenCalledTimes(1);
+    expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1);
+    expect(marketApi.getRates).toHaveBeenCalledTimes(1);
+    expect(marketOverviewApi.getMacro).not.toHaveBeenCalled();
+    expect(marketApi.getCnBreadth).not.toHaveBeenCalled();
+    expect(marketApi.getCnFlows).not.toHaveBeenCalled();
+    expect(marketApi.getSectorRotation).not.toHaveBeenCalled();
+    expect(marketApi.getUsBreadth).not.toHaveBeenCalled();
+    expect(marketApi.getFutures).not.toHaveBeenCalled();
+    expect(marketApi.getCnShortSentiment).not.toHaveBeenCalled();
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+      await Promise.resolve();
+    });
+
+    expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1);
+    expect(marketApi.getCnBreadth).toHaveBeenCalledTimes(1);
+    expect(marketApi.getUsBreadth).toHaveBeenCalledTimes(1);
+    expect(marketApi.getCnFlows).not.toHaveBeenCalled();
+    expect(marketApi.getSectorRotation).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(400);
+      await Promise.resolve();
+    });
+
+    expect(marketApi.getCnFlows).toHaveBeenCalledTimes(1);
+    expect(marketApi.getSectorRotation).toHaveBeenCalledTimes(1);
+    expect(marketApi.getFutures).toHaveBeenCalledTimes(1);
+    expect(marketApi.getCnShortSentiment).toHaveBeenCalledTimes(1);
+    expect(MockEventSource.instances).toHaveLength(1);
+  });
+
+  it('dedupes route-entry market requests and the crypto stream under React StrictMode', async () => {
+    render(
+      <StrictMode>
+        <MarketOverviewPage />
+      </StrictMode>,
+    );
+
+    await waitFor(() => expect(marketOverviewApi.getIndices).toHaveBeenCalledTimes(1));
+    expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(1);
+    expect(marketApi.getCrypto).toHaveBeenCalledTimes(1);
+    expect(marketApi.getSentiment).toHaveBeenCalledTimes(1);
+    expect(marketOverviewApi.getFundsFlow).toHaveBeenCalledTimes(1);
+    expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1);
+    expect(marketApi.getRates).toHaveBeenCalledTimes(1);
+    expect(marketApi.getFxCommodities).toHaveBeenCalledTimes(1);
+    expect(marketApi.getTemperature).toHaveBeenCalledTimes(1);
+    expect(marketApi.getMarketBriefing).toHaveBeenCalledTimes(1);
+    expect(MockEventSource.instances).toHaveLength(1);
+  });
+
   it('renders a stable workstation skeleton with grouped deep panels and an always-visible signal rail', async () => {
     render(<MarketOverviewPage />);
 
@@ -1622,7 +1685,7 @@ describe('MarketOverviewPage', () => {
     expect(breadthCard).not.toHaveTextContent(/未接入/);
 
     const sectorCard = screen.getByTestId('market-overview-card-usSectorRotation');
-    expect(sectorCard).toHaveTextContent(/Sector Health|Strongest XLK|Weakest XLE/);
+    await waitFor(() => expect(sectorCard).toHaveTextContent(/Sector Health|Strongest XLK|Weakest XLE/));
   });
 
   it('keeps US breadth unavailable state compact and honest', async () => {
@@ -1633,7 +1696,7 @@ describe('MarketOverviewPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '美股' }));
     const breadthCard = await screen.findByTestId('market-overview-card-usBreadth');
 
-    expect(breadthCard).toHaveTextContent(/数据暂不可用|未接入/);
+    await waitFor(() => expect(breadthCard).toHaveTextContent(/数据暂不可用|未接入/));
     expect(breadthCard).toHaveTextContent(/暂不可用|未接入/);
     expect(within(breadthCard).queryByText(/Advance \/ decline：未接入/)).not.toBeInTheDocument();
   });
@@ -1724,6 +1787,9 @@ describe('MarketOverviewPage', () => {
     expect(await screen.findByTestId('market-overview-card-crypto')).toBeInTheDocument();
     const source = MockEventSource.instances[0];
     view.unmount();
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(source.closed).toBe(true);
   });
@@ -1972,6 +2038,7 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(marketApi.getFutures).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByRole('button', { name: '美股' }));
     fireEvent.click(screen.getByRole('button', { name: /刷新 波动率与风险压力/i }));

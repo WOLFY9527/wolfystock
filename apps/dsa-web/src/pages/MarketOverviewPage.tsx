@@ -167,6 +167,47 @@ const DENSE_QUOTE_MODULES = new Set<MarketOverviewModuleId>([
 ]);
 const AUTO_REFRESH_MS = 60_000;
 const PANEL_REQUEST_TIMEOUT_MS = 3_000;
+const FIRST_STAGE_PANEL_DELAY_MS = 250;
+const SECOND_STAGE_PANEL_DELAY_MS = 650;
+
+type PanelRequest = readonly [PanelKey, () => Promise<PanelState[PanelKey]>];
+type StagedPanelRequestGroup = {
+  delayMs: number;
+  requests: PanelRequest[];
+};
+
+const MARKET_OVERVIEW_PRIMARY_REQUESTS: PanelRequest[] = [
+  ['indices', marketOverviewApi.getIndices],
+  ['volatility', marketOverviewApi.getVolatility],
+  ['crypto', marketApi.getCrypto],
+  ['sentiment', marketApi.getSentiment],
+  ['fundsFlow', marketOverviewApi.getFundsFlow],
+  ['cnIndices', marketApi.getCnIndices],
+  ['rates', marketApi.getRates],
+  ['fxCommodities', marketApi.getFxCommodities],
+  ['temperature', marketApi.getTemperature],
+  ['briefing', marketApi.getMarketBriefing],
+];
+
+const MARKET_OVERVIEW_STAGED_REQUEST_GROUPS: StagedPanelRequestGroup[] = [
+  {
+    delayMs: FIRST_STAGE_PANEL_DELAY_MS,
+    requests: [
+      ['macro', marketOverviewApi.getMacro],
+      ['cnBreadth', marketApi.getCnBreadth],
+      ['usBreadth', marketApi.getUsBreadth],
+    ],
+  },
+  {
+    delayMs: SECOND_STAGE_PANEL_DELAY_MS,
+    requests: [
+      ['cnFlows', marketApi.getCnFlows],
+      ['sectorRotation', marketApi.getSectorRotation],
+      ['futures', marketApi.getFutures],
+      ['cnShortSentiment', marketApi.getCnShortSentiment],
+    ],
+  },
+];
 
 function buildCategoryLayout(tab: MarketOverviewTab): MarketOverviewLayoutRow[] {
   const config = MARKET_OVERVIEW_TAB_CONFIG[tab];
@@ -1691,6 +1732,90 @@ function debugMarketPanel(panelKey: PanelKey, status: 'loading' | 'success' | 'f
   }
 }
 
+const routeEntryPanelRequestCache = new Map<string, Promise<PanelState[PanelKey]>>();
+
+function loadPanelWithRouteEntryDedupe(
+  panelKey: PanelKey,
+  loadPanel: () => Promise<PanelState[PanelKey]>,
+): Promise<PanelState[PanelKey]> {
+  const cacheKey = String(panelKey);
+  const cached = routeEntryPanelRequestCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const promise = loadPanel();
+  routeEntryPanelRequestCache.set(cacheKey, promise);
+  window.queueMicrotask(() => {
+    if (routeEntryPanelRequestCache.get(cacheKey) === promise) {
+      routeEntryPanelRequestCache.delete(cacheKey);
+    }
+  });
+  return promise;
+}
+
+type CryptoStreamSubscriber = (update: {
+  status: CryptoRealtimeStatus;
+  panel?: MarketOverviewPanel;
+}) => void;
+
+const cryptoStreamSubscribers = new Set<CryptoStreamSubscriber>();
+let sharedCryptoEventSource: EventSource | null = null;
+let latestCryptoStreamStatus: CryptoRealtimeStatus = 'snapshot';
+
+function publishCryptoStreamUpdate(update: { status: CryptoRealtimeStatus; panel?: MarketOverviewPanel }): void {
+  latestCryptoStreamStatus = update.status;
+  cryptoStreamSubscribers.forEach((subscriber) => subscriber(update));
+}
+
+function ensureSharedCryptoStream(): void {
+  if (typeof window === 'undefined' || typeof window.EventSource === 'undefined') {
+    publishCryptoStreamUpdate({ status: 'snapshot' });
+    return;
+  }
+  if (sharedCryptoEventSource) {
+    return;
+  }
+  const eventSource = new window.EventSource(marketApi.cryptoStreamUrl(), { withCredentials: true });
+  sharedCryptoEventSource = eventSource;
+  eventSource.onopen = () => {
+    publishCryptoStreamUpdate({ status: 'live' });
+  };
+  eventSource.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data) as Record<string, unknown>;
+      const panel = marketApi.normalizeCryptoStreamPayload(payload);
+      publishCryptoStreamUpdate({
+        panel,
+        status: panel.freshness === 'live' ? 'live' : 'snapshot',
+      });
+    } catch {
+      publishCryptoStreamUpdate({ status: 'snapshot' });
+    }
+  };
+  eventSource.onerror = () => {
+    publishCryptoStreamUpdate({ status: 'reconnecting' });
+  };
+}
+
+function subscribeToCryptoStream(subscriber: CryptoStreamSubscriber): () => void {
+  cryptoStreamSubscribers.add(subscriber);
+  ensureSharedCryptoStream();
+  subscriber({ status: latestCryptoStreamStatus });
+  return () => {
+    cryptoStreamSubscribers.delete(subscriber);
+    if (cryptoStreamSubscribers.size > 0 || typeof window === 'undefined') {
+      return;
+    }
+    window.queueMicrotask(() => {
+      if (cryptoStreamSubscribers.size === 0) {
+        sharedCryptoEventSource?.close();
+        sharedCryptoEventSource = null;
+        latestCryptoStreamStatus = 'snapshot';
+      }
+    });
+  };
+}
+
 const MarketOverviewPage: React.FC = () => {
   const { language, t } = useI18n();
   const initialLocalSnapshot = useMemo(() => buildInitialPanelsFromLocalSnapshot(), []);
@@ -1706,26 +1831,8 @@ const MarketOverviewPage: React.FC = () => {
 
   const loadPanels = useCallback(async (cancelledRef?: { current: boolean }) => {
     setLoading(true);
-    const requests: Array<[PanelKey, () => Promise<PanelState[PanelKey]>]> = [
-      ['indices', marketOverviewApi.getIndices],
-      ['volatility', marketOverviewApi.getVolatility],
-      ['crypto', marketApi.getCrypto],
-      ['sentiment', marketApi.getSentiment],
-      ['fundsFlow', marketOverviewApi.getFundsFlow],
-      ['macro', marketOverviewApi.getMacro],
-      ['cnIndices', marketApi.getCnIndices],
-      ['cnBreadth', marketApi.getCnBreadth],
-      ['cnFlows', marketApi.getCnFlows],
-      ['sectorRotation', marketApi.getSectorRotation],
-      ['usBreadth', marketApi.getUsBreadth],
-      ['rates', marketApi.getRates],
-      ['fxCommodities', marketApi.getFxCommodities],
-      ['temperature', marketApi.getTemperature],
-      ['briefing', marketApi.getMarketBriefing],
-      ['futures', marketApi.getFutures],
-      ['cnShortSentiment', marketApi.getCnShortSentiment],
-    ];
-    let remaining = requests.length;
+    const stagedRequests = MARKET_OVERVIEW_STAGED_REQUEST_GROUPS.flatMap((group) => group.requests);
+    let remaining = MARKET_OVERVIEW_PRIMARY_REQUESTS.length + stagedRequests.length;
     const markSettled = () => {
       remaining -= 1;
       if (remaining <= 0 && !cancelledRef?.current) {
@@ -1733,10 +1840,10 @@ const MarketOverviewPage: React.FC = () => {
       }
     };
 
-    await Promise.allSettled(requests.map(async ([panelKey, loadPanel]) => {
+    const runRequest = async ([panelKey, loadPanel]: PanelRequest) => {
       debugMarketPanel(panelKey, 'loading');
       try {
-        const panel = await withPanelTimeout(loadPanel(), panelKey);
+        const panel = await withPanelTimeout(loadPanelWithRouteEntryDedupe(panelKey, loadPanel), panelKey);
         if (!cancelledRef?.current) {
           setRefreshErrors((currentErrors) => {
             const nextErrors = { ...currentErrors };
@@ -1768,7 +1875,23 @@ const MarketOverviewPage: React.FC = () => {
       } finally {
         markSettled();
       }
-    }));
+    };
+
+    const primaryPromises = MARKET_OVERVIEW_PRIMARY_REQUESTS.map(runRequest);
+    const stagedPromises = MARKET_OVERVIEW_STAGED_REQUEST_GROUPS.flatMap((group) => (
+      group.requests.map((request) => new Promise<void>((resolve) => {
+        window.setTimeout(() => {
+          if (cancelledRef?.current) {
+            markSettled();
+            resolve();
+            return;
+          }
+          void runRequest(request).finally(resolve);
+        }, group.delayMs);
+      }))
+    ));
+
+    await Promise.allSettled([...primaryPromises, ...stagedPromises]);
   }, []);
 
   const refreshPanel = useCallback(async (
@@ -1840,33 +1963,15 @@ const MarketOverviewPage: React.FC = () => {
   }, [loadPanels]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.EventSource === 'undefined') {
-      setCryptoRealtimeStatus('snapshot');
-      return undefined;
-    }
-    const eventSource = new window.EventSource(marketApi.cryptoStreamUrl(), { withCredentials: true });
-    eventSource.onopen = () => {
-      setCryptoRealtimeStatus('live');
-    };
-    eventSource.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data) as Record<string, unknown>;
-        const panel = marketApi.normalizeCryptoStreamPayload(payload);
+    return subscribeToCryptoStream(({ panel, status }) => {
+      if (panel) {
         setPanels((currentPanels) => ({
           ...currentPanels,
           crypto: panel,
         }));
-        setCryptoRealtimeStatus(panel.freshness === 'live' ? 'live' : 'snapshot');
-      } catch {
-        setCryptoRealtimeStatus('snapshot');
       }
-    };
-    eventSource.onerror = () => {
-      setCryptoRealtimeStatus('reconnecting');
-    };
-    return () => {
-      eventSource.close();
-    };
+      setCryptoRealtimeStatus(status);
+    });
   }, []);
 
   const categoryTabs = useMemo<Array<{ key: MarketOverviewTab; label: string }>>(() => [
