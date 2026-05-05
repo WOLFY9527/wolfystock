@@ -1309,8 +1309,16 @@ const ChatPage: React.FC = () => {
   const renderDataEvidencePanel = (testId = 'chat-evidence-panel') => (
     <section data-testid={testId} className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Data Evidence</p>
-        <p className="text-[10px] font-mono uppercase text-white/30">{evidenceLoading ? 'checking' : smartRoute.symbols.length ? 'read-only' : 'idle'}</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+          {language === 'en' ? 'Data Evidence' : '数据证据'}
+        </p>
+        <p className="text-[10px] font-mono uppercase text-white/30">
+          {evidenceLoading
+            ? (language === 'en' ? 'checking' : '检查中')
+            : smartRoute.symbols.length
+              ? (language === 'en' ? 'read-only' : '只读')
+              : (language === 'en' ? 'idle' : '待命')}
+        </p>
       </div>
       {smartRoute.symbols.length === 0 ? (
         <p className="rounded-lg border border-white/5 bg-black/20 px-2 py-2 text-xs text-white/42">先输入具体标的</p>
@@ -1353,7 +1361,9 @@ const ChatPage: React.FC = () => {
     const hasBacktest = Boolean(backtestEvidence?.resultId);
     return (
       <section data-testid="chat-quick-actions" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
-        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">Quick Actions</p>
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+          {language === 'en' ? 'Quick Actions' : '快捷操作'}
+        </p>
         <div className="flex min-w-0 flex-wrap gap-2">
           <a
             href={`/backtest?symbol=${encodedSymbol}&market=${encodedMarket}&source=chat`}
@@ -1409,7 +1419,9 @@ const ChatPage: React.FC = () => {
   const renderSmartRouteStrip = () => (
     <div data-testid="chat-smart-route-strip" className="mb-3 rounded-2xl border border-white/8 bg-black/35 px-3 py-2 text-xs text-white/58">
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Smart Route</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+          {language === 'en' ? 'Smart Route' : '智能路由'}
+        </span>
         <span className="font-mono text-white/80">{formatRouteLabel(smartRoute)}</span>
         {quoteEvidence?.price != null ? (
           <span className="rounded-md border border-emerald-400/20 bg-emerald-400/10 px-1.5 py-0.5 font-mono text-[10px] text-emerald-300">

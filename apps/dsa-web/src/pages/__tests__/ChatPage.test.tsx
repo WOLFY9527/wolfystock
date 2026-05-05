@@ -592,11 +592,17 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByTestId('chat-evidence-panel')).toHaveTextContent('先输入具体标的');
+    expect(screen.getByTestId('chat-evidence-panel')).toHaveTextContent('数据证据');
+    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('智能路由');
+    expect(screen.queryByText('Data Evidence')).not.toBeInTheDocument();
+    expect(screen.queryByText('Smart Route')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
       target: { value: 'ORCL 还能买吗？' },
     });
     await waitFor(() => expect(screen.getAllByRole('button', { name: '加入观察列表 ORCL' }).length).toBeGreaterThan(0));
+    expect(screen.getAllByTestId('chat-quick-actions')[0]).toHaveTextContent('快捷操作');
+    expect(screen.queryByText('Quick Actions')).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: '加入观察列表 ORCL' })[0]);
 
     await waitFor(() => {
