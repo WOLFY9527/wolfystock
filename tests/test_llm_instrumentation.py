@@ -77,3 +77,38 @@ class TestLlmInstrumentationHelpers(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(snapshot_llm_event_counters()[0]["count"], 1)
 
+    def test_emit_allows_scanner_ai_safe_labels_only(self) -> None:
+        emit_llm_event(
+            "scanner_ai_interpretation_started",
+            market="CN",
+            profile="cn_preopen_v1",
+            rank_bucket="top_3",
+            top_n=3,
+            prompt_version="scanner_ai_v1",
+            candidate_hash="ABC123DEF456",
+            language="zh-CN",
+            raw_symbol="600001",
+            raw_prompt="should not leak",
+            raw_candidate_reasons=["trend", "volume"],
+            raw_generated_text="generated text should not leak",
+            provider_payload={"secret": "payload"},
+            stack_trace="Traceback should not leak",
+        )
+
+        snapshot = snapshot_llm_event_counters()
+        self.assertEqual(len(snapshot), 1)
+        entry = snapshot[0]
+        self.assertEqual(entry["event"], "scanner_ai_interpretation_started")
+        self.assertEqual(entry["labels"]["market"], "cn")
+        self.assertEqual(entry["labels"]["profile"], "cn_preopen_v1")
+        self.assertEqual(entry["labels"]["rank_bucket"], "top_3")
+        self.assertEqual(entry["labels"]["top_n"], "3")
+        self.assertEqual(entry["labels"]["prompt_version"], "scanner_ai_v1")
+        self.assertEqual(entry["labels"]["candidate_hash"], "abc123def456")
+        self.assertEqual(entry["labels"]["language"], "zh-cn")
+        self.assertNotIn("raw_symbol", entry["labels"])
+        self.assertNotIn("raw_prompt", entry["labels"])
+        self.assertNotIn("raw_candidate_reasons", entry["labels"])
+        self.assertNotIn("raw_generated_text", entry["labels"])
+        self.assertNotIn("provider_payload", entry["labels"])
+        self.assertNotIn("stack_trace", entry["labels"])

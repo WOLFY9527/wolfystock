@@ -148,6 +148,13 @@ Phase 1C MarketCache implementation note (2026-05-06):
 - Labels stay bounded and privacy-safe (`panel_key` only when safe, `endpoint_family`, `provider_category`, `refresh_mode`, `outcome`, `freshness_bucket`, `duration_bucket`, `error_bucket`, `cache_key_hash`); raw cache keys, payloads, snapshots, URLs, and exception text are not emitted.
 - This phase does not change TTL, stale-while-revalidate behavior, refresh scheduling, cold-start timeout, fallback factory behavior, persistent snapshot behavior, freshness metadata, response payload semantics, or provider behavior.
 
+Phase 1D scanner AI implementation note (2026-05-06):
+
+- Added scanner AI counters at the interpretation seams in `src/services/scanner_ai_service.py` using the same process-local best-effort helper.
+- Implemented `scanner_ai_duplicate_candidate_observed`, `scanner_ai_interpretation_started`, `scanner_ai_interpretation_completed`, and `scanner_ai_interpretation_skipped`.
+- Labels stay bounded and privacy-safe (`market`, `profile`, `rank_bucket`, `top_n`, `prompt_version`, `model_family`, `language`, `candidate_hash`, `skip_reason`, `outcome`); raw candidate reasons, watch context, prompts, generated text, provider payloads, symbols, user/session ids, and exception text are not emitted.
+- This phase does not change scanner rank/score/selection/threshold/actionability/CSV behavior, LLM routing, prompts, provider behavior, MarketCache behavior, backtest calculations, portfolio accounting, notification routing, or DuckDB runtime.
+
 Phase 2: read-only duplicate-cost summary
 
 - Add a backend-only/admin-only summary using existing LLM usage, execution logs, provider diagnostics, MarketCache metadata, and the new counters.

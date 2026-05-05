@@ -38,6 +38,10 @@ _ALLOWED_EVENTS = frozenset(
         "provider_cache_miss",
         "provider_inflight_join",
         "provider_duplicate_candidate_observed",
+        "scanner_ai_duplicate_candidate_observed",
+        "scanner_ai_interpretation_started",
+        "scanner_ai_interpretation_completed",
+        "scanner_ai_interpretation_skipped",
     }
 )
 
@@ -65,6 +69,12 @@ _ALLOWED_LABELS = frozenset(
         "error_bucket",
         "retry_reason_bucket",
         "cache_key_hash",
+        "profile",
+        "rank_bucket",
+        "top_n",
+        "prompt_version",
+        "candidate_hash",
+        "skip_reason",
     }
 )
 
@@ -218,6 +228,11 @@ def emit_provider_event(event_name: str, **labels: Any) -> None:
     _emit_event(event_name, labels)
 
 
+def emit_scanner_ai_event(event_name: str, **labels: Any) -> None:
+    """Emit a bounded Scanner AI event; failures are always swallowed."""
+    _emit_event(event_name, labels)
+
+
 def _emit_event(event_name: str, labels: Dict[str, Any]) -> None:
     try:
         normalized_event = _bounded_label(event_name)
@@ -245,7 +260,7 @@ def _sanitize_labels(labels: Dict[str, Any]) -> Dict[str, str]:
             safe[key] = bucket_model_family(value)
         elif key == "provider":
             safe[key] = _bounded_label(value)
-        elif key in {"attempt_index", "fallback_depth"}:
+        elif key in {"attempt_index", "fallback_depth", "top_n"}:
             safe[key] = _bounded_int_label(value)
         elif key in {"retry_reason", "retry_reason_bucket"}:
             safe[key] = bucket_retry_reason(value)

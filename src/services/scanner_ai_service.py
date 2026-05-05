@@ -13,6 +13,7 @@ from json_repair import repair_json
 
 from src.config import get_config
 from src.core.scanner_profile import ScannerMarketProfile
+from src.services.llm_instrumentation import emit_scanner_ai_event, hash_label_value
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,11 @@ class ScannerAiInterpretationService:
 
         if not normalized:
             diagnostics["message"] = "当前 shortlist 为空，无需生成 AI 解读。"
+            self._emit_skipped_event(
+                profile=profile,
+                top_n=top_n,
+                skip_reason="empty",
+            )
             return normalized, diagnostics
 
         if not self._is_enabled():
@@ -91,6 +97,11 @@ class ScannerAiInterpretationService:
                 self._attach_payload(candidate, payload)
             diagnostics["status"] = "disabled"
             diagnostics["message"] = payload["message"]
+            self._emit_skipped_event(
+                profile=profile,
+                top_n=top_n,
+                skip_reason="disabled",
+            )
             return normalized, diagnostics
 
         if profile.market != "cn":
@@ -102,6 +113,11 @@ class ScannerAiInterpretationService:
                 self._attach_payload(candidate, payload)
             diagnostics["status"] = "skipped"
             diagnostics["message"] = payload["message"]
+            self._emit_skipped_event(
+                profile=profile,
+                top_n=top_n,
+                skip_reason="non_cn",
+            )
             return normalized, diagnostics
 
         analyzer = self._get_analyzer()
@@ -114,6 +130,11 @@ class ScannerAiInterpretationService:
                 self._attach_payload(candidate, payload)
             diagnostics["status"] = "unavailable"
             diagnostics["message"] = payload["message"]
+            self._emit_skipped_event(
+                profile=profile,
+                top_n=top_n,
+                skip_reason="unavailable",
+            )
             return normalized, diagnostics
 
         models_used: List[str] = []
@@ -128,15 +149,24 @@ class ScannerAiInterpretationService:
                         message=f"为控制延迟与成本，本次仅对前 {top_n} 名生成 AI 解读。",
                     ),
                 )
+                self._emit_skipped_event(
+                    profile=profile,
+                    top_n=top_n,
+                    candidate=candidate,
+                    skip_reason="beyond_top_n",
+                )
                 continue
 
             diagnostics["attempted_candidates"] += 1
+            self._emit_duplicate_candidate_event(profile=profile, candidate=candidate, top_n=top_n)
+            self._emit_started_event(profile=profile, candidate=candidate, top_n=top_n)
             payload = self._interpret_candidate(
                 analyzer=analyzer,
                 candidate=candidate,
                 profile=profile,
             )
             self._attach_payload(candidate, payload)
+            self._emit_completed_event(profile=profile, candidate=candidate, top_n=top_n, payload=payload)
 
             if payload.get("status") == "generated":
                 diagnostics["generated_candidates"] += 1
@@ -383,6 +413,88 @@ class ScannerAiInterpretationService:
             }
         return None
 
+    def _emit_duplicate_candidate_event(
+        self,
+        *,
+        profile: ScannerMarketProfile,
+        candidate: Dict[str, Any],
+        top_n: int,
+    ) -> None:
+        emit_scanner_ai_event(
+            "scanner_ai_duplicate_candidate_observed",
+            market=profile.market,
+            profile=profile.key,
+            rank_bucket=self._rank_bucket(candidate.get("rank")),
+            top_n=top_n,
+            prompt_version=self._prompt_version(),
+            candidate_hash=self._candidate_hash(profile=profile, candidate=candidate),
+            model_family=getattr(self.config, "litellm_model", None),
+            language=self._language(),
+        )
+
+    def _emit_started_event(
+        self,
+        *,
+        profile: ScannerMarketProfile,
+        candidate: Dict[str, Any],
+        top_n: int,
+    ) -> None:
+        emit_scanner_ai_event(
+            "scanner_ai_interpretation_started",
+            market=profile.market,
+            profile=profile.key,
+            rank_bucket=self._rank_bucket(candidate.get("rank")),
+            top_n=top_n,
+            prompt_version=self._prompt_version(),
+            candidate_hash=self._candidate_hash(profile=profile, candidate=candidate),
+            model_family=getattr(self.config, "litellm_model", None),
+            language=self._language(),
+        )
+
+    def _emit_completed_event(
+        self,
+        *,
+        profile: ScannerMarketProfile,
+        candidate: Dict[str, Any],
+        top_n: int,
+        payload: Dict[str, Any],
+    ) -> None:
+        status = str(payload.get("status") or "failed")
+        emit_scanner_ai_event(
+            "scanner_ai_interpretation_completed",
+            market=profile.market,
+            profile=profile.key,
+            rank_bucket=self._rank_bucket(candidate.get("rank")),
+            top_n=top_n,
+            prompt_version=self._prompt_version(),
+            candidate_hash=self._candidate_hash(profile=profile, candidate=candidate),
+            model_family=payload.get("model") or getattr(self.config, "litellm_model", None),
+            provider=payload.get("provider"),
+            language=self._language(),
+            outcome=status if status in {"generated", "failed"} else "failed",
+        )
+
+    def _emit_skipped_event(
+        self,
+        *,
+        profile: ScannerMarketProfile,
+        top_n: int,
+        skip_reason: str,
+        candidate: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        labels: Dict[str, Any] = {
+            "market": profile.market,
+            "profile": profile.key,
+            "top_n": top_n,
+            "prompt_version": self._prompt_version(),
+            "skip_reason": self._skip_reason(skip_reason),
+            "language": self._language(),
+        }
+        if candidate is not None:
+            labels["rank_bucket"] = self._rank_bucket(candidate.get("rank"))
+            labels["candidate_hash"] = self._candidate_hash(profile=profile, candidate=candidate)
+        emit_scanner_ai_event("scanner_ai_interpretation_skipped", **labels)
+
     def _get_analyzer(self) -> Optional[Any]:
         if self._analyzer is not None:
             return self._analyzer
@@ -505,6 +617,48 @@ class ScannerAiInterpretationService:
         except Exception:
             value = 3
         return max(1, min(value, 10))
+
+    @staticmethod
+    def _prompt_version() -> str:
+        return "scanner_ai_v1"
+
+    @staticmethod
+    def _language() -> str:
+        return "zh-cn"
+
+    @staticmethod
+    def _skip_reason(reason: Any) -> str:
+        value = str(reason or "unknown").strip().lower()
+        allowed = {"empty", "disabled", "non_cn", "unavailable", "beyond_top_n"}
+        return value if value in allowed else "unknown"
+
+    @staticmethod
+    def _rank_bucket(rank: Any) -> str:
+        try:
+            value = int(rank)
+        except (TypeError, ValueError):
+            return "unknown"
+        if value <= 0:
+            return "unknown"
+        if value <= 3:
+            return f"top_{value}"
+        if value <= 5:
+            return "top_5"
+        if value <= 10:
+            return "top_10"
+        return "beyond_top_10"
+
+    @staticmethod
+    def _candidate_hash(*, profile: ScannerMarketProfile, candidate: Dict[str, Any]) -> str:
+        identity = {
+            "market": profile.market,
+            "profile": profile.key,
+            "symbol": candidate.get("symbol"),
+            "rank": candidate.get("rank"),
+            "score": candidate.get("score"),
+            "prompt_version": ScannerAiInterpretationService._prompt_version(),
+        }
+        return hash_label_value(json.dumps(identity, sort_keys=True, ensure_ascii=False))
 
     def _is_enabled(self) -> bool:
         return bool(getattr(self.config, "scanner_ai_enabled", False))
