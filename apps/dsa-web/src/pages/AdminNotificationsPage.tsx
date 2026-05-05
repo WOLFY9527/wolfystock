@@ -13,6 +13,11 @@ import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { ApiErrorAlert, GlassCard } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { cn } from '../utils/cn';
+import {
+  describeAdminNotificationStatus,
+  describeBooleanEnabled,
+  type DisplayStatusTone,
+} from '../utils/displayStatus';
 import { formatDateTime as formatDateTimeValue } from '../utils/format';
 
 type ChannelDraft = {
@@ -186,27 +191,16 @@ function eventTypesText(channel: NotificationChannel, language: 'zh' | 'en'): st
   return channel.eventTypes.length ? channel.eventTypes.join(', ') : (language === 'en' ? 'All event types' : '全部事件类型');
 }
 
-function statusLabel(status: string | null | undefined, language: 'zh' | 'en'): string {
-  const normalized = String(status || '').toLowerCase();
-  if (normalized === 'success' || normalized === 'delivered') return language === 'en' ? 'Success' : '成功';
-  if (normalized === 'failed' || normalized === 'error') return language === 'en' ? 'Failed' : '失败';
-  if (normalized === 'partial') return language === 'en' ? 'Partial' : '部分成功';
-  if (normalized === 'pending') return language === 'en' ? 'Pending' : '等待中';
-  if (normalized === 'disabled') return language === 'en' ? 'Disabled' : '已停用';
-  if (normalized === 'no_channels') return language === 'en' ? 'Unconfigured' : '未配置';
-  if (normalized === 'provider_down') return language === 'en' ? 'Provider down' : '服务异常';
-  if (normalized === 'provider_error') return language === 'en' ? 'Channel error' : '通道异常';
-  if (normalized === 'unknown' || !normalized) return language === 'en' ? 'Unknown' : '未确认';
-  return language === 'en' ? status || 'Unknown' : '未确认';
-}
-
-function statusTone(status: string | null | undefined): string {
-  const normalized = String(status || '').toLowerCase();
-  if (normalized === 'success' || normalized === 'delivered') return 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100';
-  if (normalized === 'failed' || normalized === 'error' || normalized === 'provider_error' || normalized === 'provider_down') return 'border-rose-300/25 bg-rose-500/10 text-rose-100';
-  if (normalized === 'pending' || normalized === 'partial') return 'border-amber-300/25 bg-amber-400/10 text-amber-100';
-  if (normalized === 'disabled' || normalized === 'no_channels') return 'border-white/10 bg-white/[0.03] text-white/45';
-  return 'border-cyan-300/20 bg-cyan-400/10 text-cyan-100';
+function displayStatusToneClass(tone: DisplayStatusTone): string {
+  const classes: Record<DisplayStatusTone, string> = {
+    success: 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100',
+    warning: 'border-amber-300/25 bg-amber-400/10 text-amber-100',
+    danger: 'border-rose-300/25 bg-rose-500/10 text-rose-100',
+    info: 'border-cyan-300/20 bg-cyan-400/10 text-cyan-100',
+    muted: 'border-white/10 bg-white/[0.03] text-white/45',
+    neutral: 'border-white/10 bg-white/[0.03] text-white/65',
+  };
+  return classes[tone];
 }
 
 function coverageLabel(channel: NotificationChannel, language: 'zh' | 'en'): string {
@@ -651,6 +645,8 @@ const AdminNotificationsPage: React.FC = () => {
               <div className="divide-y divide-white/6">
                 {channels.length ? channels.map((channel) => {
                   const deliveryError = formatDeliveryError(language as 'zh' | 'en', channel.lastError, channel.lastErrorCode, channel.lastErrorDiagnostics);
+                  const enabledStatus = describeBooleanEnabled(channel.enabled, { language: language as 'zh' | 'en' });
+                  const lastStatus = describeAdminNotificationStatus(channel.lastStatus, { language: language as 'zh' | 'en' });
 
                   return (
                   <div key={channel.id} data-testid={`notification-channel-${channel.id}`} className="grid gap-3 px-3 py-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(16rem,1.4fr)_minmax(11rem,0.8fr)_minmax(13rem,0.9fr)] lg:items-start">
@@ -666,8 +662,8 @@ const AdminNotificationsPage: React.FC = () => {
                               : text('In-app', '站内')}
                         </p>
                       </div>
-                      <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold', channel.enabled ? 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100' : 'border-white/10 bg-white/[0.03] text-white/45')}>
-                        {channel.enabled ? text('Active', '已启用') : text('Disabled', '已停用')}
+                      <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold', displayStatusToneClass(enabledStatus.tone))}>
+                        {enabledStatus.label}
                       </span>
                     </div>
                     <div className="min-w-0 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
@@ -686,7 +682,7 @@ const AdminNotificationsPage: React.FC = () => {
                         {text('Last trigger', '最近触发')}: <span className="text-secondary-text">{formatDate(channel.lastTriggeredAt || channel.lastSentAt)}</span>
                       </p>
                       <p>
-                        {text('Last status', '最近状态')}: <span className={cn('rounded-full border px-2 py-0.5', statusTone(channel.lastStatus))}>{statusLabel(channel.lastStatus, language as 'zh' | 'en')}</span>
+                        {text('Last status', '最近状态')}: <span className={cn('rounded-full border px-2 py-0.5', displayStatusToneClass(lastStatus.tone))}>{lastStatus.label}</span>
                       </p>
                       <p>
                         {text('Last failure', '最近失败')}: <span className="text-secondary-text">{failureSummaryLabel(channel, deliveryError, language as 'zh' | 'en')}</span>
@@ -757,7 +753,7 @@ const AdminNotificationsPage: React.FC = () => {
                     <p className="text-xs text-secondary-text">{formatDate(event.createdAt)}</p>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-foreground">{event.title}</p>
-                      <p className="mt-1 truncate text-[11px] text-muted-text" title={displayEventMessage(event.message, language as 'zh' | 'en')}>{event.eventType} · {statusLabel(event.deliveryStatus, language as 'zh' | 'en')}</p>
+                      <p className="mt-1 truncate text-[11px] text-muted-text" title={displayEventMessage(event.message, language as 'zh' | 'en')}>{event.eventType} · {describeAdminNotificationStatus(event.deliveryStatus, { language: language as 'zh' | 'en' }).label}</p>
                     </div>
                     <div>
                       <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold', severityTone[event.severity])}>{severityLabel(event.severity, language as 'zh' | 'en')}</span>
