@@ -29,6 +29,11 @@ import {
 } from '../utils/aiRouting';
 import { getCategoryDescription, getCategoryTitle } from '../utils/systemConfigI18n';
 import {
+  describeSettingsEnabledState,
+  type SettingsEnabledState,
+  type SettingsSystemHealthStatus,
+} from '../utils/displayStatus';
+import {
   AuthSettingsCard,
   ChangePasswordCard,
   IntelligentImport,
@@ -53,11 +58,10 @@ type QuickProviderTestState = {
   status: QuickProviderTestStatus;
   text: string;
 };
-type SystemHealthTone = 'available' | 'attention' | 'not_configured' | 'unavailable' | 'disabled' | 'unknown';
 type SystemHealthStatusCard = {
   key: string;
   label: string;
-  status: SystemHealthTone;
+  status: SettingsSystemHealthStatus;
   reason: string;
   nextAction?: string;
   checkedAt?: string;
@@ -68,7 +72,7 @@ type SystemHealthSummaryCard = {
   label: string;
   value: string | number;
   detail: string;
-  status?: SystemHealthTone;
+  status?: SettingsSystemHealthStatus;
 };
 type DeveloperDetailGroup = {
   key: string;
@@ -534,7 +538,7 @@ const providerLabel = (value: string): string => {
   return PROVIDER_LABEL_MAP[normalized] || prettySourceLabel(normalized);
 };
 
-const statusFromBooleanConfig = (value: string | undefined): 'enabled' | 'disabled' | 'unknown' => {
+const statusFromBooleanConfig = (value: string | undefined): SettingsEnabledState => {
   if (typeof value === 'undefined') return 'unknown';
   return isEnabledValue(value) ? 'enabled' : 'disabled';
 };
@@ -546,10 +550,10 @@ const summarizeSafeConfigValue = (item: SystemConfigItem): string => {
   }
   if (item.schema?.dataType === 'boolean') {
     if (!value) return '未配置';
-    return isEnabledValue(value) ? '已启用' : '未启用';
+    return describeSettingsEnabledState(isEnabledValue(value) ? 'enabled' : 'disabled').label;
   }
   if (!value) return '未配置';
-  if (/^(true|false)$/i.test(value)) return isEnabledValue(value) ? '已启用' : '未启用';
+  if (/^(true|false)$/i.test(value)) return describeSettingsEnabledState(isEnabledValue(value) ? 'enabled' : 'disabled').label;
   if (value.length > 24) return `${value.slice(0, 24)}...`;
   return value;
 };
@@ -3174,7 +3178,7 @@ const SettingsPage: React.FC = () => {
     notificationSummary.enabledChannels.length,
   ]);
   const systemHealthSummaryCards = useMemo<SystemHealthSummaryCard[]>(() => {
-    const countByStatus = (statuses: SystemHealthTone[]) => systemStatusCards
+    const countByStatus = (statuses: SettingsSystemHealthStatus[]) => systemStatusCards
       .filter((card) => statuses.includes(card.status))
       .length;
     const available = countByStatus(['available']);

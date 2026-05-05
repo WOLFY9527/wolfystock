@@ -3,6 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Disclosure, GlassCard, Input } from '../common';
 import { getApiErrorMessage } from '../../api/error';
 import {
+  describeSettingsDuckDBDataMode,
+  describeSettingsDuckDBDiagnosticStatus,
+  describeSettingsEnabledState,
+} from '../../utils/displayStatus';
+import {
   quantApi,
   type QuantDuckDBBenchmarkResponse,
   type QuantDuckDBBuildFactorsResponse,
@@ -46,27 +51,6 @@ function compactPath(value?: string | null): string {
   const parts = withoutHome.split('/').filter(Boolean);
   const compact = parts.length > 2 ? `.../${parts.slice(-2).join('/')}` : withoutHome;
   return compact.length > 48 ? `${compact.slice(0, 18)}...${compact.slice(-24)}` : compact;
-}
-
-function statusLabel(status?: string | null): string {
-  const normalized = String(status || '').toLowerCase();
-  if (normalized === 'ok') return '正常';
-  if (normalized === 'disabled') return '未启用';
-  if (normalized === 'empty') return '暂无数据';
-  if (normalized === 'dry_run') return '预检';
-  if (normalized === 'invalid_request') return '请求需调整';
-  if (normalized === 'unavailable') return '暂不可用';
-  if (!normalized) return '未确认';
-  return '诊断态';
-}
-
-function dataModeLabel(mode?: string | null): string {
-  const normalized = String(mode || '').toLowerCase();
-  if (normalized === 'real') return '真实样本';
-  if (normalized === 'disabled') return '未启用';
-  if (normalized === 'unavailable') return '暂不可用';
-  if (normalized === 'empty') return '空样本';
-  return normalized ? '诊断样本' : '--';
 }
 
 function formatDateRange(start?: string | null, end?: string | null): string {
@@ -139,6 +123,9 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
   const enabled = health?.enabled ?? configEnabledState === 'enabled';
   const disabled = !enabled;
   const status = health?.status || coverage?.status || (configEnabledState === 'disabled' ? 'disabled' : 'unknown');
+  const statusDescriptor = describeSettingsDuckDBDiagnosticStatus(status);
+  const dataModeDescriptor = describeSettingsDuckDBDataMode(benchmark?.dataMode || validation?.dataMode || comparison?.dataMode);
+  const enabledDescriptor = describeSettingsEnabledState(disabled ? 'disabled' : 'enabled');
   const noWriteLabel = disabled ? '未写入文件' : '写入需显式点击';
   const productionRuntimeChanged = comparison?.diagnostics?.productionRuntimeChanged === true;
 
@@ -237,7 +224,7 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className={cn(CHIP_CLASS, disabled ? 'border-cyan-300/15 bg-cyan-300/[0.05] text-cyan-200' : 'border-emerald-300/20 bg-emerald-300/[0.06] text-emerald-300')}>
-            {disabled ? '未启用' : '已启用'}
+            {enabledDescriptor.label}
           </span>
           <span className={cn(CHIP_CLASS, 'border-white/10 bg-white/[0.03] text-white/50')}>可选能力</span>
           <span className={cn(CHIP_CLASS, 'border-white/10 bg-white/[0.03] text-white/50')}>{noWriteLabel}</span>
@@ -245,7 +232,7 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <MetricTile label="状态" value={statusLabel(status)} detail={dataModeLabel(benchmark?.dataMode || validation?.dataMode || comparison?.dataMode)} />
+        <MetricTile label="状态" value={statusDescriptor.label} detail={dataModeDescriptor.label} />
         <MetricTile label="DB 路径" value={compactPath(health?.databasePath || coverage?.databasePath)} detail="已脱敏 / 截断" />
         <MetricTile label="OHLCV 行" value={formatCount(coverage?.totalOhlcvRows)} detail={`标的 ${formatCount(coverage?.symbolCount)}`} />
         <MetricTile label="因子行" value={formatCount(coverage?.totalFactorRows)} detail={`最新 ${coverage?.latestFactorDate || '--'}`} />
@@ -257,8 +244,8 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
             <SummaryLine label="日期范围" value={formatDateRange(coverage?.minTradeDate, coverage?.maxTradeDate)} />
             <SummaryLine label="覆盖样本" value={coverage?.symbols?.length ? coverage.symbols.map((item) => `${item.symbol}:${item.ohlcvRows}/${item.factorRows}`).join(' · ') : (coverage?.emptyReason || '暂无覆盖样本')} tone={coverage?.symbols?.length ? 'normal' : 'muted'} />
             <SummaryLine label="Benchmark" value={benchmark ? `${formatDurationMs(benchmark.durationMs || benchmark.elapsedMs)} · ${formatCount(benchmark.rowsScanned)} 行 · ${formatCount(benchmark.symbolsScanned)} 标的` : '--'} />
-            <SummaryLine label="快照" value={snapshot ? `${statusLabel(snapshot.status)} · ${formatCount(snapshot.rowCount)} 行 · 缺失 ${snapshot.missingSymbols.length}` : '--'} />
-            <SummaryLine label="校验" value={validation ? `${statusLabel(validation.status)} · 覆盖 ${validation.coverage.coveredSymbols}/${validation.coverage.requestedSymbols} · 不足 ${validation.insufficientSymbols.length}` : '--'} />
+            <SummaryLine label="快照" value={snapshot ? `${describeSettingsDuckDBDiagnosticStatus(snapshot.status).label} · ${formatCount(snapshot.rowCount)} 行 · 缺失 ${snapshot.missingSymbols.length}` : '--'} />
+            <SummaryLine label="校验" value={validation ? `${describeSettingsDuckDBDiagnosticStatus(validation.status).label} · 覆盖 ${validation.coverage.coveredSymbols}/${validation.coverage.requestedSymbols} · 不足 ${validation.insufficientSymbols.length}` : '--'} />
             <SummaryLine label="运行比较" value={comparison ? `productionRuntimeChanged=${productionRuntimeChanged ? 'true' : 'false'} · 诊断专用` : 'productionRuntimeChanged=false · 诊断专用'} tone={productionRuntimeChanged ? 'warn' : 'good'} />
           </div>
         </div>

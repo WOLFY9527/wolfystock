@@ -1,23 +1,27 @@
 import type React from 'react';
 import { Button, Disclosure, GlassCard } from '../common';
 import { BentoHeroStrip, type BentoHeroItem } from '../home-bento';
+import {
+  describeSettingsSystemHealthStatus,
+  type DisplayStatusTone,
+  type SettingsSystemHealthStatus,
+} from '../../utils/displayStatus';
 import { SettingsAlert } from './SettingsAlert';
 import { SettingsSectionCard } from './SettingsSectionCard';
 import DuckDBQuantPanel from './DuckDBQuantPanel';
 
 type AdminActionDialogKey = 'runtime_cache' | 'factory_reset' | null;
-type SystemHealthTone = 'available' | 'attention' | 'not_configured' | 'unavailable' | 'disabled' | 'unknown';
 type SystemHealthSummaryCard = {
   key: string;
   label: string;
   value: string | number;
   detail: string;
-  status?: SystemHealthTone;
+  status?: SettingsSystemHealthStatus;
 };
 type SystemHealthStatusCard = {
   key: string;
   label: string;
-  status: SystemHealthTone;
+  status: SettingsSystemHealthStatus;
   reason: string;
   nextAction?: string;
   checkedAt?: string;
@@ -34,29 +38,21 @@ type TranslateFn = (key: string, vars?: Record<string, string | number | undefin
 
 const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
 const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
-const STATUS_LABEL: Record<SystemHealthTone, string> = {
-  available: '正常',
-  attention: '需关注',
-  not_configured: '未配置',
-  unavailable: '暂不可用',
-  disabled: '未启用',
-  unknown: '状态未知',
+const STATUS_CLASS: Record<DisplayStatusTone, string> = {
+  success: 'border-emerald-400/20 text-emerald-300 bg-emerald-400/[0.06]',
+  warning: 'border-amber-300/20 text-amber-300 bg-amber-300/[0.06]',
+  danger: 'border-rose-400/20 text-rose-300 bg-rose-400/[0.06]',
+  info: 'border-cyan-300/15 text-cyan-200 bg-cyan-300/[0.05]',
+  muted: 'border-white/10 text-white/45 bg-white/[0.03]',
+  neutral: 'border-white/10 text-white/45 bg-white/[0.03]',
 };
-const STATUS_CLASS: Record<SystemHealthTone, string> = {
-  available: 'border-emerald-400/20 text-emerald-300 bg-emerald-400/[0.06]',
-  attention: 'border-amber-300/20 text-amber-300 bg-amber-300/[0.06]',
-  not_configured: 'border-white/10 text-white/45 bg-white/[0.03]',
-  unavailable: 'border-rose-400/20 text-rose-300 bg-rose-400/[0.06]',
-  disabled: 'border-cyan-300/15 text-cyan-200 bg-cyan-300/[0.05]',
-  unknown: 'border-white/10 text-white/45 bg-white/[0.03]',
-};
-const STATUS_TEXT_CLASS: Record<SystemHealthTone, string> = {
-  available: 'text-emerald-300',
-  attention: 'text-amber-300',
-  not_configured: 'text-white/45',
-  unavailable: 'text-rose-300',
-  disabled: 'text-cyan-200',
-  unknown: 'text-white/45',
+const STATUS_TEXT_CLASS: Record<DisplayStatusTone, string> = {
+  success: 'text-emerald-300',
+  warning: 'text-amber-300',
+  danger: 'text-rose-300',
+  info: 'text-cyan-200',
+  muted: 'text-white/45',
+  neutral: 'text-white/45',
 };
 
 type SystemControlPlaneProps = {
@@ -106,7 +102,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
           {summaryCards.map((item) => (
             <div key={item.key} className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-3">
               <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">{item.label}</p>
-              <p className={`mt-2 truncate text-sm font-semibold ${item.status ? STATUS_TEXT_CLASS[item.status] : 'text-white'}`}>
+              <p className={`mt-2 truncate text-sm font-semibold ${item.status ? STATUS_TEXT_CLASS[describeSettingsSystemHealthStatus(item.status).tone] : 'text-white'}`}>
                 {item.value}
               </p>
               <p className="mt-1 truncate text-[11px] text-white/45">{item.detail}</p>
@@ -123,24 +119,27 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
           </div>
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {statusCards.map((card) => (
-            <article key={card.key} className="min-w-0 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3">
-              <div className="flex min-w-0 items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-foreground">{card.label}</p>
-                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/50">{card.reason}</p>
+          {statusCards.map((card) => {
+            const status = describeSettingsSystemHealthStatus(card.status);
+            return (
+              <article key={card.key} className="min-w-0 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-foreground">{card.label}</p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/50">{card.reason}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${STATUS_CLASS[status.tone]}`}>
+                    {status.label}
+                  </span>
                 </div>
-                <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${STATUS_CLASS[card.status]}`}>
-                  {STATUS_LABEL[card.status]}
-                </span>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/35">
-                {card.optional ? <span className="rounded-full border border-cyan-300/15 bg-cyan-300/[0.05] px-2 py-1 text-cyan-200">可选</span> : null}
-                <span>{card.checkedAt || '最近检查：当前快照'}</span>
-              </div>
-              {card.nextAction ? <p className="mt-2 text-[11px] leading-5 text-white/45">下一步：{card.nextAction}</p> : null}
-            </article>
-          ))}
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/35">
+                  {card.optional ? <span className="rounded-full border border-cyan-300/15 bg-cyan-300/[0.05] px-2 py-1 text-cyan-200">可选</span> : null}
+                  <span>{card.checkedAt || '最近检查：当前快照'}</span>
+                </div>
+                {card.nextAction ? <p className="mt-2 text-[11px] leading-5 text-white/45">下一步：{card.nextAction}</p> : null}
+              </article>
+            );
+          })}
         </div>
       </GlassCard>
 

@@ -12,6 +12,9 @@ type DisplayStatusOptions = {
   language?: DisplayStatusLanguage;
 };
 
+export type SettingsEnabledState = 'enabled' | 'disabled' | 'unknown';
+export type SettingsSystemHealthStatus = 'available' | 'attention' | 'not_configured' | 'unavailable' | 'disabled' | 'unknown';
+
 const UNKNOWN_LABELS: Record<DisplayStatusLanguage, string> = {
   zh: '未确认',
   en: 'Unknown',
@@ -129,4 +132,99 @@ export function describeAdminLogLevel(
   }
 
   return { label: UNKNOWN_LABELS[language], tone: 'info' };
+}
+
+export function describeSettingsEnabledState(
+  state: SettingsEnabledState,
+  options?: DisplayStatusOptions,
+): DisplayStatusDescriptor {
+  const language = languageFromOptions(options);
+
+  if (state === 'enabled') {
+    return { label: labels('已启用', 'Enabled', language), tone: 'success' };
+  }
+  if (state === 'disabled') {
+    return { label: labels('未启用', 'Not enabled', language), tone: 'muted' };
+  }
+  return { label: labels('状态未知', 'Unknown', language), tone: 'info' };
+}
+
+export function describeSettingsSystemHealthStatus(
+  status: SettingsSystemHealthStatus,
+  options?: DisplayStatusOptions,
+): DisplayStatusDescriptor {
+  const language = languageFromOptions(options);
+
+  if (status === 'available') {
+    return { label: labels('正常', 'Available', language), tone: 'success' };
+  }
+  if (status === 'attention') {
+    return { label: labels('需关注', 'Needs attention', language), tone: 'warning' };
+  }
+  if (status === 'not_configured') {
+    return { label: labels('未配置', 'Not configured', language), tone: 'muted' };
+  }
+  if (status === 'unavailable') {
+    return { label: labels('暂不可用', 'Unavailable', language), tone: 'danger' };
+  }
+  if (status === 'disabled') {
+    return { label: labels('未启用', 'Not enabled', language), tone: 'info' };
+  }
+  return { label: labels('状态未知', 'Unknown', language), tone: 'muted' };
+}
+
+export function describeSettingsDuckDBDiagnosticStatus(
+  value: unknown,
+  options?: DisplayStatusOptions,
+): DisplayStatusDescriptor {
+  const language = languageFromOptions(options);
+  const normalized = normalizeDisplayStatus(value);
+
+  if (normalized === 'ok') {
+    return { label: labels('正常', 'OK', language), tone: 'success' };
+  }
+  if (normalized === 'disabled') {
+    return { label: labels('未启用', 'Not enabled', language), tone: 'info' };
+  }
+  if (normalized === 'empty') {
+    return { label: labels('暂无数据', 'No data', language), tone: 'muted' };
+  }
+  if (normalized === 'dry_run') {
+    return { label: labels('预检', 'Dry run', language), tone: 'info' };
+  }
+  if (normalized === 'invalid_request') {
+    return { label: labels('请求需调整', 'Request needs adjustment', language), tone: 'warning' };
+  }
+  if (normalized === 'unavailable') {
+    return { label: labels('暂不可用', 'Unavailable', language), tone: 'danger' };
+  }
+  if (!normalized) {
+    return { label: UNKNOWN_LABELS[language], tone: 'info' };
+  }
+  return { label: labels('诊断态', 'Diagnostic state', language), tone: 'info' };
+}
+
+export function describeSettingsDuckDBDataMode(
+  value: unknown,
+  options?: DisplayStatusOptions,
+): DisplayStatusDescriptor {
+  const language = languageFromOptions(options);
+  const normalized = normalizeDisplayStatus(value);
+
+  if (normalized === 'real') {
+    return { label: labels('真实样本', 'Real sample', language), tone: 'success' };
+  }
+  if (normalized === 'disabled') {
+    return { label: labels('未启用', 'Not enabled', language), tone: 'info' };
+  }
+  if (normalized === 'unavailable') {
+    return { label: labels('暂不可用', 'Unavailable', language), tone: 'danger' };
+  }
+  if (normalized === 'empty') {
+    return { label: labels('空样本', 'Empty sample', language), tone: 'muted' };
+  }
+  if (!normalized) {
+    return { label: '--', tone: 'muted' };
+  }
+  return { label: labels('诊断样本', 'Diagnostic sample', language), tone: 'info' };
 }

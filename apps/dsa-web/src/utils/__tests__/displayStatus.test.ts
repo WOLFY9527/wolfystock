@@ -4,6 +4,10 @@ import {
   describeAdminNotificationStatus,
   describeBooleanEnabled,
   describeDisplayStatus,
+  describeSettingsDuckDBDataMode,
+  describeSettingsDuckDBDiagnosticStatus,
+  describeSettingsEnabledState,
+  describeSettingsSystemHealthStatus,
   normalizeDisplayStatus,
 } from '../displayStatus';
 
@@ -148,6 +152,106 @@ describe('displayStatus', () => {
     expect(describeAdminLogLevel(undefined)).toEqual({
       label: '未确认',
       tone: 'info',
+    });
+  });
+
+  it('keeps settings enabled-state labels local to settings surfaces', () => {
+    expect(describeSettingsEnabledState('enabled')).toEqual({
+      label: '已启用',
+      tone: 'success',
+    });
+    expect(describeSettingsEnabledState('disabled')).toEqual({
+      label: '未启用',
+      tone: 'muted',
+    });
+    expect(describeSettingsEnabledState('unknown')).toEqual({
+      label: '状态未知',
+      tone: 'info',
+    });
+  });
+
+  it('describes settings system health statuses without collapsing optional states into errors', () => {
+    expect(describeSettingsSystemHealthStatus('available')).toEqual({
+      label: '正常',
+      tone: 'success',
+    });
+    expect(describeSettingsSystemHealthStatus('attention')).toEqual({
+      label: '需关注',
+      tone: 'warning',
+    });
+    expect(describeSettingsSystemHealthStatus('not_configured')).toEqual({
+      label: '未配置',
+      tone: 'muted',
+    });
+    expect(describeSettingsSystemHealthStatus('disabled')).toEqual({
+      label: '未启用',
+      tone: 'info',
+    });
+    expect(describeSettingsSystemHealthStatus('unavailable')).toEqual({
+      label: '暂不可用',
+      tone: 'danger',
+    });
+    expect(describeSettingsSystemHealthStatus('unknown')).toEqual({
+      label: '状态未知',
+      tone: 'muted',
+    });
+  });
+
+  it('describes DuckDB diagnostic statuses with existing Chinese labels', () => {
+    expect(describeSettingsDuckDBDiagnosticStatus('ok')).toEqual({
+      label: '正常',
+      tone: 'success',
+    });
+    expect(describeSettingsDuckDBDiagnosticStatus('disabled')).toEqual({
+      label: '未启用',
+      tone: 'info',
+    });
+    expect(describeSettingsDuckDBDiagnosticStatus('empty')).toEqual({
+      label: '暂无数据',
+      tone: 'muted',
+    });
+    expect(describeSettingsDuckDBDiagnosticStatus('dry_run')).toEqual({
+      label: '预检',
+      tone: 'info',
+    });
+    expect(describeSettingsDuckDBDiagnosticStatus('invalid_request')).toEqual({
+      label: '请求需调整',
+      tone: 'warning',
+    });
+    expect(describeSettingsDuckDBDiagnosticStatus('unavailable')).toEqual({
+      label: '暂不可用',
+      tone: 'danger',
+    });
+    expect(describeSettingsDuckDBDiagnosticStatus('internal_raw_status')).toEqual({
+      label: '诊断态',
+      tone: 'info',
+    });
+  });
+
+  it('describes DuckDB data modes without leaking raw unknown modes', () => {
+    expect(describeSettingsDuckDBDataMode('real')).toEqual({
+      label: '真实样本',
+      tone: 'success',
+    });
+    expect(describeSettingsDuckDBDataMode('disabled')).toEqual({
+      label: '未启用',
+      tone: 'info',
+    });
+    expect(describeSettingsDuckDBDataMode('unavailable')).toEqual({
+      label: '暂不可用',
+      tone: 'danger',
+    });
+    expect(describeSettingsDuckDBDataMode('empty')).toEqual({
+      label: '空样本',
+      tone: 'muted',
+    });
+    expect(describeSettingsDuckDBDataMode('provider_internal_mode')).toEqual({
+      label: '诊断样本',
+      tone: 'info',
+    });
+    expect(describeSettingsDuckDBDataMode(null)).toEqual({
+      label: '--',
+      tone: 'muted',
     });
   });
 });
