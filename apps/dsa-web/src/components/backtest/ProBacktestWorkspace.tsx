@@ -409,7 +409,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const renderStepHeader = (step: StepDefinition, chips: string[]) => (
     <div className="flex min-w-0 flex-col gap-3 border-b border-white/5 pb-4 md:flex-row md:items-start md:justify-between">
       <div className="min-w-0">
-        <p className={labelClass}>CURRENT STEP</p>
+        <p className={labelClass}>{language === 'en' ? 'CURRENT STEP' : '当前步骤'}</p>
         <h2 className="mt-2 truncate text-xl font-semibold text-white">{step.title}</h2>
         <p className="mt-1 truncate text-sm text-white/48">{step.description}</p>
       </div>
@@ -535,7 +535,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         </div>
         <div data-testid="pro-parsed-summary" className="grid min-w-0 gap-3">
           <div className="rounded-lg border border-white/5 bg-black/20 p-3">
-            <p className={labelClass}>STRATEGY</p>
+            <p className={labelClass}>{language === 'en' ? 'STRATEGY' : '策略'}</p>
             <p className="mt-2 truncate text-sm text-white/72">{strategy}</p>
             <p className="mt-1 text-xs text-white/38">{setupSource}</p>
           </div>
@@ -749,7 +749,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           </div>
         )}
         <div data-testid="pro-risk-controls-summary" className="mt-4 rounded-lg border border-white/5 bg-black/20 p-3">
-          <p className={labelClass}>PARSED RISK</p>
+          <p className={labelClass}>{language === 'en' ? 'PARSED RISK' : '风险解析'}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {riskRows.length > 0 ? riskRows.map((row) => (
               <span key={row.key} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/62">
@@ -808,18 +808,18 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           {advancedTab === 'optimization' ? (
             <>
               <details data-testid="pro-advanced-grid-search" className="rounded-lg border border-white/5 bg-black/20 p-3">
-                <summary className="cursor-pointer text-sm font-semibold text-white/70">Grid Search</summary>
+                <summary className="cursor-pointer text-sm font-semibold text-white/70">{language === 'en' ? 'Grid Search' : '网格搜索'}</summary>
                 <label className="mt-3 flex items-center gap-2.5 text-sm text-white/62">
-                  <input aria-label="启用 Grid Search" type="checkbox" className={checkboxClass} checked={enableGridSearch} onChange={(event) => setEnableGridSearch(event.target.checked)} />
-                  <span>{language === 'en' ? 'Enable Grid Search' : '启用 Grid Search'}</span>
+                  <input aria-label={language === 'en' ? 'Enable Grid Search' : '启用网格搜索'} type="checkbox" className={checkboxClass} checked={enableGridSearch} onChange={(event) => setEnableGridSearch(event.target.checked)} />
+                  <span>{language === 'en' ? 'Enable Grid Search' : '启用网格搜索'}</span>
                 </label>
                 {enableGridSearch ? <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3 text-sm text-white/52">MA window / RSI threshold / risk grid</div> : null}
               </details>
               <details data-testid="pro-advanced-bayesian" className="rounded-lg border border-white/5 bg-black/20 p-3">
-                <summary className="cursor-pointer text-sm font-semibold text-white/70">Bayesian Search</summary>
+                <summary className="cursor-pointer text-sm font-semibold text-white/70">{language === 'en' ? 'Bayesian Search' : '贝叶斯搜索'}</summary>
                 <label className="mt-3 flex items-center gap-2.5 text-sm text-white/62">
-                  <input type="checkbox" className={checkboxClass} checked={enableBayesianSearch} onChange={(event) => setEnableBayesianSearch(event.target.checked)} />
-                  <span>{language === 'en' ? 'Enable Bayesian Search' : '启用 Bayesian Search'}</span>
+                  <input aria-label={language === 'en' ? 'Enable Bayesian Search' : '启用贝叶斯搜索'} type="checkbox" className={checkboxClass} checked={enableBayesianSearch} onChange={(event) => setEnableBayesianSearch(event.target.checked)} />
+                  <span>{language === 'en' ? 'Enable Bayesian Search' : '启用贝叶斯搜索'}</span>
                 </label>
                 {enableBayesianSearch ? <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3 text-sm text-white/52">Trials / acquisition / bounds</div> : null}
               </details>
@@ -827,16 +827,16 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           ) : (
             <>
               <details className="rounded-lg border border-white/5 bg-black/20 p-3">
-                <summary className="cursor-pointer text-sm font-semibold text-white/70">Walk-forward</summary>
+                <summary className="cursor-pointer text-sm font-semibold text-white/70">{language === 'en' ? 'Walk-forward' : '滚动样本外验证'}</summary>
                 <label className="mt-3 flex items-center gap-2.5 text-sm text-white/62">
-                  <input type="checkbox" className={checkboxClass} checked={enableWalkForward} onChange={(event) => setEnableWalkForward(event.target.checked)} />
-                  <span>{language === 'en' ? 'Enable walk-forward validation' : '启用 Walk-forward 验证'}</span>
+                  <input aria-label={language === 'en' ? 'Enable walk-forward validation' : '启用滚动样本外验证'} type="checkbox" className={checkboxClass} checked={enableWalkForward} onChange={(event) => setEnableWalkForward(event.target.checked)} />
+                  <span>{language === 'en' ? 'Enable walk-forward validation' : '启用滚动样本外验证'}</span>
                 </label>
               </details>
               <details className="rounded-lg border border-white/5 bg-black/20 p-3">
-                <summary className="cursor-pointer text-sm font-semibold text-white/70">Robustness</summary>
+                <summary className="cursor-pointer text-sm font-semibold text-white/70">{language === 'en' ? 'Robustness' : '稳健性扫描'}</summary>
                 <label className="mt-3 flex items-center gap-2.5 text-sm text-white/62">
-                  <input type="checkbox" className={checkboxClass} checked={enableRobustness} onChange={(event) => setEnableRobustness(event.target.checked)} />
+                  <input aria-label={language === 'en' ? 'Enable robustness sweep' : '启用稳健性扫描'} type="checkbox" className={checkboxClass} checked={enableRobustness} onChange={(event) => setEnableRobustness(event.target.checked)} />
                   <span>{language === 'en' ? 'Enable robustness sweep' : '启用稳健性扫描'}</span>
                 </label>
               </details>
@@ -862,13 +862,13 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
       className={`${ghostCardClass} ${mobile ? 'p-4' : 'lg:sticky lg:top-6 max-h-[calc(100vh-6rem)] overflow-y-auto no-scrollbar p-4'} flex min-w-0 flex-col gap-4`}
     >
       <div>
-        <p className={labelClass}>EXECUTION SUMMARY</p>
+        <p className={labelClass}>{language === 'en' ? 'EXECUTION SUMMARY' : '执行摘要'}</p>
         <div className="mt-3 grid gap-2 text-xs">
           {[
-            ['SYMBOL', code || '--'],
-            ['BENCHMARK', getBenchmarkModeLabel(benchmarkMode, code, benchmarkCode, language)],
-            ['DATE RANGE', `${startDate || '--'} -> ${endDate || '--'}`],
-            ['CAPITAL', initialCapital || '--'],
+            [language === 'en' ? 'SYMBOL' : '标的', code || '--'],
+            [language === 'en' ? 'BENCHMARK' : '基准', getBenchmarkModeLabel(benchmarkMode, code, benchmarkCode, language)],
+            [language === 'en' ? 'DATE RANGE' : '日期区间', `${startDate || '--'} -> ${endDate || '--'}`],
+            [language === 'en' ? 'CAPITAL' : '初始资金', initialCapital || '--'],
           ].map(([label, value]) => (
             <div key={label} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
               <span className="shrink-0 text-white/35">{label}</span>
@@ -878,30 +878,30 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         </div>
       </div>
       <div>
-        <p className={labelClass}>STRATEGY</p>
+        <p className={labelClass}>{language === 'en' ? 'STRATEGY' : '策略'}</p>
         <div className="mt-3 grid gap-2 text-xs">
           <div className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
-            <span className="text-white/35">PARSE</span>
+            <span className="text-white/35">{language === 'en' ? 'PARSE' : '解析'}</span>
             <span className="truncate text-white/72">{parseStale ? (language === 'en' ? 'stale' : '需要重新解析') : parsedStrategy ? (language === 'en' ? 'synced' : '已同步') : (language === 'en' ? 'pending' : '待解析')}</span>
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
-            <span className="text-white/35">ENGINE</span>
+            <span className="text-white/35">{language === 'en' ? 'ENGINE' : '引擎'}</span>
             <span className="truncate text-white/72">{String(getStrategySpecValue(strategySpec, ['strategy_type']) || parsedStrategy?.parsedStrategy.strategyKind || 'deterministic')}</span>
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
-            <span className="text-white/35">CONFIRM</span>
+            <span className="text-white/35">{language === 'en' ? 'CONFIRM' : '确认'}</span>
             <span className="truncate text-white/72">{confirmed ? (language === 'en' ? 'confirmed' : '已确认') : (language === 'en' ? 'pending' : '待确认')}</span>
           </div>
         </div>
       </div>
       <div>
-        <p className={labelClass}>RISK</p>
+        <p className={labelClass}>{language === 'en' ? 'RISK' : '风险'}</p>
         <div className="mt-3 grid gap-2 text-xs">
           {[
-            ['STOP LOSS', formatBoolean(enableStopLoss, language)],
-            ['TAKE PROFIT', formatBoolean(enableTakeProfit, language)],
-            ['TRAILING', formatBoolean(enableTrailingStop, language)],
-            ['LEVEL', riskRows.length > 1 ? (language === 'en' ? 'guarded' : '护栏') : (language === 'en' ? 'default' : '默认')],
+            [language === 'en' ? 'STOP LOSS' : '止损', formatBoolean(enableStopLoss, language)],
+            [language === 'en' ? 'TAKE PROFIT' : '止盈', formatBoolean(enableTakeProfit, language)],
+            [language === 'en' ? 'TRAILING' : '移动止损', formatBoolean(enableTrailingStop, language)],
+            [language === 'en' ? 'LEVEL' : '风控层级', riskRows.length > 1 ? (language === 'en' ? 'guarded' : '护栏') : (language === 'en' ? 'default' : '默认')],
           ].map(([label, value]) => (
             <div key={label} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
               <span className="text-white/35">{label}</span>
@@ -911,7 +911,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         </div>
       </div>
       <div data-testid={mobile ? 'pro-mobile-execution-readiness' : 'pro-execution-readiness'}>
-        <p className={labelClass}>READINESS</p>
+        <p className={labelClass}>{language === 'en' ? 'READINESS' : '就绪度'}</p>
         <div className="mt-3 grid gap-2">
           {readiness.map((item) => (
             <div key={item.key} className="flex items-center gap-2 text-xs text-white/60">
@@ -925,7 +925,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         </p>
       </div>
       <div>
-        <p className={labelClass}>ACTIONS</p>
+        <p className={labelClass}>{language === 'en' ? 'ACTIONS' : '操作'}</p>
         <div className="mt-3 grid gap-2">
           <button
             type="button"
@@ -949,7 +949,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
       {runError ? <ApiErrorAlert error={runError} /> : null}
       {latestHistory ? (
         <div className="border-t border-white/5 pt-4">
-          <p className={labelClass}>LAST RUN</p>
+          <p className={labelClass}>{language === 'en' ? 'LAST RUN' : '最近运行'}</p>
           <div className="mt-3 rounded-lg border border-white/5 bg-black/20 p-3">
             <div className="flex min-w-0 items-center justify-between gap-2">
               <span className="truncate font-mono text-sm text-white">{latestHistory.code || '--'}</span>
@@ -969,7 +969,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     <section data-testid="pro-results-history-drawer" className={`${ghostCardClass} p-4`}>
       <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <p className={labelClass}>RESULTS & HISTORY</p>
+          <p className={labelClass}>{language === 'en' ? 'RESULTS & HISTORY' : '结果与历史'}</p>
           <p className="mt-1 truncate text-sm text-white/52">
             {latestHistory
               ? `${latestHistory.code || '--'} · ${latestHistory.status || '--'} · ${latestHistory.runAt?.slice(0, 10) || '--'}`
@@ -1088,14 +1088,14 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         <div data-testid="pro-workspace-grid" className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[220px_minmax(0,1fr)_320px] lg:items-start">
           <aside data-testid="pro-workflow-rail" className={`${ghostCardClass} hidden min-w-0 flex-col gap-3 p-3 lg:sticky lg:top-6 lg:flex`}>
             <div className="px-1">
-              <p className={labelClass}>WORKFLOW RAIL</p>
+              <p className={labelClass}>{language === 'en' ? 'WORKFLOW RAIL' : '工作流导航'}</p>
             </div>
             <div className="flex min-w-0 flex-col gap-1">
               {stepDefinitions.map((step) => renderStepButton(step))}
             </div>
             {latestHistory ? (
               <div className="mt-auto border-t border-white/5 pt-3">
-                <p className={labelClass}>LAST RUN</p>
+                <p className={labelClass}>{language === 'en' ? 'LAST RUN' : '最近运行'}</p>
                 <button type="button" aria-label={language === 'en' ? 'Open' : '查看'} className="mt-2 flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-left" onClick={() => onOpenHistoryRun(latestHistory)}>
                   <span className="min-w-0">
                     <span className="block truncate font-mono text-sm text-white">{latestHistory.code || '--'}</span>

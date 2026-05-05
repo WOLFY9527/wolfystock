@@ -1000,8 +1000,8 @@ describe('BacktestPage', () => {
     expect(screen.getByLabelText('开始日期')).toBeInTheDocument();
     expect(screen.getByLabelText('结束日期')).toBeInTheDocument();
     expect(screen.getByLabelText('初始资金')).toBeInTheDocument();
-    expect(within(screen.getByTestId('pro-execution-rail')).getByText('EXECUTION SUMMARY')).toBeInTheDocument();
-    expect(within(screen.getByTestId('pro-execution-rail')).getByText('READINESS')).toBeInTheDocument();
+    expect(within(screen.getByTestId('pro-execution-rail')).getByText('执行摘要')).toBeInTheDocument();
+    expect(within(screen.getByTestId('pro-execution-rail')).getByText('就绪度')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: '执行回测任务' }).length).toBeGreaterThan(0);
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
@@ -1088,7 +1088,12 @@ describe('BacktestPage', () => {
     expect(await screen.findByTestId('pro-step-advanced')).toBeInTheDocument();
     expect(screen.getByTestId('pro-advanced-grid-search')).not.toHaveAttribute('open');
     expect(screen.getByTestId('pro-advanced-bayesian')).not.toHaveAttribute('open');
-    expect(screen.getByLabelText('启用 Grid Search')).not.toBeChecked();
+    expect(screen.getByLabelText('启用网格搜索')).not.toBeChecked();
+    expect(screen.getByLabelText('启用贝叶斯搜索')).not.toBeChecked();
+    expect(screen.getByText('网格搜索')).toBeInTheDocument();
+    expect(screen.getByText('贝叶斯搜索')).toBeInTheDocument();
+    expect(screen.queryByText('Grid Search')).not.toBeInTheDocument();
+    expect(screen.queryByText('Bayesian Search')).not.toBeInTheDocument();
     expect(screen.queryByText('为什么改成折叠')).not.toBeInTheDocument();
     expect(screen.queryByText('执行通道说明')).not.toBeInTheDocument();
     expect(screen.queryByText('控制策略')).not.toBeInTheDocument();
