@@ -5877,13 +5877,11 @@ body::after {
   scrollbar-width: none;
 }
 
-.stealth-scrollbar,
 .custom-scrollbar {
   scrollbar-width: none;
   scrollbar-color: transparent transparent;
 }
 
-.stealth-scrollbar::-webkit-scrollbar,
 .custom-scrollbar::-webkit-scrollbar {
   display: none;
   width: 0;
@@ -5891,7 +5889,6 @@ body::after {
   background: transparent;
 }
 
-.stealth-scrollbar::-webkit-scrollbar-thumb,
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: hsl(var(--border-muted-hsl) / 0.5);
   border: 2px solid transparent;
@@ -5899,7 +5896,6 @@ body::after {
   background-clip: padding-box;
 }
 
-.stealth-scrollbar::-webkit-scrollbar-track,
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
