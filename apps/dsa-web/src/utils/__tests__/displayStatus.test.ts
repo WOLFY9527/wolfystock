@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  describeAdminLogLevel,
   describeAdminNotificationStatus,
   describeBooleanEnabled,
   describeDisplayStatus,
@@ -100,6 +101,52 @@ describe('displayStatus', () => {
     });
     expect(describeAdminNotificationStatus('raw_internal_status', { language: 'en' })).toEqual({
       label: 'Unknown',
+      tone: 'info',
+    });
+  });
+
+  it('keeps admin log levels chinese-first with stable tones', () => {
+    expect(describeAdminLogLevel('INFO')).toEqual({
+      label: '信息',
+      tone: 'info',
+    });
+    expect(describeAdminLogLevel('WARNING')).toEqual({
+      label: '警告',
+      tone: 'warning',
+    });
+    expect(describeAdminLogLevel('ERROR')).toEqual({
+      label: '错误',
+      tone: 'danger',
+    });
+    expect(describeAdminLogLevel('CRITICAL')).toEqual({
+      label: '严重',
+      tone: 'danger',
+    });
+    expect(describeAdminLogLevel('DEBUG')).toEqual({
+      label: '调试',
+      tone: 'muted',
+    });
+  });
+
+  it('normalizes admin log level input without leaking raw unknown values', () => {
+    expect(describeAdminLogLevel('warning')).toEqual({
+      label: '警告',
+      tone: 'warning',
+    });
+    expect(describeAdminLogLevel('critical_error')).toEqual({
+      label: '严重',
+      tone: 'danger',
+    });
+    expect(describeAdminLogLevel('unknown')).toEqual({
+      label: '未确认',
+      tone: 'info',
+    });
+    expect(describeAdminLogLevel(null)).toEqual({
+      label: '未确认',
+      tone: 'info',
+    });
+    expect(describeAdminLogLevel(undefined)).toEqual({
+      label: '未确认',
       tone: 'info',
     });
   });

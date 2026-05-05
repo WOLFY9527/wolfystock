@@ -104,3 +104,29 @@ export function describeAdminNotificationStatus(
 
   return describeDisplayStatus(value, undefined, { language });
 }
+
+export function describeAdminLogLevel(
+  value: unknown,
+  options?: DisplayStatusOptions,
+): DisplayStatusDescriptor {
+  const language = languageFromOptions(options);
+  const normalized = normalizeDisplayStatus(value);
+
+  if (normalized === 'debug') {
+    return { label: labels('调试', 'Debug', language), tone: 'muted' };
+  }
+  if (normalized === 'info' || normalized === 'notice') {
+    return { label: labels(normalized === 'notice' ? '通知' : '信息', normalized === 'notice' ? 'Notice' : 'Info', language), tone: 'info' };
+  }
+  if (normalized === 'warning' || normalized === 'warn') {
+    return { label: labels('警告', 'Warning', language), tone: 'warning' };
+  }
+  if (normalized === 'error' || normalized === 'failed' || normalized === 'failure') {
+    return { label: labels('错误', 'Error', language), tone: 'danger' };
+  }
+  if (normalized === 'critical' || normalized === 'critical_error' || normalized === 'fatal') {
+    return { label: labels('严重', 'Critical', language), tone: 'danger' };
+  }
+
+  return { label: UNKNOWN_LABELS[language], tone: 'info' };
+}

@@ -6,6 +6,7 @@ import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Drawer, GlassCard } from '../components/common';
 import { StatusBadge, getStatusLabel, normalizeStatus, type UnifiedStatus } from '../components/ui/StatusBadge';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { describeAdminLogLevel } from '../utils/displayStatus';
 import { formatDateTime as formatDateTimeValue, formatDurationMs } from '../utils/format';
 
 type AdminLogsLanguage = 'zh' | 'en';
@@ -31,6 +32,24 @@ const LEVEL_CLASS: Record<LogLevel, string> = {
   ERROR: 'border-rose-300/35 bg-rose-500/14 text-rose-100',
   CRITICAL: 'border-red-300/45 bg-red-500/25 text-red-50 shadow-[0_0_24px_rgba(239,68,68,0.18)]',
 };
+
+function AdminLogLevelPill({
+  value,
+  locale,
+  className = 'inline-flex w-fit rounded-full border px-2 py-0.5 text-[11px] font-semibold',
+}: {
+  value: unknown;
+  locale: AdminLogsLanguage;
+  className?: string;
+}) {
+  const level = normalizeLogLevel(String(value || ''));
+  const descriptor = describeAdminLogLevel(level, { language: locale });
+  return (
+    <span className={`${className} ${LEVEL_CLASS[level]}`}>
+      {descriptor.label}
+    </span>
+  );
+}
 
 const MOCK_WOLFY_LOG_DETAILS: ExecutionLogSessionDetail[] = [
   {
@@ -1620,7 +1639,7 @@ const AdminLogsPage: React.FC = () => {
                     return (
                       <div key={item.sessionId} data-testid="admin-log-row" className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] items-center gap-3 px-3 py-2.5">
                         <p className="truncate text-xs text-secondary-text">{formatDateTime(item.startedAt, locale)}</p>
-                        <span className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-[11px] font-semibold ${LEVEL_CLASS[level]}`}>{level}</span>
+                        <AdminLogLevelPill value={level} locale={locale} />
                         <span className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.035] px-2 py-0.5 text-[11px] text-secondary-text">{categoryLabel(category, locale)}</span>
                         <p className="min-w-0 truncate text-sm font-semibold text-foreground">{eventName}</p>
                         <p className="min-w-0 truncate text-xs text-secondary-text" title={message}>{message}</p>
@@ -1890,7 +1909,7 @@ const AdminLogsPage: React.FC = () => {
                 {drawerDetail.events.length ? drawerDetail.events.map((event) => (
                   <div key={event.id} className="rounded-2xl border border-white/6 bg-black/20 px-3 py-3 text-xs">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={`inline-flex rounded-full border px-2 py-0.5 font-semibold ${LEVEL_CLASS[normalizeLogLevel(event.level)]}`}>{normalizeLogLevel(event.level)}</span>
+                      <AdminLogLevelPill value={event.level} locale={locale} className="inline-flex rounded-full border px-2 py-0.5 font-semibold" />
                       <span className="text-secondary-text">{categoryLabel(event.category || event.phase, locale)}</span>
                       <span className="text-foreground">{text(event.eventName || event.step)}</span>
                     </div>
