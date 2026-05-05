@@ -1,0 +1,293 @@
+# -*- coding: utf-8 -*-
+"""Read-only market provider operations aggregation tests."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+from unittest.mock import patch
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from api.deps import CurrentUser, get_current_user
+from api.v1.endpoints import market_provider_operations
+from src.services.market_cache import market_cache
+from src.services.market_overview_service import MarketOverviewService
+from src.services.market_provider_operations_service import MarketProviderOperationsService
+from src.storage import DatabaseManager
+
+
+def _admin_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="bootstrap-admin",
+        username="admin",
+        display_name="Admin",
+        role="admin",
+        is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
+
+
+def _regular_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="user-1",
+        username="alice",
+        display_name="Alice",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
+
+
+class _FakeLogService:
+    def __init__(self, events: Optional[List[Dict[str, Any]]] = None) -> None:
+        self.events = events or []
+
+    def list_business_events(self, *, category: Optional[str] = None, **_: Any) -> Tuple[List[Dict[str, Any]], int]:
+        items = [item for item in self.events if not category or item.get("category") == category]
+        return items, len(items)
+
+
+@pytest.fixture(autouse=True)
+def isolated_db(tmp_path: Path):
+    DatabaseManager.reset_instance()
+    DatabaseManager(db_url=f"sqlite:///{tmp_path / 'market-provider-operations.sqlite'}")
+    market_cache.clear()
+    MarketOverviewService._market_data_cache.clear()
+    yield
+    market_cache.clear()
+    MarketOverviewService._market_data_cache.clear()
+    DatabaseManager.reset_instance()
+
+
+def _service(events: Optional[List[Dict[str, Any]]] = None) -> MarketProviderOperationsService:
+    return MarketProviderOperationsService(
+        cache=market_cache,
+        db=DatabaseManager.get_instance(),
+        log_service=_FakeLogService(events),
+    )
+
+
+def test_endpoint_requires_admin_auth_consistent_with_admin_apis() -> None:
+    app = FastAPI()
+    app.include_router(market_provider_operations.router, prefix="/api/v1/admin")
+
+    app.dependency_overrides[get_current_user] = _regular_user
+    user_client = TestClient(app)
+    user_response = user_client.get("/api/v1/admin/market-providers/operations")
+    assert user_response.status_code == 403
+    assert user_response.json()["detail"]["error"] == "admin_required"
+
+    app.dependency_overrides[get_current_user] = _admin_user
+    admin_client = TestClient(app)
+    with patch("api.v1.endpoints.market_provider_operations.MarketProviderOperationsService", return_value=_service([])):
+        admin_response = admin_client.get("/api/v1/admin/market-providers/operations")
+    assert admin_response.status_code == 200
+    assert admin_response.json()["metadata"]["readOnly"] is True
+
+
+def test_aggregator_does_not_call_external_providers_or_cache_refresh() -> None:
+    market_cache.set(
+        "crypto",
+        {
+            "source": "binance",
+            "sourceLabel": "Binance",
+            "freshness": "live",
+            "updatedAt": "2026-05-06T10:00:00+08:00",
+            "items": [{"symbol": "BTCUSDT", "price": 65000}],
+        },
+        ttl_seconds=15,
+    )
+
+    with (
+        patch.object(MarketOverviewService, "_fetch_crypto_market_snapshot", side_effect=AssertionError("provider called")),
+        patch.object(market_cache, "get_or_refresh", side_effect=AssertionError("cache refresh called")),
+    ):
+        payload = _service([]).get_operations(window="24h")
+
+    crypto = next(item for item in payload["items"] if item["cacheKey"] == "crypto")
+    assert crypto["provider"] == "binance"
+    assert payload["metadata"]["externalProviderCalls"] is False
+
+
+def test_aggregator_does_not_mutate_market_cache() -> None:
+    entry = market_cache.set(
+        "indices",
+        {
+            "source": "yahoo",
+            "freshness": "cached",
+            "updatedAt": "2026-05-06T09:00:00+08:00",
+            "items": [{"symbol": "SPX", "value": 5200}],
+        },
+        ttl_seconds=30,
+    )
+    before = {
+        "keys": sorted(market_cache._entries.keys()),
+        "data": dict(entry.data),
+        "fetched_at": entry.fetched_at,
+        "expires_at": entry.expires_at,
+        "is_refreshing": entry.is_refreshing,
+        "last_error": entry.last_error,
+    }
+
+    _service([]).get_operations(window="24h")
+    after_entry = market_cache.get("indices")
+
+    assert sorted(market_cache._entries.keys()) == before["keys"]
+    assert after_entry is not None
+    assert after_entry.data == before["data"]
+    assert after_entry.fetched_at == before["fetched_at"]
+    assert after_entry.expires_at == before["expires_at"]
+    assert after_entry.is_refreshing == before["is_refreshing"]
+    assert after_entry.last_error == before["last_error"]
+
+
+def test_admin_logs_degraded_market_events_are_summarized() -> None:
+    events = [
+        {
+            "id": "fallback-1",
+            "event": "MarketDataFallbackUsed",
+            "eventType": "MarketDataFallbackUsed",
+            "category": "data_source",
+            "status": "partial",
+            "summary": "MarketDataFallbackUsed",
+            "endpoint": "/api/v1/market/crypto",
+            "provider": "binance",
+            "component": "CryptoCard",
+            "reason": "timeout",
+            "startedAt": "2026-05-06T10:00:00+08:00",
+        },
+        {
+            "id": "stale-1",
+            "event": "MarketDataStaleServed",
+            "eventType": "MarketDataStaleServed",
+            "category": "market",
+            "status": "success",
+            "summary": "MarketDataStaleServed",
+            "endpoint": "/api/v1/market/crypto",
+            "provider": "binance",
+            "component": "CryptoCard",
+            "reason": "stale",
+            "startedAt": "2026-05-06T10:05:00+08:00",
+        },
+        {
+            "id": "failed-1",
+            "event": "MarketProviderRefreshFailed",
+            "eventType": "MarketProviderRefreshFailed",
+            "category": "data_source",
+            "status": "failed",
+            "summary": "MarketProviderRefreshFailed",
+            "endpoint": "/api/v1/market/sentiment",
+            "provider": "cnn",
+            "component": "MarketSentimentCard",
+            "reason": "provider_error",
+            "startedAt": "2026-05-06T10:10:00+08:00",
+        },
+    ]
+
+    payload = _service(events).get_operations(window="24h")
+
+    crypto = next(item for item in payload["eventRollups"] if item["provider"] == "binance")
+    assert crypto["eventCount"] == 2
+    assert crypto["fallbackCount"] == 1
+    assert crypto["staleServedCount"] == 1
+    cnn = next(item for item in payload["eventRollups"] if item["provider"] == "cnn")
+    assert cnn["failureCount"] == 1
+    assert payload["summary"]["eventCount"] == 3
+    assert payload["summary"]["fallbackEventCount"] == 1
+    assert payload["summary"]["staleEventCount"] == 1
+
+
+def test_empty_no_log_state_returns_safe_empty_rollups() -> None:
+    payload = _service([]).get_operations(window="24h")
+
+    assert payload["eventRollups"] == []
+    assert payload["summary"]["eventCount"] == 0
+    assert "admin_logs_no_degraded_market_events_in_window" in payload["limitations"]
+
+
+def test_response_sanitizes_raw_secrets_tokens_and_webhooks() -> None:
+    entry = market_cache.set(
+        "rates",
+        {
+            "source": "yahoo",
+            "freshness": "stale",
+            "lastError": "provider failed token=SECRET api_key=ABC webhook=https://hooks.example.test/raw",
+            "warning": "Authorization: Bearer SECRET",
+            "items": [],
+        },
+        ttl_seconds=60,
+    )
+    entry.last_error = "refresh failed password=SECRET token=SECRET"
+
+    payload = _service([]).get_operations(window="24h")
+    dumped = str(payload)
+
+    assert "SECRET" not in dumped
+    assert "ABC" not in dumped
+    assert "hooks.example.test/raw" not in dumped
+    rates = next(item for item in payload["items"] if item["cacheKey"] == "rates")
+    assert "***" in (rates["errorSummary"] or "")
+
+
+def test_admin_logs_drill_through_query_model_is_structured_and_safe() -> None:
+    market_cache.set(
+        "cn_indices",
+        {
+            "source": "sina",
+            "freshness": "cached",
+            "updatedAt": "2026-05-06T10:00:00+08:00",
+            "items": [{"symbol": "000001.SH", "value": 3100}],
+        },
+        ttl_seconds=30,
+    )
+
+    payload = _service([]).get_operations(window="7d")
+    item = next(item for item in payload["items"] if item["cacheKey"] == "cn_indices")
+    drill = item["adminLogDrillThrough"]
+
+    assert drill["route"] == "/zh/admin/logs"
+    assert set(drill["query"]).issubset({"since", "category", "provider", "query"})
+    assert drill["query"]["provider"] == "sina"
+    assert drill["query"]["query"] == "/api/v1/market/cn-indices"
+    assert "select" not in str(drill).lower()
+    assert "token" not in str(drill).lower()
+
+
+def test_unavailable_cache_metadata_is_represented_honestly() -> None:
+    payload = _service([]).get_operations(window="24h")
+
+    crypto = next(item for item in payload["items"] if item["cacheKey"] == "crypto")
+    crypto_cache = next(item for item in payload["cacheStates"] if item["cacheKey"] == "crypto")
+    assert crypto["status"] == "unavailable"
+    assert crypto_cache["status"] == "unavailable"
+    assert "cache_metadata_unavailable:crypto" in payload["limitations"]
+
+
+def test_persisted_snapshot_metadata_is_used_without_provider_fetch() -> None:
+    DatabaseManager.get_instance().save_market_overview_snapshot(
+        key="market_overview:indices",
+        payload={
+            "source": "yahoo",
+            "sourceLabel": "Yahoo Finance",
+            "freshness": "live",
+            "asOf": "2026-05-06T09:30:00+08:00",
+            "updatedAt": "2026-05-06T09:31:00+08:00",
+            "items": [{"symbol": "SPX", "value": 5200}],
+        },
+    )
+
+    with patch.object(MarketOverviewService, "_fetch_indices", side_effect=AssertionError("provider called")):
+        payload = _service([]).get_operations(window="24h")
+
+    indices = next(item for item in payload["items"] if item["cacheKey"] == "indices")
+    cache_state = next(item for item in payload["cacheStates"] if item["cacheKey"] == "indices")
+    assert indices["provider"] == "yahoo"
+    assert indices["isFromSnapshot"] is True
+    assert cache_state["persistentSnapshotAvailable"] is True
