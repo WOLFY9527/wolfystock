@@ -10,7 +10,7 @@ import {
   type NotificationSeverity,
 } from '../api/adminNotifications';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, GlassCard } from '../components/common';
+import { ApiErrorAlert, Badge, Button, Checkbox, Disclosure, GlassCard, Input, Select } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { cn } from '../utils/cn';
 import {
@@ -51,10 +51,10 @@ const INITIAL_DRAFT: ChannelDraft = {
 
 const SYSTEM_CHANNEL_OPTIONS = ['wechat', 'feishu', 'telegram', 'email', 'pushover', 'pushplus', 'serverchan3', 'custom', 'discord', 'slack', 'astrbot'];
 
-const severityTone: Record<NotificationSeverity, string> = {
-  info: 'border-cyan-300/25 bg-cyan-400/10 text-cyan-100',
-  warning: 'border-amber-300/30 bg-amber-400/12 text-amber-100',
-  critical: 'border-rose-300/35 bg-rose-500/14 text-rose-100',
+const severityBadgeVariant: Record<NotificationSeverity, React.ComponentProps<typeof Badge>['variant']> = {
+  info: 'info',
+  warning: 'warning',
+  critical: 'danger',
 };
 
 function severityLabel(value: NotificationSeverity, language: 'zh' | 'en'): string {
@@ -191,16 +191,12 @@ function eventTypesText(channel: NotificationChannel, language: 'zh' | 'en'): st
   return channel.eventTypes.length ? channel.eventTypes.join(', ') : (language === 'en' ? 'All event types' : '全部事件类型');
 }
 
-function displayStatusToneClass(tone: DisplayStatusTone): string {
-  const classes: Record<DisplayStatusTone, string> = {
-    success: 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100',
-    warning: 'border-amber-300/25 bg-amber-400/10 text-amber-100',
-    danger: 'border-rose-300/25 bg-rose-500/10 text-rose-100',
-    info: 'border-cyan-300/20 bg-cyan-400/10 text-cyan-100',
-    muted: 'border-white/10 bg-white/[0.03] text-white/45',
-    neutral: 'border-white/10 bg-white/[0.03] text-white/65',
-  };
-  return classes[tone];
+function displayStatusBadgeVariant(tone: DisplayStatusTone): React.ComponentProps<typeof Badge>['variant'] {
+  if (tone === 'success') return 'success';
+  if (tone === 'warning') return 'warning';
+  if (tone === 'danger') return 'danger';
+  if (tone === 'info') return 'info';
+  return 'default';
 }
 
 function coverageLabel(channel: NotificationChannel, language: 'zh' | 'en'): string {
@@ -450,9 +446,9 @@ const AdminNotificationsPage: React.FC = () => {
               )}
             </p>
           </div>
-          <button type="button" className="btn-secondary h-9 rounded-lg px-3 text-xs" onClick={() => void loadAll()} disabled={isLoading}>
-            {isLoading ? text('Refreshing', '刷新中') : text('Refresh', '刷新')}
-          </button>
+          <Button type="button" variant="secondary" size="sm" onClick={() => void loadAll()} isLoading={isLoading} loadingText={text('Refreshing', '刷新中')}>
+            {text('Refresh', '刷新')}
+          </Button>
         </div>
       </GlassCard>
 
@@ -468,12 +464,14 @@ const AdminNotificationsPage: React.FC = () => {
             </ul>
           ) : null}
           {notice.rawMessage && notice.rawMessage !== notice.message ? (
-            <details className="mt-2 rounded-md border border-white/10 bg-black/10 px-2 py-1">
-              <summary className="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-secondary-text">
-                {text('Developer details', '开发者细节')}
-              </summary>
+            <Disclosure
+              className="mt-2 rounded-md border border-white/10 bg-black/10 px-2 py-1"
+              summaryClassName="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-secondary-text"
+              bodyClassName="mt-2"
+              summary={text('Developer details', '开发者细节')}
+            >
               <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] leading-5 text-secondary-text">{notice.rawMessage}</pre>
-            </details>
+            </Disclosure>
           ) : null}
         </div>
       ) : null}
@@ -530,106 +528,79 @@ const AdminNotificationsPage: React.FC = () => {
             <h2 className="text-sm font-semibold text-foreground">{text('Channel setup', '通道设置')}</h2>
             <p className="mt-1 text-xs text-muted-text">{text('Create a low-risk in-app or webhook route. Secrets are masked after save.', '创建一个低风险的站内或 webhook 通道。保存后密钥会被遮罩。')}</p>
           </div>
-          <label className="block space-y-1">
-            <span className="text-xs font-semibold text-secondary-text">{text('Channel name', '通道名称')}</span>
-            <input
-              aria-label={text('Channel name', '通道名称')}
-              className="input-surface h-9 w-full rounded-lg px-3 text-sm"
-              value={draft.name}
-              onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs font-semibold text-secondary-text">{text('Channel type', '通道类型')}</span>
-            <select
-              aria-label={text('Channel type', '通道类型')}
-              className="input-surface h-9 w-full appearance-none rounded-lg px-3 pr-10 text-sm truncate"
-              value={draft.type}
-              onChange={(event) => setDraft((current) => ({ ...current, type: event.target.value as NotificationChannelType }))}
-            >
-              <option value="system_channel">{text('Existing channel', '已有通道')}</option>
-              <option value="in_app">{text('In-app', '站内')}</option>
-              <option value="webhook">Webhook</option>
-            </select>
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs font-semibold text-secondary-text">{text('Minimum severity', '最低严重级别')}</span>
-            <select
-              aria-label={text('Minimum severity', '最低严重级别')}
-              className="input-surface h-9 w-full appearance-none rounded-lg px-3 pr-10 text-sm truncate"
-              value={draft.severityMin}
-              onChange={(event) => setDraft((current) => ({ ...current, severityMin: event.target.value as NotificationSeverity }))}
-            >
-              <option value="info">{text('info', '信息')}</option>
-              <option value="warning">{text('warning', '警告')}</option>
-              <option value="critical">{text('critical', '严重')}</option>
-            </select>
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs font-semibold text-secondary-text">{text('Event types', '事件类型')}</span>
-            <input
-              aria-label={text('Event types', '事件类型')}
-              className="input-surface h-9 w-full rounded-lg px-3 text-sm"
-              placeholder="admin_logs.storage, scanner.failure"
-              value={draft.eventTypesText}
-              onChange={(event) => setDraft((current) => ({ ...current, eventTypesText: event.target.value }))}
-            />
-          </label>
+          <Input
+            label={text('Channel name', '通道名称')}
+            value={draft.name}
+            onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+          />
+          <Select
+            label={text('Channel type', '通道类型')}
+            value={draft.type}
+            onChange={(value) => setDraft((current) => ({ ...current, type: value as NotificationChannelType }))}
+            options={[
+              { value: 'system_channel', label: text('Existing channel', '已有通道') },
+              { value: 'in_app', label: text('In-app', '站内') },
+              { value: 'webhook', label: 'Webhook' },
+            ]}
+          />
+          <Select
+            label={text('Minimum severity', '最低严重级别')}
+            value={draft.severityMin}
+            onChange={(value) => setDraft((current) => ({ ...current, severityMin: value as NotificationSeverity }))}
+            options={[
+              { value: 'info', label: text('info', '信息') },
+              { value: 'warning', label: text('warning', '警告') },
+              { value: 'critical', label: text('critical', '严重') },
+            ]}
+          />
+          <Input
+            label={text('Event types', '事件类型')}
+            placeholder="admin_logs.storage, scanner.failure"
+            value={draft.eventTypesText}
+            onChange={(event) => setDraft((current) => ({ ...current, eventTypesText: event.target.value }))}
+          />
           {draft.type === 'system_channel' ? (
-            <label className="block space-y-1">
-              <span className="text-xs font-semibold text-secondary-text">{text('Existing notification channel', '已有通知通道')}</span>
-              <select
-                aria-label={text('Existing notification channel', '已有通知通道')}
-                className="input-surface h-9 w-full appearance-none rounded-lg px-3 pr-10 text-sm truncate"
+            <div className="space-y-1">
+              <Select
+                label={text('Existing notification channel', '已有通知通道')}
                 value={draft.systemChannel}
-                onChange={(event) => setDraft((current) => ({ ...current, systemChannel: event.target.value }))}
-              >
-                {(availableSystemChannels.length ? availableSystemChannels : SYSTEM_CHANNEL_OPTIONS).map((channel) => (
-                  <option key={channel} value={channel}>{channel}</option>
-                ))}
-              </select>
+                onChange={(value) => setDraft((current) => ({ ...current, systemChannel: value }))}
+                options={(availableSystemChannels.length ? availableSystemChannels : SYSTEM_CHANNEL_OPTIONS).map((channel) => ({
+                  value: channel,
+                  label: channel,
+                }))}
+              />
               <p className="text-[11px] leading-4 text-muted-text">
                 {text('Uses credentials already configured in System Settings.', '使用系统设置中已经配置的凭据。')}
               </p>
-            </label>
+            </div>
           ) : null}
           {draft.type === 'webhook' ? (
             <>
-              <label className="block space-y-1">
-                <span className="text-xs font-semibold text-secondary-text">{text('Webhook URL', 'Webhook 地址')}</span>
-                <input
-                  aria-label={text('Webhook URL', 'Webhook 地址')}
-                  className="input-surface h-9 w-full rounded-lg px-3 text-sm"
-                  placeholder="https://hooks.example.test/..."
-                  value={draft.webhookUrl}
-                  onChange={(event) => setDraft((current) => ({ ...current, webhookUrl: event.target.value }))}
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-xs font-semibold text-secondary-text">{text('Bearer token', 'Bearer 令牌')}</span>
-                <input
-                  aria-label={text('Bearer token', 'Bearer 令牌')}
-                  type="password"
-                  className="input-surface h-9 w-full rounded-lg px-3 text-sm"
-                  value={draft.token}
-                  onChange={(event) => setDraft((current) => ({ ...current, token: event.target.value }))}
-                />
-              </label>
+              <Input
+                label={text('Webhook URL', 'Webhook 地址')}
+                placeholder="https://hooks.example.test/..."
+                value={draft.webhookUrl}
+                onChange={(event) => setDraft((current) => ({ ...current, webhookUrl: event.target.value }))}
+              />
+              <Input
+                label={text('Bearer token', 'Bearer 令牌')}
+                type="password"
+                value={draft.token}
+                onChange={(event) => setDraft((current) => ({ ...current, token: event.target.value }))}
+              />
             </>
           ) : null}
-          <label className="flex items-center gap-2 text-xs font-semibold text-secondary-text">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border border-white/15 bg-white/[0.03] accent-emerald-400"
-              checked={draft.enabled}
-              onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}
-            />
-            {text('Enabled', '启用')}
-          </label>
+          <Checkbox
+            label={text('Enabled', '启用')}
+            checked={draft.enabled}
+            onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}
+            containerClassName="min-h-[40px] rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2"
+          />
           {formError ? <p className="text-xs text-rose-100">{formError}</p> : null}
-          <button type="submit" className="btn-primary h-9 rounded-lg px-4 text-sm" disabled={isSaving}>
-            {isSaving ? text('Saving', '保存中') : text('Create channel', '创建通道')}
-          </button>
+          <Button type="submit" variant="primary" size="md" isLoading={isSaving} loadingText={text('Saving', '保存中')} className="w-full">
+            {text('Create channel', '创建通道')}
+          </Button>
         </GlassCard>
 
         <div className="grid min-h-0 grid-cols-1 gap-4">
@@ -662,9 +633,9 @@ const AdminNotificationsPage: React.FC = () => {
                               : text('In-app', '站内')}
                         </p>
                       </div>
-                      <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold', displayStatusToneClass(enabledStatus.tone))}>
+                      <Badge variant={displayStatusBadgeVariant(enabledStatus.tone)}>
                         {enabledStatus.label}
-                      </span>
+                      </Badge>
                     </div>
                     <div className="min-w-0 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
                       <p className="text-[11px] font-semibold text-muted-text">{text('Route coverage', '路由覆盖')}</p>
@@ -674,58 +645,62 @@ const AdminNotificationsPage: React.FC = () => {
                     </div>
                     <div className="min-w-0 space-y-2 text-[11px] text-muted-text">
                       <div>
-                        <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold', severityTone[channel.severityMin])}>
+                        <Badge variant={severityBadgeVariant[channel.severityMin]}>
                           {severityLabel(channel.severityMin, language as 'zh' | 'en')}
-                        </span>
+                        </Badge>
                       </div>
                       <p>
                         {text('Last trigger', '最近触发')}: <span className="text-secondary-text">{formatDate(channel.lastTriggeredAt || channel.lastSentAt)}</span>
                       </p>
                       <p>
-                        {text('Last status', '最近状态')}: <span className={cn('rounded-full border px-2 py-0.5', displayStatusToneClass(lastStatus.tone))}>{lastStatus.label}</span>
+                        {text('Last status', '最近状态')}: <Badge variant={displayStatusBadgeVariant(lastStatus.tone)}>{lastStatus.label}</Badge>
                       </p>
                       <p>
                         {text('Last failure', '最近失败')}: <span className="text-secondary-text">{failureSummaryLabel(channel, deliveryError, language as 'zh' | 'en')}</span>
                       </p>
                     </div>
                     <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
-                      <button
+                      <Button
                         type="button"
-                        className="btn-secondary h-8 rounded-lg px-3 text-xs"
+                        variant="secondary"
+                        size="sm"
                         onClick={() => void testChannel(channel.id, true)}
                         disabled={busyId === channel.id}
                       >
                         <ShieldCheck className="h-3 w-3" />
                         {text('Dry run', '仅验证')}
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
-                        className="btn-secondary h-8 rounded-lg px-3 text-xs"
+                        variant="secondary"
+                        size="sm"
                         onClick={() => void toggleChannel(channel)}
                         disabled={busyId === channel.id}
                       >
                         <Power className="h-3 w-3" />
                         {channel.enabled ? text('Disable', '停用') : text('Enable', '启用')}
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
-                        className="btn-secondary h-8 rounded-lg px-3 text-xs"
+                        variant="secondary"
+                        size="sm"
                         onClick={() => void testChannel(channel.id, false)}
                         disabled={busyId === channel.id}
                       >
                         <Send className="h-3 w-3" />
                         {text('Test send', '测试发送')}
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
-                        className="btn-secondary h-8 rounded-lg px-3 text-xs text-rose-100"
+                        variant="danger-subtle"
+                        size="sm"
                         onClick={() => void deleteChannel(channel.id)}
                         disabled={busyId === channel.id}
                         title={text('Only unbind the log notification route; system channel is not deleted.', '仅解除日志路由绑定；不会删除系统通道。')}
                       >
                         <Trash2 className="h-3 w-3" />
                         {text('Unbind', '解除绑定')}
-                      </button>
+                      </Button>
                       <p className="basis-full text-[11px] leading-4 text-muted-text lg:text-right">
                         {text('Only removes the log route binding. The system channel is not deleted.', '仅解除日志路由绑定，不会删除系统通道。')}
                       </p>
@@ -756,18 +731,19 @@ const AdminNotificationsPage: React.FC = () => {
                       <p className="mt-1 truncate text-[11px] text-muted-text" title={displayEventMessage(event.message, language as 'zh' | 'en')}>{event.eventType} · {describeAdminNotificationStatus(event.deliveryStatus, { language: language as 'zh' | 'en' }).label}</p>
                     </div>
                     <div>
-                      <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold', severityTone[event.severity])}>{severityLabel(event.severity, language as 'zh' | 'en')}</span>
+                      <Badge variant={severityBadgeVariant[event.severity]}>{severityLabel(event.severity, language as 'zh' | 'en')}</Badge>
                       <p className="mt-1 text-[11px] text-muted-text">{acknowledgedLabel(event.acknowledgedAt, language as 'zh' | 'en')}</p>
                     </div>
                     <div className="md:text-right">
-                      <button
+                      <Button
                         type="button"
-                        className="btn-secondary h-8 rounded-lg px-3 text-xs"
+                        variant="secondary"
+                        size="sm"
                         onClick={() => void acknowledge(event.id)}
                         disabled={Boolean(event.acknowledgedAt) || busyId === event.id}
                       >
                         {text('Acknowledge', '确认')}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )) : (
