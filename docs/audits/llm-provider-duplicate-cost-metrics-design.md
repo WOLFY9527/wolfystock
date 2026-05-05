@@ -134,6 +134,20 @@ Phase 1A LLM-seams implementation note (2026-05-06):
 - Labels are allowlisted and bucketed (`call_type`, `provider`, `model_family`, `route`, `attempt_index`, `fallback_depth`, `retry_reason`, `outcome`, `duration_bucket`, `token_bucket`, `report_type`, `language`). Raw prompts, messages, images, provider payloads, API keys, URLs, exception text, user ids, and session ids are not accepted as labels.
 - This phase does not change LLM routing, prompts, model order, fallback/retry behavior, report integrity semantics, caching, provider behavior, scanner/backtest/portfolio/notification/DuckDB runtime, or API response shapes.
 
+Phase 1B provider fallback/cache implementation note (2026-05-06):
+
+- Added provider events to the existing process-local best-effort helper and instrumented only `src/services/analysis_provider_planner.py::AnalysisProviderExecutor.execute_category()` and `_get_or_call()`.
+- Implemented `provider_call_started`, `provider_call_completed`, `provider_call_failed`, `provider_fallback_attempt`, `provider_insufficient_payload`, `provider_timeout`, `provider_quota_risk_observed`, `provider_cache_hit`, `provider_cache_miss`, `provider_inflight_join`, and `provider_duplicate_candidate_observed`.
+- Labels stay allowlisted and bounded (`provider`, `provider_category`, `market`, `endpoint_family`, `attempt_index`, `fallback_depth`, `outcome`, `duration_bucket`, `error_bucket`, `retry_reason_bucket`, `cache_key_hash`). Cache keys are hashed; raw symbols, URLs, params, provider payloads, exception text, stack traces, credentials, user/session ids, prompts, messages, news, and images are not emitted.
+- This phase does not change provider ordering, fallback behavior, timeout values, retry behavior, circuit behavior, cache TTL/key semantics, `_cache`/`_inflight` behavior, provider validation probes, MarketCache behavior, scanner AI, frontend, or external provider call count.
+
+Phase 1C MarketCache implementation note (2026-05-06):
+
+- Added backend-only MarketCache counters at existing hit/stale/miss/refresh/fallback seams in `src/services/market_cache.py` using the same process-local best-effort helper.
+- Implemented `market_cache_hit`, `market_cache_stale_served`, `market_cache_miss`, `market_cache_refresh_started`, `market_cache_refresh_completed`, `market_cache_refresh_failed`, and `market_cache_cold_start_fallback_served`.
+- Labels stay bounded and privacy-safe (`panel_key` only when safe, `endpoint_family`, `provider_category`, `refresh_mode`, `outcome`, `freshness_bucket`, `duration_bucket`, `error_bucket`, `cache_key_hash`); raw cache keys, payloads, snapshots, URLs, and exception text are not emitted.
+- This phase does not change TTL, stale-while-revalidate behavior, refresh scheduling, cold-start timeout, fallback factory behavior, persistent snapshot behavior, freshness metadata, response payload semantics, or provider behavior.
+
 Phase 2: read-only duplicate-cost summary
 
 - Add a backend-only/admin-only summary using existing LLM usage, execution logs, provider diagnostics, MarketCache metadata, and the new counters.

@@ -19,6 +19,13 @@ _ALLOWED_EVENTS = frozenset(
         "llm_fallback_attempt",
         "llm_integrity_retry",
         "llm_usage_persisted",
+        "market_cache_hit",
+        "market_cache_stale_served",
+        "market_cache_miss",
+        "market_cache_refresh_started",
+        "market_cache_refresh_completed",
+        "market_cache_refresh_failed",
+        "market_cache_cold_start_fallback_served",
     }
 )
 
@@ -37,6 +44,13 @@ _ALLOWED_LABELS = frozenset(
         "token_bucket",
         "report_type",
         "language",
+        "panel_key",
+        "endpoint_family",
+        "provider_category",
+        "refresh_mode",
+        "freshness_bucket",
+        "error_bucket",
+        "cache_key_hash",
     }
 )
 
@@ -169,6 +183,15 @@ def provider_from_model(model: Any) -> str:
 
 def emit_llm_event(event_name: str, **labels: Any) -> None:
     """Emit a bounded LLM event; failures are always swallowed."""
+    _emit_event(event_name, labels)
+
+
+def emit_market_cache_event(event_name: str, **labels: Any) -> None:
+    """Emit a bounded MarketCache event; failures are always swallowed."""
+    _emit_event(event_name, labels)
+
+
+def _emit_event(event_name: str, labels: Dict[str, Any]) -> None:
     try:
         normalized_event = _bounded_label(event_name)
         if normalized_event not in _ALLOWED_EVENTS:
@@ -198,6 +221,8 @@ def _sanitize_labels(labels: Dict[str, Any]) -> Dict[str, str]:
         elif key in {"attempt_index", "fallback_depth"}:
             safe[key] = _bounded_int_label(value)
         elif key == "retry_reason":
+            safe[key] = bucket_retry_reason(value)
+        elif key == "error_bucket":
             safe[key] = bucket_retry_reason(value)
         elif key == "duration_bucket":
             safe[key] = bucket_duration_ms(value)
