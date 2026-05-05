@@ -65,18 +65,18 @@ const report: AnalysisReport = {
         ticker: 'NVDA',
         score: 78,
         currentPrice: '125.30',
-        priceLabel: 'Analysis Price',
-        priceBasis: 'Intraday snapshot',
-        priceBasisDetail: 'Captured from a market snapshot during the current session, not streaming tick-by-tick data.',
+        priceLabel: '分析价格',
+        priceBasis: '盘中快照',
+        priceBasisDetail: '来自当前常规交易时段的行情快照，非逐笔实时流。',
         changeAmount: '2.30',
         changePct: '1.87%',
         marketTime: '2026-03-28 09:35:00 EDT',
         marketSessionDate: '2026-03-28',
         sessionLabel: '常规交易时段',
-        referenceSession: '2026-03-28 regular session',
+        referenceSession: '2026-03-28 常规交易时段',
         snapshotTime: '2026-03-28 09:35:00 EDT',
         reportGeneratedAt: '2026-03-28 21:35:00 CST',
-        priceContextNote: 'Entry, stop, target, support and resistance are anchored to the same intraday snapshot shown above.',
+        priceContextNote: '买点、止损、目标、支撑与压力均锚定上方同一盘中快照。',
         operationAdvice: '观望',
         trendPrediction: '看多',
         oneSentence: '等待回踩确认后再考虑加仓',
@@ -94,7 +94,7 @@ const report: AnalysisReport = {
         market: {
           title: '行情表',
           fields: [
-            { label: 'Analysis Price', value: '125.30' },
+            { label: '分析价格', value: '125.30' },
             { label: 'Change %', value: '1.87%' },
           ],
         },
@@ -261,7 +261,9 @@ describe('StandardReportPanel', () => {
     expect(screen.getAllByText('等待回踩确认后再考虑加仓').length).toBeGreaterThan(0);
     expect(screen.getAllByText('125.30').length).toBeGreaterThan(0);
     expect(screen.getAllByText('1.87%').length).toBeGreaterThan(0);
-    expect(screen.queryAllByText(/Intraday snapshot/).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/盘中快照/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Intraday snapshot/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/regular session/)).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: '概览' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '全部' })).not.toBeInTheDocument();
 

@@ -22,18 +22,18 @@ export const previewReport: AnalysisReport = {
         ticker: 'NVDA',
         score: 78,
         currentPrice: '125.30',
-        priceLabel: 'Analysis Price',
-        priceBasis: 'Intraday snapshot',
-        priceBasisDetail: 'Captured from a market snapshot during the current session, not streaming tick-by-tick data.',
+        priceLabel: '分析价格',
+        priceBasis: '盘中快照',
+        priceBasisDetail: '来自当前常规交易时段的行情快照，非逐笔实时流。',
         changeAmount: '2.30',
         changePct: '1.87%',
         marketTime: '2026-03-28 09:35:00 EDT',
         marketSessionDate: '2026-03-28',
         sessionLabel: '常规交易时段',
-        referenceSession: '2026-03-28 regular session',
+        referenceSession: '2026-03-28 常规交易时段',
         snapshotTime: '2026-03-28 09:35:00 EDT',
         reportGeneratedAt: '2026-03-28 21:35:00 CST',
-        priceContextNote: 'Entry, stop, target, support and resistance are anchored to the same intraday snapshot shown above.',
+        priceContextNote: '买点、止损、目标、支撑与压力均锚定上方同一盘中快照。',
         operationAdvice: '观望',
         trendPrediction: '看多',
         oneSentence: '等待回踩确认后再考虑加仓',
@@ -53,15 +53,15 @@ export const previewReport: AnalysisReport = {
           amount: 5723456789,
         },
         displayFields: [
-          { label: 'Analysis Price', value: '125.30' },
-          { label: 'Prev Close', value: '123.00' },
-          { label: 'Session Open', value: '123.50' },
-          { label: 'Session High', value: '126.20' },
-          { label: 'Session Low', value: '122.90' },
-          { label: 'Change', value: '2.30' },
-          { label: 'Change %', value: '1.87%' },
-          { label: 'Volume', value: '45.68M' },
-          { label: 'Turnover', value: '5.72B' },
+          { label: '分析价格', value: '125.30' },
+          { label: '昨收', value: '123.00' },
+          { label: '开盘', value: '123.50' },
+          { label: '最高', value: '126.20' },
+          { label: '最低', value: '122.90' },
+          { label: '涨跌', value: '2.30' },
+          { label: '涨跌幅', value: '1.87%' },
+          { label: '成交量', value: '45.68M' },
+          { label: '成交额', value: '5.72B' },
         ],
         consistencyWarnings: ['常规时段多源涨跌口径存在较大偏差，已优先采用当前价与昨收重算结果'],
       },
@@ -69,8 +69,8 @@ export const previewReport: AnalysisReport = {
         market: {
           title: '行情表',
           fields: [
-            { label: 'Analysis Price', value: '125.30' },
-            { label: 'Change %', value: '1.87%' },
+            { label: '分析价格', value: '125.30' },
+            { label: '涨跌幅', value: '1.87%' },
           ],
         },
         technical: {
@@ -211,7 +211,7 @@ export const previewReport: AnalysisReport = {
 
 export const previewChartFixtures: ReportPriceChartFixtures = {
   minute1: {
-    source: 'Preview intraday feed',
+    source: '预览盘中行情',
     data: [
       { time: '2026-03-28T09:30:00-04:00', open: 124.9, high: 125.6, low: 124.7, close: 125.3, volume: 1200 },
       { time: '2026-03-28T09:35:00-04:00', open: 125.3, high: 125.9, low: 125.1, close: 125.6, volume: 1600 },
@@ -221,7 +221,7 @@ export const previewChartFixtures: ReportPriceChartFixtures = {
     ],
   },
   minute5: {
-    source: 'Preview daily feed',
+    source: '预览日线行情',
     data: [
       { date: '2026-03-24', open: 120, high: 123, low: 119, close: 122, volume: 10 },
       { date: '2026-03-25', open: 122, high: 124, low: 121, close: 123, volume: 11 },
@@ -230,7 +230,7 @@ export const previewChartFixtures: ReportPriceChartFixtures = {
     ],
   },
   daily: {
-    source: 'Preview daily feed',
+    source: '预览日线行情',
     data: [
       { date: '2026-01-08', open: 111, high: 115, low: 109, close: 114, volume: 21 },
       { date: '2026-02-08', open: 116, high: 119, low: 113, close: 117, volume: 24 },
@@ -238,7 +238,7 @@ export const previewChartFixtures: ReportPriceChartFixtures = {
     ],
   },
   yearly: {
-    source: 'Preview daily feed',
+    source: '预览日线行情',
     data: [
       { date: '2025-06-28', open: 96, high: 102, low: 94, close: 101, volume: 28 },
       { date: '2025-09-28', open: 103, high: 111, low: 100, close: 109, volume: 30 },
@@ -247,7 +247,7 @@ export const previewChartFixtures: ReportPriceChartFixtures = {
     ],
   },
   weekly: {
-    source: 'Preview weekly feed',
+    source: '预览周线行情',
     data: [
       { date: '2026-03-06', open: 117, high: 120, low: 114, close: 118, volume: 42 },
       { date: '2026-03-13', open: 118, high: 122, low: 116, close: 121, volume: 45 },
@@ -256,7 +256,7 @@ export const previewChartFixtures: ReportPriceChartFixtures = {
     ],
   },
   monthly: {
-    source: 'Preview monthly feed',
+    source: '预览月线行情',
     data: [
       { date: '2025-12-01', open: 98, high: 108, low: 95, close: 106, volume: 62 },
       { date: '2026-01-01', open: 106, high: 116, low: 104, close: 113, volume: 68 },
