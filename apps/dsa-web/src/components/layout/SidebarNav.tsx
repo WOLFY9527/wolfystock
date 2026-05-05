@@ -9,6 +9,7 @@ import {
   Activity,
   BellRing,
   BriefcaseBusiness,
+  DatabaseZap,
   Globe,
   Home,
   LogIn,
@@ -129,9 +130,11 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const signInLabel = t('nav.signIn');
   const consoleLabel = t('nav.independentConsole');
   const notificationsLabel = t('nav.notifications');
+  const marketProvidersLabel = t('nav.marketProviders');
   const signInPath = buildLoginPath(location.pathname + location.search);
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
   const notificationsPath = routeLocale ? buildLocalizedPath('/admin/notifications', routeLocale) : '/admin/notifications';
+  const marketProvidersPath = routeLocale ? buildLocalizedPath('/admin/market-providers', routeLocale) : '/admin/market-providers';
 
   const navLinks = NAV_ITEMS.map(({ key, labelKey, to, icon: Icon, badge }) => {
     const label = t(labelKey);
@@ -285,6 +288,30 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </NavLink>
   ) : null;
 
+  const marketProviderAction = isAdminAccount ? (
+    <NavLink
+      to={marketProvidersPath}
+      onClick={onNavigate}
+      className={({ isActive }) => cn(
+        isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
+        !isDrawer && isActive ? 'text-white' : '',
+        isDrawer && isActive ? 'is-active' : '',
+      )}
+      aria-label={marketProvidersLabel}
+    >
+      {isDrawer ? (
+        <>
+          <span className="shell-nav-item__icon" aria-hidden="true">
+            <DatabaseZap className="h-4 w-4" />
+          </span>
+          <DrawerUtilityLabel label={marketProvidersLabel} />
+        </>
+      ) : (
+        <span>{marketProvidersLabel}</span>
+      )}
+    </NavLink>
+  ) : null;
+
   const signInAction = authEnabled && isGuest ? (
     <NavLink
       to={signInPath}
@@ -346,6 +373,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             {settingsAction}
             {systemAction}
             {notificationAction}
+            {marketProviderAction}
             {signInAction}
             {logoutAction}
           </div>
@@ -371,6 +399,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
               {settingsAction}
               {systemAction}
               {notificationAction}
+              {marketProviderAction}
               {signInAction}
               {logoutAction && (settingsAction || systemAction || signInAction) ? (
                 <div className="h-3 w-px bg-white/10" data-testid="shell-header-utility-divider" />

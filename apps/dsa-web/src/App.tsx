@@ -42,6 +42,7 @@ const PersonalSettingsPage = lazy(() => import('./pages/PersonalSettingsPage'));
 const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'));
 const AdminLogsPage = lazy(() => import('./pages/AdminLogsPage'));
 const AdminNotificationsPage = lazy(() => import('./pages/AdminNotificationsPage'));
+const MarketProviderOperationsPage = lazy(() => import('./pages/MarketProviderOperationsPage'));
 
 type GateCopy = {
   eyebrow: string;
@@ -57,8 +58,10 @@ type GateCopy = {
 function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: boolean): GateCopy {
   const isEnglish = language === 'en';
 
-  if (pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/notifications')) {
-    const surfaceName = pathname.startsWith('/admin/notifications')
+  if (pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers')) {
+    const surfaceName = pathname.startsWith('/admin/market-providers')
+      ? (isEnglish ? 'market provider operations' : '市场数据源运维')
+      : pathname.startsWith('/admin/notifications')
       ? (isEnglish ? 'notification channels' : '通知通道')
       : (isEnglish ? 'logs' : '日志');
     return isGuest
@@ -242,6 +245,8 @@ export const AppContent: React.FC = () => {
     || routePathname.startsWith('/admin/logs/')
     || routePathname === '/admin/notifications'
     || routePathname.startsWith('/admin/notifications/')
+    || routePathname === '/admin/market-providers'
+    || routePathname.startsWith('/admin/market-providers/')
   );
 
   useEffect(() => {
@@ -355,6 +360,7 @@ export const AppContent: React.FC = () => {
               <Route path="/settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
               <Route path="/admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
               <Route path="/admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
+              <Route path="/admin/market-providers" element={<AdminSurfaceRoute><MarketProviderOperationsPage /></AdminSurfaceRoute>} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route path="/:locale" element={<Shell />}>
@@ -372,6 +378,7 @@ export const AppContent: React.FC = () => {
               <Route path="settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
               <Route path="admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
               <Route path="admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
+              <Route path="admin/market-providers" element={<AdminSurfaceRoute><MarketProviderOperationsPage /></AdminSurfaceRoute>} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route path="/login" element={<LoginPage />} />

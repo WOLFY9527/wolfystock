@@ -61,6 +61,9 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string): 
   if (pathname.startsWith('/admin/notifications')) {
     return t('nav.notifications');
   }
+  if (pathname.startsWith('/admin/market-providers')) {
+    return t('nav.marketProviders');
+  }
   return t('nav.terminal');
 }
 
@@ -92,7 +95,9 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isChatRoute = surfacePathname.startsWith('/chat');
   const isMarketOverviewRoute = surfacePathname.startsWith('/market-overview');
   const isScannerRoute = surfacePathname.startsWith('/scanner');
-  const isSystemControlRoute = surfacePathname.startsWith('/settings/system') || surfacePathname.startsWith('/admin/notifications');
+  const isSystemControlRoute = surfacePathname.startsWith('/settings/system')
+    || surfacePathname.startsWith('/admin/notifications')
+    || surfacePathname.startsWith('/admin/market-providers');
   const shellViewportClass = isScannerRoute ? 'min-h-screen' : 'h-full min-h-0';
   const shellFrameOverflowClass = '';
   const isWideRoute = surfacePathname === '/'

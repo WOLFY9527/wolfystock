@@ -105,6 +105,14 @@ vi.mock('../pages/AdminLogsPage', () => ({
   default: () => <div>admin-logs-page</div>,
 }));
 
+vi.mock('../pages/AdminNotificationsPage', () => ({
+  default: () => <div>admin-notifications-page</div>,
+}));
+
+vi.mock('../pages/MarketProviderOperationsPage', () => ({
+  default: () => <div>market-provider-operations-page</div>,
+}));
+
 vi.mock('../pages/LoginPage', () => ({
   default: () => <div>login-page</div>,
 }));
@@ -355,6 +363,25 @@ describe('AppContent route flows', () => {
     renderAt('/settings/system');
 
     await waitFor(() => expect(screen.getByText('system-settings-page')).toBeInTheDocument());
+  });
+
+  it('renders the localized market provider operations route for admin accounts', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: true,
+      isAdminMode: true,
+    });
+
+    renderAt('/zh/admin/market-providers');
+
+    await waitFor(() => expect(screen.getByText('market-provider-operations-page')).toBeInTheDocument());
   });
 
   it('keeps scanner reachable for signed-in users', async () => {
