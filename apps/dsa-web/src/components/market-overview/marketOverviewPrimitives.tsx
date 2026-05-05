@@ -233,7 +233,7 @@ export const MarketOverviewRefreshButton: React.FC<{
     aria-label={label}
     onClick={onRefresh}
     disabled={refreshing}
-    className="p-1.5 text-white/30 hover:text-white hover:bg-white/10 rounded-lg transition-all cursor-pointer disabled:cursor-wait disabled:text-white/45"
+    className="inline-flex h-[36px] w-[36px] items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/45 transition-all hover:bg-white/10 hover:text-white cursor-pointer disabled:cursor-wait disabled:text-white/45 sm:h-[32px] sm:w-[32px]"
   >
     <RefreshCcw className={cn('h-4 w-4', refreshing ? 'animate-spin' : '')} aria-hidden="true" />
   </button>

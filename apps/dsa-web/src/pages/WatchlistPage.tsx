@@ -40,8 +40,9 @@ type BatchProgress = {
   failures: Record<string, BatchFailure>;
 } | null;
 
-const ACTION_BUTTON_CLASS = 'inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-white/70 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45';
-const ICON_BUTTON_CLASS = 'inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/55 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45';
+const ACTION_BUTTON_CLASS = 'inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-medium text-white/70 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45 sm:h-[32px] sm:min-h-[32px] sm:px-2.5 sm:py-0';
+const ICON_BUTTON_CLASS = 'inline-flex h-[36px] w-[36px] items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/55 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45 sm:h-[32px] sm:w-[32px]';
+const ROW_SELECTION_BUTTON_CLASS = 'inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-lg border transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/35';
 const CHIP_CLASS = 'rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-white/60';
 
 function normalizeText(value?: string | null): string {
@@ -1103,7 +1104,7 @@ const WatchlistPage: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          className={`h-4 w-4 rounded border transition ${
+                          className={`${ROW_SELECTION_BUTTON_CLASS} ${
                             selectedIds.has(item.id)
                               ? 'border-cyan-300 bg-cyan-300/30 shadow-[0_0_10px_rgba(103,232,249,0.25)]'
                               : 'border-white/15 bg-white/[0.03] hover:border-white/30'
@@ -1112,7 +1113,16 @@ const WatchlistPage: React.FC = () => {
                           aria-checked={selectedIds.has(item.id)}
                           aria-label={`${language === 'zh' ? '选择' : 'Select'} ${item.symbol}`}
                           onClick={() => toggleSelected(item)}
-                        />
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`h-3 w-3 rounded-sm border transition ${
+                              selectedIds.has(item.id)
+                                ? 'border-cyan-100 bg-cyan-100 shadow-[0_0_8px_rgba(103,232,249,0.35)]'
+                                : 'border-white/20 bg-transparent'
+                            }`}
+                          />
+                        </button>
                         <Clipboard className="h-4 w-4 text-white/30" />
                         <span className="font-semibold text-white">{item.symbol}</span>
                       </div>
