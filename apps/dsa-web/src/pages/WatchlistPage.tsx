@@ -17,11 +17,13 @@ import { backtestApi } from '../api/backtest';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { watchlistApi } from '../api/watchlist';
 import { AuthGuardOverlay } from '../components/auth/AuthGuardOverlay';
-import { ApiErrorAlert, Input, SectionShell, Select } from '../components/common';
+import { ApiErrorAlert, Badge, Button, Input, SectionShell, Select } from '../components/common';
+import { StatusBadge } from '../components/ui/StatusBadge';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import type { WatchlistItem } from '../types/watchlist';
 import type { RuleBacktestRunResponse } from '../types/backtest';
+import { describeBooleanEnabled, describeDisplayStatus, type DisplayStatusTone } from '../utils/displayStatus';
 import { buildLocalizedPath } from '../utils/localeRouting';
 
 type SortKey = 'newest' | 'scannerScore' | 'backtestReturn' | 'historicalHitRate' | 'recentlyScored' | 'recentlyBacktested' | 'symbol' | 'market';
@@ -40,13 +42,22 @@ type BatchProgress = {
   failures: Record<string, BatchFailure>;
 } | null;
 
-const ACTION_BUTTON_CLASS = 'inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-medium text-white/70 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45 sm:h-[32px] sm:min-h-[32px] sm:px-2.5 sm:py-0';
-const ICON_BUTTON_CLASS = 'inline-flex h-[36px] w-[36px] items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/55 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45 sm:h-[32px] sm:w-[32px]';
 const ROW_SELECTION_BUTTON_CLASS = 'inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-lg border transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/35';
-const CHIP_CLASS = 'rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-white/60';
+const WATCHLIST_BUTTON_CLASS = 'border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/10 hover:text-white';
+const WATCHLIST_ICON_BUTTON_CLASS = 'h-[36px] min-h-[36px] w-[36px] px-0 text-white/55 sm:h-[34px] sm:min-h-[34px] sm:w-[34px]';
+const WATCHLIST_LINK_BUTTON_CLASS = 'inline-flex min-h-[34px] items-center justify-center gap-2 rounded-[var(--theme-button-radius)] border border-white/10 bg-white/[0.04] px-3 text-[0.72rem] font-normal text-white/70 whitespace-nowrap transition-[color,background-color,border-color,opacity,transform] duration-200 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]';
+const WATCHLIST_BADGE_CLASS = 'border-white/10 bg-white/[0.04] text-white/60';
 
 function normalizeText(value?: string | null): string {
   return String(value || '').trim();
+}
+
+function displayBadgeVariant(tone: DisplayStatusTone): React.ComponentProps<typeof Badge>['variant'] {
+  if (tone === 'success') return 'success';
+  if (tone === 'warning') return 'warning';
+  if (tone === 'danger') return 'danger';
+  if (tone === 'info') return 'info';
+  return 'default';
 }
 
 function normalizeMarket(value?: string | null): string {
@@ -884,6 +895,7 @@ const WatchlistPage: React.FC = () => {
     : notice?.tone === 'warning'
       ? 'border-amber-400/20 bg-amber-400/10 text-amber-100'
       : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100';
+  const autoRefreshStatus = describeBooleanEnabled(refreshStatus?.enabled, { language });
 
   return (
     <main className="w-full flex-1 px-4 py-6 xl:px-8" data-testid="watchlist-page">
@@ -896,7 +908,7 @@ const WatchlistPage: React.FC = () => {
           </div>
           <Link
             to={buildLocalizedPath('/scanner', language)}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm font-medium text-white/70 transition hover:bg-white/10 hover:text-white"
+            className={`${WATCHLIST_LINK_BUTTON_CLASS} h-10 px-4 text-sm font-medium`}
           >
             <ExternalLink className="h-4 w-4" />
             {copy.openScanner}
@@ -935,22 +947,24 @@ const WatchlistPage: React.FC = () => {
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-sm backdrop-blur-md">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.autoRefresh}</span>
-              <span className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 font-mono text-[11px] text-emerald-100">
-                {refreshStatus?.enabled ? copy.enabled : '--'}
-              </span>
+              <Badge variant={displayBadgeVariant(autoRefreshStatus.tone)} className="font-mono">
+                {refreshStatus ? autoRefreshStatus.label : '--'}
+              </Badge>
               <span className="truncate font-mono text-[11px] text-white/45">
                 US {refreshStatus?.usTime || '08:45'} / CN {refreshStatus?.cnTime || '09:00'} / HK {refreshStatus?.hkTime || '09:00'}
               </span>
             </div>
-            <button
+            <Button
               type="button"
-              className="inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 text-xs font-semibold text-cyan-100 transition hover:border-cyan-200/40 hover:bg-cyan-300/15 disabled:cursor-wait disabled:opacity-45"
+              variant="ghost"
+              size="sm"
+              className="shrink-0 border-cyan-300/20 bg-cyan-300/10 text-cyan-100 hover:border-cyan-200/40 hover:bg-cyan-300/15 disabled:cursor-wait"
               onClick={() => void handleRefreshScores()}
               disabled={isRefreshingScores}
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingScores ? 'animate-spin' : ''}`} />
               {isRefreshingScores ? copy.refreshingScores : copy.refreshScores}
-            </button>
+            </Button>
           </div>
           <div
             data-testid="watchlist-filter-grid"
@@ -1015,37 +1029,45 @@ const WatchlistPage: React.FC = () => {
               ) : null}
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <button
+              <Button
                 type="button"
-                className={ACTION_BUTTON_CLASS}
+                variant="ghost"
+                size="sm"
+                className={WATCHLIST_BUTTON_CLASS}
                 onClick={() => void handleRefreshScores(actionItems)}
                 disabled={isActionDisabled}
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isBatchScanning ? 'animate-spin' : ''}`} />
                 {copy.batchScanFilter}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="inline-flex h-8 shrink-0 items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-3 text-xs font-semibold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition hover:from-blue-500 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-45"
+                variant="gradient"
+                size="sm"
+                glow
                 onClick={() => void handleBatchBacktestCurrentFilter()}
                 disabled={isActionDisabled}
               >
                 <BarChart3 className="h-3.5 w-3.5" />
                 {isBatchBacktesting ? copy.batchBacktesting : copy.batchBacktestFilter}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className={ACTION_BUTTON_CLASS}
+                variant="ghost"
+                size="sm"
+                className={WATCHLIST_BUTTON_CLASS}
                 aria-pressed={useSelectedScope && selectedItems.length > 0}
                 onClick={() => setUseSelectedScope((current) => selectedItems.length > 0 ? !current : current)}
                 disabled={selectedItems.length === 0}
               >
                 <CheckSquare className="h-3.5 w-3.5" />
                 {copy.selectedOnly}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className={ACTION_BUTTON_CLASS}
+                variant="ghost"
+                size="sm"
+                className={WATCHLIST_BUTTON_CLASS}
                 onClick={() => {
                   setSelectedIds(new Set());
                   setUseSelectedScope(false);
@@ -1053,11 +1075,11 @@ const WatchlistPage: React.FC = () => {
                 disabled={selectedIds.size === 0}
               >
                 {copy.clearSelection}
-              </button>
-              <button type="button" className={ACTION_BUTTON_CLASS} onClick={() => void handleRefreshIntelligence()}>
+              </Button>
+              <Button type="button" variant="ghost" size="sm" className={WATCHLIST_BUTTON_CLASS} onClick={() => void handleRefreshIntelligence()}>
                 <RefreshCw className="h-3.5 w-3.5" />
                 {copy.refreshIntelligence}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -1096,8 +1118,38 @@ const WatchlistPage: React.FC = () => {
                     ? sanitizeFailureReason(item.scoreError || scanner?.reason || '', '扫描失败')
                     : null;
                   const latestTime = getLatestIntelligenceTime(item);
-                  const scannerStatusLabel = formatScannerStatus(item);
-                  const backtestStatusLabel = formatBacktestStatus(item, batchFailure);
+                    const scannerStatusLabel = formatScannerStatus(item);
+                    const backtestStatusLabel = formatBacktestStatus(item, batchFailure);
+                    const scoreFreshnessStatus = item.scoreStatus === 'fresh'
+                      ? 'success'
+                      : item.scoreStatus === 'stale'
+                        ? 'warning'
+                        : 'unknown';
+                    const scannerStatus = scannerStatusLabel === '扫描失败'
+                      ? 'failed'
+                      : scannerStatusLabel === '已验证' || scannerStatusLabel === '通过筛选'
+                        ? 'info'
+                        : 'unknown';
+                    const backtestStatus = backtestStatusLabel === '已回测'
+                      ? 'success'
+                      : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(backtestStatusLabel)
+                        ? 'failed'
+                        : 'unknown';
+                    const batchDisplayStatus = batchStatus
+                      ? describeDisplayStatus(
+                          batchStatus === 'completed'
+                            ? 'success'
+                            : batchStatus === 'failed'
+                              ? 'failed'
+                              : batchStatus === 'running'
+                                ? 'info'
+                                : batchStatus === 'skipped'
+                                  ? 'disabled'
+                                  : 'pending',
+                          batchStatus === 'running' ? '运行中' : batchStatus === 'completed' ? '完成' : batchStatus === 'failed' ? '失败' : batchStatus === 'skipped' ? '已跳过' : '等待',
+                          { language },
+                        )
+                      : null;
                   return (
                   <tr key={item.id} data-testid={`watchlist-row-${item.symbol}`} className="bg-white/[0.01] text-white/70">
                     <td className="px-4 py-3">
@@ -1130,135 +1182,121 @@ const WatchlistPage: React.FC = () => {
                     <td className="px-4 py-3">{formatMarket(item.market)}</td>
                     <td className="px-4 py-3">{item.name || '--'}</td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex min-w-[3.5rem] justify-center rounded-full border border-sky-400/20 bg-sky-400/10 px-2 py-1 text-xs font-semibold text-sky-100">
-                        {formatScore(score)}
-                      </span>
+                        <Badge variant="info" className="min-w-[3.5rem] font-mono font-semibold text-sky-100">
+                          {formatScore(score)}
+                        </Badge>
                     </td>
                     <td className="px-4 py-3">{item.scannerRank ? `#${item.scannerRank}` : '--'}</td>
                     <td className="px-4 py-3">
                       <div className="flex max-w-[180px] flex-col gap-1">
                         <span className="truncate font-mono text-xs text-white/60">{formatDateTime(item.lastScoredAt, language)}</span>
-                        <span className={`w-fit rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
-                          item.scoreStatus === 'fresh'
-                            ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
-                            : item.scoreStatus === 'stale'
-                              ? 'border-amber-400/20 bg-amber-400/10 text-amber-100'
-                              : 'border-white/10 bg-white/[0.04] text-white/40'
-                        }`}>
-                          {formatFreshness(item.lastScoredAt || scanner?.lastScannedAt)}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex max-w-[420px] flex-wrap items-center gap-1.5 text-[11px]">
-                        {!hasAnyEvidence ? (
-                          <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-white/40">{copy.noEvidence}</span>
-                        ) : null}
-                        <span className={`rounded-lg border px-2 py-1 ${
-                          scannerStatusLabel === '已验证' || scannerStatusLabel === '通过筛选'
-                            ? 'border-cyan-300/20 bg-cyan-300/10 text-cyan-100'
-                            : scannerStatusLabel === '扫描失败'
-                              ? 'border-rose-400/20 bg-rose-400/10 text-rose-100'
-                            : 'border-white/10 bg-white/[0.04] text-white/55'
-                        }`}>{scannerStatusLabel}</span>
-                        {scannerStatusLabel === '扫描失败' && scannerFailure ? (
-                          <span className="rounded-lg border border-rose-400/20 bg-rose-400/10 px-2 py-1 text-rose-100">{scannerFailure.label}</span>
-                        ) : null}
-                        {score !== null ? (
-                          <span className="rounded-lg border border-sky-400/20 bg-sky-400/10 px-2 py-1 font-mono text-sky-100">{language === 'zh' ? '分数' : 'SCORE'} {formatScore(score)}</span>
-                        ) : null}
-                        {(scanner?.lastRank ?? item.scannerRank) ? <span className={CHIP_CLASS}>{language === 'zh' ? '排名' : 'Rank'} #{scanner?.lastRank ?? item.scannerRank}</span> : null}
-                        {scanner?.reason && !['provider_down', 'provider_error', 'critical', 'debug', 'unknown'].some((token) => scanner.reason?.toLowerCase().includes(token)) ? (
-                          <span className="max-w-[180px] truncate rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-white/55">{scanner.reason}</span>
-                        ) : null}
-                        <span className={CHIP_CLASS}>{formatFreshness(latestTime)}</span>
-                        {typeof avgForward === 'number' || typeof hitRate === 'number' ? (
-                          <span className={`rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono ${
-                            (avgForward ?? 0) >= 0
-                              ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]'
-                              : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'
-                          }`}>
-                            HIST {formatPct(avgForward)} · HIT {typeof hitRate === 'number' ? `${Math.round(hitRate * 100)}%` : '--'}
-                          </span>
-                        ) : null}
-                        <span className={`rounded-lg border px-2 py-1 ${
-                          backtestStatusLabel === '已回测'
-                            ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
-                            : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(backtestStatusLabel)
-                              ? 'border-rose-400/20 bg-rose-400/10 text-rose-100'
-                              : 'border-white/10 bg-white/[0.04] text-white/45'
-                        }`}>{backtestStatusLabel}</span>
-                        {hasBacktestMetrics(item) ? (
-                          <>
-                            <span className={`rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono ${
-                              (returnPct ?? 0) >= 0
+                          <StatusBadge status={scoreFreshnessStatus} label={formatFreshness(item.lastScoredAt || scanner?.lastScannedAt)} variant="soft" size="sm" className="w-fit uppercase tracking-widest" />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex max-w-[420px] flex-wrap items-center gap-1.5 text-[11px]">
+                          {!hasAnyEvidence ? (
+                            <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/40">{copy.noEvidence}</Badge>
+                          ) : null}
+                          <StatusBadge status={scannerStatus} label={scannerStatusLabel} variant="soft" size="sm" />
+                          {scannerStatusLabel === '扫描失败' && scannerFailure ? (
+                            <StatusBadge status="failed" label={scannerFailure.label} variant="soft" size="sm" />
+                          ) : null}
+                          {score !== null ? (
+                            <Badge variant="info" className="font-mono text-sky-100">{language === 'zh' ? '分数' : 'SCORE'} {formatScore(score)}</Badge>
+                          ) : null}
+                          {(scanner?.lastRank ?? item.scannerRank) ? <Badge variant="default" className={WATCHLIST_BADGE_CLASS}>{language === 'zh' ? '排名' : 'Rank'} #{scanner?.lastRank ?? item.scannerRank}</Badge> : null}
+                          {scanner?.reason && !['provider_down', 'provider_error', 'critical', 'debug', 'unknown'].some((token) => scanner.reason?.toLowerCase().includes(token)) ? (
+                            <Badge variant="default" className="max-w-[180px] justify-start truncate border-white/10 bg-white/[0.04] text-white/55">{scanner.reason}</Badge>
+                          ) : null}
+                          <Badge variant="default" className={WATCHLIST_BADGE_CLASS}>{formatFreshness(latestTime)}</Badge>
+                          {typeof avgForward === 'number' || typeof hitRate === 'number' ? (
+                            <Badge variant="default" className={`border-white/10 bg-white/[0.04] font-mono ${
+                              (avgForward ?? 0) >= 0
                                 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]'
                                 : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'
                             }`}>
-                              {language === 'zh' ? '收益' : 'Return'} {formatPct(returnPct)} · {language === 'zh' ? '回撤' : 'DD'} {formatPct(backtest?.maxDrawdownPct)} · Sharpe {formatRatio(backtest?.sharpe)} · {language === 'zh' ? '交易' : 'Trades'} {backtest?.tradeCount ?? '--'}
-                            </span>
-                            {backtest?.lastResultId != null ? (
-                              <Link className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-white/55 transition hover:text-white" to={buildLocalizedPath(`/backtest/results/${backtest.lastResultId}`, language)}>
-                                {copy.resultPrefix} {backtest.lastResultId}
-                              </Link>
-                            ) : null}
-                          </>
-                        ) : null}
-                        {batchFailure?.detail ? (
-                          <details className="max-w-[180px] rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-white/45">
-                            <summary className="cursor-pointer list-none">{language === 'zh' ? '开发者细节' : 'Developer details'}</summary>
-                            <p className="mt-1 truncate text-[10px] text-white/35">{language === 'zh' ? '原始错误已隐藏' : 'Raw error hidden'}</p>
-                          </details>
-                        ) : null}
-                        {batchStatus ? (
-                          <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-white/45">
-                            {batchStatus === 'running' ? '运行中' : batchStatus === 'completed' ? '完成' : batchStatus === 'failed' ? '失败' : batchStatus === 'skipped' ? '已跳过' : '等待'}
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
+                              HIST {formatPct(avgForward)} · HIT {typeof hitRate === 'number' ? `${Math.round(hitRate * 100)}%` : '--'}
+                            </Badge>
+                          ) : null}
+                          <StatusBadge status={backtestStatus} label={backtestStatusLabel} variant="soft" size="sm" />
+                          {hasBacktestMetrics(item) ? (
+                            <>
+                              <Badge variant="default" className={`border-white/10 bg-white/[0.04] font-mono ${
+                                (returnPct ?? 0) >= 0
+                                  ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]'
+                                  : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'
+                              }`}>
+                                {language === 'zh' ? '收益' : 'Return'} {formatPct(returnPct)} · {language === 'zh' ? '回撤' : 'DD'} {formatPct(backtest?.maxDrawdownPct)} · Sharpe {formatRatio(backtest?.sharpe)} · {language === 'zh' ? '交易' : 'Trades'} {backtest?.tradeCount ?? '--'}
+                              </Badge>
+                              {backtest?.lastResultId != null ? (
+                                <Link className={`${WATCHLIST_LINK_BUTTON_CLASS} min-h-6 px-2 py-0.5 font-mono text-[11px] text-white/55`} to={buildLocalizedPath(`/backtest/results/${backtest.lastResultId}`, language)}>
+                                  {copy.resultPrefix} {backtest.lastResultId}
+                                </Link>
+                              ) : null}
+                            </>
+                          ) : null}
+                          {batchFailure?.detail ? (
+                            <details className="max-w-[180px] rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-white/45">
+                              <summary className="cursor-pointer list-none">{language === 'zh' ? '开发者细节' : 'Developer details'}</summary>
+                              <p className="mt-1 truncate text-[10px] text-white/35">{language === 'zh' ? '原始错误已隐藏' : 'Raw error hidden'}</p>
+                            </details>
+                          ) : null}
+                          {batchDisplayStatus ? (
+                            <Badge variant={displayBadgeVariant(batchDisplayStatus.tone)} className="font-mono">
+                              {batchDisplayStatus.label}
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </td>
                     <td className="px-4 py-3">{item.source || '--'}</td>
                     <td className="px-4 py-3">
                       <div className="flex max-w-[220px] flex-wrap gap-1.5">
-                        {item.themeId ? <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-xs text-white/60">{item.themeId}</span> : null}
-                        {item.universeType ? <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-xs text-white/60">{item.universeType}</span> : null}
+                          {item.themeId ? <Badge variant="default" className={WATCHLIST_BADGE_CLASS}>{item.themeId}</Badge> : null}
+                          {item.universeType ? <Badge variant="default" className={WATCHLIST_BADGE_CLASS}>{item.universeType}</Badge> : null}
                         {!item.themeId && !item.universeType ? '--' : null}
                       </div>
                     </td>
                     <td className="px-4 py-3">{formatDateTime(item.createdAt || item.updatedAt, language)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          className={ACTION_BUTTON_CLASS}
-                          onClick={() => void handleAnalyze(item)}
-                          disabled={pendingAnalyzeId === item.id}
-                        >
-                          <Play className="h-3.5 w-3.5" />
-                          {pendingAnalyzeId === item.id ? copy.analyzing : copy.analyze}
-                        </button>
-                        <Link className={ACTION_BUTTON_CLASS} to={buildBacktestPath(item, language)}>
-                          <BarChart3 className="h-3.5 w-3.5" />
-                          {copy.backtest}
-                        </Link>
-                        <button
-                          type="button"
-                          aria-label={`${copy.copySymbol} ${item.symbol}`}
-                          title={copiedId === item.id ? copy.copied : copy.copySymbol}
-                          className={ICON_BUTTON_CLASS}
-                          onClick={() => void handleCopy(item)}
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`${copy.remove} ${item.symbol}`}
-                          className={ICON_BUTTON_CLASS}
-                          onClick={() => void handleRemove(item)}
-                          disabled={pendingRemoveId === item.id}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className={WATCHLIST_BUTTON_CLASS}
+                            onClick={() => void handleAnalyze(item)}
+                            disabled={pendingAnalyzeId === item.id}
+                          >
+                            <Play className="h-3.5 w-3.5" />
+                            {pendingAnalyzeId === item.id ? copy.analyzing : copy.analyze}
+                          </Button>
+                          <Link className={WATCHLIST_LINK_BUTTON_CLASS} to={buildBacktestPath(item, language)}>
+                            <BarChart3 className="h-3.5 w-3.5" />
+                            {copy.backtest}
+                          </Link>
+                          <Button
+                            type="button"
+                            aria-label={`${copy.copySymbol} ${item.symbol}`}
+                            title={copiedId === item.id ? copy.copied : copy.copySymbol}
+                            variant="ghost"
+                            size="sm"
+                            className={`${WATCHLIST_BUTTON_CLASS} ${WATCHLIST_ICON_BUTTON_CLASS}`}
+                            onClick={() => void handleCopy(item)}
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            aria-label={`${copy.remove} ${item.symbol}`}
+                            variant="ghost"
+                            size="sm"
+                            className={`${WATCHLIST_BUTTON_CLASS} ${WATCHLIST_ICON_BUTTON_CLASS}`}
+                            onClick={() => void handleRemove(item)}
+                            disabled={pendingRemoveId === item.id}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
                       </div>
                     </td>
                   </tr>
@@ -1278,10 +1316,10 @@ const WatchlistPage: React.FC = () => {
             <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-5 py-10 text-center">
               <p className="text-base font-semibold text-white">{copy.emptyTitle}</p>
               <p className="mt-2 text-sm text-white/45">{copy.emptyBody}</p>
-              <Link
-                to={buildLocalizedPath('/scanner', language)}
-                className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm font-medium text-white/70 transition hover:bg-white/10 hover:text-white"
-              >
+                <Link
+                  to={buildLocalizedPath('/scanner', language)}
+                  className={`${WATCHLIST_LINK_BUTTON_CLASS} mt-5 h-10 px-4 text-sm font-medium`}
+                >
                 <ExternalLink className="h-4 w-4" />
                 {copy.openScanner}
               </Link>
