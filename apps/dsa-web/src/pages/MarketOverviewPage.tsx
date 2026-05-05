@@ -2420,12 +2420,12 @@ const MarketOverviewPage: React.FC = () => {
                       key={tab.key}
                       type="button"
                       aria-pressed={activeCategory === tab.key}
-                      onClick={() => setActiveCategory(tab.key)}
                       className={`ui-truncate shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
                         activeCategory === tab.key
                           ? 'bg-white/10 text-white shadow-sm'
                           : 'bg-transparent text-white/45 hover:text-white/75'
                       }`}
+                      onClick={() => setActiveCategory(tab.key)}
                     >
                       {tab.label}
                     </button>

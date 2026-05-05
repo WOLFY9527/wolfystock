@@ -806,8 +806,8 @@ function FullDecisionReportDrawer({
               </button>
               <button
                 type="button"
-                onClick={() => { void handleCopyReport(); }}
                 className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
+                onClick={() => { void handleCopyReport(); }}
               >
                 <Copy className="h-4 w-4" />
                 {copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制报告'}
@@ -3574,13 +3574,13 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           <input
             data-testid="home-bento-omnibar-input"
             type="text"
+            className="h-full min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-white caret-white outline-none [appearance:textfield] placeholder:text-white/30"
             value={searchQuery}
             onChange={(event) => {
               setSearchQuery(event.target.value);
             }}
             autoComplete="off"
             disabled={isBusy}
-            className="h-full min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-white caret-white outline-none [appearance:textfield] placeholder:text-white/30"
             placeholder={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
           />
         </div>
@@ -3857,8 +3857,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               >
                 <button
                   type="button"
-                  onClick={() => { void handleHistoryClick(item); }}
                   className="flex min-w-0 flex-1 items-center justify-between gap-4 text-left"
+                  onClick={() => { void handleHistoryClick(item); }}
                   data-testid={`home-bento-history-item-${item.id}`}
                 >
                   <div className="min-w-0">

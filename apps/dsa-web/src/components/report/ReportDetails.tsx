@@ -76,8 +76,8 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
       <div className="relative overflow-hidden">
         <button
           type="button"
-          onClick={() => copyToClipboard(jsonStr, panel)}
           className="home-accent-link absolute top-2 right-2 z-10 text-xs text-muted-text"
+          onClick={() => copyToClipboard(jsonStr, panel)}
         >
           {copiedPanels[panel] ? text.copied : text.copy}
         </button>
@@ -113,8 +113,8 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
           <div>
             <button
               type="button"
-              onClick={() => setShowRaw(!showRaw)}
               className="theme-panel-subtle flex w-full items-center justify-between rounded-[var(--cohere-radius-medium)] p-3"
+              onClick={() => setShowRaw(!showRaw)}
             >
               <span className="label-uppercase text-foreground">{text.rawResult}</span>
               <svg
@@ -139,8 +139,8 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
           <div>
             <button
               type="button"
-              onClick={() => setShowSnapshot(!showSnapshot)}
               className="theme-panel-subtle flex w-full items-center justify-between rounded-[var(--cohere-radius-medium)] p-3"
+              onClick={() => setShowSnapshot(!showSnapshot)}
             >
               <span className="label-uppercase text-foreground">{text.analysisSnapshot}</span>
               <svg

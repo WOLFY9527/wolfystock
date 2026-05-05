@@ -158,8 +158,8 @@ function SeamlessSegmentedControl({
             key={option.value}
             type="button"
             aria-pressed={active}
-            onClick={() => onChange(option.value)}
             className={`min-w-0 appearance-none border-0 flex-1 shrink-0 rounded-lg px-2 py-1.5 text-center text-sm font-medium transition-all duration-200 cursor-pointer ${active ? 'bg-white/10 text-white shadow-sm' : 'bg-transparent text-white/40 hover:text-white/70'} ${itemClassName}`}
+            onClick={() => onChange(option.value)}
           >
             <span className="ui-truncate block w-full">{option.label}</span>
           </button>

@@ -3809,20 +3809,20 @@ const SettingsPage: React.FC = () => {
           <div className={SEGMENT_WRAPPER_CLASS}>
             <button
               type="button"
-              onClick={() => setShowRuntimeExecutionSummary(true)}
               className={showRuntimeExecutionSummary
                 ? `${SEGMENT_BUTTON_CLASS} bg-white text-black`
                 : `${SEGMENT_BUTTON_CLASS} text-secondary-text hover:bg-white/[0.05] hover:text-white`}
+              onClick={() => setShowRuntimeExecutionSummary(true)}
               disabled={adminLocked || isSaving}
             >
               {t('settings.runtimeSummaryVisibleOn')}
             </button>
             <button
               type="button"
-              onClick={() => setShowRuntimeExecutionSummary(false)}
               className={!showRuntimeExecutionSummary
                 ? `${SEGMENT_BUTTON_CLASS} bg-white text-black`
                 : `${SEGMENT_BUTTON_CLASS} text-secondary-text hover:bg-white/[0.05] hover:text-white`}
+              onClick={() => setShowRuntimeExecutionSummary(false)}
               disabled={adminLocked || isSaving}
             >
               {t('settings.runtimeSummaryVisibleOff')}
@@ -4243,20 +4243,20 @@ const SettingsPage: React.FC = () => {
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => setTaskRouteInherit(task.key, true)}
                         className={draft.inherit
                           ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs text-foreground'
                           : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
+                        onClick={() => setTaskRouteInherit(task.key, true)}
                         disabled={disabledTaskEditor}
                       >
                         {t('settings.aiTaskInheritFromAnalysis')}
                       </button>
                       <button
                         type="button"
-                        onClick={() => setTaskRouteInherit(task.key, false)}
                         className={!draft.inherit
                           ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs text-foreground'
                           : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
+                        onClick={() => setTaskRouteInherit(task.key, false)}
                         disabled={disabledTaskEditor}
                       >
                         {t('settings.aiTaskOverride')}

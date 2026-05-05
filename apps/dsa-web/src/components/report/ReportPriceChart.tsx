@@ -915,8 +915,8 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
                   <button
                     key={view.key}
                     type="button"
-                    onClick={() => setActiveView(view.key)}
                     className={cn('theme-chart-tab', activeView === view.key ? 'is-active' : '')}
+                    onClick={() => setActiveView(view.key)}
                   >
                     <span className="theme-chart-tab__primary">{t(view.labelKey)}</span>
                     <span className="theme-chart-tab__secondary">{t(view.descriptionKey)}</span>

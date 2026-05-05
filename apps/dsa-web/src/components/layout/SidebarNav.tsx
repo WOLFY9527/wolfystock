@@ -167,11 +167,11 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const archiveAction = !isGuest && hasArchive ? (
     <button
       type="button"
+      className={isDrawer ? 'shell-nav-item shell-nav-item--utility' : HEADER_UTILITY_TEXT_CLASS}
       onClick={() => {
         onOpenArchive?.();
         onNavigate?.();
       }}
-      className={isDrawer ? 'shell-nav-item shell-nav-item--utility' : HEADER_UTILITY_TEXT_CLASS}
       aria-label={t('shell.archiveTitle')}
     >
       {isDrawer ? (
@@ -190,11 +190,11 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const languageAction = (
     <button
       type="button"
+      className={isDrawer ? 'shell-nav-item shell-nav-item--utility' : HEADER_UTILITY_TEXT_CLASS}
       onClick={() => {
         toggleLanguage();
         onNavigate?.();
       }}
-      className={isDrawer ? 'shell-nav-item shell-nav-item--utility' : HEADER_UTILITY_TEXT_CLASS}
       aria-label={t('language.toggle')}
     >
       {isDrawer ? (
@@ -312,8 +312,8 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const logoutAction = !isGuest ? (
     <button
       type="button"
-      onClick={() => setShowLogoutConfirm(true)}
       className={isDrawer ? 'shell-nav-item shell-nav-item--utility shell-nav-item--danger' : HEADER_UTILITY_DANGER_TEXT_CLASS}
+      onClick={() => setShowLogoutConfirm(true)}
       aria-label={t('nav.logout')}
     >
       {isDrawer ? (

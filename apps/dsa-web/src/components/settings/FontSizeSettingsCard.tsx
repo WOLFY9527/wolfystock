@@ -19,13 +19,13 @@ export const FontSizeSettingsCard: React.FC = () => {
           <button
             key={option}
             type="button"
-            onClick={() => setFontSize(option)}
             className={cn(
               'rounded-lg border px-2 py-1.5 text-[11px] font-medium transition-colors',
               fontSize === option
                 ? 'border-[var(--border-strong)] bg-[var(--pill-active-bg)] text-foreground shadow-[var(--glow-soft)]'
                 : 'settings-border settings-surface-hover text-secondary-text hover:text-foreground',
             )}
+            onClick={() => setFontSize(option)}
             aria-pressed={fontSize === option}
           >
             {t(`settings.fontSize${option.toUpperCase()}`)}
