@@ -126,6 +126,14 @@ Phase 1: instrumentation-only backend counters
 - Preserve all runtime behavior.
 - Do not add caching, provider calls, UI, tests that call live providers, dependencies, or routing changes.
 
+Phase 1A LLM-seams implementation note (2026-05-06):
+
+- Added `src/services/llm_instrumentation.py` as a backend-only, process-local, best-effort counter helper. It emits no external network calls and swallows its own sink/logging failures.
+- Implemented LLM seam events: `llm_call_started`, `llm_call_completed`, `llm_call_failed`, `llm_fallback_attempt`, `llm_integrity_retry`, and `llm_usage_persisted`.
+- Instrumented only `src/analyzer.py::GeminiAnalyzer._call_litellm()`, `GeminiAnalyzer.analyze()` integrity retry/post-usage hooks, `GeminiAnalyzer.generate_text_with_meta()` post-usage hook, `src/agent/llm_adapter.py::LLMToolAdapter.call_completion()`, and `src/services/image_stock_extractor.py::_call_litellm_vision()`.
+- Labels are allowlisted and bucketed (`call_type`, `provider`, `model_family`, `route`, `attempt_index`, `fallback_depth`, `retry_reason`, `outcome`, `duration_bucket`, `token_bucket`, `report_type`, `language`). Raw prompts, messages, images, provider payloads, API keys, URLs, exception text, user ids, and session ids are not accepted as labels.
+- This phase does not change LLM routing, prompts, model order, fallback/retry behavior, report integrity semantics, caching, provider behavior, scanner/backtest/portfolio/notification/DuckDB runtime, or API response shapes.
+
 Phase 2: read-only duplicate-cost summary
 
 - Add a backend-only/admin-only summary using existing LLM usage, execution logs, provider diagnostics, MarketCache metadata, and the new counters.
@@ -159,4 +167,3 @@ Phase 3: measured cache/design prototypes only after data exists
 3. Market Overview cache hit/stale/miss reporting.
 4. Scanner AI interpretation cache design or prototype, only after metrics confirm repeated candidate hashes.
 5. Guest preview reuse design with safe session hash, short TTL, freshness disclosure, and no behavior change until approved.
-

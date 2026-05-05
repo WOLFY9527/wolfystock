@@ -718,10 +718,16 @@ class TestAgentConstructionChain(unittest.TestCase):
 
         adapter._call_litellm_model = MagicMock(side_effect=fake_call)
 
-        result = adapter.call_completion(messages=[{"role": "user", "content": "hi"}], tools=[])
+        with patch("src.agent.llm_adapter.emit_llm_event") as mock_event:
+            result = adapter.call_completion(messages=[{"role": "user", "content": "hi"}], tools=[])
 
         self.assertEqual(calls, ["openai/gpt-4o-mini", "anthropic/claude-3-5-sonnet-20241022"])
         self.assertEqual(result.content, "ok")
+        emitted = [call.args[0] for call in mock_event.call_args_list]
+        self.assertEqual(emitted.count("llm_call_started"), 2)
+        self.assertIn("llm_call_failed", emitted)
+        self.assertIn("llm_fallback_attempt", emitted)
+        self.assertIn("llm_call_completed", emitted)
 
     @patch("src.agent.llm_adapter.Router")
     def test_llm_adapter_recomputes_timeout_for_each_fallback_attempt(self, _mock_router):

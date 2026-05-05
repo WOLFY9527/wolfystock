@@ -210,3 +210,65 @@ class TestIntegrityRetryPrompt(unittest.TestCase):
         self.assertIn("原始提示", prompt)
         self.assertIn('{"analysis_summary": "已有内容"}', prompt)
         self.assertIn("dashboard.core_conclusion.one_sentence", prompt)
+
+    def test_analyze_emits_integrity_retry_event(self) -> None:
+        """Integrity retry should be observable without changing retry behavior."""
+        cfg = MagicMock()
+        cfg.report_language = "zh"
+        cfg.gemini_request_delay = 0
+        cfg.report_integrity_enabled = True
+        cfg.report_integrity_retry = 1
+        cfg.litellm_model = "gemini/gemini-2.5-flash"
+        cfg.llm_temperature = 0.7
+
+        analyzer = GeminiAnalyzer.__new__(GeminiAnalyzer)
+        analyzer._router = None
+        analyzer._litellm_available = True
+
+        incomplete = AnalysisResult(
+            code="600519",
+            name="贵州茅台",
+            trend_prediction="震荡",
+            sentiment_score=50,
+            operation_advice="持有",
+            analysis_summary="",
+            decision_type="hold",
+            dashboard={},
+        )
+        complete = AnalysisResult(
+            code="600519",
+            name="贵州茅台",
+            trend_prediction="震荡",
+            sentiment_score=50,
+            operation_advice="持有",
+            analysis_summary="完整分析",
+            decision_type="hold",
+            dashboard={
+                "core_conclusion": {"one_sentence": "持有观望"},
+                "intelligence": {"risk_alerts": []},
+                "battle_plan": {"sniper_points": {"stop_loss": "100"}},
+            },
+        )
+
+        with patch("src.analyzer.get_config", return_value=cfg), \
+             patch.object(analyzer, "_format_prompt", return_value="prompt"), \
+             patch.object(
+                 analyzer,
+                 "_call_litellm",
+                 side_effect=[
+                     ("{}", "gemini/gemini-2.5-flash", {}, []),
+                     ("{}", "gemini/gemini-2.5-flash", {}, []),
+                 ],
+             ) as mock_call, \
+             patch.object(analyzer, "_parse_response", side_effect=[incomplete, complete]), \
+             patch.object(analyzer, "_build_integrity_retry_prompt", return_value="retry prompt"), \
+             patch.object(analyzer, "_fill_alpha_vantage_from_context", return_value=None), \
+             patch.object(analyzer, "_build_market_snapshot", return_value={}), \
+             patch("src.analyzer.persist_llm_usage"), \
+             patch("src.analyzer.emit_llm_event") as mock_event:
+            result = analyzer.analyze({"code": "600519", "stock_name": "贵州茅台"})
+
+        self.assertEqual(result.analysis_summary, "完整分析")
+        self.assertEqual(mock_call.call_count, 2)
+        emitted = [call.args[0] for call in mock_event.call_args_list]
+        self.assertIn("llm_integrity_retry", emitted)

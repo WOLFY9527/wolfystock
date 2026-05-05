@@ -51,6 +51,7 @@ class TestAnalyzerGenerateText:
             mock_call.assert_called_once_with(
                 "写一份复盘",
                 generation_config={"max_tokens": 1024, "temperature": 0.5},
+                call_type="market_review",
             )
 
     def test_generate_text_returns_none_on_failure(self):
@@ -67,9 +68,12 @@ class TestAnalyzerGenerateText:
             gen_cfg = kwargs["generation_config"]
             assert gen_cfg["max_tokens"] == 2048
             assert gen_cfg["temperature"] == 0.7
+            assert kwargs["call_type"] == "market_review"
 
     def test_call_litellm_extracts_text_from_deepseek_v4_content_blocks(self):
-        with patch("src.analyzer.get_config") as mock_cfg, patch("src.analyzer.litellm.completion") as mock_completion:
+        with patch("src.analyzer.get_config") as mock_cfg, \
+             patch("src.analyzer.litellm.completion") as mock_completion, \
+             patch("src.analyzer.emit_llm_event") as mock_event:
             cfg = MagicMock()
             cfg.litellm_model = "deepseek/deepseek-v4-pro"
             cfg.litellm_fallback_models = []
@@ -129,9 +133,14 @@ class TestAnalyzerGenerateText:
             assert model == "deepseek/deepseek-v4-pro"
             assert usage["total_tokens"] == 22
             assert attempt_trace[-1]["result"] == "succeeded"
+            emitted = [call.args[0] for call in mock_event.call_args_list]
+            assert "llm_call_started" in emitted
+            assert "llm_call_completed" in emitted
 
     def test_call_litellm_ignores_non_text_content_blocks(self):
-        with patch("src.analyzer.get_config") as mock_cfg, patch("src.analyzer.litellm.completion") as mock_completion:
+        with patch("src.analyzer.get_config") as mock_cfg, \
+             patch("src.analyzer.litellm.completion") as mock_completion, \
+             patch("src.analyzer.emit_llm_event") as mock_event:
             cfg = MagicMock()
             cfg.litellm_model = "deepseek/deepseek-v4-pro"
             cfg.litellm_fallback_models = []
@@ -192,6 +201,9 @@ class TestAnalyzerGenerateText:
             assert model == "deepseek/deepseek-v4-pro"
             assert usage["total_tokens"] == 22
             assert attempt_trace[-1]["result"] == "succeeded"
+            emitted = [call.args[0] for call in mock_event.call_args_list]
+            assert "llm_call_started" in emitted
+            assert "llm_call_completed" in emitted
 
 
 # ---------------------------------------------------------------------------

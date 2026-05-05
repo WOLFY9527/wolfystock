@@ -45,6 +45,10 @@ from src.report_language import (
     normalize_report_language,
 )
 from src.schemas.report_schema import AnalysisReportSchema
+from src.services.llm_instrumentation import (
+    emit_llm_event,
+    provider_from_model,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -811,6 +815,7 @@ class GeminiAnalyzer:
         generation_config: dict,
         *,
         system_prompt: Optional[str] = None,
+        call_type: str = "analysis",
     ) -> Tuple[str, str, Dict[str, Any], List[Dict[str, Any]]]:
         """Call LLM via litellm with fallback across configured models.
 
@@ -844,6 +849,15 @@ class GeminiAnalyzer:
         attempt_trace: List[Dict[str, Any]] = []
         effective_system_prompt = system_prompt or self.SYSTEM_PROMPT
         for index, model in enumerate(models_to_try):
+            attempt_started = time.perf_counter()
+            event_labels = {
+                "call_type": call_type,
+                "route": "analyzer",
+                "provider": provider_from_model(model),
+                "model_family": model,
+                "attempt_index": index + 1,
+                "fallback_depth": index,
+            }
             try:
                 model_short = model.split("/")[-1] if "/" in model else model
                 attempt_trace.append(
@@ -855,6 +869,7 @@ class GeminiAnalyzer:
                         "message": f"Attempting AI model {model}.",
                     }
                 )
+                emit_llm_event("llm_call_started", **event_labels)
                 call_kwargs: Dict[str, Any] = {
                     "model": model,
                     "messages": [
@@ -894,6 +909,13 @@ class GeminiAnalyzer:
                             "completion_tokens": response.usage.completion_tokens or 0,
                             "total_tokens": response.usage.total_tokens or 0,
                         }
+                    emit_llm_event(
+                        "llm_call_completed",
+                        **event_labels,
+                        outcome="success",
+                        duration_bucket=(time.perf_counter() - attempt_started) * 1000,
+                        token_bucket=usage.get("total_tokens", 0),
+                    )
                     attempt_trace.append(
                         {
                             "sequence": len(attempt_trace) + 1,
@@ -929,6 +951,13 @@ class GeminiAnalyzer:
                     result = "invalid_response"
                 else:
                     result = "failed"
+                emit_llm_event(
+                    "llm_call_failed",
+                    **event_labels,
+                    outcome=result,
+                    retry_reason=e,
+                    duration_bucket=(time.perf_counter() - attempt_started) * 1000,
+                )
                 attempt_trace.append(
                     {
                         "sequence": len(attempt_trace) + 1,
@@ -941,6 +970,16 @@ class GeminiAnalyzer:
                 )
                 if index < len(models_to_try) - 1:
                     next_model = models_to_try[index + 1]
+                    emit_llm_event(
+                        "llm_fallback_attempt",
+                        call_type=call_type,
+                        route="analyzer",
+                        provider=provider_from_model(next_model),
+                        model_family=next_model,
+                        attempt_index=index + 2,
+                        fallback_depth=index + 1,
+                        retry_reason=e,
+                    )
                     attempt_trace.append(
                         {
                             "sequence": len(attempt_trace) + 1,
@@ -1003,7 +1042,7 @@ class GeminiAnalyzer:
             if system_prompt is not None:
                 call_kwargs["system_prompt"] = system_prompt
 
-            response = self._call_litellm(prompt, **call_kwargs)
+            response = self._call_litellm(prompt, **call_kwargs, call_type=call_type)
             text: Optional[str]
             model_used: str
             usage: Dict[str, Any]
@@ -1026,6 +1065,14 @@ class GeminiAnalyzer:
             if not text:
                 return None
             persist_llm_usage(usage, model_used, call_type=call_type)
+            emit_llm_event(
+                "llm_usage_persisted",
+                call_type=call_type,
+                route="analyzer",
+                provider=provider_from_model(model_used),
+                model_family=model_used,
+                token_bucket=usage.get("total_tokens", 0),
+            )
             provider = model_used.split("/", 1)[0] if "/" in model_used else model_used
             return {
                 "text": text,
@@ -1169,6 +1216,15 @@ class GeminiAnalyzer:
                         report_language=report_language,
                     )
                     retry_count += 1
+                    emit_llm_event(
+                        "llm_integrity_retry",
+                        call_type="analysis",
+                        route="analyzer",
+                        report_type="stock_analysis",
+                        language=report_language,
+                        attempt_index=retry_count,
+                        retry_reason="integrity_missing_fields",
+                    )
                     logger.info(
                         "[LLM完整性] 必填字段缺失 %s，第 %d 次补全重试",
                         missing_fields,
@@ -1183,6 +1239,14 @@ class GeminiAnalyzer:
                     break
 
             persist_llm_usage(llm_usage, model_used, call_type="analysis", stock_code=code)
+            emit_llm_event(
+                "llm_usage_persisted",
+                call_type="analysis",
+                route="analyzer",
+                provider=provider_from_model(model_used),
+                model_family=model_used,
+                token_bucket=llm_usage.get("total_tokens", 0),
+            )
 
             logger.info(f"[LLM解析] {name}({code}) 分析完成: {result.trend_prediction}, 评分 {result.sentiment_score}")
 

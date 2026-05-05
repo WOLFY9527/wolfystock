@@ -20,6 +20,7 @@ import time
 from typing import List, Optional, Tuple
 
 from src.config import Config, get_config
+from src.services.llm_instrumentation import emit_llm_event, provider_from_model
 
 logger = logging.getLogger(__name__)
 
@@ -240,6 +241,7 @@ def _get_api_keys_for_model(model: str, cfg: Config) -> List[str]:
 def _call_litellm_vision(image_b64: str, mime_type: str, api_key: Optional[str] = None) -> str:
     """Extract stock codes from an image using litellm (all providers via OpenAI vision format)."""
     global litellm
+    started_at = time.perf_counter()
     cfg = get_config()
     model = _resolve_vision_model()
     if not model:
@@ -276,10 +278,35 @@ def _call_litellm_vision(image_b64: str, mime_type: str, api_key: Optional[str] 
     if getattr(litellm, "completion", None) is None:
         import litellm as litellm_module
         litellm = litellm_module
-    response = litellm.completion(**call_kwargs)
-    if response and response.choices and response.choices[0].message.content:
-        return response.choices[0].message.content
-    raise ValueError("LiteLLM vision returned empty response")
+    event_labels = {
+        "call_type": "vision",
+        "route": "image_stock_extractor",
+        "provider": provider_from_model(model),
+        "model_family": model,
+        "attempt_index": 1,
+        "fallback_depth": 0,
+    }
+    emit_llm_event("llm_call_started", **event_labels)
+    try:
+        response = litellm.completion(**call_kwargs)
+        if response and response.choices and response.choices[0].message.content:
+            emit_llm_event(
+                "llm_call_completed",
+                **event_labels,
+                outcome="success",
+                duration_bucket=(time.perf_counter() - started_at) * 1000,
+            )
+            return response.choices[0].message.content
+        raise ValueError("LiteLLM vision returned empty response")
+    except Exception as exc:
+        emit_llm_event(
+            "llm_call_failed",
+            **event_labels,
+            outcome="failed",
+            retry_reason=exc,
+            duration_bucket=(time.perf_counter() - started_at) * 1000,
+        )
+        raise
 
 
 def extract_stock_codes_from_image(

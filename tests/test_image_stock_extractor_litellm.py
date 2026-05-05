@@ -169,13 +169,17 @@ class TestCallLitellmVision:
         cfg = _cfg(openai_vision_model=None, litellm_model="", gemini_api_keys=[_GEMINI_KEY])
         with patch("src.services.image_stock_extractor.get_config", return_value=cfg), \
              patch("src.services.image_stock_extractor.litellm.completion",
-                   return_value=self._good_response()) as mock_comp:
+                   return_value=self._good_response()) as mock_comp, \
+             patch("src.services.image_stock_extractor.emit_llm_event") as mock_event:
             result = _call_litellm_vision("base64data", "image/jpeg")
             assert result == '["600519"]'
             mock_comp.assert_called_once()
             kwargs = mock_comp.call_args[1]
             assert kwargs["timeout"] == VISION_API_TIMEOUT
             assert kwargs["max_tokens"] == 1024
+            emitted = [call.args[0] for call in mock_event.call_args_list]
+            assert "llm_call_started" in emitted
+            assert "llm_call_completed" in emitted
 
     def test_openai_model_uses_api_base_and_aihubmix_headers(self):
         cfg = _cfg(

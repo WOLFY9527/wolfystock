@@ -24,6 +24,7 @@ from src.config import (
     get_effective_agent_models_to_try,
     get_effective_agent_primary_model,
 )
+from src.services.llm_instrumentation import emit_llm_event, provider_from_model
 
 logger = logging.getLogger(__name__)
 
@@ -296,7 +297,7 @@ class LLMToolAdapter:
         started_at = time.time()
 
         last_error = None
-        for model in models_to_try:
+        for index, model in enumerate(models_to_try):
             remaining_timeout = timeout
             if timeout is not None and timeout > 0:
                 remaining_timeout = max(0.0, float(timeout) - (time.time() - started_at))
@@ -305,8 +306,18 @@ class LLMToolAdapter:
                         f"LLM completion timed out before trying fallback model {model}"
                     )
                     break
+            attempt_started = time.perf_counter()
+            event_labels = {
+                "call_type": "agent",
+                "route": "agent",
+                "provider": provider_from_model(model),
+                "model_family": model,
+                "attempt_index": index + 1,
+                "fallback_depth": index,
+            }
             try:
-                return self._call_litellm_model(
+                emit_llm_event("llm_call_started", **event_labels)
+                response = self._call_litellm_model(
                     messages,
                     tools or [],
                     model,
@@ -314,8 +325,36 @@ class LLMToolAdapter:
                     max_tokens=max_tokens,
                     timeout=remaining_timeout,
                 )
+                usage = response.usage if isinstance(response.usage, dict) else {}
+                emit_llm_event(
+                    "llm_call_completed",
+                    **event_labels,
+                    outcome="success",
+                    duration_bucket=(time.perf_counter() - attempt_started) * 1000,
+                    token_bucket=usage.get("total_tokens", 0),
+                )
+                return response
             except Exception as e:
                 logger.warning(f"Agent LLM call failed with {model}: {e}")
+                emit_llm_event(
+                    "llm_call_failed",
+                    **event_labels,
+                    outcome="failed",
+                    retry_reason=e,
+                    duration_bucket=(time.perf_counter() - attempt_started) * 1000,
+                )
+                if index < len(models_to_try) - 1:
+                    next_model = models_to_try[index + 1]
+                    emit_llm_event(
+                        "llm_fallback_attempt",
+                        call_type="agent",
+                        route="agent",
+                        provider=provider_from_model(next_model),
+                        model_family=next_model,
+                        attempt_index=index + 2,
+                        fallback_depth=index + 1,
+                        retry_reason=e,
+                    )
                 last_error = e
                 continue
 
