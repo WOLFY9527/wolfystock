@@ -46,6 +46,7 @@ type ProBacktestWorkspaceProps = Omit<FlowProps, 'panelMode'> & {
 
 const ghostCardClass = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md transition-all hover:border-white/10';
 const fieldClass = 'w-full min-w-0 min-h-[42px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-white outline-none transition-all focus:border-blue-500/50 focus:bg-white/[0.05]';
+const checkboxClass = 'h-4 w-4 shrink-0 rounded border border-white/15 bg-white/[0.03] text-blue-300 accent-blue-400 disabled:opacity-45';
 const labelClass = 'text-[10px] font-bold uppercase tracking-widest text-white/40';
 const primaryButtonClass = 'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all hover:from-blue-500 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-45';
 const secondaryButtonClass = 'inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45';
@@ -371,9 +372,6 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
       <button
         key={`${mobile ? 'mobile' : 'desktop'}-${step.id}`}
         type="button"
-        data-testid={mobile ? `${step.testId}-mobile` : step.testId}
-        aria-current={active ? 'step' : undefined}
-        onClick={() => goToStep(step)}
         className={mobile
           ? active ? activeChipButtonClass : chipButtonClass
           : `group flex w-full min-w-0 items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all ${
@@ -381,6 +379,9 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               ? 'border-blue-400/25 bg-blue-500/10 text-white'
               : 'border-transparent bg-transparent text-white/62 hover:border-white/10 hover:bg-white/[0.03]'
           }`}
+        data-testid={mobile ? `${step.testId}-mobile` : step.testId}
+        aria-current={active ? 'step' : undefined}
+        onClick={() => goToStep(step)}
       >
         <span className="font-mono text-[11px] text-white/38">{step.number}</span>
         <span className="min-w-0 flex-1">
@@ -433,19 +434,19 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           {renderField(language === 'en' ? 'Ticker' : '标的代码', (
             <input
               type="text"
+              className={fieldClass}
               value={code}
               onChange={(event) => onCodeChange(event.target.value.toUpperCase())}
               onKeyDown={onCodeEnter}
               placeholder="ORCL / AAPL / 600519"
-              className={fieldClass}
               aria-label={language === 'en' ? 'Ticker' : '标的代码'}
             />
           ))}
           {renderField(language === 'en' ? 'Benchmark' : '对比基准', (
             <select
+              className={`${fieldClass} appearance-none pr-10 truncate`}
               value={benchmarkMode}
               onChange={(event) => onBenchmarkModeChange(event.target.value as RuleBenchmarkMode)}
-              className={fieldClass}
               aria-label={language === 'en' ? 'Benchmark' : '对比基准'}
             >
               {RULE_BENCHMARK_OPTIONS.map((option) => (
@@ -458,38 +459,38 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           {benchmarkMode === 'custom_code' ? renderField(language === 'en' ? 'Custom benchmark code' : '自定义基准代码', (
             <input
               type="text"
+              className={fieldClass}
               value={benchmarkCode}
               onChange={(event) => onBenchmarkCodeChange(event.target.value.toUpperCase())}
               placeholder="QQQ / SPY / 000300"
-              className={fieldClass}
               aria-label={language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}
             />
           ), 'md:col-span-2') : null}
           {renderField(language === 'en' ? 'Start date' : '开始日期', (
             <input
               type="date"
+              className={fieldClass}
               value={startDate}
               onChange={(event) => onStartDateChange(event.target.value)}
-              className={fieldClass}
               aria-label={language === 'en' ? 'Start date' : '开始日期'}
             />
           ))}
           {renderField(language === 'en' ? 'End date' : '结束日期', (
             <input
               type="date"
+              className={fieldClass}
               value={endDate}
               onChange={(event) => onEndDateChange(event.target.value)}
-              className={fieldClass}
               aria-label={language === 'en' ? 'End date' : '结束日期'}
             />
           ))}
           {renderField(language === 'en' ? 'Initial capital' : '初始资金', (
             <input
               type="number"
+              className={`${fieldClass} font-mono`}
               min={1}
               value={initialCapital}
               onChange={(event) => onInitialCapitalChange(event.target.value)}
-              className={`${fieldClass} font-mono`}
               aria-label={language === 'en' ? 'Initial capital' : '初始资金'}
             />
           ), 'md:col-span-2')}
@@ -499,13 +500,13 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         <summary className="cursor-pointer text-sm font-semibold text-white/72">{language === 'en' ? 'Advanced portfolio settings' : '高级组合设置'}</summary>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {renderField(language === 'en' ? 'Asset scope' : '资产范围', (
-            <select value={portfolioMode} onChange={(event) => setPortfolioMode(event.target.value as 'single' | 'multi')} className={fieldClass}>
+            <select className={`${fieldClass} appearance-none pr-10 truncate`} value={portfolioMode} onChange={(event) => setPortfolioMode(event.target.value as 'single' | 'multi')}>
               <option value="single">{language === 'en' ? 'Single asset' : '单资产'}</option>
               <option value="multi">{language === 'en' ? 'Portfolio shell' : '组合壳层'}</option>
             </select>
           ))}
           {renderField(language === 'en' ? 'Rebalance cadence' : '再平衡频率', (
-            <select value={rebalanceCadence} onChange={(event) => setRebalanceCadence(event.target.value)} className={fieldClass}>
+            <select className={`${fieldClass} appearance-none pr-10 truncate`} value={rebalanceCadence} onChange={(event) => setRebalanceCadence(event.target.value)}>
               <option value="monthly">{language === 'en' ? 'Monthly' : '每月'}</option>
               <option value="weekly">{language === 'en' ? 'Weekly' : '每周'}</option>
               <option value="quarterly">{language === 'en' ? 'Quarterly' : '每季度'}</option>
@@ -654,6 +655,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           <label className="flex items-center gap-2.5 rounded-lg border border-white/5 bg-white/[0.02] p-3 text-sm text-white/70">
             <input
               type="checkbox"
+              className={checkboxClass}
               checked={confirmed}
               disabled={!parsedStrategy || !parsedExecutable || parseStale}
               onChange={(event) => onToggleConfirmed(event.target.checked)}
@@ -690,17 +692,17 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         <div className="flex min-w-0 flex-wrap gap-2">
           <button
             type="button"
+            className={ordersTab === 'routing' ? activeChipButtonClass : chipButtonClass}
             aria-pressed={ordersTab === 'routing'}
             onClick={() => setOrdersTab('routing')}
-            className={ordersTab === 'routing' ? activeChipButtonClass : chipButtonClass}
           >
             {language === 'en' ? 'Execution routing' : '执行路由'}
           </button>
           <button
             type="button"
+            className={ordersTab === 'guards' ? activeChipButtonClass : chipButtonClass}
             aria-pressed={ordersTab === 'guards'}
             onClick={() => setOrdersTab('guards')}
-            className={ordersTab === 'guards' ? activeChipButtonClass : chipButtonClass}
           >
             {language === 'en' ? 'Risk guards' : '风险护栏'}
           </button>
@@ -713,14 +715,14 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               { label: language === 'en' ? 'Take-profit route' : '止盈路由', value: enableTakeProfit, setter: setEnableTakeProfit },
             ].map((item) => (
               <label key={item.label} className="flex items-center gap-2.5 rounded-lg border border-white/5 bg-black/20 p-3 text-sm text-white/70">
-                <input type="checkbox" checked={item.value} onChange={(event) => item.setter(event.target.checked)} />
+                <input type="checkbox" className={checkboxClass} checked={item.value} onChange={(event) => item.setter(event.target.checked)} />
                 <span>{item.label}</span>
               </label>
             ))}
             <details className="rounded-lg border border-white/5 bg-black/20 p-3 md:col-span-2">
               <summary className="cursor-pointer text-sm font-semibold text-white/70">{language === 'en' ? 'Advanced route details' : '高级路由细节'}</summary>
               <label className="mt-3 flex items-center gap-2.5 text-sm text-white/62">
-                <input type="checkbox" checked={enableTrailingStop} onChange={(event) => setEnableTrailingStop(event.target.checked)} />
+                <input type="checkbox" className={checkboxClass} checked={enableTrailingStop} onChange={(event) => setEnableTrailingStop(event.target.checked)} />
                 <span>{language === 'en' ? 'Trailing stop route' : '追踪止损路由'}</span>
               </label>
             </details>
@@ -808,7 +810,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               <details data-testid="pro-advanced-grid-search" className="rounded-lg border border-white/5 bg-black/20 p-3">
                 <summary className="cursor-pointer text-sm font-semibold text-white/70">Grid Search</summary>
                 <label className="mt-3 flex items-center gap-2.5 text-sm text-white/62">
-                  <input aria-label="启用 Grid Search" type="checkbox" checked={enableGridSearch} onChange={(event) => setEnableGridSearch(event.target.checked)} />
+                  <input aria-label="启用 Grid Search" type="checkbox" className={checkboxClass} checked={enableGridSearch} onChange={(event) => setEnableGridSearch(event.target.checked)} />
                   <span>{language === 'en' ? 'Enable Grid Search' : '启用 Grid Search'}</span>
                 </label>
                 {enableGridSearch ? <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3 text-sm text-white/52">MA window / RSI threshold / risk grid</div> : null}
@@ -816,7 +818,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               <details data-testid="pro-advanced-bayesian" className="rounded-lg border border-white/5 bg-black/20 p-3">
                 <summary className="cursor-pointer text-sm font-semibold text-white/70">Bayesian Search</summary>
                 <label className="mt-3 flex items-center gap-2.5 text-sm text-white/62">
-                  <input type="checkbox" checked={enableBayesianSearch} onChange={(event) => setEnableBayesianSearch(event.target.checked)} />
+                  <input type="checkbox" className={checkboxClass} checked={enableBayesianSearch} onChange={(event) => setEnableBayesianSearch(event.target.checked)} />
                   <span>{language === 'en' ? 'Enable Bayesian Search' : '启用 Bayesian Search'}</span>
                 </label>
                 {enableBayesianSearch ? <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3 text-sm text-white/52">Trials / acquisition / bounds</div> : null}
@@ -827,14 +829,14 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               <details className="rounded-lg border border-white/5 bg-black/20 p-3">
                 <summary className="cursor-pointer text-sm font-semibold text-white/70">Walk-forward</summary>
                 <label className="mt-3 flex items-center gap-2.5 text-sm text-white/62">
-                  <input type="checkbox" checked={enableWalkForward} onChange={(event) => setEnableWalkForward(event.target.checked)} />
+                  <input type="checkbox" className={checkboxClass} checked={enableWalkForward} onChange={(event) => setEnableWalkForward(event.target.checked)} />
                   <span>{language === 'en' ? 'Enable walk-forward validation' : '启用 Walk-forward 验证'}</span>
                 </label>
               </details>
               <details className="rounded-lg border border-white/5 bg-black/20 p-3">
                 <summary className="cursor-pointer text-sm font-semibold text-white/70">Robustness</summary>
                 <label className="mt-3 flex items-center gap-2.5 text-sm text-white/62">
-                  <input type="checkbox" checked={enableRobustness} onChange={(event) => setEnableRobustness(event.target.checked)} />
+                  <input type="checkbox" className={checkboxClass} checked={enableRobustness} onChange={(event) => setEnableRobustness(event.target.checked)} />
                   <span>{language === 'en' ? 'Enable robustness sweep' : '启用稳健性扫描'}</span>
                 </label>
               </details>
@@ -1156,8 +1158,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               <button
                 key={group.id}
                 type="button"
-                onClick={() => setCatalogGroupId(group.id)}
                 className={activeCatalogGroup?.id === group.id ? activeChipButtonClass : chipButtonClass}
+                onClick={() => setCatalogGroupId(group.id)}
               >
                 {group.title[language]}
               </button>
@@ -1209,8 +1211,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                       </p>
                       <button
                         type="button"
-                        onClick={() => handleCatalogTemplateAction(template.editorText[language], template.executable)}
                         className={template.executable ? secondaryButtonClass : 'inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-100 transition-all hover:bg-amber-500/15'}
+                        onClick={() => handleCatalogTemplateAction(template.editorText[language], template.executable)}
                       >
                         {template.executable
                           ? (language === 'en' ? 'Load into editor' : '填入编辑器')

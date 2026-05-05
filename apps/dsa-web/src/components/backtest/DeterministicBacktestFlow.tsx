@@ -667,6 +667,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   }, []);
 
   const compactInputClass = 'w-full min-w-0 min-h-[44px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm leading-6 text-white outline-none transition-all focus:border-emerald-500/50 focus:bg-white/[0.05]';
+  const compactCheckboxClass = 'h-4 w-4 shrink-0 rounded border border-white/15 bg-white/[0.03] text-emerald-400 accent-emerald-400 disabled:opacity-45';
   const compactFieldLabelClass = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
   const denseCardClass = 'h-full bg-white/[0.02] border border-white/5 rounded-[24px] p-6 flex flex-col gap-5';
   const subCardClass = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6';
@@ -685,12 +686,12 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         <span className={compactFieldLabelClass}>{language === 'en' ? 'Lookback window' : '回看范围'}</span>
         <input
           type="number"
+          className={compactInputClass}
           min={10}
           max={5000}
           value={lookbackBars}
           onChange={(event) => onLookbackBarsChange(event.target.value)}
           onFocus={() => onStepChange('confirm')}
-          className={compactInputClass}
           aria-label={language === 'en' ? 'Lookback window' : '回看范围'}
         />
       </label>
@@ -698,12 +699,12 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         <span className={compactFieldLabelClass}>{language === 'en' ? 'Fees (bp)' : '手续费 (bp)'}</span>
         <input
           type="number"
+          className={compactInputClass}
           min={0}
           max={500}
           value={feeBps}
           onChange={(event) => onFeeBpsChange(event.target.value)}
           onFocus={() => onStepChange('confirm')}
-          className={compactInputClass}
           aria-label={language === 'en' ? 'Fee per side (bp)' : '单边手续费 (bp)'}
         />
       </label>
@@ -711,12 +712,12 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         <span className={compactFieldLabelClass}>{language === 'en' ? 'Slippage (bp)' : '滑点 (bp)'}</span>
         <input
           type="number"
+          className={compactInputClass}
           min={0}
           max={500}
           value={slippageBps}
           onChange={(event) => onSlippageBpsChange(event.target.value)}
           onFocus={() => onStepChange('confirm')}
-          className={compactInputClass}
           aria-label={language === 'en' ? 'Slippage per side (bp)' : '单边滑点 (bp)'}
         />
       </label>
@@ -743,12 +744,12 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             <span className={compactFieldLabelClass}>{language === 'en' ? 'Ticker' : '标的代码'}</span>
             <input
               type="text"
+              className={compactInputClass}
               value={code}
               onChange={(event) => onCodeChange(event.target.value.toUpperCase())}
               onFocus={() => onStepChange('symbol')}
               onKeyDown={onCodeEnter}
               placeholder={language === 'en' ? 'For example ORCL / AAPL / 600519' : '例如 ORCL / AAPL / 600519'}
-              className={compactInputClass}
               aria-label={language === 'en' ? 'Ticker' : '股票代码'}
             />
           </label>
@@ -756,10 +757,10 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             <label className="product-field min-w-0 gap-1.5">
               <span className={compactFieldLabelClass}>{language === 'en' ? 'Benchmark' : '对比基准'}</span>
               <select
+                className={`${compactInputClass} appearance-none pr-10 truncate`}
                 value={benchmarkMode}
                 onChange={(event) => onBenchmarkModeChange(event.target.value as RuleBenchmarkMode)}
                 onFocus={() => onStepChange('symbol')}
-                className={compactInputClass}
                 aria-label={language === 'en' ? 'Benchmark' : '对比基准'}
               >
                 {RULE_BENCHMARK_OPTIONS.map((option) => (
@@ -774,11 +775,11 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                 <span className={compactFieldLabelClass}>{language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}</span>
                 <input
                   type="text"
+                  className={compactInputClass}
                   value={benchmarkCode}
                   onChange={(event) => onBenchmarkCodeChange(event.target.value.toUpperCase())}
                   onFocus={() => onStepChange('symbol')}
                   placeholder={language === 'en' ? 'For example QQQ / SPY / ^NDX / 000300' : '例如 QQQ / SPY / ^NDX / 000300'}
-                  className={compactInputClass}
                   aria-label={language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}
                 />
               </label>
@@ -789,10 +790,10 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
               <span className={compactFieldLabelClass}>{language === 'en' ? 'Start date' : '开始日期'}</span>
               <input
                 type="date"
+                className={compactInputClass}
                 value={startDate}
                 onChange={(event) => onStartDateChange(event.target.value)}
                 onFocus={() => onStepChange('symbol')}
-                className={compactInputClass}
                 aria-label={language === 'en' ? 'Start date' : '开始日期'}
               />
             </label>
@@ -800,10 +801,10 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
               <span className={compactFieldLabelClass}>{language === 'en' ? 'End date' : '结束日期'}</span>
               <input
                 type="date"
+                className={compactInputClass}
                 value={endDate}
                 onChange={(event) => onEndDateChange(event.target.value)}
                 onFocus={() => onStepChange('symbol')}
-                className={compactInputClass}
                 aria-label={language === 'en' ? 'End date' : '结束日期'}
               />
             </label>
@@ -812,11 +813,11 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             <span className={compactFieldLabelClass}>{language === 'en' ? 'Initial capital' : '初始资金'}</span>
             <input
               type="number"
+              className={compactInputClass}
               min={1}
               value={initialCapital}
               onChange={(event) => onInitialCapitalChange(event.target.value)}
               onFocus={() => onStepChange('symbol')}
-              className={compactInputClass}
               aria-label={language === 'en' ? 'Initial capital' : '初始资金'}
             />
           </label>
@@ -1176,6 +1177,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             <label className="product-checkbox-row mt-1">
               <input
                 type="checkbox"
+                className={compactCheckboxClass}
                 checked={confirmed}
                 disabled={parseState === 'unsupported' || parseState === 'stale'}
                 onChange={(event) => {

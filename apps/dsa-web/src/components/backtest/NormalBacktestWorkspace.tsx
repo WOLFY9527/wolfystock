@@ -115,10 +115,10 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
               <span className={LABEL_CLASS}>{language === 'en' ? 'Ticker' : '标的代码'}</span>
               <input
                 type="text"
+                className={FIELD_CLASS}
                 value={code}
                 onChange={(event) => onCodeChange(event.target.value.toUpperCase())}
                 placeholder={language === 'en' ? 'AAPL / TSLA / 600519' : 'AAPL / TSLA / 600519'}
-                className={FIELD_CLASS}
                 aria-label={language === 'en' ? 'Ticker' : '标的代码'}
               />
             </label>
@@ -127,9 +127,9 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
               <label className="product-field min-w-0 gap-1.5">
                 <span className={LABEL_CLASS}>{language === 'en' ? 'Benchmark' : '对比基准'}</span>
                 <select
+                  className={`${FIELD_CLASS} appearance-none pr-10 truncate`}
                   value={benchmarkMode}
                   onChange={(event) => onBenchmarkModeChange(event.target.value as RuleBenchmarkMode)}
-                  className={FIELD_CLASS}
                   aria-label={language === 'en' ? 'Benchmark' : '对比基准'}
                 >
                   {RULE_BENCHMARK_OPTIONS.map((option) => (
@@ -144,10 +144,10 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                   <span className="sr-only">{language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}</span>
                   <input
                     type="text"
+                    className={FIELD_CLASS}
                     value={benchmarkCode}
                     onChange={(event) => onBenchmarkCodeChange(event.target.value.toUpperCase())}
                     placeholder={language === 'en' ? 'QQQ / SPY / ^NDX / 000300' : 'QQQ / SPY / ^NDX / 000300'}
-                    className={FIELD_CLASS}
                     aria-label={language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}
                   />
                 </label>
@@ -161,9 +161,9 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                   <span className="sr-only">{language === 'en' ? 'Range start' : '回测区间开始'}</span>
                   <input
                     type="date"
+                    className={FIELD_CLASS}
                     value={startDate}
                     onChange={(event) => onStartDateChange(event.target.value)}
-                    className={FIELD_CLASS}
                     aria-label={language === 'en' ? 'Range start' : '回测区间开始'}
                   />
                 </label>
@@ -171,9 +171,9 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                   <span className="sr-only">{language === 'en' ? 'Range end' : '回测区间结束'}</span>
                   <input
                     type="date"
+                    className={FIELD_CLASS}
                     value={endDate}
                     onChange={(event) => onEndDateChange(event.target.value)}
-                    className={FIELD_CLASS}
                     aria-label={language === 'en' ? 'Range end' : '回测区间结束'}
                   />
                 </label>
@@ -184,10 +184,10 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
               <span className={LABEL_CLASS}>{language === 'en' ? 'Capital' : '初始资金'}</span>
               <input
                 type="number"
+                className={FIELD_CLASS}
                 min={1}
                 value={initialCapital}
                 onChange={(event) => onInitialCapitalChange(event.target.value)}
-                className={FIELD_CLASS}
                 aria-label={language === 'en' ? 'Capital' : '初始资金'}
               />
             </label>
@@ -197,11 +197,11 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                 <span className={LABEL_CLASS}>{language === 'en' ? 'Slippage' : '滑点'}</span>
                 <input
                   type="number"
+                  className={FIELD_CLASS}
                   min={0}
                   max={500}
                   value={slippageBps}
                   onChange={(event) => onSlippageBpsChange(event.target.value)}
-                  className={FIELD_CLASS}
                   aria-label={language === 'en' ? 'Slippage' : '滑点'}
                 />
               </label>
@@ -209,11 +209,11 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                 <span className={LABEL_CLASS}>{language === 'en' ? 'Fees (bp)' : '手续费 (bp)'}</span>
                 <input
                   type="number"
+                  className={FIELD_CLASS}
                   min={0}
                   max={500}
                   value={feeBps}
                   onChange={(event) => onFeeBpsChange(event.target.value)}
-                  className={FIELD_CLASS}
                   aria-label={language === 'en' ? 'Fees (bp)' : '手续费 (bp)'}
                 />
               </label>
@@ -223,9 +223,9 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
               <label className="product-field min-w-0 gap-1.5">
                 <span className={LABEL_CLASS}>{language === 'en' ? 'Strategy template' : '策略模板'}</span>
                 <select
+                  className={`${FIELD_CLASS} appearance-none pr-10 truncate`}
                   value={strategyTemplate}
                   onChange={(event) => onStrategyTemplateChange(event.target.value as NormalStrategyTemplate)}
-                  className={FIELD_CLASS}
                   aria-label={language === 'en' ? 'Strategy template' : '策略模板'}
                 >
                   {POINT_AND_SHOOT_TEMPLATES.map((item) => (
@@ -262,9 +262,9 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
             </div>
             <button
               type="button"
+              className={PRIMARY_CTA_CLASS}
               onClick={() => void onLaunch()}
               disabled={isLaunching}
-              className={PRIMARY_CTA_CLASS}
             >
               <Play className="h-4 w-4" />
               <span>
