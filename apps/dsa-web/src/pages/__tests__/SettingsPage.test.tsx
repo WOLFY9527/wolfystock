@@ -740,6 +740,19 @@ function getMaintenancePanel(summaryLabel = '展开维护操作与日志入口')
   return summary.closest('details');
 }
 
+function defaultVisibleText(element: HTMLElement) {
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('details:not([open])').forEach((details) => details.remove());
+  return clone.textContent || '';
+}
+
+function expectNoDuckDBDefaultLeakage(element: HTMLElement) {
+  const visibleText = defaultVisibleText(element);
+  expect(visibleText).not.toContain('/Users/');
+  expect(visibleText).not.toMatch(/\b(?:schema|token|api_key|webhook|authorization|bearer)\b/i);
+  expect(visibleText).not.toMatch(/\b(?:Traceback|Stack trace|at\s+\S+\s+\(|File ".+", line \d+)\b/i);
+}
+
 async function openQuickProviderDrawer(providerName: string) {
   const providerKey = providerName === 'AIHubMix'
     ? 'aihubmix'
@@ -1103,7 +1116,15 @@ describe('SettingsPage', () => {
       expect(panel).toHaveTextContent('productionRuntimeChanged=false · 诊断专用');
       expect(within(panel).getByRole('button', { name: '初始化' })).toBeDisabled();
       expect(within(panel).getByRole('button', { name: '显式构建因子' })).toBeDisabled();
+      expect(within(panel).getByText('开发者细节').closest('details')).not.toHaveAttribute('open');
+      expectNoDuckDBDefaultLeakage(panel);
+      expect(getDuckDBHealth).toHaveBeenCalledTimes(1);
+      expect(getDuckDBCoverage).toHaveBeenCalledTimes(1);
       expect(initDuckDB).not.toHaveBeenCalled();
+      expect(runDuckDBBenchmark).not.toHaveBeenCalled();
+      expect(getDuckDBFactorSnapshot).not.toHaveBeenCalled();
+      expect(validateDuckDBFactorPath).not.toHaveBeenCalled();
+      expect(compareDuckDBRuntimeContext).not.toHaveBeenCalled();
       expect(buildDuckDBFactors).not.toHaveBeenCalled();
     });
   });
@@ -1112,8 +1133,8 @@ describe('SettingsPage', () => {
     getDuckDBHealth.mockResolvedValue({
       enabled: true,
       available: true,
-      databasePath: 'wolfystock.duckdb',
-      parquetRoot: 'parquet',
+      databasePath: '/Users/tester/private/quant/wolfystock.duckdb',
+      parquetRoot: '/Users/tester/private/quant/parquet',
       version: '1.2.0',
       error: null,
       schemaInitialized: true,
@@ -1124,16 +1145,16 @@ describe('SettingsPage', () => {
       status: 'ok',
       engine: 'duckdb',
       enabled: true,
-      databasePath: 'wolfystock.duckdb',
-      totalOhlcvRows: 1200,
-      totalFactorRows: 800,
+      databasePath: '/Users/tester/private/quant/wolfystock.duckdb',
+      totalOhlcvRows: 44,
+      totalFactorRows: 22,
       symbolCount: 2,
-      minTradeDate: '2025-01-02',
-      maxTradeDate: '2026-01-02',
-      latestFactorDate: '2026-01-02',
+      minTradeDate: '2026-01-01',
+      maxTradeDate: '2026-01-22',
+      latestFactorDate: '2026-01-22',
       symbols: [
-        { symbol: 'AAPL', ohlcvRows: 600, minTradeDate: '2025-01-02', maxTradeDate: '2026-01-02', factorRows: 400, latestFactorDate: '2026-01-02' },
-        { symbol: 'MSFT', ohlcvRows: 600, minTradeDate: '2025-01-02', maxTradeDate: '2026-01-02', factorRows: 400, latestFactorDate: '2026-01-02' },
+        { symbol: 'AAPL', ohlcvRows: 22, minTradeDate: '2026-01-01', maxTradeDate: '2026-01-22', factorRows: 11, latestFactorDate: '2026-01-22' },
+        { symbol: 'MSFT', ohlcvRows: 22, minTradeDate: '2026-01-01', maxTradeDate: '2026-01-22', factorRows: 11, latestFactorDate: '2026-01-22' },
       ],
       emptyReason: null,
       error: null,
@@ -1143,18 +1164,18 @@ describe('SettingsPage', () => {
       engine: 'duckdb',
       elapsedMs: 8,
       durationMs: 8,
-      ohlcvRows: 1200,
-      factorRows: 800,
-      rowsScanned: 800,
+      ohlcvRows: 44,
+      factorRows: 22,
+      rowsScanned: 22,
       symbolsScanned: 2,
       symbolCount: 2,
-      dateCount: 400,
+      dateCount: 22,
       factorCount: 11,
       queryType: 'factor_daily_top_scores',
       dataMode: 'real',
-      startDate: '2025-01-02',
-      endDate: '2026-01-02',
-      topResults: [{ symbol: 'AAPL', tradeDate: '2026-01-02', factorScore: 0.88 }],
+      startDate: '2026-01-01',
+      endDate: '2026-01-22',
+      topResults: [{ symbol: 'AAPL', tradeDate: '2026-01-22', factorScore: 0.88 }],
       error: null,
     });
     getDuckDBFactorSnapshot.mockResolvedValue({
@@ -1209,26 +1230,57 @@ describe('SettingsPage', () => {
       render(<SettingsPage />);
 
       const panel = await screen.findByTestId('duckdb-quant-panel');
-      expect(panel).toHaveTextContent('1,200');
-      expect(panel).toHaveTextContent('800');
-      expect(panel).toHaveTextContent('AAPL:600/400');
+      expect(panel).toHaveTextContent('已启用');
+      expect(panel).toHaveTextContent('写入需显式点击');
+      expect(panel).toHaveTextContent('44');
+      expect(panel).toHaveTextContent('22');
+      expect(panel).toHaveTextContent('标的 2');
+      expect(panel).toHaveTextContent('2026-01-01 -> 2026-01-22');
+      expect(panel).toHaveTextContent('最新 2026-01-22');
+      expect(panel).toHaveTextContent('AAPL:22/11');
+      expect(panel).toHaveTextContent('已脱敏 / 截断');
+      expectNoDuckDBDefaultLeakage(panel);
       expect(within(panel).getByRole('button', { name: '初始化' })).not.toBeDisabled();
+      expect(initDuckDB).not.toHaveBeenCalled();
+      expect(buildDuckDBFactors).not.toHaveBeenCalled();
+      expect(runDuckDBBenchmark).not.toHaveBeenCalled();
+      expect(getDuckDBFactorSnapshot).not.toHaveBeenCalled();
+      expect(validateDuckDBFactorPath).not.toHaveBeenCalled();
+      expect(compareDuckDBRuntimeContext).not.toHaveBeenCalled();
 
       fireEvent.click(within(panel).getByRole('button', { name: '小样本基准' }));
       await waitFor(() => expect(runDuckDBBenchmark).toHaveBeenCalledWith({ symbolLimit: 2 }));
-      expect(await within(panel).findByText(/800 行 · 2 标的/)).toBeInTheDocument();
+      expect(await within(panel).findByText(/22 行 · 2 标的/)).toBeInTheDocument();
+      expect(initDuckDB).not.toHaveBeenCalled();
+      expect(buildDuckDBFactors).not.toHaveBeenCalled();
 
       fireEvent.click(within(panel).getByRole('button', { name: '因子快照' }));
-      await waitFor(() => expect(getDuckDBFactorSnapshot).toHaveBeenCalled());
+      await waitFor(() => expect(getDuckDBFactorSnapshot).toHaveBeenCalledWith({
+        symbols: ['AAPL', 'MSFT'],
+        lookbackDays: 5,
+        factors: ['return_1d', 'factor_score'],
+      }));
       expect(await within(panel).findByText(/正常 · 4 行 · 缺失 0/)).toBeInTheDocument();
+      expect(initDuckDB).not.toHaveBeenCalled();
+      expect(buildDuckDBFactors).not.toHaveBeenCalled();
 
       fireEvent.click(within(panel).getByRole('button', { name: '路径校验' }));
-      await waitFor(() => expect(validateDuckDBFactorPath).toHaveBeenCalled());
+      await waitFor(() => expect(validateDuckDBFactorPath).toHaveBeenCalledWith({
+        symbols: ['AAPL', 'MSFT'],
+        minFactorRows: 1,
+      }));
       expect(await within(panel).findByText(/正常 · 覆盖 2\/2 · 不足 0/)).toBeInTheDocument();
+      expect(initDuckDB).not.toHaveBeenCalled();
+      expect(buildDuckDBFactors).not.toHaveBeenCalled();
 
       fireEvent.click(within(panel).getByRole('button', { name: '运行比较' }));
-      await waitFor(() => expect(compareDuckDBRuntimeContext).toHaveBeenCalled());
+      await waitFor(() => expect(compareDuckDBRuntimeContext).toHaveBeenCalledWith({
+        symbols: ['AAPL', 'MSFT'],
+        scannerSnapshot: { AAPL: { score: 0 }, MSFT: { score: 0 } },
+      }));
       expect(await within(panel).findByText('productionRuntimeChanged=false · 诊断专用')).toBeInTheDocument();
+      expect(initDuckDB).not.toHaveBeenCalled();
+      expect(buildDuckDBFactors).not.toHaveBeenCalled();
     });
   });
 
@@ -1267,10 +1319,62 @@ describe('SettingsPage', () => {
       const duckdbDetails = within(panel).getByText('开发者细节').closest('details');
       expect(duckdbDetails).not.toBeNull();
       expect(duckdbDetails).not.toHaveAttribute('open');
-      expect(panel).not.toHaveTextContent('/Users/tester/private');
-      expect(panel).not.toHaveTextContent('API_KEY');
-      expect(panel).not.toHaveTextContent('SECRET');
-      expect(panel).not.toHaveTextContent('TOKEN');
+      expectNoDuckDBDefaultLeakage(panel);
+    });
+  });
+
+  it('renders unavailable DuckDB diagnostics without exposing raw stack or path text by default', async () => {
+    getDuckDBHealth.mockResolvedValue({
+      enabled: true,
+      available: false,
+      databasePath: '/Users/tester/private/quant/wolfystock.duckdb',
+      parquetRoot: '/Users/tester/private/quant/parquet',
+      version: null,
+      error: 'Traceback: token api_key schema webhook authorization bearer at /Users/tester/private/service.py:42',
+      schemaInitialized: false,
+      status: 'unavailable',
+      engine: 'duckdb',
+    });
+    getDuckDBCoverage.mockResolvedValue({
+      status: 'unavailable',
+      engine: 'duckdb',
+      enabled: true,
+      databasePath: '/Users/tester/private/quant/wolfystock.duckdb',
+      totalOhlcvRows: 0,
+      totalFactorRows: 0,
+      symbolCount: 0,
+      minTradeDate: null,
+      maxTradeDate: null,
+      latestFactorDate: null,
+      symbols: [],
+      emptyReason: 'DuckDB 暂不可用，请查看开发者细节',
+      error: 'Stack trace: File "/Users/tester/private/service.py", line 42, in token_handler',
+    });
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        quant: buildSystemConfigState().itemsByCategory.quant.map((item) => (
+          item.key === 'QUANT_DUCKDB_ENABLED' ? { ...item, value: 'true' } : item
+        )),
+      },
+    }));
+
+    await withSystemSettingsPath(async () => {
+      render(<SettingsPage />);
+
+      const panel = await screen.findByTestId('duckdb-quant-panel');
+      expect(panel).toHaveTextContent('暂不可用');
+      expect(panel).toHaveTextContent('DuckDB 暂不可用，请查看开发者细节');
+      const duckdbDetails = within(panel).getByText('开发者细节').closest('details');
+      expect(duckdbDetails).not.toBeNull();
+      expect(duckdbDetails).not.toHaveAttribute('open');
+      expectNoDuckDBDefaultLeakage(panel);
+      expect(runDuckDBBenchmark).not.toHaveBeenCalled();
+      expect(getDuckDBFactorSnapshot).not.toHaveBeenCalled();
+      expect(validateDuckDBFactorPath).not.toHaveBeenCalled();
+      expect(compareDuckDBRuntimeContext).not.toHaveBeenCalled();
+      expect(initDuckDB).not.toHaveBeenCalled();
+      expect(buildDuckDBFactors).not.toHaveBeenCalled();
     });
   });
 
