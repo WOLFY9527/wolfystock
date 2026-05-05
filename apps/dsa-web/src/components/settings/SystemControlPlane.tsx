@@ -4,34 +4,17 @@ import { BentoHeroStrip, type BentoHeroItem } from '../home-bento';
 import {
   describeSettingsSystemHealthStatus,
   type DisplayStatusTone,
-  type SettingsSystemHealthStatus,
 } from '../../utils/displayStatus';
 import { SettingsAlert } from './SettingsAlert';
 import { SettingsSectionCard } from './SettingsSectionCard';
 import DuckDBQuantPanel from './DuckDBQuantPanel';
+import type {
+  DeveloperDetailGroup,
+  SystemHealthStatusCard,
+  SystemHealthSummaryCard,
+} from './settingsDerivedState';
 
 type AdminActionDialogKey = 'runtime_cache' | 'factory_reset' | null;
-type SystemHealthSummaryCard = {
-  key: string;
-  label: string;
-  value: string | number;
-  detail: string;
-  status?: SettingsSystemHealthStatus;
-};
-type SystemHealthStatusCard = {
-  key: string;
-  label: string;
-  status: SettingsSystemHealthStatus;
-  reason: string;
-  nextAction?: string;
-  checkedAt?: string;
-  optional?: boolean;
-};
-type DeveloperDetailGroup = {
-  key: string;
-  label: string;
-  detail: string;
-};
 type DuckDBConfigState = 'enabled' | 'disabled' | 'unknown';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
