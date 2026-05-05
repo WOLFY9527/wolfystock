@@ -3555,6 +3555,7 @@ const SettingsPage: React.FC = () => {
                   adminActionDialog={adminActionDialog}
                   adminActionMessage={adminActionMessage}
                   adminActionTone={adminActionTone}
+                  duckdbConfigEnabledState={statusFromBooleanConfig(allItemMap.get('QUANT_DUCKDB_ENABLED'))}
                   onOpenAdminLogs={() => window.location.assign(buildAdminLogsPath())}
                   onSetAdminActionDialog={setAdminActionDialog}
                 />

@@ -3,6 +3,7 @@ import { Button, Disclosure, GlassCard } from '../common';
 import { BentoHeroStrip, type BentoHeroItem } from '../home-bento';
 import { SettingsAlert } from './SettingsAlert';
 import { SettingsSectionCard } from './SettingsSectionCard';
+import DuckDBQuantPanel from './DuckDBQuantPanel';
 
 type AdminActionDialogKey = 'runtime_cache' | 'factory_reset' | null;
 type SystemHealthTone = 'available' | 'attention' | 'not_configured' | 'unavailable' | 'disabled' | 'unknown';
@@ -27,6 +28,7 @@ type DeveloperDetailGroup = {
   label: string;
   detail: string;
 };
+type DuckDBConfigState = 'enabled' | 'disabled' | 'unknown';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 
@@ -67,6 +69,7 @@ type SystemControlPlaneProps = {
   adminActionDialog: AdminActionDialogKey;
   adminActionMessage: string | null;
   adminActionTone: 'success' | 'error';
+  duckdbConfigEnabledState: DuckDBConfigState;
   onOpenAdminLogs: () => void;
   onSetAdminActionDialog: (value: Exclude<AdminActionDialogKey, null>) => void;
 };
@@ -81,6 +84,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
   adminActionDialog,
   adminActionMessage,
   adminActionTone,
+  duckdbConfigEnabledState,
   onOpenAdminLogs,
   onSetAdminActionDialog,
 }) => (
@@ -139,6 +143,8 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
           ))}
         </div>
       </GlassCard>
+
+      <DuckDBQuantPanel configEnabledState={duckdbConfigEnabledState} />
 
       <Disclosure
         summary={(

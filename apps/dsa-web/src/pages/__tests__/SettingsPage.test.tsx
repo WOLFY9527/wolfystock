@@ -24,6 +24,14 @@ const {
   testBuiltinDataSource,
   resetRuntimeCaches,
   factoryResetSystem,
+  getDuckDBHealth,
+  getDuckDBCoverage,
+  initDuckDB,
+  runDuckDBBenchmark,
+  getDuckDBFactorSnapshot,
+  validateDuckDBFactorPath,
+  compareDuckDBRuntimeContext,
+  buildDuckDBFactors,
   useAuthMock,
   useSystemConfigMock,
 } = vi.hoisted(() => ({
@@ -44,6 +52,14 @@ const {
   testBuiltinDataSource: vi.fn(),
   resetRuntimeCaches: vi.fn(),
   factoryResetSystem: vi.fn(),
+  getDuckDBHealth: vi.fn(),
+  getDuckDBCoverage: vi.fn(),
+  initDuckDB: vi.fn(),
+  runDuckDBBenchmark: vi.fn(),
+  getDuckDBFactorSnapshot: vi.fn(),
+  validateDuckDBFactorPath: vi.fn(),
+  compareDuckDBRuntimeContext: vi.fn(),
+  buildDuckDBFactors: vi.fn(),
   useAuthMock: vi.fn(),
   useSystemConfigMock: vi.fn(),
 }));
@@ -62,6 +78,19 @@ vi.mock('../../api/systemConfig', async (importOriginal) => {
       },
     };
 });
+
+vi.mock('../../api/quant', () => ({
+  quantApi: {
+    getDuckDBHealth,
+    getDuckDBCoverage,
+    initDuckDB,
+    runDuckDBBenchmark,
+    getDuckDBFactorSnapshot,
+    validateDuckDBFactorPath,
+    compareDuckDBRuntimeContext,
+    buildDuckDBFactors,
+  },
+}));
 
 vi.mock('../../hooks', () => ({
   useAuth: () => useAuthMock(),
@@ -838,6 +867,136 @@ describe('SettingsPage', () => {
       },
       confirmationPhrase: 'FACTORY RESET',
     });
+    getDuckDBHealth.mockResolvedValue({
+      enabled: false,
+      available: true,
+      databasePath: 'wolfystock.duckdb',
+      parquetRoot: 'parquet',
+      version: '1.2.0',
+      error: null,
+      schemaInitialized: false,
+      status: 'disabled',
+      engine: 'duckdb',
+    });
+    getDuckDBCoverage.mockResolvedValue({
+      status: 'disabled',
+      engine: 'duckdb',
+      enabled: false,
+      databasePath: 'wolfystock.duckdb',
+      totalOhlcvRows: 0,
+      totalFactorRows: 0,
+      symbolCount: 0,
+      minTradeDate: null,
+      maxTradeDate: null,
+      latestFactorDate: null,
+      symbols: [],
+      emptyReason: 'DuckDB quant engine is disabled',
+      error: null,
+    });
+    initDuckDB.mockResolvedValue({
+      status: 'disabled',
+      engine: 'duckdb',
+      schemaInitialized: false,
+      error: 'DuckDB quant engine is disabled',
+    });
+    runDuckDBBenchmark.mockResolvedValue({
+      status: 'disabled',
+      engine: 'duckdb',
+      elapsedMs: 0,
+      durationMs: 0,
+      ohlcvRows: 0,
+      factorRows: 0,
+      rowsScanned: 0,
+      symbolsScanned: 0,
+      symbolCount: 0,
+      dateCount: 0,
+      factorCount: 0,
+      queryType: 'factor_daily_top_scores',
+      dataMode: 'disabled',
+      startDate: null,
+      endDate: null,
+      topResults: [],
+      error: null,
+    });
+    getDuckDBFactorSnapshot.mockResolvedValue({
+      status: 'disabled',
+      engine: 'duckdb',
+      dataMode: 'disabled',
+      durationMs: 0,
+      rowCount: 0,
+      coverage: {
+        requestedSymbols: 2,
+        coveredSymbols: 0,
+        missingSymbols: 2,
+        sufficientSymbols: 0,
+        rowCount: 0,
+        minFactorDate: null,
+        maxFactorDate: null,
+      },
+      factorDates: [],
+      missingSymbols: ['AAPL', 'MSFT'],
+      factors: ['return_1d', 'factor_score'],
+      snapshots: [],
+      warnings: ['DuckDB quant engine is disabled'],
+      error: null,
+    });
+    validateDuckDBFactorPath.mockResolvedValue({
+      status: 'disabled',
+      engine: 'duckdb',
+      dataMode: 'disabled',
+      durationMs: 0,
+      rowCount: 0,
+      coverage: {
+        requestedSymbols: 2,
+        coveredSymbols: 0,
+        missingSymbols: 2,
+        sufficientSymbols: 0,
+        rowCount: 0,
+        minFactorDate: null,
+        maxFactorDate: null,
+      },
+      factorDates: [],
+      missingSymbols: ['AAPL', 'MSFT'],
+      insufficientSymbols: [],
+      warnings: ['DuckDB quant engine is disabled'],
+      error: null,
+    });
+    compareDuckDBRuntimeContext.mockResolvedValue({
+      status: 'disabled',
+      engine: 'duckdb',
+      dataMode: 'disabled',
+      durationMs: 0,
+      runtimeContexts: ['scanner'],
+      coverage: {
+        requestedSymbols: 2,
+        coveredSymbols: 0,
+        missingSymbols: 2,
+        sufficientSymbols: 0,
+        rowCount: 0,
+        minFactorDate: null,
+        maxFactorDate: null,
+      },
+      diagnostics: {
+        productionRuntimeChanged: false,
+        diagnosticOnly: true,
+        missingSymbols: ['AAPL', 'MSFT'],
+        insufficientSymbols: [],
+        scannerSymbols: ['AAPL', 'MSFT'],
+        backtestSymbols: [],
+      },
+      snapshots: [],
+      warnings: [],
+      error: null,
+    });
+    buildDuckDBFactors.mockResolvedValue({
+      status: 'disabled',
+      engine: 'duckdb',
+      ohlcvRows: 0,
+      factorRows: 0,
+      factorCount: 0,
+      durationMs: 0,
+      error: 'DuckDB quant engine is disabled',
+    });
   });
 
   it('renders category navigation and auth settings modules', async () => {
@@ -929,15 +1088,255 @@ describe('SettingsPage', () => {
     });
   });
 
+  it('renders the DuckDB panel as optional and blocks write actions while disabled', async () => {
+    await withSystemSettingsPath(async () => {
+      render(<SettingsPage />);
+
+      const panel = await screen.findByTestId('duckdb-quant-panel');
+      expect(panel).toHaveTextContent('DuckDB 诊断');
+      expect(panel).toHaveTextContent('未启用');
+      expect(panel).toHaveTextContent('可选能力');
+      expect(panel).toHaveTextContent('未写入文件');
+      expect(panel).toHaveTextContent('诊断用途，不影响生产运行路径');
+      expect(panel).toHaveTextContent('OHLCV 行');
+      expect(panel).toHaveTextContent('因子行');
+      expect(panel).toHaveTextContent('productionRuntimeChanged=false · 诊断专用');
+      expect(within(panel).getByRole('button', { name: '初始化' })).toBeDisabled();
+      expect(within(panel).getByRole('button', { name: '显式构建因子' })).toBeDisabled();
+      expect(initDuckDB).not.toHaveBeenCalled();
+      expect(buildDuckDBFactors).not.toHaveBeenCalled();
+    });
+  });
+
+  it('renders DuckDB coverage, benchmark, snapshot, and validation summaries after explicit clicks', async () => {
+    getDuckDBHealth.mockResolvedValue({
+      enabled: true,
+      available: true,
+      databasePath: 'wolfystock.duckdb',
+      parquetRoot: 'parquet',
+      version: '1.2.0',
+      error: null,
+      schemaInitialized: true,
+      status: 'ok',
+      engine: 'duckdb',
+    });
+    getDuckDBCoverage.mockResolvedValue({
+      status: 'ok',
+      engine: 'duckdb',
+      enabled: true,
+      databasePath: 'wolfystock.duckdb',
+      totalOhlcvRows: 1200,
+      totalFactorRows: 800,
+      symbolCount: 2,
+      minTradeDate: '2025-01-02',
+      maxTradeDate: '2026-01-02',
+      latestFactorDate: '2026-01-02',
+      symbols: [
+        { symbol: 'AAPL', ohlcvRows: 600, minTradeDate: '2025-01-02', maxTradeDate: '2026-01-02', factorRows: 400, latestFactorDate: '2026-01-02' },
+        { symbol: 'MSFT', ohlcvRows: 600, minTradeDate: '2025-01-02', maxTradeDate: '2026-01-02', factorRows: 400, latestFactorDate: '2026-01-02' },
+      ],
+      emptyReason: null,
+      error: null,
+    });
+    runDuckDBBenchmark.mockResolvedValue({
+      status: 'ok',
+      engine: 'duckdb',
+      elapsedMs: 8,
+      durationMs: 8,
+      ohlcvRows: 1200,
+      factorRows: 800,
+      rowsScanned: 800,
+      symbolsScanned: 2,
+      symbolCount: 2,
+      dateCount: 400,
+      factorCount: 11,
+      queryType: 'factor_daily_top_scores',
+      dataMode: 'real',
+      startDate: '2025-01-02',
+      endDate: '2026-01-02',
+      topResults: [{ symbol: 'AAPL', tradeDate: '2026-01-02', factorScore: 0.88 }],
+      error: null,
+    });
+    getDuckDBFactorSnapshot.mockResolvedValue({
+      status: 'ok',
+      engine: 'duckdb',
+      dataMode: 'real',
+      durationMs: 4,
+      rowCount: 4,
+      coverage: { requestedSymbols: 2, coveredSymbols: 2, missingSymbols: 0, sufficientSymbols: 2, rowCount: 4, minFactorDate: '2026-01-01', maxFactorDate: '2026-01-02' },
+      factorDates: ['2026-01-01', '2026-01-02'],
+      missingSymbols: [],
+      factors: ['return_1d', 'factor_score'],
+      snapshots: [],
+      warnings: [],
+      error: null,
+    });
+    validateDuckDBFactorPath.mockResolvedValue({
+      status: 'ok',
+      engine: 'duckdb',
+      dataMode: 'real',
+      durationMs: 3,
+      rowCount: 4,
+      coverage: { requestedSymbols: 2, coveredSymbols: 2, missingSymbols: 0, sufficientSymbols: 2, rowCount: 4, minFactorDate: '2026-01-01', maxFactorDate: '2026-01-02' },
+      factorDates: ['2026-01-01', '2026-01-02'],
+      missingSymbols: [],
+      insufficientSymbols: [],
+      warnings: [],
+      error: null,
+    });
+    compareDuckDBRuntimeContext.mockResolvedValue({
+      status: 'ok',
+      engine: 'duckdb',
+      dataMode: 'real',
+      durationMs: 5,
+      runtimeContexts: ['scanner'],
+      coverage: { requestedSymbols: 2, coveredSymbols: 2, missingSymbols: 0, sufficientSymbols: 2, rowCount: 4, minFactorDate: '2026-01-01', maxFactorDate: '2026-01-02' },
+      diagnostics: { productionRuntimeChanged: false, diagnosticOnly: true, scannerSymbols: ['AAPL', 'MSFT'], backtestSymbols: [] },
+      snapshots: [],
+      warnings: [],
+      error: null,
+    });
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        quant: buildSystemConfigState().itemsByCategory.quant.map((item) => (
+          item.key === 'QUANT_DUCKDB_ENABLED' ? { ...item, value: 'true' } : item
+        )),
+      },
+    }));
+
+    await withSystemSettingsPath(async () => {
+      render(<SettingsPage />);
+
+      const panel = await screen.findByTestId('duckdb-quant-panel');
+      expect(panel).toHaveTextContent('1,200');
+      expect(panel).toHaveTextContent('800');
+      expect(panel).toHaveTextContent('AAPL:600/400');
+      expect(within(panel).getByRole('button', { name: '初始化' })).not.toBeDisabled();
+
+      fireEvent.click(within(panel).getByRole('button', { name: '小样本基准' }));
+      await waitFor(() => expect(runDuckDBBenchmark).toHaveBeenCalledWith({ symbolLimit: 2 }));
+      expect(await within(panel).findByText(/800 行 · 2 标的/)).toBeInTheDocument();
+
+      fireEvent.click(within(panel).getByRole('button', { name: '因子快照' }));
+      await waitFor(() => expect(getDuckDBFactorSnapshot).toHaveBeenCalled());
+      expect(await within(panel).findByText(/正常 · 4 行 · 缺失 0/)).toBeInTheDocument();
+
+      fireEvent.click(within(panel).getByRole('button', { name: '路径校验' }));
+      await waitFor(() => expect(validateDuckDBFactorPath).toHaveBeenCalled());
+      expect(await within(panel).findByText(/正常 · 覆盖 2\/2 · 不足 0/)).toBeInTheDocument();
+
+      fireEvent.click(within(panel).getByRole('button', { name: '运行比较' }));
+      await waitFor(() => expect(compareDuckDBRuntimeContext).toHaveBeenCalled());
+      expect(await within(panel).findByText('productionRuntimeChanged=false · 诊断专用')).toBeInTheDocument();
+    });
+  });
+
+  it('keeps DuckDB developer details collapsed and does not leak raw absolute paths by default', async () => {
+    getDuckDBHealth.mockResolvedValue({
+      enabled: false,
+      available: true,
+      databasePath: '/Users/tester/private/wolfystock.duckdb',
+      parquetRoot: '/Users/tester/private/parquet',
+      version: '1.2.0',
+      error: null,
+      schemaInitialized: false,
+      status: 'disabled',
+      engine: 'duckdb',
+    });
+    getDuckDBCoverage.mockResolvedValue({
+      status: 'disabled',
+      engine: 'duckdb',
+      enabled: false,
+      databasePath: '/Users/tester/private/wolfystock.duckdb',
+      totalOhlcvRows: 0,
+      totalFactorRows: 0,
+      symbolCount: 0,
+      minTradeDate: null,
+      maxTradeDate: null,
+      latestFactorDate: null,
+      symbols: [],
+      emptyReason: 'DuckDB quant engine is disabled',
+      error: null,
+    });
+
+    await withSystemSettingsPath(async () => {
+      render(<SettingsPage />);
+
+      const panel = await screen.findByTestId('duckdb-quant-panel');
+      const duckdbDetails = within(panel).getByText('开发者细节').closest('details');
+      expect(duckdbDetails).not.toBeNull();
+      expect(duckdbDetails).not.toHaveAttribute('open');
+      expect(panel).not.toHaveTextContent('/Users/tester/private');
+      expect(panel).not.toHaveTextContent('API_KEY');
+      expect(panel).not.toHaveTextContent('SECRET');
+      expect(panel).not.toHaveTextContent('TOKEN');
+    });
+  });
+
+  it('does not auto-run DuckDB init or factor build on render and keeps writes explicit when enabled', async () => {
+    getDuckDBHealth.mockResolvedValue({
+      enabled: true,
+      available: true,
+      databasePath: 'wolfystock.duckdb',
+      parquetRoot: 'parquet',
+      version: '1.2.0',
+      error: null,
+      schemaInitialized: true,
+      status: 'ok',
+      engine: 'duckdb',
+    });
+    getDuckDBCoverage.mockResolvedValue({
+      status: 'empty',
+      engine: 'duckdb',
+      enabled: true,
+      databasePath: 'wolfystock.duckdb',
+      totalOhlcvRows: 0,
+      totalFactorRows: 0,
+      symbolCount: 0,
+      minTradeDate: null,
+      maxTradeDate: null,
+      latestFactorDate: null,
+      symbols: [],
+      emptyReason: 'No OHLCV or factor rows have been ingested',
+      error: null,
+    });
+    initDuckDB.mockResolvedValue({ status: 'ok', engine: 'duckdb', schemaInitialized: true, error: null });
+    buildDuckDBFactors.mockResolvedValue({ status: 'ok', engine: 'duckdb', ohlcvRows: 4, factorRows: 4, factorCount: 11, durationMs: 3, error: null });
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        quant: buildSystemConfigState().itemsByCategory.quant.map((item) => (
+          item.key === 'QUANT_DUCKDB_ENABLED' ? { ...item, value: 'true' } : item
+        )),
+      },
+    }));
+
+    await withSystemSettingsPath(async () => {
+      render(<SettingsPage />);
+
+      const panel = await screen.findByTestId('duckdb-quant-panel');
+      expect(initDuckDB).not.toHaveBeenCalled();
+      expect(buildDuckDBFactors).not.toHaveBeenCalled();
+
+      fireEvent.click(within(panel).getByRole('button', { name: '初始化' }));
+      await waitFor(() => expect(initDuckDB).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(within(panel).getByRole('button', { name: '显式构建因子' }));
+      await waitFor(() => expect(buildDuckDBFactors).toHaveBeenCalledWith({ symbols: ['AAPL', 'MSFT'] }));
+    });
+  });
+
   it('keeps secrets and raw diagnostics collapsed in the system health overview', async () => {
     await withSystemSettingsPath(async () => {
       render(<SettingsPage />);
 
-      expect(await screen.findByText('开发者细节')).toBeInTheDocument();
-      const developerDetails = screen.getByText('开发者细节').closest('details');
+      expect(await screen.findByText('原始诊断')).toBeInTheDocument();
+      const developerDetails = screen.getAllByText('开发者细节')
+        .map((item) => item.closest('details'))
+        .find((details) => details?.textContent?.includes('原始诊断'));
       expect(developerDetails).not.toBeNull();
       expect(developerDetails).not.toHaveAttribute('open');
-      expect(screen.getByText('原始诊断')).toBeInTheDocument();
       expect(screen.queryByText('masked-vendor-key')).not.toBeInTheDocument();
       expect(screen.queryByText('wechat-webhook-token')).not.toBeInTheDocument();
       expect(screen.queryByText('pushover-key')).not.toBeInTheDocument();
@@ -2223,7 +2622,7 @@ describe('SettingsPage', () => {
     const newsDrawer = await screen.findByRole('dialog', { name: '新闻数据' });
     expect(within(newsDrawer).getAllByRole('option', { name: /Demo News Api/i }).length).toBeGreaterThan(0);
 
-    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(within(newsDrawer).getByLabelText('关闭抽屉'));
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: '新闻数据' })).not.toBeInTheDocument();
     });
