@@ -602,6 +602,56 @@ function renderMarketOverviewWithLanguage(language: 'zh' | 'en') {
   );
 }
 
+const primaryMarketPanelRequests = [
+  marketOverviewApi.getIndices,
+  marketOverviewApi.getVolatility,
+  marketApi.getCrypto,
+  marketApi.getSentiment,
+  marketOverviewApi.getFundsFlow,
+  marketApi.getCnIndices,
+  marketApi.getRates,
+  marketApi.getFxCommodities,
+  marketApi.getTemperature,
+  marketApi.getMarketBriefing,
+] as const;
+
+const firstStagedMarketPanelRequests = [
+  marketOverviewApi.getMacro,
+  marketApi.getCnBreadth,
+  marketApi.getUsBreadth,
+] as const;
+
+const secondStagedMarketPanelRequests = [
+  marketApi.getCnFlows,
+  marketApi.getSectorRotation,
+  marketApi.getFutures,
+  marketApi.getCnShortSentiment,
+] as const;
+
+const allMarketPanelRequests = [
+  ...primaryMarketPanelRequests,
+  ...firstStagedMarketPanelRequests,
+  ...secondStagedMarketPanelRequests,
+] as const;
+
+type MarketPanelRequestMock = (typeof allMarketPanelRequests)[number];
+
+function countMarketPanelRequests(): number {
+  return allMarketPanelRequests.reduce((total, request) => total + vi.mocked(request).mock.calls.length, 0);
+}
+
+function expectMarketPanelRequestsCalledOnce(requests: readonly MarketPanelRequestMock[]): void {
+  requests.forEach((request) => {
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+}
+
+function expectMarketPanelRequestsNotCalled(requests: readonly MarketPanelRequestMock[]): void {
+  requests.forEach((request) => {
+    expect(request).not.toHaveBeenCalled();
+  });
+}
+
 describe('MarketOverviewPage', () => {
   let originalClipboard: Navigator['clipboard'] | undefined;
   const writeTextMock = vi.fn().mockResolvedValue(undefined);
@@ -1004,18 +1054,12 @@ describe('MarketOverviewPage', () => {
 
     render(<MarketOverviewPage />);
 
-    expect(marketOverviewApi.getIndices).toHaveBeenCalledTimes(1);
-    expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(1);
-    expect(marketApi.getCrypto).toHaveBeenCalledTimes(1);
-    expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1);
-    expect(marketApi.getRates).toHaveBeenCalledTimes(1);
-    expect(marketOverviewApi.getMacro).not.toHaveBeenCalled();
-    expect(marketApi.getCnBreadth).not.toHaveBeenCalled();
-    expect(marketApi.getCnFlows).not.toHaveBeenCalled();
-    expect(marketApi.getSectorRotation).not.toHaveBeenCalled();
-    expect(marketApi.getUsBreadth).not.toHaveBeenCalled();
-    expect(marketApi.getFutures).not.toHaveBeenCalled();
-    expect(marketApi.getCnShortSentiment).not.toHaveBeenCalled();
+    expect(countMarketPanelRequests()).toBe(10);
+    expectMarketPanelRequestsCalledOnce(primaryMarketPanelRequests);
+    expectMarketPanelRequestsNotCalled([
+      ...firstStagedMarketPanelRequests,
+      ...secondStagedMarketPanelRequests,
+    ]);
     expect(MockEventSource.instances).toHaveLength(1);
 
     await act(async () => {
@@ -1023,41 +1067,58 @@ describe('MarketOverviewPage', () => {
       await Promise.resolve();
     });
 
-    expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1);
-    expect(marketApi.getCnBreadth).toHaveBeenCalledTimes(1);
-    expect(marketApi.getUsBreadth).toHaveBeenCalledTimes(1);
-    expect(marketApi.getCnFlows).not.toHaveBeenCalled();
-    expect(marketApi.getSectorRotation).not.toHaveBeenCalled();
+    expect(countMarketPanelRequests()).toBe(13);
+    expectMarketPanelRequestsCalledOnce([
+      ...primaryMarketPanelRequests,
+      ...firstStagedMarketPanelRequests,
+    ]);
+    expectMarketPanelRequestsNotCalled(secondStagedMarketPanelRequests);
 
     await act(async () => {
       vi.advanceTimersByTime(400);
       await Promise.resolve();
     });
 
-    expect(marketApi.getCnFlows).toHaveBeenCalledTimes(1);
-    expect(marketApi.getSectorRotation).toHaveBeenCalledTimes(1);
-    expect(marketApi.getFutures).toHaveBeenCalledTimes(1);
-    expect(marketApi.getCnShortSentiment).toHaveBeenCalledTimes(1);
+    expect(countMarketPanelRequests()).toBe(17);
+    expectMarketPanelRequestsCalledOnce(allMarketPanelRequests);
     expect(MockEventSource.instances).toHaveLength(1);
   });
 
   it('dedupes route-entry market requests and the crypto stream under React StrictMode', async () => {
+    vi.useFakeTimers();
+
     render(
       <StrictMode>
         <MarketOverviewPage />
       </StrictMode>,
     );
 
-    await waitFor(() => expect(marketOverviewApi.getIndices).toHaveBeenCalledTimes(1));
-    expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(1);
-    expect(marketApi.getCrypto).toHaveBeenCalledTimes(1);
-    expect(marketApi.getSentiment).toHaveBeenCalledTimes(1);
-    expect(marketOverviewApi.getFundsFlow).toHaveBeenCalledTimes(1);
-    expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1);
-    expect(marketApi.getRates).toHaveBeenCalledTimes(1);
-    expect(marketApi.getFxCommodities).toHaveBeenCalledTimes(1);
-    expect(marketApi.getTemperature).toHaveBeenCalledTimes(1);
-    expect(marketApi.getMarketBriefing).toHaveBeenCalledTimes(1);
+    expect(countMarketPanelRequests()).toBe(10);
+    expectMarketPanelRequestsCalledOnce(primaryMarketPanelRequests);
+    expectMarketPanelRequestsNotCalled([
+      ...firstStagedMarketPanelRequests,
+      ...secondStagedMarketPanelRequests,
+    ]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+      await Promise.resolve();
+    });
+
+    expect(countMarketPanelRequests()).toBe(13);
+    expectMarketPanelRequestsCalledOnce([
+      ...primaryMarketPanelRequests,
+      ...firstStagedMarketPanelRequests,
+    ]);
+    expectMarketPanelRequestsNotCalled(secondStagedMarketPanelRequests);
+
+    await act(async () => {
+      vi.advanceTimersByTime(400);
+      await Promise.resolve();
+    });
+
+    expect(countMarketPanelRequests()).toBe(17);
+    expectMarketPanelRequestsCalledOnce(allMarketPanelRequests);
     expect(MockEventSource.instances).toHaveLength(1);
   });
 
