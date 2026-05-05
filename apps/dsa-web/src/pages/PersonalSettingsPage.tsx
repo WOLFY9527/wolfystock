@@ -184,8 +184,8 @@ const PersonalSettingsPage: React.FC = () => {
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() => setMarketColorConvention(option.value)}
                       className={buildOptionButtonClass(active)}
+                      onClick={() => setMarketColorConvention(option.value)}
                       aria-pressed={active}
                     >
                       <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
@@ -204,8 +204,8 @@ const PersonalSettingsPage: React.FC = () => {
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() => setDataDensity(option.value)}
                       className={buildOptionButtonClass(active)}
+                      onClick={() => setDataDensity(option.value)}
                       aria-pressed={active}
                     >
                       <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
@@ -224,8 +224,8 @@ const PersonalSettingsPage: React.FC = () => {
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() => setNumberFormat(option.value)}
                       className={buildOptionButtonClass(active)}
+                      onClick={() => setNumberFormat(option.value)}
                       aria-pressed={active}
                     >
                       <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
@@ -261,11 +261,11 @@ const PersonalSettingsPage: React.FC = () => {
                     <button
                       key={currency}
                       type="button"
-                      onClick={() => handlePortfolioDisplayCurrencyChange(currency)}
-                      aria-pressed={active}
                       className={active
                         ? 'rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition-all'
                         : 'rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white'}
+                      onClick={() => handlePortfolioDisplayCurrencyChange(currency)}
+                      aria-pressed={active}
                     >
                       {currency}
                     </button>
@@ -358,11 +358,11 @@ const PersonalSettingsPage: React.FC = () => {
                       <span className="theme-field-label">{t('settings.personalNotificationEmailLabel')}</span>
                       <input
                         type="email"
+                        className={`mt-2 ${GLASS_INPUT_CLASS}`}
                         value={notificationEmail}
                         onChange={(event) => setNotificationEmail(event.target.value)}
                         placeholder={t('settings.personalNotificationEmailPlaceholder')}
                         disabled={notificationLoading || notificationSaving}
-                        className={`mt-2 ${GLASS_INPUT_CLASS}`}
                       />
                     </label>
                     <label className="flex items-center gap-3 text-xs text-secondary-text">
@@ -379,11 +379,11 @@ const PersonalSettingsPage: React.FC = () => {
                       <span className="theme-field-label">{t('settings.personalNotificationDiscordLabel')}</span>
                       <input
                         type="url"
+                        className={`mt-2 ${GLASS_INPUT_CLASS}`}
                         value={notificationDiscordWebhook}
                         onChange={(event) => setNotificationDiscordWebhook(event.target.value)}
                         placeholder="https://discord.com/api/webhooks/..."
                         disabled={notificationLoading || notificationSaving}
-                        className={`mt-2 ${GLASS_INPUT_CLASS}`}
                       />
                     </label>
                     {notificationNotice ? (
@@ -392,9 +392,9 @@ const PersonalSettingsPage: React.FC = () => {
                     {notificationError ? <ApiErrorAlert error={notificationError} /> : null}
                     <button
                       type="button"
+                      className={SETTINGS_PRIMARY_BUTTON_CLASS}
                       onClick={() => void handleSaveNotificationPreferences()}
                       disabled={notificationLoading || notificationSaving}
-                      className={SETTINGS_PRIMARY_BUTTON_CLASS}
                     >
                       {notificationSaving ? t('settings.personalNotificationSaving') : t('settings.personalNotificationSaveAction')}
                     </button>

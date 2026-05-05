@@ -434,13 +434,13 @@ function SeamlessSegmentedControl({
           <button
             key={option.value}
             type="button"
-            aria-pressed={active}
-            onClick={() => onChange(option.value)}
             className={`appearance-none flex-1 rounded-md border-0 px-3 py-2 text-center text-sm font-medium transition-all duration-200 ${
               active
                 ? 'bg-white/10 text-white shadow-sm'
                 : 'bg-transparent text-white/40 hover:text-white/72'
             }`}
+            aria-pressed={active}
+            onClick={() => onChange(option.value)}
           >
             {option.label[language]}
           </button>
@@ -1035,9 +1035,9 @@ const ChatPage: React.FC = () => {
     return (
       <button
         type="button"
+        className="mb-2 flex w-full items-center gap-2 text-left text-xs text-muted-text transition-colors hover:text-secondary-text"
         aria-label={chat('thinking.toggleLabel')}
         onClick={() => toggleThinking(msg.id)}
-        className="mb-2 flex w-full items-center gap-2 text-left text-xs text-muted-text transition-colors hover:text-secondary-text"
       >
         <svg
           className={`h-3 w-3 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
@@ -1191,11 +1191,11 @@ const ChatPage: React.FC = () => {
           </button>
           <button
             type="button"
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-secondary-text transition-colors hover:bg-white/[0.08] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => {
               void handleNotifySession();
             }}
             disabled={sending}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-secondary-text transition-colors hover:bg-white/[0.08] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             title={chat('notifyTitle')}
           >
             {sending ? (
@@ -1275,11 +1275,11 @@ const ChatPage: React.FC = () => {
                     </div>
                     <button
                       type="button"
+                      className="rounded-lg p-1 text-white/28 opacity-0 transition-all hover:bg-white/10 hover:text-danger group-hover:opacity-100"
                       onClick={(e) => {
                         e.stopPropagation();
                         setDeleteConfirmId(s.session_id);
                       }}
-                      className="rounded-lg p-1 text-white/28 opacity-0 transition-all hover:bg-white/10 hover:text-danger group-hover:opacity-100"
                       title={chat('deleteConversationAction')}
                     >
                       <svg
@@ -1364,12 +1364,12 @@ const ChatPage: React.FC = () => {
           </a>
           <button
             type="button"
+            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => {
               if (isInWatchlist) return;
               void handleAddWatchlist(primarySymbol, symbolMarket);
             }}
             disabled={isInWatchlist}
-            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/10"
             aria-label={`${isInWatchlist ? '已在观察列表' : '加入观察列表'} ${primarySymbol}`}
           >
             {isInWatchlist ? '已在观察列表' : '加入观察列表'}
@@ -1430,15 +1430,15 @@ const ChatPage: React.FC = () => {
       <button
         key={lens.id}
         type="button"
-        onClick={() => handleSelectLens(lens)}
-        disabled={!isAvailable}
-        onMouseEnter={() => setShowSkillDesc(lens.id)}
-        onMouseLeave={() => setShowSkillDesc(null)}
         className={`min-w-0 rounded-xl border px-3 py-2 text-left transition-all ${
           isActive
             ? 'border-blue-400/40 bg-blue-500/10 text-white shadow-[0_0_15px_rgba(59,130,246,0.16)]'
             : 'border-white/8 bg-white/[0.025] text-white/58 hover:bg-white/[0.06] hover:text-white/86'
         } disabled:cursor-not-allowed disabled:opacity-40`}
+        onClick={() => handleSelectLens(lens)}
+        disabled={!isAvailable}
+        onMouseEnter={() => setShowSkillDesc(lens.id)}
+        onMouseLeave={() => setShowSkillDesc(null)}
         title={lens.description}
       >
         <span className="block truncate text-xs font-semibold">{lens.label}</span>
@@ -1497,8 +1497,8 @@ const ChatPage: React.FC = () => {
           <div className="mt-3">
             <button
               type="button"
+              className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white/40 transition-all hover:bg-white/[0.07] hover:text-white/70"
               onClick={() => setShowAdvancedLenses((value) => !value)}
-              className="text-[10px] font-bold uppercase tracking-widest text-white/40 hover:text-white/70"
             >
               高级视角 {showAdvancedLenses ? '收起' : '展开'}
             </button>
@@ -1743,10 +1743,10 @@ const ChatPage: React.FC = () => {
                               key={card.id}
                               type="button"
                               data-testid={`chat-mobile-template-${card.id}`}
+                              className="rounded-xl border border-white/6 bg-white/[0.025] px-3 py-2 text-left text-xs text-white/64 transition-all hover:bg-white/[0.05] hover:text-white/80"
                               onClick={() => {
                                 void handleSend(chat(`starterCards.${card.id}.prompt`), card.skill);
                               }}
-                              className="rounded-xl border border-white/6 bg-white/[0.025] px-3 py-2 text-left text-xs text-white/64"
                             >
                               <span className="block font-bold text-white/80">{chat(`starterCards.${card.id}.title`)}</span>
                               <span className="mt-1 block line-clamp-1 text-white/40">{chat(`starterCards.${card.id}.prompt`)}</span>
@@ -1765,8 +1765,8 @@ const ChatPage: React.FC = () => {
                           <button
                             key={q.id}
                             type="button"
-                            onClick={() => handleQuickQuestion(q)}
                             className="inline-flex items-center justify-center whitespace-nowrap rounded-xl border border-white/5 bg-white/[0.02] px-5 py-2.5 text-xs text-white/60 transition-all hover:bg-white/[0.05] hover:text-white"
+                            onClick={() => handleQuickQuestion(q)}
                           >
                             {chat(`quickQuestions.${q.id}`)}
                           </button>
