@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import re
+import hashlib
 from collections import Counter
 from threading import Lock
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -26,6 +27,17 @@ _ALLOWED_EVENTS = frozenset(
         "market_cache_refresh_completed",
         "market_cache_refresh_failed",
         "market_cache_cold_start_fallback_served",
+        "provider_call_started",
+        "provider_call_completed",
+        "provider_call_failed",
+        "provider_fallback_attempt",
+        "provider_insufficient_payload",
+        "provider_timeout",
+        "provider_quota_risk_observed",
+        "provider_cache_hit",
+        "provider_cache_miss",
+        "provider_inflight_join",
+        "provider_duplicate_candidate_observed",
     }
 )
 
@@ -44,12 +56,14 @@ _ALLOWED_LABELS = frozenset(
         "token_bucket",
         "report_type",
         "language",
+        "market",
         "panel_key",
         "endpoint_family",
         "provider_category",
         "refresh_mode",
         "freshness_bucket",
         "error_bucket",
+        "retry_reason_bucket",
         "cache_key_hash",
     }
 )
@@ -148,6 +162,8 @@ def bucket_retry_reason(reason: Any) -> str:
         return "auth"
     if "empty" in lowered:
         return "empty_response"
+    if "insufficient" in lowered:
+        return "insufficient_payload"
     if "json" in lowered or "parse" in lowered:
         return "parse_error"
     if "invalid" in lowered:
@@ -181,6 +197,12 @@ def provider_from_model(model: Any) -> str:
     return "unknown"
 
 
+def hash_label_value(value: Any) -> str:
+    """Return a bounded non-reversible label hash for cache keys or request identity."""
+    text = str(value or "")
+    return hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()[:16]
+
+
 def emit_llm_event(event_name: str, **labels: Any) -> None:
     """Emit a bounded LLM event; failures are always swallowed."""
     _emit_event(event_name, labels)
@@ -188,6 +210,11 @@ def emit_llm_event(event_name: str, **labels: Any) -> None:
 
 def emit_market_cache_event(event_name: str, **labels: Any) -> None:
     """Emit a bounded MarketCache event; failures are always swallowed."""
+    _emit_event(event_name, labels)
+
+
+def emit_provider_event(event_name: str, **labels: Any) -> None:
+    """Emit a bounded provider event; failures are always swallowed."""
     _emit_event(event_name, labels)
 
 
@@ -220,7 +247,7 @@ def _sanitize_labels(labels: Dict[str, Any]) -> Dict[str, str]:
             safe[key] = _bounded_label(value)
         elif key in {"attempt_index", "fallback_depth"}:
             safe[key] = _bounded_int_label(value)
-        elif key == "retry_reason":
+        elif key in {"retry_reason", "retry_reason_bucket"}:
             safe[key] = bucket_retry_reason(value)
         elif key == "error_bucket":
             safe[key] = bucket_retry_reason(value)
@@ -261,4 +288,3 @@ def _model_family_name(model_name: str) -> str:
     if parts[0] == "deepseek" and len(parts) >= 2:
         return _bounded_label("-".join(parts[:2]))
     return _bounded_label("-".join(parts[:2]))
-

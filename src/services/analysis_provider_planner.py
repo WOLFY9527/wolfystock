@@ -22,6 +22,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional
 
 from data_provider.us_index_mapping import is_us_index_code, is_us_stock_code
+from src.services.llm_instrumentation import emit_provider_event, hash_label_value
 
 logger = logging.getLogger(__name__)
 
@@ -261,7 +262,8 @@ class AnalysisProviderExecutor:
         warnings: list[str] = []
         attempts: list[dict[str, Any]] = []
         available = [provider for provider in category_plan.providers if provider in providers]
-        for index, provider in enumerate(available[: category_plan.max_attempts]):
+        attempted_providers = available[: category_plan.max_attempts]
+        for index, provider in enumerate(attempted_providers):
             if self._is_circuit_open(provider, category_plan.category):
                 attempts.append({"provider": provider, "status": "skipped", "reason": "circuit_open"})
                 warnings.append(f"{provider}: circuit_open")
@@ -269,6 +271,14 @@ class AnalysisProviderExecutor:
                     "ProviderCircuitOpened category=%s provider=%s circuit_state=open",
                     category_plan.category.value,
                     provider,
+                )
+                self._emit_provider_fallback_attempt(
+                    provider=provider,
+                    category_plan=category_plan,
+                    symbol=symbol,
+                    attempt_index=index,
+                    retry_reason="circuit_open",
+                    has_next=index + 1 < len(attempted_providers),
                 )
                 continue
             started = time.monotonic()
@@ -283,6 +293,28 @@ class AnalysisProviderExecutor:
                 duration_ms = int((time.monotonic() - started) * 1000)
                 if not sufficient(data):
                     self._record_failure(provider, category_plan.category)
+                    self._emit_provider_event(
+                        "provider_insufficient_payload",
+                        provider=provider,
+                        category_plan=category_plan,
+                        symbol=symbol,
+                        attempt_index=index,
+                        fallback_depth=index,
+                        duration_ms=duration_ms,
+                        outcome="failed",
+                        error_bucket="insufficient_payload",
+                    )
+                    self._emit_provider_event(
+                        "provider_call_failed",
+                        provider=provider,
+                        category_plan=category_plan,
+                        symbol=symbol,
+                        attempt_index=index,
+                        fallback_depth=index,
+                        duration_ms=duration_ms,
+                        outcome="failed",
+                        error_bucket="insufficient_payload",
+                    )
                     attempts.append(
                         {
                             "provider": provider,
@@ -299,8 +331,27 @@ class AnalysisProviderExecutor:
                         duration_ms,
                         cache_hit,
                     )
+                    self._emit_provider_fallback_attempt(
+                        provider=provider,
+                        category_plan=category_plan,
+                        symbol=symbol,
+                        attempt_index=index,
+                        retry_reason="insufficient_payload",
+                        has_next=index + 1 < len(attempted_providers),
+                    )
                     continue
                 self._record_success(provider, category_plan.category)
+                if not cache_hit:
+                    self._emit_provider_event(
+                        "provider_call_completed",
+                        provider=provider,
+                        category_plan=category_plan,
+                        symbol=symbol,
+                        attempt_index=index,
+                        fallback_depth=index,
+                        duration_ms=duration_ms,
+                        outcome="success",
+                    )
                 attempts.append(
                     {
                         "provider": provider,
@@ -341,6 +392,41 @@ class AnalysisProviderExecutor:
                 duration_ms = int((time.monotonic() - started) * 1000)
                 reason = self._classify_exception(exc)
                 self._record_failure(provider, category_plan.category)
+                self._emit_provider_event(
+                    "provider_call_failed",
+                    provider=provider,
+                    category_plan=category_plan,
+                    symbol=symbol,
+                    attempt_index=index,
+                    fallback_depth=index,
+                    duration_ms=duration_ms,
+                    outcome="failed",
+                    error_bucket=reason,
+                )
+                if reason == "timeout":
+                    self._emit_provider_event(
+                        "provider_timeout",
+                        provider=provider,
+                        category_plan=category_plan,
+                        symbol=symbol,
+                        attempt_index=index,
+                        fallback_depth=index,
+                        duration_ms=duration_ms,
+                        outcome="failed",
+                        error_bucket=reason,
+                    )
+                if reason == "rate_limited":
+                    self._emit_provider_event(
+                        "provider_quota_risk_observed",
+                        provider=provider,
+                        category_plan=category_plan,
+                        symbol=symbol,
+                        attempt_index=index,
+                        fallback_depth=index,
+                        duration_ms=duration_ms,
+                        outcome="failed",
+                        error_bucket=reason,
+                    )
                 attempts.append(
                     {
                         "provider": provider,
@@ -375,6 +461,14 @@ class AnalysisProviderExecutor:
                         reason,
                         duration_ms,
                     )
+                self._emit_provider_fallback_attempt(
+                    provider=provider,
+                    category_plan=category_plan,
+                    symbol=symbol,
+                    attempt_index=index,
+                    retry_reason=reason,
+                    has_next=index + 1 < len(attempted_providers),
+                )
                 continue
         return ProviderCategoryResult(
             category=category_plan.category,
@@ -396,22 +490,82 @@ class AnalysisProviderExecutor:
         call: Callable[[], Any],
     ) -> tuple[Any, bool]:
         key = self._cache_key(provider, category_plan.category, symbol, params)
+        cache_key_hash = hash_label_value(key)
         now = time.time()
+        cache_hit_data: Optional[Any] = None
+        emit_cache_hit = False
+        emit_cache_miss = False
+        emit_duplicate_candidate = False
+        emit_inflight_join = False
+        emit_call_started = False
         with self._lock:
             cached = self._cache.get(key)
             if cached and cached.expires_at > now:
-                return copy.deepcopy(cached.data), True
-            future = self._inflight.get(key)
-            if future is None:
-                logger.debug(
-                    "ProviderCallStarted category=%s provider=%s symbol=%s cache_hit=false",
-                    category_plan.category.value,
-                    provider,
-                    symbol,
-                )
-                future = self._call_pool.submit(call)
-                self._inflight[key] = future
-                future.add_done_callback(lambda _future, cache_key=key: self._clear_inflight(cache_key))
+                cache_hit_data = copy.deepcopy(cached.data)
+                emit_cache_hit = True
+            else:
+                emit_cache_miss = True
+                emit_duplicate_candidate = True
+                future = self._inflight.get(key)
+                if future is None:
+                    logger.debug(
+                        "ProviderCallStarted category=%s provider=%s symbol=%s cache_hit=false",
+                        category_plan.category.value,
+                        provider,
+                        symbol,
+                    )
+                    future = self._call_pool.submit(call)
+                    self._inflight[key] = future
+                    future.add_done_callback(lambda _future, cache_key=key: self._clear_inflight(cache_key))
+                    emit_call_started = True
+                else:
+                    emit_inflight_join = True
+        if emit_cache_hit and cache_hit_data is not None:
+            self._emit_provider_event(
+                "provider_cache_hit",
+                provider=provider,
+                category_plan=category_plan,
+                symbol=symbol,
+                cache_key_hash=cache_key_hash,
+                outcome="cache_hit",
+            )
+            return cache_hit_data, True
+        if emit_cache_miss:
+            self._emit_provider_event(
+                "provider_cache_miss",
+                provider=provider,
+                category_plan=category_plan,
+                symbol=symbol,
+                cache_key_hash=cache_key_hash,
+                outcome="cache_miss",
+            )
+        if emit_duplicate_candidate:
+            self._emit_provider_event(
+                "provider_duplicate_candidate_observed",
+                provider=provider,
+                category_plan=category_plan,
+                symbol=symbol,
+                cache_key_hash=cache_key_hash,
+                outcome="observed",
+            )
+        if emit_inflight_join:
+            self._emit_provider_event(
+                "provider_inflight_join",
+                provider=provider,
+                category_plan=category_plan,
+                symbol=symbol,
+                cache_key_hash=cache_key_hash,
+                outcome="inflight_join",
+            )
+        if emit_call_started:
+            self._emit_provider_event(
+                "provider_call_started",
+                provider=provider,
+                category_plan=category_plan,
+                symbol=symbol,
+                cache_key_hash=cache_key_hash,
+                outcome="started",
+            )
         try:
             data = future.result(timeout=category_plan.timeout_seconds)
         except TimeoutError as exc:
@@ -423,6 +577,59 @@ class AnalysisProviderExecutor:
                     data=copy.deepcopy(data),
                 )
         return copy.deepcopy(data), False
+
+    def _emit_provider_event(
+        self,
+        event_name: str,
+        *,
+        provider: str,
+        category_plan: CategoryProviderPlan,
+        symbol: str,
+        attempt_index: Optional[int] = None,
+        fallback_depth: Optional[int] = None,
+        duration_ms: Optional[int] = None,
+        outcome: Optional[str] = None,
+        error_bucket: Optional[str] = None,
+        retry_reason: Optional[str] = None,
+        cache_key_hash: Optional[str] = None,
+    ) -> None:
+        emit_provider_event(
+            event_name,
+            provider=provider,
+            provider_category=category_plan.category.value,
+            market=_normalize_market(symbol, None),
+            endpoint_family="analysis_provider_executor",
+            attempt_index=attempt_index,
+            fallback_depth=fallback_depth,
+            duration_bucket=duration_ms,
+            outcome=outcome,
+            error_bucket=error_bucket,
+            retry_reason_bucket=retry_reason,
+            cache_key_hash=cache_key_hash,
+        )
+
+    def _emit_provider_fallback_attempt(
+        self,
+        *,
+        provider: str,
+        category_plan: CategoryProviderPlan,
+        symbol: str,
+        attempt_index: int,
+        retry_reason: str,
+        has_next: bool,
+    ) -> None:
+        if not has_next:
+            return
+        self._emit_provider_event(
+            "provider_fallback_attempt",
+            provider=provider,
+            category_plan=category_plan,
+            symbol=symbol,
+            attempt_index=attempt_index,
+            fallback_depth=attempt_index + 1,
+            outcome="fallback",
+            retry_reason=retry_reason,
+        )
 
     def _clear_inflight(self, key: str) -> None:
         with self._lock:
