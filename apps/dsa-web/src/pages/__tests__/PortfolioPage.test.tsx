@@ -507,7 +507,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).toBeInTheDocument();
     const submitTradeButton = screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') });
     expect(submitTradeButton).toHaveAttribute('type', 'submit');
-    expect(submitTradeButton).not.toHaveAttribute('data-variant');
+    expect(submitTradeButton).toHaveAttribute('data-variant', 'primary');
+    expect(submitTradeButton).toHaveAttribute('data-size', 'md');
     expect(submitTradeButton.className).toContain('from-blue-600');
     expect(submitTradeButton.className).toContain('to-purple-600');
     expect(submitTradeButton.className).toContain('text-white');

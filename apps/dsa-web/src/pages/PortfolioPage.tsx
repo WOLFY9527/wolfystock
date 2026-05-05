@@ -4,7 +4,7 @@ import { MoreHorizontal, PenSquare, Settings, RefreshCw, Trash2 } from 'lucide-r
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Drawer, Input, PillBadge, SectionShell, Select } from '../components/common';
+import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Drawer, Input, PillBadge, SectionShell, SegmentedControl, Select } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
   getSafariReadySurfaceClassName,
@@ -79,7 +79,7 @@ type FlatPosition = PortfolioPositionItem & {
   accountName: string;
 };
 
-type SeamlessSegmentOption = {
+type PortfolioSegmentOption = {
   value: string;
   label: React.ReactNode;
 };
@@ -134,7 +134,7 @@ type PortfolioLanguage = 'zh' | 'en';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 
-function SeamlessSegmentedControl({
+function PortfolioSegmentedControl({
   value,
   options,
   onChange,
@@ -143,28 +143,25 @@ function SeamlessSegmentedControl({
   dataTestId,
 }: {
   value: string;
-  options: SeamlessSegmentOption[];
+  options: PortfolioSegmentOption[];
   onChange: (value: string) => void;
   className?: string;
   itemClassName?: string;
   dataTestId?: string;
 }) {
   return (
-    <div data-testid={dataTestId} className={`ui-scroll-x-quiet flex min-w-0 w-full max-w-full rounded-xl bg-white/[0.05] p-1 ${className}`}>
-      {options.map((option) => {
-        const active = option.value === value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={active}
-            className={`min-w-0 appearance-none border-0 flex-1 shrink-0 rounded-lg px-2 py-1.5 text-center text-sm font-medium transition-all duration-200 cursor-pointer ${active ? 'bg-white/10 text-white shadow-sm' : 'bg-transparent text-white/40 hover:text-white/70'} ${itemClassName}`}
-            onClick={() => onChange(option.value)}
-          >
-            <span className="ui-truncate block w-full">{option.label}</span>
-          </button>
-        );
-      })}
+    <div data-testid={dataTestId} className={`min-w-0 w-full max-w-full rounded-xl bg-white/[0.05] ${className}`}>
+      <SegmentedControl
+        value={value}
+        options={options}
+        onChange={onChange}
+        className="space-y-0"
+        listClassName="ui-scroll-x-quiet w-full rounded-xl border-0 bg-white/[0.05] p-1"
+        buttonClassName={`rounded-lg border-0 text-center text-sm font-medium ${itemClassName}`}
+        activeButtonClassName="bg-white/10 text-white shadow-sm"
+        inactiveButtonClassName="bg-transparent text-white/40 hover:bg-transparent hover:text-white/70"
+        size="sm"
+      />
     </div>
   );
 }
@@ -1661,9 +1658,9 @@ const PortfolioPage: React.FC = () => {
   const renderTradeActions = (item: PortfolioTradeListItem, context: 'history' | 'recent') => {
     if (item.isActive === false) {
       return (
-        <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">
+        <PillBadge variant="default" className="shrink-0 text-white/35">
           {voidedTradeLabel}
-        </span>
+        </PillBadge>
       );
     }
 
@@ -1738,7 +1735,7 @@ const PortfolioPage: React.FC = () => {
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pt-5">
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <SeamlessSegmentedControl
+            <PortfolioSegmentedControl
               value={eventType}
               onChange={(next) => setEventType(next as EventType)}
               options={[
@@ -1772,9 +1769,9 @@ const PortfolioPage: React.FC = () => {
                         <span>{item.symbol}</span>
                         <span className="text-xs text-muted-text">{formatSideLabel(item.side, language)}</span>
                         {item.isActive === false ? (
-                          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/35">
+                          <PillBadge variant="default" className="text-white/35">
                             {voidedTradeLabel}
-                          </span>
+                          </PillBadge>
                         ) : null}
                       </div>
                       <div className="mt-1 text-xs text-muted-text">{item.tradeDate} · {item.quantity} @ {item.price}</div>
@@ -1969,7 +1966,7 @@ const PortfolioPage: React.FC = () => {
                       {copy.costMethodLabel} {costMethod.toUpperCase()}
                     </span>
 	                    {hasFxUnavailable ? (
-                      <span className="rounded-full border border-amber-300/15 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-200">{fxUnavailableLabel}</span>
+                      <PillBadge variant="warning" className="text-amber-200">{fxUnavailableLabel}</PillBadge>
                     ) : null}
                   </div>
 	              </div>
@@ -2084,7 +2081,7 @@ const PortfolioPage: React.FC = () => {
 	            >
 	              <div className="flex flex-wrap items-center justify-between gap-3">
 	                <h2 className="text-xs uppercase tracking-widest text-muted-text">{exposureTitle}</h2>
-	                <SeamlessSegmentedControl
+	                <PortfolioSegmentedControl
 	                  value={exposureTab}
 	                  onChange={(value) => setExposureTab(value as ExposureTab)}
 	                  options={exposureTabs}
@@ -2145,8 +2142,13 @@ const PortfolioPage: React.FC = () => {
 	                  <h2 className="text-xs uppercase tracking-widest text-muted-text">{riskTitle}</h2>
 	                  <p className="mt-1 text-xs text-white/40">{language === 'zh' ? '风险概览 · 持仓集中度 · 盈亏贡献' : 'Risk overview · concentration · P&L contribution'}</p>
 	                </div>
-	                <span data-testid="portfolio-concentration-label" className={`rounded-full bg-white/[0.04] px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${hasHoldings ? concentrationToneClass : 'text-white/35'}`}>
-	                  {concentrationLabel}
+	                <span data-testid="portfolio-concentration-label">
+                    <PillBadge
+                      variant={topPositionPercent >= 50 ? 'danger' : topPositionPercent >= 20 ? 'warning' : hasHoldings ? 'success' : 'default'}
+                      className={hasHoldings ? concentrationToneClass : 'text-white/35'}
+                    >
+	                    {concentrationLabel}
+                    </PillBadge>
 	                </span>
 	              </div>
 
@@ -2180,7 +2182,7 @@ const PortfolioPage: React.FC = () => {
 	                <div data-testid="portfolio-currency-exposure-drilldown" className="rounded-xl bg-white/[0.025] px-3 py-3">
 	                  <div className="flex items-center justify-between gap-3">
 	                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '币种敞口' : 'Currency Exposure'}</div>
-	                    <span className="shrink-0 rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-cyan-200">{currencyFxContext}</span>
+	                    <PillBadge variant={topCurrency?.fxStatus === 'unavailable' ? 'warning' : 'info'} className="shrink-0 text-cyan-200">{currencyFxContext}</PillBadge>
 	                  </div>
 	                  <div className="mt-2 text-[10px] uppercase tracking-widest text-white/35">{language === 'zh' ? '最大币种' : 'Largest Currency'}</div>
 	                  <div className="mt-2 text-sm text-white">{topCurrency?.label || '--'}</div>
@@ -2198,7 +2200,7 @@ const PortfolioPage: React.FC = () => {
 	                <div data-testid="portfolio-market-exposure-drilldown" className="rounded-xl bg-white/[0.025] px-3 py-3">
 	                  <div className="flex items-center justify-between gap-3">
 	                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '市场敞口' : 'Market Exposure'}</div>
-	                    <span className="shrink-0 rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-cyan-200">{marketRiskHint}</span>
+	                    <PillBadge variant={marketExposureRows.length <= 1 || Number(topMarket?.percent || 0) >= 80 ? 'warning' : 'info'} className="shrink-0 text-cyan-200">{marketRiskHint}</PillBadge>
 	                  </div>
 	                  <div className="mt-2 text-[10px] uppercase tracking-widest text-white/35">{language === 'zh' ? '最大市场' : 'Largest Market'}</div>
 	                  <div className="mt-2 text-sm text-white">{formatExposureMarketLabel(topMarket, language)}</div>
@@ -2246,10 +2248,10 @@ const PortfolioPage: React.FC = () => {
 	                <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '风险提示' : 'Risk Hints'}</div>
 	                <div className="flex flex-wrap gap-1.5">
 	                  {(riskHintTexts.length ? riskHintTexts : [language === 'zh' ? '暂无显著集中风险' : 'No notable concentration risk']).map((hint) => (
-	                    <span key={hint} className="rounded-full bg-white/[0.04] px-2 py-1 text-[11px] text-white/55">{hint}</span>
+	                    <PillBadge key={hint} variant="default" className="text-white/55">{hint}</PillBadge>
 	                  ))}
 	                  {safeRiskWarningLabels.map((warning) => (
-	                    <span key={warning} className="rounded-full bg-white/[0.04] px-2 py-1 text-[11px] text-white/55">{warning}</span>
+	                    <PillBadge key={warning} variant="warning" className="text-white/55">{warning}</PillBadge>
 	                  ))}
 	                </div>
 	              </div>
@@ -2323,7 +2325,7 @@ const PortfolioPage: React.FC = () => {
 	                      <p className="mt-1 text-sm text-white/45">{language === 'zh' ? '录入第一笔买入交易后自动生成持仓' : 'Enter the first buy trade to generate holdings automatically.'}</p>
 	                    </div>
 	                    {hasHistory ? (
-	                      <span className="rounded-full border border-amber-300/15 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-200">{noHoldingsHistoryNote}</span>
+	                      <PillBadge variant="warning" className="text-amber-200">{noHoldingsHistoryNote}</PillBadge>
 	                    ) : null}
 	                  </div>
 	                  <div className="grid gap-2 sm:grid-cols-3">
@@ -2411,7 +2413,7 @@ const PortfolioPage: React.FC = () => {
             </div>
 
             <div className="shrink-0 border-b border-white/5 pt-4 pb-4">
-              <SeamlessSegmentedControl
+              <PortfolioSegmentedControl
                 value={leftTab}
                 onChange={(value) => setLeftTab(value as 'trade' | 'account' | 'sync' | 'fx')}
                 options={[
@@ -2434,7 +2436,7 @@ const PortfolioPage: React.FC = () => {
                     data-testid="portfolio-trade-type-switcher"
                     className="mb-3"
                   >
-                    <SeamlessSegmentedControl
+                    <PortfolioSegmentedControl
                       value={tradeType}
                       onChange={(value) => setTradeType(value as TradeFormType)}
                       options={[
@@ -2500,7 +2502,16 @@ const PortfolioPage: React.FC = () => {
                             {language === 'zh' ? '请选择具体账户后录入交易' : 'Select a specific account before recording trades'}
                           </div>
                         ) : null}
-                        <button type="submit" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId || tradeSubmitting}>{tradeSubmitting ? copy.refreshingData : copy.submitTrade}</button>
+                        <Button
+                          type="submit"
+                          variant="primary"
+                          className={PORTFOLIO_SUBMIT_BUTTON_CLASS}
+                          disabled={!writableAccountId || tradeSubmitting}
+                          isLoading={tradeSubmitting}
+                          loadingText={copy.refreshingData}
+                        >
+                          {copy.submitTrade}
+                        </Button>
                       </form>
                     </div>
                   ) : null}
@@ -2525,7 +2536,7 @@ const PortfolioPage: React.FC = () => {
                           />
                         </div>
                         <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={cashForm.note} onChange={(e) => setCashForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        <button type="submit" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId}>{copy.submitCash}</button>
+                        <Button type="submit" variant="primary" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId}>{copy.submitCash}</Button>
                       </form>
                     </SectionShell>
                   ) : null}
@@ -2542,7 +2553,7 @@ const PortfolioPage: React.FC = () => {
                           <Input label="SPLIT RATIO" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={PORTFOLIO_FIELD_WRAPPER_CLASS} className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="1.0000" value={corpForm.splitRatio} onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value }))} />
                         </div>
                         <Input label="NOTE" labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder="optional" value={corpForm.note} onChange={(e) => setCorpForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        <button type="submit" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId}>{copy.submitCorporate}</button>
+                        <Button type="submit" variant="primary" className={PORTFOLIO_SUBMIT_BUTTON_CLASS} disabled={!writableAccountId}>{copy.submitCorporate}</Button>
                       </form>
                     </SectionShell>
                   ) : null}
