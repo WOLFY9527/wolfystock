@@ -594,13 +594,34 @@ function LanguageSwitch() {
   );
 }
 
-function renderUserScannerPage(withLanguageSwitch = false) {
+type RenderUserScannerPageOptions = {
+  withLanguageSwitch?: boolean;
+  initialEntry?: string;
+  viewportWidth?: number;
+};
+
+function renderUserScannerPage(options: boolean | RenderUserScannerPageOptions = false) {
+  const normalizedOptions = typeof options === 'boolean' ? { withLanguageSwitch: options } : options;
+  const {
+    withLanguageSwitch = false,
+    initialEntry = '/scanner',
+    viewportWidth,
+  } = normalizedOptions;
+  if (viewportWidth) {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: viewportWidth,
+    });
+    window.dispatchEvent(new Event('resize'));
+  }
   return render(
     <UiLanguageProvider>
-      <MemoryRouter initialEntries={['/scanner']}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         {withLanguageSwitch ? <LanguageSwitch /> : null}
         <Routes>
           <Route path="/scanner" element={<UserScannerPage />} />
+          <Route path="/:locale/scanner" element={<UserScannerPage />} />
           <Route path="/" element={<div>Home Landing</div>} />
           <Route path="/:locale" element={<div>Home Landing</div>} />
           <Route path="/backtest" element={<div>Backtest Landing</div>} />
@@ -640,6 +661,11 @@ async function openAdvancedControls() {
 describe('UserScannerPage', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 1280,
+    });
     getRuns.mockReset();
     getRun.mockReset();
     getThemes.mockReset();
@@ -798,6 +824,33 @@ describe('UserScannerPage', () => {
     listWatchlistItems.mockResolvedValue({ items: [] });
     addWatchlistItem.mockResolvedValue(makeWatchlistItem());
     removeWatchlistItem.mockResolvedValue({ deleted: 1 });
+  });
+
+  it('fetches scanner run history once on the initial zh desktop route load', async () => {
+    renderUserScannerPage({ initialEntry: '/zh/scanner', viewportWidth: 1280 });
+
+    expect(await screen.findByTestId('scanner-result-card-NVDA')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(getRun).toHaveBeenCalledWith(11);
+    });
+    expect(getRuns).toHaveBeenCalledTimes(1);
+    expect(getRuns).toHaveBeenCalledWith({
+      market: 'cn',
+      profile: 'cn_preopen_v1',
+      page: 1,
+      limit: 8,
+    });
+  });
+
+  it('fetches scanner run history once on the initial zh narrow route load', async () => {
+    renderUserScannerPage({ initialEntry: '/zh/scanner', viewportWidth: 390 });
+
+    expect(await screen.findByTestId('scanner-result-card-NVDA')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(getRun).toHaveBeenCalledWith(11);
+    });
+    expect(getRuns).toHaveBeenCalledTimes(1);
+    expect(getRun).toHaveBeenCalledTimes(1);
   });
 
   it('renders scanner score without misleading AI score copy for normal scanner scores', async () => {
