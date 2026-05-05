@@ -20,7 +20,7 @@ import type {
   StandardReportTableSection,
 } from '../../types/analysis';
 import { getSentimentColor, getSentimentLabel } from '../../types/analysis';
-import { Badge } from '../common';
+import { Badge, Disclosure } from '../common';
 import { cn } from '../../utils/cn';
 import { ReportPriceChart, type ReportPriceChartFixtures } from './ReportPriceChart';
 import {
@@ -52,6 +52,7 @@ const glassCardClass =
   'theme-panel-glass rounded-[var(--cohere-radius-signature)] px-4 py-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
 const subtlePanelClass = 'theme-panel-subtle rounded-[var(--cohere-radius-medium)] px-3.5 py-3';
 const rowGridClass = 'grid gap-4 lg:grid-cols-2';
+const primaryReportGridClass = 'grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] xl:items-start';
 
 const ui = translateForCurrentLanguage;
 const isEnglishUi = (): boolean => /^[A-Za-z]/.test(ui('report.score'));
@@ -1380,10 +1381,16 @@ const AppendixDisclosure: React.FC<{
   children: React.ReactNode;
   testId?: string;
 }> = ({ title, children, testId }) => (
-  <details className="report-hero-disclosure" data-testid={testId}>
-    <summary className="flex min-h-[36px] items-center">{title}</summary>
-    <div className="report-hero-disclosure-body">{children}</div>
-  </details>
+  <div data-testid={testId}>
+    <Disclosure
+      summary={title}
+      className="report-hero-disclosure"
+      summaryClassName="flex min-h-[40px] items-center md:min-h-[36px]"
+      bodyClassName="report-hero-disclosure-body"
+    >
+      {children}
+    </Disclosure>
+  </div>
 );
 
 export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({
@@ -1424,20 +1431,26 @@ export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({
         />
       </section>
 
-      <ExecutionPlanLayer
-        decisionPanel={standardReport.decisionPanel}
-        checklistItems={standardReport.checklistItems || []}
-      />
+      <div className={primaryReportGridClass}>
+        <ExecutionPlanLayer
+          decisionPanel={standardReport.decisionPanel}
+          checklistItems={standardReport.checklistItems || []}
+        />
 
-      <NewsRiskPanel
-        highlights={standardReport.highlights}
-        reasonLayer={standardReport.reasonLayer}
-      />
+        <NewsRiskPanel
+          highlights={standardReport.highlights}
+          reasonLayer={standardReport.reasonLayer}
+        />
+      </div>
 
       <section className={cn(solidCardClass)} data-testid="deep-appendix-layer">
-        <details className="report-hero-disclosure" data-testid="deep-appendix-disclosure">
-          <summary className="flex min-h-[36px] items-center">{ui('report.deepAppendix')}</summary>
-          <div className="report-hero-disclosure-body space-y-4">
+        <div data-testid="deep-appendix-disclosure">
+          <Disclosure
+            summary={ui('report.deepAppendix')}
+            className="report-hero-disclosure"
+            summaryClassName="flex min-h-[40px] items-center md:min-h-[36px]"
+            bodyClassName="report-hero-disclosure-body space-y-4"
+          >
             <p className="text-xs leading-5 text-muted-text">{ui('report.deepAppendixHint')}</p>
 
             <AppendixDisclosure title={ui('report.appendixExecution')} testId="appendix-execution-disclosure">
@@ -1488,8 +1501,8 @@ export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({
                 missingFieldAudit={missingFieldAudit}
               />
             </AppendixDisclosure>
-          </div>
-        </details>
+          </Disclosure>
+        </div>
       </section>
     </div>
   );

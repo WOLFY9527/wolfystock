@@ -18,11 +18,12 @@ const PreviewReportPage: React.FC = () => {
   }, [t]);
 
   return (
-    <div className="workspace-page workspace-page--preview" data-testid="preview-report-page">
+    <div className="workspace-page workspace-page--preview min-w-0" data-testid="preview-report-page">
       <WorkspacePageHeader
         eyebrow={t('previewReport.eyebrow')}
         title={t('previewReport.title')}
         description={t('previewReport.description')}
+        className="shrink-0"
       />
 
       <StandardReportPanel report={normalizedPreviewReport} chartFixtures={previewChartFixtures} />

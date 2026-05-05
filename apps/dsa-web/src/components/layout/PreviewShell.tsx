@@ -70,8 +70,8 @@ export const PreviewShell: React.FC<PreviewShellProps> = ({ children }) => {
         </div>
       </header>
 
-      <div className="shell-content-frame flex flex-1 min-h-0 min-w-0 w-full overflow-hidden">
-        <main className="theme-main-lane flex-1 min-h-0 min-w-0 w-full overflow-hidden">
+      <div className="shell-content-frame shell-content-frame--wide flex flex-1 min-h-0 min-w-0 w-full overflow-hidden">
+        <main className="theme-main-lane shell-main-column flex-1 min-h-0 min-w-0 w-full overflow-hidden">
           <div className="theme-page-transition flex h-full min-h-0 min-w-0 w-full flex-col">
             {children}
           </div>

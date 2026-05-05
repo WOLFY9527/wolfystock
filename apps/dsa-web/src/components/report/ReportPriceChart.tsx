@@ -6,7 +6,7 @@ import type {
   StandardReportMarketBlock,
   StandardReportSummaryPanel,
 } from '../../types/analysis';
-import { SupportPanel } from '../common';
+import { Button, SupportPanel } from '../common';
 import { cn } from '../../utils/cn';
 import { useElementSize } from '../../hooks/useElementSize';
 
@@ -915,7 +915,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
                   <button
                     key={view.key}
                     type="button"
-                    className={cn('theme-chart-tab !min-h-[36px] md:!min-h-[32px]', activeView === view.key ? 'is-active' : '')}
+                    className={cn('theme-chart-tab !min-h-[40px] md:!min-h-[36px]', activeView === view.key ? 'is-active' : '')}
                     onClick={() => setActiveView(view.key)}
                   >
                     <span className="theme-chart-tab__primary">{t(view.labelKey)}</span>
@@ -925,9 +925,35 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
               </div>
             </div>
             <div className="theme-chart-toolbar-actions flex flex-nowrap items-center gap-2">
-              <button type="button" className="theme-chart-tab !min-h-[36px] !min-w-[36px] px-3 md:!min-h-[32px] md:!min-w-[32px]" onClick={() => zoomWindow('in')} aria-label={t('chart.zoomIn')}>+</button>
-              <button type="button" className="theme-chart-tab !min-h-[36px] !min-w-[36px] px-3 md:!min-h-[32px] md:!min-w-[32px]" onClick={() => zoomWindow('out')} aria-label={t('chart.zoomOut')}>-</button>
-              <button type="button" className="theme-chart-tab !min-h-[36px] px-3.5 md:!min-h-[32px]" onClick={resetViewWindow}>{t('chart.resetView')}</button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="theme-chart-tab !h-auto !min-h-[40px] !min-w-[40px] px-3 md:!min-h-[36px] md:!min-w-[36px]"
+                onClick={() => zoomWindow('in')}
+                aria-label={t('chart.zoomIn')}
+              >
+                +
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="theme-chart-tab !h-auto !min-h-[40px] !min-w-[40px] px-3 md:!min-h-[36px] md:!min-w-[36px]"
+                onClick={() => zoomWindow('out')}
+                aria-label={t('chart.zoomOut')}
+              >
+                -
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="theme-chart-tab !h-auto !min-h-[40px] px-3.5 md:!min-h-[36px]"
+                onClick={resetViewWindow}
+              >
+                {t('chart.resetView')}
+              </Button>
             </div>
           </div>
         </div>
@@ -937,7 +963,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
             <button
               key={item.label}
               type="button"
-              className={cn('theme-chart-legend-item !min-h-[34px] md:!min-h-[32px]', !indicatorVisibility[item.key] && 'opacity-45')}
+              className={cn('theme-chart-legend-item !min-h-[40px] md:!min-h-[34px]', !indicatorVisibility[item.key] && 'opacity-45')}
               onClick={() => setIndicatorVisibility((current) => ({ ...current, [item.key]: !current[item.key] }))}
             >
               <span className="theme-chart-legend-swatch" style={{ background: item.color }} />
