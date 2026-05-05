@@ -1,0 +1,299 @@
+# -*- coding: utf-8 -*-
+"""Admin-only read APIs for safe user directory and activity projections."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from api.deps import CurrentUser, require_admin_user
+from api.v1.schemas.admin_activity import AdminActivityResponse, AdminActivityWindow
+from api.v1.schemas.admin_users import AdminDataLinks, AdminUserDetailResponse, AdminUserListResponse
+from src.services.admin_activity_service import AdminActivityService
+from src.services.admin_user_service import AdminUserService
+
+router = APIRouter()
+
+USER_SORT_VALUES = {
+    "created_at_desc",
+    "created_at_asc",
+    "updated_at_desc",
+    "username_asc",
+    "username_desc",
+    "last_seen_desc",
+    "last_seen_asc",
+}
+USER_STATUS_VALUES = {"all", "active", "inactive", "needs_password", "sessionless", "stale_session"}
+SESSION_STATUS_VALUES = {"all", "active", "expired", "revoked"}
+ROLE_VALUES = {"admin", "user"}
+ACTOR_TYPE_VALUES = {"admin", "user", "guest", "anonymous", "system"}
+
+
+def _parse_optional_datetime(value: Optional[str], *, name: str) -> Optional[datetime]:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "validation_error", "message": f"Invalid datetime for {name}"},
+        ) from None
+
+
+def _validate_value(value: Optional[str], allowed: set[str], *, name: str) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if normalized not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "validation_error", "message": f"Invalid {name}: {value}"},
+        )
+    return normalized
+
+
+def _default_activity_window(*, route: str, date_from: Optional[str], date_to: Optional[str]) -> tuple[datetime, datetime, int]:
+    end = _parse_optional_datetime(date_to, name="to") or datetime.now()
+    start = _parse_optional_datetime(date_from, name="from")
+    if route == "user":
+        max_days = 90
+        default_days = 7
+    else:
+        max_days = 30
+        default_days = 1
+    if start is None:
+        start = end - timedelta(days=default_days)
+    if start > end:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "validation_error", "message": "from must be before to"},
+        )
+    if end - start > timedelta(days=max_days):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "validation_error", "message": f"window exceeds {max_days} days"},
+        )
+    return start, end, max_days
+
+
+@router.get(
+    "/users",
+    response_model=AdminUserListResponse,
+    summary="List safe admin user directory entries",
+)
+def list_admin_users(
+    q: Optional[str] = Query(default=None, max_length=128),
+    role: Optional[str] = Query(default=None),
+    status: str = Query(default="all"),
+    active: Optional[bool] = Query(default=None),
+    created_from: Optional[str] = Query(default=None),
+    created_to: Optional[str] = Query(default=None),
+    last_seen_from: Optional[str] = Query(default=None),
+    last_seen_to: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0, le=10000),
+    sort: str = Query(default="created_at_desc"),
+    _: CurrentUser = Depends(require_admin_user),
+) -> AdminUserListResponse:
+    role = _validate_value(role, ROLE_VALUES, name="role")
+    status = _validate_value(status, USER_STATUS_VALUES, name="status") or "all"
+    sort = _validate_value(sort, USER_SORT_VALUES, name="sort") or "created_at_desc"
+    if status == "active" and active is False:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "status and active conflict"})
+    if status == "inactive" and active is True:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "status and active conflict"})
+
+    service = AdminUserService()
+    items, total = service.list_users(
+        q=str(q).strip() if isinstance(q, str) and q.strip() else None,
+        role=role,
+        status=status,
+        active=active,
+        created_from=_parse_optional_datetime(created_from, name="created_from"),
+        created_to=_parse_optional_datetime(created_to, name="created_to"),
+        last_seen_from=_parse_optional_datetime(last_seen_from, name="last_seen_from"),
+        last_seen_to=_parse_optional_datetime(last_seen_to, name="last_seen_to"),
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+    return AdminUserListResponse(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        hasMore=offset + limit < total,
+    )
+
+
+@router.get(
+    "/users/{user_id}",
+    response_model=AdminUserDetailResponse,
+    summary="Read one safe admin user detail projection",
+)
+def get_admin_user_detail(
+    user_id: str,
+    include_sessions: bool = Query(default=True),
+    session_limit: int = Query(default=20, ge=1, le=50),
+    session_status: str = Query(default="all"),
+    _: CurrentUser = Depends(require_admin_user),
+) -> AdminUserDetailResponse:
+    normalized_user_id = str(user_id or "").strip()
+    if not normalized_user_id or len(normalized_user_id) > 64:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "Invalid user_id"})
+    session_status = _validate_value(session_status, SESSION_STATUS_VALUES, name="session_status") or "all"
+
+    service = AdminUserService()
+    user, sessions = service.get_user_detail(
+        normalized_user_id,
+        include_sessions=include_sessions,
+        session_limit=session_limit,
+        session_status=session_status,
+    )
+    if user is None:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "User not found"})
+    return AdminUserDetailResponse(
+        user=user,
+        sessions=sessions,
+        dataLinks=AdminDataLinks(
+            self=f"/api/v1/admin/users/{normalized_user_id}",
+            adminLogs=f"/api/v1/admin/logs?user_id={normalized_user_id}",
+            activity=f"/api/v1/admin/users/{normalized_user_id}/activity",
+            portfolio=None,
+            analysis=None,
+            scanner=None,
+            backtest=None,
+        ),
+        limitations=[
+            "failed_login_count_unavailable",
+            "client_device_metadata_unavailable",
+        ],
+    )
+
+
+@router.get(
+    "/users/{user_id}/activity",
+    response_model=AdminActivityResponse,
+    summary="List safe admin activity for one user",
+)
+def list_admin_user_activity(
+    user_id: str,
+    date_from: Optional[str] = Query(default=None, alias="from"),
+    date_from_alias: Optional[str] = Query(default=None, alias="date_from"),
+    date_to: Optional[str] = Query(default=None, alias="to"),
+    date_to_alias: Optional[str] = Query(default=None, alias="date_to"),
+    family: Optional[str] = Query(default=None),
+    category: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    entity_type: Optional[str] = Query(default=None),
+    actor_type: Optional[str] = Query(default=None),
+    target_user: Optional[str] = Query(default=None),
+    q: Optional[str] = Query(default=None, max_length=128),
+    include_system: bool = Query(default=False),
+    include_admin: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=10000),
+    _: CurrentUser = Depends(require_admin_user),
+) -> AdminActivityResponse:
+    normalized_user_id = str(user_id or "").strip()
+    if not normalized_user_id or len(normalized_user_id) > 64:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "Invalid user_id"})
+    if target_user and str(target_user).strip() != normalized_user_id:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "target_user must match path user_id"})
+    if actor_type:
+        actor_type = _validate_value(actor_type, ACTOR_TYPE_VALUES, name="actor_type")
+    start, end, max_days = _default_activity_window(
+        route="user",
+        date_from=date_from or date_from_alias,
+        date_to=date_to or date_to_alias,
+    )
+    service = AdminActivityService()
+    items, total = service.list_activity(
+        target_user_id=normalized_user_id,
+        date_from=start,
+        date_to=end,
+        family=family or category,
+        status=status,
+        entity_type=entity_type,
+        actor_type=actor_type,
+        q=str(q).strip() if isinstance(q, str) and q.strip() else None,
+        include_system=include_system,
+        include_admin=include_admin,
+        limit=limit,
+        offset=offset,
+    )
+    return AdminActivityResponse(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        hasMore=offset + limit < total,
+        window=AdminActivityWindow(**{"from": start.isoformat(), "to": end.isoformat(), "maxDays": max_days}),
+        limitations=[
+            "scanner_backtest_portfolio_domain_projections_deferred",
+            "raw_payloads_excluded",
+        ],
+    )
+
+
+@router.get(
+    "/activity",
+    response_model=AdminActivityResponse,
+    summary="List safe global admin activity",
+)
+def list_admin_activity(
+    date_from: Optional[str] = Query(default=None, alias="from"),
+    date_from_alias: Optional[str] = Query(default=None, alias="date_from"),
+    date_to: Optional[str] = Query(default=None, alias="to"),
+    date_to_alias: Optional[str] = Query(default=None, alias="date_to"),
+    family: Optional[str] = Query(default=None),
+    category: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    entity_type: Optional[str] = Query(default=None),
+    actor_type: Optional[str] = Query(default=None),
+    target_user: Optional[str] = Query(default=None),
+    q: Optional[str] = Query(default=None, max_length=128),
+    include_system: bool = Query(default=False),
+    include_admin: bool = Query(default=True),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=10000),
+    _: CurrentUser = Depends(require_admin_user),
+) -> AdminActivityResponse:
+    if actor_type:
+        actor_type = _validate_value(actor_type, ACTOR_TYPE_VALUES, name="actor_type")
+    normalized_target = str(target_user or "").strip() or None
+    start, end, max_days = _default_activity_window(
+        route="global",
+        date_from=date_from or date_from_alias,
+        date_to=date_to or date_to_alias,
+    )
+    service = AdminActivityService()
+    items, total = service.list_activity(
+        target_user_id=normalized_target,
+        date_from=start,
+        date_to=end,
+        family=family or category,
+        status=status,
+        entity_type=entity_type,
+        actor_type=actor_type,
+        q=str(q).strip() if isinstance(q, str) and q.strip() else None,
+        include_system=include_system,
+        include_admin=include_admin,
+        limit=limit,
+        offset=offset,
+    )
+    return AdminActivityResponse(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        hasMore=offset + limit < total,
+        window=AdminActivityWindow(**{"from": start.isoformat(), "to": end.isoformat(), "maxDays": max_days}),
+        limitations=[
+            "scanner_backtest_portfolio_domain_projections_deferred",
+            "raw_payloads_excluded",
+        ],
+    )

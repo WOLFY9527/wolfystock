@@ -539,8 +539,15 @@ Minimum local verification for implementation:
 
 ## 10. Follow-up tasks
 
-- Implement read-only Admin User Directory API.
-- Implement read-only Admin User Detail API.
+- Implement read-only Admin User Directory API. Implemented 2026-05-06 as `GET /api/v1/admin/users`.
+- Implement read-only Admin User Detail API. Implemented 2026-05-06 as `GET /api/v1/admin/users/{user_id}` with safe session summaries.
 - Implement User Activity Timeline API as a separate audited contract.
 - Implement frontend admin user directory and detail routes after the backend contract lands.
 - Design security-control APIs separately for disable/enable, password reset, force password change, and session revocation.
+
+## 11. Implementation note 2026-05-06
+
+- Backend routes landed in `api/v1/endpoints/admin_users.py` and are registered under `/api/v1/admin`.
+- Safe response schemas landed in `api/v1/schemas/admin_users.py`; directory/detail use `AdminUserService` plus narrow `AuthRepository` read helpers.
+- The implementation derives `passwordState` and session counts without returning `password_hash`, raw `session_id`, cookies, tokens, API keys, or secrets.
+- Audit writes for directory/detail access are deferred to a later admin-audit hardening pass; the current implementation keeps read paths non-mutating except normal log/table reads.

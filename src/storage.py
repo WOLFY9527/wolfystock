@@ -1943,6 +1943,14 @@ class DatabaseManager:
                 select(AppUser).where(AppUser.username == normalized).limit(1)
             ).scalar_one_or_none()
 
+    def _sqlite_list_app_users(self) -> List[AppUser]:
+        with self.get_session() as session:
+            return list(
+                session.execute(
+                    select(AppUser).order_by(desc(AppUser.created_at), desc(AppUser.id))
+                ).scalars().all()
+            )
+
     def _sqlite_create_or_update_app_user(
         self,
         *,
@@ -1992,6 +2000,18 @@ class DatabaseManager:
             return None
         with self.get_session() as session:
             return self._sqlite_find_app_user_session_row(session, session_id=normalized_session_id)
+
+    def _sqlite_list_app_user_sessions(self, user_id: Optional[str] = None) -> List[AppUserSession]:
+        normalized_user_id = str(user_id or "").strip()
+        with self.get_session() as session:
+            query = select(AppUserSession)
+            if normalized_user_id:
+                query = query.where(AppUserSession.user_id == normalized_user_id)
+            return list(
+                session.execute(
+                    query.order_by(desc(AppUserSession.created_at), desc(AppUserSession.session_id))
+                ).scalars().all()
+            )
 
     def _sqlite_find_app_user_session_row(
         self,
@@ -2224,6 +2244,44 @@ class DatabaseManager:
                 return None
             return self._sync_phase_a_user_from_legacy(legacy_row)
         return self._sqlite_get_app_user_by_username(normalized)
+
+    def list_app_users(self) -> List[Any]:
+        legacy_rows = self._sqlite_list_app_users()
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            rows_by_id: Dict[str, Any] = {
+                str(row.id): row
+                for row in self._phase_a_store.list_app_users()
+                if str(getattr(row, "id", "") or "").strip()
+            }
+            for legacy_row in legacy_rows:
+                user_id = str(getattr(legacy_row, "id", "") or "").strip()
+                if user_id and user_id not in rows_by_id:
+                    rows_by_id[user_id] = self._sync_phase_a_user_from_legacy(legacy_row) or legacy_row
+            return sorted(
+                rows_by_id.values(),
+                key=lambda row: (getattr(row, "created_at", None) or datetime.min, str(getattr(row, "id", ""))),
+                reverse=True,
+            )
+        return legacy_rows
+
+    def list_app_user_sessions(self, user_id: Optional[str] = None) -> List[Any]:
+        legacy_rows = self._sqlite_list_app_user_sessions(user_id)
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            rows_by_id: Dict[str, Any] = {
+                str(row.session_id): row
+                for row in self._phase_a_store.list_app_user_sessions(user_id)
+                if str(getattr(row, "session_id", "") or "").strip()
+            }
+            for legacy_row in legacy_rows:
+                session_id = str(getattr(legacy_row, "session_id", "") or "").strip()
+                if session_id and session_id not in rows_by_id:
+                    rows_by_id[session_id] = self._sync_phase_a_session_from_legacy(legacy_row) or legacy_row
+            return sorted(
+                rows_by_id.values(),
+                key=lambda row: (getattr(row, "created_at", None) or datetime.min, str(getattr(row, "session_id", ""))),
+                reverse=True,
+            )
+        return legacy_rows
 
     def create_or_update_app_user(
         self,

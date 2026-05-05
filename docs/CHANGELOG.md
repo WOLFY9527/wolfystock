@@ -1,3 +1,7 @@
+## 2026-05-06
+
+- 🔐 **Admin Data Control Center Backend Phase 1/2** — 新增只读、管理员专用的用户目录、用户详情与活动时间线 API：`GET /api/v1/admin/users`、`GET /api/v1/admin/users/{user_id}`、`GET /api/v1/admin/users/{user_id}/activity`、`GET /api/v1/admin/activity`。响应只返回安全投影：用户基础字段、派生 `passwordState`、会话计数、脱敏会话 handle、活动事件的哈希 request/session/entity 引用与已脱敏 metadata；不返回 `password_hash`、原始 session id、cookie、token、API key、prompt/provider payload、request body、stack trace 或 analysis raw payload。首版活动时间线以 Execution Logs、AnalysisHistory 和 auth session snapshot 为保守来源，scanner/backtest/portfolio 深投影后续单独实现；不改变认证、授权、Portfolio accounting、Scanner 排名、Backtest 计算、provider/MarketCache、AI/LLM、notification 或 DuckDB 行为。
+
 ## 2026-05-05
 
 - 🦆 **DuckDB Quant Engine Phase 2（可选因子验证路径）** — 可选 DuckDB quant engine 新增只读 `factor_daily` snapshot、factor path coverage validation 与 runtime context comparison 管理员接口：`/api/v1/quant/duckdb/factor-snapshot`、`validate-factor-path`、`compare-runtime-context`。响应会明确返回 `dataMode`、coverage、row count、factor dates、missing/insufficient symbols、duration 与 diagnostic labels；禁用模式继续 `QUANT_DUCKDB_ENABLED=false` 默认且不创建 DuckDB 文件。该路径只供 scanner/backtest-like symbol/date context 对照验证，不替换 scanner scoring/ranking、backtest calculation、Portfolio accounting、AI decision 或 notification routing。

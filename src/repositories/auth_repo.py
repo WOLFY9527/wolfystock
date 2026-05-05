@@ -59,6 +59,12 @@ class AuthRepository:
     def get_app_user_by_username(self, username: str):
         return self.db.get_app_user_by_username(username)
 
+    def list_app_users(self):
+        return self.db.list_app_users()
+
+    def list_app_user_sessions(self, user_id: str | None = None):
+        return self.db.list_app_user_sessions(user_id)
+
     def create_or_update_app_user(
         self,
         *,

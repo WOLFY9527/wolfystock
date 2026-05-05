@@ -708,3 +708,9 @@ Implementation direction:
 7. Frontend Admin Users route after backend contracts.
 8. End-to-end admin data governance QA.
 
+## 16. Implementation status 2026-05-06
+
+- Available backend routes: `GET /api/v1/admin/users`, `GET /api/v1/admin/users/{user_id}`, `GET /api/v1/admin/users/{user_id}/activity`, and `GET /api/v1/admin/activity`.
+- Phase 1/2 scope is backend-only and read-only. No frontend admin user routes were added.
+- User directory/detail returns safe user/session projections only. Activity timeline currently uses conservative Execution Logs, AnalysisHistory, and auth session sources; portfolio/scanner/backtest deep projections and security actions remain future phases.
+- Explicitly unchanged: authentication behavior, authorization behavior beyond adding admin-only read routes, portfolio accounting, scanner scoring/ranking/selection, backtest calculations, provider runtime/fallback order, MarketCache behavior, AI/LLM routing/prompts, notification routing, and DuckDB production runtime.

@@ -516,3 +516,11 @@ Risk notes:
 - User attribution can be incomplete for legacy/system/global records. The projection must label confidence rather than over-assigning ownership.
 - Global provider/system events can be noisy. Keep them excluded by default from user timelines and bounded in global timelines.
 - Redaction is a product boundary, not only a display concern. Sensitive fields must be omitted or masked before response serialization.
+
+## 11. Implementation note 2026-05-06
+
+- Backend routes landed in `api/v1/endpoints/admin_users.py`: `GET /api/v1/admin/users/{user_id}/activity` and `GET /api/v1/admin/activity`.
+- Safe response schemas landed in `api/v1/schemas/admin_activity.py`; projection logic landed in `src/services/admin_activity_service.py`.
+- The first implementation is conservative: it normalizes sanitized Execution Logs business events, safe `AnalysisHistory` metadata, and auth session snapshots. Scanner, backtest, portfolio, and richer admin-audit projections remain deferred limitations.
+- Activity responses hash request/session/entity references and omit raw `session_id`, cookies, tokens, password hashes, API keys, raw prompts/messages/provider payloads, request bodies, stack traces, `raw_result`, `news_content`, and `context_snapshot`.
+- Sensitive admin-view audit writes are deferred to a later admin-audit hardening pass to avoid inventing a broader audit model in this backend-only phase.

@@ -257,6 +257,14 @@ class PostgresPhaseAStore:
                 select(PhaseAAppUser).where(PhaseAAppUser.username == normalized).limit(1)
             ).scalar_one_or_none()
 
+    def list_app_users(self) -> list[PhaseAAppUser]:
+        with self.get_session() as session:
+            return list(
+                session.execute(
+                    select(PhaseAAppUser).order_by(PhaseAAppUser.created_at.desc(), PhaseAAppUser.id.desc())
+                ).scalars().all()
+            )
+
     def upsert_app_user(
         self,
         *,
@@ -361,6 +369,18 @@ class PostgresPhaseAStore:
                 .where(PhaseAAppUserSession.session_id == normalized_session_id)
                 .limit(1)
             ).scalar_one_or_none()
+
+    def list_app_user_sessions(self, user_id: str | None = None) -> list[PhaseAAppUserSession]:
+        normalized_user_id = str(user_id or "").strip()
+        with self.get_session() as session:
+            query = select(PhaseAAppUserSession)
+            if normalized_user_id:
+                query = query.where(PhaseAAppUserSession.user_id == normalized_user_id)
+            return list(
+                session.execute(
+                    query.order_by(PhaseAAppUserSession.created_at.desc(), PhaseAAppUserSession.session_id.desc())
+                ).scalars().all()
+            )
 
     def touch_app_user_session(self, session_id: str) -> bool:
         normalized_session_id = str(session_id or "").strip()
