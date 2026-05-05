@@ -1271,13 +1271,13 @@ function ActionButton({
     <button
       type="button"
       data-testid={testId}
+      className={className}
       onClick={(event) => {
         event.stopPropagation();
         onClick?.(event);
       }}
       disabled={disabled}
       title={title}
-      className={className}
     >
       {content}
     </button>
@@ -1319,7 +1319,6 @@ function PillTagGroup({
               key={option.value}
               type="button"
               aria-pressed={isActive}
-              onClick={() => onChange(option.value)}
               className={isActive
                 ? isMarketGroup
                   ? 'min-w-0 shrink-0 rounded-lg bg-white/10 px-4 py-1 text-sm font-bold text-white shadow-[0_2px_10px_rgba(0,0,0,0.5)] transition-all'
@@ -1327,6 +1326,7 @@ function PillTagGroup({
                 : isMarketGroup
                   ? 'min-w-0 shrink-0 rounded-lg bg-transparent px-4 py-1 text-sm font-medium text-white/40 transition-all hover:text-white/70'
                   : 'min-w-0 rounded-full border border-white/5 bg-transparent px-3 py-1 text-xs text-white/50 transition-colors hover:bg-white/[0.05]'}
+              onClick={() => onChange(option.value)}
             >
               <span className="ui-truncate block max-w-full">{option.label}</span>
             </button>
@@ -1523,6 +1523,7 @@ function AdvancedDisclosure({
           type="button"
           aria-expanded={open}
           aria-label={actionLabel}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/8 bg-white/[0.035] px-2 py-1 text-[11px] text-white/58 hover:bg-white/[0.07] hover:text-white"
           onClick={() => {
             const nextOpen = !open;
             if (controlledOpen == null) {
@@ -1530,7 +1531,6 @@ function AdvancedDisclosure({
             }
             onToggle?.(nextOpen);
           }}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/8 bg-white/[0.035] px-2 py-1 text-[11px] text-white/58 hover:bg-white/[0.07] hover:text-white"
         >
           {open ? <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />}
           <span>{open ? (title.match(/[A-Za-z]/) ? 'Collapse' : '收起') : (title.match(/[A-Za-z]/) ? 'Expand' : '展开')}</span>
@@ -3240,10 +3240,10 @@ const UserScannerPage: React.FC = () => {
                         <select
                           data-testid="scanner-theme-select"
                           value={themeId}
+                          className="select-surface absolute inset-0 z-10 h-full w-full min-w-0 cursor-pointer appearance-none truncate rounded-lg pr-10 opacity-0 outline-none"
                           onChange={(event) => setThemeId(event.target.value)}
                           aria-invalid={Boolean(validationErrors.theme)}
                           aria-describedby={validationErrors.theme ? 'scanner-theme-error' : undefined}
-                          className="select-surface absolute inset-0 z-10 h-full w-full min-w-0 cursor-pointer rounded-lg opacity-0 outline-none"
                         >
                           <option value="">{language === 'en' ? 'Select a theme' : '选择主题'}</option>
                           {configuredMarketThemes.length ? (
@@ -3299,12 +3299,12 @@ const UserScannerPage: React.FC = () => {
                         <input
                           data-testid="scanner-ai-theme-label-input"
                           value={customThemeLabel}
+                          className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
                           onChange={(event) => setCustomThemeLabel(event.target.value)}
                           aria-invalid={Boolean(validationErrors.customThemeLabel)}
                           aria-describedby={validationErrors.customThemeLabel ? 'scanner-ai-theme-label-error' : undefined}
                           maxLength={80}
                           placeholder={language === 'en' ? 'White House Stocks' : 'White House Stocks'}
-                          className="w-full rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
                         />
                         {validationErrors.customThemeLabel ? (
                           <p id="scanner-ai-theme-label-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
@@ -3330,11 +3330,11 @@ const UserScannerPage: React.FC = () => {
                         <input
                           data-testid="scanner-ai-theme-manual-symbols-input"
                           value={customThemeManualSymbols}
+                          className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
                           onChange={(event) => setCustomThemeManualSymbols(event.target.value)}
                           aria-invalid={Boolean(validationErrors.customThemeManualSymbols)}
                           aria-describedby={validationErrors.customThemeManualSymbols ? 'scanner-ai-theme-manual-symbols-error' : undefined}
                           placeholder={language === 'en' ? 'Optional: add symbols, e.g. NVDA PLTR' : '可选：手动补充代码，例如 NVDA PLTR'}
-                          className="w-full rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
                         />
                         {validationErrors.customThemeManualSymbols ? (
                           <p id="scanner-ai-theme-manual-symbols-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
@@ -3475,8 +3475,8 @@ const UserScannerPage: React.FC = () => {
 	                              type="button"
 	                              aria-expanded={isMoreActionsOpen}
 	                              aria-label={language === 'en' ? 'More scanner actions' : '更多扫描操作'}
-	                              onClick={() => setIsMoreActionsOpen((current) => !current)}
 	                              className="inline-flex h-full w-full min-w-0 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white"
+	                              onClick={() => setIsMoreActionsOpen((current) => !current)}
 	                            >
 	                              <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
 	                              <span>{language === 'en' ? 'More' : '更多'}</span>
@@ -3629,13 +3629,13 @@ const UserScannerPage: React.FC = () => {
                           {language === 'en' ? 'Threshold preview' : '阈值预览'}
                         </span>
                         {[40, 50, 60].map((threshold) => (
-                          <button
-                            key={threshold}
-                            type="button"
-                            aria-pressed={previewThreshold === threshold}
-                            onClick={() => setPreviewThreshold(threshold)}
-                            className={`rounded-md border px-2 py-0.5 font-mono text-[11px] ${previewThreshold === threshold ? 'border-blue-400/30 bg-blue-400/12 text-blue-100' : 'border-white/10 bg-white/5 text-white/58 hover:bg-white/10'}`}
-                          >
+	                          <button
+	                            key={threshold}
+	                            type="button"
+	                            aria-pressed={previewThreshold === threshold}
+	                            className={`rounded-md border px-2 py-0.5 font-mono text-[11px] ${previewThreshold === threshold ? 'border-blue-400/30 bg-blue-400/12 text-blue-100' : 'border-white/10 bg-white/5 text-white/58 hover:bg-white/10'}`}
+	                            onClick={() => setPreviewThreshold(threshold)}
+	                          >
                             {threshold}
                           </button>
                         ))}
@@ -3675,12 +3675,12 @@ const UserScannerPage: React.FC = () => {
                       {isRejectionSummaryOpen && rejectionBuckets.length ? (
                         <div data-testid="scanner-rejection-aggregate" className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
                           {rejectionBuckets.map((bucket) => (
-                            <button
-                              key={bucket.label}
-                              type="button"
-                              onClick={() => setCandidateFilter(bucket.label === rejectionBucketLabel('data', language) ? 'data_failed' : 'rejected')}
-                              className="inline-flex max-w-full items-baseline gap-1 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/62 hover:bg-white/10"
-                            >
+	                            <button
+	                              key={bucket.label}
+	                              type="button"
+	                              className="inline-flex max-w-full items-baseline gap-1 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/62 hover:bg-white/10"
+	                              onClick={() => setCandidateFilter(bucket.label === rejectionBucketLabel('data', language) ? 'data_failed' : 'rejected')}
+	                            >
                               <span className="truncate">{bucket.label}</span>
                               <span className="font-mono text-white/82">{bucket.value}</span>
                             </button>
@@ -3705,8 +3705,8 @@ const UserScannerPage: React.FC = () => {
                       <button
                         key={key}
                         type="button"
-                        onClick={() => setCandidateFilter(key)}
                         className={`inline-flex shrink-0 items-center rounded-md px-2.5 py-1 text-xs ${candidateFilter === key ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'}`}
+                        onClick={() => setCandidateFilter(key)}
                       >
                         <span className="ui-truncate block">{label}</span>
                       </button>
@@ -3719,17 +3719,17 @@ const UserScannerPage: React.FC = () => {
                 <div className="ui-scroll-x-quiet flex min-w-0 max-w-full rounded-lg border border-white/5 bg-black/30 p-0.5" role="group" aria-label={language === 'en' ? 'Result view mode' : '结果视图'}>
                   <button
                     type="button"
-                    onClick={() => setViewMode('cards')}
                     disabled={!selectedOnlyView}
                     className={`inline-flex min-w-0 shrink-0 items-center gap-2 rounded-md px-2.5 py-1 text-xs ${viewMode === 'cards' && selectedOnlyView ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'} disabled:cursor-not-allowed disabled:opacity-35`}
+                    onClick={() => setViewMode('cards')}
                   >
                     <LayoutGrid className="h-3.5 w-3.5" />
                     <span className="ui-truncate">{language === 'en' ? 'Card view' : '卡片视图'}</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setViewMode('table')}
                     className={`inline-flex min-w-0 shrink-0 items-center gap-2 rounded-md px-2.5 py-1 text-xs ${viewMode === 'table' ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'}`}
+                    onClick={() => setViewMode('table')}
                   >
                     <Table2 className="h-3.5 w-3.5" />
                     <span className="ui-truncate">{language === 'en' ? 'Table view' : '表格视图'}</span>
@@ -3746,8 +3746,8 @@ const UserScannerPage: React.FC = () => {
                     <button
                       key={key}
                       type="button"
-                      onClick={() => handleSortChange(key)}
                       className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 ${sortKey === key ? 'border-white/16 bg-white/[0.08] text-white' : 'border-white/5 bg-white/[0.02] text-white/48 hover:text-white/75'}`}
+                      onClick={() => handleSortChange(key)}
                     >
                       {label}
                       {sortKey === key ? <ArrowDownUp className="h-3 w-3" /> : null}
@@ -3975,13 +3975,13 @@ const UserScannerPage: React.FC = () => {
                             </div>
 	                            <button
 	                              type="button"
+	                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-white/8 bg-white/[0.04] px-2.5 py-1 text-xs text-white/65 hover:bg-white/[0.08]"
 	                              onClick={(event) => {
 	                                event.stopPropagation();
 	                                setInspectorSymbol(candidate.symbol);
 	                                setExpandedSymbol(isExpanded ? null : candidate.symbol);
 	                              }}
-                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-white/8 bg-white/[0.04] px-2.5 py-1 text-xs text-white/65 hover:bg-white/[0.08]"
-                            >
+	                            >
                               {language === 'en' ? 'Detail' : '详情'}
                               {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                             </button>
@@ -4107,27 +4107,27 @@ const UserScannerPage: React.FC = () => {
                               ? `${runDetail?.summary?.universeCount ? Math.max(0, runDetail.summary.universeCount - sortedCandidates.length) : previewCandidates.length} other candidates were not selected`
                               : `其余 ${runDetail?.summary?.universeCount ? Math.max(0, runDetail.summary.universeCount - sortedCandidates.length) : previewCandidates.length} 个候选未入选`}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => setCandidateFilter('pool')}
-                            className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/70 hover:bg-white/10"
-                          >
+	                          <button
+	                            type="button"
+	                            className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/70 hover:bg-white/10"
+	                            onClick={() => setCandidateFilter('pool')}
+	                          >
                             {language === 'en' ? 'View all candidates' : '查看全部候选'}
                           </button>
                         </div>
                         {previewAddedDiagnostics.length ? (
                           <div data-testid="scanner-preview-added-list" className="mb-2 grid gap-1.5">
                             {previewAddedDiagnostics.slice(0, 4).map((candidate) => (
-                              <button
-                                key={`preview-added-${candidate.symbol}`}
-                                type="button"
-                                data-testid={`scanner-preview-added-${candidate.symbol}`}
-                                onClick={() => {
-                                  setInspectorSymbol(candidate.symbol);
-                                  setCandidateFilter('pool');
-                                }}
-                                className="grid min-w-0 grid-cols-[minmax(54px,0.45fr)_minmax(72px,0.55fr)_minmax(0,1fr)] items-center gap-2 rounded-lg border border-blue-400/15 bg-blue-400/[0.06] px-2 py-1.5 text-left text-xs hover:bg-blue-400/10"
-                              >
+	                              <button
+	                                key={`preview-added-${candidate.symbol}`}
+	                                type="button"
+	                                data-testid={`scanner-preview-added-${candidate.symbol}`}
+	                                className="grid min-w-0 grid-cols-[minmax(54px,0.45fr)_minmax(72px,0.55fr)_minmax(0,1fr)] items-center gap-2 rounded-lg border border-blue-400/15 bg-blue-400/[0.06] px-2 py-1.5 text-left text-xs hover:bg-blue-400/10"
+	                                onClick={() => {
+	                                  setInspectorSymbol(candidate.symbol);
+	                                  setCandidateFilter('pool');
+	                                }}
+	                              >
                                 <span className="truncate font-mono font-semibold text-blue-100">{candidate.symbol}</span>
                                 <span className="truncate font-mono text-blue-100/58">{diagnosticScoreValue(candidate)}</span>
                                 <span className="truncate text-white/50" title={getDiagnosticReason(candidate, language)}>
@@ -4139,15 +4139,15 @@ const UserScannerPage: React.FC = () => {
                         ) : null}
                         <div className="grid gap-1.5">
                           {previewCandidates.map((candidate) => (
-                            <button
-                              key={`preview-${candidate.symbol}`}
-                              type="button"
-                              onClick={() => {
-                                setInspectorSymbol(candidate.symbol);
-                                setCandidateFilter('pool');
-                              }}
-                              className="grid min-w-0 grid-cols-[minmax(54px,0.45fr)_minmax(72px,0.55fr)_minmax(0,1fr)] items-center gap-2 rounded-lg border border-white/5 bg-black/20 px-2 py-1.5 text-left text-xs hover:bg-white/[0.04]"
-                            >
+	                            <button
+	                              key={`preview-${candidate.symbol}`}
+	                              type="button"
+	                              className="grid min-w-0 grid-cols-[minmax(54px,0.45fr)_minmax(72px,0.55fr)_minmax(0,1fr)] items-center gap-2 rounded-lg border border-white/5 bg-black/20 px-2 py-1.5 text-left text-xs hover:bg-white/[0.04]"
+	                              onClick={() => {
+	                                setInspectorSymbol(candidate.symbol);
+	                                setCandidateFilter('pool');
+	                              }}
+	                            >
                               <span className="truncate font-mono font-semibold text-white/78">{candidate.symbol}</span>
                               <span className="truncate font-mono text-white/42">{diagnosticScoreValue(candidate)}</span>
                               <span className="truncate text-white/50" title={getDiagnosticReason(candidate, language)}>
@@ -4469,15 +4469,15 @@ const UserScannerPage: React.FC = () => {
             {!isLoadingHistory && historyCards.length ? (
               <div className="space-y-3">
                 {historyCards.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      void loadRun(item.id);
-                      setIsHistoryDrawerOpen(false);
-                    }}
-                    className={`w-full flex flex-col gap-3 bg-white/[0.02] border border-white/5 rounded-2xl p-5 hover:bg-white/[0.04] transition-colors text-left ${item.id === selectedRunId ? 'border-white/15 bg-white/[0.05]' : ''}`}
-                  >
+	                  <button
+	                    key={item.id}
+	                    type="button"
+	                    className={`w-full flex flex-col gap-3 bg-white/[0.02] border border-white/5 rounded-2xl p-5 hover:bg-white/[0.04] transition-colors text-left ${item.id === selectedRunId ? 'border-white/15 bg-white/[0.05]' : ''}`}
+	                    onClick={() => {
+	                      void loadRun(item.id);
+	                      setIsHistoryDrawerOpen(false);
+	                    }}
+	                  >
                     <div className="flex w-full max-w-full items-start gap-3 overflow-hidden">
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
