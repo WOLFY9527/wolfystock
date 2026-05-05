@@ -190,11 +190,18 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getAllByText('cn_indices').length).toBeGreaterThan(0);
     expect(screen.getByText('市场事件回卷')).toBeInTheDocument();
     expect(screen.getAllByText('查看 Admin Logs').length).toBeGreaterThan(0);
-    expect(screen.getByText('admin_logs_no_degraded_market_events_in_window')).toBeInTheDocument();
+    expect(screen.getByText('Admin Logs 窗口内暂无降级事件')).toBeInTheDocument();
 
     const developerDetails = screen.getByText('开发者 / 响应形状');
     expect(developerDetails).toBeInTheDocument();
     expect(screen.queryByText('SECRET')).not.toBeInTheDocument();
+    screen.getAllByText('/api/v1/market/market-briefing').forEach((node) => {
+      expect(node).not.toBeVisible();
+    });
+    screen.getAllByText('fallback_used', { exact: false }).forEach((node) => {
+      expect(node).not.toBeVisible();
+    });
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
   it('renders empty and limitation states compactly', async () => {

@@ -40,6 +40,17 @@ function providerLabel(item: Pick<MarketProviderOperationItem, 'provider' | 'sou
   return item.sourceLabel || item.provider || 'unknown';
 }
 
+function limitationLabel(value: string): string {
+  if (value.startsWith('cache_metadata_unavailable:')) {
+    const key = value.split(':').slice(1).join(':') || 'unknown';
+    return `缓存元数据未覆盖 ${key}`;
+  }
+  if (value === 'admin_logs_no_degraded_market_events_in_window') {
+    return 'Admin Logs 窗口内暂无降级事件';
+  }
+  return value.replace(/_/g, ' ');
+}
+
 function buildAdminLogHref(drill?: AdminLogDrillThrough): string | null {
   if (!drill?.route) return null;
   const query = new URLSearchParams();
@@ -106,7 +117,7 @@ const ReadOnlyBadges: React.FC<{ response?: MarketProviderOperationsResponse | n
         {metadata.cacheMutation === false ? '缓存不变更' : '缓存变更未确认'}
       </Badge>
       <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">
-        Window {response?.window?.key || '24h'}
+        窗口 {response?.window?.key || '24h'}
       </Badge>
     </div>
   );
@@ -118,6 +129,8 @@ const DrillLink: React.FC<{ drill?: AdminLogDrillThrough; className?: string }> 
   return (
     <a
       href={href}
+      aria-label={`${drill.label}（打开筛选后的 Admin Logs）`}
+      title={`${drill.label}（打开筛选后的 Admin Logs）`}
       className={cn('inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-semibold text-white/62 transition hover:border-cyan-300/25 hover:text-cyan-100', className)}
     >
       {drill.label}
@@ -130,65 +143,70 @@ const ProviderOperationsPanel: React.FC<{ items: MarketProviderOperationItem[] }
   <GlassCard as="section" className="p-4 md:p-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Providers</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">数据源</p>
         <h2 className="mt-1 text-lg font-semibold text-white">数据源运维矩阵</h2>
       </div>
-      <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/58">Read only</Badge>
+      <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/58">只读快照</Badge>
     </div>
     {items.length === 0 ? (
-      <div className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-8 text-sm text-white/50">
+      <div className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-6 text-sm text-white/50">
         暂无数据源运维条目
       </div>
     ) : (
-      <div className="mt-5 overflow-x-auto no-scrollbar">
-        <table className="min-w-[860px] w-full border-separate border-spacing-y-2 text-left">
-          <thead className="text-[10px] uppercase tracking-[0.18em] text-white/34">
-            <tr>
-              <th className="px-3 py-2">来源</th>
-              <th className="px-3 py-2">状态</th>
-              <th className="px-3 py-2">时间</th>
-              <th className="px-3 py-2">缓存</th>
-              <th className="px-3 py-2">事件</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => {
-              const status = normalizeStatus(item.status);
-              return (
-                <tr key={`${item.cacheKey}-${item.endpoint}`} className="rounded-2xl bg-white/[0.018] text-sm text-white/70">
-                  <td className="rounded-l-2xl border-y border-l border-white/5 px-3 py-3 align-top">
-                    <p className="font-semibold text-white">{providerLabel(item)}</p>
-                    <p className="mt-1 font-mono text-[11px] text-white/40">{item.provider}</p>
-                    <p className="mt-1 text-[11px] text-white/34">{item.domain} · {item.sourceType || 'source'}</p>
-                  </td>
-                  <td className="border-y border-white/5 px-3 py-3 align-top">
-                    <div className="flex flex-wrap gap-1.5">
-                      <DataFreshnessBadge status={status as MarketProviderHealthStatus} />
-                      {item.isRefreshing ? <DataFreshnessBadge status="refreshing" /> : null}
-                      {item.isFallback || item.fallbackUsed ? <DataFreshnessBadge status="fallback" /> : null}
-                    </div>
-                    {item.warning ? <p className="mt-2 text-[11px] leading-4 text-amber-200/80">{item.warning}</p> : null}
-                  </td>
-                  <td className="border-y border-white/5 px-3 py-3 align-top font-mono text-[11px] text-white/52">
-                    <p>asOf {formatDate(item.asOf)}</p>
-                    <p className="mt-1">update {formatDate(item.updatedAt)}</p>
-                    <p className="mt-1">latency {compactNumber(item.latencyMs, 0)} ms</p>
-                  </td>
-                  <td className="border-y border-white/5 px-3 py-3 align-top">
-                    <p className="font-mono text-xs text-white/72">{item.cacheKey}</p>
-                    <p className="mt-1 text-[11px] text-white/42">{item.card}</p>
-                    <p className="mt-1 text-[11px] text-white/42">last good {item.lastKnownGoodAgeMinutes ?? '--'} min</p>
-                  </td>
-                  <td className="rounded-r-2xl border-y border-r border-white/5 px-3 py-3 align-top">
-                    <p className="max-w-[220px] truncate text-[11px] text-white/44">{item.endpoint}</p>
-                    {item.errorSummary ? <p className="mt-1 max-w-[220px] truncate text-[11px] text-rose-200/70">最近异常已脱敏</p> : null}
-                    <DrillLink drill={item.adminLogDrillThrough} className="mt-2" />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="mt-4 grid grid-cols-1 gap-3 2xl:grid-cols-2">
+        {items.map((item) => {
+          const status = normalizeStatus(item.status);
+          return (
+            <article key={`${item.cacheKey}-${item.endpoint}`} className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3.5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white">{providerLabel(item)}</p>
+                  <p className="mt-1 truncate font-mono text-[11px] text-white/42">{item.provider} · {item.domain}</p>
+                </div>
+                <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                  <DataFreshnessBadge status={status as MarketProviderHealthStatus} />
+                  {item.isRefreshing ? <DataFreshnessBadge status="refreshing" /> : null}
+                  {item.isFallback || item.fallbackUsed ? <DataFreshnessBadge status="fallback" /> : null}
+                </div>
+              </div>
+              {item.warning ? <p className="mt-2 text-[11px] leading-4 text-amber-200/80">{item.warning}</p> : null}
+              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
+                <p className="min-w-0">卡片 <span className="block truncate font-mono text-white/68">{item.card}</span></p>
+                <p className="min-w-0">缓存 <span className="block truncate font-mono text-white/68">{item.cacheKey}</span></p>
+                <p className="min-w-0">更新 <span className="block truncate font-mono text-white/68">{formatDate(item.updatedAt)}</span></p>
+                <p className="min-w-0">延迟 <span className="block truncate font-mono text-white/68">{compactNumber(item.latencyMs, 0)} ms</span></p>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] text-white/42">最近可用 <span className="font-mono text-white/65">{item.lastKnownGoodAgeMinutes ?? '--'} min</span></p>
+                <DrillLink drill={item.adminLogDrillThrough} />
+              </div>
+              <Disclosure
+                summary="运维细节"
+                className="mt-3"
+                bodyClassName="rounded-xl border border-white/5 bg-white/[0.025] p-3"
+              >
+                <dl className="grid gap-2 text-[11px] leading-5 text-white/50 sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <dt className="text-white/34">API route</dt>
+                    <dd className="break-words font-mono text-white/60">{item.endpoint}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-white/34">source type</dt>
+                    <dd className="break-words font-mono text-white/60">{item.sourceType || '--'}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-white/34">asOf</dt>
+                    <dd className="break-words font-mono text-white/60">{formatDate(item.asOf)}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-white/34">最近异常</dt>
+                    <dd className="break-words text-rose-100/70">{item.errorSummary ? '已脱敏，仅在 Admin Logs 查看' : '--'}</dd>
+                  </div>
+                </dl>
+              </Disclosure>
+            </article>
+          );
+        })}
       </div>
     )}
   </GlassCard>
@@ -199,7 +217,7 @@ const CacheStatesPanel: React.FC<{ cacheStates: MarketProviderCacheState[] }> = 
     <div className="flex items-start gap-3">
       <DatabaseZap className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Cache</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">缓存</p>
         <h2 className="mt-1 text-base font-semibold text-white">缓存状态</h2>
       </div>
     </div>
@@ -241,7 +259,7 @@ const EventRollupsPanel: React.FC<{ eventRollups: MarketProviderEventRollup[] }>
     <div className="flex items-start gap-3">
       <Radar className="mt-1 h-4 w-4 text-amber-200" aria-hidden="true" />
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Events</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">事件</p>
         <h2 className="mt-1 text-base font-semibold text-white">市场事件回卷</h2>
       </div>
     </div>
@@ -254,7 +272,7 @@ const EventRollupsPanel: React.FC<{ eventRollups: MarketProviderEventRollup[] }>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="font-semibold text-white">{rollup.provider}</p>
-                <p className="mt-1 text-[11px] text-white/40">{rollup.card || rollup.endpoint || rollup.category || 'market provider'}</p>
+                <p className="mt-1 text-[11px] text-white/40">{rollup.card || rollup.category || 'market provider'}</p>
               </div>
               <DrillLink drill={rollup.adminLogDrillThrough} />
             </div>
@@ -265,13 +283,26 @@ const EventRollupsPanel: React.FC<{ eventRollups: MarketProviderEventRollup[] }>
               <SummaryTile label="慢请求" value={rollup.slowCount} tone={rollup.slowCount ? 'warn' : 'neutral'} />
               <SummaryTile label="失败率" value={formatPercent(rollup.failureRate, { mode: 'ratio' })} tone={rollup.failureRate > 0 ? 'danger' : 'good'} />
             </div>
-            {rollup.topReasons.length ? (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {rollup.topReasons.map((reason) => (
-                  <Badge key={reason} variant="default" className="border-white/10 bg-white/[0.035] text-white/58">{reason}</Badge>
-                ))}
-              </div>
-            ) : null}
+            <Disclosure
+              summary="事件细节"
+              className="mt-3"
+              bodyClassName="rounded-xl border border-white/5 bg-white/[0.025] p-3"
+            >
+              <dl className="grid gap-2 text-[11px] leading-5 text-white/50 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <dt className="text-white/34">API route</dt>
+                  <dd className="break-words font-mono text-white/60">{rollup.endpoint || '--'}</dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-white/34">latest event</dt>
+                  <dd className="break-words font-mono text-white/60">{rollup.latestLogEventId || '--'}</dd>
+                </div>
+                <div className="min-w-0 sm:col-span-2">
+                  <dt className="text-white/34">top reasons</dt>
+                  <dd className="break-words font-mono text-white/60">{rollup.topReasons.length ? rollup.topReasons.join(' · ') : '--'}</dd>
+                </div>
+              </dl>
+            </Disclosure>
           </div>
         ))}
       </div>
@@ -283,20 +314,36 @@ const LimitationsPanel: React.FC<{ response: MarketProviderOperationsResponse }>
   <GlassCard as="section" className="p-4 md:p-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Limitations</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">限制</p>
         <h2 className="mt-1 text-base font-semibold text-white">限制与开发者细节</h2>
       </div>
       <DrillLink drill={response.adminLogDrillThrough} />
     </div>
     <div className="mt-4 flex flex-wrap gap-2">
       {response.limitations.length ? response.limitations.map((limitation) => (
-        <Badge key={limitation} variant="warning" className="border-amber-300/25 bg-amber-400/10 text-amber-100">
-          {limitation}
-        </Badge>
+        <span
+          key={limitation}
+          className="inline-flex min-h-6 items-center rounded-full border border-amber-300/25 bg-amber-400/10 px-2.5 py-0.5 text-[11px] font-medium leading-5 text-amber-100"
+        >
+          {limitationLabel(limitation)}
+        </span>
       )) : (
         <Badge variant="success" className="border-emerald-300/25 bg-emerald-400/10 text-emerald-100">暂无限制</Badge>
       )}
     </div>
+    {response.limitations.length ? (
+      <Disclosure
+        summary="原始限制代码"
+        className="mt-4"
+        bodyClassName="rounded-2xl border border-white/5 bg-black/20 p-3"
+      >
+        <ul className="space-y-1 text-[11px] leading-5 text-white/50">
+          {response.limitations.map((limitation) => (
+            <li key={limitation} className="break-words font-mono">{limitation}</li>
+          ))}
+        </ul>
+      </Disclosure>
+    ) : null}
     <Disclosure
       summary="开发者 / 响应形状"
       className="mt-5"
@@ -306,6 +353,32 @@ const LimitationsPanel: React.FC<{ response: MarketProviderOperationsResponse }>
         {JSON.stringify(safeMetadataSummary(response), null, 2)}
       </pre>
     </Disclosure>
+  </GlassCard>
+);
+
+const LoadingOperationsState: React.FC = () => (
+  <GlassCard as="section" className="mt-5 p-4 md:p-5" role="status" aria-label="正在读取市场数据源运维快照">
+    <div className="flex items-center gap-3">
+      <Activity className="h-4 w-4 animate-pulse text-cyan-200" aria-hidden="true" />
+      <div>
+        <p className="text-sm font-semibold text-white">正在读取只读运维快照</p>
+        <p className="mt-1 text-xs text-white/46">不会触发外部 provider 调用，也不会变更缓存。</p>
+      </div>
+    </div>
+    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+      {[0, 1, 2].map((index) => (
+        <div key={index} className="h-24 rounded-2xl border border-white/5 bg-black/20" />
+      ))}
+    </div>
+  </GlassCard>
+);
+
+const EmptyErrorState: React.FC = () => (
+  <GlassCard as="section" className="mt-5 p-5">
+    <div className="flex items-center gap-2 text-sm text-white/50">
+      <Activity className="h-4 w-4" aria-hidden="true" />
+      运维快照暂不可用
+    </div>
   </GlassCard>
 );
 
@@ -339,12 +412,12 @@ const MarketProviderOperationsPage: React.FC = () => {
   const summaryTiles = useMemo(() => {
     if (!summary) return [];
     return [
-      { label: 'Provider', value: summary.totalItems, tone: 'info' as const },
-      { label: 'Live', value: summary.liveCount, tone: 'good' as const },
-      { label: 'Fallback', value: summary.fallbackCount, tone: summary.fallbackCount ? 'warn' as const : 'neutral' as const },
-      { label: 'Errors', value: summary.errorCount + summary.failureCount, tone: summary.errorCount + summary.failureCount ? 'danger' as const : 'neutral' as const },
-      { label: 'Refreshing', value: summary.refreshingCount, tone: summary.refreshingCount ? 'info' as const : 'neutral' as const },
-      { label: 'Events', value: summary.eventCount, tone: summary.eventCount ? 'info' as const : 'neutral' as const },
+      { label: '数据源', value: summary.totalItems, tone: 'info' as const },
+      { label: '实时', value: summary.liveCount, tone: 'good' as const },
+      { label: '备用', value: summary.fallbackCount, tone: summary.fallbackCount ? 'warn' as const : 'neutral' as const },
+      { label: '异常', value: summary.errorCount + summary.failureCount, tone: summary.errorCount + summary.failureCount ? 'danger' as const : 'neutral' as const },
+      { label: '刷新', value: summary.refreshingCount, tone: summary.refreshingCount ? 'info' as const : 'neutral' as const },
+      { label: '事件', value: summary.eventCount, tone: summary.eventCount ? 'info' as const : 'neutral' as const },
     ];
   }, [summary]);
 
@@ -356,7 +429,7 @@ const MarketProviderOperationsPage: React.FC = () => {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200/80">
               <ServerCog className="h-4 w-4" aria-hidden="true" />
-              Admin Operations
+              运维快照
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-normal text-white md:text-4xl">市场数据源运维</h1>
             <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
@@ -373,53 +446,59 @@ const MarketProviderOperationsPage: React.FC = () => {
             <SummaryTile key={tile.label} label={tile.label} value={tile.value} tone={tile.tone} />
           )) : (
             <>
-              <SummaryTile label="Provider" value="--" />
-              <SummaryTile label="Live" value="--" />
-              <SummaryTile label="Fallback" value="--" />
-              <SummaryTile label="Events" value="--" />
+              <SummaryTile label="数据源" value="--" />
+              <SummaryTile label="实时" value="--" />
+              <SummaryTile label="备用" value="--" />
+              <SummaryTile label="事件" value="--" />
             </>
           )}
         </div>
       </GlassCard>
 
-      <div className="mt-5 grid shrink-0 grid-cols-1 gap-5 xl:grid-cols-12">
-        <div className="min-w-0 xl:col-span-8">
-          <ProviderOperationsPanel items={response?.items || []} />
-        </div>
-        <div className="min-w-0 space-y-5 xl:col-span-4">
-          <GlassCard as="section" className="p-4 md:p-5">
-            <div className="flex items-start gap-3">
-              <LockKeyhole className="mt-1 h-4 w-4 text-emerald-200" aria-hidden="true" />
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Guardrail</p>
-                <h2 className="mt-1 text-base font-semibold text-white">只读边界</h2>
-                <p className="mt-2 text-sm leading-6 text-white/50">
-                  前端只读取现有运维快照，不触发数据源请求、不改变缓存、不改变 provider 排序。
-                </p>
-              </div>
+      {isLoading && !response && !error ? <LoadingOperationsState /> : null}
+      {error && !response && !isLoading ? <EmptyErrorState /> : null}
+      {!isLoading && (response || !error) ? (
+        <>
+          <div className="mt-5 grid shrink-0 grid-cols-1 gap-5 xl:grid-cols-12">
+            <div className="min-w-0 xl:col-span-8">
+              <ProviderOperationsPanel items={response?.items || []} />
             </div>
-          </GlassCard>
-          <CacheStatesPanel cacheStates={response?.cacheStates || []} />
-        </div>
-      </div>
-
-      <div className="mt-5 grid shrink-0 grid-cols-1 gap-5 xl:grid-cols-12">
-        <div className="min-w-0 xl:col-span-7">
-          <EventRollupsPanel eventRollups={response?.eventRollups || []} />
-        </div>
-        {response ? (
-          <div className="min-w-0 xl:col-span-5">
-            <LimitationsPanel response={response} />
+            <div className="min-w-0 space-y-5 xl:col-span-4">
+              <GlassCard as="section" className="p-4 md:p-5">
+                <div className="flex items-start gap-3">
+                  <LockKeyhole className="mt-1 h-4 w-4 text-emerald-200" aria-hidden="true" />
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">边界</p>
+                    <h2 className="mt-1 text-base font-semibold text-white">只读边界</h2>
+                    <p className="mt-2 text-sm leading-6 text-white/50">
+                      前端只读取现有运维快照，不触发数据源请求、不改变缓存、不改变 provider 排序。
+                    </p>
+                  </div>
+                </div>
+              </GlassCard>
+              <CacheStatesPanel cacheStates={response?.cacheStates || []} />
+            </div>
           </div>
-        ) : (
-          <GlassCard as="section" className="p-5 xl:col-span-5">
-            <div className="flex items-center gap-2 text-sm text-white/50">
-              <Activity className="h-4 w-4" aria-hidden="true" />
-              等待运维快照
+
+          <div className="mt-5 grid shrink-0 grid-cols-1 gap-5 xl:grid-cols-12">
+            <div className="min-w-0 xl:col-span-7">
+              <EventRollupsPanel eventRollups={response?.eventRollups || []} />
             </div>
-          </GlassCard>
-        )}
-      </div>
+            {response ? (
+              <div className="min-w-0 xl:col-span-5">
+                <LimitationsPanel response={response} />
+              </div>
+            ) : (
+              <GlassCard as="section" className="p-5 xl:col-span-5">
+                <div className="flex items-center gap-2 text-sm text-white/50">
+                  <Activity className="h-4 w-4" aria-hidden="true" />
+                  等待运维快照
+                </div>
+              </GlassCard>
+            )}
+          </div>
+        </>
+      ) : null}
       <span className="sr-only">{language === 'zh' ? '市场数据源运维只读页面' : 'Market provider operations read-only page'}</span>
     </div>
   );
