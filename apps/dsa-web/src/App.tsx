@@ -16,7 +16,6 @@ import type { UiLanguage } from './i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from './utils/localeRouting';
 import { isPreviewRoutePath } from './utils/appRouteGuards';
 import { useAgentChatStore } from './stores/agentChatStore';
-import DeterministicBacktestResultPage from './pages/DeterministicBacktestResultPage';
 
 const APP_BOOT_SPLASH_MIN_MS = 950;
 const APP_BOOT_SPLASH_FADE_MS = 380;
@@ -38,6 +37,7 @@ const MarketOverviewPage = lazy(() => import('./pages/MarketOverviewPage'));
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'));
 const BacktestPage = lazy(() => import('./pages/BacktestPage'));
 const RuleBacktestComparePage = lazy(() => import('./pages/RuleBacktestComparePage'));
+const DeterministicBacktestResultPage = lazy(() => import('./pages/DeterministicBacktestResultPage'));
 const PersonalSettingsPage = lazy(() => import('./pages/PersonalSettingsPage'));
 const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'));
 const AdminLogsPage = lazy(() => import('./pages/AdminLogsPage'));
