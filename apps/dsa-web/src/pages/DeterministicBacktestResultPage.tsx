@@ -1203,7 +1203,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   role="tab"
                   aria-selected={activeTab === tab.key}
                   aria-controls={`deterministic-result-tab-panel-${tab.key}`}
-                  className={`backtest-mode-toggle__button${activeTab === tab.key ? ' is-active' : ''}`}
+                  className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${activeTab === tab.key ? ' is-active' : ''}`}
                   onClick={() => setActiveTab(tab.key)}
                 >
                   {tab.label}

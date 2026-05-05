@@ -69,8 +69,8 @@ const LABEL_CLASS = 'text-[10px] font-bold uppercase tracking-widest text-white/
 const VALUE_CLASS = 'font-mono text-sm text-white';
 const POSITIVE_CLASS = 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]';
 const NEGATIVE_CLASS = 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]';
-const SECONDARY_BUTTON_CLASS = 'inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/70 transition-all hover:bg-white/10';
-const PRIMARY_BUTTON_CLASS = 'inline-flex items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.18)] transition-all hover:border-emerald-400/45 hover:bg-emerald-500/15';
+const SECONDARY_BUTTON_CLASS = 'inline-flex min-h-[36px] items-center justify-center rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/70 transition-all hover:bg-white/10 md:min-h-[32px]';
+const PRIMARY_BUTTON_CLASS = 'inline-flex min-h-[36px] items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.18)] transition-all hover:border-emerald-400/45 hover:bg-emerald-500/15 md:min-h-[32px]';
 const TRADE_ROW_LIMIT = 20;
 const LEDGER_ROW_LIMIT = 30;
 const EVENT_ROW_LIMIT = 12;
@@ -795,7 +795,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
       <div className="flex min-w-0 flex-col gap-4 text-sm text-white/70">
         <nav className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="Backtest result sections">
           {['概览', '曲线', '交易', '归因', '风险', '数据质量', '执行假设', '账本'].map((item) => (
-            <a key={item} href={`#backtest-report-${item}`} className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/60 hover:bg-white/10">
+            <a key={item} href={`#backtest-report-${item}`} className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60 hover:bg-white/10 md:min-h-[32px] md:py-1.5">
               {item}
             </a>
           ))}
@@ -1025,7 +1025,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         </div>
 
         <div id="backtest-report-数据质量" data-testid="backtest-report-data-quality" className={GHOST_SECTION_CLASS}>
-          <button type="button" className="flex w-full items-center justify-between gap-3 text-left" onClick={() => setDataQualityOpen((value) => !value)}>
+          <button type="button" className="flex min-h-[36px] w-full items-center justify-between gap-3 text-left" onClick={() => setDataQualityOpen((value) => !value)}>
             <span><span className={LABEL_CLASS}>数据质量</span></span>
             <span className="text-xs text-white/45">{dataQualityOpen ? '收起' : '展开'}</span>
           </button>
@@ -1059,7 +1059,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         </div>
 
         <div id="backtest-report-执行假设" data-testid="backtest-report-execution-assumptions" className={GHOST_SECTION_CLASS}>
-          <button type="button" className="flex w-full items-center justify-between gap-3 text-left" onClick={() => setAssumptionsOpen((value) => !value)}>
+          <button type="button" className="flex min-h-[36px] w-full items-center justify-between gap-3 text-left" onClick={() => setAssumptionsOpen((value) => !value)}>
             <span><span className={LABEL_CLASS}>执行假设</span></span>
             <span className="text-xs text-white/45">{assumptionsOpen ? '收起' : '展开'}</span>
           </button>
@@ -1096,7 +1096,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         </div>
 
         <div id="backtest-report-账本" data-testid="backtest-report-advanced-details" className={GHOST_SECTION_CLASS}>
-          <button type="button" className="flex w-full items-center justify-between gap-3 text-left" onClick={() => setAdvancedOpen((value) => !value)}>
+          <button type="button" className="flex min-h-[36px] w-full items-center justify-between gap-3 text-left" onClick={() => setAdvancedOpen((value) => !value)}>
             <span>
               <span className={LABEL_CLASS}>开发者细节</span>
               <span className="ml-2 text-xs text-white/42">完整指标 · 每日账本 · 原始执行轨迹</span>

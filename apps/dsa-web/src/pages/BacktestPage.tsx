@@ -1165,7 +1165,7 @@ const BacktestPage: React.FC = () => {
         type="button"
         role="tab"
         aria-selected={activeModule === 'rule'}
-        className={`backtest-mode-toggle__button${activeModule === 'rule' ? ' is-active' : ''}`}
+        className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${activeModule === 'rule' ? ' is-active' : ''}`}
         onClick={showRuleModuleButton.onClick}
         onPointerUp={showRuleModuleButton.onPointerUp}
       >
@@ -1176,7 +1176,7 @@ const BacktestPage: React.FC = () => {
         type="button"
         role="tab"
         aria-selected={activeModule === 'historical'}
-        className={`backtest-mode-toggle__button${activeModule === 'historical' ? ' is-active' : ''}`}
+        className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${activeModule === 'historical' ? ' is-active' : ''}`}
         onClick={showHistoricalModuleButton.onClick}
         onPointerUp={showHistoricalModuleButton.onPointerUp}
       >
@@ -1192,7 +1192,7 @@ const BacktestPage: React.FC = () => {
         type="button"
         role="tab"
         aria-selected={controlPanelMode === 'normal'}
-        className={`backtest-mode-toggle__button${controlPanelMode === 'normal' ? ' is-active' : ''}`}
+        className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${controlPanelMode === 'normal' ? ' is-active' : ''}`}
         onClick={showNormalModeButton.onClick}
         onPointerUp={showNormalModeButton.onPointerUp}
       >
@@ -1203,7 +1203,7 @@ const BacktestPage: React.FC = () => {
         type="button"
         role="tab"
         aria-selected={controlPanelMode === 'professional'}
-        className={`backtest-mode-toggle__button${controlPanelMode === 'professional' ? ' is-active' : ''}`}
+        className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${controlPanelMode === 'professional' ? ' is-active' : ''}`}
         onClick={showProfessionalModeButton.onClick}
         onPointerUp={showProfessionalModeButton.onPointerUp}
       >

@@ -1381,7 +1381,7 @@ const AppendixDisclosure: React.FC<{
   testId?: string;
 }> = ({ title, children, testId }) => (
   <details className="report-hero-disclosure" data-testid={testId}>
-    <summary>{title}</summary>
+    <summary className="flex min-h-[36px] items-center">{title}</summary>
     <div className="report-hero-disclosure-body">{children}</div>
   </details>
 );
@@ -1436,7 +1436,7 @@ export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({
 
       <section className={cn(solidCardClass)} data-testid="deep-appendix-layer">
         <details className="report-hero-disclosure" data-testid="deep-appendix-disclosure">
-          <summary>{ui('report.deepAppendix')}</summary>
+          <summary className="flex min-h-[36px] items-center">{ui('report.deepAppendix')}</summary>
           <div className="report-hero-disclosure-body space-y-4">
             <p className="text-xs leading-5 text-muted-text">{ui('report.deepAppendixHint')}</p>
 

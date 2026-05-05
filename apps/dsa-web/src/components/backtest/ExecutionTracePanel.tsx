@@ -102,7 +102,7 @@ const ExecutionTracePanel: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }
             type="button"
             role="tab"
             aria-selected={viewMode === 'highlights'}
-            className={`backtest-mode-toggle__button${viewMode === 'highlights' ? ' is-active' : ''}`}
+            className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${viewMode === 'highlights' ? ' is-active' : ''}`}
             onClick={() => setViewMode('highlights')}
           >
             {language === 'en' ? 'Key checkpoints' : '关键节点'}
@@ -111,7 +111,7 @@ const ExecutionTracePanel: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }
             type="button"
             role="tab"
             aria-selected={viewMode === 'all'}
-            className={`backtest-mode-toggle__button${viewMode === 'all' ? ' is-active' : ''}`}
+            className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${viewMode === 'all' ? ' is-active' : ''}`}
             onClick={() => setViewMode('all')}
           >
             {language === 'en' ? 'Full trace' : '全部轨迹'}
