@@ -2764,29 +2764,6 @@ textarea {
   font: inherit;
 }
 
-.gradient-border-card {
-  position: relative;
-  border-radius: var(--theme-panel-radius-lg);
-  padding: 1px;
-  background: linear-gradient(
-    180deg,
-    var(--border-accent) 0%,
-    var(--border-purple) 50%,
-    var(--border-dim) 100%
-  );
-  box-shadow: 0 18px 48px rgba(3, 8, 20, 0.2);
-}
-
-.gradient-border-card-inner {
-  height: 100%;
-  border-radius: calc(var(--theme-panel-radius-lg) - 1px);
-  background: linear-gradient(
-    180deg,
-    hsl(var(--elevated) / 0.98),
-    hsl(var(--card) / 0.98)
-  );
-}
-
 .theme-card-surface {
   border-radius: var(--theme-panel-radius-lg);
 }
@@ -3952,8 +3929,6 @@ html[data-theme] button[data-variant="settings-primary"]:hover {
   box-shadow: none;
 }
 
-html[data-theme] .gradient-border-card,
-html[data-theme] .gradient-border-card-inner,
 html[data-theme] .home-subpanel {
   border-radius: var(--cohere-radius-signature);
   box-shadow: none;
@@ -3964,19 +3939,8 @@ html[data-theme] .home-subpanel {
   background: var(--theme-panel-solid-bg);
 }
 
-html[data-theme] .gradient-border-card::before,
 html[data-theme] .home-history-item::before {
   display: none;
-}
-
-html[data-theme] .gradient-border-card {
-  padding: 0;
-  background: transparent;
-}
-
-html[data-theme] .gradient-border-card-inner {
-  border: 1px solid var(--theme-panel-solid-border);
-  background: linear-gradient(180deg, var(--theme-panel-solid-bg), var(--theme-panel-subtle-bg));
 }
 
 html[data-theme] .theme-chart-toolbar,
