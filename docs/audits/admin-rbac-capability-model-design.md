@@ -5,6 +5,20 @@ Mode: docs-only authorization design. No runtime behavior changed.
 
 Implementation note, 2026-05-06:
 
+- Phase R4A backend capability summary contract has landed on the existing
+  current-user auth contract. `GET /api/v1/auth/status`, `GET
+  /api/v1/auth/me`, and login responses now expose a sanitized, sorted
+  `currentUser.adminCapabilities` list plus coarse convenience booleans derived
+  from `expand_admin_capabilities(user)`: `canReadUsers`,
+  `canReadUserActivity`, `canReadUserPortfolio`, `canWriteUserSecurity`,
+  `canReadCostObservability`, `canReadOpsLogs`, `canReadProviders`,
+  `canReadNotifications`, and `canReadSystemConfig`. This is a UX contract for
+  future frontend capability-aware navigation only. Backend route guards remain
+  authoritative, `require_admin_user()` remains available, and no additional
+  admin routes were migrated in R4A. The response does not expose password
+  hashes, raw sessions, cookies, tokens, API keys, secrets, broker/provider
+  credentials, `.env` values, raw role mapping internals, or grant metadata.
+  Phase R4B frontend navigation is still pending.
 - Phase R3 pilot route migration has landed for the intentionally narrow
   high-risk subset from the route matrix: admin security writes now require
   `users:security:write`, and admin portfolio visibility reads now require
@@ -546,8 +560,9 @@ Fail-closed recommendation:
 
 ### Phase R4: frontend capability-aware nav
 
-- Add a safe capability summary endpoint or include capabilities in current-user
-  status.
+- R4A complete: include safe capability summary fields in the existing
+  current-user auth contract.
+- R4B pending: consume those fields in frontend navigation and actions.
 - Hide or disable nav/actions by capability.
 - Add reason prompts and future MFA/reauth prompts.
 - Ensure forbidden data is never fetched optimistically.

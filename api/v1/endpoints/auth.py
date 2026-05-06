@@ -114,6 +114,15 @@ class CurrentUserResponse(BaseModel):
     auth_enabled: bool = Field(alias="authEnabled")
     legacy_admin: bool = Field(default=False, alias="legacyAdmin")
     admin_capabilities: list[str] = Field(default_factory=list, alias="adminCapabilities")
+    can_read_users: bool = Field(default=False, alias="canReadUsers")
+    can_read_user_activity: bool = Field(default=False, alias="canReadUserActivity")
+    can_read_user_portfolio: bool = Field(default=False, alias="canReadUserPortfolio")
+    can_write_user_security: bool = Field(default=False, alias="canWriteUserSecurity")
+    can_read_cost_observability: bool = Field(default=False, alias="canReadCostObservability")
+    can_read_ops_logs: bool = Field(default=False, alias="canReadOpsLogs")
+    can_read_providers: bool = Field(default=False, alias="canReadProviders")
+    can_read_notifications: bool = Field(default=False, alias="canReadNotifications")
+    can_read_system_config: bool = Field(default=False, alias="canReadSystemConfig")
 
 
 class UserNotificationPreferencesRequest(BaseModel):
@@ -241,10 +250,42 @@ def _normalize_username(value: str | None) -> str:
     return str(value or "").strip()
 
 
+def _capability_flags(capabilities: list[str]) -> dict[str, bool]:
+    capability_set = set(capabilities)
+    return {
+        "canReadUsers": "users:read" in capability_set,
+        "canReadUserActivity": "users:activity:read" in capability_set,
+        "canReadUserPortfolio": "users:portfolio:read" in capability_set,
+        "canWriteUserSecurity": "users:security:write" in capability_set,
+        "canReadCostObservability": "cost:observability:read" in capability_set,
+        "canReadOpsLogs": "ops:logs:read" in capability_set,
+        "canReadProviders": "ops:providers:read" in capability_set,
+        "canReadNotifications": "ops:notifications:read" in capability_set,
+        "canReadSystemConfig": "ops:system_config:read" in capability_set,
+    }
+
+
+def _current_user_capability_summary(current_user) -> tuple[list[str], dict[str, bool]]:
+    capabilities = sorted(getattr(current_user, "admin_capabilities", ()) or ())
+    if not capabilities:
+        capabilities = sorted(expand_admin_capabilities(current_user))
+    return capabilities, _capability_flags(capabilities)
+
+
+def _current_user_response(**kwargs) -> CurrentUserResponse:
+    capabilities = list(kwargs.pop("adminCapabilities", []) or [])
+    return CurrentUserResponse(
+        **kwargs,
+        adminCapabilities=capabilities,
+        **_capability_flags(capabilities),
+    )
+
+
 def _serialize_current_user(request: Request) -> dict | None:
     current_user = resolve_current_user(request)
     if current_user is None:
         return None
+    capabilities, flags = _current_user_capability_summary(current_user)
     return CurrentUserResponse(
         id=current_user.user_id,
         username=current_user.username,
@@ -255,7 +296,8 @@ def _serialize_current_user(request: Request) -> dict | None:
         transitional=current_user.transitional,
         authEnabled=current_user.auth_enabled,
         legacyAdmin=current_user.legacy_admin,
-        adminCapabilities=sorted(getattr(current_user, "admin_capabilities", ()) or ()),
+        adminCapabilities=capabilities,
+        **flags,
     ).model_dump(by_alias=True)
 
 
@@ -827,6 +869,7 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
         # and won't be visible in request.cookies until the NEXT request.
         content = _get_auth_status_dict(request)
         content["loggedIn"] = True
+        capabilities, flags = _current_user_capability_summary(current_user)
         content["currentUser"] = CurrentUserResponse(
             id=current_user.user_id,
             username=current_user.username,
@@ -837,7 +880,8 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
             transitional=False,
             authEnabled=True,
             legacyAdmin=current_user.legacy_admin,
-            adminCapabilities=sorted(getattr(current_user, "admin_capabilities", ()) or ()),
+            adminCapabilities=capabilities,
+            **flags,
         ).model_dump(by_alias=True)
         resp = JSONResponse(content=content)
         _set_session_cookie(resp, session_val, request)
@@ -1080,7 +1124,7 @@ async def auth_login(request: Request, body: LoginRequest):
         content={
             "ok": True,
             "createdUser": created_user,
-            "currentUser": CurrentUserResponse(
+            "currentUser": _current_user_response(
                 id=str(user_row.id),
                 username=str(user_row.username),
                 displayName=getattr(user_row, "display_name", None),

@@ -2,6 +2,7 @@
 """Integration tests for auth API endpoints (login, logout, change-password, API protection)."""
 
 import asyncio
+import json
 import os
 import sys
 import tempfile
@@ -26,6 +27,7 @@ from api.deps import CurrentUser
 from api.middlewares.auth import AuthMiddleware
 from api.v1.endpoints import auth as auth_endpoint
 from src.config import Config
+from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.storage import DatabaseManager
 
 
@@ -87,6 +89,10 @@ class AuthApiTestCase(unittest.TestCase):
     def _extract_session_cookie(response) -> str:
         cookie_header = response.headers["set-cookie"]
         return cookie_header.split(f"{auth.COOKIE_NAME}=", 1)[1].split(";", 1)[0]
+
+    @staticmethod
+    def _json_response_body(response) -> dict:
+        return json.loads(response.body.decode("utf-8"))
 
     def _login_admin(self, password: str = "passwd6"):
         return asyncio.run(
@@ -172,6 +178,137 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertEqual(me_response["role"], "user")
         self.assertFalse(me_response["isAdmin"])
         self.assertTrue(me_response["isAuthenticated"])
+
+    def test_admin_current_user_exposes_safe_sorted_capability_summary(self) -> None:
+        response = self._login_admin(password="secret123")
+        self.assertEqual(response.status_code, 200)
+        session_cookie = self._extract_session_cookie(response)
+
+        status_response = asyncio.run(
+            auth_endpoint.auth_status(
+                self._build_request(cookies={auth.COOKIE_NAME: session_cookie})
+            )
+        )
+        me_response = asyncio.run(
+            auth_endpoint.auth_me(
+                self._build_request(cookies={auth.COOKIE_NAME: session_cookie})
+            )
+        )
+
+        for payload in (status_response["currentUser"], me_response):
+            self.assertEqual(payload["id"], BOOTSTRAP_ADMIN_USER_ID)
+            self.assertEqual(payload["username"], "admin")
+            self.assertTrue(payload["isAdmin"])
+            self.assertTrue(payload["isAuthenticated"])
+            capabilities = payload["adminCapabilities"]
+            self.assertEqual(capabilities, sorted(capabilities))
+            self.assertIn("users:security:write", capabilities)
+            self.assertIn("users:portfolio:read", capabilities)
+            self.assertTrue(payload["canReadUsers"])
+            self.assertTrue(payload["canReadUserActivity"])
+            self.assertTrue(payload["canReadUserPortfolio"])
+            self.assertTrue(payload["canWriteUserSecurity"])
+            self.assertTrue(payload["canReadCostObservability"])
+            self.assertTrue(payload["canReadOpsLogs"])
+            self.assertTrue(payload["canReadProviders"])
+            self.assertTrue(payload["canReadNotifications"])
+            self.assertTrue(payload["canReadSystemConfig"])
+            self.assertNotIn("passwordHash", payload)
+            self.assertNotIn("sessionId", payload)
+            self.assertNotIn("roles", payload)
+            self.assertNotIn("roleMappings", payload)
+
+    def test_login_response_includes_compatible_current_user_capability_contract(self) -> None:
+        response = self._login_admin(password="secret123")
+        payload = self._json_response_body(response)
+        current_user = payload["currentUser"]
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(current_user["id"], BOOTSTRAP_ADMIN_USER_ID)
+        self.assertEqual(current_user["username"], "admin")
+        self.assertEqual(current_user["role"], "admin")
+        self.assertTrue(current_user["isAdmin"])
+        self.assertTrue(current_user["isAuthenticated"])
+        self.assertIn("adminCapabilities", current_user)
+        self.assertIn("users:security:write", current_user["adminCapabilities"])
+        self.assertIn("users:portfolio:read", current_user["adminCapabilities"])
+        self.assertTrue(current_user["canWriteUserSecurity"])
+        self.assertTrue(current_user["canReadUserPortfolio"])
+
+    def test_non_admin_current_user_has_no_admin_capability_summary(self) -> None:
+        response = self._login_user(username="normal-user", password="secret123")
+        self.assertEqual(response.status_code, 200)
+        session_cookie = self._extract_session_cookie(response)
+
+        status_response = asyncio.run(
+            auth_endpoint.auth_status(
+                self._build_request(cookies={auth.COOKIE_NAME: session_cookie})
+            )
+        )
+        me_response = asyncio.run(
+            auth_endpoint.auth_me(
+                self._build_request(cookies={auth.COOKIE_NAME: session_cookie})
+            )
+        )
+
+        for payload in (status_response["currentUser"], me_response):
+            self.assertEqual(payload["username"], "normal-user")
+            self.assertEqual(payload["role"], "user")
+            self.assertFalse(payload["isAdmin"])
+            self.assertEqual(payload["adminCapabilities"], [])
+            for key in (
+                "canReadUsers",
+                "canReadUserActivity",
+                "canReadUserPortfolio",
+                "canWriteUserSecurity",
+                "canReadCostObservability",
+                "canReadOpsLogs",
+                "canReadProviders",
+                "canReadNotifications",
+                "canReadSystemConfig",
+            ):
+                self.assertFalse(payload[key])
+
+    def test_unauthenticated_auth_status_contract_is_unchanged(self) -> None:
+        data = asyncio.run(auth_endpoint.auth_status(self._build_request()))
+
+        self.assertTrue(data["authEnabled"])
+        self.assertFalse(data["loggedIn"])
+        self.assertFalse(data["passwordSet"])
+        self.assertEqual(data["setupState"], "enabled")
+        self.assertIsNone(data["currentUser"])
+
+    def test_current_user_capability_summary_exposes_no_sensitive_fields(self) -> None:
+        response = self._login_admin(password="secret123")
+        session_cookie = self._extract_session_cookie(response)
+        payload = asyncio.run(
+            auth_endpoint.auth_me(
+                self._build_request(cookies={auth.COOKIE_NAME: session_cookie})
+            )
+        )
+        text = json.dumps(payload, sort_keys=True).lower()
+
+        for forbidden in (
+            "password_hash",
+            "passwordhash",
+            "raw session",
+            "sessionid",
+            "cookie",
+            "token",
+            "api_key",
+            "apikey",
+            "secret",
+            "broker credential",
+            "brokercredential",
+            "provider credential",
+            "providercredential",
+            ".env",
+            "granted_by",
+            "reason",
+            "expiry",
+            "rolemappings",
+        ):
+            self.assertNotIn(forbidden, text)
 
     def test_login_wrong_password_returns_401(self) -> None:
         first_response = asyncio.run(

@@ -279,6 +279,23 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, text)
 
+    def test_only_r3_pilot_admin_routes_use_capability_dependencies(self) -> None:
+        endpoint_dir = Path(__file__).resolve().parents[1] / "api" / "v1" / "endpoints"
+        usages: dict[str, int] = {}
+        for path in endpoint_dir.glob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            count = text.count("require_admin_capability(") + text.count("require_any_admin_capability(")
+            if count:
+                usages[path.name] = count
+
+        self.assertEqual(
+            {
+                "admin_portfolio.py": 4,
+                "admin_security.py": 3,
+            },
+            usages,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
