@@ -747,6 +747,109 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(result.execution_assumptions.indicator_price_basis, "close")
         self.assertEqual(result.execution_assumptions.entry_fill_timing, "next_bar_open")
 
+    def test_engine_fixture_is_deterministic_explicit_and_uses_next_bar_entries(self) -> None:
+        parser = RuleBacktestParser()
+        parsed = parser.parse("Buy when Close > MA3. Sell when Close < MA3.")
+        engine = RuleBacktestEngine()
+
+        bars = self._make_bars(
+            [10.0, 10.0, 10.0, 11.0, 12.0, 9.0, 8.0, 10.0],
+            start=date(2024, 1, 1),
+        )
+        first = engine.run(
+            code="SAFE",
+            parsed_strategy=parsed,
+            bars=bars,
+            initial_capital=100000.0,
+            fee_bps=2.5,
+            slippage_bps=1.25,
+            lookback_bars=20,
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 1, 8),
+        ).to_dict()
+        second = engine.run(
+            code="SAFE",
+            parsed_strategy=parsed,
+            bars=bars,
+            initial_capital=100000.0,
+            fee_bps=2.5,
+            slippage_bps=1.25,
+            lookback_bars=20,
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 1, 8),
+        ).to_dict()
+
+        self.assertEqual(first["metrics"], second["metrics"])
+        self.assertEqual(first["trades"], second["trades"])
+        self.assertEqual(first["equity_curve"], second["equity_curve"])
+        self.assertEqual(first["execution_model"]["fee_bps_per_side"], 2.5)
+        self.assertEqual(first["execution_model"]["slippage_bps_per_side"], 1.25)
+        self.assertEqual(first["execution_model"]["entry_timing"], "next_bar_open")
+        self.assertEqual(first["execution_assumptions"]["entry_fill_timing"], "next_bar_open")
+        self.assertGreater(len(first["trades"]), 0)
+        for trade in first["trades"]:
+            self.assertLess(trade["entry_signal_date"], trade["entry_date"])
+
+    def test_engine_entry_fill_is_stable_when_future_candles_change(self) -> None:
+        parser = RuleBacktestParser()
+        parsed = parser.parse("Buy when Close > MA3. Sell when Close < MA3.")
+        engine = RuleBacktestEngine()
+
+        prefix = [10.0, 10.0, 10.0, 11.0, 12.0]
+        base = engine.run(
+            code="SAFE",
+            parsed_strategy=parsed,
+            bars=self._make_bars(prefix, start=date(2024, 1, 1)),
+            initial_capital=100000.0,
+            lookback_bars=20,
+        ).to_dict()
+        with_future_shock = engine.run(
+            code="SAFE",
+            parsed_strategy=parsed,
+            bars=self._make_bars(prefix + [200.0, 1.0], start=date(2024, 1, 1)),
+            initial_capital=100000.0,
+            lookback_bars=20,
+        ).to_dict()
+
+        self.assertGreater(len(base["trades"]), 0)
+        self.assertGreater(len(with_future_shock["trades"]), 0)
+        self.assertEqual(base["trades"][0]["entry_signal_date"], with_future_shock["trades"][0]["entry_signal_date"])
+        self.assertEqual(base["trades"][0]["entry_date"], with_future_shock["trades"][0]["entry_date"])
+        self.assertEqual(base["trades"][0]["entry_price"], with_future_shock["trades"][0]["entry_price"])
+
+    def test_service_missing_market_data_returns_safe_sanitized_no_result(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="NODATA",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                start_date="2024-01-01",
+                end_date="2024-01-31",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        self.assertEqual(response["status"], "completed")
+        self.assertEqual(response["no_result_reason"], "insufficient_history")
+        self.assertEqual(response["trade_count"], 0)
+        self.assertEqual(response["data_quality"]["bar_count"], 0)
+        self.assertIsNotNone(response["no_result_message"])
+        serialized = json.dumps(response, ensure_ascii=False, sort_keys=True)
+        for forbidden in ("SECRET", "TOKEN", "api_key", "payload_json", "raw_provider_payload"):
+            self.assertNotIn(forbidden, serialized)
+
+    def test_service_normalizes_timezone_datetime_boundaries_to_dates(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        start_date, end_date = service._normalize_date_range(
+            start_date="2024-01-05T23:30:00+08:00",
+            end_date="2024-01-20T00:30:00+08:00",
+        )
+
+        self.assertEqual(start_date, date(2024, 1, 5))
+        self.assertEqual(end_date, date(2024, 1, 20))
+
     def test_service_runs_periodic_accumulation_with_existing_result_shape(self) -> None:
         service = RuleBacktestService(self.db)
         parsed = service.parse_strategy("资金100000，从2024-01-05到2024-01-20，每天买100股ORCL，买到资金耗尽为止", code="600519")
