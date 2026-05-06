@@ -34,6 +34,7 @@ from api.middlewares.auth import add_auth_middleware
 from api.middlewares.error_handler import add_error_handlers
 from api.v1.schemas.common import HealthResponse
 from src.storage import get_db
+from src.auth import is_production_mode
 from src.services.system_config_service import SystemConfigService
 from src.services.crypto_realtime_service import get_crypto_realtime_service, should_auto_start_crypto_realtime
 from src.services.task_queue import get_task_queue
@@ -196,11 +197,16 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     
     # 从环境变量添加额外的允许来源
     extra_origins = os.environ.get("CORS_ORIGINS", "")
+    explicit_origins = [o.strip() for o in extra_origins.split(",") if o.strip()]
     if extra_origins:
-        allowed_origins.extend([o.strip() for o in extra_origins.split(",") if o.strip()])
+        allowed_origins.extend(explicit_origins)
     
     # 允许所有来源（开发/演示用）
     allow_all_origins = os.environ.get("CORS_ALLOW_ALL", "").lower() == "true"
+    if is_production_mode() and allow_all_origins:
+        raise RuntimeError("CORS_ALLOW_ALL is not allowed in production")
+    if is_production_mode() and not explicit_origins:
+        raise RuntimeError("CORS_ORIGINS must be explicitly configured in production")
     allow_credentials = not allow_all_origins
     if allow_all_origins:
         allowed_origins = ["*"]

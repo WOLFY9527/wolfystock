@@ -349,8 +349,8 @@ class AdminSecurityApiTestCase(unittest.TestCase):
                 json={"username": "alice", "password": "userpass123"},
             )
 
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["error"], "user_inactive")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "invalid_login")
         self.assertEqual(self._active_session_count("user-1"), 2)
 
 

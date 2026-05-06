@@ -24,14 +24,17 @@ from src.auth import (
     create_session,
     get_client_ip,
     get_session_expiry_datetime,
+    has_rate_limit_failures,
     has_stored_password,
     hash_password_for_storage,
     is_auth_enabled,
     is_password_changeable,
     is_password_set,
+    is_production_mode,
     record_login_failure,
     refresh_auth_state,
     rotate_session_secret,
+    safe_identifier_hash,
     set_initial_password,
     get_session_identity,
     verify_password_hash_string,
@@ -42,7 +45,9 @@ from src.config import Config, setup_env
 from src.core.config_manager import ConfigManager
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, BOOTSTRAP_ADMIN_USERNAME, ROLE_ADMIN, ROLE_USER
 from src.repositories.auth_repo import AuthRepository
+from src.services.execution_log_service import ExecutionLogService
 from src.services.system_config_service import SystemConfigService
+from src.utils.security import sanitize_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +150,12 @@ def _cookie_params(request: Request) -> dict:
     else:
         # Check URL scheme when not behind proxy
         secure = request.url.scheme == "https"
+    if is_production_mode() and not secure:
+        logger.warning(
+            "Production auth cookie requested without HTTPS context; issuing Secure cookie. "
+            "Configure HTTPS and trusted proxy headers with TRUST_X_FORWARDED_FOR/X-Forwarded-Proto."
+        )
+        secure = True
 
     try:
         max_age_hours = int(os.getenv("ADMIN_SESSION_MAX_AGE_HOURS", str(SESSION_MAX_AGE_HOURS_DEFAULT)))
@@ -249,6 +260,75 @@ def _clear_current_user_cache(request: Request) -> None:
     state = getattr(request, "state", None)
     if state is not None and hasattr(state, "current_user"):
         delattr(state, "current_user")
+
+
+def _generic_login_error(status_code: int = 401) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": "invalid_login", "message": "Invalid username or password"},
+    )
+
+
+def _rate_limited_error() -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={"error": "rate_limited", "message": "Login temporarily unavailable. Please try again later."},
+    )
+
+
+def _audit_login_event(
+    *,
+    request: Request,
+    action: str,
+    username: str,
+    outcome: str,
+    status: str = "failed",
+    user_id: str | None = None,
+    admin: bool = False,
+) -> None:
+    safe_detail = sanitize_metadata(
+        {
+            "outcome": outcome,
+            "account_hash": safe_identifier_hash(username, prefix="acct"),
+            "user_hash": safe_identifier_hash(user_id, prefix="user") if user_id else None,
+            "ip_hash": safe_identifier_hash(get_client_ip(request), prefix="ip"),
+            "user_agent_hash": safe_identifier_hash(request.headers.get("User-Agent"), prefix="ua"),
+            "admin_flow": bool(admin),
+        }
+    )
+    try:
+        ExecutionLogService().record_admin_action(
+            action=action,
+            message=f"Security auth event: {outcome}",
+            actor={"actor_type": "anonymous", "role": "anonymous"},
+            subsystem="security",
+            destructive=False,
+            detail=safe_detail,
+            overall_status=status,
+            result={"event": action, "metadata": safe_detail},
+        )
+    except Exception as exc:
+        logger.warning("Failed to record auth security event: %s", exc)
+
+
+def _record_login_failure_and_audit(
+    request: Request,
+    *,
+    ip: str,
+    username: str,
+    outcome: str,
+    user_id: str | None = None,
+    admin: bool = False,
+) -> None:
+    record_login_failure(ip, username, reason=outcome, admin=admin)
+    _audit_login_event(
+        request=request,
+        action="security.login_failed",
+        username=username,
+        outcome=outcome,
+        user_id=user_id,
+        admin=admin,
+    )
 
 
 def _normalize_notification_email(value: str | None) -> str | None:
@@ -487,14 +567,17 @@ async def auth_verify_password(request: Request, body: VerifyPasswordRequest):
         )
 
     ip = get_client_ip(request)
-    if not check_rate_limit(ip):
-        return JSONResponse(
-            status_code=429,
-            content={
-                "error": "rate_limited",
-                "message": "Too many failed attempts. Please try again later.",
-            },
+    if not check_rate_limit(ip, current_user.username, admin=True):
+        _audit_login_event(
+            request=request,
+            action="security.login_rate_limited",
+            username=current_user.username,
+            outcome="rate_limited",
+            status="failed",
+            user_id=current_user.user_id,
+            admin=True,
         )
+        return _rate_limited_error()
 
     bootstrap_admin = current_user.user_id == BOOTSTRAP_ADMIN_USER_ID
 
@@ -509,14 +592,28 @@ async def auth_verify_password(request: Request, body: VerifyPasswordRequest):
                 },
             )
         if password != confirm:
-            record_login_failure(ip)
+            _record_login_failure_and_audit(
+                request,
+                ip=ip,
+                username=current_user.username,
+                outcome="password_mismatch",
+                user_id=current_user.user_id,
+                admin=True,
+            )
             return JSONResponse(
                 status_code=400,
                 content={"error": "password_mismatch", "message": "两次输入的密码不一致"},
             )
         err = set_initial_password(password)
         if err:
-            record_login_failure(ip)
+            _record_login_failure_and_audit(
+                request,
+                ip=ip,
+                username=current_user.username,
+                outcome="invalid_password_policy",
+                user_id=current_user.user_id,
+                admin=True,
+            )
             return JSONResponse(
                 status_code=400,
                 content={"error": "invalid_password", "message": err},
@@ -530,13 +627,17 @@ async def auth_verify_password(request: Request, body: VerifyPasswordRequest):
             user_row = AuthRepository().get_app_user(current_user.user_id)
             verified = bool(user_row and verify_password_hash_string(password, getattr(user_row, "password_hash", None)))
         if not verified:
-            record_login_failure(ip)
-            return JSONResponse(
-                status_code=401,
-                content={"error": "invalid_password", "message": "管理员密码错误"},
+            _record_login_failure_and_audit(
+                request,
+                ip=ip,
+                username=current_user.username,
+                outcome="invalid_password",
+                user_id=current_user.user_id,
+                admin=True,
             )
+            return _generic_login_error()
 
-    clear_rate_limit(ip)
+    clear_rate_limit(ip, current_user.username)
     unlock_token = create_admin_unlock_token(
         user_id=current_user.user_id,
         username=current_user.username,
@@ -769,14 +870,17 @@ async def auth_login(request: Request, body: LoginRequest):
         )
 
     ip = get_client_ip(request)
-    if not check_rate_limit(ip):
-        return JSONResponse(
-            status_code=429,
-            content={
-                "error": "rate_limited",
-                "message": "Too many failed attempts. Please try again later.",
-            },
+    admin_flow = username == BOOTSTRAP_ADMIN_USERNAME
+    if not check_rate_limit(ip, username, admin=admin_flow):
+        _audit_login_event(
+            request=request,
+            action="security.login_rate_limited",
+            username=username,
+            outcome="rate_limited",
+            status="failed",
+            admin=admin_flow,
         )
+        return _rate_limited_error()
 
     repo = AuthRepository()
     user_row = repo.get_app_user_by_username(username)
@@ -787,11 +891,15 @@ async def auth_login(request: Request, body: LoginRequest):
         if user_row is None:
             user_row = repo.ensure_bootstrap_admin_user()
         if user_row is not None and not getattr(user_row, "is_active", True):
-            record_login_failure(ip)
-            return JSONResponse(
-                status_code=403,
-                content={"error": "user_inactive", "message": "该账户已停用"},
+            _record_login_failure_and_audit(
+                request,
+                ip=ip,
+                username=username,
+                outcome="disabled_user",
+                user_id=str(getattr(user_row, "id", "") or ""),
+                admin=True,
             )
+            return _generic_login_error()
         if not has_stored_password():
             if not confirm:
                 return JSONResponse(
@@ -799,14 +907,26 @@ async def auth_login(request: Request, body: LoginRequest):
                     content={"error": "password_confirm_required", "message": "请确认管理员初始密码"},
                 )
             if password != confirm:
-                record_login_failure(ip)
+                _record_login_failure_and_audit(
+                    request,
+                    ip=ip,
+                    username=username,
+                    outcome="password_mismatch",
+                    admin=True,
+                )
                 return JSONResponse(
                     status_code=400,
                     content={"error": "password_mismatch", "message": "两次输入的密码不一致"},
                 )
             err = set_initial_password(password)
             if err:
-                record_login_failure(ip)
+                _record_login_failure_and_audit(
+                    request,
+                    ip=ip,
+                    username=username,
+                    outcome="invalid_password_policy",
+                    admin=True,
+                )
                 return JSONResponse(
                     status_code=400,
                     content={"error": "invalid_password", "message": err},
@@ -815,21 +935,32 @@ async def auth_login(request: Request, body: LoginRequest):
             user_row = repo.get_app_user(BOOTSTRAP_ADMIN_USER_ID)
             created_user = True
         elif not verify_stored_password(password):
-            record_login_failure(ip)
-            return JSONResponse(
-                status_code=401,
-                content={"error": "invalid_password", "message": "管理员密码错误"},
+            _record_login_failure_and_audit(
+                request,
+                ip=ip,
+                username=username,
+                outcome="invalid_password",
+                user_id=str(getattr(user_row, "id", "") or ""),
+                admin=True,
             )
+            return _generic_login_error()
     else:
         if user_row is None:
             if not create_user and not confirm:
-                record_login_failure(ip)
-                return JSONResponse(
-                    status_code=404,
-                    content={"error": "user_not_found", "message": "用户不存在，请先创建账户"},
+                _record_login_failure_and_audit(
+                    request,
+                    ip=ip,
+                    username=username,
+                    outcome="unknown_user",
                 )
+                return _generic_login_error()
             if password != confirm:
-                record_login_failure(ip)
+                _record_login_failure_and_audit(
+                    request,
+                    ip=ip,
+                    username=username,
+                    outcome="password_mismatch",
+                )
                 return JSONResponse(
                     status_code=400,
                     content={"error": "password_mismatch", "message": "两次输入的密码不一致"},
@@ -837,7 +968,12 @@ async def auth_login(request: Request, body: LoginRequest):
             try:
                 password_hash = hash_password_for_storage(password)
             except ValueError as exc:
-                record_login_failure(ip)
+                _record_login_failure_and_audit(
+                    request,
+                    ip=ip,
+                    username=username,
+                    outcome="invalid_password_policy",
+                )
                 return JSONResponse(
                     status_code=400,
                     content={"error": "invalid_password", "message": str(exc)},
@@ -853,11 +989,14 @@ async def auth_login(request: Request, body: LoginRequest):
             created_user = True
         else:
             if not getattr(user_row, "is_active", True):
-                record_login_failure(ip)
-                return JSONResponse(
-                    status_code=403,
-                    content={"error": "user_inactive", "message": "该账户已停用"},
+                _record_login_failure_and_audit(
+                    request,
+                    ip=ip,
+                    username=username,
+                    outcome="disabled_user",
+                    user_id=str(getattr(user_row, "id", "") or ""),
                 )
+                return _generic_login_error()
             stored_hash = getattr(user_row, "password_hash", None)
             if not stored_hash:
                 if not confirm:
@@ -866,7 +1005,13 @@ async def auth_login(request: Request, body: LoginRequest):
                         content={"error": "password_not_initialized", "message": "该账户尚未设置密码"},
                     )
                 if password != confirm:
-                    record_login_failure(ip)
+                    _record_login_failure_and_audit(
+                        request,
+                        ip=ip,
+                        username=username,
+                        outcome="password_mismatch",
+                        user_id=str(getattr(user_row, "id", "") or ""),
+                    )
                     return JSONResponse(
                         status_code=400,
                         content={"error": "password_mismatch", "message": "两次输入的密码不一致"},
@@ -874,7 +1019,13 @@ async def auth_login(request: Request, body: LoginRequest):
                 try:
                     password_hash = hash_password_for_storage(password)
                 except ValueError as exc:
-                    record_login_failure(ip)
+                    _record_login_failure_and_audit(
+                        request,
+                        ip=ip,
+                        username=username,
+                        outcome="invalid_password_policy",
+                        user_id=str(getattr(user_row, "id", "") or ""),
+                    )
                     return JSONResponse(
                         status_code=400,
                         content={"error": "invalid_password", "message": str(exc)},
@@ -888,13 +1039,27 @@ async def auth_login(request: Request, body: LoginRequest):
                     is_active=bool(getattr(user_row, "is_active", True)),
                 )
             elif not verify_password_hash_string(password, stored_hash):
-                record_login_failure(ip)
-                return JSONResponse(
-                    status_code=401,
-                    content={"error": "invalid_password", "message": "密码错误"},
+                _record_login_failure_and_audit(
+                    request,
+                    ip=ip,
+                    username=username,
+                    outcome="invalid_password",
+                    user_id=str(getattr(user_row, "id", "") or ""),
                 )
+                return _generic_login_error()
 
-    clear_rate_limit(ip)
+    had_failures = has_rate_limit_failures(ip, username)
+    clear_rate_limit(ip, username)
+    if had_failures:
+        _audit_login_event(
+            request=request,
+            action="security.login_success_after_failures",
+            username=username,
+            outcome="success_after_failures",
+            status="completed",
+            user_id=str(getattr(user_row, "id", "") or ""),
+            admin=str(getattr(user_row, "role", "")) == ROLE_ADMIN,
+        )
     session_val = _persist_session_for_user(
         request=request,
         user_id=str(user_row.id),

@@ -21,7 +21,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 from src.utils.dotenv_loader import read_dotenv_values
@@ -37,6 +37,7 @@ COOKIE_NAME = "dsa_session"
 PBKDF2_ITERATIONS = 100_000
 RATE_LIMIT_WINDOW_SEC = 300
 RATE_LIMIT_MAX_FAILURES = 5
+ACCOUNT_RATE_LIMIT_MAX_FAILURES = 5
 SESSION_MAX_AGE_HOURS_DEFAULT = 24
 ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT = 120
 ADMIN_UNLOCK_TOKEN_PURPOSE = "admin_settings_unlock"
@@ -52,6 +53,8 @@ _password_hash_salt: Optional[bytes] = None
 _password_hash_stored: Optional[bytes] = None
 _rate_limit: dict[str, Tuple[int, float]] = {}
 _rate_limit_lock = None
+
+_PRODUCTION_ENV_VALUES = {"prod", "production"}
 
 
 @dataclass(frozen=True)
@@ -354,6 +357,22 @@ def _get_session_max_age_seconds() -> int:
     except ValueError:
         max_age_hours = SESSION_MAX_AGE_HOURS_DEFAULT
     return max(300, max_age_hours * 3600)
+
+
+def is_production_mode() -> bool:
+    """Return whether runtime env indicates production deployment."""
+    for name in ("APP_ENV", "ENVIRONMENT", "DSA_ENV"):
+        if str(os.getenv(name, "")).strip().lower() in _PRODUCTION_ENV_VALUES:
+            return True
+    return False
+
+
+def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        value = default
+    return max(minimum, value)
 
 
 def get_session_expiry_datetime() -> datetime:
@@ -720,8 +739,42 @@ def get_client_ip(request) -> str:
     return "127.0.0.1"
 
 
-def check_rate_limit(ip: str) -> bool:
-    """Return True if under limit, False if rate limited."""
+def _rate_limit_window_seconds() -> int:
+    return _env_int("AUTH_RATE_LIMIT_WINDOW_SECONDS", RATE_LIMIT_WINDOW_SEC, minimum=60)
+
+
+def _rate_limit_max_failures(*, bucket_type: str, admin: bool = False) -> int:
+    if admin:
+        return _env_int("AUTH_ADMIN_RATE_LIMIT_MAX_FAILURES", 3, minimum=1)
+    if bucket_type == "account":
+        return _env_int("AUTH_ACCOUNT_RATE_LIMIT_MAX_FAILURES", ACCOUNT_RATE_LIMIT_MAX_FAILURES, minimum=1)
+    return _env_int("AUTH_RATE_LIMIT_MAX_FAILURES", RATE_LIMIT_MAX_FAILURES, minimum=1)
+
+
+def _normalize_rate_limit_identifier(value: str | None) -> str:
+    return str(value or "").strip().lower()
+
+
+def _rate_limit_bucket_key(bucket_type: str, identifier: str | None) -> str | None:
+    normalized = _normalize_rate_limit_identifier(identifier)
+    if not normalized:
+        return None
+    digest = hashlib.sha256(f"{bucket_type}:{normalized}".encode("utf-8")).hexdigest()
+    return f"{bucket_type}:{digest}"
+
+
+def _rate_limit_bucket_keys(ip: str, account_identifier: str | None = None) -> list[tuple[str, str]]:
+    keys: list[tuple[str, str]] = []
+    ip_key = _rate_limit_bucket_key("ip", ip)
+    if ip_key:
+        keys.append(("ip", ip_key))
+    account_key = _rate_limit_bucket_key("account", account_identifier)
+    if account_key:
+        keys.append(("account", account_key))
+    return keys
+
+
+def _memory_check_rate_limit(ip: str) -> bool:
     lock = _get_lock()
     now = time.time()
     with lock:
@@ -735,8 +788,7 @@ def check_rate_limit(ip: str) -> bool:
         return True
 
 
-def record_login_failure(ip: str) -> None:
-    """Record a failed login attempt for rate limiting."""
+def _memory_record_login_failure(ip: str) -> None:
     lock = _get_lock()
     now = time.time()
     with lock:
@@ -750,11 +802,90 @@ def record_login_failure(ip: str) -> None:
             _rate_limit[ip] = (1, now)
 
 
-def clear_rate_limit(ip: str) -> None:
-    """Clear rate limit for IP after successful login."""
+def _memory_clear_rate_limit(ip: str) -> None:
     lock = _get_lock()
     with lock:
         _rate_limit.pop(ip, None)
+
+
+def check_rate_limit(ip: str, account_identifier: str | None = None, *, admin: bool = False) -> bool:
+    """Return True when source IP and account buckets are under limit."""
+    try:
+        from src.storage import DatabaseManager
+
+        db = DatabaseManager.get_instance()
+        for bucket_type, bucket_key in _rate_limit_bucket_keys(ip, account_identifier):
+            row = db.get_auth_rate_limit_bucket(bucket_key)
+            if row is None:
+                continue
+            if int(getattr(row, "failure_count", 0) or 0) >= _rate_limit_max_failures(
+                bucket_type=bucket_type,
+                admin=admin,
+            ):
+                return False
+        return True
+    except Exception as exc:
+        logger.warning("Durable auth rate-limit check failed, using process-local fallback: %s", exc)
+        return _memory_check_rate_limit(ip)
+
+
+def has_rate_limit_failures(ip: str, account_identifier: str | None = None) -> bool:
+    """Return whether either throttle bucket currently has recorded failures."""
+    try:
+        from src.storage import DatabaseManager
+
+        db = DatabaseManager.get_instance()
+        return any(
+            bool(db.get_auth_rate_limit_bucket(bucket_key))
+            for _, bucket_key in _rate_limit_bucket_keys(ip, account_identifier)
+        )
+    except Exception:
+        return ip in _rate_limit
+
+
+def record_login_failure(
+    ip: str,
+    account_identifier: str | None = None,
+    *,
+    reason: str | None = None,
+    admin: bool = False,
+) -> None:
+    """Record a failed login attempt for durable throttling."""
+    try:
+        from src.storage import DatabaseManager
+
+        db = DatabaseManager.get_instance()
+        for bucket_type, bucket_key in _rate_limit_bucket_keys(ip, account_identifier):
+            db.record_auth_rate_limit_failure(
+                bucket_key=bucket_key,
+                bucket_type=bucket_type,
+                window_seconds=_rate_limit_window_seconds(),
+            )
+        return
+    except Exception as exc:
+        logger.warning("Durable auth rate-limit write failed, using process-local fallback: %s", exc)
+        _memory_record_login_failure(ip)
+
+
+def clear_rate_limit(ip: str, account_identifier: str | None = None) -> None:
+    """Clear source IP and account throttle buckets after successful login."""
+    try:
+        from src.storage import DatabaseManager
+
+        DatabaseManager.get_instance().clear_auth_rate_limit_buckets(
+            [bucket_key for _, bucket_key in _rate_limit_bucket_keys(ip, account_identifier)]
+        )
+    except Exception as exc:
+        logger.warning("Durable auth rate-limit clear failed, using process-local fallback: %s", exc)
+    _memory_clear_rate_limit(ip)
+
+
+def safe_identifier_hash(value: Any, *, prefix: str = "id") -> str | None:
+    """Return a short stable hash for audit metadata without storing raw identifiers."""
+    normalized = _normalize_rate_limit_identifier(str(value or ""))
+    if not normalized:
+        return None
+    return f"{prefix}:{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:16]}"
 
 
 def overwrite_password(new_password: str) -> Optional[str]:

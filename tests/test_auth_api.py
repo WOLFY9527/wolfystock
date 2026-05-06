@@ -222,7 +222,8 @@ class AuthApiTestCase(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 401)
-        self.assertIn(b'"error":"invalid_password"', response.body)
+        self.assertIn(b'"error":"invalid_login"', response.body)
+        self.assertNotIn(b"wrong-pass", response.body)
 
     def test_logout_clears_cookie(self) -> None:
         response = asyncio.run(auth_endpoint.auth_logout(self._build_request()))

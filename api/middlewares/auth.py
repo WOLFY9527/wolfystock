@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import logging
 from typing import Callable
+from urllib.parse import urlparse
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.deps import resolve_current_user
-from src.auth import is_auth_enabled
+from src.auth import COOKIE_NAME, is_auth_enabled, is_production_mode
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +34,49 @@ EXEMPT_PATHS = frozenset({
     "/openapi.json",
 })
 
+UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
 
 def _path_exempt(path: str) -> bool:
     """Check if path is exempt from auth."""
     normalized = path.rstrip("/") or "/"
     return normalized in EXEMPT_PATHS
+
+
+def _origin_from_value(value: str | None) -> str | None:
+    parsed = urlparse(str(value or "").strip())
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+
+
+def _trusted_origins() -> set[str]:
+    import os
+
+    origins = {
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    }
+    for env_name in ("CORS_ORIGINS", "CSRF_TRUSTED_ORIGINS"):
+        raw = os.getenv(env_name, "")
+        origins.update(origin for origin in (_origin_from_value(item) for item in raw.split(",")) if origin)
+    return origins
+
+
+def _request_origin(request: Request) -> str | None:
+    origin = _origin_from_value(request.headers.get("Origin"))
+    if origin:
+        return origin
+    return _origin_from_value(request.headers.get("Referer"))
+
+
+def _csrf_origin_allowed(request: Request) -> bool:
+    origin = _request_origin(request)
+    if origin is None:
+        return not is_production_mode()
+    return origin in _trusted_origins()
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -69,6 +108,19 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 content={
                     "error": "unauthorized",
                     "message": "Login required",
+                },
+            )
+
+        if (
+            request.method.upper() in UNSAFE_METHODS
+            and COOKIE_NAME in (getattr(request, "cookies", {}) or {})
+            and not _csrf_origin_allowed(request)
+        ):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "csrf_origin_forbidden",
+                    "message": "Request origin is not allowed",
                 },
             )
 

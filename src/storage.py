@@ -316,6 +316,23 @@ class AppUserSession(Base):
     )
 
 
+class AuthRateLimitBucket(Base):
+    """Durable auth throttling bucket keyed by hashed source/account identifiers."""
+
+    __tablename__ = 'auth_rate_limit_buckets'
+
+    bucket_key = Column(String(96), primary_key=True)
+    bucket_type = Column(String(16), nullable=False, index=True)
+    failure_count = Column(Integer, nullable=False, default=0)
+    first_failed_at = Column(DateTime, nullable=False, default=datetime.now, index=True)
+    last_failed_at = Column(DateTime, nullable=False, default=datetime.now, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+
+    __table_args__ = (
+        Index('ix_auth_rate_limit_type_expiry', 'bucket_type', 'expires_at'),
+    )
+
+
 class UserPreference(Base):
     """User-owned preferences kept separate from global system configuration."""
 
@@ -2412,6 +2429,74 @@ class DatabaseManager:
                 return len(active_session_ids)
             return max(phase_a_count, legacy_count)
         return self._sqlite_revoke_all_app_user_sessions(resolved_user_id)
+
+    def get_auth_rate_limit_bucket(self, bucket_key: str) -> Optional[AuthRateLimitBucket]:
+        normalized = str(bucket_key or "").strip()
+        if not normalized:
+            return None
+        now = datetime.now()
+        with self.session_scope() as session:
+            session.execute(delete(AuthRateLimitBucket).where(AuthRateLimitBucket.expires_at <= now))
+            row = session.execute(
+                select(AuthRateLimitBucket).where(AuthRateLimitBucket.bucket_key == normalized).limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            return SimpleNamespace(
+                bucket_key=row.bucket_key,
+                bucket_type=row.bucket_type,
+                failure_count=row.failure_count,
+                first_failed_at=row.first_failed_at,
+                last_failed_at=row.last_failed_at,
+                expires_at=row.expires_at,
+            )
+
+    def record_auth_rate_limit_failure(
+        self,
+        *,
+        bucket_key: str,
+        bucket_type: str,
+        window_seconds: int,
+    ) -> int:
+        normalized_key = str(bucket_key or "").strip()
+        normalized_type = str(bucket_type or "").strip()[:16] or "unknown"
+        if not normalized_key:
+            return 0
+        now = datetime.now()
+        window = max(60, int(window_seconds or 300))
+        expires_at = now + timedelta(seconds=window)
+        with self.session_scope() as session:
+            session.execute(delete(AuthRateLimitBucket).where(AuthRateLimitBucket.expires_at <= now))
+            row = session.execute(
+                select(AuthRateLimitBucket).where(AuthRateLimitBucket.bucket_key == normalized_key).limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                row = AuthRateLimitBucket(
+                    bucket_key=normalized_key,
+                    bucket_type=normalized_type,
+                    failure_count=1,
+                    first_failed_at=now,
+                    last_failed_at=now,
+                    expires_at=expires_at,
+                )
+                session.add(row)
+                return 1
+            if row.expires_at <= now:
+                row.failure_count = 1
+                row.first_failed_at = now
+            else:
+                row.failure_count = int(row.failure_count or 0) + 1
+            row.bucket_type = normalized_type
+            row.last_failed_at = now
+            row.expires_at = expires_at
+            return int(row.failure_count or 0)
+
+    def clear_auth_rate_limit_buckets(self, bucket_keys: Iterable[str]) -> None:
+        normalized_keys = [str(value or "").strip() for value in bucket_keys if str(value or "").strip()]
+        if not normalized_keys:
+            return
+        with self.session_scope() as session:
+            session.execute(delete(AuthRateLimitBucket).where(AuthRateLimitBucket.bucket_key.in_(normalized_keys)))
 
     def factory_reset_non_bootstrap_state(self) -> Dict[str, Any]:
         """Clear bounded non-bootstrap user-owned state while preserving system bootstrap rows."""

@@ -1,5 +1,7 @@
 ## 2026-05-06
 
+- 🔐 **Public auth hardening Phase 1** — Web 登录失败现在统一返回不可枚举的 generic error，失败/限流/失败后成功登录会写入脱敏 security execution log；登录限流从进程内 IP-only 扩展为持久化 IP + account 哈希桶，生产模式强制 Secure session cookie，Cookie 认证的写请求增加 Origin/Referer 校验，生产 CORS 禁止 wildcard 并要求显式 `CORS_ORIGINS`。本阶段不改变密码 KDF、MFA、RBAC、portfolio/scanner/backtest/provider/MarketCache/AI/notification/DuckDB 行为。
+
 - 🧪 **Options Lab Phase 2 Frontend Shell** — 新增 `/zh/options-lab` 前端只读期权实验室壳层，包含中文情景假设、标的快照、到期日过滤、Calls/Puts 模拟链表、候选排序/策略比较/情景收益占位与显式风险披露。当前阶段使用 mocked / fixture-compatible 数据，不接入 live option provider、LLM、broker execution、portfolio mutation、order CTA、scanner/backtest、MarketCache、AI、notification 或 DuckDB 行为，也不显示 raw provider payload、request URL、API key、token、secret 或 stack trace。
 
 - 🔐 **Production Security Scan CI Gates** — 新增独立 `Security Scan` GitHub Actions workflow，覆盖 redacted Gitleaks secret scan、Python `pip-audit`、`apps/dsa-web` production-only `npm audit`、Bandit SAST 与本地构建镜像的 Trivy 漏洞扫描；同时新增 `scripts/security_scan.sh` 作为本地安全扫描辅助脚本，默认不安装工具、不运行依赖更新/修复、不启动服务、不推送镜像，并将本轮实现备注补充进生产安全加固审计文档。该变更仅增加 CI/开发者 guardrail，不改变 runtime、UI、API、依赖锁文件或部署目标行为。
