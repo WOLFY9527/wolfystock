@@ -44,6 +44,7 @@ const AdminLogsPage = lazy(() => import('./pages/AdminLogsPage'));
 const AdminNotificationsPage = lazy(() => import('./pages/AdminNotificationsPage'));
 const MarketProviderOperationsPage = lazy(() => import('./pages/MarketProviderOperationsPage'));
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
+const AdminCostObservabilityPage = lazy(() => import('./pages/AdminCostObservabilityPage'));
 
 type GateCopy = {
   eyebrow: string;
@@ -59,8 +60,10 @@ type GateCopy = {
 function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: boolean): GateCopy {
   const isEnglish = language === 'en';
 
-  if (pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/users')) {
-    const surfaceName = pathname.startsWith('/admin/market-providers')
+  if (pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/cost-observability')) {
+    const surfaceName = pathname.startsWith('/admin/cost-observability')
+      ? (isEnglish ? 'cost observability' : '成本观测')
+      : pathname.startsWith('/admin/market-providers')
       ? (isEnglish ? 'market provider operations' : '市场数据源运维')
       : pathname.startsWith('/admin/notifications')
       ? (isEnglish ? 'notification channels' : '通知通道')
@@ -252,6 +255,8 @@ export const AppContent: React.FC = () => {
     || routePathname.startsWith('/admin/market-providers/')
     || routePathname === '/admin/users'
     || routePathname.startsWith('/admin/users/')
+    || routePathname === '/admin/cost-observability'
+    || routePathname.startsWith('/admin/cost-observability/')
   );
 
   useEffect(() => {
@@ -369,6 +374,7 @@ export const AppContent: React.FC = () => {
               <Route path="/admin/users" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
               <Route path="/admin/users/:userId" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
               <Route path="/admin/users/:userId/activity" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
+              <Route path="/admin/cost-observability" element={<AdminSurfaceRoute><AdminCostObservabilityPage /></AdminSurfaceRoute>} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route path="/:locale" element={<Shell />}>
@@ -390,6 +396,7 @@ export const AppContent: React.FC = () => {
               <Route path="admin/users" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
               <Route path="admin/users/:userId" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
               <Route path="admin/users/:userId/activity" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
+              <Route path="admin/cost-observability" element={<AdminSurfaceRoute><AdminCostObservabilityPage /></AdminSurfaceRoute>} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route path="/login" element={<LoginPage />} />

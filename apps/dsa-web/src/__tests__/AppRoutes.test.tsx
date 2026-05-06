@@ -117,6 +117,10 @@ vi.mock('../pages/AdminUsersPage', () => ({
   default: () => <div>admin-users-page</div>,
 }));
 
+vi.mock('../pages/AdminCostObservabilityPage', () => ({
+  default: () => <div>admin-cost-observability-page</div>,
+}));
+
 vi.mock('../pages/LoginPage', () => ({
   default: () => <div>login-page</div>,
 }));
@@ -386,6 +390,45 @@ describe('AppContent route flows', () => {
     renderAt('/zh/admin/market-providers');
 
     await waitFor(() => expect(screen.getByText('market-provider-operations-page')).toBeInTheDocument());
+  });
+
+  it('renders the localized cost observability route for admin accounts', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: true,
+      isAdminMode: true,
+    });
+
+    renderAt('/zh/admin/cost-observability');
+
+    await waitFor(() => expect(screen.getByText('admin-cost-observability-page')).toBeInTheDocument());
+  });
+
+  it('shows the admin-account gate on the cost observability route for normal users', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: false,
+      isAdminMode: false,
+    });
+
+    renderAt('/zh/admin/cost-observability');
+
+    expect(await screen.findByRole('heading', { name: '这个成本观测页面需要管理员账户' })).toBeInTheDocument();
+    expect(screen.queryByText('admin-cost-observability-page')).not.toBeInTheDocument();
   });
 
   it.each(['/zh/admin/users', '/zh/admin/users/user-1', '/zh/admin/users/user-1/activity'])(
