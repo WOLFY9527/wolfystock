@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException
 
-from api.v1.endpoints.analysis import _format_sse_event, get_analysis_status
+from api.v1.endpoints.analysis import _format_sse_event, get_analysis_status, poll_analysis_task_progress
 from src.storage import DatabaseManager
 from src.services.task_queue import AnalysisTaskQueue
 
@@ -133,6 +133,198 @@ class DurableTaskStateTestCase(unittest.TestCase):
         self.assertNotIn("not-a-real-key", serialized)
         self.assertNotIn("Traceback", serialized)
         self.assertNotIn("token", failed["metadata"])
+
+    def test_progress_event_append_increments_sequence(self) -> None:
+        self.db.create_durable_task_state(
+            task_id="task-progress-sequence",
+            owner_user_id="user-a",
+            task_type="analysis",
+        )
+
+        first = self.db.append_durable_task_progress_event(
+            task_id="task-progress-sequence",
+            owner_user_id="user-a",
+            event_type="progress",
+            stage="stage-1",
+            progress=10,
+            message="Stage 1",
+        )
+        second = self.db.append_durable_task_progress_event(
+            task_id="task-progress-sequence",
+            owner_user_id="user-a",
+            event_type="progress",
+            stage="stage-2",
+            progress=20,
+            message="Stage 2",
+        )
+
+        self.assertEqual(first["sequence"], 1)
+        self.assertEqual(second["sequence"], 2)
+
+    def test_owner_can_list_own_progress_events(self) -> None:
+        self.db.create_durable_task_state(
+            task_id="task-progress-owned",
+            owner_user_id="user-a",
+            task_type="analysis",
+        )
+        self.db.append_durable_task_progress_event(
+            task_id="task-progress-owned",
+            owner_user_id="user-a",
+            event_type="progress",
+            progress=25,
+            message="Owned event",
+        )
+
+        events = self.db.list_durable_task_progress_events(
+            task_id="task-progress-owned",
+            owner_user_id="user-a",
+        )
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["message_safe"], "Owned event")
+
+    def test_other_owner_cannot_read_progress_events(self) -> None:
+        self.db.create_durable_task_state(
+            task_id="task-progress-private",
+            owner_user_id="user-a",
+            task_type="analysis",
+        )
+        self.db.append_durable_task_progress_event(
+            task_id="task-progress-private",
+            owner_user_id="user-a",
+            event_type="progress",
+            progress=25,
+            message="Private event",
+        )
+
+        events = self.db.list_durable_task_progress_events(
+            task_id="task-progress-private",
+            owner_user_id="user-b",
+        )
+
+        self.assertEqual(events, [])
+
+    def test_progress_events_after_sequence_returns_newer_only(self) -> None:
+        self.db.create_durable_task_state(
+            task_id="task-progress-after",
+            owner_user_id="user-a",
+            task_type="analysis",
+        )
+        for progress in (10, 20, 30):
+            self.db.append_durable_task_progress_event(
+                task_id="task-progress-after",
+                owner_user_id="user-a",
+                event_type="progress",
+                progress=progress,
+                message=f"Progress {progress}",
+            )
+
+        events = self.db.list_durable_task_progress_events_after(
+            task_id="task-progress-after",
+            owner_user_id="user-a",
+            after_sequence=1,
+        )
+
+        self.assertEqual([event["sequence"] for event in events], [2, 3])
+
+    def test_progress_event_limit_is_bounded(self) -> None:
+        self.db.create_durable_task_state(
+            task_id="task-progress-limit",
+            owner_user_id="user-a",
+            task_type="analysis",
+        )
+        for index in range(105):
+            self.db.append_durable_task_progress_event(
+                task_id="task-progress-limit",
+                owner_user_id="user-a",
+                event_type="progress",
+                progress=index % 100,
+                message=f"Progress {index}",
+            )
+
+        events = self.db.list_durable_task_progress_events(
+            task_id="task-progress-limit",
+            owner_user_id="user-a",
+            limit=500,
+        )
+
+        self.assertEqual(len(events), 100)
+        self.assertEqual(events[0]["sequence"], 1)
+        self.assertEqual(events[-1]["sequence"], 100)
+
+    def test_progress_event_sanitizes_metadata_and_message(self) -> None:
+        self.db.create_durable_task_state(
+            task_id="task-progress-sanitized",
+            owner_user_id="user-a",
+            task_type="analysis",
+        )
+
+        event = self.db.append_durable_task_progress_event(
+            task_id="task-progress-sanitized",
+            owner_user_id="user-a",
+            event_type="failed",
+            stage="failure",
+            progress=100,
+            message=(
+                "Traceback (most recent call last):\n"
+                "RuntimeError: Authorization: Bearer not-a-real-token api_key=not-a-real-key"
+            ),
+            metadata={"api_key": "not-a-real-key", "nested": {"token": "not-a-real-token", "safe": "ok"}},
+        )
+
+        serialized = json.dumps(event, ensure_ascii=False)
+        self.assertEqual(
+            event["message_safe"],
+            "Task progress update unavailable; see server logs for sanitized details",
+        )
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("not-a-real-token", serialized)
+        self.assertNotIn("Traceback", serialized)
+        self.assertEqual(event["metadata"]["nested"]["safe"], "ok")
+
+    def test_polling_endpoint_returns_task_state_and_events(self) -> None:
+        self.db.create_durable_task_state(
+            task_id="task-progress-poll",
+            owner_user_id="user-a",
+            task_type="analysis",
+            status="processing",
+            progress=40,
+        )
+        self.db.append_durable_task_progress_event(
+            task_id="task-progress-poll",
+            owner_user_id="user-a",
+            event_type="progress",
+            progress=40,
+            message="Polling event",
+        )
+
+        response = poll_analysis_task_progress(
+            "task-progress-poll",
+            current_user=SimpleNamespace(user_id="user-a"),
+        )
+
+        self.assertEqual(response.task.task_id, "task-progress-poll")
+        self.assertEqual(response.task.status, "processing")
+        self.assertEqual(response.latest_sequence, 1)
+        self.assertFalse(response.terminal)
+        self.assertEqual(response.events[0].message_safe, "Polling event")
+
+    def test_polling_endpoint_is_owner_scoped(self) -> None:
+        self.db.create_durable_task_state(
+            task_id="task-progress-poll-private",
+            owner_user_id="user-a",
+            task_type="analysis",
+            status="processing",
+        )
+
+        with self.assertRaises(HTTPException) as ctx:
+            poll_analysis_task_progress(
+                "task-progress-poll-private",
+                current_user=SimpleNamespace(user_id="user-b"),
+            )
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertNotIn("user-a", json.dumps(ctx.exception.detail))
 
     def test_process_local_queue_and_sse_contract_remains_present(self) -> None:
         original_instance = AnalysisTaskQueue._instance

@@ -38,6 +38,7 @@ from api.v1.schemas.analysis import (
     BatchTaskAcceptedResponse,
     BatchTaskAcceptedItem,
     BatchDuplicateTaskItem,
+    DurableTaskProgressPollResponse,
     TaskProgressResponse,
     TaskStatus,
     TaskInfo,
@@ -890,6 +891,73 @@ def _task_status_from_durable_state(task_id: str, state: Dict[str, Any]) -> Task
         stock_name=metadata.get("stock_name"),
         original_query=None,
         selection_source=metadata.get("selection_source"),
+    )
+
+
+@router.get(
+    "/status/{task_id}/poll",
+    response_model=DurableTaskProgressPollResponse,
+    responses={
+        200: {"description": "任务状态与可重放进度事件"},
+        404: {"description": "任务不存在", "model": ErrorResponse},
+    },
+    summary="轮询任务状态和进度事件",
+    description="返回 owner-scoped durable task state 与 after_sequence 之后的安全进度事件。",
+)
+def poll_analysis_task_progress(
+    task_id: str,
+    after_sequence: Optional[int] = Query(None, ge=0, description="仅返回该序号之后的事件"),
+    limit: int = Query(50, ge=1, le=500, description="返回事件数量限制，服务端最多 100 条"),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> DurableTaskProgressPollResponse:
+    if not isinstance(after_sequence, int):
+        after_sequence = None
+    if not isinstance(limit, int):
+        limit = 50
+    owner_id = get_current_user_id(current_user)
+    durable_state = _load_owner_durable_analysis_task(task_id, owner_id)
+    if durable_state is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "not_found",
+                "message": f"任务 {task_id} 不存在或已过期",
+            },
+        )
+
+    try:
+        from src.storage import DatabaseManager
+
+        db = DatabaseManager.get_instance()
+        events = db.list_durable_task_progress_events(
+            task_id=task_id,
+            owner_user_id=owner_id,
+            after_sequence=after_sequence,
+            limit=limit,
+        )
+        latest_event = db.get_latest_durable_task_progress_summary(
+            task_id=task_id,
+            owner_user_id=owner_id,
+        )
+    except ValueError:
+        events = []
+        latest_event = None
+    except Exception as exc:
+        logger.warning(
+            "读取 durable analysis task progress 失败: task_id=%s error=%s",
+            task_id,
+            type(exc).__name__,
+        )
+        events = []
+        latest_event = None
+
+    latest_sequence = int((latest_event or {}).get("sequence") or 0)
+    terminal = str(durable_state.get("status") or "").lower() in {"completed", "failed", "canceled", "cancelled"}
+    return DurableTaskProgressPollResponse(
+        task=_task_status_from_durable_state(task_id, durable_state),
+        events=events,
+        latest_sequence=latest_sequence,
+        terminal=terminal,
     )
 
 

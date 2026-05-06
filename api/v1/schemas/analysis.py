@@ -10,7 +10,7 @@
 3. 定义异步任务队列相关模型
 """
 
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -362,6 +362,24 @@ class TaskProgressResponse(BaseModel):
     execution_session_id: Optional[str] = Field(None, description="执行日志会话 ID")
     modules: List[TaskProgressModule] = Field(default_factory=list, description="模块级进度列表")
     final_result: Optional[AnalysisResultResponse] = Field(None, description="最终分析结果")
+
+
+class DurableTaskProgressEvent(BaseModel):
+    task_id: str = Field(..., description="任务 ID")
+    sequence: int = Field(..., ge=1, description="任务内递增事件序号")
+    event_type: str = Field(..., description="事件类型")
+    stage: Optional[str] = Field(None, description="阶段")
+    progress: Optional[int] = Field(None, ge=0, le=100, description="进度百分比")
+    message_safe: Optional[str] = Field(None, description="安全事件消息")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="已清洗的事件元数据")
+    created_at: Optional[str] = Field(None, description="创建时间")
+
+
+class DurableTaskProgressPollResponse(BaseModel):
+    task: TaskStatus = Field(..., description="当前任务状态")
+    events: List[DurableTaskProgressEvent] = Field(default_factory=list, description="最近进度事件")
+    latest_sequence: int = Field(0, ge=0, description="当前返回后的最新事件序号")
+    terminal: bool = Field(False, description="任务是否已进入终态")
 
 
 class TaskListResponse(BaseModel):

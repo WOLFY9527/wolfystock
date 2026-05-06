@@ -27,6 +27,15 @@ WS2-R0 is design only. It does not implement Redis, Celery, RQ, workers, migrati
 - No Redis, Celery, RQ, Dramatiq, Kafka, or external queue dependency was added, and the prototype does not call live LLM, provider, broker, scanner, backtest, portfolio, or frontend paths.
 - Remaining WS2 work stays queued for later passes: WS2-R3 external SSE/polling state, WS2-R4 quota enforcement, and WS2-R5 provider circuit breaker policy.
 
+## WS2-R3 implementation note
+
+- Durable progress/event rows are now backed by `durable_task_progress_events`, with owner scope, per-task sequence ordering, bounded sanitized messages, sanitized metadata, and task/owner/time indexes for replay and cleanup-friendly reads.
+- Owner-scoped polling fallback is now available through a narrow durable task status+events endpoint. It returns the latest durable task state, replayable events after an optional sequence, the latest sequence, and terminal-state indication.
+- The WS2-R2 synthetic worker prototype now writes durable progress events for claim, fixture progress, retry/failure, and completion paths while remaining fixture-only.
+- Current process-local `AnalysisTaskQueue` and `/api/v1/analysis/tasks/stream` SSE behavior remain the default. Production SSE is not routed through durable progress rows in this pass.
+- No Redis, Celery, RQ, Dramatiq, Kafka, external queue dependency, multi-instance cutover, quota enforcement, live LLM/provider call, scanner/backtest/portfolio/provider behavior change, or frontend change was introduced.
+- Remaining WS2 work stays queued for later passes: WS2-R4 quota enforcement and WS2-R5 provider circuit breaker policy. External SSE replay/cutover remains future work.
+
 ## 2. Current deployment assumptions
 
 - API single-process assumption: `docs/DEPLOY.md` and `docs/deploy-webui-cloud.md` currently state that `/api/v1/analysis/*` task queue and SSE state are process-local and should stay single-process unless sticky routing is intentionally provided.

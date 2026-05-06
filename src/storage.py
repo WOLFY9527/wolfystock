@@ -531,6 +531,46 @@ class DurableTaskState(Base):
         }
 
 
+class DurableTaskProgressEvent(Base):
+    """Replayable, owner-scoped durable task progress event."""
+
+    __tablename__ = 'durable_task_progress_events'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(64), nullable=False, index=True)
+    owner_user_id = Column(String(64), ForeignKey('app_users.id'), nullable=False, index=True)
+    sequence = Column(Integer, nullable=False)
+    event_type = Column(String(32), nullable=False)
+    stage = Column(String(64))
+    progress = Column(Integer)
+    message_safe = Column(Text)
+    metadata_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        UniqueConstraint('task_id', 'sequence', name='uq_durable_task_progress_task_sequence'),
+        Index('ix_durable_task_progress_task_sequence', 'task_id', 'sequence'),
+        Index('ix_durable_task_progress_task_created', 'task_id', 'created_at'),
+        Index('ix_durable_task_progress_owner_created', 'owner_user_id', 'created_at'),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        metadata = DatabaseManager._safe_json_loads(self.metadata_json, {}) if self.metadata_json else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        return {
+            'task_id': self.task_id,
+            'owner_user_id': self.owner_user_id,
+            'sequence': int(self.sequence or 0),
+            'event_type': self.event_type,
+            'stage': self.stage,
+            'progress': int(self.progress) if self.progress is not None else None,
+            'message_safe': self.message_safe,
+            'metadata': metadata,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class ExecutionLogSession(Base):
     """
     管理员可观测执行会话（D2）。
@@ -1764,6 +1804,24 @@ class DatabaseManager:
                 "durable_task_states",
                 "status, lease_expires_at",
             )
+            self._create_index_if_missing(
+                conn,
+                "ix_durable_task_progress_task_sequence",
+                "durable_task_progress_events",
+                "task_id, sequence",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_durable_task_progress_task_created",
+                "durable_task_progress_events",
+                "task_id, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_durable_task_progress_owner_created",
+                "durable_task_progress_events",
+                "owner_user_id, created_at",
+            )
 
             self._migrate_backtest_summaries_table(conn, bootstrap_user_id=bootstrap_user_id)
 
@@ -2463,6 +2521,23 @@ class DatabaseManager:
     def _durable_task_payload(row: DurableTaskState) -> Dict[str, Any]:
         return row.to_dict()
 
+    @staticmethod
+    def _sanitize_task_progress_message(value: Any) -> Optional[str]:
+        text = sanitize_message(str(value or "").strip())
+        if not text:
+            return None
+        if "Traceback (most recent call last)" in text or "\n" in text:
+            return "Task progress update unavailable; see server logs for sanitized details"
+        return text[:500]
+
+    @staticmethod
+    def _durable_task_progress_payload(row: DurableTaskProgressEvent) -> Dict[str, Any]:
+        return row.to_dict()
+
+    @staticmethod
+    def _bounded_durable_task_progress_limit(limit: int) -> int:
+        return max(1, min(int(limit or 50), 100))
+
     def create_durable_task_state(
         self,
         *,
@@ -2517,6 +2592,128 @@ class DatabaseManager:
                 row.started_at = now
             session.flush()
             return self._durable_task_payload(row)
+
+    def append_durable_task_progress_event(
+        self,
+        *,
+        task_id: str,
+        owner_user_id: Optional[str],
+        event_type: str,
+        stage: Optional[str] = None,
+        progress: Optional[int] = None,
+        message: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        created_at: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        normalized_task_id = str(task_id or "").strip()
+        if not normalized_task_id:
+            raise ValueError("task_id is required")
+        resolved_owner_id = self.require_user_id(owner_user_id)
+        safe_event_type = sanitize_message(str(event_type or "progress").strip())[:32] or "progress"
+        safe_progress = None if progress is None else max(0, min(int(progress or 0), 100))
+        safe_metadata = self._sanitize_task_metadata(metadata or {})
+        current_time = created_at or datetime.now()
+        with self.session_scope() as session:
+            task_row = session.execute(
+                select(DurableTaskState)
+                .where(
+                    DurableTaskState.task_id == normalized_task_id,
+                    DurableTaskState.owner_user_id == resolved_owner_id,
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if task_row is None:
+                raise ValueError("durable task not found")
+            next_sequence = session.execute(
+                select(func.max(DurableTaskProgressEvent.sequence))
+                .where(DurableTaskProgressEvent.task_id == normalized_task_id)
+            ).scalar_one_or_none()
+            row = DurableTaskProgressEvent(
+                task_id=normalized_task_id,
+                owner_user_id=resolved_owner_id,
+                sequence=int(next_sequence or 0) + 1,
+                event_type=safe_event_type,
+                stage=sanitize_message(str(stage or "").strip())[:64] or None,
+                progress=safe_progress,
+                message_safe=self._sanitize_task_progress_message(message),
+                metadata_json=self._safe_json_dumps(safe_metadata),
+                created_at=current_time,
+            )
+            session.add(row)
+            session.flush()
+            return self._durable_task_progress_payload(row)
+
+    def list_durable_task_progress_events(
+        self,
+        *,
+        task_id: str,
+        owner_user_id: Optional[str],
+        after_sequence: Optional[int] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        normalized_task_id = str(task_id or "").strip()
+        if not normalized_task_id:
+            return []
+        resolved_owner_id = self.require_user_id(owner_user_id)
+        safe_limit = self._bounded_durable_task_progress_limit(limit)
+        with self.get_session() as session:
+            task_row = session.execute(
+                select(DurableTaskState.id)
+                .where(
+                    DurableTaskState.task_id == normalized_task_id,
+                    DurableTaskState.owner_user_id == resolved_owner_id,
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if task_row is None:
+                return []
+            query = select(DurableTaskProgressEvent).where(
+                DurableTaskProgressEvent.task_id == normalized_task_id,
+                DurableTaskProgressEvent.owner_user_id == resolved_owner_id,
+            )
+            if after_sequence is not None:
+                query = query.where(DurableTaskProgressEvent.sequence > max(0, int(after_sequence or 0)))
+            rows = session.execute(
+                query.order_by(asc(DurableTaskProgressEvent.sequence)).limit(safe_limit)
+            ).scalars().all()
+            return [self._durable_task_progress_payload(row) for row in rows]
+
+    def list_durable_task_progress_events_after(
+        self,
+        *,
+        task_id: str,
+        owner_user_id: Optional[str],
+        after_sequence: int,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        return self.list_durable_task_progress_events(
+            task_id=task_id,
+            owner_user_id=owner_user_id,
+            after_sequence=after_sequence,
+            limit=limit,
+        )
+
+    def get_latest_durable_task_progress_summary(
+        self,
+        *,
+        task_id: str,
+        owner_user_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        normalized_task_id = str(task_id or "").strip()
+        if not normalized_task_id:
+            return None
+        resolved_owner_id = self.require_user_id(owner_user_id)
+        with self.get_session() as session:
+            row = session.execute(
+                select(DurableTaskProgressEvent)
+                .where(
+                    DurableTaskProgressEvent.task_id == normalized_task_id,
+                    DurableTaskProgressEvent.owner_user_id == resolved_owner_id,
+                )
+                .order_by(desc(DurableTaskProgressEvent.sequence))
+                .limit(1)
+            ).scalar_one_or_none()
+            return self._durable_task_progress_payload(row) if row is not None else None
 
     def update_durable_task_state(
         self,

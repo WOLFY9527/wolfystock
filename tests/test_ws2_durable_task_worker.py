@@ -50,6 +50,10 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
 
         result = worker.run_once()
         state = self.db.get_durable_task_state(task_id="task-complete", owner_user_id="user-a")
+        events = self.db.list_durable_task_progress_events(
+            task_id="task-complete",
+            owner_user_id="user-a",
+        )
 
         self.assertEqual(result.status, "completed")
         self.assertIsNotNone(state)
@@ -58,6 +62,8 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
         self.assertEqual(state["attempt_count"], 1)
         self.assertIsNone(state["lease_owner"])
         self.assertEqual(state["metadata"]["result_ref"], "fixture:ws2-synthetic")
+        self.assertEqual([event["event_type"] for event in events], ["claimed", "progress", "progress", "completed"])
+        self.assertEqual(events[-1]["message_safe"], "Synthetic task complete")
 
     def test_worker_failure_stores_sanitized_error(self) -> None:
         self._create_task("task-sanitized", failure_mode="non_retryable")
@@ -65,12 +71,18 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
 
         result = worker.run_once()
         state = self.db.get_durable_task_state(task_id="task-sanitized", owner_user_id="user-a")
+        events = self.db.list_durable_task_progress_events(
+            task_id="task-sanitized",
+            owner_user_id="user-a",
+        )
 
         self.assertEqual(result.status, "failed")
         self.assertEqual(state["status"], "failed")
         self.assertEqual(state["error_code"], "non_retryable_synthetic_error")
         self.assertNotIn("Traceback", json.dumps(state, ensure_ascii=False))
         self.assertNotIn("api_key", json.dumps(state, ensure_ascii=False))
+        self.assertEqual(events[-1]["event_type"], "failed")
+        self.assertNotIn("Traceback", json.dumps(events[-1], ensure_ascii=False))
 
     def test_transient_synthetic_failure_retries_until_bounded_cap(self) -> None:
         self._create_task(
@@ -197,6 +209,11 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
         self.assertEqual(state["lease_owner"], "worker-a")
         self.assertIsNone(state["completed_at"])
         self.assertIsNone(state["failed_at"])
+        events = self.db.list_durable_task_progress_events(
+            task_id="task-shutdown",
+            owner_user_id="user-a",
+        )
+        self.assertEqual([event["event_type"] for event in events], ["claimed", "progress"])
 
     def test_owner_scoped_status_remains_intact_for_worker_task(self) -> None:
         self._create_task("task-owner-status")

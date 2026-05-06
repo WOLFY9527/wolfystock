@@ -76,6 +76,15 @@ class DurableTaskWorkerPrototype:
 
         task_id = str(task["task_id"])
         attempt_count = int(task.get("attempt_count") or 0)
+        owner_user_id = str(task.get("owner_user_id") or "")
+        self._append_event(
+            task_id,
+            owner_user_id=owner_user_id,
+            event_type="claimed",
+            stage="claim",
+            progress=int(task.get("progress") or 0),
+            message="Synthetic task claimed",
+        )
         try:
             self._run_synthetic_handler(task)
         except TransientSyntheticTaskError as exc:
@@ -88,9 +97,18 @@ class DurableTaskWorkerPrototype:
                 current_step="Synthetic task queued for retry",
             )
             status = "retry_queued" if failed and failed.get("status") == "queued" else "failed"
+            self._append_event(
+                task_id,
+                owner_user_id=owner_user_id,
+                event_type="retry" if status == "retry_queued" else "failed",
+                stage="failure",
+                progress=failed.get("progress") if failed else 100,
+                message=str(exc),
+                metadata={"error_code": "transient_synthetic_error", "retryable": status == "retry_queued"},
+            )
             return WorkerRunResult(status=status, task_id=task_id, attempt_count=attempt_count)
         except NonRetryableSyntheticTaskError as exc:
-            self.db.fail_claimed_durable_task_state(
+            failed = self.db.fail_claimed_durable_task_state(
                 task_id=task_id,
                 worker_id=self.worker_id,
                 error_code="non_retryable_synthetic_error",
@@ -98,15 +116,33 @@ class DurableTaskWorkerPrototype:
                 retryable=False,
                 current_step="Synthetic task failed",
             )
+            self._append_event(
+                task_id,
+                owner_user_id=owner_user_id,
+                event_type="failed",
+                stage="failure",
+                progress=failed.get("progress") if failed else 100,
+                message=str(exc),
+                metadata={"error_code": "non_retryable_synthetic_error", "retryable": False},
+            )
             return WorkerRunResult(status="failed", task_id=task_id, attempt_count=attempt_count)
         except Exception as exc:
-            self.db.fail_claimed_durable_task_state(
+            failed = self.db.fail_claimed_durable_task_state(
                 task_id=task_id,
                 worker_id=self.worker_id,
                 error_code="worker_error",
                 error_summary=str(exc),
                 retryable=False,
                 current_step="Synthetic task failed",
+            )
+            self._append_event(
+                task_id,
+                owner_user_id=owner_user_id,
+                event_type="failed",
+                stage="failure",
+                progress=failed.get("progress") if failed else 100,
+                message=str(exc),
+                metadata={"error_code": "worker_error", "retryable": False},
             )
             return WorkerRunResult(status="failed", task_id=task_id, attempt_count=attempt_count)
 
@@ -121,6 +157,15 @@ class DurableTaskWorkerPrototype:
         )
         if completed is None:
             return WorkerRunResult(status="lost_lease", task_id=task_id, attempt_count=attempt_count)
+        self._append_event(
+            task_id,
+            owner_user_id=owner_user_id,
+            event_type="completed",
+            stage="complete",
+            progress=100,
+            message="Synthetic task complete",
+            metadata={"result_ref": "fixture:ws2-synthetic"},
+        )
         return WorkerRunResult(status="completed", task_id=task_id, attempt_count=attempt_count)
 
     def run_until_idle(self, *, max_tasks: int = 20) -> WorkerRunResult:
@@ -165,7 +210,7 @@ class DurableTaskWorkerPrototype:
         current_step: str,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self.db.heartbeat_durable_task_state(
+        state = self.db.heartbeat_durable_task_state(
             task_id=task_id,
             worker_id=self.worker_id,
             lease_seconds=self.lease_seconds,
@@ -173,7 +218,38 @@ class DurableTaskWorkerPrototype:
             current_step=current_step,
             metadata=metadata,
         )
+        if state is not None:
+            self._append_event(
+                task_id,
+                owner_user_id=str(state.get("owner_user_id") or ""),
+                event_type="progress",
+                stage=current_step,
+                progress=progress,
+                message=current_step,
+                metadata=metadata,
+            )
 
     def _emit_stage(self, stage: str, task: Dict[str, Any]) -> None:
         if self.stage_hook is not None:
             self.stage_hook(stage, task)
+
+    def _append_event(
+        self,
+        task_id: str,
+        *,
+        owner_user_id: str,
+        event_type: str,
+        stage: str,
+        progress: Optional[int],
+        message: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        self.db.append_durable_task_progress_event(
+            task_id=task_id,
+            owner_user_id=owner_user_id,
+            event_type=event_type,
+            stage=stage,
+            progress=progress,
+            message=message,
+            metadata=metadata,
+        )
