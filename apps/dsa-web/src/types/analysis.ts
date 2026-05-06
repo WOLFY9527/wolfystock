@@ -335,6 +335,15 @@ export interface DataQualityReport {
   confidenceCap?: number;
   reasonCodes?: string[];
   freshness?: Record<string, unknown>;
+  enrichmentStatus?: 'pending' | 'partial' | 'complete' | 'skipped' | 'failed' | string;
+  enrichmentSources?: string[];
+  completedSources?: string[];
+  pendingSources?: string[];
+  failedSources?: string[];
+  skippedSources?: string[];
+  enrichmentReasons?: Record<string, string[]>;
+  enrichmentUpdatedAt?: string | null;
+  enrichmentAsOf?: string | null;
 }
 
 export interface DecisionTraceField {

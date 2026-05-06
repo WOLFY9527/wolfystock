@@ -846,6 +846,12 @@ class StockAnalysisPipeline:
                 alpha_errors=alpha_errors + yfinance_errors,
             )
             enhanced_context.update(multidim_blocks)
+            tech = multidim_blocks.get("technicals", {})
+            diagnostics["ma20_source"] = (tech.get("ma20") or {}).get("source", "unknown")
+            diagnostics["fundamentals_status"] = (multidim_blocks.get("fundamentals") or {}).get("status", "unknown")
+            diagnostics["earnings_status"] = (multidim_blocks.get("earnings_analysis") or {}).get("status", "unknown")
+            if diagnostics.get("sentiment_status") not in {"failed", "pending"}:
+                diagnostics["sentiment_status"] = (multidim_blocks.get("sentiment_analysis") or {}).get("status", "unknown")
             data_quality_report = build_data_quality_report(
                 context=enhanced_context,
                 data_quality=enhanced_context.get("data_quality", {}),
@@ -856,11 +862,6 @@ class StockAnalysisPipeline:
             enhanced_context["data_quality_report"] = data_quality_report
             if social_context:
                 enhanced_context["social_context"] = social_context
-            tech = multidim_blocks.get("technicals", {})
-            diagnostics["ma20_source"] = (tech.get("ma20") or {}).get("source", "unknown")
-            diagnostics["fundamentals_status"] = (multidim_blocks.get("fundamentals") or {}).get("status", "unknown")
-            diagnostics["earnings_status"] = (multidim_blocks.get("earnings_analysis") or {}).get("status", "unknown")
-            diagnostics["sentiment_status"] = (multidim_blocks.get("sentiment_analysis") or {}).get("status", "unknown")
             if getattr(self.config, "diagnostic_mode", False):
                 enhanced_context["diagnostics"] = diagnostics
             enhanced_context['technical_indicators'] = {

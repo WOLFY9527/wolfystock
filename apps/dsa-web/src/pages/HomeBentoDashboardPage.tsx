@@ -1117,17 +1117,60 @@ function dataQualityTierLabel(tier: string | undefined, locale: DashboardLocale)
   return (locale === 'en' ? en : zh)[normalized] || (locale === 'en' ? 'Unknown' : '未确认');
 }
 
+function enrichmentStatusLabel(status: string | undefined, locale: DashboardLocale): string {
+  const normalized = String(status || '').trim().toLowerCase();
+  const zh: Record<string, string> = {
+    pending: '增强数据补充中',
+    partial: '部分缺失',
+    complete: '已完成',
+    skipped: '已跳过',
+    failed: '部分缺失',
+  };
+  const en: Record<string, string> = {
+    pending: 'Enrichment in progress',
+    partial: 'Partially missing',
+    complete: 'Complete',
+    skipped: 'Skipped',
+    failed: 'Partially missing',
+  };
+  return (locale === 'en' ? en : zh)[normalized] || (locale === 'en' ? 'Unknown' : '未确认');
+}
+
+function summarizeEnrichmentGaps(report: DataQualityReport): string[] {
+  const sources = [
+    ...(report.pendingSources || []),
+    ...(report.failedSources || []),
+    ...(report.skippedSources || []),
+  ].filter(Boolean);
+  return Array.from(new Set(sources)).slice(0, 5);
+}
+
+function summarizeEnrichmentReasons(report: DataQualityReport): string[] {
+  const reasonMap = report.enrichmentReasons || {};
+  const reasons = Object.values(reasonMap).flat().filter(Boolean);
+  return Array.from(new Set(reasons)).slice(0, 5);
+}
+
 function DataQualityCompactPanel({ report, locale }: { report: DataQualityReport | undefined; locale: DashboardLocale }) {
   if (!report) return null;
   const isEnglish = locale === 'en';
+  const quickDecisionText = report.requiredAvailable === false
+    ? (isEnglish ? 'Fast decision is limited' : '快速判断受限')
+    : (isEnglish ? 'Fast decision complete' : '快速判断已完成');
   const missingCritical = report.requiredAvailable === false
     ? (isEnglish ? 'Required quote/candle data missing' : '缺失关键行情或 K 线数据')
     : report.importantMissing?.slice(0, 3).join('、') || (isEnglish ? 'No required gaps' : '关键数据已满足');
-  const optionalText = report.optionalMissing?.length
-    ? report.optionalMissing.includes('optional_enrichment_pending')
-      ? (isEnglish ? 'Optional enrichment is still filling in' : '可选增强数据仍在补充')
-      : `${isEnglish ? 'Optional missing' : '可选数据缺失'}：${report.optionalMissing.slice(0, 3).join('、')}`
-    : (isEnglish ? 'Optional enrichment available or not material' : '可选增强数据无重大缺口');
+  const enrichmentGaps = summarizeEnrichmentGaps(report);
+  const enrichmentReasons = summarizeEnrichmentReasons(report);
+  const optionalText = [
+    enrichmentStatusLabel(report.enrichmentStatus, locale),
+    enrichmentGaps.length
+      ? `${isEnglish ? 'Missing' : '缺失项'}：${enrichmentGaps.join('、')}`
+      : (isEnglish ? 'No visible enrichment gaps' : '暂无可见增强缺口'),
+    enrichmentReasons.length
+      ? `${isEnglish ? 'Reasons' : '原因'}：${enrichmentReasons.join('、')}`
+      : null,
+  ].filter(Boolean).join(' · ');
   const providerLabels = [...(report.providerTimeouts || []), ...(report.providerCooldowns || [])].slice(0, 4);
 
   return (
@@ -1153,6 +1196,7 @@ function DataQualityCompactPanel({ report, locale }: { report: DataQualityReport
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
             {isEnglish ? 'Critical Gaps' : '缺失关键数据'}
           </p>
+          <p className="mt-1 text-xs font-semibold text-emerald-200/80">{quickDecisionText}</p>
           <p className="mt-1 break-words text-sm text-white/72">{missingCritical}</p>
         </div>
         <div className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">

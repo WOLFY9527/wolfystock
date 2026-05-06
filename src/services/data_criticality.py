@@ -66,7 +66,13 @@ SECRET_MARKERS = (
     "session",
     "sk-",
     "webhook",
+    "http://",
+    "https://",
+    "traceback",
+    "stack trace",
 )
+
+ENRICHMENT_SOURCES = ("news", "sentiment", "detailed_fundamentals")
 
 
 @dataclass(frozen=True)
@@ -82,6 +88,15 @@ class DataQualityReport:
     confidence_cap: int = 100
     reason_codes: List[str] = field(default_factory=list)
     freshness: Dict[str, Any] = field(default_factory=dict)
+    enrichment_status: str = "skipped"
+    enrichment_sources: List[str] = field(default_factory=list)
+    completed_sources: List[str] = field(default_factory=list)
+    pending_sources: List[str] = field(default_factory=list)
+    failed_sources: List[str] = field(default_factory=list)
+    skipped_sources: List[str] = field(default_factory=list)
+    enrichment_reasons: Dict[str, List[str]] = field(default_factory=dict)
+    enrichment_updated_at: Optional[str] = None
+    enrichment_as_of: Optional[str] = None
 
     def to_api_dict(self) -> Dict[str, Any]:
         return {
@@ -96,6 +111,15 @@ class DataQualityReport:
             "confidenceCap": self.confidence_cap,
             "reasonCodes": list(self.reason_codes),
             "freshness": dict(self.freshness),
+            "enrichmentStatus": self.enrichment_status,
+            "enrichmentSources": list(self.enrichment_sources),
+            "completedSources": list(self.completed_sources),
+            "pendingSources": list(self.pending_sources),
+            "failedSources": list(self.failed_sources),
+            "skippedSources": list(self.skipped_sources),
+            "enrichmentReasons": {key: list(value) for key, value in self.enrichment_reasons.items()},
+            "enrichmentUpdatedAt": self.enrichment_updated_at,
+            "enrichmentAsOf": self.enrichment_as_of,
         }
 
 
@@ -127,6 +151,143 @@ def sanitize_reason_codes(values: Iterable[Any]) -> List[str]:
         if code not in result:
             result.append(code)
     return result[:24]
+
+
+def _status_bucket(value: Any) -> str:
+    status = str(value or "").strip().lower()
+    if status in {"ok", "used", "partial", "completed", "success"}:
+        return "completed"
+    if status in {"pending", "attempting", "running"}:
+        return "pending"
+    if status in {"failed", "missing", "timeout", "unavailable", "error"}:
+        return "failed"
+    if status in {"not_configured", "skipped", "configured_not_used", "not_supported"}:
+        return "skipped"
+    return "unknown"
+
+
+def _source_reasons(
+    *,
+    source: str,
+    diagnostics: Mapping[str, Any],
+    data_quality: Mapping[str, Any],
+    missing_fields: List[str],
+) -> List[str]:
+    reasons: List[Any] = []
+    failure_reasons = diagnostics.get("failure_reasons", [])
+    if isinstance(failure_reasons, (list, tuple, set)):
+        for reason in failure_reasons:
+            reason_text = str(reason or "").lower()
+            if (
+                source == "news" and "news" in reason_text
+                or source == "sentiment" and "sentiment" in reason_text
+                or source == "detailed_fundamentals" and ("fundamental" in reason_text or "earning" in reason_text)
+            ):
+                reasons.append(reason)
+    if source == "news":
+        reasons.append(diagnostics.get("news_reason"))
+        status = diagnostics.get("news_status")
+    elif source == "sentiment":
+        reasons.append(diagnostics.get("sentiment_reason"))
+        status = diagnostics.get("sentiment_status") or data_quality.get("sentiment_status")
+    else:
+        reasons.extend([
+            diagnostics.get("fundamentals_reason"),
+            diagnostics.get("earnings_reason"),
+        ])
+        status = diagnostics.get("fundamentals_status") or diagnostics.get("earnings_status")
+        if "detailed_fundamentals" in missing_fields:
+            reasons.append("detailed_fundamentals_missing")
+    if (
+        status
+        and _status_bucket(status) not in {"completed", "unknown"}
+        and not (source == "news" and any(str(reason).lower() == "optional_news_timeout" for reason in reasons))
+        and not (source == "sentiment" and any(str(reason).lower() == "optional_sentiment_timeout" for reason in reasons))
+    ):
+        reasons.append(f"{source}_{status}")
+    return sanitize_reason_codes(reason for reason in reasons if reason)
+
+
+def _build_enrichment_metadata(
+    *,
+    data_quality: Mapping[str, Any],
+    diagnostics: Mapping[str, Any],
+    missing_fields: List[str],
+    optional_enrichment_pending: bool,
+    freshness: Mapping[str, Any],
+) -> Dict[str, Any]:
+    failure_reasons = [str(item or "").lower() for item in diagnostics.get("failure_reasons", []) or []]
+
+    source_states: Dict[str, str] = {}
+    for source in ENRICHMENT_SOURCES:
+        if source == "news":
+            status = _status_bucket(diagnostics.get("news_status"))
+            if optional_enrichment_pending and any("news" in reason and "timeout" in reason for reason in failure_reasons):
+                status = "pending"
+        elif source == "sentiment":
+            status = _status_bucket(diagnostics.get("sentiment_status") or data_quality.get("sentiment_status"))
+            if optional_enrichment_pending and any("sentiment" in reason and "timeout" in reason for reason in failure_reasons):
+                status = "pending"
+        else:
+            fundamentals_status = _status_bucket(diagnostics.get("fundamentals_status"))
+            earnings_status = _status_bucket(diagnostics.get("earnings_status"))
+            if "detailed_fundamentals" in missing_fields:
+                status = "failed"
+            elif "completed" in {fundamentals_status, earnings_status}:
+                status = "completed"
+            elif "failed" in {fundamentals_status, earnings_status}:
+                status = "failed"
+            elif "pending" in {fundamentals_status, earnings_status}:
+                status = "pending"
+            elif {fundamentals_status, earnings_status} <= {"skipped", "unknown"}:
+                status = "skipped"
+            else:
+                status = "unknown"
+        source_states[source] = "skipped" if status == "unknown" else status
+
+    completed = [source for source, status in source_states.items() if status == "completed"]
+    pending = [source for source, status in source_states.items() if status == "pending"]
+    failed = [source for source, status in source_states.items() if status == "failed"]
+    skipped = [source for source, status in source_states.items() if status == "skipped"]
+
+    if pending:
+        enrichment_status = "pending"
+    elif len(completed) == len(ENRICHMENT_SOURCES):
+        enrichment_status = "complete"
+    elif failed and not completed and not pending:
+        enrichment_status = "failed"
+    elif completed or failed:
+        enrichment_status = "partial"
+    else:
+        enrichment_status = "skipped"
+
+    reasons = {
+        source: _source_reasons(
+            source=source,
+            diagnostics=diagnostics,
+            data_quality=data_quality,
+            missing_fields=missing_fields,
+        )
+        for source in ENRICHMENT_SOURCES
+    }
+    reasons = {source: value for source, value in reasons.items() if value}
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    as_of = (
+        freshness.get("newsPublishedAt")
+        or freshness.get("reportGeneratedAt")
+        or freshness.get("marketTimestamp")
+    )
+    return {
+        "enrichment_status": enrichment_status,
+        "enrichment_sources": list(ENRICHMENT_SOURCES),
+        "completed_sources": completed,
+        "pending_sources": pending,
+        "failed_sources": failed,
+        "skipped_sources": skipped,
+        "enrichment_reasons": reasons,
+        "enrichment_updated_at": now,
+        "enrichment_as_of": str(as_of) if as_of else None,
+    }
 
 
 def _has_value(value: Any) -> bool:
@@ -193,6 +354,8 @@ def build_data_quality_report(
     news_status = str(diagnostics.get("news_status") or "").strip().lower()
     if news_status in {"not_configured", "failed", "skipped", "timeout", "configured_not_used"}:
         optional_missing.append("news")
+    if "detailed_fundamentals" in missing_fields:
+        optional_missing.append("detailed_fundamentals")
     if optional_enrichment_pending:
         optional_missing.append("optional_enrichment_pending")
 
@@ -246,6 +409,14 @@ def build_data_quality_report(
         "sessionType": context.get("session_type"),
         "marketTimezone": context.get("market_timezone"),
     }
+    clean_freshness = {key: value for key, value in freshness.items() if value is not None}
+    enrichment_metadata = _build_enrichment_metadata(
+        data_quality=data_quality,
+        diagnostics=diagnostics,
+        missing_fields=missing_fields,
+        optional_enrichment_pending=optional_enrichment_pending,
+        freshness=clean_freshness,
+    )
     return DataQualityReport(
         data_quality_tier=tier,
         data_quality_score=max(0, min(100, int(score))),
@@ -257,6 +428,6 @@ def build_data_quality_report(
         provider_cooldowns=provider_cooldowns,
         confidence_cap=confidence_cap,
         reason_codes=sanitize_reason_codes([*reason_codes, *failure_reasons]),
-        freshness={key: value for key, value in freshness.items() if value is not None},
+        freshness=clean_freshness,
+        **enrichment_metadata,
     )
-

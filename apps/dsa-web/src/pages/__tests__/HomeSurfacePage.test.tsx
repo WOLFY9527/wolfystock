@@ -101,6 +101,15 @@ const defaultHistoryReport = {
       confidenceCap: 70,
       reasonCodes: ['important_data_missing', 'optional_enrichment_missing'],
       freshness: { marketSessionDate: '2026-05-05' },
+      enrichmentStatus: 'pending',
+      enrichmentSources: ['news', 'sentiment', 'detailed_fundamentals'],
+      completedSources: ['sentiment'],
+      pendingSources: ['news'],
+      failedSources: [],
+      skippedSources: ['detailed_fundamentals'],
+      enrichmentReasons: { news: ['optional_news_timeout'] },
+      enrichmentUpdatedAt: '2026-05-06T01:01:00Z',
+      enrichmentAsOf: '2026-05-06T01:00:00Z',
     },
     standardReport: {
       summaryPanel: {
@@ -142,6 +151,15 @@ const defaultHistoryReport = {
     confidenceCap: 70,
     reasonCodes: ['important_data_missing', 'optional_enrichment_missing'],
     freshness: { marketSessionDate: '2026-05-05' },
+    enrichmentStatus: 'pending',
+    enrichmentSources: ['news', 'sentiment', 'detailed_fundamentals'],
+    completedSources: ['sentiment'],
+    pendingSources: ['news'],
+    failedSources: [],
+    skippedSources: ['detailed_fundamentals'],
+    enrichmentReasons: { news: ['optional_news_timeout'] },
+    enrichmentUpdatedAt: '2026-05-06T01:01:00Z',
+    enrichmentAsOf: '2026-05-06T01:00:00Z',
   },
   decisionTrace: {
     engineVersion: 'analysis_decision_trace_v1',
@@ -408,8 +426,11 @@ describe('HomeSurfacePage', () => {
     const panel = screen.getByTestId('home-bento-data-quality-panel');
     expect(panel).toHaveTextContent('数据等级: 分析级');
     expect(panel).toHaveTextContent('置信度上限 70');
+    expect(panel).toHaveTextContent('快速判断已完成');
     expect(panel).toHaveTextContent('fundamentals.eps');
-    expect(panel).toHaveTextContent('可选增强数据仍在补充');
+    expect(panel).toHaveTextContent('增强数据补充中');
+    expect(panel).toHaveTextContent('缺失项：news、detailed_fundamentals');
+    expect(panel).toHaveTextContent('optional_news_timeout');
     expect(panel).toHaveTextContent('gnews:news');
     expect(panel).toHaveTextContent('fmp:fundamentals');
     expect(screen.getByTestId('home-bento-data-quality-developer')).not.toHaveAttribute('open');

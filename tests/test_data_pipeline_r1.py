@@ -88,6 +88,62 @@ def test_optional_news_timeout_does_not_block_quick_decision():
     assert elapsed < 0.1
 
 
+def test_optional_enrichment_timeout_is_reported_as_pending_gap():
+    report = build_data_quality_report(
+        context=_quality_context(),
+        data_quality={"missing_fields": [], "sentiment_status": "ok"},
+        diagnostics={
+            "news_status": "skipped",
+            "sentiment_status": "ok",
+            "fundamentals_status": "ok",
+            "earnings_status": "ok",
+            "failure_reasons": ["optional_news_timeout"],
+        },
+        optional_enrichment_pending=True,
+    ).to_api_dict()
+
+    assert report["requiredAvailable"] is True
+    assert report["dataQualityTier"] == "decision_grade"
+    assert report["enrichmentStatus"] == "pending"
+    assert report["enrichmentSources"] == ["news", "sentiment", "detailed_fundamentals"]
+    assert report["pendingSources"] == ["news"]
+    assert report["completedSources"] == ["sentiment", "detailed_fundamentals"]
+    assert report["failedSources"] == []
+    assert "optional_enrichment_pending" in report["optionalMissing"]
+    assert report["enrichmentReasons"]["news"] == ["optional_news_timeout"]
+
+
+def test_optional_enrichment_failures_are_sanitized_non_blocking_gaps():
+    report = build_data_quality_report(
+        context=_quality_context(),
+        data_quality={
+            "missing_fields": ["detailed_fundamentals"],
+            "sentiment_status": "failed",
+        },
+        diagnostics={
+            "news_status": "failed",
+            "sentiment_status": "failed",
+            "sentiment_reason": "provider failed with api_key=sk-test-secret",
+            "fundamentals_status": "failed",
+            "earnings_status": "failed",
+            "failure_reasons": [
+                "optional_news_failed",
+                "provider failed with api_key=sk-test-secret",
+            ],
+        },
+    ).to_api_dict()
+
+    assert report["requiredAvailable"] is True
+    assert report["dataQualityTier"] == "decision_grade"
+    assert report["enrichmentStatus"] == "failed"
+    assert report["failedSources"] == ["news", "sentiment", "detailed_fundamentals"]
+    assert "news" in report["optionalMissing"]
+    assert "sentiment" in report["optionalMissing"]
+    assert "detailed_fundamentals" in report["optionalMissing"]
+    assert "redacted_sensitive_reason" in report["enrichmentReasons"]["sentiment"]
+    assert "sk-test-secret" not in str(report)
+
+
 def test_first_good_wins_does_not_wait_for_slow_fallback():
     executor = AnalysisProviderExecutor()
     called = {"fallback": False}
@@ -162,4 +218,3 @@ def test_fast_decision_plan_uses_bounded_hot_path_timeouts():
     assert plan.categories[DataCategory.QUOTE].timeout_seconds == 1.2
     assert plan.categories[DataCategory.FUNDAMENTALS].timeout_seconds == 2.5
     assert plan.categories[DataCategory.NEWS].timeout_seconds == 1.5
-

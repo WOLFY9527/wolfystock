@@ -163,6 +163,17 @@ describe('normalizeFrontendReportContract', () => {
           required_available: false,
           confidence_cap: 40,
           optional_missing: ['news'],
+          enrichment_status: 'partial',
+          enrichment_sources: ['news', 'sentiment', 'detailed_fundamentals'],
+          completed_sources: ['sentiment'],
+          pending_sources: [],
+          failed_sources: ['news'],
+          skipped_sources: ['detailed_fundamentals'],
+          enrichment_reasons: {
+            news: ['optional_news_failed'],
+          },
+          enrichment_updated_at: '2026-05-06T01:01:00Z',
+          enrichment_as_of: '2026-05-06T01:00:00Z',
           provider_timeouts: ['gnews:news'],
           reason_codes: ['required_data_missing'],
         },
@@ -172,6 +183,12 @@ describe('normalizeFrontendReportContract', () => {
     expect(normalized.dataQualityReport?.dataQualityTier).toBe('insufficient');
     expect(normalized.dataQualityReport?.confidenceCap).toBe(40);
     expect(normalized.details?.dataQualityReport?.optionalMissing).toEqual(['news']);
+    expect(normalized.dataQualityReport?.enrichmentStatus).toBe('partial');
+    expect(normalized.dataQualityReport?.enrichmentSources).toEqual(['news', 'sentiment', 'detailed_fundamentals']);
+    expect(normalized.dataQualityReport?.completedSources).toEqual(['sentiment']);
+    expect(normalized.dataQualityReport?.failedSources).toEqual(['news']);
+    expect(normalized.dataQualityReport?.enrichmentReasons?.news).toEqual(['optional_news_failed']);
+    expect(normalized.dataQualityReport?.enrichmentUpdatedAt).toBe('2026-05-06T01:01:00Z');
   });
 
   it('keeps structured standardReport summary blocks for compact web rendering', () => {
