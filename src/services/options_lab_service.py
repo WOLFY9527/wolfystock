@@ -8,18 +8,28 @@ portfolio mutation. The service only normalizes the synthetic TEM fixture.
 from __future__ import annotations
 
 import copy
+from datetime import date, datetime
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from api.v1.schemas.options import (
     OptionChainResponse,
+    OptionCandidateContract,
     OptionContract,
+    OptionContractScoring,
     OptionExpirationItem,
     OptionExpirationsResponse,
     OptionGreeks,
+    OptionScenarioPayoffRow,
+    OptionScenarioRisk,
+    OptionScoringSubScores,
     OptionsMetadata,
+    OptionsAnalyzeRequest,
+    OptionsAnalyzeResponse,
+    OptionsScenarioRequest,
+    OptionsScenarioResponse,
     OptionUnderlyingSummaryResponse,
 )
 
@@ -33,6 +43,28 @@ PHASE1_WARNING_CODES = [
     "analytical_only_not_investment_advice",
     "no_order_placement",
 ]
+PHASE3_RISKS = [
+    "options_are_high_risk",
+    "long_options_can_lose_100_percent_premium",
+    "bid_ask_spread_can_create_slippage",
+    "iv_and_theta_can_reduce_long_premium_value",
+    "scores_are_analytical_rankings_under_assumptions",
+]
+PHASE3_LIMITATIONS = [
+    "synthetic_fixture_data_only",
+    "long_call_and_long_put_only_in_phase3",
+    "phase4_spreads_deferred",
+    "pre_expiration_theoretical_pricing_unavailable",
+    "no_live_provider_calls",
+    "no_llm_calls",
+    "no_broker_execution",
+    "no_portfolio_mutation",
+    "no_order_placement",
+    "not_trading_advice",
+]
+CONTRACT_MULTIPLIER = 100
+SCORING_MODEL_VERSION = "deterministic_fixture_scoring_v1"
+SCENARIO_MODEL_VERSION = "expiration_payoff_v1"
 
 
 class OptionsLabUnsupportedSymbol(ValueError):
@@ -148,6 +180,120 @@ class OptionsLabService:
             metadata=self._metadata(force_refresh=force_refresh),
         )
 
+    def analyze(self, request: OptionsAnalyzeRequest | Dict[str, Any]) -> OptionsAnalyzeResponse:
+        parsed = self._parse_analyze_request(request)
+        fixture = self._fixture_for_symbol(parsed.symbol)
+        contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
+        target_date = self._parse_date(parsed.target_date)
+        strategies = self._supported_strategies(parsed.strategies)
+        candidate_sides = self._candidate_sides(parsed.direction, strategies)
+        candidates: List[OptionCandidateContract] = []
+
+        for contract in contracts:
+            strategy = "long_call" if contract.side == "call" else "long_put"
+            if contract.side not in candidate_sides or strategy not in strategies:
+                continue
+            premium_at_risk = self._premium_at_risk(contract)
+            if parsed.max_premium is not None and premium_at_risk > parsed.max_premium:
+                continue
+            candidates.append(
+                self._score_contract(
+                    contract=contract,
+                    strategy=strategy,
+                    direction=parsed.direction,
+                    target_price=parsed.target_price,
+                    target_date=target_date,
+                    max_premium=parsed.max_premium,
+                    risk_profile=parsed.risk_profile,
+                    underlying_price=float((fixture.get("underlying") or {}).get("price") or 0),
+                )
+            )
+
+        candidates.sort(
+            key=lambda candidate: (-candidate.score, candidate.contract.expiration, candidate.contract.strike)
+        )
+        calls = [contract for contract in contracts if contract.side == "call"]
+        puts = [contract for contract in contracts if contract.side == "put"]
+        return OptionsAnalyzeResponse(
+            symbol=fixture["symbol"],
+            underlying=self._safe_underlying(fixture),
+            assumptions={
+                "direction": parsed.direction,
+                "targetPrice": parsed.target_price,
+                "targetDate": parsed.target_date,
+                "maxPremium": parsed.max_premium,
+                "riskProfile": parsed.risk_profile,
+                "strategies": list(parsed.strategies),
+                "contractMultiplier": CONTRACT_MULTIPLIER,
+            },
+            optionChainSummary={
+                "source": fixture["source"],
+                "chainAsOf": fixture["chainAsOf"],
+                "expirationCount": len(fixture.get("expirations") or []),
+                "callCount": len(calls),
+                "putCount": len(puts),
+                "candidateCount": len(candidates),
+            },
+            candidateContracts=candidates,
+            risks=list(PHASE3_RISKS),
+            limitations=list(PHASE3_LIMITATIONS),
+            metadata=self._metadata(
+                force_refresh=parsed.force_refresh,
+                scoring_engine=SCORING_MODEL_VERSION,
+                strategy_engine=SCENARIO_MODEL_VERSION,
+            ),
+        )
+
+    def scenario(self, request: OptionsScenarioRequest | Dict[str, Any]) -> OptionsScenarioResponse:
+        parsed = self._parse_scenario_request(request)
+        fixture = self._fixture_for_symbol(parsed.symbol)
+        contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
+        side = "call" if parsed.strategy == "long_call" else "put"
+        contract = self._select_contract(
+            contracts,
+            side=side,
+            contract_symbol=parsed.contract_symbol,
+            expiration=parsed.expiration,
+            strike=parsed.strike,
+        )
+        underlying_price = float((fixture.get("underlying") or {}).get("price") or 0)
+        premium_at_risk = self._premium_at_risk(contract)
+        breakeven = self._breakeven(contract)
+        grid_prices = self._scenario_prices(underlying_price, parsed.target_price, parsed.custom_prices)
+        rows = [
+            self._payoff_row(
+                label=label,
+                terminal_price=price,
+                contract=contract,
+                premium_at_risk=premium_at_risk,
+            )
+            for label, price in grid_prices
+        ]
+        return OptionsScenarioResponse(
+            symbol=fixture["symbol"],
+            underlying=self._safe_underlying(fixture),
+            strategy=parsed.strategy,
+            contract=contract,
+            expirationPayoffGrid=rows,
+            risk=OptionScenarioRisk(
+                premiumAtRisk=premium_at_risk,
+                breakeven=breakeven,
+                requiredMovePct=self._required_move_pct(underlying_price, breakeven),
+                maxLoss=premium_at_risk,
+            ),
+            preExpirationTheoreticalPricing={
+                "available": False,
+                "reason": "phase3_expiration_payoff_only",
+                "requiredInputs": ["pricing_model", "risk_free_rate", "dividends", "iv_surface", "time_to_expiration"],
+            },
+            limitations=list(PHASE3_LIMITATIONS),
+            metadata=self._metadata(
+                force_refresh=parsed.force_refresh,
+                scoring_engine=SCORING_MODEL_VERSION,
+                strategy_engine=SCENARIO_MODEL_VERSION,
+            ),
+        )
+
     def _fixture_for_symbol(self, symbol: str) -> Dict[str, Any]:
         normalized = self._normalize_symbol(symbol)
         if normalized != "TEM" or not self._is_us_equity_symbol(normalized):
@@ -167,8 +313,16 @@ class OptionsLabService:
         return bool(re.fullmatch(r"[A-Z]{1,5}", symbol))
 
     @staticmethod
-    def _metadata(force_refresh: bool = False) -> OptionsMetadata:
-        return OptionsMetadata(forceRefreshIgnored=bool(force_refresh))
+    def _metadata(
+        force_refresh: bool = False,
+        scoring_engine: str = "not_implemented_until_scoring_phase",
+        strategy_engine: str = "not_implemented_until_later_phase",
+    ) -> OptionsMetadata:
+        return OptionsMetadata(
+            forceRefreshIgnored=bool(force_refresh),
+            scoringEngine=scoring_engine,
+            strategyEngine=strategy_engine,
+        )
 
     @staticmethod
     def _safe_underlying(fixture: Dict[str, Any]) -> Dict[str, Any]:
@@ -186,7 +340,11 @@ class OptionsLabService:
         underlying_price = float((fixture.get("underlying") or {}).get("price") or 0)
         for item in sorted(
             fixture.get("contracts") or [],
-            key=lambda row: (str(row.get("expiration") or ""), str(row.get("side") or ""), float(row.get("strike") or 0)),
+            key=lambda row: (
+                str(row.get("expiration") or ""),
+                str(row.get("side") or ""),
+                float(row.get("strike") or 0),
+            ),
         ):
             bid = self._float_or_none(item.get("bid"))
             ask = self._float_or_none(item.get("ask"))
@@ -206,9 +364,17 @@ class OptionsLabService:
                 volume=self._int_or_none(item.get("volume")),
                 openInterest=self._int_or_none(item.get("openInterest")),
                 impliedVolatility=self._float_or_none(item.get("impliedVolatility")),
-                greeks=OptionGreeks(**dict(item.get("greeks") or {})) if include_greeks and item.get("greeks") else None,
+                greeks=(
+                    OptionGreeks(**dict(item.get("greeks") or {}))
+                    if include_greeks and item.get("greeks")
+                    else None
+                ),
                 dte=expiration_dte.get(expiration, 0),
-                moneyness=self._moneyness(str(item.get("side") or ""), float(item.get("strike") or 0), underlying_price),
+                moneyness=self._moneyness(
+                    str(item.get("side") or ""),
+                    float(item.get("strike") or 0),
+                    underlying_price,
+                ),
                 spreadPct=spread_pct,
                 liquidityBucket=self._liquidity_bucket(spread_pct, self._int_or_none(item.get("openInterest"))),
                 asOf=fixture["chainAsOf"],
@@ -262,3 +428,351 @@ class OptionsLabService:
         if spread_pct <= 25 and open_interest >= 100:
             return "moderate"
         return "thin"
+
+    @staticmethod
+    def _parse_analyze_request(request: OptionsAnalyzeRequest | Dict[str, Any]) -> OptionsAnalyzeRequest:
+        if isinstance(request, OptionsAnalyzeRequest):
+            return request
+        return OptionsAnalyzeRequest.model_validate(request)
+
+    @staticmethod
+    def _parse_scenario_request(request: OptionsScenarioRequest | Dict[str, Any]) -> OptionsScenarioRequest:
+        if isinstance(request, OptionsScenarioRequest):
+            return request
+        return OptionsScenarioRequest.model_validate(request)
+
+    @staticmethod
+    def _supported_strategies(strategies: Sequence[str]) -> set[str]:
+        requested = set(strategies or ["long_call", "long_put"])
+        return requested & {"long_call", "long_put"}
+
+    @staticmethod
+    def _candidate_sides(direction: str, strategies: set[str]) -> set[str]:
+        if direction == "bullish":
+            return {"call"} if "long_call" in strategies else set()
+        if direction == "bearish":
+            return {"put"} if "long_put" in strategies else set()
+        if direction == "volatility":
+            sides = set()
+            if "long_call" in strategies:
+                sides.add("call")
+            if "long_put" in strategies:
+                sides.add("put")
+            return sides
+        return set()
+
+    @staticmethod
+    def _parse_date(value: str) -> date:
+        return datetime.strptime(str(value), "%Y-%m-%d").date()
+
+    def _score_contract(
+        self,
+        contract: OptionContract,
+        strategy: str,
+        direction: str,
+        target_price: float,
+        target_date: date,
+        max_premium: Optional[float],
+        risk_profile: str,
+        underlying_price: float,
+    ) -> OptionCandidateContract:
+        premium_at_risk = self._premium_at_risk(contract)
+        breakeven = self._breakeven(contract)
+        target_payoff = self._expiration_net_payoff(contract, target_price, premium_at_risk)
+        required_move_pct = self._required_move_pct(underlying_price, breakeven)
+        sub_scores = OptionScoringSubScores(
+            directionalFit=self._directional_fit(contract.side, direction),
+            deltaFit=self._delta_fit(contract, risk_profile),
+            breakevenDifficulty=self._breakeven_score(contract, target_price, breakeven),
+            premiumEfficiency=self._premium_efficiency(target_payoff, premium_at_risk),
+            liquidityScore=self._liquidity_score(contract),
+            spreadPenalty=self._spread_score(contract.spread_pct),
+            ivRisk=self._iv_score(contract.implied_volatility),
+            thetaRisk=self._theta_score(contract, premium_at_risk),
+            dteFit=self._dte_fit(contract, target_date),
+            targetScenarioPayoff=self._target_payoff_score(target_payoff, premium_at_risk),
+            maxLossBudgetFit=self._budget_fit(premium_at_risk, max_premium),
+            oiVolumeConfidence=self._oi_volume_confidence(contract),
+            dataFreshnessConfidence=100,
+        )
+        score = self._weighted_score(sub_scores)
+        grade = self._grade_label(score)
+        return OptionCandidateContract(
+            strategy=strategy,
+            contract=contract,
+            score=score,
+            gradeLabel=grade,
+            premiumAtRisk=premium_at_risk,
+            breakeven=breakeven,
+            requiredMovePct=required_move_pct,
+            targetPayoff=round(target_payoff, 2),
+            scoring=OptionContractScoring(
+                subScores=sub_scores,
+                gradeLabel=grade,
+                topPositiveDrivers=self._positive_drivers(sub_scores),
+                topRiskDrivers=self._risk_drivers(sub_scores),
+                assumptionsUsed={
+                    "direction": direction,
+                    "targetPrice": target_price,
+                    "targetDate": target_date.isoformat(),
+                    "riskProfile": risk_profile,
+                    "contractMultiplier": CONTRACT_MULTIPLIER,
+                    "pricingMode": "expiration_intrinsic_minus_mid_premium",
+                },
+                dataConfidence=self._data_confidence(sub_scores),
+                notAdviceDisclosure=(
+                    "Analytical ranking under explicit assumptions only; "
+                    "not investment advice or an instruction."
+                ),
+            ),
+        )
+
+    @staticmethod
+    def _premium_at_risk(contract: OptionContract) -> float:
+        mid = contract.mid if contract.mid is not None else contract.last
+        return round(float(mid or 0) * CONTRACT_MULTIPLIER, 2)
+
+    @staticmethod
+    def _breakeven(contract: OptionContract) -> float:
+        mid = float(contract.mid if contract.mid is not None else contract.last or 0)
+        if contract.side == "call":
+            return round(contract.strike + mid, 2)
+        return round(contract.strike - mid, 2)
+
+    @staticmethod
+    def _required_move_pct(underlying_price: float, breakeven: float) -> float:
+        if not underlying_price:
+            return 0
+        return round(((breakeven - underlying_price) / underlying_price) * 100, 2)
+
+    @staticmethod
+    def _expiration_net_payoff(contract: OptionContract, terminal_price: float, premium_at_risk: float) -> float:
+        if contract.side == "call":
+            gross = max(0.0, terminal_price - contract.strike) * CONTRACT_MULTIPLIER
+        else:
+            gross = max(0.0, contract.strike - terminal_price) * CONTRACT_MULTIPLIER
+        return gross - premium_at_risk
+
+    @staticmethod
+    def _directional_fit(side: str, direction: str) -> float:
+        if (direction == "bullish" and side == "call") or (direction == "bearish" and side == "put"):
+            return 100
+        if direction == "volatility":
+            return 70
+        return 40
+
+    @classmethod
+    def _delta_fit(cls, contract: OptionContract, risk_profile: str) -> float:
+        delta = abs((contract.greeks.delta if contract.greeks else 0) or 0)
+        ideal = {"conservative": 0.55, "balanced": 0.42, "aggressive": 0.28}.get(risk_profile, 0.42)
+        return cls._bounded(100 - abs(delta - ideal) * 180)
+
+    @classmethod
+    def _breakeven_score(cls, contract: OptionContract, target_price: float, breakeven: float) -> float:
+        if contract.side == "call":
+            if target_price >= breakeven:
+                return cls._bounded(75 + min((target_price - breakeven) * 4, 25))
+            return cls._bounded(75 - (breakeven - target_price) * 8)
+        if target_price <= breakeven:
+            return cls._bounded(75 + min((breakeven - target_price) * 4, 25))
+        return cls._bounded(75 - (target_price - breakeven) * 8)
+
+    @classmethod
+    def _premium_efficiency(cls, target_payoff: float, premium_at_risk: float) -> float:
+        if premium_at_risk <= 0:
+            return 0
+        return cls._bounded(45 + (target_payoff / premium_at_risk) * 25)
+
+    @classmethod
+    def _liquidity_score(cls, contract: OptionContract) -> float:
+        spread = cls._spread_score(contract.spread_pct)
+        oi = min(float(contract.open_interest or 0) / 1000 * 100, 100)
+        volume = min(float(contract.volume or 0) / 300 * 100, 100)
+        return round(spread * 0.45 + oi * 0.35 + volume * 0.2, 2)
+
+    @classmethod
+    def _spread_score(cls, spread_pct: Optional[float]) -> float:
+        if spread_pct is None:
+            return 35
+        return cls._bounded(100 - float(spread_pct) * 2)
+
+    @classmethod
+    def _iv_score(cls, iv: Optional[float]) -> float:
+        if iv is None:
+            return 55
+        return cls._bounded(100 - max(0.0, float(iv) - 0.45) * 130)
+
+    @classmethod
+    def _theta_score(cls, contract: OptionContract, premium_at_risk: float) -> float:
+        theta = abs((contract.greeks.theta if contract.greeks else 0) or 0) * CONTRACT_MULTIPLIER
+        if premium_at_risk <= 0:
+            return 50
+        daily_decay_pct = theta / premium_at_risk * 100
+        return cls._bounded(100 - daily_decay_pct * 16)
+
+    @classmethod
+    def _dte_fit(cls, contract: OptionContract, target_date: date) -> float:
+        expiration = cls._parse_date(contract.expiration)
+        if expiration < target_date:
+            days_short = (target_date - expiration).days
+            return cls._bounded(35 - days_short * 0.5)
+        buffer_days = (expiration - target_date).days
+        return cls._bounded(100 - buffer_days * 0.35)
+
+    @classmethod
+    def _target_payoff_score(cls, target_payoff: float, premium_at_risk: float) -> float:
+        if premium_at_risk <= 0:
+            return 0
+        return cls._bounded(50 + (target_payoff / premium_at_risk) * 22)
+
+    @classmethod
+    def _budget_fit(cls, premium_at_risk: float, max_premium: Optional[float]) -> float:
+        if max_premium is None:
+            return 100
+        if max_premium <= 0:
+            return 0
+        return cls._bounded(100 - max(0.0, premium_at_risk - max_premium) / max_premium * 100)
+
+    @classmethod
+    def _oi_volume_confidence(cls, contract: OptionContract) -> float:
+        oi = min(float(contract.open_interest or 0) / 750 * 100, 100)
+        volume = min(float(contract.volume or 0) / 200 * 100, 100)
+        return round(oi * 0.6 + volume * 0.4, 2)
+
+    @staticmethod
+    def _weighted_score(sub_scores: OptionScoringSubScores) -> float:
+        weights = {
+            "directional_fit": 0.12,
+            "delta_fit": 0.08,
+            "breakeven_difficulty": 0.10,
+            "premium_efficiency": 0.10,
+            "liquidity_score": 0.12,
+            "spread_penalty": 0.08,
+            "iv_risk": 0.06,
+            "theta_risk": 0.06,
+            "dte_fit": 0.08,
+            "target_scenario_payoff": 0.12,
+            "max_loss_budget_fit": 0.04,
+            "oi_volume_confidence": 0.03,
+            "data_freshness_confidence": 0.01,
+        }
+        raw = sum(float(getattr(sub_scores, key)) * weight for key, weight in weights.items())
+        return round(max(0.0, min(100.0, raw)), 2)
+
+    @staticmethod
+    def _grade_label(score: float) -> str:
+        if score >= 80:
+            return "A"
+        if score >= 65:
+            return "B"
+        if score >= 50:
+            return "C"
+        return "D"
+
+    @staticmethod
+    def _positive_drivers(sub_scores: OptionScoringSubScores) -> List[str]:
+        rows = [
+            ("directional_fit", sub_scores.directional_fit),
+            ("target_scenario_payoff", sub_scores.target_scenario_payoff),
+            ("liquidity_score", sub_scores.liquidity_score),
+            ("premium_efficiency", sub_scores.premium_efficiency),
+            ("dte_fit", sub_scores.dte_fit),
+        ]
+        return [name for name, _score in sorted(rows, key=lambda row: row[1], reverse=True)[:3]]
+
+    @staticmethod
+    def _risk_drivers(sub_scores: OptionScoringSubScores) -> List[str]:
+        rows = [
+            ("breakeven_difficulty", sub_scores.breakeven_difficulty),
+            ("spread_penalty", sub_scores.spread_penalty),
+            ("iv_risk", sub_scores.iv_risk),
+            ("theta_risk", sub_scores.theta_risk),
+            ("oi_volume_confidence", sub_scores.oi_volume_confidence),
+            ("dte_fit", sub_scores.dte_fit),
+        ]
+        return [name for name, _score in sorted(rows, key=lambda row: row[1])[:3]]
+
+    @staticmethod
+    def _data_confidence(sub_scores: OptionScoringSubScores) -> str:
+        average = (
+            sub_scores.liquidity_score
+            + sub_scores.oi_volume_confidence
+            + sub_scores.data_freshness_confidence
+        ) / 3
+        if average >= 75:
+            return "high"
+        if average >= 50:
+            return "moderate"
+        return "low"
+
+    @staticmethod
+    def _bounded(value: float) -> float:
+        return round(max(0.0, min(100.0, value)), 2)
+
+    @staticmethod
+    def _select_contract(
+        contracts: Sequence[OptionContract],
+        side: str,
+        contract_symbol: Optional[str],
+        expiration: Optional[str],
+        strike: Optional[float],
+    ) -> OptionContract:
+        filtered = [contract for contract in contracts if contract.side == side]
+        if contract_symbol:
+            filtered = [contract for contract in filtered if contract.contract_symbol == contract_symbol]
+        if expiration:
+            filtered = [contract for contract in filtered if contract.expiration == expiration]
+        if strike is not None:
+            filtered = [contract for contract in filtered if contract.strike == strike]
+        if not filtered:
+            raise ValueError("No supported fixture contract matched the scenario request.")
+        return sorted(filtered, key=lambda contract: (contract.expiration, contract.strike))[0]
+
+    @classmethod
+    def _scenario_prices(
+        cls,
+        underlying_price: float,
+        target_price: Optional[float],
+        custom_prices: Sequence[float],
+    ) -> List[tuple[str, float]]:
+        rows = [
+            ("down_20_pct", underlying_price * 0.8),
+            ("down_10_pct", underlying_price * 0.9),
+            ("flat", underlying_price),
+            ("up_10_pct", underlying_price * 1.1),
+            ("up_20_pct", underlying_price * 1.2),
+        ]
+        if target_price is not None:
+            rows.append(("custom_target", target_price))
+        for index, price in enumerate(custom_prices):
+            rows.append((f"custom_{index + 1}", float(price)))
+        seen = set()
+        unique_rows = []
+        for label, price in rows:
+            rounded = round(float(price), 2)
+            key = (label, rounded)
+            if key not in seen:
+                unique_rows.append((label, rounded))
+                seen.add(key)
+        return unique_rows
+
+    def _payoff_row(
+        self,
+        label: str,
+        terminal_price: float,
+        contract: OptionContract,
+        premium_at_risk: float,
+    ) -> OptionScenarioPayoffRow:
+        if contract.side == "call":
+            gross = max(0.0, terminal_price - contract.strike) * CONTRACT_MULTIPLIER
+        else:
+            gross = max(0.0, contract.strike - terminal_price) * CONTRACT_MULTIPLIER
+        net = gross - premium_at_risk
+        return_pct = (net / premium_at_risk * 100) if premium_at_risk else None
+        return OptionScenarioPayoffRow(
+            label=label,
+            underlyingPrice=round(terminal_price, 2),
+            grossPayoff=round(gross, 2),
+            netPayoff=round(net, 2),
+            returnOnPremiumPct=round(return_pct, 2) if return_pct is not None else None,
+        )

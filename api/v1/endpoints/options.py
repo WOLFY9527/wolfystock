@@ -5,7 +5,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
-from api.v1.schemas.options import OptionChainResponse, OptionExpirationsResponse, OptionUnderlyingSummaryResponse
+from api.v1.schemas.options import (
+    OptionChainResponse,
+    OptionExpirationsResponse,
+    OptionsAnalyzeRequest,
+    OptionsAnalyzeResponse,
+    OptionsScenarioRequest,
+    OptionsScenarioResponse,
+    OptionUnderlyingSummaryResponse,
+)
 from src.services.options_lab_service import OptionsLabService, OptionsLabUnsupportedSymbol
 
 router = APIRouter()
@@ -79,6 +87,34 @@ def get_options_chain(
             include_greeks=include_greeks,
             force_refresh=force_refresh,
         )
+    except OptionsLabUnsupportedSymbol as exc:
+        raise _unsupported_response(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": str(exc)}) from exc
+
+
+@router.post(
+    "/analyze",
+    response_model=OptionsAnalyzeResponse,
+    summary="Analyze fixture-backed Options Lab candidate contracts",
+)
+def analyze_options(request: OptionsAnalyzeRequest) -> OptionsAnalyzeResponse:
+    try:
+        return _service().analyze(request)
+    except OptionsLabUnsupportedSymbol as exc:
+        raise _unsupported_response(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": str(exc)}) from exc
+
+
+@router.post(
+    "/scenario",
+    response_model=OptionsScenarioResponse,
+    summary="Compute deterministic fixture-backed Options Lab expiration payoff scenarios",
+)
+def analyze_options_scenario(request: OptionsScenarioRequest) -> OptionsScenarioResponse:
+    try:
+        return _service().scenario(request)
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
     except ValueError as exc:

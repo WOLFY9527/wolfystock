@@ -518,6 +518,10 @@ Phase 3:
 - Scoring and scenario simulation with deterministic fixture tests.
 - Score explanation required for every ranked candidate.
 
+Phase 3 implementation note (2026-05-06):
+
+- Delivered backend-only `POST /api/v1/options/analyze` and `POST /api/v1/options/scenario` on top of the existing synthetic `TEM` fixture. The analyze route ranks only long call / long put candidates with bounded deterministic sub-scores, explanation drivers, assumptions, data-confidence labels, and a no-advice disclosure. The scenario route returns deterministic expiration payoff grids for long calls and long puts across -20%, -10%, flat, +10%, +20%, and optional custom target prices. Pre-expiration theoretical pricing, spreads, live provider integration, LLM usage, broker execution, order placement, and portfolio mutation remain deferred/out of scope.
+
 Phase 4:
 
 - Strategy comparison.

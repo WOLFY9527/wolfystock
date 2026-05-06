@@ -23,6 +23,8 @@ FORBIDDEN_TERMS = [
     "必买",
     "稳赚",
     "guaranteed",
+    "best contract",
+    "AI recommends you buy",
     "buy now",
 ]
 
@@ -129,8 +131,192 @@ def test_responses_do_not_expose_raw_or_recommendation_fields() -> None:
         service.get_summary("TEM"),
         service.get_expirations("TEM"),
         service.get_chain("TEM", expiration="2026-06-19"),
+        service.analyze(
+            {
+                "symbol": "TEM",
+                "direction": "bullish",
+                "targetPrice": 65,
+                "targetDate": "2026-08-21",
+                "maxPremium": 600,
+                "riskProfile": "balanced",
+                "strategies": ["long_call"],
+                "forceRefresh": True,
+            }
+        ),
+        service.scenario(
+            {
+                "symbol": "TEM",
+                "strategy": "long_call",
+                "contractSymbol": "TEM260619C00055000",
+                "targetPrice": 65,
+                "forceRefresh": True,
+            }
+        ),
     ]
 
     text = "\n".join(_json_text(payload) for payload in payloads).lower()
     for blocked in FORBIDDEN_TERMS:
         assert blocked.lower() not in text
+
+
+def test_analyze_bullish_tem_returns_ranked_call_candidates() -> None:
+    response = _service().analyze(
+        {
+            "symbol": "TEM",
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-08-21",
+            "riskProfile": "balanced",
+            "strategies": ["long_call"],
+        }
+    )
+
+    assert response.symbol == "TEM"
+    assert [candidate.contract.side for candidate in response.candidate_contracts] == ["call", "call", "call", "call"]
+    scores = [candidate.score for candidate in response.candidate_contracts]
+    assert scores == sorted(scores, reverse=True)
+    assert response.candidate_contracts[0].strategy == "long_call"
+    assert response.candidate_contracts[0].scoring.sub_scores.directional_fit == 100
+    assert response.metadata.scoring_engine == "deterministic_fixture_scoring_v1"
+    assert "phase4_spreads_deferred" in response.limitations
+
+
+def test_analyze_bearish_tem_returns_ranked_put_candidates() -> None:
+    response = _service().analyze(
+        {
+            "symbol": "TEM",
+            "direction": "bearish",
+            "targetPrice": 45,
+            "targetDate": "2026-06-19",
+            "riskProfile": "balanced",
+            "strategies": ["long_put"],
+        }
+    )
+
+    assert [candidate.contract.side for candidate in response.candidate_contracts] == ["put", "put", "put"]
+    assert all(candidate.strategy == "long_put" for candidate in response.candidate_contracts)
+    assert response.candidate_contracts[0].score >= response.candidate_contracts[-1].score
+
+
+def test_analyze_max_premium_filters_expensive_contracts() -> None:
+    response = _service().analyze(
+        {
+            "symbol": "TEM",
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "maxPremium": 300,
+            "riskProfile": "balanced",
+            "strategies": ["long_call"],
+        }
+    )
+
+    assert [candidate.contract.contract_symbol for candidate in response.candidate_contracts] == [
+        "TEM260619C00055000",
+        "TEM260619C00065000",
+    ]
+    assert all(candidate.premium_at_risk <= 300 for candidate in response.candidate_contracts)
+
+
+def test_analyze_penalizes_wide_spread_and_low_oi() -> None:
+    response = _service().analyze(
+        {
+            "symbol": "TEM",
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskProfile": "balanced",
+            "strategies": ["long_call"],
+        }
+    )
+
+    thin = next(
+        candidate
+        for candidate in response.candidate_contracts
+        if candidate.contract.contract_symbol == "TEM260619C00065000"
+    )
+    liquid = next(
+        candidate
+        for candidate in response.candidate_contracts
+        if candidate.contract.contract_symbol == "TEM260619C00055000"
+    )
+    assert thin.scoring.sub_scores.liquidity_score < liquid.scoring.sub_scores.liquidity_score
+    assert thin.scoring.sub_scores.oi_volume_confidence < liquid.scoring.sub_scores.oi_volume_confidence
+    assert thin.scoring.sub_scores.spread_penalty < liquid.scoring.sub_scores.spread_penalty
+    assert thin.score < liquid.score
+
+
+def test_analyze_target_price_affects_score_ordering() -> None:
+    lower_target = _service().analyze(
+        {
+            "symbol": "TEM",
+            "direction": "bullish",
+            "targetPrice": 55,
+            "targetDate": "2026-06-19",
+            "riskProfile": "balanced",
+            "strategies": ["long_call"],
+        }
+    )
+    higher_target = _service().analyze(
+        {
+            "symbol": "TEM",
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskProfile": "balanced",
+            "strategies": ["long_call"],
+        }
+    )
+
+    assert lower_target.candidate_contracts[0].contract.contract_symbol == "TEM260619C00050000"
+    assert higher_target.candidate_contracts[0].contract.contract_symbol == "TEM260619C00055000"
+
+
+def test_scenario_payoff_is_deterministic_at_expiration() -> None:
+    response = _service().scenario(
+        {
+            "symbol": "TEM",
+            "strategy": "long_call",
+            "contractSymbol": "TEM260619C00055000",
+            "targetPrice": 65,
+        }
+    )
+
+    assert response.contract.contract_symbol == "TEM260619C00055000"
+    assert response.expiration_payoff_grid[0].label == "down_20_pct"
+    target = next(row for row in response.expiration_payoff_grid if row.label == "custom_target")
+    assert target.underlying_price == 65
+    assert target.gross_payoff == 1000
+    assert target.net_payoff == 730
+    assert response.risk.premium_at_risk == 270
+    assert response.risk.breakeven == 57.7
+    assert response.pre_expiration_theoretical_pricing["available"] is False
+
+
+def test_analyze_force_refresh_does_not_call_external_paths() -> None:
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("forbidden external path was called")
+
+    with (
+        patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
+        patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
+        patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
+    ):
+        response = _service().analyze(
+            {
+                "symbol": "TEM",
+                "direction": "bullish",
+                "targetPrice": 65,
+                "targetDate": "2026-08-21",
+                "forceRefresh": True,
+            }
+        )
+
+    assert response.metadata.force_refresh_ignored is True
+
+
+def test_scenario_unsupported_symbol_uses_sanitized_error() -> None:
+    with pytest.raises(OptionsLabUnsupportedSymbol) as exc_info:
+        _service().scenario({"symbol": "HK00700", "strategy": "long_call"})
+
+    assert exc_info.value.code == "unsupported_symbol_or_market"
