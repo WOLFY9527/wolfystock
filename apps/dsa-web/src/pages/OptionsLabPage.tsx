@@ -1,5 +1,4 @@
-import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BarChart3, ChevronDown, CircleDollarSign, Layers3, LineChart, Search, ShieldCheck } from 'lucide-react';
 import {
   optionsLabApi,
@@ -56,6 +55,7 @@ const EMPTY_CONTRACTS: OptionContract[] = [];
 const EMPTY_EXPIRATIONS: OptionsExpiration[] = [];
 const COMPARISON_LOADING_TIMEOUT_MS = 12000;
 const COMPARISON_EMPTY_MESSAGE = '先选择可用到期日并加载合约后，再进入策略对比。';
+const OPTIONS_LAB_CRASH_FALLBACK = '期权实验室暂时无法加载，请刷新或稍后重试。';
 
 const fieldClass = 'h-10 w-full rounded-xl border border-white/10 bg-white/[0.02] px-3 font-mono text-sm text-white outline-none transition-all placeholder:text-white/20 focus:border-emerald-400/50 focus:bg-white/[0.05]';
 const labelClass = 'text-[10px] font-bold uppercase tracking-[0.18em] text-white/40';
@@ -74,6 +74,10 @@ function ratio(value?: number | null): string {
 function number(value?: number | null, digits = 0): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
   return formatNumber(value, digits);
+}
+
+function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
 }
 
 function limitationLabel(value: string): string {
@@ -385,7 +389,10 @@ const StrategyMetric: React.FC<{ label: string; value: string; tone?: string }> 
 );
 
 const StrategyCard: React.FC<{ strategy: OptionsStrategyComparison }> = ({ strategy }) => {
-  const caveats = [...strategy.liquidityWarnings, ...strategy.ivThetaNotes];
+  const liquidityWarnings = asArray(strategy.liquidityWarnings);
+  const ivThetaNotes = asArray(strategy.ivThetaNotes);
+  const suitabilityNotes = asArray(strategy.suitabilityNotes);
+  const caveats = [...liquidityWarnings, ...ivThetaNotes];
   return (
     <article className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-4 transition-all hover:border-white/10 hover:bg-white/[0.03]">
       <div className="flex min-w-0 items-start justify-between gap-3">
@@ -407,17 +414,17 @@ const StrategyCard: React.FC<{ strategy: OptionsStrategyComparison }> = ({ strat
         <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-3">
           <p className={labelClass}>流动性提示</p>
           <p className="mt-2 text-sm leading-6 text-white/62">
-            {strategy.liquidityWarnings.length ? strategy.liquidityWarnings.map(limitationLabel).join(' · ') : '未触发额外流动性提示'}
+            {liquidityWarnings.length ? liquidityWarnings.map(limitationLabel).join(' · ') : '未触发额外流动性提示'}
           </p>
         </div>
         <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-3">
           <p className={labelClass}>波动率 / 时间价值提示</p>
           <p className="mt-2 text-sm leading-6 text-white/62">
-            {strategy.ivThetaNotes.length ? strategy.ivThetaNotes.map(limitationLabel).join(' · ') : '暂无额外 IV / Theta 提示'}
+            {ivThetaNotes.length ? ivThetaNotes.map(limitationLabel).join(' · ') : '暂无额外 IV / Theta 提示'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {strategy.suitabilityNotes.slice(0, 3).map((note) => (
+          {suitabilityNotes.slice(0, 3).map((note) => (
             <Pill key={note}>{limitationLabel(note)}</Pill>
           ))}
           {caveats.length > 0 ? <Pill tone="warn">需复核假设</Pill> : null}
@@ -433,8 +440,11 @@ const StrategyComparisonPanel: React.FC<{
   emptyMessage: string | null;
   chain: OptionsChainResponse | null;
 }> = ({ comparisonState, loading, emptyMessage, chain }) => {
-  const strategies = comparisonState.comparison?.strategies || [];
-  const freshness = chain?.underlying?.freshness || (comparisonState.comparison?.metadata.fixtureBacked ? 'fixture' : null);
+  const comparison = comparisonState.comparison;
+  const comparisonMetadata = comparison?.metadata ?? {};
+  const strategies = asArray(comparison?.strategies);
+  const limitations = asArray(comparison?.limitations);
+  const freshness = chain?.underlying?.freshness || (comparisonMetadata.fixtureBacked ? 'fixture' : null);
   return (
     <section className={cn(panelClass, 'xl:col-span-12')} data-testid="options-lab-strategy-comparison">
       <SectionHeader eyebrow="Phase 4" title="策略对比" icon={Layers3}>
@@ -477,11 +487,11 @@ const StrategyComparisonPanel: React.FC<{
           <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
         </summary>
         <div className="mt-4 grid gap-2 text-xs leading-5 text-white/45">
-          <p>策略引擎：{comparisonState.comparison?.metadata.strategyEngine || '--'}</p>
-          <p>本地数据：{comparisonState.comparison?.metadata.fixtureBacked === false ? '未确认' : '是'}</p>
-          <p>忽略强制刷新：{comparisonState.comparison?.metadata.forceRefreshIgnored ? '是' : '否'}</p>
-          <p>假设：{comparisonState.comparison ? JSON.stringify(comparisonState.comparison.assumptions) : '--'}</p>
-          <p>限制：{(comparisonState.comparison?.limitations || []).map(limitationLabel).join(' · ') || '--'}</p>
+          <p>策略引擎：{comparisonMetadata.strategyEngine || '--'}</p>
+          <p>本地数据：{comparisonMetadata.fixtureBacked === false ? '未确认' : '是'}</p>
+          <p>忽略强制刷新：{comparisonMetadata.forceRefreshIgnored ? '是' : '否'}</p>
+          <p>假设：{comparison ? JSON.stringify(comparison.assumptions ?? {}) : '--'}</p>
+          <p>限制：{limitations.map(limitationLabel).join(' · ') || '--'}</p>
         </div>
       </details>
     </section>
@@ -526,16 +536,68 @@ const DeveloperDetails: React.FC<{ state: LoadState }> = ({ state }) => (
       <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
     </summary>
     <div className="mt-4 grid gap-2 text-xs leading-5 text-white/45">
-      <p>Source: {state.chain?.source || state.summary?.underlying.source || '--'}</p>
+      <p>Source: {state.chain?.source || state.summary?.underlying?.source || '--'}</p>
       <p>Chain as of: {state.chain?.chainAsOf || '--'}</p>
-      <p>Read only: {state.chain?.metadata.readOnly === false ? 'unconfirmed' : 'true'}</p>
-      <p>No external calls in tests: {state.chain?.metadata.noExternalCallsInTests === false ? 'unconfirmed' : 'true'}</p>
-      <p>Limitations: {[...(state.chain?.limitations || []), ...(state.chain?.metadata.limitations || [])].map(limitationLabel).join(' · ') || '--'}</p>
+      <p>Read only: {state.chain?.metadata?.readOnly === false ? 'unconfirmed' : 'true'}</p>
+      <p>No external calls in tests: {state.chain?.metadata?.noExternalCallsInTests === false ? 'unconfirmed' : 'true'}</p>
+      <p>Limitations: {[...asArray(state.chain?.limitations), ...asArray(state.chain?.metadata?.limitations)].map(limitationLabel).join(' · ') || '--'}</p>
     </div>
   </details>
 );
 
-const OptionsLabPage: React.FC = () => {
+type OptionsLabErrorBoundaryState = {
+  hasError: boolean;
+  errorName: string;
+};
+
+export class OptionsLabErrorBoundary extends React.Component<{ children: React.ReactNode }, OptionsLabErrorBoundaryState> {
+  state: OptionsLabErrorBoundaryState = {
+    hasError: false,
+    errorName: '',
+  };
+
+  static getDerivedStateFromError(error: unknown): OptionsLabErrorBoundaryState {
+    return {
+      hasError: true,
+      errorName: error instanceof Error && error.name ? error.name : 'RenderError',
+    };
+  }
+
+  render() {
+    if (!this.state.hasError) {
+      return this.props.children;
+    }
+
+    return (
+      <main className="min-h-screen w-full bg-[#050505] px-4 py-5 text-white md:px-8 xl:px-10">
+        <section className="mx-auto flex w-full max-w-[920px] flex-col gap-4 rounded-[24px] border border-rose-300/20 bg-white/[0.02] p-5 backdrop-blur-md md:p-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-1 h-5 w-5 shrink-0 text-amber-200" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className={labelClass}>Options Lab</p>
+              <h1 className="mt-2 text-xl font-semibold text-white">{OPTIONS_LAB_CRASH_FALLBACK}</h1>
+              <p className="mt-3 text-sm leading-6 text-white/58">基础工作区仍保持只读。此处仅显示已清理的错误类别，不展示堆栈或供应商载荷。</p>
+            </div>
+          </div>
+          <details data-testid="options-lab-crash-developer-details" className="rounded-2xl border border-white/5 bg-black/20 p-4 text-sm text-white/55">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/68">
+              <span className="inline-flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-cyan-200" aria-hidden="true" />
+                开发者字段 / 已清理
+              </span>
+              <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
+            </summary>
+            <div className="mt-4 grid gap-2 text-xs leading-5 text-white/45">
+              <p>Error class: {this.state.errorName || 'RenderError'}</p>
+            </div>
+          </details>
+        </section>
+      </main>
+    );
+  }
+}
+
+const OptionsLabPageContent: React.FC = () => {
   const [symbolInput, setSymbolInput] = useState('TEM');
   const [activeSymbol, setActiveSymbol] = useState('TEM');
   const [direction, setDirection] = useState<OptionsDirection>('bullish');
@@ -572,9 +634,10 @@ const OptionsLabPage: React.FC = () => {
           optionsLabApi.getUnderlyingSummary(activeSymbol),
           optionsLabApi.getExpirations(activeSymbol),
         ]);
-        const nextExpiration = expirations.expirations.some((item) => item.date === selectedExpiration)
+        const expirationItems = asArray(expirations.expirations);
+        const nextExpiration = expirationItems.some((item) => item.date === selectedExpiration)
           ? selectedExpiration
-          : expirations.expirations[0]?.date || selectedExpiration;
+          : expirationItems[0]?.date || selectedExpiration;
         const chain = await optionsLabApi.getOptionChain(activeSymbol, nextExpiration);
         if (ignored) return;
         setSelectedExpiration(nextExpiration);
@@ -612,8 +675,8 @@ const OptionsLabPage: React.FC = () => {
       const targetPriceValue = Number(targetPrice);
       const hasTargetPrice = Number.isFinite(targetPriceValue) && targetPriceValue > 0;
       const hasTargetDate = targetDate.trim().length > 0;
-      const hasExpirations = (state.expirations?.expirations.length || 0) > 0;
-      const hasContracts = Boolean((state.chain?.calls.length || 0) || (state.chain?.puts.length || 0));
+      const hasExpirations = asArray(state.expirations?.expirations).length > 0;
+      const hasContracts = Boolean(asArray(state.chain?.calls).length || asArray(state.chain?.puts).length);
       const baseReady = !state.loading && !state.error && state.summary && state.expirations && state.chain;
       const comparisonReady = Boolean(baseReady && hasTargetPrice && hasTargetDate && hasExpirations && hasContracts);
 
@@ -703,9 +766,9 @@ const OptionsLabPage: React.FC = () => {
     setSelectedExpiration(expiration);
   }, []);
 
-  const expirations = state.expirations?.expirations || EMPTY_EXPIRATIONS;
-  const calls = state.chain?.calls || EMPTY_CONTRACTS;
-  const puts = state.chain?.puts || EMPTY_CONTRACTS;
+  const expirations = asArray(state.expirations?.expirations).length ? asArray(state.expirations?.expirations) : EMPTY_EXPIRATIONS;
+  const calls = asArray(state.chain?.calls).length ? asArray(state.chain?.calls) : EMPTY_CONTRACTS;
+  const puts = asArray(state.chain?.puts).length ? asArray(state.chain?.puts) : EMPTY_CONTRACTS;
   const hasChainRows = calls.length > 0 || puts.length > 0;
   const topCall = useMemo(() => calls[0], [calls]);
   const comparisonEmptyMessage = useMemo(() => {
@@ -806,5 +869,11 @@ const OptionsLabPage: React.FC = () => {
     </main>
   );
 };
+
+const OptionsLabPage: React.FC = () => (
+  <OptionsLabErrorBoundary>
+    <OptionsLabPageContent />
+  </OptionsLabErrorBoundary>
+);
 
 export default OptionsLabPage;

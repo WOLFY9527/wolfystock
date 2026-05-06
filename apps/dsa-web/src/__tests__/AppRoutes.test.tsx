@@ -599,6 +599,27 @@ describe('AppContent route flows', () => {
     expect(await screen.findByText('options-lab-page')).toBeInTheDocument();
   });
 
+  it('renders an auth guard instead of an empty root for logged-out direct options lab entry', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: false,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: true,
+      isAdmin: false,
+      isAdminMode: false,
+      adminCapabilities: noCapabilities,
+    });
+
+    renderAt('/zh/options-lab');
+
+    expect(await screen.findByText('auth-guard:期权实验室')).toBeInTheDocument();
+    expect(screen.queryByText('options-lab-page')).not.toBeInTheDocument();
+  });
+
   it.each(['/backtest/results/123', '/zh/backtest/results/123'])(
     'renders the deterministic backtest result route for signed-in users at %s',
     async (path) => {

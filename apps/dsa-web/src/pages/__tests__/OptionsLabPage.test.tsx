@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import OptionsLabPage from '../OptionsLabPage';
+import OptionsLabPage, { OptionsLabErrorBoundary } from '../OptionsLabPage';
 import { optionsLabApi } from '../../api/optionsLab';
 
 vi.mock('../../api/optionsLab', () => ({
@@ -326,6 +326,41 @@ describe('OptionsLabPage', () => {
     expect(screen.getByText('TEM260619C00055000')).toBeInTheDocument();
   });
 
+  it('keeps the page visible when compare returns incomplete strategy fields', async () => {
+    vi.mocked(optionsLabApi.compareStrategies).mockResolvedValueOnce({
+      symbol: 'TEM',
+      underlying: {
+        price: 52.34,
+      },
+      assumptions: {},
+      strategies: [
+        {
+          strategyType: 'long_call',
+          legs: [],
+          netDebit: 423,
+          maxLoss: 423,
+          maxGain: null,
+          breakeven: 59.23,
+          requiredMovePct: 13.17,
+          payoffAtTarget: 577,
+          riskRewardRatio: null,
+        } as never,
+      ],
+      limitations: null,
+      metadata: null,
+    } as never);
+
+    renderPage();
+
+    expect(await screen.findByText('期权实验室')).toBeInTheDocument();
+    const section = await screen.findByTestId('options-lab-strategy-comparison');
+    await waitFor(() => {
+      expect(within(section).getByText('看涨期权多头')).toBeInTheDocument();
+    });
+    expect(document.body.textContent || '').not.toContain('TypeError');
+    expect(document.body.textContent || '').not.toContain('stack');
+  });
+
   it('keeps the base page usable when compare returns 404', async () => {
     vi.mocked(optionsLabApi.compareStrategies).mockRejectedValueOnce({
       response: { status: 404, data: { detail: { error: 'not_found' } } },
@@ -340,6 +375,24 @@ describe('OptionsLabPage', () => {
       expect(within(section).getByText('策略对比暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
     });
     expect(screen.getByText('TEM260619C00055000')).toBeInTheDocument();
+  });
+
+  it.each([401, 403])('keeps the base page usable when compare returns %s', async (status) => {
+    vi.mocked(optionsLabApi.compareStrategies).mockRejectedValueOnce({
+      response: { status, data: { detail: { error: 'auth_gated', raw_provider_payload: 'token=abc Traceback' } } },
+      message: `HTTP ${status}`,
+    });
+    renderPage();
+
+    expect(await screen.findByText('期权实验室')).toBeInTheDocument();
+    const section = await screen.findByTestId('options-lab-strategy-comparison');
+    await waitFor(() => {
+      expect(within(section).getByText('策略对比暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
+    });
+    const domText = document.body.textContent || '';
+    expect(domText).not.toContain('raw_provider_payload');
+    expect(domText).not.toContain('token=abc');
+    expect(domText).not.toContain('Traceback');
   });
 
   it('keeps the base page usable when compare times out', async () => {
@@ -396,6 +449,29 @@ describe('OptionsLabPage', () => {
     expect(details).not.toHaveAttribute('open');
     const strategyDetails = screen.getByTestId('options-lab-strategy-developer-details');
     expect(strategyDetails).not.toHaveAttribute('open');
+  });
+
+  it('renders the Options-only crash fallback with collapsed sanitized details', () => {
+    const ThrowingPage = () => {
+      throw new TypeError('provider exploded stack trace token=abc');
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/zh/options-lab']}>
+        <OptionsLabErrorBoundary>
+          <ThrowingPage />
+        </OptionsLabErrorBoundary>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('期权实验室暂时无法加载，请刷新或稍后重试。')).toBeInTheDocument();
+    const details = screen.getByTestId('options-lab-crash-developer-details');
+    expect(details).not.toHaveAttribute('open');
+    const domText = document.body.textContent || '';
+    expect(domText).toContain('TypeError');
+    expect(domText).not.toContain('provider exploded');
+    expect(domText).not.toContain('token=abc');
+    expect(domText).not.toContain('stack trace');
   });
 
   it('does not expose raw provider payloads, secrets, rejected recommendation wording, or order CTAs', async () => {
@@ -455,6 +531,42 @@ describe('OptionsLabPage', () => {
     renderPage();
     expect(await screen.findByText('期权链暂不可用。请稍后重试或调整标的。')).toBeInTheDocument();
     expect(document.body.textContent || '').not.toContain('provider exploded stack trace token=abc');
+  });
+
+  it('keeps the route visible when base response fields are missing, null, or empty', async () => {
+    vi.mocked(optionsLabApi.compareStrategies).mockClear();
+    vi.mocked(optionsLabApi.getUnderlyingSummary).mockResolvedValueOnce({
+      symbol: 'TEM',
+      market: 'us',
+      underlying: null,
+      optionsAvailability: null,
+      metadata: null,
+    } as never);
+    vi.mocked(optionsLabApi.getExpirations).mockResolvedValueOnce({
+      symbol: 'TEM',
+      expirations: null,
+      metadata: null,
+    } as never);
+    vi.mocked(optionsLabApi.getOptionChain).mockResolvedValueOnce({
+      symbol: 'TEM',
+      expiration: '2026-06-19',
+      underlying: null,
+      calls: null,
+      puts: null,
+      filtersApplied: null,
+      chainAsOf: null,
+      source: null,
+      limitations: null,
+      metadata: null,
+    } as never);
+
+    renderPage();
+
+    expect(await screen.findByText('期权实验室')).toBeInTheDocument();
+    expect(await screen.findByText('暂无可用到期日。')).toBeInTheDocument();
+    expect(screen.getByText('先选择可用到期日并加载合约后，再进入策略对比。')).toBeInTheDocument();
+    expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
+    expect(document.body.textContent || '').not.toContain('TypeError');
   });
 
   it('renders calls and puts in separate dense tables with mocked chain data', async () => {
