@@ -482,6 +482,10 @@ class DurableTaskState(Base):
     current_step = Column(Text)
     error_code = Column(String(64))
     error_summary = Column(Text)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=1)
+    lease_owner = Column(String(128), index=True)
+    lease_expires_at = Column(DateTime, index=True)
     idempotency_key_hash = Column(String(128), index=True)
     dedupe_key_hash = Column(String(128), index=True)
     metadata_json = Column(Text)
@@ -496,6 +500,7 @@ class DurableTaskState(Base):
         Index('ix_durable_task_owner_created', 'owner_user_id', 'created_at'),
         Index('ix_durable_task_owner_status_created', 'owner_user_id', 'status', 'created_at'),
         Index('ix_durable_task_status_updated', 'status', 'updated_at'),
+        Index('ix_durable_task_status_lease', 'status', 'lease_expires_at'),
     )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -512,6 +517,10 @@ class DurableTaskState(Base):
             'current_step': self.current_step,
             'error_code': self.error_code,
             'error_summary': self.error_summary,
+            'attempt_count': int(self.attempt_count or 0),
+            'max_attempts': int(self.max_attempts or 1),
+            'lease_owner': self.lease_owner,
+            'lease_expires_at': self.lease_expires_at.isoformat() if self.lease_expires_at else None,
             'metadata': metadata,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
@@ -1684,6 +1693,10 @@ class DatabaseManager:
             self._add_column_if_missing(conn, "user_watchlist_items", "score_reason", "TEXT")
             self._add_column_if_missing(conn, "user_watchlist_items", "score_status", "VARCHAR(16) DEFAULT 'stale'")
             self._add_column_if_missing(conn, "user_watchlist_items", "score_error", "TEXT")
+            self._add_column_if_missing(conn, "durable_task_states", "attempt_count", "INTEGER NOT NULL DEFAULT 0")
+            self._add_column_if_missing(conn, "durable_task_states", "max_attempts", "INTEGER NOT NULL DEFAULT 1")
+            self._add_column_if_missing(conn, "durable_task_states", "lease_owner", "VARCHAR(128)")
+            self._add_column_if_missing(conn, "durable_task_states", "lease_expires_at", "DATETIME")
             self._add_column_if_missing(
                 conn,
                 "market_scanner_runs",
@@ -1744,6 +1757,12 @@ class DatabaseManager:
                 "ix_portfolio_trade_account_active_date",
                 "portfolio_trades",
                 "account_id, is_active, trade_date",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_durable_task_status_lease",
+                "durable_task_states",
+                "status, lease_expires_at",
             )
 
             self._migrate_backtest_summaries_table(conn, bootstrap_user_id=bootstrap_user_id)
@@ -2456,6 +2475,7 @@ class DatabaseManager:
         route_family: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         dedupe_key: Optional[str] = None,
+        max_attempts: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         normalized_task_id = str(task_id or "").strip()
@@ -2484,6 +2504,11 @@ class DatabaseManager:
             row.status = str(status or "pending")[:32]
             row.progress = max(0, min(int(progress or 0), 100))
             row.current_step = sanitize_message(str(current_step or ""))[:500] or None
+            if max_attempts is not None:
+                row.max_attempts = max(1, min(int(max_attempts or 1), 10))
+            elif not row.max_attempts:
+                row.max_attempts = 1
+            row.attempt_count = max(0, int(row.attempt_count or 0))
             row.idempotency_key_hash = self._hash_optional_key(idempotency_key)
             row.dedupe_key_hash = self._hash_optional_key(dedupe_key)
             row.metadata_json = self._safe_json_dumps(safe_metadata)
@@ -2546,6 +2571,189 @@ class DatabaseManager:
             if error_summary is not None:
                 row.error_summary = self._sanitize_task_error_summary(error_summary)
             row.updated_at = now
+            session.flush()
+            return self._durable_task_payload(row)
+
+    def claim_next_durable_task_state(
+        self,
+        *,
+        worker_id: str,
+        task_type: str,
+        lease_seconds: int = 60,
+        now: Optional[datetime] = None,
+    ) -> Optional[Dict[str, Any]]:
+        normalized_worker = sanitize_message(str(worker_id or "").strip())[:128]
+        normalized_task_type = str(task_type or "").strip()[:32]
+        if not normalized_worker or not normalized_task_type:
+            return None
+        lease_seconds = max(1, min(int(lease_seconds or 60), 3600))
+        current_time = now or datetime.now()
+        claimable_statuses = ("queued", "pending", "waiting_retry")
+        recoverable_statuses = ("leased", "processing")
+        with self.session_scope() as session:
+            row = session.execute(
+                select(DurableTaskState)
+                .where(
+                    DurableTaskState.task_type == normalized_task_type,
+                    or_(
+                        and_(
+                            DurableTaskState.status.in_(claimable_statuses),
+                            or_(
+                                DurableTaskState.lease_expires_at.is_(None),
+                                DurableTaskState.lease_expires_at <= current_time,
+                            ),
+                        ),
+                        and_(
+                            DurableTaskState.status.in_(recoverable_statuses),
+                            DurableTaskState.lease_expires_at <= current_time,
+                        ),
+                    ),
+                )
+                .order_by(asc(DurableTaskState.created_at), asc(DurableTaskState.id))
+                .limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            row.status = "leased"
+            row.lease_owner = normalized_worker
+            row.lease_expires_at = current_time + timedelta(seconds=lease_seconds)
+            row.attempt_count = max(0, int(row.attempt_count or 0)) + 1
+            row.max_attempts = max(1, int(row.max_attempts or 1))
+            row.updated_at = current_time
+            if row.started_at is None:
+                row.started_at = current_time
+            session.flush()
+            return self._durable_task_payload(row)
+
+    def heartbeat_durable_task_state(
+        self,
+        *,
+        task_id: str,
+        worker_id: str,
+        lease_seconds: int = 60,
+        status: str = "processing",
+        progress: Optional[int] = None,
+        current_step: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        now: Optional[datetime] = None,
+    ) -> Optional[Dict[str, Any]]:
+        normalized_worker = sanitize_message(str(worker_id or "").strip())[:128]
+        if not normalized_worker:
+            return None
+        current_time = now or datetime.now()
+        with self.session_scope() as session:
+            row = session.execute(
+                select(DurableTaskState)
+                .where(
+                    DurableTaskState.task_id == str(task_id or "").strip(),
+                    DurableTaskState.lease_owner == normalized_worker,
+                    DurableTaskState.status.in_(("leased", "processing")),
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            row.status = str(status or "processing")[:32]
+            row.lease_expires_at = current_time + timedelta(seconds=max(1, min(int(lease_seconds or 60), 3600)))
+            if progress is not None:
+                row.progress = max(0, min(int(progress or 0), 100))
+            if current_step is not None:
+                row.current_step = sanitize_message(str(current_step or ""))[:500] or None
+            if metadata is not None:
+                prior = self._safe_json_loads(row.metadata_json, {})
+                if not isinstance(prior, dict):
+                    prior = {}
+                prior.update(self._sanitize_task_metadata(metadata))
+                row.metadata_json = self._safe_json_dumps(prior)
+            row.updated_at = current_time
+            session.flush()
+            return self._durable_task_payload(row)
+
+    def complete_claimed_durable_task_state(
+        self,
+        *,
+        task_id: str,
+        worker_id: str,
+        current_step: str = "Task complete",
+        metadata: Optional[Dict[str, Any]] = None,
+        now: Optional[datetime] = None,
+    ) -> Optional[Dict[str, Any]]:
+        normalized_worker = sanitize_message(str(worker_id or "").strip())[:128]
+        current_time = now or datetime.now()
+        with self.session_scope() as session:
+            row = session.execute(
+                select(DurableTaskState)
+                .where(
+                    DurableTaskState.task_id == str(task_id or "").strip(),
+                    DurableTaskState.lease_owner == normalized_worker,
+                    DurableTaskState.status.in_(("leased", "processing")),
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            if metadata is not None:
+                prior = self._safe_json_loads(row.metadata_json, {})
+                if not isinstance(prior, dict):
+                    prior = {}
+                prior.update(self._sanitize_task_metadata(metadata))
+                row.metadata_json = self._safe_json_dumps(prior)
+            row.status = "completed"
+            row.progress = 100
+            row.current_step = sanitize_message(str(current_step or ""))[:500] or None
+            row.completed_at = current_time
+            row.lease_owner = None
+            row.lease_expires_at = None
+            row.updated_at = current_time
+            session.flush()
+            return self._durable_task_payload(row)
+
+    def fail_claimed_durable_task_state(
+        self,
+        *,
+        task_id: str,
+        worker_id: str,
+        error_code: str,
+        error_summary: str,
+        retryable: bool,
+        current_step: str = "Task failed",
+        metadata: Optional[Dict[str, Any]] = None,
+        now: Optional[datetime] = None,
+    ) -> Optional[Dict[str, Any]]:
+        normalized_worker = sanitize_message(str(worker_id or "").strip())[:128]
+        current_time = now or datetime.now()
+        with self.session_scope() as session:
+            row = session.execute(
+                select(DurableTaskState)
+                .where(
+                    DurableTaskState.task_id == str(task_id or "").strip(),
+                    DurableTaskState.lease_owner == normalized_worker,
+                    DurableTaskState.status.in_(("leased", "processing")),
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            if metadata is not None:
+                prior = self._safe_json_loads(row.metadata_json, {})
+                if not isinstance(prior, dict):
+                    prior = {}
+                prior.update(self._sanitize_task_metadata(metadata))
+                row.metadata_json = self._safe_json_dumps(prior)
+            attempts = max(0, int(row.attempt_count or 0))
+            max_attempts = max(1, int(row.max_attempts or 1))
+            should_retry = bool(retryable) and attempts < max_attempts
+            row.status = "queued" if should_retry else "failed"
+            row.progress = 0 if should_retry else 100
+            row.current_step = sanitize_message(str(current_step or ""))[:500] or None
+            row.error_code = str(error_code or "worker_error")[:64] or None
+            row.error_summary = self._sanitize_task_error_summary(error_summary)
+            row.lease_owner = None
+            row.lease_expires_at = None
+            if not should_retry:
+                row.failed_at = current_time
+                row.completed_at = current_time
+            row.updated_at = current_time
             session.flush()
             return self._durable_task_payload(row)
 

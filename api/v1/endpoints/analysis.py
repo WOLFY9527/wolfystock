@@ -877,7 +877,9 @@ def _load_owner_durable_analysis_task(task_id: str, owner_id: Optional[str]) -> 
 def _task_status_from_durable_state(task_id: str, state: Dict[str, Any]) -> TaskStatus:
     metadata = state.get("metadata") if isinstance(state.get("metadata"), dict) else {}
     status = str(state.get("status") or "pending").strip().lower()
-    if status not in {"pending", "processing", "completed", "failed"}:
+    if status in {"queued", "leased", "waiting_retry"}:
+        status = "processing" if status != "queued" else "pending"
+    elif status not in {"pending", "processing", "completed", "failed"}:
         status = "processing"
     return TaskStatus(
         task_id=task_id,

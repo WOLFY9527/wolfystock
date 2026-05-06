@@ -18,6 +18,15 @@ WS2-R0 is design only. It does not implement Redis, Celery, RQ, workers, migrati
 - The current process-local queue/SSE implementation remains in place. No worker, Redis, Celery, RQ, Kafka, or external queue cutover has been introduced.
 - Remaining WS2 work stays queued for later passes: WS2-R2 worker prototype, WS2-R3 external SSE/polling state, WS2-R4 quota enforcement, and WS2-R5 provider circuit breaker policy.
 
+## WS2-R2 implementation note
+
+- A durable worker prototype now claims and leases one synthetic fixture-backed task type through `durable_task_states`, updates progress, completes safe fixture work, and records sanitized failures.
+- Retry behavior is bounded and limited to explicit transient synthetic errors. Validation-style synthetic failures are terminal and are not retried.
+- Graceful shutdown is cooperative: the prototype checks a shutdown flag before claiming and between fixture stages, leaving leased in-progress state recoverable by lease expiry instead of corrupting terminal state.
+- This is not a production queue cutover. Existing process-local `AnalysisTaskQueue` and SSE behavior remain the production default.
+- No Redis, Celery, RQ, Dramatiq, Kafka, or external queue dependency was added, and the prototype does not call live LLM, provider, broker, scanner, backtest, portfolio, or frontend paths.
+- Remaining WS2 work stays queued for later passes: WS2-R3 external SSE/polling state, WS2-R4 quota enforcement, and WS2-R5 provider circuit breaker policy.
+
 ## 2. Current deployment assumptions
 
 - API single-process assumption: `docs/DEPLOY.md` and `docs/deploy-webui-cloud.md` currently state that `/api/v1/analysis/*` task queue and SSE state are process-local and should stay single-process unless sticky routing is intentionally provided.
