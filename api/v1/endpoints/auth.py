@@ -55,7 +55,9 @@ from src.services.admin_mfa_service import (
     create_enrollment_challenge,
     disable_mfa,
     enable_mfa,
+    generate_recovery_codes,
     record_mfa_verification,
+    verify_recovery_code,
     verify_totp_code,
 )
 from src.services.system_config_service import SystemConfigService
@@ -124,6 +126,12 @@ class MfaCodeRequest(BaseModel):
     """MFA verification request body."""
 
     code: str = Field(default="", description="Six-digit MFA code")
+
+
+class MfaRecoveryCodeRequest(BaseModel):
+    """MFA recovery code verification request body."""
+
+    code: str = Field(default="", description="One-time MFA recovery code")
 
 
 class CurrentUserResponse(BaseModel):
@@ -854,6 +862,94 @@ async def auth_mfa_disable(request: Request):
     return {
         "ok": True,
         "status": "disabled",
+        "mfaRequiredForLogin": False,
+    }
+
+
+@router.post(
+    "/mfa/recovery-codes/generate",
+    summary="Generate admin MFA recovery codes",
+    description="Generates one-time admin MFA recovery codes. Plaintext codes are returned only in this response.",
+)
+async def auth_mfa_recovery_codes_generate(request: Request):
+    current_user, error_response = _require_admin_current_user(request)
+    if error_response is not None:
+        return error_response
+    reauth_error = _require_recent_admin_reauth_response(current_user)
+    if reauth_error is not None:
+        return reauth_error
+
+    batch = generate_recovery_codes(user_id=current_user.user_id, repo=AuthRepository())
+    if batch is None:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "mfa_not_enabled", "message": "MFA is not enabled"},
+        )
+    return {
+        "ok": True,
+        "status": "generated",
+        "count": len(batch.codes),
+        "remainingCount": batch.remaining_count,
+        "generatedAt": batch.generated_at.isoformat(),
+        "recoveryCodes": batch.codes,
+        "mfaRequiredForLogin": False,
+    }
+
+
+@router.post(
+    "/mfa/recovery-codes/verify",
+    summary="Verify admin MFA recovery code",
+    description="Verifies and consumes one active admin MFA recovery code. Login enforcement remains disabled.",
+)
+async def auth_mfa_recovery_codes_verify(request: Request, body: MfaRecoveryCodeRequest):
+    current_user, error_response = _require_admin_current_user(request)
+    if error_response is not None:
+        return error_response
+
+    result = verify_recovery_code(user_id=current_user.user_id, code=body.code, repo=AuthRepository())
+    if not result.verified:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "error": "invalid_recovery_code",
+                "message": "Invalid recovery code",
+                "remainingCount": result.remaining_count,
+            },
+        )
+    return {
+        "ok": True,
+        "verified": True,
+        "remainingCount": result.remaining_count,
+        "mfaRequiredForLogin": False,
+    }
+
+
+@router.post(
+    "/mfa/recovery-codes/rotate",
+    summary="Rotate admin MFA recovery codes",
+    description="Replaces active admin MFA recovery codes after recent reauthentication.",
+)
+async def auth_mfa_recovery_codes_rotate(request: Request):
+    current_user, error_response = _require_admin_current_user(request)
+    if error_response is not None:
+        return error_response
+    reauth_error = _require_recent_admin_reauth_response(current_user)
+    if reauth_error is not None:
+        return reauth_error
+
+    batch = generate_recovery_codes(user_id=current_user.user_id, repo=AuthRepository())
+    if batch is None:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "mfa_not_enabled", "message": "MFA is not enabled"},
+        )
+    return {
+        "ok": True,
+        "status": "rotated",
+        "count": len(batch.codes),
+        "remainingCount": batch.remaining_count,
+        "generatedAt": batch.generated_at.isoformat(),
+        "recoveryCodes": batch.codes,
         "mfaRequiredForLogin": False,
     }
 

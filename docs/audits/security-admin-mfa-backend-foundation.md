@@ -43,9 +43,18 @@ Phase 3E TOTP path is a scaffold:
 - Production-ready MFA still requires an approved secret encryption or external
   secret storage design before login enforcement can be enabled.
 
-Recovery code hashing is represented by the storage placeholder
-`mfa_recovery_codes_hash`, but recovery code issuance and verification are not
-implemented in this phase.
+Implementation note, Security Phase 3F:
+
+- Recovery-code issuance and verification now use `mfa_recovery_codes_hash` as a
+  versioned JSON envelope.
+- The envelope stores only salted password-hash entries plus `generated_at`,
+  per-code `used_at`, and per-set `replaced_at` metadata.
+- Plaintext recovery codes are returned only by generation/rotation responses
+  and are never persisted.
+- Recovery-code verification consumes one active code exactly once and then
+  returns only status plus remaining count.
+- Recovery-code generation and rotation require the existing recent admin reauth
+  marker. Login MFA enforcement remains disabled.
 
 ## Explicitly Not Changed
 
@@ -59,7 +68,7 @@ implemented in this phase.
 ## Remaining Blockers
 
 - Approve and implement production secret encryption/storage for TOTP secrets.
-- Add recovery code generation, hashing, display-once behavior, and verification.
-- Decide the future login/session contract for MFA-required state.
+- Decide the future login/session contract for MFA-required and recovery-code
+  fallback flows.
 - Enable admin MFA enforcement only after the storage/encryption model and
   rollout/rollback plan are production-ready.

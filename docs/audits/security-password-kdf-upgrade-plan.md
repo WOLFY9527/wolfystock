@@ -81,9 +81,20 @@ Implementation note, Security Phase 3E:
   placeholder, and created/enabled/last-verified timestamps.
 - The current TOTP path is a scaffold because no production secret encryption
   service exists in the auth stack. Tests use `WOLFYSTOCK_MFA_TEST_SECRET` and a
-  deterministic `test-only:` reference; production login enforcement remains
-  blocked until encrypted/external secret storage and recovery-code issuance are
-  implemented.
+  deterministic `test-only:` reference; at this phase, production login
+  enforcement remained blocked until encrypted/external secret storage and
+  recovery-code issuance were implemented.
+
+Implementation note, Security Phase 3F:
+
+- MFA recovery-code foundation has landed without login enforcement.
+- Recovery codes are generated as display-once plaintext values and persisted
+  only as salted hashes inside the existing `mfa_recovery_codes_hash` field.
+- Stored recovery metadata records generation, one-time `used_at`, and rotation
+  replacement timestamps where the current field can support them.
+- Generation and rotation require the existing recent admin reauth marker.
+- Production login MFA enforcement remains blocked until the approved encrypted
+  or external TOTP secret storage and final MFA-required session contract land.
 
 Explicitly not changed in this task:
 

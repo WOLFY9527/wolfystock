@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import hmac
+import json
 import os
 import struct
 import tempfile
@@ -180,6 +181,95 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
         user = self.db.get_app_user("bootstrap-admin")
         self.assertFalse(getattr(user, "mfa_enabled"))
         self.assertIsNone(getattr(user, "mfa_secret_ref"))
+
+    def test_recovery_code_generation_returns_plaintext_once_and_stores_hashes(self) -> None:
+        self._login_admin()
+        self.client.post("/api/v1/auth/mfa/enroll/start")
+        self._reauth_admin()
+        self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": _totp_code(TEST_MFA_SECRET)})
+
+        generated = self.client.post("/api/v1/auth/mfa/recovery-codes/generate")
+
+        self.assertEqual(generated.status_code, 200)
+        payload = generated.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["status"], "generated")
+        self.assertEqual(payload["count"], 10)
+        codes = payload["recoveryCodes"]
+        self.assertEqual(len(codes), 10)
+        self.assertTrue(all("-" in code for code in codes))
+        self.assertFalse(payload["mfaRequiredForLogin"])
+
+        user = self.db.get_app_user("bootstrap-admin")
+        stored = getattr(user, "mfa_recovery_codes_hash")
+        self.assertIsNotNone(stored)
+        self.assertNotIn(codes[0], stored)
+        envelope = json.loads(stored)
+        active_set = envelope["sets"][0]
+        self.assertIsNotNone(active_set["generated_at"])
+        self.assertIsNone(active_set["replaced_at"])
+        self.assertEqual(len(active_set["codes"]), 10)
+        self.assertTrue(all(entry["hash"].startswith("$wolfystock$kdf=v1$") for entry in active_set["codes"]))
+
+    def test_recovery_code_verify_marks_used_once_and_does_not_block_login(self) -> None:
+        self._login_admin()
+        self.client.post("/api/v1/auth/mfa/enroll/start")
+        self._reauth_admin()
+        self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": _totp_code(TEST_MFA_SECRET)})
+        generated = self.client.post("/api/v1/auth/mfa/recovery-codes/generate")
+        code = generated.json()["recoveryCodes"][0]
+
+        verified = self.client.post("/api/v1/auth/mfa/recovery-codes/verify", json={"code": code})
+        self.assertEqual(verified.status_code, 200)
+        self.assertTrue(verified.json()["verified"])
+        self.assertEqual(verified.json()["remainingCount"], 9)
+        self.assertNotIn(code, verified.text)
+
+        user = self.db.get_app_user("bootstrap-admin")
+        envelope = json.loads(getattr(user, "mfa_recovery_codes_hash"))
+        used_entries = [entry for entry in envelope["sets"][0]["codes"] if entry["used_at"]]
+        self.assertEqual(len(used_entries), 1)
+
+        replay = self.client.post("/api/v1/auth/mfa/recovery-codes/verify", json={"code": code})
+        self.assertEqual(replay.status_code, 401)
+        self.assertEqual(replay.json()["error"], "invalid_recovery_code")
+
+        login = self.client.post("/api/v1/auth/login", json={"username": "admin", "password": "adminpass123"})
+        self.assertEqual(login.status_code, 200)
+        self.assertTrue(login.json()["ok"])
+
+    def test_recovery_code_rotation_requires_recent_reauth_and_replaces_active_set(self) -> None:
+        self._login_admin()
+        self.client.post("/api/v1/auth/mfa/enroll/start")
+        self._reauth_admin()
+        self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": _totp_code(TEST_MFA_SECRET)})
+        first = self.client.post("/api/v1/auth/mfa/recovery-codes/generate").json()["recoveryCodes"][0]
+        auth._admin_reauth_markers = {}
+
+        blocked = self.client.post("/api/v1/auth/mfa/recovery-codes/rotate")
+        self.assertEqual(blocked.status_code, 403)
+        self.assertEqual(blocked.json()["detail"]["error"], "admin_reauth_required")
+
+        self._reauth_admin()
+        rotated = self.client.post("/api/v1/auth/mfa/recovery-codes/rotate")
+        self.assertEqual(rotated.status_code, 200)
+        payload = rotated.json()
+        self.assertEqual(payload["status"], "rotated")
+        self.assertEqual(payload["count"], 10)
+        second = payload["recoveryCodes"][0]
+        self.assertNotEqual(first, second)
+
+        old_rejected = self.client.post("/api/v1/auth/mfa/recovery-codes/verify", json={"code": first})
+        self.assertEqual(old_rejected.status_code, 401)
+
+        new_accepted = self.client.post("/api/v1/auth/mfa/recovery-codes/verify", json={"code": second})
+        self.assertEqual(new_accepted.status_code, 200)
+        self.assertTrue(new_accepted.json()["verified"])
+
+        user = self.db.get_app_user("bootstrap-admin")
+        envelope = json.loads(getattr(user, "mfa_recovery_codes_hash"))
+        self.assertIsNotNone(envelope["sets"][0]["replaced_at"])
+        self.assertIsNone(envelope["sets"][1]["replaced_at"])
 
 
 if __name__ == "__main__":
