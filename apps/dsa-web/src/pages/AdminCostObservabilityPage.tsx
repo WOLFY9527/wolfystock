@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, AlertTriangle, BarChart3, DatabaseZap, Gauge, Radar, ShieldCheck } from 'lucide-react';
+import { Activity, AlertTriangle, BarChart3, Coins, DatabaseZap, Gauge, Radar, ShieldCheck } from 'lucide-react';
 import {
   adminCostApi,
   type AdminCostArea,
@@ -10,6 +10,8 @@ import {
   type AdminCostSummaryParams,
   type AdminCostSummaryResponse,
   type AdminCostWindowKey,
+  type LlmLedgerSummaryResponse,
+  type LlmLedgerSummaryRollup,
   type QuotaDryRunOperation,
   type QuotaDryRunResponse,
   type QuotaEnforcementMode,
@@ -30,6 +32,12 @@ type QuotaDryRunState = {
   loading: boolean;
   error: ParsedApiError | null;
   data: QuotaDryRunResponse | null;
+};
+
+type LedgerState = {
+  loading: boolean;
+  error: ParsedApiError | null;
+  data: LlmLedgerSummaryResponse | null;
 };
 
 const WINDOW_OPTIONS: Array<{ value: AdminCostWindowKey; label: string }> = [
@@ -82,6 +90,14 @@ function formatDate(value?: string | null): string {
 function compactNumber(value?: number | null): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
   return formatNumber(value, 0);
+}
+
+function moneyUsd(value?: string | number | null): string {
+  if (value === null || value === undefined || value === '') return '--';
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '--';
+  if (Math.abs(numeric) > 0 && Math.abs(numeric) < 0.01) return `$${numeric.toFixed(6)}`;
+  return `$${numeric.toFixed(2)}`;
 }
 
 function percent(value?: number | null): string {
@@ -138,6 +154,21 @@ function sanitizedQuotaError(error: unknown): ParsedApiError {
       : parsed.isTimeoutError
       ? '配额诊断请求超时，请稍后重试。'
       : parsed.message || '配额诊断暂不可用。',
+    rawMessage: '',
+    details: undefined,
+  };
+}
+
+function sanitizedLedgerError(error: unknown): ParsedApiError {
+  const parsed = getParsedApiError(error);
+  return {
+    ...parsed,
+    title: '读取 LLM 成本账本失败',
+    message: parsed.status === 403
+      ? '当前账号没有成本观测权限。'
+      : parsed.isTimeoutError
+      ? 'LLM 成本账本请求超时，请稍后重试。'
+      : parsed.message || 'LLM 成本账本暂不可用。',
     rawMessage: '',
     details: undefined,
   };
@@ -365,6 +396,194 @@ const DeveloperDetails: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }
     </dl>
   </Disclosure>
 );
+
+function ledgerQueryFromFilters(filters: Required<AdminCostSummaryParams>) {
+  return {
+    window: filters.window === '7d' ? '7d' as const : '24h' as const,
+    bucket: filters.bucket,
+    limit: filters.limit,
+  };
+}
+
+function ledgerCount(data?: LlmLedgerSummaryResponse | null): number {
+  return Number(data?.total.requestCount ?? data?.total.ledgerCount ?? data?.total.calls ?? 0);
+}
+
+function pricingCount(data: LlmLedgerSummaryResponse, key: 'pricing_unknown' | 'pricing_inactive'): number | null {
+  const camelKey = key === 'pricing_unknown' ? 'pricingUnknown' : 'pricingInactive';
+  const metadataValue = data.metadata[camelKey];
+  if (typeof metadataValue === 'number') return metadataValue;
+  const statusValue = data.metadata.resultStatusCounts?.[key] ?? data.metadata.resultStatusCounts?.[camelKey];
+  if (typeof statusValue === 'number') return statusValue;
+  const totalValue = data.total[camelKey];
+  return typeof totalValue === 'number' ? totalValue : null;
+}
+
+const LedgerRollupList: React.FC<{
+  items: LlmLedgerSummaryRollup[];
+  empty: string;
+  labelFor: (item: LlmLedgerSummaryRollup) => string;
+}> = ({ items, empty, labelFor }) => {
+  if (items.length === 0) {
+    return <p className="rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/45">{empty}</p>;
+  }
+  return (
+    <div className="grid gap-2">
+      {items.slice(0, 5).map((item) => (
+        <article key={`${item.group}-${item.totalTokens}-${item.totalCostUsd}`} className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-3.5 py-3">
+          <div className="flex items-start justify-between gap-3">
+            <p className="min-w-0 truncate font-mono text-sm font-semibold text-white">{labelFor(item)}</p>
+            <span className="shrink-0 font-mono text-sm text-cyan-100">{moneyUsd(item.totalCostUsd)}</span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/42">
+            <span>Token <b className="font-mono text-white/68">{compactNumber(item.totalTokens)}</b></span>
+            <span>请求 <b className="font-mono text-white/68">{compactNumber(item.requestCount ?? item.ledgerCount ?? item.calls)}</b></span>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+};
+
+const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = ({ filters }) => {
+  const { canReadCostObservability } = useProductSurface();
+  const [state, setState] = useState<LedgerState>({ loading: true, error: null, data: null });
+
+  useEffect(() => {
+    if (!canReadCostObservability) {
+      return;
+    }
+    let alive = true;
+    void adminCostApi.getLlmLedgerSummary(ledgerQueryFromFilters(filters))
+      .then((data) => {
+        if (alive) setState({ loading: false, error: null, data });
+      })
+      .catch((error) => {
+        if (alive) setState({ loading: false, error: sanitizedLedgerError(error), data: null });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [canReadCostObservability, filters]);
+
+  if (!canReadCostObservability) {
+    return null;
+  }
+
+  const data = state.data;
+  const empty = data ? ledgerCount(data) === 0 : false;
+  const pricingUnknown = data ? pricingCount(data, 'pricing_unknown') : null;
+  const pricingInactive = data ? pricingCount(data, 'pricing_inactive') : null;
+
+  return (
+    <GlassCard as="section" className="p-4 md:p-5" data-testid="llm-ledger-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <Coins className="mt-1 h-4 w-4 shrink-0 text-cyan-200" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">LLM Ledger</p>
+            <h2 className="mt-1 text-lg font-semibold text-white">LLM 成本账本</h2>
+          </div>
+        </div>
+        <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">
+          估算值，不等同于供应商账单
+        </Badge>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <SummaryTile label="当前窗口" value={data?.window.key || ledgerQueryFromFilters(filters).window} tone="info" />
+        <SummaryTile label="总 Token" value={compactNumber(data?.total.totalTokens)} tone="info" />
+        <SummaryTile label="估算成本" value={moneyUsd(data?.total.totalCostUsd)} tone="warn" />
+        <SummaryTile label="请求数" value={compactNumber(data ? ledgerCount(data) : undefined)} />
+      </div>
+
+      {data ? (
+        <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-white/44">
+          <span className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-2">Prompt <b className="font-mono text-white/68">{compactNumber(data.total.promptTokens ?? data.total.inputTokens)}</b></span>
+          <span className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-2">Cached <b className="font-mono text-white/68">{compactNumber(data.total.cachedInputTokens)}</b></span>
+          <span className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-2">Completion <b className="font-mono text-white/68">{compactNumber(data.total.completionTokens ?? data.total.outputTokens)}</b></span>
+        </div>
+      ) : null}
+
+      {state.loading ? (
+        <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/50">正在读取 LLM 成本账本</p>
+      ) : null}
+      {state.error ? <div className="mt-4"><ApiErrorAlert error={state.error} /></div> : null}
+      {empty ? (
+        <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/45">当前窗口暂无 LLM 成本账本记录</p>
+      ) : null}
+
+      {data ? (
+        <>
+          {pricingUnknown != null || pricingInactive != null ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {pricingUnknown != null ? (
+                <Badge variant="warning" className="border-amber-300/25 bg-amber-400/10 text-amber-100">
+                  价格未知 {compactNumber(pricingUnknown)}
+                </Badge>
+              ) : null}
+              {pricingInactive != null ? (
+                <Badge variant="warning" className="border-amber-300/25 bg-amber-400/10 text-amber-100">
+                  价格未激活 {compactNumber(pricingInactive)}
+                </Badge>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="mt-4 grid grid-cols-1 gap-4 2xl:grid-cols-3">
+            <section className="min-w-0">
+              <h3 className="mb-3 text-sm font-semibold text-white/82">用户成本排行</h3>
+              <LedgerRollupList
+                items={data.byUser}
+                empty="暂无用户成本记录"
+                labelFor={(item) => item.dimensions.owner_user_id || item.dimensions.ownerUserId || item.group}
+              />
+            </section>
+            <section className="min-w-0">
+              <h3 className="mb-3 text-sm font-semibold text-white/82">模型成本分布</h3>
+              <LedgerRollupList
+                items={data.byProviderModel}
+                empty="暂无模型成本记录"
+                labelFor={(item) => `${item.dimensions.provider || 'unknown'} / ${item.dimensions.model || item.group}`}
+              />
+            </section>
+            <section className="min-w-0">
+              <h3 className="mb-3 text-sm font-semibold text-white/82">功能成本分布</h3>
+              <LedgerRollupList
+                items={data.byRouteFamily}
+                empty="暂无功能成本记录"
+                labelFor={(item) => item.dimensions.route_family || item.dimensions.routeFamily || item.group}
+              />
+            </section>
+          </div>
+          <Disclosure
+            summary="开发者 / LLM 账本响应形状"
+            className="mt-4"
+            bodyClassName="rounded-2xl border border-white/5 bg-black/20 p-4"
+          >
+            <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
+              <div className="min-w-0">
+                <dt className="text-white/32">readOnly</dt>
+                <dd className="font-mono text-white/64">{String(data.metadata.readOnly)}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-white/32">liveEnforcement</dt>
+                <dd className="font-mono text-white/64">{String(data.metadata.liveEnforcement)}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-white/32">dataSources</dt>
+                <dd className="break-words font-mono text-white/64">{data.metadata.dataSources.join(', ') || '--'}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-white/32">redaction</dt>
+                <dd className="break-words font-mono text-white/64">{data.metadata.redaction.join(', ') || '--'}</dd>
+              </div>
+            </dl>
+          </Disclosure>
+        </>
+      ) : null}
+    </GlassCard>
+  );
+};
 
 const QuotaDryRunPanel: React.FC = () => {
   const { canReadCostObservability } = useProductSurface();
@@ -633,6 +852,7 @@ const AdminCostObservabilityPage: React.FC = () => {
                   </div>
                 </GlassCard>
                 <QuotaDryRunPanel />
+                <LlmLedgerPanel key={`${filters.window}-${filters.bucket}-${filters.limit}`} filters={filters} />
 
                 <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
                   <SectionCard icon={<Activity className="h-4 w-4" />} eyebrow="LLM" title="LLM 调用">

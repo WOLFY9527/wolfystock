@@ -150,6 +150,56 @@ export interface QuotaDryRunResponse {
   };
 }
 
+export interface LlmLedgerSummaryParams {
+  window?: Extract<AdminCostWindowKey, '24h' | '7d'> | '30d';
+  bucket?: AdminCostBucket;
+  limit?: number;
+}
+
+export interface LlmLedgerSummaryTotal {
+  calls: number;
+  requestCount?: number;
+  ledgerCount?: number;
+  promptTokens: number;
+  inputTokens?: number;
+  cachedInputTokens: number;
+  completionTokens: number;
+  outputTokens?: number;
+  totalTokens: number;
+  totalCostUsd: string;
+  pricingUnknown?: number;
+  pricingInactive?: number;
+}
+
+export interface LlmLedgerSummaryRollup {
+  group: string;
+  calls: number;
+  requestCount?: number;
+  ledgerCount?: number;
+  totalTokens: number;
+  totalCostUsd: string;
+  dimensions: Record<string, string>;
+}
+
+export interface LlmLedgerSummaryResponse {
+  generatedAt: string;
+  window: AdminCostWindow;
+  total: LlmLedgerSummaryTotal;
+  byUser: LlmLedgerSummaryRollup[];
+  byProviderModel: LlmLedgerSummaryRollup[];
+  byRouteFamily: LlmLedgerSummaryRollup[];
+  metadata: {
+    readOnly: boolean;
+    noExternalCalls: boolean;
+    liveEnforcement: boolean;
+    dataSources: string[];
+    redaction: string[];
+    pricingUnknown?: number;
+    pricingInactive?: number;
+    resultStatusCounts?: Record<string, number>;
+  };
+}
+
 const EMPTY_OVERVIEW: AdminCostOverview = {
   llmCalls: 0,
   llmUsageCalls: 0,
@@ -181,6 +231,16 @@ function toSafeQuery(params: AdminCostSummaryParams): Record<string, unknown> {
     window: params.window || '24h',
     bucket: params.bucket || 'hour',
     area: params.area || 'all',
+    limit: Math.min(Math.max(Number(params.limit || 50), 1), 200),
+  };
+}
+
+function toSafeLedgerQuery(params: LlmLedgerSummaryParams): Record<string, unknown> {
+  const window = ['24h', '7d', '30d'].includes(params.window || '') ? params.window : '24h';
+  const bucket = ['hour', 'day'].includes(params.bucket || '') ? params.bucket : 'day';
+  return {
+    window,
+    bucket,
     limit: Math.min(Math.max(Number(params.limit || 50), 1), 200),
   };
 }
@@ -284,6 +344,59 @@ function normalizeQuotaDryRun(payload: Record<string, unknown>): QuotaDryRunResp
   };
 }
 
+function normalizeLedgerTotal(total?: Partial<LlmLedgerSummaryTotal> | null): LlmLedgerSummaryTotal {
+  const promptTokens = Number(total?.promptTokens ?? total?.inputTokens ?? 0);
+  const completionTokens = Number(total?.completionTokens ?? total?.outputTokens ?? 0);
+  return {
+    calls: Number(total?.calls ?? total?.requestCount ?? total?.ledgerCount ?? 0),
+    requestCount: typeof total?.requestCount === 'number' ? total.requestCount : undefined,
+    ledgerCount: typeof total?.ledgerCount === 'number' ? total.ledgerCount : undefined,
+    promptTokens,
+    inputTokens: typeof total?.inputTokens === 'number' ? total.inputTokens : undefined,
+    cachedInputTokens: Number(total?.cachedInputTokens ?? 0),
+    completionTokens,
+    outputTokens: typeof total?.outputTokens === 'number' ? total.outputTokens : undefined,
+    totalTokens: Number(total?.totalTokens ?? 0),
+    totalCostUsd: String(total?.totalCostUsd ?? '0'),
+    pricingUnknown: typeof total?.pricingUnknown === 'number' ? total.pricingUnknown : undefined,
+    pricingInactive: typeof total?.pricingInactive === 'number' ? total.pricingInactive : undefined,
+  };
+}
+
+function normalizeLedgerRollup(item: Partial<LlmLedgerSummaryRollup>): LlmLedgerSummaryRollup {
+  return {
+    group: String(item.group || item.dimensions?.ownerUserId || item.dimensions?.owner_user_id || item.dimensions?.provider || item.dimensions?.route_family || 'unknown'),
+    calls: Number(item.calls ?? item.requestCount ?? item.ledgerCount ?? 0),
+    requestCount: typeof item.requestCount === 'number' ? item.requestCount : undefined,
+    ledgerCount: typeof item.ledgerCount === 'number' ? item.ledgerCount : undefined,
+    totalTokens: Number(item.totalTokens ?? 0),
+    totalCostUsd: String(item.totalCostUsd ?? '0'),
+    dimensions: item.dimensions || {},
+  };
+}
+
+function normalizeLedgerSummary(payload: Record<string, unknown>): LlmLedgerSummaryResponse {
+  const normalized = toCamelCase<LlmLedgerSummaryResponse>(payload);
+  return {
+    generatedAt: normalized.generatedAt || '',
+    window: normalized.window || { key: '24h', from: '', to: '', bucket: 'day', historical: true },
+    total: normalizeLedgerTotal(normalized.total),
+    byUser: safeArray<Partial<LlmLedgerSummaryRollup>>(normalized.byUser).map(normalizeLedgerRollup),
+    byProviderModel: safeArray<Partial<LlmLedgerSummaryRollup>>(normalized.byProviderModel).map(normalizeLedgerRollup),
+    byRouteFamily: safeArray<Partial<LlmLedgerSummaryRollup>>(normalized.byRouteFamily).map(normalizeLedgerRollup),
+    metadata: {
+      readOnly: normalized.metadata?.readOnly === true,
+      noExternalCalls: normalized.metadata?.noExternalCalls === true,
+      liveEnforcement: normalized.metadata?.liveEnforcement === true,
+      dataSources: safeArray<string>(normalized.metadata?.dataSources),
+      redaction: safeArray<string>(normalized.metadata?.redaction),
+      pricingUnknown: typeof normalized.metadata?.pricingUnknown === 'number' ? normalized.metadata.pricingUnknown : undefined,
+      pricingInactive: typeof normalized.metadata?.pricingInactive === 'number' ? normalized.metadata.pricingInactive : undefined,
+      resultStatusCounts: normalized.metadata?.resultStatusCounts || undefined,
+    },
+  };
+}
+
 export const adminCostApi = {
   async getDuplicateSummary(params: AdminCostSummaryParams = {}): Promise<AdminCostSummaryResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/cost/duplicate-summary', {
@@ -298,5 +411,12 @@ export const adminCostApi = {
       sanitizeQuotaDryRunRequest(params),
     );
     return normalizeQuotaDryRun(response.data);
+  },
+
+  async getLlmLedgerSummary(params: LlmLedgerSummaryParams = {}): Promise<LlmLedgerSummaryResponse> {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/cost/llm-ledger-summary', {
+      params: toSafeLedgerQuery(params),
+    });
+    return normalizeLedgerSummary(response.data);
   },
 };

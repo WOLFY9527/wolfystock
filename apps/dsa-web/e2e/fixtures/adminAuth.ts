@@ -106,6 +106,39 @@ function quotaDryRunPayload() {
   };
 }
 
+function llmLedgerSummaryPayload() {
+  return {
+    generated_at: timestamp,
+    window: { key: '24h', from: timestamp, to: timestamp, bucket: 'day', historical: true },
+    total: {
+      calls: 5,
+      prompt_tokens: 8000,
+      cached_input_tokens: 1200,
+      completion_tokens: 3000,
+      total_tokens: 11000,
+      total_cost_usd: '0.123456',
+    },
+    by_user: [
+      { group: 'user-a', calls: 3, total_tokens: 7000, total_cost_usd: '0.090000', dimensions: { owner_user_id: 'user-a' } },
+      { group: 'user-b', calls: 2, total_tokens: 4000, total_cost_usd: '0.033456', dimensions: { owner_user_id: 'user-b' } },
+    ],
+    by_provider_model: [
+      { group: 'openai|gpt-4o-mini', calls: 4, total_tokens: 9000, total_cost_usd: '0.100000', dimensions: { provider: 'openai', model: 'gpt-4o-mini' } },
+    ],
+    by_route_family: [
+      { group: 'analysis', calls: 5, total_tokens: 11000, total_cost_usd: '0.123456', dimensions: { route_family: 'analysis' } },
+    ],
+    metadata: {
+      read_only: true,
+      no_external_calls: true,
+      live_enforcement: false,
+      data_sources: ['llm_cost_ledger', 'model_pricing_policies'],
+      redaction: ['prompts_omitted', 'provider_payloads_omitted', 'credentials_omitted'],
+      result_status_counts: { pricing_unknown: 1, pricing_inactive: 2 },
+    },
+  };
+}
+
 function adminUsersPayload() {
   return {
     items: [{
@@ -214,6 +247,9 @@ export async function installAdminAuthHarness(
     }
     if (method === 'POST' && path === '/api/v1/admin/cost/quota-dry-run') {
       return fulfillJson(route, quotaDryRunPayload());
+    }
+    if (method === 'GET' && path === '/api/v1/admin/cost/llm-ledger-summary') {
+      return fulfillJson(route, llmLedgerSummaryPayload());
     }
     if (method === 'GET' && path === '/api/v1/admin/users') {
       return fulfillJson(route, adminUsersPayload());

@@ -6,7 +6,8 @@ const { getDuplicateSummary } = vi.hoisted(() => ({
   getDuplicateSummary: vi.fn(),
 }));
 
-const { runQuotaDryRun, capabilityState } = vi.hoisted(() => ({
+const { getLlmLedgerSummary, runQuotaDryRun, capabilityState } = vi.hoisted(() => ({
+  getLlmLedgerSummary: vi.fn(),
   runQuotaDryRun: vi.fn(),
   capabilityState: { canReadCostObservability: true },
 }));
@@ -14,6 +15,7 @@ const { runQuotaDryRun, capabilityState } = vi.hoisted(() => ({
 vi.mock('../../api/adminCost', () => ({
   adminCostApi: {
     getDuplicateSummary,
+    getLlmLedgerSummary,
     runQuotaDryRun,
   },
 }));
@@ -201,11 +203,80 @@ const quotaAllowedPayload = {
   },
 };
 
+const ledgerPayload = {
+  generatedAt: '2026-05-06T10:35:00+08:00',
+  window: {
+    key: '24h',
+    from: '2026-05-05T10:35:00+08:00',
+    to: '2026-05-06T10:35:00+08:00',
+    bucket: 'day',
+    historical: true,
+  },
+  total: {
+    calls: 5,
+    promptTokens: 8000,
+    cachedInputTokens: 1200,
+    completionTokens: 3000,
+    totalTokens: 11000,
+    totalCostUsd: '0.123456',
+  },
+  byUser: [
+    {
+      group: 'user-a',
+      calls: 3,
+      totalTokens: 7000,
+      totalCostUsd: '0.090000',
+      dimensions: { owner_user_id: 'user-a' },
+    },
+    {
+      group: 'user-b',
+      calls: 2,
+      totalTokens: 4000,
+      totalCostUsd: '0.033456',
+      dimensions: { owner_user_id: 'user-b' },
+    },
+  ],
+  byProviderModel: [
+    {
+      group: 'openai|gpt-4o-mini',
+      calls: 4,
+      totalTokens: 9000,
+      totalCostUsd: '0.100000',
+      dimensions: { provider: 'openai', model: 'gpt-4o-mini' },
+    },
+  ],
+  byRouteFamily: [
+    {
+      group: 'analysis',
+      calls: 5,
+      totalTokens: 11000,
+      totalCostUsd: '0.123456',
+      dimensions: { route_family: 'analysis' },
+    },
+  ],
+  metadata: {
+    readOnly: true,
+    noExternalCalls: true,
+    liveEnforcement: false,
+    dataSources: ['llm_cost_ledger', 'model_pricing_policies'],
+    redaction: ['prompts_omitted', 'provider_payloads_omitted', 'credentials_omitted'],
+    resultStatusCounts: {
+      pricing_unknown: 1,
+      pricing_inactive: 2,
+    },
+    rawPrompt: 'LEDGER_PROMPT_SHOULD_NOT_RENDER',
+    providerPayload: 'LEDGER_PAYLOAD_SHOULD_NOT_RENDER',
+    apiKey: 'sk-ledger-should-not-render',
+    stackTrace: 'LEDGER_STACK_SHOULD_NOT_RENDER',
+  },
+};
+
 describe('AdminCostObservabilityPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     capabilityState.canReadCostObservability = true;
     runQuotaDryRun.mockResolvedValue(quotaAllowedPayload);
+    getLlmLedgerSummary.mockResolvedValue(ledgerPayload);
   });
 
   it('renders mocked duplicate-cost summary with read-only, no-external-call, and observational badges', async () => {
@@ -225,6 +296,7 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('限制与数据质量')).toBeInTheDocument();
     expect(screen.getByText('counter_snapshot_not_timestamped')).toBeInTheDocument();
     expect(screen.getByText('配额试运行诊断')).toBeInTheDocument();
+    expect(screen.getByText('LLM 成本账本')).toBeInTheDocument();
   });
 
   it('keeps developer details collapsed and does not render secret-like strings in the DOM', async () => {
@@ -239,6 +311,10 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.queryByText('https://provider.example/path?token=secret')).not.toBeInTheDocument();
     expect(screen.queryByText('SHOULD_NOT_RENDER_QUOTA')).not.toBeInTheDocument();
     expect(screen.queryByText('sk-quota-should-not-render')).not.toBeInTheDocument();
+    expect(screen.queryByText('LEDGER_PROMPT_SHOULD_NOT_RENDER')).not.toBeInTheDocument();
+    expect(screen.queryByText('LEDGER_PAYLOAD_SHOULD_NOT_RENDER')).not.toBeInTheDocument();
+    expect(screen.queryByText('sk-ledger-should-not-render')).not.toBeInTheDocument();
+    expect(screen.queryByText('LEDGER_STACK_SHOULD_NOT_RENDER')).not.toBeInTheDocument();
   });
 
   it('renders loading state without implying billing exactness', () => {
@@ -345,6 +421,68 @@ describe('AdminCostObservabilityPage', () => {
     });
   });
 
+  it('renders LLM ledger totals and cost summaries for users with cost observability capability', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+
+    render(<AdminCostObservabilityPage />);
+
+    expect(await screen.findByTestId('llm-ledger-panel')).toBeInTheDocument();
+    expect(getLlmLedgerSummary).toHaveBeenCalledWith({ window: '24h', bucket: 'hour', limit: 50 });
+    expect(screen.getByText('总 Token')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('llm-ledger-panel')).toHaveTextContent('11,000'));
+    expect(screen.getAllByText('$0.12').length).toBeGreaterThan(0);
+    expect(screen.getByText('用户成本排行')).toBeInTheDocument();
+    expect(screen.getByText('user-a')).toBeInTheDocument();
+    expect(screen.getByText('user-b')).toBeInTheDocument();
+    expect(screen.getByText('模型成本分布')).toBeInTheDocument();
+    expect(screen.getByText('openai / gpt-4o-mini')).toBeInTheDocument();
+    expect(screen.getByText('功能成本分布')).toBeInTheDocument();
+    expect(screen.getAllByText('analysis').length).toBeGreaterThan(0);
+    expect(screen.getByText('价格未知 1')).toBeInTheDocument();
+    expect(screen.getByText('价格未激活 2')).toBeInTheDocument();
+  });
+
+  it('renders compact empty LLM ledger state', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+    getLlmLedgerSummary.mockResolvedValue({
+      ...ledgerPayload,
+      total: {
+        ...ledgerPayload.total,
+        calls: 0,
+        promptTokens: 0,
+        cachedInputTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        totalCostUsd: '0',
+      },
+      byUser: [],
+      byProviderModel: [],
+      byRouteFamily: [],
+      metadata: {
+        ...ledgerPayload.metadata,
+        resultStatusCounts: {},
+      },
+    });
+
+    render(<AdminCostObservabilityPage />);
+
+    expect(await screen.findByText('当前窗口暂无 LLM 成本账本记录')).toBeInTheDocument();
+    expect(screen.getByText('暂无用户成本记录')).toBeInTheDocument();
+    expect(screen.getByText('暂无模型成本记录')).toBeInTheDocument();
+    expect(screen.getByText('暂无功能成本记录')).toBeInTheDocument();
+  });
+
+  it('does not fetch or render LLM ledger without cost observability capability', async () => {
+    capabilityState.canReadCostObservability = false;
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+
+    render(<AdminCostObservabilityPage />);
+
+    expect(await screen.findByRole('heading', { name: '成本观测' })).toBeInTheDocument();
+    expect(screen.queryByTestId('llm-ledger-panel')).not.toBeInTheDocument();
+    expect(getLlmLedgerSummary).not.toHaveBeenCalled();
+  });
+
   it('hides quota panel and does not fetch quota dry-run without cost observability capability', async () => {
     capabilityState.canReadCostObservability = false;
     getDuplicateSummary.mockResolvedValue(populatedPayload);
@@ -393,6 +531,25 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.queryByText('apiKey=secret')).not.toBeInTheDocument();
   });
 
+  it('renders sanitized LLM ledger 403 and 500 errors without breaking the cost page', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+    getLlmLedgerSummary.mockRejectedValueOnce({ response: { status: 403, data: { detail: { message: 'token=secret raw prompt' } } } });
+
+    render(<AdminCostObservabilityPage />);
+
+    expect(await screen.findByText('读取 LLM 成本账本失败')).toBeInTheDocument();
+    expect(screen.getByText('当前账号没有成本观测权限。')).toBeInTheDocument();
+    expect(screen.getByText('配额试运行诊断')).toBeInTheDocument();
+    expect(screen.queryByText(/token=secret/)).not.toBeInTheDocument();
+
+    getLlmLedgerSummary.mockRejectedValueOnce({ response: { status: 500, data: { detail: { message: 'stack trace apiKey=secret' } } } });
+    fireEvent.change(screen.getByLabelText('窗口'), { target: { value: '7d' } });
+
+    await waitFor(() => expect(screen.getAllByText('读取 LLM 成本账本失败').length).toBeGreaterThan(0));
+    expect(screen.getByText('服务器暂时不可用，请稍后重试。')).toBeInTheDocument();
+    expect(screen.queryByText('apiKey=secret')).not.toBeInTheDocument();
+  });
+
   it('keeps quota developer details collapsed by default', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
@@ -402,6 +559,16 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('diagnosticOnly')).not.toBeVisible();
   });
 
+  it('keeps LLM ledger developer details collapsed by default', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+
+    render(<AdminCostObservabilityPage />);
+
+    const panel = await screen.findByTestId('llm-ledger-panel');
+    await waitFor(() => expect(within(panel).getByText('开发者 / LLM 账本响应形状')).toBeInTheDocument());
+    expect(within(panel).getByText('liveEnforcement')).not.toBeVisible();
+  });
+
   it('keeps the cost page within the viewport width in jsdom layout checks', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
     Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 390 });
@@ -409,7 +576,7 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
-    expect(await screen.findByTestId('quota-dry-run-panel')).toBeInTheDocument();
+    expect(await screen.findByTestId('llm-ledger-panel')).toBeInTheDocument();
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
   });
 });

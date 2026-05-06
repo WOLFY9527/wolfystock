@@ -21,9 +21,15 @@ test.describe('mocked admin auth browser harness', () => {
       });
       await expect(page.getByRole('heading', { name: '成本观测' })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('quota-dry-run-panel')).toBeVisible();
+      await expect(page.getByTestId('llm-ledger-panel')).toBeVisible();
+      await expect(page.getByText('LLM 成本账本')).toBeVisible();
+      await expect(page.getByText('用户成本排行')).toBeVisible();
+      await expect(page.getByText('模型成本分布')).toBeVisible();
+      await expect(page.getByText('功能成本分布')).toBeVisible();
       await expect(page).not.toHaveURL(/\/guest(?:$|[/?#])/);
       expect(harness.requests.count('GET', '/api/v1/admin/cost/duplicate-summary')).toBeGreaterThan(0);
       expect(harness.requests.count('POST', '/api/v1/admin/cost/quota-dry-run')).toBe(1);
+      expect(harness.requests.count('GET', '/api/v1/admin/cost/llm-ledger-summary')).toBe(1);
       await expectNoHorizontalOverflow(page);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
 
@@ -59,8 +65,10 @@ test.describe('mocked admin auth browser harness', () => {
 
       await expect(page.getByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('quota-dry-run-panel')).toHaveCount(0);
+      await expect(page.getByTestId('llm-ledger-panel')).toHaveCount(0);
       expect(harness.requests.wasFetched('GET', '/api/v1/admin/cost/duplicate-summary')).toBe(false);
       expect(harness.requests.wasFetched('POST', '/api/v1/admin/cost/quota-dry-run')).toBe(false);
+      expect(harness.requests.wasFetched('GET', '/api/v1/admin/cost/llm-ledger-summary')).toBe(false);
       await expect(page).not.toHaveURL(/\/guest(?:$|[/?#])/);
       await expectNoHorizontalOverflow(page);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
