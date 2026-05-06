@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import admin_provider_circuits
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
+from src.services.provider_circuit_observer import ProviderCircuitObserver
 from src.storage import DatabaseManager
 
 
@@ -307,6 +308,61 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
             response = self.client.get("/api/v1/admin/providers/circuits")
 
         self.assertEqual(response.status_code, 200)
+
+    def test_diagnostics_api_reads_provider_circuit_observer_dry_run_rows(self) -> None:
+        self._as_provider_read_admin()
+        observer = ProviderCircuitObserver(db=self.db)
+        observer.record_observation(
+            provider="FMP",
+            provider_category="quote",
+            route_family="analysis",
+            result_bucket="timeout",
+            duration_ms=1200,
+            observed_at=datetime(2026, 5, 6, 10, 15, 0),
+            metadata={
+                "safe_label": "observer_fixture",
+                "url": "https://provider.example.test/raw?api_key=must-not-leak",
+                "raw_response": "must-not-leak",
+            },
+        )
+        observer.record_observation(
+            provider="tavily",
+            provider_category="probe",
+            route_family="admin_provider_probe",
+            result_bucket="provider_403",
+            probe_type="synthetic_fixture",
+            duration_ms=220,
+            observed_at=datetime(2026, 5, 6, 10, 20, 0),
+            metadata={"safe_label": "observer_probe", "token": "must-not-leak"},
+        )
+
+        events_response = self.client.get(
+            "/api/v1/admin/providers/circuits/events",
+            params={"provider": "fmp", "eventType": "policy_dry_run"},
+        )
+        windows_response = self.client.get("/api/v1/admin/providers/quota-windows", params={"provider": "fmp"})
+        probes_response = self.client.get("/api/v1/admin/providers/probe-events", params={"provider": "tavily"})
+
+        self.assertEqual(events_response.status_code, 200)
+        self.assertEqual(windows_response.status_code, 200)
+        self.assertEqual(probes_response.status_code, 200)
+        event = events_response.json()["items"][0]
+        window = windows_response.json()["items"][0]
+        probe = probes_response.json()["items"][0]
+        self.assertEqual(event["eventType"], "policy_dry_run")
+        self.assertEqual(event["reasonBucket"], "timeout")
+        self.assertEqual(event["durationBucketMs"], 1500)
+        self.assertEqual(window["requestCount"], 1)
+        self.assertEqual(window["failureCount"], 1)
+        self.assertEqual(window["timeoutCount"], 1)
+        self.assertEqual(probe["probeType"], "synthetic_fixture")
+        self.assertEqual(probe["probeSource"], "dry_run")
+        self.assertEqual(probe["resultBucket"], "provider_403")
+        text = self._json_text(
+            {"events": events_response.json(), "windows": windows_response.json(), "probes": probes_response.json()}
+        ).lower()
+        self.assertNotIn("must-not-leak", text)
+        self.assertNotIn("https://provider.example", text)
 
 
 if __name__ == "__main__":

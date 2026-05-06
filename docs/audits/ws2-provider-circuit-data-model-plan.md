@@ -47,6 +47,15 @@ This plan explicitly does not implement:
 - This landed as diagnostics only. It does not add provider enforcement, live quota enforcement, provider ordering/fallback changes, MarketCache TTL/SWR/cold-start/background refresh/payload-shape changes, Data Pipeline hot-path changes, frontend dashboard UI, or live provider/LLM calls.
 - Frontend dashboard surfacing remains future work and should stay read-only/observational until a separately approved enforcement pilot exists.
 
+## WS2-R5 dry-run counter observer implementation note
+
+- A narrow `ProviderCircuitObserver` helper now records synthetic provider observations into the existing provider circuit storage foundation without reading circuit state for enforcement.
+- Supported observation buckets are `success`, `timeout`, `provider_429`, `provider_403`, `provider_5xx`, `network_error`, `malformed_payload`, `insufficient_payload`, `auth_or_key_invalid`, `quota_policy_block`, and `operator_disabled`.
+- Success and failure observations update `provider_quota_windows` dry-run counters. Failure/state observations append `provider_circuit_events` with `event_type = policy_dry_run`; probe-like observations also write `provider_probe_events`.
+- Cooldown observations are event-only and do not transition durable state to `open`, `half_open`, `provider_quota_depleted`, or any enforcing state.
+- Metadata continues through the provider circuit storage sanitizer and uses bounded dry-run labels only. Raw URLs, query strings, request params, provider payloads, exception text, stack traces, credentials, tokens, cookies, session ids, and secrets remain out of stored rows and diagnostics responses.
+- No runtime provider call site was integrated in this pass. Provider ordering/fallback, Data Pipeline hot-path cooldown, MarketCache TTL/SWR/cold-start/background refresh/payload shape, quota enforcement, frontend UI, scanner, backtest, portfolio, Options Lab, LLM routing, notification, DuckDB, broker/order, and live provider behavior remain unchanged.
+
 ## 2. Proposed tables
 
 Design only. Names are proposed for a later additive schema pass.
