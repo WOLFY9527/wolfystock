@@ -7,6 +7,10 @@ import {
 } from '../../src/test-utils/adminAuthHarness';
 import type { CurrentUser } from '../../src/api/auth';
 
+type AdminAuthFixtures = {
+  consoleErrors: string[];
+};
+
 type ApiRequestLog = {
   calls: string[];
   count: (method: string, path: string) => number;
@@ -246,5 +250,24 @@ export async function expectNoHorizontalOverflow(page: Page) {
   await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 }
 
-export { expect, base as test };
+export const test = base.extend<AdminAuthFixtures>({
+  consoleErrors: [async ({ page }, use) => {
+    const consoleErrors: string[] = [];
+
+    page.on('console', (message) => {
+      if (message.type() === 'error' && !message.text().includes('favicon.ico')) {
+        consoleErrors.push(message.text());
+      }
+    });
+    page.on('pageerror', (error) => {
+      consoleErrors.push(error.message);
+    });
+
+    await use(consoleErrors);
+
+    expect(consoleErrors).toEqual([]);
+  }, { auto: true }],
+});
+
+export { expect };
 export type { AdminCapability };
