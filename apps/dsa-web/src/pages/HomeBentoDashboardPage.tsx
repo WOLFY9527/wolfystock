@@ -1276,7 +1276,14 @@ function sanitizeMetricValue(value?: string): string {
 
 function isPeLikeMetric(label: string): boolean {
   const key = normalizeDetailKey(label);
-  return key === 'pe' || key.includes('市盈率') || key.includes('peratio') || key.includes('pettm') || key.includes('forwardpe') || key.includes('pegratio');
+  return key === 'pe'
+    || key.includes('市盈率')
+    || key.includes('预期pe')
+    || key.includes('peratio')
+    || key.includes('pettm')
+    || key.includes('forwardpe')
+    || key.includes('pegratio')
+    || key.includes('peg比率');
 }
 
 function isZombieStockLabel(value: unknown): boolean {
