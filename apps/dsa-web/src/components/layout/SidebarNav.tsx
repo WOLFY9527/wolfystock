@@ -20,6 +20,7 @@ import {
   Settings2,
   ShieldCheck,
   TestTubeDiagonal,
+  UsersRound,
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -131,10 +132,12 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const consoleLabel = t('nav.independentConsole');
   const notificationsLabel = t('nav.notifications');
   const marketProvidersLabel = t('nav.marketProviders');
+  const userGovernanceLabel = t('nav.userGovernance');
   const signInPath = buildLoginPath(location.pathname + location.search);
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
   const notificationsPath = routeLocale ? buildLocalizedPath('/admin/notifications', routeLocale) : '/admin/notifications';
   const marketProvidersPath = routeLocale ? buildLocalizedPath('/admin/market-providers', routeLocale) : '/admin/market-providers';
+  const userGovernancePath = routeLocale ? buildLocalizedPath('/admin/users', routeLocale) : '/admin/users';
 
   const navLinks = NAV_ITEMS.map(({ key, labelKey, to, icon: Icon, badge }) => {
     const label = t(labelKey);
@@ -312,6 +315,30 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </NavLink>
   ) : null;
 
+  const userGovernanceAction = isAdminAccount ? (
+    <NavLink
+      to={userGovernancePath}
+      onClick={onNavigate}
+      className={({ isActive }) => cn(
+        isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
+        !isDrawer && isActive ? 'text-white' : '',
+        isDrawer && isActive ? 'is-active' : '',
+      )}
+      aria-label={userGovernanceLabel}
+    >
+      {isDrawer ? (
+        <>
+          <span className="shell-nav-item__icon" aria-hidden="true">
+            <UsersRound className="h-4 w-4" />
+          </span>
+          <DrawerUtilityLabel label={userGovernanceLabel} />
+        </>
+      ) : (
+        <span>{userGovernanceLabel}</span>
+      )}
+    </NavLink>
+  ) : null;
+
   const signInAction = authEnabled && isGuest ? (
     <NavLink
       to={signInPath}
@@ -372,6 +399,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             {languageAction}
             {settingsAction}
             {systemAction}
+            {userGovernanceAction}
             {notificationAction}
             {marketProviderAction}
             {signInAction}
@@ -398,6 +426,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
               ) : null}
               {settingsAction}
               {systemAction}
+              {userGovernanceAction}
               {notificationAction}
               {marketProviderAction}
               {signInAction}

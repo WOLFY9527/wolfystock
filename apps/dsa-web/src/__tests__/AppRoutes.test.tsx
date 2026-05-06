@@ -113,6 +113,10 @@ vi.mock('../pages/MarketProviderOperationsPage', () => ({
   default: () => <div>market-provider-operations-page</div>,
 }));
 
+vi.mock('../pages/AdminUsersPage', () => ({
+  default: () => <div>admin-users-page</div>,
+}));
+
 vi.mock('../pages/LoginPage', () => ({
   default: () => <div>login-page</div>,
 }));
@@ -383,6 +387,28 @@ describe('AppContent route flows', () => {
 
     await waitFor(() => expect(screen.getByText('market-provider-operations-page')).toBeInTheDocument());
   });
+
+  it.each(['/zh/admin/users', '/zh/admin/users/user-1', '/zh/admin/users/user-1/activity'])(
+    'renders the localized admin user governance route for admin accounts at %s',
+    async (path) => {
+      useAuthMock.mockReturnValue({
+        authEnabled: true,
+        loggedIn: true,
+        isLoading: false,
+        loadError: null,
+        refreshStatus: vi.fn(),
+      });
+      useProductSurfaceMock.mockReturnValue({
+        isGuest: false,
+        isAdmin: true,
+        isAdminMode: true,
+      });
+
+      renderAt(path);
+
+      await waitFor(() => expect(screen.getByText('admin-users-page')).toBeInTheDocument());
+    },
+  );
 
   it('keeps scanner reachable for signed-in users', async () => {
     useAuthMock.mockReturnValue({
