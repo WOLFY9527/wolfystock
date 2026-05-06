@@ -55,6 +55,9 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string): 
   if (pathname.startsWith('/backtest')) {
     return t('nav.backtest');
   }
+  if (pathname.startsWith('/options-lab')) {
+    return t('nav.optionsLab');
+  }
   if (pathname.startsWith('/settings')) {
     return t('nav.settings');
   }
@@ -117,6 +120,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     || isChatRoute
     || surfacePathname.startsWith('/portfolio')
     || isMarketOverviewRoute
+    || surfacePathname.startsWith('/options-lab')
     || isSystemControlRoute;
   const isDesktop = useIsDesktopViewport();
   const previousPathnameRef = useRef(location.pathname);

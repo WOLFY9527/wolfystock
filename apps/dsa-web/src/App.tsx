@@ -36,6 +36,7 @@ const PortfolioPage = lazy(() => import('./pages/PortfolioPage'));
 const MarketOverviewPage = lazy(() => import('./pages/MarketOverviewPage'));
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'));
 const BacktestPage = lazy(() => import('./pages/BacktestPage'));
+const OptionsLabPage = lazy(() => import('./pages/OptionsLabPage'));
 const RuleBacktestComparePage = lazy(() => import('./pages/RuleBacktestComparePage'));
 const DeterministicBacktestResultPage = lazy(() => import('./pages/DeterministicBacktestResultPage'));
 const PersonalSettingsPage = lazy(() => import('./pages/PersonalSettingsPage'));
@@ -189,6 +190,8 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
     moduleName = language === 'en' ? 'Watchlist' : '观察列表';
   } else if (routePathname.startsWith('/backtest')) {
     moduleName = language === 'en' ? 'Backtest' : '回测';
+  } else if (routePathname.startsWith('/options-lab')) {
+    moduleName = language === 'en' ? 'Options Lab' : '期权实验室';
   }
 
   if (!isGuest) {
@@ -364,6 +367,7 @@ export const AppContent: React.FC = () => {
               <Route path="/market-overview" element={<RegisteredSurfaceRoute><MarketOverviewPage /></RegisteredSurfaceRoute>} />
               <Route path="/watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
               <Route path="/backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
+              <Route path="/options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />
               <Route path="/backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
               <Route path="/backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
               <Route path="/settings" element={<PersonalSettingsPage />} />
@@ -386,6 +390,7 @@ export const AppContent: React.FC = () => {
               <Route path="market-overview" element={<RegisteredSurfaceRoute><MarketOverviewPage /></RegisteredSurfaceRoute>} />
               <Route path="watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
               <Route path="backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
+              <Route path="options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />
               <Route path="backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
               <Route path="backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
               <Route path="settings" element={<PersonalSettingsPage />} />

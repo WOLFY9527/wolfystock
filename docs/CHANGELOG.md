@@ -1,5 +1,7 @@
 ## 2026-05-06
 
+- 🧪 **Options Lab Phase 2 Frontend Shell** — 新增 `/zh/options-lab` 前端只读期权实验室壳层，包含中文情景假设、标的快照、到期日过滤、Calls/Puts 模拟链表、候选排序/策略比较/情景收益占位与显式风险披露。当前阶段使用 mocked / fixture-compatible 数据，不接入 live option provider、LLM、broker execution、portfolio mutation、order CTA、scanner/backtest、MarketCache、AI、notification 或 DuckDB 行为，也不显示 raw provider payload、request URL、API key、token、secret 或 stack trace。
+
 - 🔐 **Production Security Scan CI Gates** — 新增独立 `Security Scan` GitHub Actions workflow，覆盖 redacted Gitleaks secret scan、Python `pip-audit`、`apps/dsa-web` production-only `npm audit`、Bandit SAST 与本地构建镜像的 Trivy 漏洞扫描；同时新增 `scripts/security_scan.sh` 作为本地安全扫描辅助脚本，默认不安装工具、不运行依赖更新/修复、不启动服务、不推送镜像，并将本轮实现备注补充进生产安全加固审计文档。该变更仅增加 CI/开发者 guardrail，不改变 runtime、UI、API、依赖锁文件或部署目标行为。
 
 - 🔐 **Admin Data Control Center Frontend Phase F3/F4** — `/zh/admin/users/:userId` 现已接入“组合”和“安全”标签：组合页只读展示账户数、估值、持仓、组合活动与 masked broker handle；安全页提供 disable / enable / revoke-sessions 三个 S1 控制，均要求操作原因和 typed confirmation，并在成功时展示安全的 `auditEventId`。前端不会显示 plaintext password、`password_hash`、raw session id、cookie、token、API key、broker credential、`payload_json`、`sync_metadata_json`、raw prompt/provider payload 或 stack trace；不实现 reset-password、force-password-change、unlock、RBAC，也不触发 broker sync、导入、重放、FX refresh、provider/LLM/MarketCache/scanner/backtest/portfolio accounting/notification/DuckDB 行为。

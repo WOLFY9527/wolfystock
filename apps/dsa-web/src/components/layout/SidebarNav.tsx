@@ -11,6 +11,7 @@ import {
   BriefcaseBusiness,
   BarChart3,
   DatabaseZap,
+  FlaskConical,
   Globe,
   Home,
   LogIn,
@@ -74,6 +75,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'market-overview', labelKey: 'nav.marketOverview', to: '/market-overview', icon: Activity },
   { key: 'watchlist', labelKey: 'nav.watchlist', to: '/watchlist', icon: ListChecks },
   { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', icon: TestTubeDiagonal },
+  { key: 'options-lab', labelKey: 'nav.optionsLab', to: '/options-lab', icon: FlaskConical },
 ];
 
 const HEADER_UTILITY_TEXT_CLASS = 'px-3 py-1 text-xs font-medium text-white/50 transition-colors hover:text-white';

@@ -85,6 +85,10 @@ vi.mock('../pages/BacktestPage', () => ({
   default: () => <div>backtest-page</div>,
 }));
 
+vi.mock('../pages/OptionsLabPage', () => ({
+  default: () => <div>options-lab-page</div>,
+}));
+
 vi.mock('../pages/DeterministicBacktestResultPage', () => ({
   default: () => <div>backtest-result-page</div>,
 }));
@@ -489,6 +493,25 @@ describe('AppContent route flows', () => {
     renderAt('/backtest/compare?runIds=101,202');
 
     expect(await screen.findByText('backtest-compare-page')).toBeInTheDocument();
+  });
+
+  it('renders the localized options lab route for signed-in users', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: false,
+      isAdminMode: false,
+    });
+
+    renderAt('/zh/options-lab');
+
+    expect(await screen.findByText('options-lab-page')).toBeInTheDocument();
   });
 
   it.each(['/backtest/results/123', '/zh/backtest/results/123'])(
