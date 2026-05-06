@@ -316,7 +316,10 @@ async function getOrFixture<T>(path: string, fixture: T): Promise<T> {
   try {
     const response = await apiClient.get<Record<string, unknown>>(path);
     return toCamelCase<T>(response.data);
-  } catch {
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'response' in error) {
+      throw error;
+    }
     return fixture;
   }
 }

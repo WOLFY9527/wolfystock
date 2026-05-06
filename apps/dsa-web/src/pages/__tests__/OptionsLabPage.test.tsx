@@ -342,6 +342,52 @@ describe('OptionsLabPage', () => {
     expect(screen.getByText('TEM260619C00055000')).toBeInTheDocument();
   });
 
+  it('keeps the base page usable when compare times out', async () => {
+    const originalSetTimeout = window.setTimeout.bind(window);
+    const timeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation(((handler: TimerHandler, timeout?: number, ...args: unknown[]) => (
+      originalSetTimeout(handler, timeout === 12_000 ? 0 : timeout, ...args)
+    )) as typeof window.setTimeout);
+    vi.mocked(optionsLabApi.compareStrategies).mockReturnValueOnce(new Promise(() => {}));
+
+    try {
+      renderPage();
+
+      const section = await screen.findByTestId('options-lab-strategy-comparison');
+      await waitFor(() => {
+        expect(within(section).getByText('策略对比暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
+      });
+      expect(screen.getByText('TEM260619C00055000')).toBeInTheDocument();
+    } finally {
+      timeoutSpy.mockRestore();
+    }
+  });
+
+  it('terminates unsupported or auth-gated base data with sanitized copy and no compare call', async () => {
+    vi.mocked(optionsLabApi.compareStrategies).mockClear();
+    vi.mocked(optionsLabApi.getUnderlyingSummary).mockRejectedValueOnce({
+      response: {
+        status: 404,
+        data: {
+          detail: {
+            error: 'unsupported_symbol',
+            message: 'Options Lab Phase 1 supports fixture-backed US listed equity options only.',
+            raw_provider_payload: 'token=abc Traceback',
+          },
+        },
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('期权链暂不可用。请稍后重试或调整标的。')).toBeInTheDocument();
+    expect(screen.getByText('期权链暂不可用，策略对比已暂停。')).toBeInTheDocument();
+    expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
+    const domText = document.body.textContent || '';
+    expect(domText).not.toContain('raw_provider_payload');
+    expect(domText).not.toContain('token=abc');
+    expect(domText).not.toContain('Traceback');
+  });
+
   it('keeps freshness and developer details collapsed by default', async () => {
     renderPage();
 
