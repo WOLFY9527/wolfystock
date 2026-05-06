@@ -9,8 +9,11 @@ import pytest
 
 from src.services.options_lab_service import OptionsLabProviderUnavailable, OptionsLabService
 from src.services.options_market_data_provider import (
+    ALLOWED_OPTIONS_PROVIDER_KEYS,
     DelayedFixtureOptionsProvider,
     MalformedGreeksFixtureOptionsProvider,
+    OptionsLiveProviderConfig,
+    OptionsProviderUnavailable,
     SyntheticFixtureOptionsProvider,
     create_options_market_data_provider,
 )
@@ -95,11 +98,81 @@ def test_malformed_missing_greeks_provider_normalizes_missing_fields_and_caps_de
     assert decision.decision_label == "数据不足，禁止判断"
 
 
-def test_live_provider_names_are_explicitly_disabled() -> None:
-    with pytest.raises(OptionsLabProviderUnavailable) as exc_info:
-        OptionsLabService(provider_name="tradier")
+@pytest.mark.parametrize("provider_name", ["tradier", "ibkr", "polygon"])
+def test_live_provider_stubs_are_disabled_by_default(provider_name: str) -> None:
+    provider = create_options_market_data_provider(provider_name)
 
-    assert exc_info.value.code == "options_provider_not_implemented"
+    assert provider.provider_name == provider_name
+    assert provider.capabilities.live_enabled is False
+    assert provider.capabilities.fixture_only is False
+    assert provider.capabilities.tradeable_data is False
+    assert "live_stub" in provider.capabilities.notes
+
+    with pytest.raises(OptionsProviderUnavailable) as exc_info:
+        provider.get_chain("TEM")
+
+    assert exc_info.value.provider_name == provider_name
+    assert exc_info.value.code == "options_provider_disabled"
+
+
+@pytest.mark.parametrize("provider_name", ["tradier", "ibkr", "polygon"])
+def test_live_provider_stubs_require_provider_enable_flag(provider_name: str) -> None:
+    provider = create_options_market_data_provider(
+        provider_name,
+        live_provider_config=OptionsLiveProviderConfig(live_providers_enabled=True),
+    )
+
+    with pytest.raises(OptionsProviderUnavailable) as exc_info:
+        provider.get_expirations("TEM")
+
+    assert exc_info.value.code == "options_provider_not_enabled"
+
+
+@pytest.mark.parametrize("provider_name", ["tradier", "ibkr", "polygon"])
+def test_live_provider_stubs_require_credentials_without_exposing_values(provider_name: str) -> None:
+    provider = create_options_market_data_provider(
+        provider_name,
+        live_provider_config=OptionsLiveProviderConfig(
+            live_providers_enabled=True,
+            enabled_provider_keys=frozenset({provider_name}),
+            credentialed_provider_keys=frozenset(),
+        ),
+    )
+
+    with pytest.raises(OptionsProviderUnavailable) as exc_info:
+        provider.get_underlying_quote("TEM")
+
+    assert exc_info.value.code == "options_provider_credentials_missing"
+    serialized_error = str(exc_info.value).lower()
+    assert "api_key" not in serialized_error
+    assert "token" not in serialized_error
+    assert "secret" not in serialized_error
+    assert "env" not in serialized_error
+
+
+def test_options_provider_selection_contract_keeps_fixture_default_and_allowed_keys() -> None:
+    provider = create_options_market_data_provider("")
+
+    assert provider.provider_name == "synthetic_fixture"
+    assert {
+        "synthetic_fixture",
+        "delayed_fixture",
+        "malformed_fixture",
+        "tradier",
+        "ibkr",
+        "polygon",
+    }.issubset(ALLOWED_OPTIONS_PROVIDER_KEYS)
+
+
+@pytest.mark.parametrize("provider_name", ["tradier", "ibkr", "polygon"])
+def test_options_lab_service_surfaces_live_stub_safe_errors(provider_name: str) -> None:
+    service = OptionsLabService()
+
+    with pytest.raises(OptionsLabProviderUnavailable) as exc_info:
+        service.get_chain("TEM", market_data_provider=provider_name)
+
+    assert exc_info.value.provider_name == provider_name
+    assert exc_info.value.code == "options_provider_disabled"
 
 
 def test_provider_factory_rejects_unknown_provider_without_fallback() -> None:

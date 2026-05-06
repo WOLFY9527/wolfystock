@@ -18,7 +18,19 @@ from typing import Any, Dict, List, Optional, Protocol
 
 DEFAULT_OPTIONS_FIXTURE_PATH = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "options" / "tem_chain.json"
 DEFAULT_OPTIONS_PROVIDER_NAME = "synthetic_fixture"
+FIXTURE_OPTIONS_PROVIDER_NAMES = frozenset(
+    {
+        "synthetic_fixture",
+        "synthetic",
+        "fixture",
+        "delayed_fixture",
+        "real_shaped_delayed_fixture",
+        "malformed_fixture",
+        "missing_greeks_fixture",
+    }
+)
 LIVE_OPTIONS_PROVIDER_NAMES = {"tradier", "ibkr", "polygon"}
+ALLOWED_OPTIONS_PROVIDER_KEYS = frozenset(FIXTURE_OPTIONS_PROVIDER_NAMES | LIVE_OPTIONS_PROVIDER_NAMES)
 
 
 class OptionsProviderError(ValueError):
@@ -43,12 +55,36 @@ class OptionsProviderUnsupportedSymbol(OptionsProviderError):
 class OptionsProviderUnavailable(OptionsProviderError):
     """Raised when a provider name is known but unavailable."""
 
-    def __init__(self, provider_name: str) -> None:
+    def __init__(
+        self,
+        provider_name: str,
+        code: str = "options_provider_not_implemented",
+        message: Optional[str] = None,
+    ) -> None:
         self.provider_name = provider_name
         super().__init__(
-            f"Options provider '{provider_name}' is disabled or not implemented.",
-            "options_provider_not_implemented",
+            message or f"Options provider '{provider_name}' is disabled or not implemented.",
+            code,
         )
+
+
+@dataclass(frozen=True)
+class OptionsLiveProviderConfig:
+    """Provider-selection policy for disabled live adapter stubs.
+
+    This contract intentionally carries only booleans and provider keys. It does
+    not read, store, or expose credential values.
+    """
+
+    live_providers_enabled: bool = False
+    enabled_provider_keys: frozenset[str] = frozenset()
+    credentialed_provider_keys: frozenset[str] = frozenset()
+
+    def is_provider_enabled(self, provider_name: str) -> bool:
+        return provider_name in self.enabled_provider_keys
+
+    def has_credentials(self, provider_name: str) -> bool:
+        return provider_name in self.credentialed_provider_keys
 
 
 @dataclass(frozen=True)
@@ -255,19 +291,98 @@ class MalformedGreeksFixtureOptionsProvider(_FixtureOptionsProvider):
         return decorated
 
 
+class _DisabledLiveOptionsProviderStub:
+    """Fail-closed placeholder for future live Options Lab providers."""
+
+    source_type = "live_stub"
+
+    def __init__(self, provider_name: str, config: Optional[OptionsLiveProviderConfig] = None) -> None:
+        self.provider_name = provider_name
+        self.config = config or OptionsLiveProviderConfig()
+        self.capabilities = OptionsProviderCapabilityMetadata(
+            provider_name=provider_name,
+            source_type=self.source_type,
+            fixture_only=False,
+            live_enabled=False,
+            delayed=False,
+            tradeable_data=False,
+            notes=("live_stub", "disabled_by_default", "no_external_calls"),
+        )
+
+    def get_expirations(self, symbol: str) -> List[Dict[str, Any]]:
+        self._raise_unavailable()
+
+    def get_underlying_quote(self, symbol: str) -> Dict[str, Any]:
+        self._raise_unavailable()
+
+    def get_chain(self, symbol: str, expiration: Optional[str] = None) -> Dict[str, Any]:
+        self._raise_unavailable()
+
+    def _raise_unavailable(self) -> None:
+        if not self.config.live_providers_enabled:
+            raise OptionsProviderUnavailable(
+                self.provider_name,
+                code="options_provider_disabled",
+                message="Options live provider adapter is disabled.",
+            )
+        if not self.config.is_provider_enabled(self.provider_name):
+            raise OptionsProviderUnavailable(
+                self.provider_name,
+                code="options_provider_not_enabled",
+                message="Options live provider adapter is not enabled.",
+            )
+        if not self.config.has_credentials(self.provider_name):
+            raise OptionsProviderUnavailable(
+                self.provider_name,
+                code="options_provider_credentials_missing",
+                message="Options live provider credentials are not configured.",
+            )
+        raise OptionsProviderUnavailable(
+            self.provider_name,
+            code="options_provider_not_enabled",
+            message="Options live provider adapter has no network implementation.",
+        )
+
+
+class TradierOptionsProviderStub(_DisabledLiveOptionsProviderStub):
+    """Disabled Tradier Options Lab adapter stub."""
+
+    def __init__(self, config: Optional[OptionsLiveProviderConfig] = None) -> None:
+        super().__init__("tradier", config=config)
+
+
+class IbkrOptionsProviderStub(_DisabledLiveOptionsProviderStub):
+    """Disabled IBKR Options Lab adapter stub."""
+
+    def __init__(self, config: Optional[OptionsLiveProviderConfig] = None) -> None:
+        super().__init__("ibkr", config=config)
+
+
+class PolygonOptionsProviderStub(_DisabledLiveOptionsProviderStub):
+    """Disabled Polygon Options Lab adapter stub."""
+
+    def __init__(self, config: Optional[OptionsLiveProviderConfig] = None) -> None:
+        super().__init__("polygon", config=config)
+
+
 def create_options_market_data_provider(
     provider_name: str = DEFAULT_OPTIONS_PROVIDER_NAME,
     fixture_path: Optional[Path] = None,
+    live_provider_config: Optional[OptionsLiveProviderConfig] = None,
 ) -> OptionsMarketDataProvider:
-    """Create a fixture provider or reject disabled live providers."""
+    """Create a fixture provider or disabled live provider stub."""
 
     normalized = (provider_name or DEFAULT_OPTIONS_PROVIDER_NAME).strip().lower()
-    if normalized in LIVE_OPTIONS_PROVIDER_NAMES:
-        raise OptionsProviderUnavailable(normalized)
     if normalized in {"synthetic_fixture", "synthetic", "fixture"}:
         return SyntheticFixtureOptionsProvider(fixture_path=fixture_path)
     if normalized in {"delayed_fixture", "real_shaped_delayed_fixture"}:
         return DelayedFixtureOptionsProvider(fixture_path=fixture_path)
     if normalized in {"malformed_fixture", "missing_greeks_fixture"}:
         return MalformedGreeksFixtureOptionsProvider(fixture_path=fixture_path)
+    if normalized == "tradier":
+        return TradierOptionsProviderStub(config=live_provider_config)
+    if normalized == "ibkr":
+        return IbkrOptionsProviderStub(config=live_provider_config)
+    if normalized == "polygon":
+        return PolygonOptionsProviderStub(config=live_provider_config)
     raise OptionsProviderUnavailable(normalized)

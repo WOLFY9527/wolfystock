@@ -122,9 +122,35 @@ def test_chain_endpoint_rejects_live_provider_selection_without_live_calls() -> 
         )
         assert response.status_code == 400
         assert response.json()["detail"] == {
-            "error": "options_provider_not_implemented",
+            "error": "options_provider_disabled",
             "message": "Requested Options Lab provider is fixture-only, disabled, or not implemented.",
         }
+    finally:
+        client.close()
+
+
+def test_live_provider_stub_selection_does_not_call_external_paths_or_expose_secrets() -> None:
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("forbidden runtime path was called")
+
+    client = _client()
+    try:
+        with (
+            patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
+            patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
+            patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
+            patch("src.services.portfolio_service.PortfolioService.add_lot", side_effect=forbidden, create=True),
+        ):
+            response = client.get(
+                "/api/v1/options/underlyings/TEM/chain",
+                params={"marketDataProvider": "polygon"},
+            )
+
+        assert response.status_code == 400
+        text = _json_text(response.json()).lower()
+        assert "options_provider_disabled" in text
+        for value in ("api_key", "apikey", "token", "secret", "requesturl", "env"):
+            assert value not in text
     finally:
         client.close()
 
