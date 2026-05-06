@@ -10,6 +10,14 @@ Mode: docs-only security design / rollout plan. No runtime auth or MFA code,
 storage/schema, tests, Options, Data Pipeline, Provider Circuit, cost/quota,
 scanner, backtest, or portfolio behavior was changed.
 
+Implementation update: the first safe foundation slice now stores new non-test
+TOTP secrets as a versioned AES-GCM encrypted envelope in the existing
+`mfa_secret_ref` field. `WOLFYSTOCK_MFA_SECRET_ENCRYPTION_KEY` is required for
+new non-test enrollment, `WOLFYSTOCK_MFA_SECRET_KEY_ID` is stored only as
+envelope metadata, `test-only:` and legacy plaintext TOTP references remain
+read-compatible, and `placeholder-sha256:` remains migration-incomplete and
+non-verifiable. Login MFA enforcement remains disabled.
+
 ## 1. Current scaffold and production gap
 
 Admin MFA has a backend foundation, but login enforcement remains disabled. The

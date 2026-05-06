@@ -17,20 +17,25 @@ import struct
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Final
 from urllib.parse import quote
 
 from src.repositories.auth_repo import AuthRepository
 
 
 MFA_ISSUER = "WolfyStock"
+MFA_SECRET_REF_ENCRYPTED_PREFIX: Final = "$wolfystock$mfa-secret=v1$"
 MFA_SECRET_REF_TEST_PREFIX = "test-only:"
 MFA_SECRET_REF_PLACEHOLDER_PREFIX = "placeholder-sha256:"
 MFA_RECOVERY_CODE_COUNT = 10
 MFA_RECOVERY_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 MFA_RECOVERY_CODES_VERSION = 1
+MFA_SECRET_KEY_ENV = "WOLFYSTOCK_MFA_SECRET_ENCRYPTION_KEY"
+MFA_SECRET_KEY_ID_ENV = "WOLFYSTOCK_MFA_SECRET_KEY_ID"
+MFA_SECRET_ENCRYPTION_ALG = "aes-256-gcm"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class MfaEnrollmentChallenge:
     secret: str
     secret_ref: str
@@ -49,6 +54,14 @@ class RecoveryCodeBatch:
 class RecoveryCodeVerification:
     verified: bool
     remaining_count: int
+
+
+class MfaSecretStorageUnavailable(RuntimeError):
+    """Raised when a recoverable TOTP secret cannot be stored safely."""
+
+
+class MfaSecretStorageInvalid(RuntimeError):
+    """Raised when encrypted MFA secret metadata cannot be resolved safely."""
 
 
 def _b32decode_secret(secret: str) -> bytes | None:
@@ -88,18 +101,133 @@ def _new_totp_secret() -> str:
     return base64.b32encode(secrets.token_bytes(20)).decode("ascii").rstrip("=")
 
 
+def _b64url_encode(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _b64url_decode(value: str) -> bytes:
+    padded = value + "=" * ((4 - len(value) % 4) % 4)
+    return base64.urlsafe_b64decode(padded.encode("ascii"))
+
+
+def _configured_mfa_secret_key() -> tuple[bytes, str] | None:
+    raw_key = str(os.getenv(MFA_SECRET_KEY_ENV) or "").strip()
+    if not raw_key:
+        return None
+    if raw_key.startswith("base64:"):
+        try:
+            key = _b64url_decode(raw_key.removeprefix("base64:").strip())
+        except Exception as exc:
+            raise MfaSecretStorageUnavailable("mfa_secret_storage_key_invalid") from exc
+    else:
+        key = raw_key.encode("utf-8")
+    if len(key) < 32:
+        raise MfaSecretStorageUnavailable("mfa_secret_storage_key_invalid")
+    key_id = str(os.getenv(MFA_SECRET_KEY_ID_ENV) or "local").strip() or "local"
+    return key, key_id
+
+
+def _derive_mfa_secret_key(master_key: bytes, purpose: bytes) -> bytes:
+    return hmac.new(master_key, b"wolfystock:mfa-secret:" + purpose, hashlib.sha256).digest()
+
+
+def _parse_secret_ref_fields(secret_ref: str) -> dict[str, str] | None:
+    value = str(secret_ref or "").strip()
+    if not value.startswith(MFA_SECRET_REF_ENCRYPTED_PREFIX):
+        return None
+    fields: dict[str, str] = {}
+    for part in value.removeprefix(MFA_SECRET_REF_ENCRYPTED_PREFIX).split("$"):
+        if "=" not in part:
+            return None
+        key, raw = part.split("=", 1)
+        if not key or key in fields:
+            return None
+        fields[key] = raw
+    return fields
+
+
+def _encrypt_mfa_secret(secret: str) -> str:
+    configured_key = _configured_mfa_secret_key()
+    if configured_key is None:
+        raise MfaSecretStorageUnavailable("mfa_secret_storage_key_missing")
+
+    master_key, key_id = configured_key
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except Exception as exc:
+        raise MfaSecretStorageUnavailable("mfa_secret_storage_crypto_unavailable") from exc
+
+    aes_key = _derive_mfa_secret_key(master_key, b"aes-gcm-v1")
+    nonce = secrets.token_bytes(12)
+    kid = _b64url_encode(key_id.encode("utf-8"))
+    aad = f"v=1|mode=encrypted|kid={kid}|alg={MFA_SECRET_ENCRYPTION_ALG}".encode("utf-8")
+    ciphertext = AESGCM(aes_key).encrypt(nonce, secret.encode("utf-8"), aad)
+    return (
+        f"{MFA_SECRET_REF_ENCRYPTED_PREFIX}"
+        f"mode=encrypted$kid={kid}$alg={MFA_SECRET_ENCRYPTION_ALG}"
+        f"$nonce={_b64url_encode(nonce)}$ciphertext={_b64url_encode(ciphertext)}"
+    )
+
+
+def _decrypt_mfa_secret_ref(secret_ref: str) -> str | None:
+    fields = _parse_secret_ref_fields(secret_ref)
+    if fields is None:
+        return None
+    if fields.get("mode") != "encrypted" or fields.get("alg") != MFA_SECRET_ENCRYPTION_ALG:
+        raise MfaSecretStorageInvalid("mfa_secret_storage_ref_unsupported")
+
+    configured_key = _configured_mfa_secret_key()
+    if configured_key is None:
+        raise MfaSecretStorageInvalid("mfa_secret_storage_key_missing")
+    master_key, key_id = configured_key
+    expected_kid = _b64url_encode(key_id.encode("utf-8"))
+    if not hmac.compare_digest(fields.get("kid") or "", expected_kid):
+        raise MfaSecretStorageInvalid("mfa_secret_storage_key_mismatch")
+    try:
+        nonce = _b64url_decode(fields["nonce"])
+        ciphertext = _b64url_decode(fields["ciphertext"])
+    except Exception as exc:
+        raise MfaSecretStorageInvalid("mfa_secret_storage_ref_malformed") from exc
+
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except Exception as exc:
+        raise MfaSecretStorageInvalid("mfa_secret_storage_crypto_unavailable") from exc
+
+    aes_key = _derive_mfa_secret_key(master_key, b"aes-gcm-v1")
+    aad = (
+        f"v=1|mode=encrypted|kid={fields['kid']}|alg={MFA_SECRET_ENCRYPTION_ALG}"
+    ).encode("utf-8")
+    try:
+        return AESGCM(aes_key).decrypt(nonce, ciphertext, aad).decode("utf-8")
+    except Exception as exc:
+        raise MfaSecretStorageInvalid("mfa_secret_storage_ref_invalid") from exc
+
+
+def _looks_like_legacy_plaintext_secret(value: str) -> bool:
+    normalized = value.strip().replace(" ", "").upper()
+    if len(normalized) < 16:
+        return False
+    return normalized == value.strip().upper() and _b32decode_secret(normalized) is not None
+
+
 def _secret_ref_for_storage(secret: str) -> tuple[str, str]:
     configured = str(os.getenv("WOLFYSTOCK_MFA_TEST_SECRET") or "").strip()
     if configured and hmac.compare_digest(secret, configured):
         return f"{MFA_SECRET_REF_TEST_PREFIX}{secret}", "test_only_secret"
-    digest = hashlib.sha256(secret.encode("utf-8")).hexdigest()
-    return f"{MFA_SECRET_REF_PLACEHOLDER_PREFIX}{digest}", "hash_only_scaffold"
+    return _encrypt_mfa_secret(secret), "encrypted_v1"
 
 
 def _secret_from_ref(secret_ref: str | None) -> str | None:
     value = str(secret_ref or "").strip()
+    if value.startswith(MFA_SECRET_REF_ENCRYPTED_PREFIX):
+        return _decrypt_mfa_secret_ref(value)
     if value.startswith(MFA_SECRET_REF_TEST_PREFIX):
         return value.removeprefix(MFA_SECRET_REF_TEST_PREFIX)
+    if value.startswith(MFA_SECRET_REF_PLACEHOLDER_PREFIX):
+        return None
+    if _looks_like_legacy_plaintext_secret(value):
+        return value
     return None
 
 
@@ -208,7 +336,10 @@ def verify_totp_code(*, secret_ref: str | None, code: str | None) -> bool:
     normalized_code = _normalize_code(code)
     if len(normalized_code) != 6:
         return False
-    secret = _secret_from_ref(secret_ref)
+    try:
+        secret = _secret_from_ref(secret_ref)
+    except MfaSecretStorageInvalid:
+        return False
     if not secret:
         return False
     current = int(time.time())

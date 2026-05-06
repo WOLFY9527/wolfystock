@@ -20,10 +20,17 @@ from fastapi.testclient import TestClient
 
 import src.auth as auth
 from api.middlewares.auth import add_auth_middleware
+from src.repositories.auth_repo import AuthRepository
+from src.services.admin_mfa_service import (
+    MFA_SECRET_REF_ENCRYPTED_PREFIX,
+    create_enrollment_challenge,
+    verify_totp_code,
+)
 from src.storage import DatabaseManager
 
 
 TEST_MFA_SECRET = "JBSWY3DPEHPK3PXP"
+TEST_MFA_ENCRYPTION_KEY = "test-mfa-secret-storage-key-32-bytes-minimum"
 
 
 def _reset_auth_globals() -> None:
@@ -68,7 +75,8 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
             {
                 "DATABASE_PATH": str(self.db_path),
                 "ADMIN_AUTH_ENABLED": "true",
-                "WOLFYSTOCK_MFA_TEST_SECRET": TEST_MFA_SECRET,
+                "WOLFYSTOCK_MFA_SECRET_ENCRYPTION_KEY": TEST_MFA_ENCRYPTION_KEY,
+                "WOLFYSTOCK_MFA_SECRET_KEY_ID": "unit-test-key",
             },
             clear=False,
         )
@@ -102,7 +110,8 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
     def test_mfa_enrollment_start_returns_secret_once_and_stores_pending_metadata(self) -> None:
         self._login_admin()
 
-        response = self.client.post("/api/v1/auth/mfa/enroll/start")
+        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_TEST_SECRET": TEST_MFA_SECRET}, clear=False):
+            response = self.client.post("/api/v1/auth/mfa/enroll/start")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -121,15 +130,16 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
 
     def test_mfa_enrollment_verify_requires_recent_reauth_and_does_not_block_login(self) -> None:
         self._login_admin()
-        self.client.post("/api/v1/auth/mfa/enroll/start")
-        code = _totp_code(TEST_MFA_SECRET)
+        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_TEST_SECRET": TEST_MFA_SECRET}, clear=False):
+            self.client.post("/api/v1/auth/mfa/enroll/start")
+            code = _totp_code(TEST_MFA_SECRET)
 
-        blocked = self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": code})
-        self.assertEqual(blocked.status_code, 403)
-        self.assertEqual(blocked.json()["detail"]["error"], "admin_reauth_required")
+            blocked = self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": code})
+            self.assertEqual(blocked.status_code, 403)
+            self.assertEqual(blocked.json()["detail"]["error"], "admin_reauth_required")
 
-        self._reauth_admin()
-        enabled = self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": code})
+            self._reauth_admin()
+            enabled = self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": code})
         self.assertEqual(enabled.status_code, 200)
         self.assertTrue(enabled.json()["ok"])
         self.assertEqual(enabled.json()["status"], "enabled")
@@ -147,26 +157,28 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
 
     def test_mfa_verify_is_sanitized_and_updates_last_verified_at(self) -> None:
         self._login_admin()
-        self.client.post("/api/v1/auth/mfa/enroll/start")
-        self._reauth_admin()
-        code = _totp_code(TEST_MFA_SECRET)
-        self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": code})
+        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_TEST_SECRET": TEST_MFA_SECRET}, clear=False):
+            self.client.post("/api/v1/auth/mfa/enroll/start")
+            self._reauth_admin()
+            code = _totp_code(TEST_MFA_SECRET)
+            self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": code})
 
-        rejected = self.client.post("/api/v1/auth/mfa/verify", json={"code": "000000"})
-        self.assertEqual(rejected.status_code, 401)
-        self.assertEqual(rejected.json()["error"], "invalid_mfa_code")
-        self.assertNotIn(TEST_MFA_SECRET, rejected.text)
+            rejected = self.client.post("/api/v1/auth/mfa/verify", json={"code": "000000"})
+            self.assertEqual(rejected.status_code, 401)
+            self.assertEqual(rejected.json()["error"], "invalid_mfa_code")
+            self.assertNotIn(TEST_MFA_SECRET, rejected.text)
 
-        accepted = self.client.post("/api/v1/auth/mfa/verify", json={"code": _totp_code(TEST_MFA_SECRET)})
+            accepted = self.client.post("/api/v1/auth/mfa/verify", json={"code": _totp_code(TEST_MFA_SECRET)})
         self.assertEqual(accepted.status_code, 200)
         self.assertTrue(accepted.json()["verified"])
         self.assertNotIn(TEST_MFA_SECRET, accepted.text)
 
     def test_mfa_disable_requires_recent_reauth(self) -> None:
         self._login_admin()
-        self.client.post("/api/v1/auth/mfa/enroll/start")
-        self._reauth_admin()
-        self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": _totp_code(TEST_MFA_SECRET)})
+        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_TEST_SECRET": TEST_MFA_SECRET}, clear=False):
+            self.client.post("/api/v1/auth/mfa/enroll/start")
+            self._reauth_admin()
+            self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": _totp_code(TEST_MFA_SECRET)})
         auth._admin_reauth_markers = {}
 
         blocked = self.client.post("/api/v1/auth/mfa/disable")
@@ -184,9 +196,10 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
 
     def test_recovery_code_generation_returns_plaintext_once_and_stores_hashes(self) -> None:
         self._login_admin()
-        self.client.post("/api/v1/auth/mfa/enroll/start")
-        self._reauth_admin()
-        self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": _totp_code(TEST_MFA_SECRET)})
+        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_TEST_SECRET": TEST_MFA_SECRET}, clear=False):
+            self.client.post("/api/v1/auth/mfa/enroll/start")
+            self._reauth_admin()
+            self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": _totp_code(TEST_MFA_SECRET)})
 
         generated = self.client.post("/api/v1/auth/mfa/recovery-codes/generate")
 
@@ -213,9 +226,10 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
 
     def test_recovery_code_verify_marks_used_once_and_does_not_block_login(self) -> None:
         self._login_admin()
-        self.client.post("/api/v1/auth/mfa/enroll/start")
-        self._reauth_admin()
-        self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": _totp_code(TEST_MFA_SECRET)})
+        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_TEST_SECRET": TEST_MFA_SECRET}, clear=False):
+            self.client.post("/api/v1/auth/mfa/enroll/start")
+            self._reauth_admin()
+            self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": _totp_code(TEST_MFA_SECRET)})
         generated = self.client.post("/api/v1/auth/mfa/recovery-codes/generate")
         code = generated.json()["recoveryCodes"][0]
 
@@ -240,9 +254,10 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
 
     def test_recovery_code_rotation_requires_recent_reauth_and_replaces_active_set(self) -> None:
         self._login_admin()
-        self.client.post("/api/v1/auth/mfa/enroll/start")
-        self._reauth_admin()
-        self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": _totp_code(TEST_MFA_SECRET)})
+        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_TEST_SECRET": TEST_MFA_SECRET}, clear=False):
+            self.client.post("/api/v1/auth/mfa/enroll/start")
+            self._reauth_admin()
+            self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": _totp_code(TEST_MFA_SECRET)})
         first = self.client.post("/api/v1/auth/mfa/recovery-codes/generate").json()["recoveryCodes"][0]
         auth._admin_reauth_markers = {}
 
@@ -270,6 +285,74 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
         envelope = json.loads(getattr(user, "mfa_recovery_codes_hash"))
         self.assertIsNotNone(envelope["sets"][0]["replaced_at"])
         self.assertIsNone(envelope["sets"][1]["replaced_at"])
+
+    def test_mfa_secret_is_encrypted_for_storage_and_readable_for_verification(self) -> None:
+        self._login_admin()
+
+        response = self.client.post("/api/v1/auth/mfa/enroll/start")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["storageMode"], "encrypted_v1")
+        secret = payload["secret"]
+        user = self.db.get_app_user("bootstrap-admin")
+        secret_ref = str(getattr(user, "mfa_secret_ref"))
+        self.assertTrue(secret_ref.startswith(MFA_SECRET_REF_ENCRYPTED_PREFIX))
+        self.assertNotIn(secret, secret_ref)
+
+        self._reauth_admin()
+        verified = self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": _totp_code(secret)})
+        self.assertEqual(verified.status_code, 200)
+        self.assertTrue(verified.json()["ok"])
+        self.assertNotIn(secret, verified.text)
+
+    def test_mfa_secret_legacy_refs_remain_read_compatible(self) -> None:
+        self.assertTrue(verify_totp_code(secret_ref=TEST_MFA_SECRET, code=_totp_code(TEST_MFA_SECRET)))
+        self.assertTrue(
+            verify_totp_code(
+                secret_ref=f"test-only:{TEST_MFA_SECRET}",
+                code=_totp_code(TEST_MFA_SECRET),
+            )
+        )
+        self.assertFalse(
+            verify_totp_code(
+                secret_ref="placeholder-sha256:" + "0" * 64,
+                code=_totp_code(TEST_MFA_SECRET),
+            )
+        )
+
+    def test_mfa_enrollment_fails_safely_when_encryption_key_is_missing(self) -> None:
+        self._login_admin()
+
+        with patch.dict(
+            os.environ,
+            {
+                "WOLFYSTOCK_MFA_SECRET_ENCRYPTION_KEY": "",
+                "WOLFYSTOCK_MFA_SECRET_KEY_ID": "",
+            },
+            clear=False,
+        ):
+            response = self.client.post("/api/v1/auth/mfa/enroll/start")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["error"], "mfa_secret_storage_unavailable")
+        self.assertNotIn(TEST_MFA_SECRET, response.text)
+        self.assertNotIn("provisioningUri", response.text)
+        user = self.db.get_app_user("bootstrap-admin")
+        self.assertIsNone(getattr(user, "mfa_secret_ref"))
+
+    def test_mfa_enrollment_challenge_repr_does_not_leak_plaintext_secret(self) -> None:
+        repo = AuthRepository(self.db)
+        challenge = create_enrollment_challenge(
+            user_id="bootstrap-admin",
+            username="admin",
+            repo=repo,
+        )
+
+        rendered = repr(challenge)
+        self.assertNotIn(challenge.secret, rendered)
+        self.assertNotIn(challenge.provisioning_uri, rendered)
+        self.assertNotIn(challenge.secret_ref, rendered)
 
 
 if __name__ == "__main__":

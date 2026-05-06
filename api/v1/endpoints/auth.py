@@ -52,6 +52,7 @@ from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, BOOTSTRAP_ADMIN_USERNAME, RO
 from src.repositories.auth_repo import AuthRepository
 from src.services.execution_log_service import ExecutionLogService
 from src.services.admin_mfa_service import (
+    MfaSecretStorageUnavailable,
     create_enrollment_challenge,
     disable_mfa,
     enable_mfa,
@@ -746,11 +747,20 @@ async def auth_mfa_enroll_start(request: Request):
             content={"error": "user_not_found", "message": "Current user not found"},
         )
 
-    challenge = create_enrollment_challenge(
-        user_id=current_user.user_id,
-        username=current_user.username,
-        repo=repo,
-    )
+    try:
+        challenge = create_enrollment_challenge(
+            user_id=current_user.user_id,
+            username=current_user.username,
+            repo=repo,
+        )
+    except MfaSecretStorageUnavailable:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "mfa_secret_storage_unavailable",
+                "message": "MFA secret storage is not available",
+            },
+        )
     return {
         "ok": True,
         "status": "pending",
