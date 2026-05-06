@@ -1,0 +1,39 @@
+{
+  "description": "Sample local import file for model_pricing_policies. Values are placeholders for workflow validation only and are not verified current official prices.",
+  "policies": [
+    {
+      "provider": "openai",
+      "model": "openai/example-model",
+      "input_price_per_1m": "0.10000000",
+      "cached_input_price_per_1m": null,
+      "output_price_per_1m": "0.30000000",
+      "currency": "USD",
+      "effective_from": "2025-01-01T00:00:00",
+      "effective_until": null,
+      "source_label": "Sample placeholder, verify against provider pricing page before production use",
+      "source_url": "https://openai.com/api/pricing/",
+      "active": true,
+      "metadata": {
+        "pricing_status": "sample_unverified",
+        "notes": "Replace with reviewed values, source label, and effective date during a manual pricing update."
+      }
+    },
+    {
+      "provider": "deepseek",
+      "model": "deepseek/example-model",
+      "input_price_per_1m": "0.05000000",
+      "cached_input_price_per_1m": "0.01000000",
+      "output_price_per_1m": "0.20000000",
+      "currency": "USD",
+      "effective_from": "2025-01-01T00:00:00",
+      "effective_until": null,
+      "source_label": "Sample placeholder, verify against provider pricing page before production use",
+      "source_url": "https://api-docs.deepseek.com/quick_start/pricing",
+      "active": false,
+      "metadata": {
+        "pricing_status": "sample_unverified",
+        "notes": "Inactive sample row demonstrating cached input pricing shape."
+      }
+    }
+  ]
+}

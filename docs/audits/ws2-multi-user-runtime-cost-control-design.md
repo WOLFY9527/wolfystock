@@ -71,6 +71,15 @@ WS2-R0 is design only. It does not implement Redis, Celery, RQ, workers, migrati
 - Per-user accounting is precise only where the caller passes `owner_user_id` or a guest bucket into the usage seam. Current analyzer/agent usage paths continue to preserve existing behavior and may still write global/null-owner ledger rows until owner context propagation is completed.
 - Quota reservation reconciliation is not consumed or released unless a future caller passes a safe `quota_reservation_id`; live quota enforcement remains out of scope.
 - Future work remains separate: complete owner/guest propagation at product route boundaries, connect safe quota reservation reconciliation, improve admin dashboard UX, and add retention/aggregation polish.
+
+## WS2-R4C pricing policy update workflow note
+
+- Pricing policies are manually/import maintained through local JSON records and `ModelPricingPolicyImportService`; the application must not scrape official provider pricing pages at runtime.
+- Sample file: `docs/examples/model_pricing_policies.example.json`. Its placeholder values are intentionally marked unverified and must not be treated as current official pricing.
+- Each imported policy should include provider, model, per-1M input/cached-input/output prices, currency, source label, public source URL, active flag, and an explicit effective date range where applicable.
+- The importer validates required provider/model/effective date fields, rejects negative or invalid prices, normalizes provider/model labels, upserts by stable `policy_key` or provider/model/effective date, sanitizes metadata, and keeps historical effective-dated policies unless superseded deactivation is explicitly requested.
+- Official price changes require a reviewed local update using the source/effective date fields. Future work remains separate: admin UI for pricing policies, scheduled price review reminders, and pricing verification audit evidence.
+
 ## 2. Current deployment assumptions
 
 - API single-process assumption: `docs/DEPLOY.md` and `docs/deploy-webui-cloud.md` currently state that `/api/v1/analysis/*` task queue and SSE state are process-local and should stay single-process unless sticky routing is intentionally provided.
