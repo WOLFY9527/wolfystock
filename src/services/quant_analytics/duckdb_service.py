@@ -59,22 +59,26 @@ class QuantDuckDBService:
         )
 
     def health(self) -> dict:
-        available, version, error = self._duckdb_status()
         payload = {
             "enabled": self.enabled,
-            "available": available,
+            "available": False,
             "databasePath": self._safe_path(self.database_path),
             "parquetRoot": self._safe_path(self.parquet_root),
-            "version": version,
-            "error": error,
+            "version": None,
+            "error": "DuckDB quant engine is disabled" if not self.enabled else None,
             "schemaInitialized": False,
             "status": "disabled" if not self.enabled else "ok",
             "engine": "duckdb",
         }
+        if not self.enabled:
+            return payload
+
+        available, version, error = self._duckdb_status()
+        payload["available"] = available
+        payload["version"] = version
+        payload["error"] = error
         if not available:
             payload["status"] = "unavailable"
-            return payload
-        if not self.enabled:
             return payload
 
         try:

@@ -50,6 +50,27 @@ def test_disabled_service_health_does_not_create_database_file(tmp_path) -> None
     assert not db_path.exists()
 
 
+def test_disabled_service_health_wins_over_missing_duckdb(tmp_path, monkeypatch) -> None:
+    real_import_module = importlib.import_module
+
+    def fake_import_module(name: str, package: str | None = None):
+        if name == "duckdb":
+            raise ModuleNotFoundError("No module named 'duckdb'")
+        return real_import_module(name, package)
+
+    monkeypatch.setattr(importlib, "import_module", fake_import_module)
+    db_path = tmp_path / "quant" / "disabled.duckdb"
+    service = QuantDuckDBService(database_path=str(db_path), enabled=False)
+
+    health = service.health()
+
+    assert health["enabled"] is False
+    assert health["status"] == "disabled"
+    assert health["available"] is False
+    assert health["error"] == "DuckDB quant engine is disabled"
+    assert not db_path.exists()
+
+
 def test_missing_duckdb_import_is_reported(tmp_path, monkeypatch) -> None:
     real_import_module = importlib.import_module
 
