@@ -61,6 +61,16 @@ WS2-R0 is design only. It does not implement Redis, Celery, RQ, workers, migrati
 - This is not live enforcement and is not wired into live LLM/provider execution. No prompts, model routing/order, fallback, retry, integrity retry, provider behavior, scanner/backtest/portfolio/Options/MarketCache/DuckDB/broker/notification behavior changed.
 - Future work remains separate: live instrumentation integration, provider response reconciliation, quota consume/release reconciliation, pricing source update workflow, admin dashboard UX, retention/aggregation policy, and budget enforcement.
 
+## WS2-R4C LLM usage observer reconciliation note
+
+- Existing normalized `persist_llm_usage(...)` writes now invoke a best-effort LLM cost ledger observer after the legacy `llm_usage` row is recorded.
+- The observer uses only normalized usage fields already available at the successful response seam: provider/model labels, route family/call type, prompt/cached/completion/total token counts when present, optional owner/guest identifiers, optional request hash, and sanitized bounded metadata.
+- Ledger reconciliation is observational only. A ledger write failure is swallowed and cannot change the user-visible LLM result, prompt, model routing/order, provider selection, fallback, retry, integrity retry, or provider behavior.
+- No raw prompts, raw provider payloads, credentials, cookies, raw session identifiers, stack traces, or secret-like metadata are stored by the observer.
+- Missing active pricing policy remains safe: the ledger row records `pricing_unknown` with zero estimated cost according to `LlmCostLedgerService`; there is no live price fetch or pricing-page scrape.
+- Per-user accounting is precise only where the caller passes `owner_user_id` or a guest bucket into the usage seam. Current analyzer/agent usage paths continue to preserve existing behavior and may still write global/null-owner ledger rows until owner context propagation is completed.
+- Quota reservation reconciliation is not consumed or released unless a future caller passes a safe `quota_reservation_id`; live quota enforcement remains out of scope.
+- Future work remains separate: complete owner/guest propagation at product route boundaries, connect safe quota reservation reconciliation, improve admin dashboard UX, and add retention/aggregation polish.
 ## 2. Current deployment assumptions
 
 - API single-process assumption: `docs/DEPLOY.md` and `docs/deploy-webui-cloud.md` currently state that `/api/v1/analysis/*` task queue and SSE state are process-local and should stay single-process unless sticky routing is intentionally provided.

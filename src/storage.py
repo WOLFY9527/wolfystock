@@ -9705,20 +9705,99 @@ def persist_llm_usage(
     model: str,
     call_type: str,
     stock_code: Optional[str] = None,
+    *,
+    owner_user_id: Optional[str] = None,
+    guest_bucket_hash: Optional[str] = None,
+    route_family: Optional[str] = None,
+    provider: Optional[str] = None,
+    cached_input_tokens: Optional[int] = None,
+    quota_reservation_id: Optional[str] = None,
+    request_hash: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Fire-and-forget: write one LLM call record to llm_usage. Never raises."""
+    prompt_tokens = usage.get("prompt_tokens", 0) or 0
+    completion_tokens = usage.get("completion_tokens", 0) or 0
+    total_tokens = usage.get("total_tokens", 0) or 0
     try:
         db = DatabaseManager.get_instance()
         db.record_llm_usage(
             call_type=call_type,
             model=model,
-            prompt_tokens=usage.get("prompt_tokens", 0) or 0,
-            completion_tokens=usage.get("completion_tokens", 0) or 0,
-            total_tokens=usage.get("total_tokens", 0) or 0,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
             stock_code=stock_code,
         )
     except Exception as exc:
         logging.getLogger(__name__).warning("[LLM usage] failed to persist usage record: %s", exc)
+        return
+    _reconcile_llm_usage_cost_ledger(
+        owner_user_id=owner_user_id,
+        guest_bucket_hash=guest_bucket_hash,
+        route_family=route_family or call_type,
+        call_type=call_type,
+        provider=provider or _provider_from_llm_model(model),
+        model=model,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        cached_input_tokens=cached_input_tokens,
+        quota_reservation_id=quota_reservation_id,
+        request_hash=request_hash,
+        metadata=metadata,
+    )
+
+
+def _reconcile_llm_usage_cost_ledger(
+    *,
+    owner_user_id: Optional[str],
+    guest_bucket_hash: Optional[str],
+    route_family: str,
+    call_type: str,
+    provider: str,
+    model: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    total_tokens: int,
+    cached_input_tokens: Optional[int],
+    quota_reservation_id: Optional[str],
+    request_hash: Optional[str],
+    metadata: Optional[Dict[str, Any]],
+) -> None:
+    """Best-effort observer that mirrors normalized usage into the cost ledger."""
+    try:
+        from src.services.llm_cost_ledger_service import LlmCostLedgerService
+
+        LlmCostLedgerService().reconcile_usage(
+            owner_user_id=owner_user_id,
+            guest_bucket_hash=guest_bucket_hash,
+            route_family=route_family,
+            call_type=call_type,
+            provider=provider,
+            model=model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            cached_input_tokens=cached_input_tokens,
+            quota_reservation_id=quota_reservation_id,
+            request_hash=request_hash,
+            metadata=metadata,
+        )
+    except Exception as exc:
+        logging.getLogger(__name__).debug(
+            "[LLM cost ledger] usage reconciliation skipped: %s",
+            type(exc).__name__,
+        )
+
+
+def _provider_from_llm_model(model: Any) -> str:
+    raw = str(model or "").strip().lower()
+    if "/" in raw:
+        return raw.split("/", 1)[0] or "unknown"
+    if raw:
+        return raw.split("-", 1)[0] or "unknown"
+    return "unknown"
 
 
 if __name__ == "__main__":
