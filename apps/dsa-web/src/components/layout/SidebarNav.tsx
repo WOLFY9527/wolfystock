@@ -10,6 +10,7 @@ import {
   BellRing,
   BriefcaseBusiness,
   BarChart3,
+  CircuitBoard,
   DatabaseZap,
   FlaskConical,
   Globe,
@@ -142,12 +143,14 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const consoleLabel = t('nav.independentConsole');
   const notificationsLabel = t('nav.notifications');
   const marketProvidersLabel = t('nav.marketProviders');
+  const providerCircuitsLabel = t('nav.providerCircuits');
   const userGovernanceLabel = t('nav.userGovernance');
   const costObservabilityLabel = t('nav.costObservability');
   const signInPath = buildLoginPath(location.pathname + location.search);
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
   const notificationsPath = routeLocale ? buildLocalizedPath('/admin/notifications', routeLocale) : '/admin/notifications';
   const marketProvidersPath = routeLocale ? buildLocalizedPath('/admin/market-providers', routeLocale) : '/admin/market-providers';
+  const providerCircuitsPath = routeLocale ? buildLocalizedPath('/admin/provider-circuits', routeLocale) : '/admin/provider-circuits';
   const userGovernancePath = routeLocale ? buildLocalizedPath('/admin/users', routeLocale) : '/admin/users';
   const costObservabilityPath = routeLocale ? buildLocalizedPath('/admin/cost-observability', routeLocale) : '/admin/cost-observability';
 
@@ -327,6 +330,30 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </NavLink>
   ) : null;
 
+  const providerCircuitAction = canReadProviders ? (
+    <NavLink
+      to={providerCircuitsPath}
+      onClick={onNavigate}
+      className={({ isActive }) => cn(
+        isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
+        !isDrawer && isActive ? 'text-white' : '',
+        isDrawer && isActive ? 'is-active' : '',
+      )}
+      aria-label={providerCircuitsLabel}
+    >
+      {isDrawer ? (
+        <>
+          <span className="shell-nav-item__icon" aria-hidden="true">
+            <CircuitBoard className="h-4 w-4" />
+          </span>
+          <DrawerUtilityLabel label={providerCircuitsLabel} />
+        </>
+      ) : (
+        <span>{providerCircuitsLabel}</span>
+      )}
+    </NavLink>
+  ) : null;
+
   const userGovernanceAction = canReadUsers ? (
     <NavLink
       to={userGovernancePath}
@@ -439,6 +466,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             {costObservabilityAction}
             {notificationAction}
             {marketProviderAction}
+            {providerCircuitAction}
             {signInAction}
             {logoutAction}
           </div>
@@ -467,6 +495,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
               {costObservabilityAction}
               {notificationAction}
               {marketProviderAction}
+              {providerCircuitAction}
               {signInAction}
               {logoutAction && (settingsAction || systemAction || signInAction) ? (
                 <div className="h-3 w-px bg-white/10" data-testid="shell-header-utility-divider" />

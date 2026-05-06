@@ -64,6 +64,9 @@ export function canAccessAdminPath(pathname: string, flags: AdminCapabilityFlags
   if (pathname === '/admin/market-providers' || pathname.startsWith('/admin/market-providers/')) {
     return capabilityFlags.canReadProviders;
   }
+  if (pathname === '/admin/provider-circuits' || pathname.startsWith('/admin/provider-circuits/')) {
+    return capabilityFlags.canReadProviders;
+  }
   if (pathname === '/admin/cost-observability' || pathname.startsWith('/admin/cost-observability/')) {
     return capabilityFlags.canReadCostObservability;
   }

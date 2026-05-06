@@ -45,6 +45,7 @@ const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'));
 const AdminLogsPage = lazy(() => import('./pages/AdminLogsPage'));
 const AdminNotificationsPage = lazy(() => import('./pages/AdminNotificationsPage'));
 const MarketProviderOperationsPage = lazy(() => import('./pages/MarketProviderOperationsPage'));
+const AdminProviderCircuitDiagnosticsPage = lazy(() => import('./pages/AdminProviderCircuitDiagnosticsPage'));
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
 const AdminCostObservabilityPage = lazy(() => import('./pages/AdminCostObservabilityPage'));
 
@@ -62,9 +63,11 @@ type GateCopy = {
 function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: boolean): GateCopy {
   const isEnglish = language === 'en';
 
-  if (pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/cost-observability')) {
+  if (pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/provider-circuits') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/cost-observability')) {
     const surfaceName = pathname.startsWith('/admin/cost-observability')
       ? (isEnglish ? 'cost observability' : '成本观测')
+      : pathname.startsWith('/admin/provider-circuits')
+      ? (isEnglish ? 'provider circuit diagnostics' : 'Provider 熔断诊断')
       : pathname.startsWith('/admin/market-providers')
       ? (isEnglish ? 'market provider operations' : '市场数据源运维')
       : pathname.startsWith('/admin/notifications')
@@ -267,6 +270,8 @@ export const AppContent: React.FC = () => {
     || routePathname.startsWith('/admin/notifications/')
     || routePathname === '/admin/market-providers'
     || routePathname.startsWith('/admin/market-providers/')
+    || routePathname === '/admin/provider-circuits'
+    || routePathname.startsWith('/admin/provider-circuits/')
     || routePathname === '/admin/users'
     || routePathname.startsWith('/admin/users/')
     || routePathname === '/admin/cost-observability'
@@ -386,6 +391,7 @@ export const AppContent: React.FC = () => {
               <Route path="/admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
               <Route path="/admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
               <Route path="/admin/market-providers" element={<AdminSurfaceRoute><MarketProviderOperationsPage /></AdminSurfaceRoute>} />
+              <Route path="/admin/provider-circuits" element={<AdminSurfaceRoute><AdminProviderCircuitDiagnosticsPage /></AdminSurfaceRoute>} />
               <Route path="/admin/users" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
               <Route path="/admin/users/:userId" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
               <Route path="/admin/users/:userId/activity" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
@@ -409,6 +415,7 @@ export const AppContent: React.FC = () => {
               <Route path="admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
               <Route path="admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
               <Route path="admin/market-providers" element={<AdminSurfaceRoute><MarketProviderOperationsPage /></AdminSurfaceRoute>} />
+              <Route path="admin/provider-circuits" element={<AdminSurfaceRoute><AdminProviderCircuitDiagnosticsPage /></AdminSurfaceRoute>} />
               <Route path="admin/users" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
               <Route path="admin/users/:userId" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
               <Route path="admin/users/:userId/activity" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />

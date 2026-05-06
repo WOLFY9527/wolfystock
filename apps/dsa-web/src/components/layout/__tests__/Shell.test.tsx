@@ -570,6 +570,7 @@ describe('Shell', () => {
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.providerCircuits') })).not.toBeInTheDocument();
   });
 
   it('fails closed for sensitive admin nav when capability fields are absent', async () => {
@@ -596,6 +597,7 @@ describe('Shell', () => {
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.costObservability') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.providerCircuits') })).not.toBeInTheDocument();
   });
 
   it('resets mobile drawer and archive rail state when crossing back to desktop', async () => {

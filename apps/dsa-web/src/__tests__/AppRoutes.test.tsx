@@ -142,6 +142,10 @@ vi.mock('../pages/MarketProviderOperationsPage', () => ({
   default: () => <div>market-provider-operations-page</div>,
 }));
 
+vi.mock('../pages/AdminProviderCircuitDiagnosticsPage', () => ({
+  default: () => <div>admin-provider-circuit-diagnostics-page</div>,
+}));
+
 vi.mock('../pages/AdminUsersPage', () => ({
   default: () => <div>admin-users-page</div>,
 }));
@@ -427,6 +431,26 @@ describe('AppContent route flows', () => {
     await waitFor(() => expect(screen.getByText('market-provider-operations-page')).toBeInTheDocument());
   });
 
+  it('renders the localized provider circuit diagnostics route for admin accounts', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: true,
+      isAdminMode: true,
+      adminCapabilities: fullCapabilities,
+    });
+
+    renderAt('/zh/admin/provider-circuits');
+
+    await waitFor(() => expect(screen.getByText('admin-provider-circuit-diagnostics-page')).toBeInTheDocument());
+  });
+
   it('blocks an admin account from market providers when capability fields are absent', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
@@ -453,6 +477,7 @@ describe('AppContent route flows', () => {
     ['/zh/admin/logs', { ...noCapabilities, canReadOpsLogs: true }, 'admin-logs-page'],
     ['/zh/admin/notifications', { ...noCapabilities, canReadNotifications: true }, 'admin-notifications-page'],
     ['/zh/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
+    ['/zh/admin/provider-circuits', { ...noCapabilities, canReadProviders: true }, 'admin-provider-circuit-diagnostics-page'],
     ['/zh/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
     ['/zh/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
   ])('renders %s only with its matching capability', async (path, adminCapabilities, pageText) => {
