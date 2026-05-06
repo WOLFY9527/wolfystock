@@ -1,0 +1,136 @@
+name: Security Scan
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/security-scan.yml'
+      - 'api/**'
+      - 'bot/**'
+      - 'data_provider/**'
+      - 'docker/**'
+      - 'src/**'
+      - 'scripts/security_scan.sh'
+      - 'requirements*.txt'
+      - 'pyproject.toml'
+      - 'apps/dsa-web/package.json'
+      - 'apps/dsa-web/package-lock.json'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/security-scan.yml'
+      - 'api/**'
+      - 'bot/**'
+      - 'data_provider/**'
+      - 'docker/**'
+      - 'src/**'
+      - 'scripts/security_scan.sh'
+      - 'requirements*.txt'
+      - 'pyproject.toml'
+      - 'apps/dsa-web/package.json'
+      - 'apps/dsa-web/package-lock.json'
+  workflow_dispatch:
+
+concurrency:
+  group: security-scan-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks scan with redacted output
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+        with:
+          args: detect --source . --redact --no-banner --exit-code 1
+
+  python-dependency-audit:
+    name: python-dependency-audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install audit tool
+        run: python -m pip install pip-audit
+
+      - name: Audit Python requirements
+        run: python -m pip_audit -r requirements.txt -r requirements-dev.txt
+
+  frontend-npm-audit:
+    name: frontend-npm-audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/dsa-web
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: apps/dsa-web/package-lock.json
+
+      - name: Audit production frontend dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  sast-static-checks:
+    name: sast-static-checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install SAST tool
+        run: python -m pip install 'bandit[toml]'
+
+      - name: Run Bandit SAST
+        run: bandit -c pyproject.toml -r api bot data_provider src main.py server.py
+
+  container-vulnerability-scan:
+    name: container-vulnerability-scan
+    runs-on: ubuntu-latest
+    needs: [secret-scan, python-dependency-audit, frontend-npm-audit, sast-static-checks]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Build local scan image
+        run: docker build -t daily-stock-analysis:security-scan -f docker/Dockerfile .
+
+      - name: Scan local image with Trivy
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: daily-stock-analysis:security-scan
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+          scanners: vuln

@@ -305,6 +305,14 @@ Recommendations:
 - Consider stronger dependency pinning and hash verification for production builds.
 - Do not run dependency update/fix commands as part of audit-only work.
 
+Implementation note, 2026-05-06:
+
+- Added `.github/workflows/security-scan.yml` as a dedicated production hardening scan workflow.
+- Blocking PR/push/manual gates now cover redacted Gitleaks secret scanning, `pip-audit` for Python requirements, production-only `npm audit --omit=dev --audit-level=high` for `apps/dsa-web`, Bandit SAST over committed backend/application paths, and Trivy scanning of a locally built Docker image.
+- The container gate builds only a local scan image and does not push to a registry.
+- Added `scripts/security_scan.sh` as an optional local helper. It does not install tools automatically; local dependency audits are opt-in with `SECURITY_SCAN_ALLOW_NETWORK=true`, and local container scanning is opt-in with `SECURITY_SCAN_CONTAINER=true`.
+- No dependency update/fix commands, runtime app behavior changes, live provider calls, registry pushes, servers, or browser verification are part of this scan-gate implementation.
+
 ## 13. Reverse proxy, TLS, and security headers
 
 Static evidence:
