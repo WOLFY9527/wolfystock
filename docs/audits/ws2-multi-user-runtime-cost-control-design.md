@@ -36,6 +36,14 @@ WS2-R0 is design only. It does not implement Redis, Celery, RQ, workers, migrati
 - No Redis, Celery, RQ, Dramatiq, Kafka, external queue dependency, multi-instance cutover, quota enforcement, live LLM/provider call, scanner/backtest/portfolio/provider behavior change, or frontend change was introduced.
 - Remaining WS2 work stays queued for later passes: WS2-R4 quota enforcement and WS2-R5 provider circuit breaker policy. External SSE replay/cutover remains future work.
 
+## WS2-R4 prerequisite implementation note
+
+- Quota schema foundation is now backed by `quota_policy_definitions`, `quota_usage_windows`, and `quota_reservations`, with narrow indexes for policy lookup, owner/window accounting, route/provider windows, and reservation lifecycle cleanup.
+- `QuotaPolicyService` provides deterministic synthetic checks for route weights, budget-unit estimation, global kill switch, per-user daily/monthly budget, route request caps, token caps, safe rejection reason codes, metadata sanitization, and reserve/consume/release/expired reservation lifecycle.
+- Quota enforcement remains disabled by default unless a caller explicitly instantiates the service with enforcement enabled. The service is callable by future routes, but this pass does not wire it into live LLM/provider execution or any product route.
+- No live LLM/provider calls were added, and no LLM prompts, model routing, provider fallback, scanner AI behavior, MarketCache behavior, Options Lab behavior, portfolio/backtest/scanner calculations, notifications, broker/order paths, or DuckDB production runtime were changed.
+- Remaining WS2-R4 work: route integration/enforcement, admin dashboard and policy editing, provider quota buckets, circuit breaker policy, actual usage reconciliation from provider responses, and retention/cleanup dry runs for quota ledgers.
+
 ## 2. Current deployment assumptions
 
 - API single-process assumption: `docs/DEPLOY.md` and `docs/deploy-webui-cloud.md` currently state that `/api/v1/analysis/*` task queue and SSE state are process-local and should stay single-process unless sticky routing is intentionally provided.

@@ -571,6 +571,137 @@ class DurableTaskProgressEvent(Base):
         }
 
 
+class QuotaPolicyDefinition(Base):
+    """WS2 quota policy definition, not wired into live route enforcement."""
+
+    __tablename__ = 'quota_policy_definitions'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    policy_key = Column(String(128), nullable=False, unique=True, index=True)
+    scope_type = Column(String(32), nullable=False, index=True)
+    route_family = Column(String(64), index=True)
+    provider = Column(String(64), index=True)
+    model_tier = Column(String(64), index=True)
+    daily_budget_units = Column(Integer)
+    monthly_budget_units = Column(Integer)
+    token_cap = Column(Integer)
+    request_cap = Column(Integer)
+    enabled = Column(Boolean, nullable=False, default=True, index=True)
+    metadata_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        Index('ix_quota_policy_scope_route', 'scope_type', 'route_family'),
+        Index('ix_quota_policy_scope_provider', 'scope_type', 'provider', 'model_tier'),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        metadata = DatabaseManager._safe_json_loads(self.metadata_json, {}) if self.metadata_json else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        return {
+            'policy_key': self.policy_key,
+            'scope_type': self.scope_type,
+            'route_family': self.route_family,
+            'provider': self.provider,
+            'model_tier': self.model_tier,
+            'daily_budget_units': self.daily_budget_units,
+            'monthly_budget_units': self.monthly_budget_units,
+            'token_cap': self.token_cap,
+            'request_cap': self.request_cap,
+            'enabled': bool(self.enabled),
+            'metadata': metadata,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class QuotaUsageWindow(Base):
+    """Reserved/consumed quota units for one bounded accounting window."""
+
+    __tablename__ = 'quota_usage_windows'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_user_id = Column(String(64), ForeignKey('app_users.id'), nullable=True, index=True)
+    route_family = Column(String(64), index=True)
+    provider = Column(String(64), index=True)
+    model_tier = Column(String(64), index=True)
+    window_type = Column(String(16), nullable=False, index=True)
+    window_start = Column(DateTime, nullable=False, index=True)
+    window_end = Column(DateTime, nullable=False, index=True)
+    reserved_units = Column(Integer, nullable=False, default=0)
+    consumed_units = Column(Integer, nullable=False, default=0)
+    request_count = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        Index('ix_quota_window_owner_type_start', 'owner_user_id', 'window_type', 'window_start'),
+        Index('ix_quota_window_route_type_start', 'route_family', 'window_type', 'window_start'),
+        Index('ix_quota_window_provider_type_start', 'provider', 'model_tier', 'window_type', 'window_start'),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'owner_user_id': self.owner_user_id,
+            'route_family': self.route_family,
+            'provider': self.provider,
+            'model_tier': self.model_tier,
+            'window_type': self.window_type,
+            'window_start': self.window_start.isoformat() if self.window_start else None,
+            'window_end': self.window_end.isoformat() if self.window_end else None,
+            'reserved_units': int(self.reserved_units or 0),
+            'consumed_units': int(self.consumed_units or 0),
+            'request_count': int(self.request_count or 0),
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class QuotaReservation(Base):
+    """Synthetic quota reservation lifecycle row."""
+
+    __tablename__ = 'quota_reservations'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    reservation_id = Column(String(64), nullable=False, unique=True, index=True)
+    owner_user_id = Column(String(64), ForeignKey('app_users.id'), nullable=True, index=True)
+    route_family = Column(String(64), index=True)
+    provider = Column(String(64), index=True)
+    model_tier = Column(String(64), index=True)
+    estimated_units = Column(Integer, nullable=False, default=0)
+    status = Column(String(16), nullable=False, index=True)
+    reason_code = Column(String(64), index=True)
+    metadata_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+
+    __table_args__ = (
+        Index('ix_quota_reservation_owner_status_created', 'owner_user_id', 'status', 'created_at'),
+        Index('ix_quota_reservation_route_status_created', 'route_family', 'status', 'created_at'),
+        Index('ix_quota_reservation_status_expires', 'status', 'expires_at'),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        metadata = DatabaseManager._safe_json_loads(self.metadata_json, {}) if self.metadata_json else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        return {
+            'reservation_id': self.reservation_id,
+            'owner_user_id': self.owner_user_id,
+            'route_family': self.route_family,
+            'provider': self.provider,
+            'model_tier': self.model_tier,
+            'estimated_units': int(self.estimated_units or 0),
+            'status': self.status,
+            'reason_code': self.reason_code,
+            'metadata': metadata,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+        }
+
+
 class ExecutionLogSession(Base):
     """
     管理员可观测执行会话（D2）。
@@ -1737,6 +1868,23 @@ class DatabaseManager:
             self._add_column_if_missing(conn, "durable_task_states", "max_attempts", "INTEGER NOT NULL DEFAULT 1")
             self._add_column_if_missing(conn, "durable_task_states", "lease_owner", "VARCHAR(128)")
             self._add_column_if_missing(conn, "durable_task_states", "lease_expires_at", "DATETIME")
+            self._add_column_if_missing(conn, "quota_policy_definitions", "provider", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "quota_policy_definitions", "model_tier", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "quota_policy_definitions", "daily_budget_units", "INTEGER")
+            self._add_column_if_missing(conn, "quota_policy_definitions", "monthly_budget_units", "INTEGER")
+            self._add_column_if_missing(conn, "quota_policy_definitions", "token_cap", "INTEGER")
+            self._add_column_if_missing(conn, "quota_policy_definitions", "request_cap", "INTEGER")
+            self._add_column_if_missing(conn, "quota_policy_definitions", "enabled", "BOOLEAN NOT NULL DEFAULT 1")
+            self._add_column_if_missing(conn, "quota_policy_definitions", "metadata_json", "TEXT")
+            self._add_column_if_missing(conn, "quota_usage_windows", "provider", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "quota_usage_windows", "model_tier", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "quota_usage_windows", "reserved_units", "INTEGER NOT NULL DEFAULT 0")
+            self._add_column_if_missing(conn, "quota_usage_windows", "consumed_units", "INTEGER NOT NULL DEFAULT 0")
+            self._add_column_if_missing(conn, "quota_usage_windows", "request_count", "INTEGER NOT NULL DEFAULT 0")
+            self._add_column_if_missing(conn, "quota_reservations", "provider", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "quota_reservations", "model_tier", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "quota_reservations", "reason_code", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "quota_reservations", "metadata_json", "TEXT")
             self._add_column_if_missing(
                 conn,
                 "market_scanner_runs",
@@ -1821,6 +1969,54 @@ class DatabaseManager:
                 "ix_durable_task_progress_owner_created",
                 "durable_task_progress_events",
                 "owner_user_id, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_quota_policy_scope_route",
+                "quota_policy_definitions",
+                "scope_type, route_family",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_quota_policy_scope_provider",
+                "quota_policy_definitions",
+                "scope_type, provider, model_tier",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_quota_window_owner_type_start",
+                "quota_usage_windows",
+                "owner_user_id, window_type, window_start",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_quota_window_route_type_start",
+                "quota_usage_windows",
+                "route_family, window_type, window_start",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_quota_window_provider_type_start",
+                "quota_usage_windows",
+                "provider, model_tier, window_type, window_start",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_quota_reservation_owner_status_created",
+                "quota_reservations",
+                "owner_user_id, status, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_quota_reservation_route_status_created",
+                "quota_reservations",
+                "route_family, status, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_quota_reservation_status_expires",
+                "quota_reservations",
+                "status, expires_at",
             )
 
             self._migrate_backtest_summaries_table(conn, bootstrap_user_id=bootstrap_user_id)
@@ -3033,6 +3229,123 @@ class DatabaseManager:
                 query.order_by(desc(DurableTaskState.created_at)).limit(safe_limit)
             ).scalars().all()
             return [self._durable_task_payload(row) for row in rows]
+
+    @staticmethod
+    def _sanitize_quota_metadata(value: Any) -> Dict[str, Any]:
+        """Sanitize quota metadata and drop secret-like keys entirely."""
+        def scrub(obj: Any) -> Any:
+            if isinstance(obj, dict):
+                cleaned: Dict[str, Any] = {}
+                for key, item in obj.items():
+                    key_text = str(key)
+                    if is_sensitive_key(key_text):
+                        continue
+                    cleaned[key_text[:80]] = scrub(item)
+                return cleaned
+            if isinstance(obj, list):
+                return [scrub(item) for item in obj[:50]]
+            if isinstance(obj, tuple):
+                return [scrub(item) for item in obj[:50]]
+            if isinstance(obj, str):
+                return sanitize_message(obj)[:500]
+            return obj
+
+        sanitized = sanitize_metadata(scrub(value or {}))
+        return sanitized if isinstance(sanitized, dict) else {}
+
+    @staticmethod
+    def _quota_policy_payload(row: QuotaPolicyDefinition) -> Dict[str, Any]:
+        return row.to_dict()
+
+    def upsert_quota_policy(
+        self,
+        *,
+        policy_key: str,
+        scope_type: str,
+        route_family: Optional[str] = None,
+        provider: Optional[str] = None,
+        model_tier: Optional[str] = None,
+        daily_budget_units: Optional[int] = None,
+        monthly_budget_units: Optional[int] = None,
+        token_cap: Optional[int] = None,
+        request_cap: Optional[int] = None,
+        enabled: bool = True,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        normalized_key = sanitize_message(str(policy_key or "").strip())[:128]
+        normalized_scope = sanitize_message(str(scope_type or "").strip().lower())[:32]
+        if not normalized_key:
+            raise ValueError("policy_key is required")
+        if normalized_scope not in {"global", "user", "route", "provider", "model_tier"}:
+            raise ValueError("unsupported quota policy scope")
+
+        def bounded_optional(value: Optional[int]) -> Optional[int]:
+            if value is None:
+                return None
+            return max(0, int(value or 0))
+
+        now = datetime.now()
+        safe_metadata = self._sanitize_quota_metadata(metadata or {})
+        with self.session_scope() as session:
+            row = session.execute(
+                select(QuotaPolicyDefinition)
+                .where(QuotaPolicyDefinition.policy_key == normalized_key)
+                .limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                row = QuotaPolicyDefinition(policy_key=normalized_key, created_at=now)
+                session.add(row)
+            row.scope_type = normalized_scope
+            row.route_family = sanitize_message(str(route_family or "").strip())[:64] or None
+            row.provider = sanitize_message(str(provider or "").strip().lower())[:64] or None
+            row.model_tier = sanitize_message(str(model_tier or "").strip().lower())[:64] or None
+            row.daily_budget_units = bounded_optional(daily_budget_units)
+            row.monthly_budget_units = bounded_optional(monthly_budget_units)
+            row.token_cap = bounded_optional(token_cap)
+            row.request_cap = bounded_optional(request_cap)
+            row.enabled = bool(enabled)
+            row.metadata_json = self._safe_json_dumps(safe_metadata)
+            row.updated_at = now
+            session.flush()
+            return self._quota_policy_payload(row)
+
+    def list_quota_policies(
+        self,
+        *,
+        scope_type: Optional[str] = None,
+        route_family: Optional[str] = None,
+        provider: Optional[str] = None,
+        model_tier: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        with self.get_session() as session:
+            query = select(QuotaPolicyDefinition)
+            if scope_type:
+                query = query.where(QuotaPolicyDefinition.scope_type == str(scope_type).strip().lower())
+            if route_family:
+                query = query.where(
+                    or_(
+                        QuotaPolicyDefinition.route_family.is_(None),
+                        QuotaPolicyDefinition.route_family == str(route_family).strip()[:64],
+                    )
+                )
+            if provider:
+                query = query.where(
+                    or_(
+                        QuotaPolicyDefinition.provider.is_(None),
+                        QuotaPolicyDefinition.provider == str(provider).strip().lower()[:64],
+                    )
+                )
+            if model_tier:
+                query = query.where(
+                    or_(
+                        QuotaPolicyDefinition.model_tier.is_(None),
+                        QuotaPolicyDefinition.model_tier == str(model_tier).strip().lower()[:64],
+                    )
+                )
+            rows = session.execute(
+                query.order_by(asc(QuotaPolicyDefinition.scope_type), asc(QuotaPolicyDefinition.policy_key))
+            ).scalars().all()
+            return [self._quota_policy_payload(row) for row in rows]
 
     def get_app_user(self, user_id: str) -> Optional[AppUser]:
         normalized = str(user_id or "").strip()
