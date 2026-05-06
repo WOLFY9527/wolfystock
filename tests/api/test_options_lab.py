@@ -411,3 +411,78 @@ def test_strategy_compare_endpoint_does_not_call_external_or_mutating_paths() ->
             assert value not in text
     finally:
         client.close()
+
+
+def test_decision_endpoint_returns_safe_demo_only_contract_quality() -> None:
+    client = _client()
+    try:
+        response = client.post(
+            "/api/v1/options/decision/evaluate",
+            json={
+                "symbol": "TEM",
+                "strategy": "long_call",
+                "expiration": "2026-06-19",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+                "riskBudget": 600,
+                "forceRefresh": True,
+            },
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["dataQuality"]["dataQualityTier"] == "synthetic_demo_only"
+        assert payload["decisionLabel"] == "数据不足，禁止判断"
+        assert payload["tradeQualityScore"] <= 35
+        assert payload["metadata"]["noExternalCalls"] is True
+        assert payload["metadata"]["noOrderPlacement"] is True
+        assert "not personalized financial advice" in payload["noAdviceDisclosure"]
+    finally:
+        client.close()
+
+
+def test_decision_endpoint_excludes_raw_payloads_and_live_provider_paths() -> None:
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("forbidden runtime path was called")
+
+    client = _client()
+    try:
+        with (
+            patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
+            patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
+            patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
+            patch("src.services.portfolio_service.PortfolioService.add_lot", side_effect=forbidden, create=True),
+        ):
+            response = client.post(
+                "/api/v1/options/decision/evaluate",
+                json={
+                    "symbol": "TEM",
+                    "strategy": "bull_call_spread",
+                    "expiration": "2026-06-19",
+                    "targetPrice": 65,
+                    "targetDate": "2026-06-19",
+                    "forceRefresh": True,
+                },
+            )
+
+        assert response.status_code == 200
+        text = _json_text(response.json()).lower()
+        for value in [
+            "rawproviderpayload",
+            "api_key",
+            "apikey",
+            "token",
+            "secret",
+            "requesturl",
+            "traceback",
+            "stack trace",
+            "必买",
+            "稳赚",
+            "保证收益",
+            "guaranteed",
+            "best contract",
+            "ai recommends you buy",
+            "trade ticket",
+        ]:
+            assert value not in text
+    finally:
+        client.close()

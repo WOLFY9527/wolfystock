@@ -153,6 +153,82 @@ export type OptionsStrategyCompareResponse = {
   metadata: OptionsStrategyCompareMetadata;
 };
 
+export type OptionsDecisionLeg = {
+  action: 'buy' | 'sell';
+  side: OptionSide;
+  contractSymbol?: string;
+  expiration?: string;
+  strike?: number;
+  quantity?: number;
+};
+
+export type OptionsDecisionRequest = {
+  symbol: string;
+  strategy: OptionsStrategyType;
+  expiration?: string;
+  legs?: OptionsDecisionLeg[];
+  targetPrice?: number;
+  targetDate?: string;
+  holdingHorizonDays?: number;
+  riskBudget?: number;
+  scenarioAssumptions?: Record<string, unknown>;
+  forceRefresh?: boolean;
+};
+
+export type OptionsDecisionResponse = {
+  symbol: string;
+  strategy: OptionsStrategyType;
+  dataQuality: {
+    dataQualityScore: number | null;
+    dataQualityTier: 'live_usable' | 'delayed_usable' | 'synthetic_demo_only' | 'insufficient' | string;
+    sourceType?: string | null;
+    asOfAgeMinutes?: number | null;
+    blockingReasons?: string[] | null;
+    warnings?: string[] | null;
+  } | null;
+  liquidity: {
+    liquidityScore: number | null;
+    spreadPct?: number | null;
+    liquidityWarnings?: string[] | null;
+  } | null;
+  ivGreeks: {
+    ivReadiness: number | null;
+    ivRankStatus: 'unavailable' | 'available' | string;
+    warnings?: string[] | null;
+    dteBucket?: string | null;
+  } | null;
+  breakeven: {
+    breakeven?: number | null;
+    requiredMovePct?: number | null;
+    targetPriceStatus?: string | null;
+    score: number | null;
+  } | null;
+  riskReward: {
+    maxLoss?: number | null;
+    maxGain?: number | null;
+    riskRewardRatio?: number | null;
+    score: number | null;
+    warnings?: string[] | null;
+  } | null;
+  tradeQualityScore: number | null;
+  decisionLabel: string | null;
+  primaryReasons?: string[] | null;
+  riskWarnings?: string[] | null;
+  betterAlternative?: {
+    strategyType: OptionsStrategyType;
+    reason: string;
+    maxLoss?: number | null;
+    riskRewardRatio?: number | null;
+  } | null;
+  noAdviceDisclosure?: string | null;
+  freshness?: {
+    source?: string | null;
+    freshness?: string | null;
+    asOf?: string | null;
+  } | null;
+  metadata?: OptionsStrategyCompareMetadata | null;
+};
+
 const FIXTURE_METADATA: OptionsLabMetadata = {
   readOnly: true,
   noExternalCallsInTests: true,
@@ -308,6 +384,73 @@ function fixtureChain(symbol: string, expiration = FIXTURE_EXPIRATION): OptionsC
   };
 }
 
+function fixtureDecision(symbol: string): OptionsDecisionResponse {
+  return {
+    symbol,
+    strategy: 'bull_call_spread',
+    dataQuality: {
+      dataQualityScore: 25,
+      dataQualityTier: 'synthetic_demo_only',
+      sourceType: 'synthetic',
+      asOfAgeMinutes: null,
+      blockingReasons: ['synthetic_or_fixture_data_not_decision_grade'],
+      warnings: [],
+    },
+    liquidity: {
+      liquidityScore: 76,
+      spreadPct: 10,
+      liquidityWarnings: [],
+    },
+    ivGreeks: {
+      ivReadiness: 82,
+      ivRankStatus: 'unavailable',
+      warnings: ['iv_rank_unavailable'],
+      dteBucket: 'standard',
+    },
+    breakeven: {
+      breakeven: 52.3,
+      requiredMovePct: -0.08,
+      targetPriceStatus: 'target_above_breakeven',
+      score: 86,
+    },
+    riskReward: {
+      maxLoss: 230,
+      maxGain: 270,
+      riskRewardRatio: 1.17,
+      score: 72,
+      warnings: [],
+    },
+    tradeQualityScore: 35,
+    decisionLabel: '数据不足，禁止判断',
+    primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+    riskWarnings: ['不可用于真实交易判断'],
+    betterAlternative: {
+      strategyType: 'bull_call_spread',
+      reason: '定义风险结构或更低权利金暴露可能降低单合约风险',
+      maxLoss: 230,
+      riskRewardRatio: 1.17,
+    },
+    noAdviceDisclosure: 'Analytical output under explicit assumptions only; not personalized financial advice and not an instruction to trade.',
+    freshness: {
+      source: 'synthetic_options_lab_fixture',
+      freshness: 'synthetic_delayed',
+      asOf: FIXTURE_UNDERLYING.asOf,
+    },
+    metadata: {
+      readOnly: true,
+      fixtureBacked: true,
+      syntheticData: true,
+      noExternalCalls: true,
+      noOrderPlacement: true,
+      noBrokerConnection: true,
+      noPortfolioMutation: true,
+      noTradingRecommendation: true,
+      strategyEngine: 'options_decision_engine_r1',
+      forceRefreshIgnored: true,
+    },
+  };
+}
+
 function normalizeSymbol(symbol: string): string {
   return symbol.trim().toUpperCase() || 'TEM';
 }
@@ -349,5 +492,20 @@ export const optionsLabApi = {
     };
     return apiClient.post<Record<string, unknown>>('/api/v1/options/strategies/compare', payload)
       .then((response) => toCamelCase<OptionsStrategyCompareResponse>(response.data));
+  },
+  evaluateDecision(request: OptionsDecisionRequest): Promise<OptionsDecisionResponse> {
+    const normalized = normalizeSymbol(request.symbol);
+    const payload: OptionsDecisionRequest = {
+      ...request,
+      symbol: normalized,
+    };
+    return apiClient.post<Record<string, unknown>>('/api/v1/options/decision/evaluate', payload)
+      .then((response) => toCamelCase<OptionsDecisionResponse>(response.data))
+      .catch((error) => {
+        if (typeof error === 'object' && error !== null && 'response' in error) {
+          throw error;
+        }
+        return fixtureDecision(normalized);
+      });
   },
 };

@@ -469,3 +469,170 @@ def test_strategy_compare_response_excludes_raw_advice_and_order_fields() -> Non
     for blocked in FORBIDDEN_TERMS + ["trade ticket", "order placement", "buy/sell cta"]:
         assert blocked.lower() not in text
     assert "rawproviderpayload" not in text
+
+
+def test_decision_synthetic_fixture_forces_demo_only_insufficient_label() -> None:
+    response = _service().evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "long_call",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskBudget": 600,
+            "forceRefresh": True,
+        }
+    )
+
+    assert response.data_quality.data_quality_tier == "synthetic_demo_only"
+    assert response.decision_label == "数据不足，禁止判断"
+    assert response.trade_quality_score <= 35
+    assert "synthetic_or_fixture_data_not_decision_grade" in response.data_quality.blocking_reasons
+    assert response.metadata.no_external_calls is True
+
+
+def test_decision_missing_greeks_caps_score_and_warns() -> None:
+    response = _service().evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "long_call",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "legs": [
+                {
+                    "action": "buy",
+                    "side": "call",
+                    "contractSymbol": "TEM260619C00055000",
+                    "expiration": "2026-06-19",
+                    "strike": 55,
+                    "quantity": 1,
+                }
+            ],
+            "scenarioAssumptions": {"omitGreeks": True},
+        }
+    )
+
+    assert response.iv_greeks.iv_readiness <= 45
+    assert "missing_greeks" in response.iv_greeks.warnings
+    assert response.trade_quality_score <= 35
+    assert "missing_greeks_degrade_confidence" in response.risk_warnings
+
+
+def test_decision_wide_spread_caps_score_and_warns() -> None:
+    response = _service().evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "long_call",
+            "expiration": "2026-06-19",
+            "targetPrice": 70,
+            "targetDate": "2026-06-19",
+            "legs": [
+                {
+                    "action": "buy",
+                    "side": "call",
+                    "contractSymbol": "TEM260619C00065000",
+                    "expiration": "2026-06-19",
+                    "strike": 65,
+                    "quantity": 1,
+                }
+            ],
+        }
+    )
+
+    assert response.liquidity.spread_pct >= 90
+    assert "wide_bid_ask_spread" in response.liquidity.liquidity_warnings
+    assert response.trade_quality_score <= 35
+
+
+def test_decision_delayed_non_live_data_cannot_emit_tradeable_label(tmp_path: Path) -> None:
+    fixture = json.loads(Path("tests/fixtures/options/tem_chain.json").read_text(encoding="utf-8"))
+    fixture["source"] = "delayed_provider_fixture"
+    fixture["underlying"]["source"] = "delayed_provider_fixture"
+    fixture["underlying"]["freshness"] = "delayed"
+    path = tmp_path / "tem_delayed.json"
+    path.write_text(json.dumps(fixture), encoding="utf-8")
+
+    response = OptionsLabService(fixture_path=path).evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "bull_call_spread",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskBudget": 600,
+        }
+    )
+
+    assert response.data_quality.data_quality_tier == "delayed_usable"
+    assert response.decision_label != "有条件可交易"
+    assert response.trade_quality_score <= 75
+
+
+def test_decision_long_call_breakeven_realism_calculation() -> None:
+    response = _service().evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "long_call",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "legs": [
+                {
+                    "action": "buy",
+                    "side": "call",
+                    "contractSymbol": "TEM260619C00055000",
+                    "expiration": "2026-06-19",
+                    "strike": 55,
+                    "quantity": 1,
+                }
+            ],
+        }
+    )
+
+    assert response.breakeven.breakeven == 57.7
+    assert response.breakeven.required_move_pct == 10.11
+    assert response.breakeven.target_price_status == "target_above_breakeven"
+
+
+def test_decision_bull_call_spread_risk_reward_calculation() -> None:
+    response = _service().evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "bull_call_spread",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+        }
+    )
+
+    assert response.risk_reward.max_loss == 230
+    assert response.risk_reward.max_gain == 270
+    assert response.risk_reward.risk_reward_ratio == 1.17
+    assert response.better_alternative is not None
+
+
+def test_decision_response_excludes_raw_provider_secret_and_live_paths() -> None:
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("forbidden external path was called")
+
+    with (
+        patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
+        patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
+        patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
+    ):
+        response = _service().evaluate_decision(
+            {
+                "symbol": "TEM",
+                "strategy": "bull_call_spread",
+                "expiration": "2026-06-19",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+                "forceRefresh": True,
+            }
+        )
+
+    text = _json_text(response).lower()
+    for blocked in FORBIDDEN_TERMS + ["traceback", "stack trace", "raw payload"]:
+        assert blocked.lower() not in text
+    assert response.metadata.force_refresh_ignored is True

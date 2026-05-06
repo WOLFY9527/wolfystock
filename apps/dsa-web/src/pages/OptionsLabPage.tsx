@@ -3,6 +3,7 @@ import { AlertTriangle, BarChart3, ChevronDown, CircleDollarSign, Layers3, LineC
 import {
   optionsLabApi,
   type OptionContract,
+  type OptionsDecisionResponse,
   type OptionsChainResponse,
   type OptionsDirection,
   type OptionsExpiration,
@@ -28,6 +29,12 @@ type ComparisonState = {
   loading: boolean;
   error: string | null;
   comparison: OptionsStrategyCompareResponse | null;
+};
+
+type DecisionState = {
+  loading: boolean;
+  error: string | null;
+  decision: OptionsDecisionResponse | null;
 };
 
 const DIRECTION_OPTIONS: Array<{ value: OptionsDirection; label: string }> = [
@@ -124,6 +131,27 @@ function strategyChineseLabel(value: OptionsStrategyType): string {
     bear_put_spread: '熊市看跌价差',
   };
   return labels[value];
+}
+
+function warningLabel(value: string): string {
+  if (value === 'wide_bid_ask_spread') return '买卖价差过宽';
+  if (value === 'missing_greeks') return 'Greeks 缺失';
+  if (value === 'missing_greeks_degrade_confidence') return 'Greeks 缺失降低可信度';
+  if (value === 'low_or_missing_volume') return '成交量不足或缺失';
+  if (value === 'low_or_missing_open_interest') return 'OI 不足或缺失';
+  if (value === 'breakeven_requires_large_underlying_move') return '盈亏平衡需要较大标的波动';
+  if (value === 'max_gain_not_defined_for_long_option') return '单腿多头收益边界不固定';
+  if (value === 'iv_rank_unavailable') return 'IV Rank 不可用';
+  if (value === 'synthetic_or_fixture_data_not_decision_grade') return '演示数据不可用于真实判断';
+  return limitationLabel(value);
+}
+
+function dataTierLabel(value?: string | null): string {
+  if (value === 'live_usable') return 'Live 可分析';
+  if (value === 'delayed_usable') return 'Delayed 可观察';
+  if (value === 'synthetic_demo_only') return 'Synthetic Demo Only';
+  if (value === 'insufficient') return '数据不足';
+  return '--';
 }
 
 function metricTone(value?: number | null): string {
@@ -498,6 +526,117 @@ const StrategyComparisonPanel: React.FC<{
   );
 };
 
+const DecisionMetric: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-white' }) => (
+  <div className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3">
+    <p className={labelClass}>{label}</p>
+    <p className={cn('mt-2 truncate font-mono text-lg font-semibold', tone)}>{value}</p>
+  </div>
+);
+
+const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: string | null }> = ({ decisionState, emptyMessage }) => {
+  const decision = decisionState.decision;
+  const label = decision?.decisionLabel || '数据不足，禁止判断';
+  const reasons = asArray(decision?.primaryReasons);
+  const riskWarnings = asArray(decision?.riskWarnings);
+  const dataWarnings = asArray(decision?.dataQuality?.blockingReasons).concat(asArray(decision?.dataQuality?.warnings));
+  const liquidityWarnings = asArray(decision?.liquidity?.liquidityWarnings);
+  const ivWarnings = asArray(decision?.ivGreeks?.warnings);
+  const allWarnings = [...new Set([...dataWarnings, ...liquidityWarnings, ...ivWarnings, ...riskWarnings])];
+  const labelTone = label === '数据不足，禁止判断' || label === '不建议'
+    ? 'text-rose-200'
+    : label === '仅观察'
+      ? 'text-cyan-100'
+      : 'text-amber-100';
+  return (
+    <section className={cn(panelClass, 'xl:col-span-12')} data-testid="options-lab-decision-engine">
+      <SectionHeader eyebrow="Decision Engine R1" title="交易质量判断" icon={ShieldCheck}>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Pill tone="warn">{label}</Pill>
+          <Pill tone="info">{dataTierLabel(decision?.dataQuality?.dataQualityTier)}</Pill>
+        </div>
+      </SectionHeader>
+      {emptyMessage ? (
+        <p className="mt-5 rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-4 text-sm text-white/55">{emptyMessage}</p>
+      ) : null}
+      {!emptyMessage && decisionState.loading ? (
+        <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 font-mono text-sm text-cyan-100">正在计算交易质量判断...</p>
+      ) : null}
+      {!emptyMessage && !decisionState.loading && decisionState.error ? (
+        <p className="mt-5 rounded-2xl border border-rose-300/20 bg-rose-500/10 px-4 py-4 text-sm text-rose-100">{decisionState.error}</p>
+      ) : null}
+      {!emptyMessage && !decisionState.loading && !decisionState.error && !decision ? (
+        <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/45">等待交易质量判断。</p>
+      ) : null}
+      {!emptyMessage && !decisionState.loading && !decisionState.error && decision ? (
+        <div className="mt-5 grid gap-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+            <DecisionMetric label="系统判断" value={label} tone={labelTone} />
+            <DecisionMetric label="交易质量分" value={number(decision?.tradeQualityScore)} />
+            <DecisionMetric label="数据质量" value={number(decision?.dataQuality?.dataQualityScore)} />
+            <DecisionMetric label="流动性评分" value={number(decision?.liquidity?.liquidityScore)} />
+            <DecisionMetric label="波动率 / Greeks 就绪度" value={number(decision?.ivGreeks?.ivReadiness)} />
+            <DecisionMetric label="风险回报" value={number(decision?.riskReward?.score)} />
+          </div>
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
+              <p className={labelClass}>盈亏平衡压力</p>
+              <p className="mt-2 font-mono text-lg font-semibold text-white">{money(decision?.breakeven?.breakeven)}</p>
+              <p className="mt-1 text-sm text-white/52">所需波动：{ratio(decision?.breakeven?.requiredMovePct)}</p>
+            </div>
+            <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
+              <p className={labelClass}>主要原因</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(reasons.length ? reasons : ['数据不足，禁止判断']).slice(0, 4).map((reason) => (
+                  <Pill key={reason} tone="warn">{warningLabel(reason)}</Pill>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
+              <p className={labelClass}>风险警示</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(allWarnings.length ? allWarnings : ['暂无额外警示']).slice(0, 5).map((warning) => (
+                  <Pill key={warning} tone="warn">{warningLabel(warning)}</Pill>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-2xl border border-cyan-300/10 bg-cyan-400/8 p-4">
+              <p className={labelClass}>数据状态</p>
+              <p className="mt-2 text-sm leading-6 text-cyan-100/78">
+                当前为 {decision?.freshness?.freshness || 'synthetic delayed'} / 演示数据；不可用于真实交易判断。
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
+              <p className={labelClass}>更优替代结构</p>
+              <p className="mt-2 text-sm leading-6 text-white/62">
+                {decision?.betterAlternative
+                  ? `${strategyChineseLabel(decision.betterAlternative.strategyType)}：${decision.betterAlternative.reason}`
+                  : '暂无更低风险替代结构。'}
+              </p>
+            </div>
+          </div>
+          <details data-testid="options-lab-decision-developer-details" className="rounded-2xl border border-white/5 bg-black/20 p-4 text-sm text-white/55">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/68">
+              <span className="inline-flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-cyan-200" aria-hidden="true" />
+                决策字段 / 新鲜度
+              </span>
+              <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
+            </summary>
+            <div className="mt-4 grid gap-2 text-xs leading-5 text-white/45">
+              <p>Source: {decision?.freshness?.source || '--'}</p>
+              <p>Freshness: {decision?.freshness?.freshness || '--'}</p>
+              <p>IV Rank: {decision?.ivGreeks?.ivRankStatus === 'available' ? 'Available' : 'IV Rank 不可用'}</p>
+              <p>Disclosure: {decision?.noAdviceDisclosure || '--'}</p>
+            </div>
+          </details>
+        </div>
+      ) : null}
+    </section>
+  );
+};
+
 const PlaceholderPanel: React.FC<{
   title: string;
   eyebrow: string;
@@ -618,6 +757,11 @@ const OptionsLabPageContent: React.FC = () => {
     loading: false,
     error: null,
     comparison: null,
+  });
+  const [decisionState, setDecisionState] = useState<DecisionState>({
+    loading: false,
+    error: null,
+    decision: null,
   });
 
   useEffect(() => {
@@ -750,6 +894,62 @@ const OptionsLabPageContent: React.FC = () => {
     targetPrice,
   ]);
 
+  useEffect(() => {
+    let ignored = false;
+
+    async function loadDecision() {
+      const targetPriceValue = Number(targetPrice);
+      const riskBudgetValue = Number(riskBudget);
+      const hasTargetPrice = Number.isFinite(targetPriceValue) && targetPriceValue > 0;
+      const hasTargetDate = targetDate.trim().length > 0;
+      const hasContracts = Boolean(asArray(state.chain?.calls).length || asArray(state.chain?.puts).length);
+      const baseReady = !state.loading && !state.error && state.summary && state.expirations && state.chain;
+      if (!baseReady || !hasTargetPrice || !hasTargetDate || !hasContracts) {
+        setDecisionState({ loading: false, error: null, decision: null });
+        return;
+      }
+
+      setDecisionState({ loading: true, error: null, decision: null });
+      try {
+        const decision = await optionsLabApi.evaluateDecision({
+          symbol: activeSymbol,
+          strategy: 'bull_call_spread',
+          expiration: selectedExpiration,
+          targetPrice: targetPriceValue,
+          targetDate,
+          riskBudget: Number.isFinite(riskBudgetValue) && riskBudgetValue > 0 ? riskBudgetValue : undefined,
+          forceRefresh: true,
+        });
+        if (ignored) return;
+        setDecisionState({ loading: false, error: null, decision });
+      } catch {
+        if (ignored) return;
+        setDecisionState({
+          loading: false,
+          error: '交易质量判断暂不可用。请稍后重试或调整假设。',
+          decision: null,
+        });
+      }
+    }
+
+    void loadDecision();
+
+    return () => {
+      ignored = true;
+    };
+  }, [
+    activeSymbol,
+    riskBudget,
+    selectedExpiration,
+    state.chain,
+    state.error,
+    state.expirations,
+    state.loading,
+    state.summary,
+    targetDate,
+    targetPrice,
+  ]);
+
   const handleSubmit = useCallback(() => {
     const normalized = symbolInput.trim().toUpperCase() || 'TEM';
     setSymbolInput(normalized);
@@ -783,6 +983,14 @@ const OptionsLabPageContent: React.FC = () => {
     if (!hasTargetPrice || !hasTargetDate || !hasExpirations || !hasContracts) return COMPARISON_EMPTY_MESSAGE;
     return null;
   }, [expirations.length, hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
+  const decisionEmptyMessage = useMemo(() => {
+    if (state.loading) return '正在加载基础数据，稍后将自动计算交易质量判断。';
+    if (state.error) return '期权链暂不可用，交易质量判断已暂停。';
+    const targetPriceValue = Number(targetPrice);
+    if (!state.summary || !state.expirations || !state.chain || !hasChainRows) return '先加载合约链后，再进入交易质量判断。';
+    if (!Number.isFinite(targetPriceValue) || targetPriceValue <= 0 || !targetDate.trim()) return '先补齐目标价格与目标日期。';
+    return null;
+  }, [hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
 
   return (
     <main className="min-h-screen w-full bg-[#050505] px-4 py-5 text-white md:px-8 xl:px-10">
@@ -860,6 +1068,8 @@ const OptionsLabPageContent: React.FC = () => {
             body={`目标价 ${targetPrice || '--'}，目标日 ${targetDate || '--'}，预算 ${riskBudget || '--'}。后续 payoff 图应仅表达假设下结构，不表达确定收益。`}
           />
         </div>
+
+        <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} />
 
         <StrategyComparisonPanel comparisonState={comparisonState} loading={comparisonState.loading} emptyMessage={comparisonEmptyMessage} chain={state.chain} />
 

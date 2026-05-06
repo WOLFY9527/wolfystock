@@ -10,6 +10,8 @@ from api.v1.schemas.options import (
     OptionExpirationsResponse,
     OptionsAnalyzeRequest,
     OptionsAnalyzeResponse,
+    OptionsDecisionRequest,
+    OptionsDecisionResponse,
     OptionsScenarioRequest,
     OptionsScenarioResponse,
     OptionsStrategyCompareRequest,
@@ -103,6 +105,20 @@ def get_options_chain(
 def analyze_options(request: OptionsAnalyzeRequest) -> OptionsAnalyzeResponse:
     try:
         return _service().analyze(request)
+    except OptionsLabUnsupportedSymbol as exc:
+        raise _unsupported_response(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": str(exc)}) from exc
+
+
+@router.post(
+    "/decision/evaluate",
+    response_model=OptionsDecisionResponse,
+    summary="Evaluate fixture-backed Options Lab trade quality",
+)
+def evaluate_options_decision(request: OptionsDecisionRequest) -> OptionsDecisionResponse:
+    try:
+        return _service().evaluate_decision(request)
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
     except ValueError as exc:

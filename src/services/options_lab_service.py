@@ -28,6 +28,16 @@ from api.v1.schemas.options import (
     OptionsMetadata,
     OptionsAnalyzeRequest,
     OptionsAnalyzeResponse,
+    OptionsDecisionAlternative,
+    OptionsDecisionBreakeven,
+    OptionsDecisionDataQuality,
+    OptionsDecisionFreshness,
+    OptionsDecisionIvGreeks,
+    OptionsDecisionLeg,
+    OptionsDecisionLiquidity,
+    OptionsDecisionRequest,
+    OptionsDecisionResponse,
+    OptionsDecisionRiskReward,
     OptionsScenarioRequest,
     OptionsScenarioResponse,
     OptionsStrategyCompareRequest,
@@ -83,6 +93,7 @@ CONTRACT_MULTIPLIER = 100
 SCORING_MODEL_VERSION = "deterministic_fixture_scoring_v1"
 SCENARIO_MODEL_VERSION = "expiration_payoff_v1"
 STRATEGY_COMPARE_MODEL_VERSION = "defined_risk_strategy_compare_v1"
+DECISION_ENGINE_MODEL_VERSION = "options_decision_engine_r1"
 SUPPORTED_COMPARE_STRATEGIES = {"long_call", "long_put", "bull_call_spread", "bear_put_spread"}
 
 
@@ -362,6 +373,517 @@ class OptionsLabService:
             ),
         )
 
+    def evaluate_decision(self, request: OptionsDecisionRequest | Dict[str, Any]) -> OptionsDecisionResponse:
+        parsed = self._parse_decision_request(request)
+        fixture = self._fixture_for_symbol(parsed.symbol)
+        contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
+        if parsed.scenario_assumptions.get("omitGreeks"):
+            contracts = [contract.model_copy(update={"greeks": None}) for contract in contracts]
+        underlying_price = float((fixture.get("underlying") or {}).get("price") or 0)
+        target_date = self._parse_date(parsed.target_date or parsed.expiration or str(date.today()))
+        comparison = self._comparison_for_decision(
+            parsed=parsed,
+            contracts=contracts,
+            underlying_price=underlying_price,
+            target_date=target_date,
+        )
+        decision_contracts = self._contracts_for_decision(parsed, contracts, comparison)
+        data_quality = self._decision_data_quality(fixture, decision_contracts)
+        liquidity = self._decision_liquidity(decision_contracts)
+        iv_greeks = self._decision_iv_greeks(decision_contracts)
+        breakeven = self._decision_breakeven(
+            strategy=parsed.strategy,
+            comparison=comparison,
+            contracts=decision_contracts,
+            underlying_price=underlying_price,
+            target_price=parsed.target_price,
+        )
+        risk_reward = self._decision_risk_reward(comparison, decision_contracts, parsed.risk_budget)
+        raw_score = (
+            data_quality.data_quality_score * 0.25
+            + liquidity.liquidity_score * 0.20
+            + iv_greeks.iv_readiness * 0.20
+            + breakeven.score * 0.15
+            + risk_reward.score * 0.20
+        )
+        score = self._apply_decision_caps(
+            raw_score=raw_score,
+            data_quality=data_quality,
+            liquidity=liquidity,
+            iv_greeks=iv_greeks,
+            contracts=decision_contracts,
+        )
+        label = self._decision_label(score, data_quality)
+        reasons, warnings = self._decision_reasons(data_quality, liquidity, iv_greeks, breakeven, risk_reward)
+        alternative = self._decision_alternative(parsed, comparison, fixture, underlying_price, target_date)
+        underlying = self._safe_underlying(fixture)
+        return OptionsDecisionResponse(
+            symbol=fixture["symbol"],
+            strategy=parsed.strategy,
+            dataQuality=data_quality,
+            liquidity=liquidity,
+            ivGreeks=iv_greeks,
+            breakeven=breakeven,
+            riskReward=risk_reward,
+            tradeQualityScore=score,
+            decisionLabel=label,
+            primaryReasons=reasons,
+            riskWarnings=warnings,
+            betterAlternative=alternative,
+            noAdviceDisclosure=(
+                "Analytical output under explicit assumptions only; not personalized financial advice "
+                "and not an instruction to trade."
+            ),
+            freshness=OptionsDecisionFreshness(
+                source=str(fixture.get("source") or "unknown"),
+                freshness=str(underlying.get("freshness") or "unknown"),
+                asOf=str(fixture.get("chainAsOf") or underlying.get("asOf") or ""),
+            ),
+            metadata=self._metadata(
+                force_refresh=parsed.force_refresh,
+                scoring_engine=DECISION_ENGINE_MODEL_VERSION,
+                strategy_engine=DECISION_ENGINE_MODEL_VERSION,
+            ),
+        )
+
+    def _comparison_for_decision(
+        self,
+        parsed: OptionsDecisionRequest,
+        contracts: Sequence[OptionContract],
+        underlying_price: float,
+        target_date: date,
+    ) -> OptionsStrategyComparison:
+        if parsed.legs:
+            selected = self._contracts_for_legs(parsed.legs, contracts, parsed.expiration)
+            return self._comparison_from_selected_legs(parsed, selected, underlying_price)
+        comparison = self._build_strategy_comparison(
+            strategy=parsed.strategy,
+            contracts=contracts,
+            direction="bullish" if "call" in parsed.strategy else "bearish",
+            target_price=float(parsed.target_price or underlying_price),
+            target_date=target_date,
+            max_premium=parsed.risk_budget,
+            risk_profile="balanced",
+            underlying_price=underlying_price,
+        )
+        if comparison is None:
+            raise ValueError("No supported fixture contract matched the decision request.")
+        return comparison
+
+    def _comparison_from_selected_legs(
+        self,
+        parsed: OptionsDecisionRequest,
+        contracts: Sequence[OptionContract],
+        underlying_price: float,
+    ) -> OptionsStrategyComparison:
+        target_price = float(parsed.target_price or underlying_price)
+        if parsed.strategy in {"long_call", "long_put"}:
+            contract = contracts[0]
+            net_debit = self._premium_at_risk(contract)
+            breakeven = self._breakeven(contract)
+            return OptionsStrategyComparison(
+                strategyType=parsed.strategy,
+                legs=[self._strategy_leg("buy", contract)],
+                netDebit=net_debit,
+                maxLoss=net_debit,
+                maxGain=None,
+                breakeven=breakeven,
+                requiredMovePct=self._required_move_pct(underlying_price, breakeven),
+                payoffAtTarget=round(self._expiration_net_payoff(contract, target_price, net_debit), 2),
+                riskRewardRatio=None,
+                liquidityWarnings=self._strategy_liquidity_warnings([contract]),
+                ivThetaNotes=self._strategy_iv_theta_notes([contract]),
+                suitabilityNotes=self._strategy_suitability_notes(parsed.strategy, "", ""),
+                limitations=list(PHASE4_LIMITATIONS),
+                noAdviceDisclosure=self._no_advice_disclosure(),
+            )
+        if len(contracts) < 2:
+            raise ValueError("Defined-risk spread decision requires two supported legs.")
+        long_leg = next((contract for leg, contract in zip(parsed.legs, contracts) if leg.action == "buy"), contracts[0])
+        short_leg = next((contract for leg, contract in zip(parsed.legs, contracts) if leg.action == "sell"), contracts[1])
+        long_mid = float(long_leg.mid if long_leg.mid is not None else long_leg.last or 0)
+        short_mid = float(short_leg.mid if short_leg.mid is not None else short_leg.last or 0)
+        net_debit = round((long_mid - short_mid) * CONTRACT_MULTIPLIER, 2)
+        width = abs(long_leg.strike - short_leg.strike) * CONTRACT_MULTIPLIER
+        max_gain = round(width - net_debit, 2)
+        breakeven = (
+            round(long_leg.strike + net_debit / CONTRACT_MULTIPLIER, 2)
+            if long_leg.side == "call"
+            else round(long_leg.strike - net_debit / CONTRACT_MULTIPLIER, 2)
+        )
+        return OptionsStrategyComparison(
+            strategyType=parsed.strategy,
+            legs=[self._strategy_leg("buy", long_leg), self._strategy_leg("sell", short_leg)],
+            netDebit=net_debit,
+            maxLoss=net_debit,
+            maxGain=max_gain,
+            breakeven=breakeven,
+            requiredMovePct=self._required_move_pct(underlying_price, breakeven),
+            payoffAtTarget=self._debit_spread_payoff(long_leg.side, long_leg, short_leg, target_price, net_debit),
+            riskRewardRatio=round(max_gain / net_debit, 2) if net_debit > 0 and max_gain > 0 else None,
+            liquidityWarnings=self._strategy_liquidity_warnings([long_leg, short_leg]),
+            ivThetaNotes=self._strategy_iv_theta_notes([long_leg, short_leg]),
+            suitabilityNotes=self._strategy_suitability_notes(parsed.strategy, "", ""),
+            limitations=list(PHASE4_LIMITATIONS),
+            noAdviceDisclosure=self._no_advice_disclosure(),
+        )
+
+    def _contracts_for_decision(
+        self,
+        parsed: OptionsDecisionRequest,
+        contracts: Sequence[OptionContract],
+        comparison: OptionsStrategyComparison,
+    ) -> List[OptionContract]:
+        if parsed.legs:
+            return self._contracts_for_legs(parsed.legs, contracts, parsed.expiration)
+        selected = []
+        for leg in comparison.legs:
+            match = next(
+                (
+                    contract
+                    for contract in contracts
+                    if contract.contract_symbol == leg.contract_symbol
+                    and contract.side == leg.side
+                    and contract.expiration == leg.expiration
+                    and contract.strike == leg.strike
+                ),
+                None,
+            )
+            if match is not None:
+                selected.append(match)
+        if not selected:
+            raise ValueError("No supported fixture contract matched the decision request.")
+        return selected
+
+    def _contracts_for_legs(
+        self,
+        legs: Sequence[OptionsDecisionLeg],
+        contracts: Sequence[OptionContract],
+        expiration: Optional[str],
+    ) -> List[OptionContract]:
+        selected = []
+        for leg in legs:
+            matches = [contract for contract in contracts if contract.side == leg.side]
+            if leg.contract_symbol:
+                matches = [contract for contract in matches if contract.contract_symbol == leg.contract_symbol]
+            if leg.expiration or expiration:
+                target_expiration = leg.expiration or expiration
+                matches = [contract for contract in matches if contract.expiration == target_expiration]
+            if leg.strike is not None:
+                matches = [contract for contract in matches if contract.strike == leg.strike]
+            if not matches:
+                raise ValueError("No supported fixture contract matched the decision request.")
+            selected.append(sorted(matches, key=lambda contract: (contract.expiration, contract.strike))[0])
+        return selected
+
+    def _decision_data_quality(
+        self,
+        fixture: Dict[str, Any],
+        contracts: Sequence[OptionContract],
+    ) -> OptionsDecisionDataQuality:
+        underlying = self._safe_underlying(fixture)
+        source_text = f"{fixture.get('source') or ''} {underlying.get('freshness') or ''}".lower()
+        source_type = self._source_type(source_text)
+        if source_type == "live":
+            score = 90.0
+            tier = "live_usable"
+        elif source_type == "delayed":
+            score = 70.0
+            tier = "delayed_usable"
+        elif source_type in {"synthetic", "fixture", "fallback"}:
+            score = 25.0
+            tier = "synthetic_demo_only"
+        else:
+            score = 45.0
+            tier = "insufficient"
+        blocking: List[str] = []
+        warnings: List[str] = []
+        if tier == "synthetic_demo_only":
+            blocking.append("synthetic_or_fixture_data_not_decision_grade")
+        if any(contract.bid is None or contract.ask is None for contract in contracts):
+            blocking.append("missing_bid_ask")
+            score -= 25
+        if any(contract.implied_volatility is None for contract in contracts):
+            warnings.append("missing_iv")
+            score -= 12
+        if any(contract.greeks is None for contract in contracts):
+            warnings.append("missing_greeks")
+            score -= 18
+        if any(contract.volume is None for contract in contracts):
+            warnings.append("missing_volume")
+            score -= 10
+        if any(contract.open_interest is None for contract in contracts):
+            warnings.append("missing_open_interest")
+            score -= 10
+        if any(contract.strike <= 0 or contract.dte <= 0 or contract.expiration == "" for contract in contracts):
+            blocking.append("invalid_strike_expiration_or_dte")
+            score -= 25
+        if not contracts:
+            blocking.append("missing_contract_legs")
+            score = 0
+        if blocking and tier != "synthetic_demo_only":
+            tier = "insufficient"
+        return OptionsDecisionDataQuality(
+            dataQualityScore=self._bounded(score),
+            dataQualityTier=tier,
+            sourceType=source_type,
+            asOfAgeMinutes=self._as_of_age_minutes(str(fixture.get("chainAsOf") or "")),
+            blockingReasons=blocking,
+            warnings=warnings,
+        )
+
+    @staticmethod
+    def _source_type(source_text: str) -> str:
+        if "synthetic" in source_text:
+            return "synthetic"
+        if "fallback" in source_text:
+            return "fallback"
+        if "delayed" in source_text:
+            return "delayed"
+        if "fixture" in source_text or "mock" in source_text:
+            return "fixture"
+        if "live" in source_text:
+            return "live"
+        return "unknown"
+
+    @staticmethod
+    def _as_of_age_minutes(as_of: str) -> Optional[float]:
+        if not as_of:
+            return None
+        try:
+            parsed = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
+            now = datetime.now(tz=parsed.tzinfo)
+            return round(max(0.0, (now - parsed).total_seconds() / 60), 2)
+        except ValueError:
+            return None
+
+    def _decision_liquidity(self, contracts: Sequence[OptionContract]) -> OptionsDecisionLiquidity:
+        scores = [self._liquidity_score(contract) for contract in contracts]
+        spread_values = [float(contract.spread_pct) for contract in contracts if contract.spread_pct is not None]
+        spread_pct = round(max(spread_values), 2) if spread_values else None
+        warnings: List[str] = []
+        if spread_pct is None:
+            warnings.append("missing_bid_ask_spread")
+        elif spread_pct > 25:
+            warnings.append("wide_bid_ask_spread")
+        if any((contract.volume is None or contract.volume < 50) for contract in contracts):
+            warnings.append("low_or_missing_volume")
+        if any((contract.open_interest is None or contract.open_interest < 100) for contract in contracts):
+            warnings.append("low_or_missing_open_interest")
+        if any(contract.mid is None or contract.mid <= 0 for contract in contracts):
+            warnings.append("invalid_mid_price")
+        score = round(sum(scores) / len(scores), 2) if scores else 0
+        if "wide_bid_ask_spread" in warnings:
+            score = min(score, 55)
+        return OptionsDecisionLiquidity(
+            liquidityScore=self._bounded(score),
+            spreadPct=spread_pct,
+            liquidityWarnings=warnings,
+        )
+
+    def _decision_iv_greeks(self, contracts: Sequence[OptionContract]) -> OptionsDecisionIvGreeks:
+        warnings: List[str] = ["iv_rank_unavailable"]
+        iv_scores = []
+        for contract in contracts:
+            if contract.implied_volatility is None:
+                warnings.append("missing_iv")
+                iv_scores.append(25.0)
+            elif not (0.01 <= float(contract.implied_volatility) <= 3.0):
+                warnings.append("implausible_iv")
+                iv_scores.append(35.0)
+            else:
+                iv_scores.append(self._iv_score(contract.implied_volatility))
+            if contract.greeks is None:
+                warnings.append("missing_greeks")
+            else:
+                missing = [
+                    name
+                    for name in ("delta", "theta", "gamma", "vega")
+                    if getattr(contract.greeks, name) is None
+                ]
+                if missing:
+                    warnings.append("missing_greeks")
+                if abs(float(contract.greeks.theta or 0)) * CONTRACT_MULTIPLIER > 8:
+                    warnings.append("high_theta_decay")
+        if any(contract.greeks is None for contract in contracts):
+            readiness = min(sum(iv_scores) / len(iv_scores) if iv_scores else 0, 45)
+        else:
+            readiness = sum(iv_scores) / len(iv_scores) if iv_scores else 0
+        dte = min((contract.dte for contract in contracts), default=0)
+        if dte <= 14:
+            dte_bucket = "short"
+        elif dte <= 60:
+            dte_bucket = "standard"
+        else:
+            dte_bucket = "long"
+        return OptionsDecisionIvGreeks(
+            ivReadiness=self._bounded(readiness),
+            ivRankStatus="unavailable",
+            warnings=sorted(set(warnings)),
+            dteBucket=dte_bucket,
+        )
+
+    def _decision_breakeven(
+        self,
+        strategy: str,
+        comparison: OptionsStrategyComparison,
+        contracts: Sequence[OptionContract],
+        underlying_price: float,
+        target_price: Optional[float],
+    ) -> OptionsDecisionBreakeven:
+        breakeven = comparison.breakeven
+        required_move = self._required_move_pct(underlying_price, breakeven)
+        status = "not_supplied"
+        if target_price is not None:
+            if strategy in {"long_call", "bull_call_spread"}:
+                status = "target_above_breakeven" if target_price >= breakeven else "target_below_breakeven"
+            else:
+                status = "target_below_breakeven" if target_price <= breakeven else "target_above_breakeven"
+        pressure = abs(required_move)
+        score = self._bounded(100 - pressure * 2.8)
+        if target_price is not None and status in {"target_below_breakeven"} and strategy in {"long_call", "bull_call_spread"}:
+            score = min(score, 45)
+        if target_price is not None and status == "target_above_breakeven" and strategy in {"long_put", "bear_put_spread"}:
+            score = min(score, 45)
+        return OptionsDecisionBreakeven(
+            breakeven=breakeven,
+            requiredMovePct=required_move,
+            targetPriceStatus=status,
+            score=score,
+        )
+
+    def _decision_risk_reward(
+        self,
+        comparison: OptionsStrategyComparison,
+        contracts: Sequence[OptionContract],
+        risk_budget: Optional[float],
+    ) -> OptionsDecisionRiskReward:
+        warnings: List[str] = []
+        max_loss = comparison.max_loss
+        max_gain = comparison.max_gain
+        ratio = comparison.risk_reward_ratio
+        if max_gain is None:
+            warnings.append("max_gain_not_defined_for_long_option")
+            score = 55.0
+        else:
+            score = self._bounded(45 + float(ratio or 0) * 22)
+        if risk_budget is not None and max_loss > risk_budget:
+            warnings.append("max_loss_exceeds_risk_budget")
+            score = min(score, 40)
+        if any(contract.mid is None or contract.mid <= 0 for contract in contracts):
+            warnings.append("invalid_mid_price")
+            score = min(score, 25)
+        return OptionsDecisionRiskReward(
+            maxLoss=max_loss,
+            maxGain=max_gain,
+            riskRewardRatio=ratio,
+            score=score,
+            warnings=warnings,
+        )
+
+    def _apply_decision_caps(
+        self,
+        raw_score: float,
+        data_quality: OptionsDecisionDataQuality,
+        liquidity: OptionsDecisionLiquidity,
+        iv_greeks: OptionsDecisionIvGreeks,
+        contracts: Sequence[OptionContract],
+    ) -> float:
+        score = self._bounded(raw_score)
+        if data_quality.data_quality_tier == "insufficient":
+            score = min(score, 40)
+        if data_quality.data_quality_tier == "synthetic_demo_only":
+            score = min(score, 35)
+        if data_quality.data_quality_tier == "delayed_usable":
+            score = min(score, 75)
+        if (liquidity.spread_pct or 0) > 25:
+            score = min(score, 60)
+        if "missing_greeks" in iv_greeks.warnings:
+            score = min(score, 65)
+        if any(contract.volume is None or contract.open_interest is None for contract in contracts):
+            score = min(score, 60)
+        return round(score, 2)
+
+    @staticmethod
+    def _decision_label(score: float, data_quality: OptionsDecisionDataQuality) -> str:
+        if data_quality.data_quality_tier in {"insufficient", "synthetic_demo_only"}:
+            return "数据不足，禁止判断"
+        if score < 45:
+            return "不建议"
+        if score < 65:
+            return "仅观察"
+        if data_quality.data_quality_tier == "delayed_usable":
+            return "高风险，仅小仓验证"
+        if score < 78:
+            return "高风险，仅小仓验证"
+        return "有条件可交易"
+
+    @staticmethod
+    def _decision_reasons(
+        data_quality: OptionsDecisionDataQuality,
+        liquidity: OptionsDecisionLiquidity,
+        iv_greeks: OptionsDecisionIvGreeks,
+        breakeven: OptionsDecisionBreakeven,
+        risk_reward: OptionsDecisionRiskReward,
+    ) -> tuple[List[str], List[str]]:
+        reasons: List[str] = []
+        warnings: List[str] = []
+        if data_quality.data_quality_tier == "synthetic_demo_only":
+            reasons.append("当前为 synthetic delayed / 演示数据")
+            warnings.append("不可用于真实交易判断")
+        if data_quality.blocking_reasons:
+            reasons.extend(data_quality.blocking_reasons)
+        if "wide_bid_ask_spread" in liquidity.liquidity_warnings:
+            warnings.append("wide_bid_ask_spread")
+        if "missing_greeks" in iv_greeks.warnings:
+            reasons.append("Greeks 缺失，无法评估时间价值与敏感度")
+            warnings.append("missing_greeks_degrade_confidence")
+        if breakeven.required_move_pct is not None and abs(breakeven.required_move_pct) > 12:
+            warnings.append("breakeven_requires_large_underlying_move")
+        warnings.extend(risk_reward.warnings)
+        return list(dict.fromkeys(reasons or ["数据质量、流动性与风险回报需同时复核"])), list(dict.fromkeys(warnings))
+
+    def _decision_alternative(
+        self,
+        parsed: OptionsDecisionRequest,
+        current: OptionsStrategyComparison,
+        fixture: Dict[str, Any],
+        underlying_price: float,
+        target_date: date,
+    ) -> Optional[OptionsDecisionAlternative]:
+        contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
+        alternatives = []
+        for strategy in SUPPORTED_COMPARE_STRATEGIES - {parsed.strategy}:
+            comparison = self._build_strategy_comparison(
+                strategy=strategy,
+                contracts=contracts,
+                direction="bullish" if "call" in strategy else "bearish",
+                target_price=float(parsed.target_price or underlying_price),
+                target_date=target_date,
+                max_premium=parsed.risk_budget,
+                risk_profile="balanced",
+                underlying_price=underlying_price,
+            )
+            if comparison is None:
+                continue
+            lower_loss = comparison.max_loss < current.max_loss
+            defined_gain = comparison.max_gain is not None and current.max_gain is None
+            better_ratio = (
+                comparison.risk_reward_ratio is not None
+                and (current.risk_reward_ratio is None or comparison.risk_reward_ratio > current.risk_reward_ratio)
+            )
+            if lower_loss or defined_gain or better_ratio:
+                alternatives.append(comparison)
+        if not alternatives:
+            return None
+        best = sorted(alternatives, key=lambda item: (item.max_loss, -(item.risk_reward_ratio or 0)))[0]
+        return OptionsDecisionAlternative(
+            strategyType=best.strategy_type,
+            reason="定义风险结构或更低权利金暴露可能降低单合约风险",
+            maxLoss=best.max_loss,
+            riskRewardRatio=best.risk_reward_ratio,
+        )
+
     def _fixture_for_symbol(self, symbol: str) -> Dict[str, Any]:
         normalized = self._normalize_symbol(symbol)
         if normalized != "TEM" or not self._is_us_equity_symbol(normalized):
@@ -516,6 +1038,12 @@ class OptionsLabService:
         if isinstance(request, OptionsStrategyCompareRequest):
             return request
         return OptionsStrategyCompareRequest.model_validate(request)
+
+    @staticmethod
+    def _parse_decision_request(request: OptionsDecisionRequest | Dict[str, Any]) -> OptionsDecisionRequest:
+        if isinstance(request, OptionsDecisionRequest):
+            return request
+        return OptionsDecisionRequest.model_validate(request)
 
     @staticmethod
     def _validate_compare_strategies(strategies: Sequence[str]) -> set[str]:

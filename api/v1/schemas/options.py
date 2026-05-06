@@ -128,6 +128,9 @@ class OptionChainResponse(_OptionsModel):
 OptionDirection = Literal["bullish", "bearish", "neutral", "volatility"]
 OptionRiskProfile = Literal["conservative", "balanced", "aggressive"]
 OptionStrategy = Literal["long_call", "long_put", "bull_call_spread", "bear_put_spread"]
+OptionsDataQualityTier = Literal["live_usable", "delayed_usable", "synthetic_demo_only", "insufficient"]
+OptionsDecisionLabel = Literal["数据不足，禁止判断", "不建议", "仅观察", "有条件可交易", "高风险，仅小仓验证"]
+OptionsIvRankStatus = Literal["unavailable", "available"]
 
 
 class OptionsAnalyzeRequest(_OptionsModel):
@@ -274,4 +277,94 @@ class OptionsStrategyCompareResponse(_OptionsModel):
     assumptions: Dict[str, Any]
     strategies: List[OptionsStrategyComparison] = Field(default_factory=list)
     limitations: List[str] = Field(default_factory=list)
+    metadata: OptionsMetadata = Field(default_factory=OptionsMetadata)
+
+
+class OptionsDecisionLeg(_OptionsModel):
+    action: Literal["buy", "sell"] = "buy"
+    side: Literal["call", "put"]
+    contract_symbol: Optional[str] = Field(default=None, alias="contractSymbol")
+    expiration: Optional[str] = None
+    strike: Optional[float] = Field(default=None, gt=0)
+    quantity: int = Field(default=1, ge=1)
+
+
+class OptionsDecisionRequest(_OptionsModel):
+    symbol: str
+    strategy: OptionStrategy
+    expiration: Optional[str] = None
+    legs: List[OptionsDecisionLeg] = Field(default_factory=list)
+    target_price: Optional[float] = Field(default=None, alias="targetPrice", gt=0)
+    target_date: Optional[str] = Field(default=None, alias="targetDate")
+    holding_horizon_days: Optional[int] = Field(default=None, alias="holdingHorizonDays", ge=1)
+    risk_budget: Optional[float] = Field(default=None, alias="riskBudget", ge=0)
+    scenario_assumptions: Dict[str, Any] = Field(default_factory=dict, alias="scenarioAssumptions")
+    force_refresh: bool = Field(default=False, alias="forceRefresh")
+
+
+class OptionsDecisionDataQuality(_OptionsModel):
+    data_quality_score: float = Field(alias="dataQualityScore")
+    data_quality_tier: OptionsDataQualityTier = Field(alias="dataQualityTier")
+    source_type: str = Field(alias="sourceType")
+    as_of_age_minutes: Optional[float] = Field(default=None, alias="asOfAgeMinutes")
+    blocking_reasons: List[str] = Field(default_factory=list, alias="blockingReasons")
+    warnings: List[str] = Field(default_factory=list)
+
+
+class OptionsDecisionLiquidity(_OptionsModel):
+    liquidity_score: float = Field(alias="liquidityScore")
+    spread_pct: Optional[float] = Field(default=None, alias="spreadPct")
+    liquidity_warnings: List[str] = Field(default_factory=list, alias="liquidityWarnings")
+
+
+class OptionsDecisionIvGreeks(_OptionsModel):
+    iv_readiness: float = Field(alias="ivReadiness")
+    iv_rank_status: OptionsIvRankStatus = Field(alias="ivRankStatus")
+    warnings: List[str] = Field(default_factory=list)
+    dte_bucket: str = Field(default="unknown", alias="dteBucket")
+
+
+class OptionsDecisionBreakeven(_OptionsModel):
+    breakeven: Optional[float] = None
+    required_move_pct: Optional[float] = Field(default=None, alias="requiredMovePct")
+    target_price_status: str = Field(default="not_supplied", alias="targetPriceStatus")
+    score: float
+
+
+class OptionsDecisionRiskReward(_OptionsModel):
+    max_loss: Optional[float] = Field(default=None, alias="maxLoss")
+    max_gain: Optional[float] = Field(default=None, alias="maxGain")
+    risk_reward_ratio: Optional[float] = Field(default=None, alias="riskRewardRatio")
+    score: float
+    warnings: List[str] = Field(default_factory=list)
+
+
+class OptionsDecisionAlternative(_OptionsModel):
+    strategy_type: OptionStrategy = Field(alias="strategyType")
+    reason: str
+    max_loss: Optional[float] = Field(default=None, alias="maxLoss")
+    risk_reward_ratio: Optional[float] = Field(default=None, alias="riskRewardRatio")
+
+
+class OptionsDecisionFreshness(_OptionsModel):
+    source: str
+    freshness: str
+    as_of: Optional[str] = Field(default=None, alias="asOf")
+
+
+class OptionsDecisionResponse(_OptionsModel):
+    symbol: str
+    strategy: OptionStrategy
+    data_quality: OptionsDecisionDataQuality = Field(alias="dataQuality")
+    liquidity: OptionsDecisionLiquidity
+    iv_greeks: OptionsDecisionIvGreeks = Field(alias="ivGreeks")
+    breakeven: OptionsDecisionBreakeven
+    risk_reward: OptionsDecisionRiskReward = Field(alias="riskReward")
+    trade_quality_score: float = Field(alias="tradeQualityScore")
+    decision_label: OptionsDecisionLabel = Field(alias="decisionLabel")
+    primary_reasons: List[str] = Field(default_factory=list, alias="primaryReasons")
+    risk_warnings: List[str] = Field(default_factory=list, alias="riskWarnings")
+    better_alternative: Optional[OptionsDecisionAlternative] = Field(default=None, alias="betterAlternative")
+    no_advice_disclosure: str = Field(alias="noAdviceDisclosure")
+    freshness: OptionsDecisionFreshness
     metadata: OptionsMetadata = Field(default_factory=OptionsMetadata)

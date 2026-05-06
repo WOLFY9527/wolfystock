@@ -10,6 +10,7 @@ vi.mock('../../api/optionsLab', () => ({
     getExpirations: vi.fn(),
     getOptionChain: vi.fn(),
     compareStrategies: vi.fn(),
+    evaluateDecision: vi.fn(),
   },
 }));
 
@@ -216,6 +217,64 @@ function mockHappyPath() {
       forceRefreshIgnored: true,
     },
   });
+  vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValue({
+    symbol: 'TEM',
+    strategy: 'bull_call_spread',
+    dataQuality: {
+      dataQualityScore: 25,
+      dataQualityTier: 'synthetic_demo_only',
+      blockingReasons: ['synthetic_or_fixture_data_not_decision_grade'],
+      sourceType: 'synthetic',
+      asOfAgeMinutes: 0,
+    },
+    liquidity: {
+      liquidityScore: 76,
+      spreadPct: 10,
+      liquidityWarnings: [],
+    },
+    ivGreeks: {
+      ivReadiness: 82,
+      ivRankStatus: 'unavailable',
+      warnings: ['iv_rank_unavailable'],
+    },
+    breakeven: {
+      breakeven: 52.3,
+      requiredMovePct: -0.19,
+      targetPriceStatus: 'target_above_breakeven',
+      score: 86,
+    },
+    riskReward: {
+      maxLoss: 230,
+      maxGain: 270,
+      riskRewardRatio: 1.17,
+      score: 72,
+    },
+    tradeQualityScore: 35,
+    decisionLabel: '数据不足，禁止判断',
+    primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+    riskWarnings: ['不可用于真实交易判断'],
+    betterAlternative: {
+      strategyType: 'bull_call_spread',
+      reason: '定义风险结构降低权利金风险',
+    },
+    noAdviceDisclosure: 'Analytical output only; not personalized financial advice.',
+    freshness: {
+      source: 'synthetic_options_lab_fixture',
+      freshness: 'synthetic_delayed',
+      asOf: '2026-05-06T09:45:00Z',
+    },
+    metadata: {
+      readOnly: true,
+      fixtureBacked: true,
+      syntheticData: true,
+      noExternalCalls: true,
+      noOrderPlacement: true,
+      noBrokerConnection: true,
+      noPortfolioMutation: true,
+      noTradingRecommendation: true,
+      strategyEngine: 'options_decision_engine_r1',
+    },
+  });
 }
 
 function renderPage() {
@@ -273,6 +332,84 @@ describe('OptionsLabPage', () => {
     expect(within(section).getAllByText('仅供情景分析，不构成交易建议').length).toBeGreaterThan(0);
   });
 
+  it('renders the R1 decision section with synthetic demo-only guardrails', async () => {
+    renderPage();
+
+    const section = await screen.findByTestId('options-lab-decision-engine');
+    expect(within(section).getByText('交易质量判断')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(section).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
+    });
+    expect(within(section).getByText('当前为 synthetic delayed / 演示数据')).toBeInTheDocument();
+    expect(within(section).getByText('不可用于真实交易判断')).toBeInTheDocument();
+    expect(within(section).getByText('波动率 / Greeks 就绪度')).toBeInTheDocument();
+    expect(within(section).getByText('IV Rank 不可用')).toBeInTheDocument();
+    expect(document.body.textContent || '').not.toContain('有条件可交易');
+  });
+
+  it('renders missing Greeks and liquidity warnings in the decision section', async () => {
+    vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValueOnce({
+      symbol: 'TEM',
+      strategy: 'long_call',
+      dataQuality: {
+        dataQualityScore: 35,
+        dataQualityTier: 'synthetic_demo_only',
+        blockingReasons: ['synthetic_or_fixture_data_not_decision_grade'],
+        sourceType: 'synthetic',
+      },
+      liquidity: {
+        liquidityScore: 42,
+        spreadPct: 38,
+        liquidityWarnings: ['wide_bid_ask_spread'],
+      },
+      ivGreeks: {
+        ivReadiness: 30,
+        ivRankStatus: 'unavailable',
+        warnings: ['missing_greeks'],
+      },
+      breakeven: {
+        breakeven: 57.7,
+        requiredMovePct: 10.11,
+        targetPriceStatus: 'target_above_breakeven',
+        score: 68,
+      },
+      riskReward: {
+        maxLoss: 270,
+        maxGain: null,
+        riskRewardRatio: null,
+        score: 45,
+      },
+      tradeQualityScore: 35,
+      decisionLabel: '数据不足，禁止判断',
+      primaryReasons: ['Greeks 缺失，无法评估时间价值与敏感度'],
+      riskWarnings: ['wide_bid_ask_spread', 'missing_greeks_degrade_confidence'],
+      noAdviceDisclosure: 'Analytical output only; not personalized financial advice.',
+      freshness: {
+        source: 'synthetic_options_lab_fixture',
+        freshness: 'synthetic_delayed',
+      },
+      metadata: {
+        readOnly: true,
+        fixtureBacked: true,
+        syntheticData: true,
+        noExternalCalls: true,
+        noOrderPlacement: true,
+        noBrokerConnection: true,
+        noPortfolioMutation: true,
+        noTradingRecommendation: true,
+      },
+    });
+
+    renderPage();
+
+    const section = await screen.findByTestId('options-lab-decision-engine');
+    await waitFor(() => {
+      expect(within(section).getAllByText('买卖价差过宽').length).toBeGreaterThan(0);
+    });
+    expect(within(section).getByText('Greeks 缺失')).toBeInTheDocument();
+    expect(within(section).getByText('Greeks 缺失，无法评估时间价值与敏感度')).toBeInTheDocument();
+  });
+
   it('does not fire compare before required assumptions are ready and shows a compact empty state', async () => {
     vi.mocked(optionsLabApi.compareStrategies).mockClear();
     vi.mocked(optionsLabApi.getExpirations).mockResolvedValueOnce({
@@ -308,6 +445,7 @@ describe('OptionsLabPage', () => {
       expect(screen.getByText('先选择可用到期日并加载合约后，再进入策略对比。')).toBeInTheDocument();
     });
     expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
+    expect(vi.mocked(optionsLabApi.evaluateDecision)).not.toHaveBeenCalled();
   });
 
   it('keeps the base page usable when compare returns 500', async () => {
@@ -449,6 +587,8 @@ describe('OptionsLabPage', () => {
     expect(details).not.toHaveAttribute('open');
     const strategyDetails = screen.getByTestId('options-lab-strategy-developer-details');
     expect(strategyDetails).not.toHaveAttribute('open');
+    const decisionDetails = await screen.findByTestId('options-lab-decision-developer-details');
+    expect(decisionDetails).not.toHaveAttribute('open');
   });
 
   it('renders the Options-only crash fallback with collapsed sanitized details', () => {
@@ -501,6 +641,32 @@ describe('OptionsLabPage', () => {
     ].forEach((text) => {
       expect(domText.toLowerCase()).not.toContain(text.toLowerCase());
     });
+  });
+
+  it('keeps the page visible when decision payload is malformed', async () => {
+    vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValueOnce({
+      symbol: 'TEM',
+      strategy: 'long_call',
+      dataQuality: null,
+      liquidity: null,
+      ivGreeks: null,
+      breakeven: null,
+      riskReward: null,
+      tradeQualityScore: null,
+      decisionLabel: null,
+      primaryReasons: null,
+      riskWarnings: null,
+      metadata: null,
+    } as never);
+
+    renderPage();
+
+    const section = await screen.findByTestId('options-lab-decision-engine');
+    expect(within(section).getByText('交易质量判断')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(section).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
+    });
+    expect(document.body.textContent || '').not.toContain('TypeError');
   });
 
   it('shows loading, empty, and error states without raw stack traces', async () => {
