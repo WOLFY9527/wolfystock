@@ -320,3 +320,152 @@ def test_scenario_unsupported_symbol_uses_sanitized_error() -> None:
         _service().scenario({"symbol": "HK00700", "strategy": "long_call"})
 
     assert exc_info.value.code == "unsupported_symbol_or_market"
+
+
+def test_strategy_compare_returns_long_options_and_debit_spreads() -> None:
+    response = _service().compare_strategies(
+        {
+            "symbol": "TEM",
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskProfile": "balanced",
+            "strategies": ["long_call", "long_put", "bull_call_spread", "bear_put_spread"],
+        }
+    )
+
+    assert [strategy.strategy_type for strategy in response.strategies] == [
+        "long_call",
+        "long_put",
+        "bull_call_spread",
+        "bear_put_spread",
+    ]
+    assert all(strategy.no_advice_disclosure for strategy in response.strategies)
+    assert response.metadata.strategy_engine == "defined_risk_strategy_compare_v1"
+
+
+def test_bull_call_spread_math_is_deterministic() -> None:
+    response = _service().compare_strategies(
+        {
+            "symbol": "TEM",
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskProfile": "balanced",
+            "strategies": ["bull_call_spread"],
+        }
+    )
+
+    spread = response.strategies[0]
+    assert [(leg.action, leg.side, leg.strike) for leg in spread.legs] == [
+        ("buy", "call", 50.0),
+        ("sell", "call", 55.0),
+    ]
+    assert spread.net_debit == 230
+    assert spread.max_loss == 230
+    assert spread.max_gain == 270
+    assert spread.breakeven == 52.3
+    assert spread.payoff_at_target == 270
+    assert spread.risk_reward_ratio == 1.17
+
+
+def test_bear_put_spread_math_and_target_payoff_are_deterministic() -> None:
+    response = _service().compare_strategies(
+        {
+            "symbol": "TEM",
+            "direction": "bearish",
+            "targetPrice": 45,
+            "targetDate": "2026-06-19",
+            "riskProfile": "balanced",
+            "strategies": ["bear_put_spread"],
+        }
+    )
+
+    spread = response.strategies[0]
+    assert [(leg.action, leg.side, leg.strike) for leg in spread.legs] == [
+        ("buy", "put", 50.0),
+        ("sell", "put", 45.0),
+    ]
+    assert spread.net_debit == 130
+    assert spread.max_loss == 130
+    assert spread.max_gain == 370
+    assert spread.breakeven == 48.7
+    assert spread.payoff_at_target == 370
+    assert spread.risk_reward_ratio == 2.85
+
+
+def test_strategy_compare_max_premium_filters_net_debit() -> None:
+    response = _service().compare_strategies(
+        {
+            "symbol": "TEM",
+            "direction": "neutral",
+            "targetPrice": 52.4,
+            "targetDate": "2026-06-19",
+            "maxPremium": 150,
+            "riskProfile": "conservative",
+            "strategies": ["long_call", "long_put", "bull_call_spread", "bear_put_spread"],
+        }
+    )
+
+    assert [strategy.strategy_type for strategy in response.strategies] == [
+        "long_call",
+        "long_put",
+        "bear_put_spread",
+    ]
+    assert all(strategy.net_debit <= 150 for strategy in response.strategies)
+
+
+def test_strategy_compare_rejects_unsupported_strategy_safely() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _service().compare_strategies(
+            {
+                "symbol": "TEM",
+                "direction": "bullish",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+                "riskProfile": "balanced",
+                "strategies": ["short_call"],
+            }
+        )
+
+    assert str(exc_info.value) == "Unsupported strategy requested for Options Lab Phase 4."
+
+
+def test_strategy_compare_force_refresh_does_not_call_external_paths() -> None:
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("forbidden external path was called")
+
+    with (
+        patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
+        patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
+        patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
+    ):
+        response = _service().compare_strategies(
+            {
+                "symbol": "TEM",
+                "direction": "bullish",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+                "forceRefresh": True,
+            }
+        )
+
+    assert response.metadata.force_refresh_ignored is True
+    assert response.metadata.no_external_calls is True
+
+
+def test_strategy_compare_response_excludes_raw_advice_and_order_fields() -> None:
+    response = _service().compare_strategies(
+        {
+            "symbol": "TEM",
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "forceRefresh": True,
+        }
+    )
+
+    text = _json_text(response).lower()
+    for blocked in FORBIDDEN_TERMS + ["trade ticket", "order placement", "buy/sell cta"]:
+        assert blocked.lower() not in text
+    assert "rawproviderpayload" not in text

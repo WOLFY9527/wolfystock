@@ -527,6 +527,10 @@ Phase 4:
 - Strategy comparison.
 - Include long call, long put, bull call spread, and bear put spread first.
 
+Phase 4 implementation note (2026-05-06):
+
+- Delivered backend-only `POST /api/v1/options/strategies/compare` on top of the existing synthetic `TEM` fixture. The route compares long call, long put, bull call spread, and bear put spread structures using deterministic expiration payoff math, fixture mid prices, bounded max-loss outputs, net debit filtering, liquidity warnings, IV/theta caveats, explicit limitations, and a no-advice disclosure. Bull call spreads buy a lower-strike call and sell a higher-strike call; bear put spreads buy a higher-strike put and sell a lower-strike put. Credit spreads, naked short strategies, live provider integration, LLM usage, broker execution, order placement, portfolio mutation, scanner/backtest/provider/MarketCache/AI/notification, and DuckDB behavior remain out of scope.
+
 Phase 5:
 
 - Optional integration with portfolio context and covered/collar strategies after risk review.

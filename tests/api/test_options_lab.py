@@ -285,3 +285,129 @@ def test_analyze_unsupported_symbol_returns_sanitized_error() -> None:
         assert "HK00700" not in _json_text(response.json())
     finally:
         client.close()
+
+
+def test_strategy_compare_endpoint_returns_defined_risk_structures() -> None:
+    client = _client()
+    try:
+        response = client.post(
+            "/api/v1/options/strategies/compare",
+            json={
+                "symbol": "TEM",
+                "direction": "bullish",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+                "riskProfile": "balanced",
+                "strategies": ["long_call", "long_put", "bull_call_spread", "bear_put_spread"],
+                "forceRefresh": True,
+            },
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert [strategy["strategyType"] for strategy in payload["strategies"]] == [
+            "long_call",
+            "long_put",
+            "bull_call_spread",
+            "bear_put_spread",
+        ]
+        bull = next(strategy for strategy in payload["strategies"] if strategy["strategyType"] == "bull_call_spread")
+        assert bull["netDebit"] == 230
+        assert bull["maxLoss"] == 230
+        assert bull["maxGain"] == 270
+        assert bull["breakeven"] == 52.3
+        assert bull["payoffAtTarget"] == 270
+        assert payload["metadata"]["forceRefreshIgnored"] is True
+        assert payload["metadata"]["noBrokerConnection"] is True
+        assert payload["metadata"]["noPortfolioMutation"] is True
+    finally:
+        client.close()
+
+
+def test_strategy_compare_endpoint_filters_max_premium_and_rejects_unsupported_strategy() -> None:
+    client = _client()
+    try:
+        filtered = client.post(
+            "/api/v1/options/strategies/compare",
+            json={
+                "symbol": "TEM",
+                "direction": "neutral",
+                "targetPrice": 52.4,
+                "targetDate": "2026-06-19",
+                "maxPremium": 150,
+                "riskProfile": "conservative",
+                "strategies": ["long_call", "long_put", "bull_call_spread", "bear_put_spread"],
+            },
+        )
+        assert filtered.status_code == 200
+        filtered_strategies = filtered.json()["strategies"]
+        assert [strategy["strategyType"] for strategy in filtered_strategies] == [
+            "long_call",
+            "long_put",
+            "bear_put_spread",
+        ]
+        assert all(strategy["netDebit"] <= 150 for strategy in filtered_strategies)
+
+        unsupported = client.post(
+            "/api/v1/options/strategies/compare",
+            json={
+                "symbol": "TEM",
+                "direction": "bullish",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+                "riskProfile": "balanced",
+                "strategies": ["short_call"],
+            },
+        )
+        assert unsupported.status_code == 400
+        assert unsupported.json()["detail"] == {
+            "error": "validation_error",
+            "message": "Unsupported strategy requested for Options Lab Phase 4.",
+        }
+    finally:
+        client.close()
+
+
+def test_strategy_compare_endpoint_does_not_call_external_or_mutating_paths() -> None:
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("forbidden runtime path was called")
+
+    client = _client()
+    try:
+        with (
+            patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
+            patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
+            patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
+            patch("src.services.portfolio_service.PortfolioService.add_lot", side_effect=forbidden, create=True),
+        ):
+            response = client.post(
+                "/api/v1/options/strategies/compare",
+                json={
+                    "symbol": "TEM",
+                    "direction": "bullish",
+                    "targetPrice": 65,
+                    "targetDate": "2026-06-19",
+                    "forceRefresh": True,
+                },
+            )
+
+        assert response.status_code == 200
+        text = _json_text(response.json()).lower()
+        blocked = [
+            "rawproviderpayload",
+            "api_key",
+            "apikey",
+            "token",
+            "secret",
+            "requesturl",
+            "必买",
+            "稳赚",
+            "guaranteed",
+            "best contract",
+            "ai recommends you buy",
+            "buy now",
+            "trade ticket",
+        ]
+        for value in blocked:
+            assert value not in text
+    finally:
+        client.close()

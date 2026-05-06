@@ -226,3 +226,52 @@ class OptionsScenarioResponse(_OptionsModel):
     pre_expiration_theoretical_pricing: Dict[str, Any] = Field(alias="preExpirationTheoreticalPricing")
     limitations: List[str] = Field(default_factory=list)
     metadata: OptionsMetadata = Field(default_factory=OptionsMetadata)
+
+
+class OptionsStrategyCompareRequest(_OptionsModel):
+    symbol: str
+    direction: OptionDirection
+    target_price: float = Field(alias="targetPrice", gt=0)
+    target_date: str = Field(alias="targetDate")
+    max_premium: Optional[float] = Field(default=None, alias="maxPremium", ge=0)
+    risk_profile: OptionRiskProfile = Field(default="balanced", alias="riskProfile")
+    strategies: List[str] = Field(
+        default_factory=lambda: ["long_call", "long_put", "bull_call_spread", "bear_put_spread"]
+    )
+    force_refresh: bool = Field(default=False, alias="forceRefresh")
+
+
+class OptionsStrategyLeg(_OptionsModel):
+    action: Literal["buy", "sell"]
+    side: Literal["call", "put"]
+    contract_symbol: str = Field(alias="contractSymbol")
+    expiration: str
+    strike: float
+    mid: float
+    quantity: int = 1
+
+
+class OptionsStrategyComparison(_OptionsModel):
+    strategy_type: OptionStrategy = Field(alias="strategyType")
+    legs: List[OptionsStrategyLeg]
+    net_debit: float = Field(alias="netDebit")
+    max_loss: float = Field(alias="maxLoss")
+    max_gain: Optional[float] = Field(default=None, alias="maxGain")
+    breakeven: float
+    required_move_pct: float = Field(alias="requiredMovePct")
+    payoff_at_target: float = Field(alias="payoffAtTarget")
+    risk_reward_ratio: Optional[float] = Field(default=None, alias="riskRewardRatio")
+    liquidity_warnings: List[str] = Field(default_factory=list, alias="liquidityWarnings")
+    iv_theta_notes: List[str] = Field(default_factory=list, alias="ivThetaNotes")
+    suitability_notes: List[str] = Field(default_factory=list, alias="suitabilityNotes")
+    limitations: List[str] = Field(default_factory=list)
+    no_advice_disclosure: str = Field(alias="noAdviceDisclosure")
+
+
+class OptionsStrategyCompareResponse(_OptionsModel):
+    symbol: str
+    underlying: Dict[str, Any]
+    assumptions: Dict[str, Any]
+    strategies: List[OptionsStrategyComparison] = Field(default_factory=list)
+    limitations: List[str] = Field(default_factory=list)
+    metadata: OptionsMetadata = Field(default_factory=OptionsMetadata)

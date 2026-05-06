@@ -12,6 +12,8 @@ from api.v1.schemas.options import (
     OptionsAnalyzeResponse,
     OptionsScenarioRequest,
     OptionsScenarioResponse,
+    OptionsStrategyCompareRequest,
+    OptionsStrategyCompareResponse,
     OptionUnderlyingSummaryResponse,
 )
 from src.services.options_lab_service import OptionsLabService, OptionsLabUnsupportedSymbol
@@ -115,6 +117,20 @@ def analyze_options(request: OptionsAnalyzeRequest) -> OptionsAnalyzeResponse:
 def analyze_options_scenario(request: OptionsScenarioRequest) -> OptionsScenarioResponse:
     try:
         return _service().scenario(request)
+    except OptionsLabUnsupportedSymbol as exc:
+        raise _unsupported_response(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": str(exc)}) from exc
+
+
+@router.post(
+    "/strategies/compare",
+    response_model=OptionsStrategyCompareResponse,
+    summary="Compare fixture-backed defined-risk Options Lab strategies",
+)
+def compare_options_strategies(request: OptionsStrategyCompareRequest) -> OptionsStrategyCompareResponse:
+    try:
+        return _service().compare_strategies(request)
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
     except ValueError as exc:

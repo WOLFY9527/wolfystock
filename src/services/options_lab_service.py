@@ -30,6 +30,10 @@ from api.v1.schemas.options import (
     OptionsAnalyzeResponse,
     OptionsScenarioRequest,
     OptionsScenarioResponse,
+    OptionsStrategyCompareRequest,
+    OptionsStrategyCompareResponse,
+    OptionsStrategyComparison,
+    OptionsStrategyLeg,
     OptionUnderlyingSummaryResponse,
 )
 
@@ -62,9 +66,24 @@ PHASE3_LIMITATIONS = [
     "no_order_placement",
     "not_trading_advice",
 ]
+PHASE4_LIMITATIONS = [
+    "synthetic_fixture_data_only",
+    "defined_risk_debit_structures_only",
+    "naked_short_strategies_not_supported",
+    "credit_spreads_not_supported_in_phase4",
+    "pre_expiration_theoretical_pricing_unavailable",
+    "no_live_provider_calls",
+    "no_llm_calls",
+    "no_broker_execution",
+    "no_portfolio_mutation",
+    "no_order_placement",
+    "not_trading_advice",
+]
 CONTRACT_MULTIPLIER = 100
 SCORING_MODEL_VERSION = "deterministic_fixture_scoring_v1"
 SCENARIO_MODEL_VERSION = "expiration_payoff_v1"
+STRATEGY_COMPARE_MODEL_VERSION = "defined_risk_strategy_compare_v1"
+SUPPORTED_COMPARE_STRATEGIES = {"long_call", "long_put", "bull_call_spread", "bear_put_spread"}
 
 
 class OptionsLabUnsupportedSymbol(ValueError):
@@ -294,6 +313,55 @@ class OptionsLabService:
             ),
         )
 
+    def compare_strategies(
+        self, request: OptionsStrategyCompareRequest | Dict[str, Any]
+    ) -> OptionsStrategyCompareResponse:
+        parsed = self._parse_strategy_compare_request(request)
+        requested = self._validate_compare_strategies(parsed.strategies)
+        fixture = self._fixture_for_symbol(parsed.symbol)
+        contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
+        underlying_price = float((fixture.get("underlying") or {}).get("price") or 0)
+        target_date = self._parse_date(parsed.target_date)
+        comparisons: List[OptionsStrategyComparison] = []
+
+        for strategy in parsed.strategies:
+            if strategy not in requested:
+                continue
+            comparison = self._build_strategy_comparison(
+                strategy=strategy,
+                contracts=contracts,
+                direction=parsed.direction,
+                target_price=parsed.target_price,
+                target_date=target_date,
+                max_premium=parsed.max_premium,
+                risk_profile=parsed.risk_profile,
+                underlying_price=underlying_price,
+            )
+            if comparison is not None:
+                comparisons.append(comparison)
+
+        return OptionsStrategyCompareResponse(
+            symbol=fixture["symbol"],
+            underlying=self._safe_underlying(fixture),
+            assumptions={
+                "direction": parsed.direction,
+                "targetPrice": parsed.target_price,
+                "targetDate": parsed.target_date,
+                "maxPremium": parsed.max_premium,
+                "riskProfile": parsed.risk_profile,
+                "strategies": list(parsed.strategies),
+                "contractMultiplier": CONTRACT_MULTIPLIER,
+                "pricingMode": "expiration_intrinsic_minus_mid_debit",
+            },
+            strategies=comparisons,
+            limitations=list(PHASE4_LIMITATIONS),
+            metadata=self._metadata(
+                force_refresh=parsed.force_refresh,
+                scoring_engine=SCORING_MODEL_VERSION,
+                strategy_engine=STRATEGY_COMPARE_MODEL_VERSION,
+            ),
+        )
+
     def _fixture_for_symbol(self, symbol: str) -> Dict[str, Any]:
         normalized = self._normalize_symbol(symbol)
         if normalized != "TEM" or not self._is_us_equity_symbol(normalized):
@@ -440,6 +508,21 @@ class OptionsLabService:
         if isinstance(request, OptionsScenarioRequest):
             return request
         return OptionsScenarioRequest.model_validate(request)
+
+    @staticmethod
+    def _parse_strategy_compare_request(
+        request: OptionsStrategyCompareRequest | Dict[str, Any]
+    ) -> OptionsStrategyCompareRequest:
+        if isinstance(request, OptionsStrategyCompareRequest):
+            return request
+        return OptionsStrategyCompareRequest.model_validate(request)
+
+    @staticmethod
+    def _validate_compare_strategies(strategies: Sequence[str]) -> set[str]:
+        requested = set(strategies or ["long_call", "long_put", "bull_call_spread", "bear_put_spread"])
+        if not requested or requested - SUPPORTED_COMPARE_STRATEGIES:
+            raise ValueError("Unsupported strategy requested for Options Lab Phase 4.")
+        return requested
 
     @staticmethod
     def _supported_strategies(strategies: Sequence[str]) -> set[str]:
@@ -727,6 +810,249 @@ class OptionsLabService:
         if not filtered:
             raise ValueError("No supported fixture contract matched the scenario request.")
         return sorted(filtered, key=lambda contract: (contract.expiration, contract.strike))[0]
+
+    def _build_strategy_comparison(
+        self,
+        strategy: str,
+        contracts: Sequence[OptionContract],
+        direction: str,
+        target_price: float,
+        target_date: date,
+        max_premium: Optional[float],
+        risk_profile: str,
+        underlying_price: float,
+    ) -> Optional[OptionsStrategyComparison]:
+        if strategy == "long_call":
+            return self._long_option_comparison(
+                strategy=strategy,
+                side="call",
+                contracts=contracts,
+                direction=direction,
+                target_price=target_price,
+                target_date=target_date,
+                max_premium=max_premium,
+                risk_profile=risk_profile,
+                underlying_price=underlying_price,
+            )
+        if strategy == "long_put":
+            return self._long_option_comparison(
+                strategy=strategy,
+                side="put",
+                contracts=contracts,
+                direction=direction,
+                target_price=target_price,
+                target_date=target_date,
+                max_premium=max_premium,
+                risk_profile=risk_profile,
+                underlying_price=underlying_price,
+            )
+        if strategy == "bull_call_spread":
+            return self._debit_spread_comparison(
+                strategy=strategy,
+                side="call",
+                contracts=contracts,
+                target_price=target_price,
+                max_premium=max_premium,
+                underlying_price=underlying_price,
+            )
+        if strategy == "bear_put_spread":
+            return self._debit_spread_comparison(
+                strategy=strategy,
+                side="put",
+                contracts=contracts,
+                target_price=target_price,
+                max_premium=max_premium,
+                underlying_price=underlying_price,
+            )
+        raise ValueError("Unsupported strategy requested for Options Lab Phase 4.")
+
+    def _long_option_comparison(
+        self,
+        strategy: str,
+        side: str,
+        contracts: Sequence[OptionContract],
+        direction: str,
+        target_price: float,
+        target_date: date,
+        max_premium: Optional[float],
+        risk_profile: str,
+        underlying_price: float,
+    ) -> Optional[OptionsStrategyComparison]:
+        candidates = [contract for contract in contracts if contract.side == side]
+        if max_premium is not None:
+            candidates = [contract for contract in candidates if self._premium_at_risk(contract) <= max_premium]
+        if not candidates:
+            return None
+        scored = [
+            self._score_contract(
+                contract=contract,
+                strategy=strategy,
+                direction=direction,
+                target_price=target_price,
+                target_date=target_date,
+                max_premium=max_premium,
+                risk_profile=risk_profile,
+                underlying_price=underlying_price,
+            )
+            for contract in candidates
+        ]
+        best = sorted(scored, key=lambda candidate: (-candidate.score, candidate.contract.expiration, candidate.contract.strike))[0]
+        contract = best.contract
+        net_debit = self._premium_at_risk(contract)
+        breakeven = self._breakeven(contract)
+        payoff = round(self._expiration_net_payoff(contract, target_price, net_debit), 2)
+        return OptionsStrategyComparison(
+            strategyType=strategy,
+            legs=[self._strategy_leg("buy", contract)],
+            netDebit=net_debit,
+            maxLoss=net_debit,
+            maxGain=None,
+            breakeven=breakeven,
+            requiredMovePct=self._required_move_pct(underlying_price, breakeven),
+            payoffAtTarget=payoff,
+            riskRewardRatio=None,
+            liquidityWarnings=self._strategy_liquidity_warnings([contract]),
+            ivThetaNotes=self._strategy_iv_theta_notes([contract]),
+            suitabilityNotes=self._strategy_suitability_notes(strategy, direction, risk_profile),
+            limitations=list(PHASE4_LIMITATIONS),
+            noAdviceDisclosure=self._no_advice_disclosure(),
+        )
+
+    def _debit_spread_comparison(
+        self,
+        strategy: str,
+        side: str,
+        contracts: Sequence[OptionContract],
+        target_price: float,
+        max_premium: Optional[float],
+        underlying_price: float,
+    ) -> Optional[OptionsStrategyComparison]:
+        pairs = self._debit_spread_pairs(strategy, side, contracts)
+        comparisons = []
+        for long_leg, short_leg in pairs:
+            long_mid = float(long_leg.mid if long_leg.mid is not None else long_leg.last or 0)
+            short_mid = float(short_leg.mid if short_leg.mid is not None else short_leg.last or 0)
+            net_debit = round((long_mid - short_mid) * CONTRACT_MULTIPLIER, 2)
+            if net_debit <= 0:
+                continue
+            if max_premium is not None and net_debit > max_premium:
+                continue
+            width = abs(long_leg.strike - short_leg.strike) * CONTRACT_MULTIPLIER
+            max_gain = round(width - net_debit, 2)
+            if max_gain <= 0:
+                continue
+            breakeven = (
+                round(long_leg.strike + net_debit / CONTRACT_MULTIPLIER, 2)
+                if side == "call"
+                else round(long_leg.strike - net_debit / CONTRACT_MULTIPLIER, 2)
+            )
+            payoff = self._debit_spread_payoff(side, long_leg, short_leg, target_price, net_debit)
+            comparisons.append(
+                OptionsStrategyComparison(
+                    strategyType=strategy,
+                    legs=[self._strategy_leg("buy", long_leg), self._strategy_leg("sell", short_leg)],
+                    netDebit=net_debit,
+                    maxLoss=net_debit,
+                    maxGain=max_gain,
+                    breakeven=breakeven,
+                    requiredMovePct=self._required_move_pct(underlying_price, breakeven),
+                    payoffAtTarget=payoff,
+                    riskRewardRatio=round(max_gain / net_debit, 2),
+                    liquidityWarnings=self._strategy_liquidity_warnings([long_leg, short_leg]),
+                    ivThetaNotes=self._strategy_iv_theta_notes([long_leg, short_leg]),
+                    suitabilityNotes=self._strategy_suitability_notes(strategy, "", ""),
+                    limitations=list(PHASE4_LIMITATIONS),
+                    noAdviceDisclosure=self._no_advice_disclosure(),
+                )
+            )
+        if not comparisons:
+            return None
+        return sorted(comparisons, key=lambda item: (len(item.liquidity_warnings), item.net_debit, -float(item.max_gain or 0)))[0]
+
+    @staticmethod
+    def _debit_spread_pairs(
+        strategy: str,
+        side: str,
+        contracts: Sequence[OptionContract],
+    ) -> List[tuple[OptionContract, OptionContract]]:
+        by_expiration: Dict[str, List[OptionContract]] = {}
+        for contract in contracts:
+            if contract.side == side:
+                by_expiration.setdefault(contract.expiration, []).append(contract)
+        pairs: List[tuple[OptionContract, OptionContract]] = []
+        for expiration_contracts in by_expiration.values():
+            ordered = sorted(expiration_contracts, key=lambda contract: contract.strike)
+            for index, lower in enumerate(ordered[:-1]):
+                higher = ordered[index + 1]
+                if strategy == "bull_call_spread":
+                    pairs.append((lower, higher))
+                elif strategy == "bear_put_spread":
+                    pairs.append((higher, lower))
+        return pairs
+
+    @staticmethod
+    def _strategy_leg(action: str, contract: OptionContract) -> OptionsStrategyLeg:
+        mid = float(contract.mid if contract.mid is not None else contract.last or 0)
+        return OptionsStrategyLeg(
+            action=action,
+            side=contract.side,
+            contractSymbol=contract.contract_symbol,
+            expiration=contract.expiration,
+            strike=contract.strike,
+            mid=round(mid, 4),
+            quantity=1,
+        )
+
+    @staticmethod
+    def _debit_spread_payoff(
+        side: str,
+        long_leg: OptionContract,
+        short_leg: OptionContract,
+        terminal_price: float,
+        net_debit: float,
+    ) -> float:
+        if side == "call":
+            gross = (
+                max(0.0, terminal_price - long_leg.strike)
+                - max(0.0, terminal_price - short_leg.strike)
+            ) * CONTRACT_MULTIPLIER
+        else:
+            gross = (
+                max(0.0, long_leg.strike - terminal_price)
+                - max(0.0, short_leg.strike - terminal_price)
+            ) * CONTRACT_MULTIPLIER
+        return round(gross - net_debit, 2)
+
+    @staticmethod
+    def _strategy_liquidity_warnings(contracts: Sequence[OptionContract]) -> List[str]:
+        warnings = []
+        if any(contract.liquidity_bucket == "thin" for contract in contracts):
+            warnings.append("thin_liquidity_in_one_or_more_legs")
+        if any((contract.spread_pct or 0) > 20 for contract in contracts):
+            warnings.append("wide_bid_ask_spread_in_one_or_more_legs")
+        return warnings
+
+    @staticmethod
+    def _strategy_iv_theta_notes(contracts: Sequence[OptionContract]) -> List[str]:
+        notes = ["iv_and_theta_can_change_strategy_value_before_expiration"]
+        if any((contract.implied_volatility or 0) >= 0.7 for contract in contracts):
+            notes.append("high_implied_volatility_in_one_or_more_legs")
+        return notes
+
+    @staticmethod
+    def _strategy_suitability_notes(strategy: str, direction: str, risk_profile: str) -> List[str]:
+        notes = ["comparison_uses_user_assumptions_and_fixture_mid_prices"]
+        if strategy in {"bull_call_spread", "bear_put_spread"}:
+            notes.append("defined_risk_debit_spread_caps_loss_and_gain")
+        if direction:
+            notes.append(f"direction_assumption_{direction}")
+        if risk_profile:
+            notes.append(f"risk_profile_{risk_profile}")
+        return notes
+
+    @staticmethod
+    def _no_advice_disclosure() -> str:
+        return "Analytical comparison under explicit assumptions only; not investment advice or an instruction."
 
     @classmethod
     def _scenario_prices(
