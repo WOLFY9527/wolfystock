@@ -422,7 +422,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
 
   return (
     <div
-      className="w-full min-w-0 flex flex-col gap-6 mt-6"
+      className="w-full min-w-0 flex flex-col gap-5"
       data-testid="backtest-unified-shell"
       data-module="historical"
       data-panel-mode={panelMode}
@@ -438,9 +438,9 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start w-full min-w-0">
+      <div className="grid grid-cols-1 gap-4 lg:gap-5 lg:grid-cols-12 items-start w-full min-w-0">
         <section
-          className="col-span-1 lg:col-span-3 w-full min-w-0 flex flex-col gap-6"
+          className={`col-span-1 w-full min-w-0 flex flex-col gap-4 ${isProfessionalMode ? 'lg:col-span-12' : 'lg:col-span-3'}`}
           data-testid="backtest-control-panel"
           data-panel-mode={panelMode}
         >
@@ -484,7 +484,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
           ) : null}
 
           {isProfessionalMode ? (
-            <div className="backtest-control-panel__stack" data-testid="backtest-control-panel-expanded">
+            <div className="backtest-control-panel__stack backtest-control-panel__stack--professional" data-testid="backtest-control-panel-expanded">
               {scopeSamplesSection}
               {paramsSection}
               {executeSection}
@@ -509,7 +509,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
         </section>
 
         <section
-          className="col-span-1 lg:col-span-4 w-full min-w-0 flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-[24px] p-6"
+          className={`col-span-1 w-full min-w-0 flex flex-col gap-4 bg-white/[0.02] border border-white/5 rounded-[24px] p-5 ${isProfessionalMode ? 'lg:col-span-5' : 'lg:col-span-4'}`}
           data-testid="historical-inspection-panel"
         >
           <div className="grid gap-3 min-w-0">
@@ -556,7 +556,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
           </Disclosure>
         </section>
 
-        <section className="col-span-1 lg:col-span-5 w-full min-w-0 flex flex-col gap-6" data-testid="backtest-display-board">
+        <section className={`col-span-1 w-full min-w-0 flex flex-col gap-4 ${isProfessionalMode ? 'lg:col-span-7' : 'lg:col-span-5'}`} data-testid="backtest-display-board">
           <div className="backtest-display-board__header shrink-0">
             <SectionEyebrow>显示面板</SectionEyebrow>
             <h2 className="backtest-display-board__title">结果与记录</h2>

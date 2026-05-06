@@ -6916,6 +6916,12 @@ body::after {
   gap: 1rem;
 }
 
+.backtest-control-panel__stack--professional {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
 .backtest-guided-step-helper {
   margin: -0.15rem 0 0.15rem;
   max-width: 42ch;
@@ -7011,12 +7017,16 @@ body::after {
 
 .backtest-control-panel[data-panel-mode='normal'] .backtest-control-section > .product-section-card {
   display: flex;
-  min-height: clamp(28rem, 56vh, 34rem);
+  min-height: clamp(18rem, 38vh, 24rem);
   flex-direction: column;
   gap: 0.95rem;
   padding: clamp(1.35rem, 1.55vw, 1.65rem);
   border-radius: calc(var(--theme-panel-radius-lg) + 0.1rem);
   background: linear-gradient(180deg, hsl(var(--bg-card-hsl) / 0.74), hsl(var(--bg-card-elevated-hsl) / 0.9));
+}
+
+.backtest-display-board .product-empty-state {
+  min-height: clamp(6rem, 14vh, 8.5rem);
 }
 
 .backtest-control-panel[data-panel-mode='normal'] .backtest-control-grid,
@@ -7563,6 +7573,10 @@ body::after {
   }
 
   .backtest-unified-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .backtest-control-panel__stack--professional {
     grid-template-columns: minmax(0, 1fr);
   }
 

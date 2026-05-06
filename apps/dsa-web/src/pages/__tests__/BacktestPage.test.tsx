@@ -984,7 +984,7 @@ describe('BacktestPage', () => {
     await switchToProfessionalMode();
 
     expect(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByTestId('pro-backtest-workspace')).toHaveClass('max-w-[1600px]', 'w-full', 'mx-auto');
+    expect(screen.getByTestId('pro-backtest-workspace')).toHaveClass('max-w-[1680px]', 'w-full', 'mx-auto', 'pb-12');
     expect(screen.getByTestId('pro-workflow-rail')).toHaveClass('hidden', 'lg:flex', 'lg:sticky');
     expect(screen.getByTestId('pro-mobile-step-chips')).toHaveClass('lg:hidden', 'overflow-x-auto', 'no-scrollbar');
     expect(screen.getByTestId('pro-workspace-grid')).toHaveClass('lg:grid-cols-[220px_minmax(0,1fr)_320px]');
@@ -1191,10 +1191,10 @@ describe('BacktestPage', () => {
     const displayBoard = screen.getByTestId('backtest-display-board');
     expect(screen.getByTestId('backtest-control-window')).toBeInTheDocument();
     expect(unifiedShell).not.toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
-    expect(controlPanel).toHaveClass('col-span-1', 'lg:col-span-3', 'w-full', 'min-w-0', 'flex', 'flex-col', 'gap-6');
+    expect(controlPanel).toHaveClass('col-span-1', 'lg:col-span-3', 'w-full', 'min-w-0', 'flex', 'flex-col', 'gap-4');
     expect(controlPanel).not.toHaveClass('h-full', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
-    expect(inspectionPanel).toHaveClass('col-span-1', 'lg:col-span-4', 'w-full', 'min-w-0', 'flex', 'flex-col', 'gap-6');
-    expect(displayBoard).toHaveClass('col-span-1', 'lg:col-span-5', 'w-full', 'min-w-0', 'flex', 'flex-col', 'gap-6');
+    expect(inspectionPanel).toHaveClass('col-span-1', 'lg:col-span-4', 'w-full', 'min-w-0', 'flex', 'flex-col', 'gap-4');
+    expect(displayBoard).toHaveClass('col-span-1', 'lg:col-span-5', 'w-full', 'min-w-0', 'flex', 'flex-col', 'gap-4');
     expect(displayBoard).not.toHaveClass('h-full', 'min-h-0', 'overflow-y-auto', 'no-scrollbar');
 
     expect(within(screen.getByTestId('historical-control-section-scope-samples')).getByText('范围与样本')).toBeInTheDocument();
@@ -1209,7 +1209,10 @@ describe('BacktestPage', () => {
     expect(within(displayBoard).queryByRole('button', { name: '运行历史评估' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') }));
-    expect(screen.getByTestId('backtest-control-panel-expanded')).toBeInTheDocument();
+    expect(controlPanel).toHaveClass('lg:col-span-12');
+    expect(inspectionPanel).toHaveClass('lg:col-span-5');
+    expect(displayBoard).toHaveClass('lg:col-span-7');
+    expect(screen.getByTestId('backtest-control-panel-expanded')).toHaveClass('backtest-control-panel__stack--professional');
     expect(within(controlPanel).getByTestId('historical-control-section-scope-samples')).toBeInTheDocument();
     expect(within(controlPanel).getByTestId('historical-control-section-params')).toBeInTheDocument();
     expect(within(controlPanel).getByTestId('historical-control-section-execute')).toBeInTheDocument();

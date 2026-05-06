@@ -1937,12 +1937,12 @@ const PortfolioPage: React.FC = () => {
         aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
         className={getSafariReadySurfaceClassName(
           isSafariReady,
-          'w-full flex-1 flex flex-col gap-6 min-h-0 min-w-0 bg-transparent text-white/72',
+          'w-full flex-1 flex flex-col gap-5 min-h-0 min-w-0 bg-transparent text-white/72',
         )}
       >
-        <section className="w-full max-w-[1600px] mx-auto px-4 xl:px-8 flex flex-col gap-8">
-          <div data-testid="portfolio-workspace-grid" className="flex flex-col gap-8">
-            <div data-testid="portfolio-row-macro" className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+        <section className="w-full max-w-[1680px] mx-auto px-0 flex flex-col gap-5">
+          <div data-testid="portfolio-workspace-grid" className="flex flex-col gap-5">
+            <div data-testid="portfolio-row-macro" className="grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
 		            <div
 		              data-testid="portfolio-total-assets-card"
 		              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-12 grid shrink-0 gap-4 lg:grid-cols-[minmax(260px,1.1fr)_minmax(360px,1.7fr)_minmax(220px,0.8fr)] lg:items-stretch`}
@@ -2075,7 +2075,7 @@ const PortfolioPage: React.FC = () => {
 		            </div>
             </div>
 
-            <div data-testid="portfolio-row-routing" className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+            <div data-testid="portfolio-row-routing" className="grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
 	            <section
 	              data-testid="portfolio-pnl-summary"
 	              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-4 grid gap-2 sm:grid-cols-3`}
@@ -2268,7 +2268,7 @@ const PortfolioPage: React.FC = () => {
 	            </section>
             </div>
 
-            <div data-testid="portfolio-row-execution" className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+            <div data-testid="portfolio-row-execution" className="grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
 	            {hasHoldings ? (
 	              <div
 	                data-testid="portfolio-current-holdings-panel"
@@ -2368,7 +2368,7 @@ const PortfolioPage: React.FC = () => {
 	              </div>
 	            )}
 	
-		          <section data-testid="portfolio-trade-station-card" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-5 overflow-visible xl:col-span-4 xl:order-1 xl:min-h-[300px]`}>
+		          <section data-testid="portfolio-trade-station-card" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-4 overflow-visible xl:col-span-4 xl:order-1 xl:min-h-0`}>
             <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -2761,7 +2761,7 @@ const PortfolioPage: React.FC = () => {
             ) : null}
 
             {shouldRenderFullHistory ? (
-              <section data-testid="portfolio-history-full" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 xl:col-span-8 xl:order-4 flex flex-col overflow-hidden ${currentEventCount > 5 ? 'max-h-[800px] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]' : 'max-h-none'}`}>
+              <section data-testid="portfolio-history-full" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 xl:col-span-8 xl:order-4 flex flex-col overflow-hidden ${currentEventCount > 5 ? 'max-h-[640px] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]' : 'max-h-none'}`}>
                 {historyPanelContent}
               </section>
             ) : null}

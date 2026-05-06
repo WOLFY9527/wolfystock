@@ -112,10 +112,10 @@ describe('Shell', () => {
     const logo = within(brandLink).getByRole('img', { name: 'WolfyStock logo' });
     expect(logo).toHaveAttribute('src', '/wolfystock-logo-mark.png');
     expect(logo).not.toHaveClass('invert');
-    expect(screen.getByRole('link', { name: '问股' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.chat') })).toBeInTheDocument();
     const scannerLink = screen.getByRole('link', { name: '扫描器' });
     expect(scannerLink).toHaveClass('text-sm', 'font-medium', 'text-white/50');
-    expect(screen.getByRole('link', { name: '问股' })).toHaveClass('text-sm', 'font-bold', 'text-white');
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.chat') })).toHaveClass('text-sm', 'font-bold', 'text-white');
     expect(screen.getByTestId('chat-completion-badge')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
     expect(document.querySelector('.shell-content-frame')).toHaveClass('shell-content-frame--chat', 'shell-content-frame--wide');
@@ -210,7 +210,7 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('link', { name: '问股' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.chat') })).toBeInTheDocument();
   });
 
   it('shows a confirmation dialog before logout', async () => {
@@ -411,6 +411,27 @@ describe('Shell', () => {
 
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
+  });
+
+  it('keeps admin logs on the system-control shell with a localized mobile route label', () => {
+    window.innerWidth = 390;
+
+    render(
+      <MemoryRouter initialEntries={['/admin/logs']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('shell-mobile-active-route')).toHaveTextContent(translate('zh', 'adminNav.logs'));
+    expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--system-control')).not.toBeNull();
+    expect(document.querySelector('.shell-main-column')).toHaveClass('shell-main-column--system-control', 'p-0');
+    expect(document.querySelector('.theme-page-transition')).toHaveClass('theme-page-transition--system-control');
   });
 
   it('adds a dedicated content-frame modifier for the backtest route', () => {

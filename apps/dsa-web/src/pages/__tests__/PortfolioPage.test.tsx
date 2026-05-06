@@ -483,10 +483,10 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const workspace = screen.getByTestId('portfolio-workspace-grid');
-    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-8');
-    expect(workspace).toHaveClass('flex', 'flex-col', 'gap-8');
+    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1680px]', 'mx-auto', 'px-0', 'flex', 'flex-col', 'gap-5');
+    expect(workspace).toHaveClass('flex', 'flex-col', 'gap-5');
     expect(screen.getByTestId('portfolio-bento-page')).toHaveAttribute('data-bento-surface', 'true');
-    expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6', 'min-h-0');
+    expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-5', 'min-h-0');
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('max-w-[1920px]', 'mx-auto', 'px-4', 'py-2');
     expect(screen.queryByTestId('portfolio-bento-hero')).not.toBeInTheDocument();
@@ -615,6 +615,7 @@ describe('PortfolioPage FX refresh', () => {
     const tradeStation = screen.getByTestId('portfolio-trade-station-card');
     expect(within(tradeStation).getByRole('button', { name: '交易' }).className).toContain('bg-white/10');
     expect(screen.getByLabelText(/交易账户|TRADE ACCOUNT/)).toHaveValue('1');
+    expect(screen.getByTestId('portfolio-trade-station-card')).toHaveClass('gap-4', 'xl:min-h-0');
     expect(within(tradeStation).getByRole('button', { name: translate('zh', 'portfolio.submitTrade') })).not.toBeDisabled();
   });
 
