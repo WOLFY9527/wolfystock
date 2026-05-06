@@ -18,6 +18,22 @@ changes, portfolio accounting changes, scanner/backtest changes, provider
 runtime changes, AI/LLM routing changes, notification routing changes, DuckDB
 changes, or data mutations.
 
+Implementation note, 2026-05-06:
+
+- The read-only Admin Portfolio Visibility backend API has landed for
+  `GET /api/v1/admin/users/{user_id}/portfolio-summary`,
+  `GET /api/v1/admin/users/{user_id}/holdings`,
+  `GET /api/v1/admin/users/{user_id}/portfolio-activity`, and
+  `GET /api/v1/admin/users/{user_id}/portfolio/accounts/{account_id}`.
+- The implementation uses safe allowlist projections, target-user portfolio
+  ownership joins, masked broker account handles, bounded pagination, and
+  best-effort admin-governance audit events via existing execution-log admin
+  action patterns.
+- It does not add frontend UI, security controls, correction flows, portfolio
+  accounting changes, broker sync/import commits, FX refreshes,
+  scanner/backtest/provider/MarketCache/AI/notification/DuckDB behavior
+  changes, raw broker payload exposure, or raw credential/session exposure.
+
 The target product shape remains a controlled, least-privilege, audited admin
 workspace. It must not become a raw database browser and must never reveal
 plaintext passwords, password hashes, session IDs, cookies, tokens, API keys,
@@ -1042,4 +1058,3 @@ Audit:
    audit success/failure behavior, portfolio read-only behavior, security
    guardrails, and absence of secrets across API responses, audit records, and
    frontend surfaces.
-
