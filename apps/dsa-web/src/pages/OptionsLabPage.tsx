@@ -9,6 +9,9 @@ import {
   type OptionsExpiration,
   type OptionsExpirationsResponse,
   type OptionsRiskProfile,
+  type OptionsStrategyCompareResponse,
+  type OptionsStrategyComparison,
+  type OptionsStrategyType,
   type OptionsUnderlyingSummaryResponse,
 } from '../api/optionsLab';
 import { cn } from '../utils/cn';
@@ -20,6 +23,8 @@ type LoadState = {
   summary: OptionsUnderlyingSummaryResponse | null;
   expirations: OptionsExpirationsResponse | null;
   chain: OptionsChainResponse | null;
+  comparison: OptionsStrategyCompareResponse | null;
+  comparisonError: string | null;
 };
 
 const DIRECTION_OPTIONS: Array<{ value: OptionsDirection; label: string }> = [
@@ -40,7 +45,7 @@ const RISK_WARNINGS = [
   '评分表示情景假设下的风险收益结构，不代表确定收益。',
   'IV 偏高时，即使方向判断正确，合约仍可能亏损。',
   '价差过宽或 OI 较低的合约可能难以成交或滑点较大。',
-  '本模块不提供下单或保证性收益建议。',
+  '本模块不提供交易执行或收益承诺。',
 ];
 
 const EMPTY_CONTRACTS: OptionContract[] = [];
@@ -69,9 +74,53 @@ function limitationLabel(value: string): string {
   if (value === 'provider_validation_required') return 'Provider 待验证';
   if (value === 'mocked_frontend_shell') return '前端 Fixture';
   if (value === 'mocked_chain') return '模拟链';
+  if (value === 'mock') return '本地模拟';
+  if (value === 'fixture') return '本地 Fixture';
   if (value === 'wide_spread_watch') return '价差观察';
   if (value === 'low_oi_watch') return 'OI 偏低';
+  if (value === 'fixture_backed_defined_risk_only') return '本地定义风险模型';
+  if (value === 'analytical_only_not_advice') return '仅供情景分析';
+  if (value === 'thin_liquidity_in_one_or_more_legs') return '至少一腿流动性偏薄';
+  if (value === 'wide_bid_ask_spread_in_one_or_more_legs') return '至少一腿买卖价差偏宽';
+  if (value === 'iv_and_theta_can_change_strategy_value_before_expiration') return 'IV 与 Theta 会改变到期前估值';
+  if (value === 'high_implied_volatility_in_one_or_more_legs') return '至少一腿隐含波动率偏高';
+  if (value === 'comparison_uses_user_assumptions_and_fixture_mid_prices') return '使用用户假设与中间价估算';
+  if (value === 'defined_risk_debit_spread_caps_loss_and_gain') return '借方价差同时限制亏损与收益';
+  if (value === 'direction_assumption_bullish') return '方向假设：看涨';
+  if (value === 'direction_assumption_bearish') return '方向假设：看跌';
+  if (value === 'direction_assumption_neutral') return '方向假设：中性';
+  if (value === 'direction_assumption_volatility') return '方向假设：波动';
+  if (value === 'risk_profile_conservative') return '风险偏好：保守';
+  if (value === 'risk_profile_balanced') return '风险偏好：均衡';
+  if (value === 'risk_profile_aggressive') return '风险偏好：进取';
   return value.replace(/_/g, ' ');
+}
+
+function strategyLabel(value: OptionsStrategyType): string {
+  const labels: Record<OptionsStrategyType, string> = {
+    long_call: 'Long Call',
+    long_put: 'Long Put',
+    bull_call_spread: 'Bull Call Spread',
+    bear_put_spread: 'Bear Put Spread',
+  };
+  return labels[value];
+}
+
+function strategyChineseLabel(value: OptionsStrategyType): string {
+  const labels: Record<OptionsStrategyType, string> = {
+    long_call: '看涨期权多头',
+    long_put: '看跌期权多头',
+    bull_call_spread: '牛市看涨价差',
+    bear_put_spread: '熊市看跌价差',
+  };
+  return labels[value];
+}
+
+function metricTone(value?: number | null): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'text-white/75';
+  if (value > 0) return 'text-emerald-300';
+  if (value < 0) return 'text-rose-300';
+  return 'text-white/75';
 }
 
 const Pill: React.FC<{ children: React.ReactNode; tone?: 'neutral' | 'info' | 'warn' | 'good' }> = ({ children, tone = 'neutral' }) => {
@@ -322,6 +371,111 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
   </section>
 );
 
+const StrategyMetric: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-white' }) => (
+  <div className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3">
+    <p className={labelClass}>{label}</p>
+    <p className={cn('mt-2 truncate font-mono text-lg font-semibold', tone)}>{value}</p>
+  </div>
+);
+
+const StrategyCard: React.FC<{ strategy: OptionsStrategyComparison }> = ({ strategy }) => {
+  const caveats = [...strategy.liquidityWarnings, ...strategy.ivThetaNotes];
+  return (
+    <article className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-4 transition-all hover:border-white/10 hover:bg-white/[0.03]">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-mono text-xs font-semibold uppercase tracking-[0.16em] text-cyan-100/72">{strategyLabel(strategy.strategyType)}</p>
+          <h3 className="mt-1 text-base font-semibold text-white">{strategyChineseLabel(strategy.strategyType)}</h3>
+        </div>
+        <Pill tone={strategy.maxGain == null ? 'info' : 'good'}>{strategy.maxGain == null ? '收益开放' : '定义风险'}</Pill>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <StrategyMetric label="净支出" value={money(strategy.netDebit)} />
+        <StrategyMetric label="最大亏损" value={money(strategy.maxLoss)} tone="text-rose-300" />
+        <StrategyMetric label="最大收益" value={strategy.maxGain == null ? '不封顶' : money(strategy.maxGain)} tone="text-emerald-300" />
+        <StrategyMetric label="盈亏平衡" value={money(strategy.breakeven)} />
+        <StrategyMetric label="目标价格收益" value={money(strategy.payoffAtTarget)} tone={metricTone(strategy.payoffAtTarget)} />
+        <StrategyMetric label="风险收益比" value={strategy.riskRewardRatio == null ? '--' : `${formatNumber(strategy.riskRewardRatio, 2)}x`} />
+      </div>
+      <div className="mt-4 grid gap-2">
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-3">
+          <p className={labelClass}>流动性提示</p>
+          <p className="mt-2 text-sm leading-6 text-white/62">
+            {strategy.liquidityWarnings.length ? strategy.liquidityWarnings.map(limitationLabel).join(' · ') : '未触发额外流动性提示'}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-3">
+          <p className={labelClass}>波动率 / 时间价值提示</p>
+          <p className="mt-2 text-sm leading-6 text-white/62">
+            {strategy.ivThetaNotes.length ? strategy.ivThetaNotes.map(limitationLabel).join(' · ') : '暂无额外 IV / Theta 提示'}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {strategy.suitabilityNotes.slice(0, 3).map((note) => (
+            <Pill key={note}>{limitationLabel(note)}</Pill>
+          ))}
+          {caveats.length > 0 ? <Pill tone="warn">需复核假设</Pill> : null}
+        </div>
+      </div>
+    </article>
+  );
+};
+
+const StrategyComparisonPanel: React.FC<{
+  comparison: OptionsStrategyCompareResponse | null;
+  loading: boolean;
+  error: string | null;
+  chain: OptionsChainResponse | null;
+}> = ({ comparison, loading, error, chain }) => {
+  const strategies = comparison?.strategies || [];
+  const freshness = chain?.underlying?.freshness || (comparison?.metadata.fixtureBacked ? 'fixture' : null);
+  return (
+    <section className={cn(panelClass, 'xl:col-span-12')} data-testid="options-lab-strategy-comparison">
+      <SectionHeader eyebrow="Phase 4" title="策略对比" icon={Layers3}>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Pill tone="info">{freshness ? `数据状态：${limitationLabel(String(freshness))}` : '数据状态：等待快照'}</Pill>
+          <Pill tone="warn">仅供情景分析，不构成交易建议</Pill>
+        </div>
+      </SectionHeader>
+      <p className="mt-4 rounded-2xl border border-cyan-300/10 bg-cyan-400/8 px-4 py-3 text-sm leading-6 text-cyan-100/78">
+        仅供情景分析，不构成交易建议。对比使用当前标的、到期日与目标价格假设，展示定义风险结构下的权利金、盈亏边界与风险收益关系。
+      </p>
+      {loading ? (
+        <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 font-mono text-sm text-cyan-100">正在计算策略对比...</p>
+      ) : null}
+      {!loading && error ? (
+        <p className="mt-5 rounded-2xl border border-rose-300/20 bg-rose-500/10 px-4 py-4 text-sm text-rose-100">{error}</p>
+      ) : null}
+      {!loading && !error && strategies.length === 0 ? (
+        <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/45">当前假设下暂无可比较策略。</p>
+      ) : null}
+      {!loading && !error && strategies.length > 0 ? (
+        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-4">
+          {strategies.map((strategy) => (
+            <StrategyCard key={strategy.strategyType} strategy={strategy} />
+          ))}
+        </div>
+      ) : null}
+      <details data-testid="options-lab-strategy-developer-details" className="mt-5 rounded-2xl border border-white/5 bg-black/20 p-4 text-sm text-white/55">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/68">
+          <span className="inline-flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-cyan-200" aria-hidden="true" />
+            开发者字段 / 新鲜度
+          </span>
+          <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
+        </summary>
+        <div className="mt-4 grid gap-2 text-xs leading-5 text-white/45">
+          <p>策略引擎：{comparison?.metadata.strategyEngine || '--'}</p>
+          <p>本地数据：{comparison?.metadata.fixtureBacked === false ? '未确认' : '是'}</p>
+          <p>忽略强制刷新：{comparison?.metadata.forceRefreshIgnored ? '是' : '否'}</p>
+          <p>假设：{comparison ? JSON.stringify(comparison.assumptions) : '--'}</p>
+          <p>限制：{(comparison?.limitations || []).map(limitationLabel).join(' · ') || '--'}</p>
+        </div>
+      </details>
+    </section>
+  );
+};
+
 const PlaceholderPanel: React.FC<{
   title: string;
   eyebrow: string;
@@ -385,6 +539,8 @@ const OptionsLabPage: React.FC = () => {
     summary: null,
     expirations: null,
     chain: null,
+    comparison: null,
+    comparisonError: null,
   });
 
   useEffect(() => {
@@ -392,6 +548,12 @@ const OptionsLabPage: React.FC = () => {
 
     async function load() {
       try {
+        setState((current) => ({
+          ...current,
+          loading: true,
+          error: null,
+          comparisonError: null,
+        }));
         const [summary, expirations] = await Promise.all([
           optionsLabApi.getUnderlyingSummary(activeSymbol),
           optionsLabApi.getExpirations(activeSymbol),
@@ -402,7 +564,39 @@ const OptionsLabPage: React.FC = () => {
         const chain = await optionsLabApi.getOptionChain(activeSymbol, nextExpiration);
         if (ignored) return;
         setSelectedExpiration(nextExpiration);
-        setState({ loading: false, error: null, summary, expirations, chain });
+        setState((current) => ({
+          ...current,
+          loading: false,
+          error: null,
+          summary,
+          expirations,
+          chain,
+        }));
+        try {
+          const comparison = await optionsLabApi.compareStrategies({
+            symbol: activeSymbol,
+            direction,
+            targetPrice: Number(targetPrice) || 65,
+            targetDate: targetDate || nextExpiration,
+            maxPremium: Number(riskBudget) > 0 ? Number(riskBudget) : undefined,
+            riskProfile,
+            strategies: ['long_call', 'long_put', 'bull_call_spread', 'bear_put_spread'],
+            forceRefresh: true,
+          });
+          if (ignored) return;
+          setState((current) => ({
+            ...current,
+            comparison,
+            comparisonError: null,
+          }));
+        } catch {
+          if (ignored) return;
+          setState((current) => ({
+            ...current,
+            comparison: null,
+            comparisonError: '策略对比暂不可用。请稍后重试或调整假设。',
+          }));
+        }
       } catch {
         if (ignored) return;
         setState((current) => ({
@@ -410,6 +604,8 @@ const OptionsLabPage: React.FC = () => {
           loading: false,
           error: '期权链暂不可用。请稍后重试或调整标的。',
           chain: null,
+          comparison: null,
+          comparisonError: null,
         }));
       }
     }
@@ -419,7 +615,7 @@ const OptionsLabPage: React.FC = () => {
     return () => {
       ignored = true;
     };
-  }, [activeSymbol, reloadKey, selectedExpiration]);
+  }, [activeSymbol, direction, reloadKey, riskBudget, riskProfile, selectedExpiration, targetDate, targetPrice]);
 
   const handleSubmit = useCallback(() => {
     const normalized = symbolInput.trim().toUpperCase() || 'TEM';
@@ -442,22 +638,21 @@ const OptionsLabPage: React.FC = () => {
   const puts = state.chain?.puts || EMPTY_CONTRACTS;
   const hasChainRows = calls.length > 0 || puts.length > 0;
   const topCall = useMemo(() => calls[0], [calls]);
-  const topPut = useMemo(() => puts[0], [puts]);
 
   return (
     <main className="min-h-screen w-full bg-[#050505] px-4 py-5 text-white md:px-8 xl:px-10">
       <div className="mx-auto flex w-full max-w-[1720px] flex-col gap-5">
         <header className="flex flex-col gap-4 rounded-[24px] border border-white/5 bg-white/[0.02] p-5 backdrop-blur-md md:flex-row md:items-end md:justify-between md:p-6">
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-cyan-200/70">Options Lab Phase 2</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-cyan-200/70">Options Lab Phase 4</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-normal text-white md:text-5xl">期权实验室</h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-white/58">
-              前端只读实验台：用模拟期权链展示情景假设、合约表、排序占位、策略比较占位与风险披露，不接入交易或实时供应商调用。
+              前端只读实验台：用模拟期权链展示情景假设、合约表、策略对比与风险披露，不接入交易或实时供应商调用。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Pill tone="good">Read-only</Pill>
-            <Pill tone="info">Mocked Chain</Pill>
+            <Pill tone="good">只读分析</Pill>
+            <Pill tone="info">本地情景链</Pill>
             <Pill tone="warn">分析支持 / 不构成投资建议</Pill>
           </div>
         </header>
@@ -506,18 +701,12 @@ const OptionsLabPage: React.FC = () => {
           </section>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           <PlaceholderPanel
             eyebrow="Ranking"
             title="候选合约排序"
             icon={CircleDollarSign}
             body={topCall ? `当前仅展示占位排序：${topCall.contractSymbol} 的流动性与价差结构较清晰；后续分析仍需使用显式假设与风险预算。` : '等待合约链后展示情景排序占位。'}
-          />
-          <PlaceholderPanel
-            eyebrow="Strategy"
-            title="策略比较"
-            icon={Layers3}
-            body={topCall && topPut ? `比较长 Call、长 Put 与定义风险价差结构。当前占位参考 ${topCall.contractSymbol} / ${topPut.contractSymbol}，不提供执行建议。` : '等待合约链后展示策略比较占位。'}
           />
           <PlaceholderPanel
             eyebrow="Scenario"
@@ -526,6 +715,8 @@ const OptionsLabPage: React.FC = () => {
             body={`目标价 ${targetPrice || '--'}，目标日 ${targetDate || '--'}，预算 ${riskBudget || '--'}。后续 payoff 图应仅表达假设下结构，不表达确定收益。`}
           />
         </div>
+
+        <StrategyComparisonPanel comparison={state.comparison} loading={state.loading} error={state.comparisonError} chain={state.chain} />
 
         <RiskWarnings />
         <DeveloperDetails state={state} />
