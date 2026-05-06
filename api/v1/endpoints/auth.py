@@ -786,6 +786,12 @@ async def auth_login(request: Request, body: LoginRequest):
         ensure_bootstrap_admin_user_password_hash()
         if user_row is None:
             user_row = repo.ensure_bootstrap_admin_user()
+        if user_row is not None and not getattr(user_row, "is_active", True):
+            record_login_failure(ip)
+            return JSONResponse(
+                status_code=403,
+                content={"error": "user_inactive", "message": "该账户已停用"},
+            )
         if not has_stored_password():
             if not confirm:
                 return JSONResponse(

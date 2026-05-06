@@ -33,6 +33,19 @@ Implementation note, 2026-05-06:
   accounting changes, broker sync/import commits, FX refreshes,
   scanner/backtest/provider/MarketCache/AI/notification/DuckDB behavior
   changes, raw broker payload exposure, or raw credential/session exposure.
+- The limited Admin Security Controls Phase S1 backend API has landed for
+  `POST /api/v1/admin/users/{user_id}/disable`,
+  `POST /api/v1/admin/users/{user_id}/enable`, and
+  `POST /api/v1/admin/users/{user_id}/revoke-sessions`.
+- Phase S1 uses existing `AppUser.is_active`, app-user session revocation,
+  `require_admin_user()`, typed confirmations, required reasons,
+  self-disable blocking, last-active-admin blocking, and sanitized
+  admin-governance audit events. Responses return only safe action status and
+  `sessionsRevoked` counts.
+- Phase S1 does not implement reset-password, force-password-change, unlock,
+  failed-login/lockout models, role/capability migration, security frontend UI,
+  password reset token delivery, new migrations, raw session exposure, or
+  credential/hash/token exposure.
 
 The target product shape remains a controlled, least-privilege, audited admin
 workspace. It must not become a raw database browser and must never reveal
