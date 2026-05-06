@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -163,6 +164,10 @@ def _guest_actor(guest_session_id: str, query_id: str) -> Dict[str, Any]:
     }
 
 
+def _guest_bucket_hash(guest_session_id: str) -> str:
+    return hashlib.sha256(f"wolfystock-guest:{guest_session_id}".encode("utf-8")).hexdigest()
+
+
 # ============================================================
 # POST /analyze - 触发股票分析
 # ============================================================
@@ -213,6 +218,7 @@ def preview_analysis(
             force_refresh=request.force_refresh,
             query_id=query_id,
             send_notification=False,
+            guest_bucket_hash=_guest_bucket_hash(guest_session_id),
             persist_history=False,
         )
         if result is None:

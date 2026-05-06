@@ -125,6 +125,8 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
         self.assertFalse(kwargs["persist_history"])
         self.assertTrue(kwargs["query_id"].startswith("guest:"))
         self.assertTrue(self.client.cookies.get("wolfystock_guest_session"))
+        self.assertRegex(kwargs["guest_bucket_hash"], r"^[a-f0-9]{64}$")
+        self.assertNotIn(str(self.client.cookies.get("wolfystock_guest_session")), kwargs["guest_bucket_hash"])
 
         payload = response.json()
         self.assertEqual(payload["preview_scope"], "guest")

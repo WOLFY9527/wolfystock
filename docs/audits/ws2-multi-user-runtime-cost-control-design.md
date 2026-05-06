@@ -82,6 +82,14 @@ WS2-R0 is design only. It does not implement Redis, Celery, RQ, workers, migrati
 - The importer validates required provider/model/effective date fields, rejects negative or invalid prices, normalizes provider/model labels, upserts by stable `policy_key` or provider/model/effective date, sanitizes metadata, and keeps historical effective-dated policies unless superseded deactivation is explicitly requested.
 - Official price changes require a reviewed local update using the source/effective date fields. Future work remains separate: admin UI for pricing policies, scheduled price review reminders, and pricing verification audit evidence.
 
+## WS2-R4D owner context propagation note
+
+- LLM cost ledger owner context now propagates through authenticated sync analysis, async analysis task execution, agent analysis mode, authenticated agent chat/stream execution, scanner AI interpretation, and guest preview analysis.
+- Authenticated paths pass `owner_user_id` from the route boundary. Guest preview passes only a hashed guest bucket derived from the guest cookie; raw guest session IDs are not written to the cost ledger.
+- Legacy/system calls that invoke `persist_llm_usage(...)` without owner context continue to write null-owner rows for backward compatibility. Current known null-owner paths include CLI/scheduled/system analysis and free-form analyzer text generation outside authenticated route context.
+- This pass did not change LLM prompts, model routing/order, provider selection, fallback, retry, integrity retry, quota enforcement, scanner ranking, or provider/cache behavior.
+- No raw prompts, raw provider payloads, credentials, cookies, raw session IDs, stack traces, or secret-like metadata are stored by the owner propagation path.
+
 ## 2. Current deployment assumptions
 
 - API single-process assumption: `docs/DEPLOY.md` and `docs/deploy-webui-cloud.md` currently state that `/api/v1/analysis/*` task queue and SSE state are process-local and should stay single-process unless sticky routing is intentionally provided.

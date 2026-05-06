@@ -1033,6 +1033,9 @@ class GeminiAnalyzer:
         *,
         system_prompt: Optional[str] = None,
         call_type: str = "market_review",
+        owner_user_id: Optional[str] = None,
+        guest_bucket_hash: Optional[str] = None,
+        route_family: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Public text generation entry with model/usage diagnostics."""
         try:
@@ -1064,7 +1067,14 @@ class GeminiAnalyzer:
 
             if not text:
                 return None
-            persist_llm_usage(usage, model_used, call_type=call_type)
+            persist_llm_usage(
+                usage,
+                model_used,
+                call_type=call_type,
+                owner_user_id=owner_user_id,
+                guest_bucket_hash=guest_bucket_hash,
+                route_family=route_family or call_type,
+            )
             emit_llm_event(
                 "llm_usage_persisted",
                 call_type=call_type,
@@ -1088,7 +1098,11 @@ class GeminiAnalyzer:
     def analyze(
         self, 
         context: Dict[str, Any],
-        news_context: Optional[str] = None
+        news_context: Optional[str] = None,
+        *,
+        owner_user_id: Optional[str] = None,
+        guest_bucket_hash: Optional[str] = None,
+        route_family: str = "analysis",
     ) -> AnalysisResult:
         """
         分析单只股票
@@ -1238,7 +1252,15 @@ class GeminiAnalyzer:
                     )
                     break
 
-            persist_llm_usage(llm_usage, model_used, call_type="analysis", stock_code=code)
+            persist_llm_usage(
+                llm_usage,
+                model_used,
+                call_type="analysis",
+                stock_code=code,
+                owner_user_id=owner_user_id,
+                guest_bucket_hash=guest_bucket_hash,
+                route_family=route_family,
+            )
             emit_llm_event(
                 "llm_usage_persisted",
                 call_type="analysis",

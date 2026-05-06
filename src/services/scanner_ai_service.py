@@ -51,9 +51,13 @@ class ScannerAiInterpretationService:
         *,
         config: Optional[Any] = None,
         analyzer_factory: Optional[Callable[[], Any]] = None,
+        owner_user_id: Optional[str] = None,
+        guest_bucket_hash: Optional[str] = None,
     ) -> None:
         self.config = config or get_config()
         self._analyzer_factory = analyzer_factory
+        self.owner_user_id = owner_user_id
+        self.guest_bucket_hash = guest_bucket_hash
         self._analyzer: Optional[Any] = None
 
     def interpret_shortlist(
@@ -388,6 +392,9 @@ class ScannerAiInterpretationService:
                 temperature=temperature,
                 system_prompt=self.SYSTEM_PROMPT,
                 call_type="scanner_interpretation",
+                owner_user_id=self.owner_user_id,
+                guest_bucket_hash=self.guest_bucket_hash,
+                route_family="scanner_ai",
             )
             if isinstance(response, dict) and self._clean_text(response.get("text")):
                 return response

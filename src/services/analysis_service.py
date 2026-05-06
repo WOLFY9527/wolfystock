@@ -62,6 +62,7 @@ class AnalysisService:
         send_notification: bool = True,
         progress_callback: Optional[Callable[[str, int, str], None]] = None,
         owner_id: Optional[str] = None,
+        guest_bucket_hash: Optional[str] = None,
         persist_history: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """
@@ -100,6 +101,7 @@ class AnalysisService:
                 query_id=query_id,
                 query_source="api",
                 owner_id=owner_id,
+                guest_bucket_hash=guest_bucket_hash,
                 persist_history=persist_history,
             )
             

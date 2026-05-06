@@ -97,6 +97,7 @@ class StockAnalysisPipeline:
         query_source: Optional[str] = None,
         save_context_snapshot: Optional[bool] = None,
         owner_id: Optional[str] = None,
+        guest_bucket_hash: Optional[str] = None,
         persist_history: bool = True,
     ):
         """
@@ -112,6 +113,7 @@ class StockAnalysisPipeline:
         self.query_id = query_id
         self.query_source = self._resolve_query_source(query_source)
         self.owner_id = owner_id
+        self.guest_bucket_hash = guest_bucket_hash
         self.persist_history = bool(persist_history)
         self.save_context_snapshot = (
             self.config.save_context_snapshot if save_context_snapshot is None else save_context_snapshot
@@ -817,7 +819,13 @@ class StockAnalysisPipeline:
             )
 
             # Step 7: 调用 AI 分析（传入增强的上下文和新闻）
-            result = self.analyzer.analyze(enhanced_context, news_context=news_context)
+            result = self.analyzer.analyze(
+                enhanced_context,
+                news_context=news_context,
+                owner_user_id=self.owner_id,
+                guest_bucket_hash=self.guest_bucket_hash,
+                route_family="guest_preview" if self.guest_bucket_hash else "analysis",
+            )
             if result:
                 ai_attempt_chain = getattr(result, "ai_attempt_chain", [])
                 diagnostics["ai_attempt_chain"] = ai_attempt_chain if isinstance(ai_attempt_chain, list) else []
@@ -3543,6 +3551,10 @@ class StockAnalysisPipeline:
                 "report_language": report_language,
                 "fundamental_context": fundamental_context,
             }
+            if self.owner_id:
+                initial_context["owner_id"] = self.owner_id
+            if self.guest_bucket_hash:
+                initial_context["guest_bucket_hash"] = self.guest_bucket_hash
             
             if realtime_quote:
                 initial_context["realtime_quote"] = self._safe_to_dict(realtime_quote)

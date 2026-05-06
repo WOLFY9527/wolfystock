@@ -338,6 +338,8 @@ def run_agent_loop(
     thinking_labels: Optional[Dict[str, str]] = None,
     max_wall_clock_seconds: Optional[float] = None,
     tool_call_timeout_seconds: Optional[float] = None,
+    owner_user_id: Optional[str] = None,
+    guest_bucket_hash: Optional[str] = None,
 ) -> RunLoopResult:
     """Execute the ReAct LLM ↔ tool loop.
 
@@ -424,7 +426,14 @@ def run_agent_loop(
 
         model_for_usage = m or response.provider
         if model_for_usage and model_for_usage != "error" and response.usage:
-            _persist_usage(response.usage, model_for_usage, call_type="agent")
+            _persist_usage(
+                response.usage,
+                model_for_usage,
+                call_type="agent",
+                owner_user_id=owner_user_id,
+                guest_bucket_hash=guest_bucket_hash,
+                route_family="guest_preview" if guest_bucket_hash else "agent",
+            )
 
         if response.tool_calls:
             # ---- tool execution branch ----

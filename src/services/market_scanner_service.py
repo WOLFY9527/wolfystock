@@ -393,8 +393,8 @@ class MarketScannerService:
         self.data_manager = data_manager or DataFetcherManager()
         self.repo = ScannerRepository(self.db)
         self.stock_repo = StockRepository(self.db)
-        self.ai_service = ai_interpretation_service or ScannerAiInterpretationService()
         self.owner_id = owner_id
+        self.ai_service = ai_interpretation_service or ScannerAiInterpretationService(owner_user_id=owner_id)
         self.include_all_owners = bool(include_all_owners)
         configured_path = local_universe_cache_path or getattr(
             get_config(),

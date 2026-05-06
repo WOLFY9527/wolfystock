@@ -347,7 +347,15 @@ class AgentExecutor:
             {"role": "user", "content": self._build_user_message(task, context)},
         ]
 
-        return self._run_loop(messages, tool_decls, parse_dashboard=True)
+        owner_id = str((context or {}).get("owner_id") or "").strip() or None
+        guest_bucket_hash = str((context or {}).get("guest_bucket_hash") or "").strip() or None
+        return self._run_loop(
+            messages,
+            tool_decls,
+            parse_dashboard=True,
+            owner_user_id=owner_id,
+            guest_bucket_hash=guest_bucket_hash,
+        )
 
     def chat(
         self,
@@ -460,7 +468,13 @@ class AgentExecutor:
         else:
             conversation_manager.add_message(session_id, "user", message, owner_id=owner_id)
 
-        result = self._run_loop(messages, tool_decls, parse_dashboard=False, progress_callback=progress_callback)
+        result = self._run_loop(
+            messages,
+            tool_decls,
+            parse_dashboard=False,
+            progress_callback=progress_callback,
+            owner_user_id=owner_id,
+        )
 
         # Persist assistant reply (or error note) for context continuity
         if result.success:
@@ -477,7 +491,16 @@ class AgentExecutor:
 
         return result
 
-    def _run_loop(self, messages: List[Dict[str, Any]], tool_decls: List[Dict[str, Any]], parse_dashboard: bool, progress_callback: Optional[Callable] = None) -> AgentResult:
+    def _run_loop(
+        self,
+        messages: List[Dict[str, Any]],
+        tool_decls: List[Dict[str, Any]],
+        parse_dashboard: bool,
+        progress_callback: Optional[Callable] = None,
+        *,
+        owner_user_id: Optional[str] = None,
+        guest_bucket_hash: Optional[str] = None,
+    ) -> AgentResult:
         """Delegate to the shared runner and adapt the result.
 
         This preserves the exact same observable behaviour as the original
@@ -491,6 +514,8 @@ class AgentExecutor:
             max_steps=self.max_steps,
             progress_callback=progress_callback,
             max_wall_clock_seconds=self.timeout_seconds,
+            owner_user_id=owner_user_id,
+            guest_bucket_hash=guest_bucket_hash,
         )
 
         model_str = loop_result.model
