@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, AlertTriangle, BarChart3, DatabaseZap, Radar, ShieldCheck } from 'lucide-react';
+import { Activity, AlertTriangle, BarChart3, DatabaseZap, Gauge, Radar, ShieldCheck } from 'lucide-react';
 import {
   adminCostApi,
   type AdminCostArea,
@@ -10,9 +10,13 @@ import {
   type AdminCostSummaryParams,
   type AdminCostSummaryResponse,
   type AdminCostWindowKey,
+  type QuotaDryRunOperation,
+  type QuotaDryRunResponse,
+  type QuotaEnforcementMode,
 } from '../api/adminCost';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { ApiErrorAlert, Badge, Disclosure, GlassCard, Select } from '../components/common';
+import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
 import { formatDateTime, formatNumber, formatPercent } from '../utils/format';
 
@@ -20,6 +24,12 @@ type LoadState = {
   loading: boolean;
   error: ParsedApiError | null;
   data: AdminCostSummaryResponse | null;
+};
+
+type QuotaDryRunState = {
+  loading: boolean;
+  error: ParsedApiError | null;
+  data: QuotaDryRunResponse | null;
 };
 
 const WINDOW_OPTIONS: Array<{ value: AdminCostWindowKey; label: string }> = [
@@ -43,6 +53,27 @@ const AREA_OPTIONS: Array<{ value: AdminCostArea; label: string }> = [
 ];
 
 const LIMIT_OPTIONS = [25, 50, 100, 200];
+
+const ROUTE_FAMILY_OPTIONS = [
+  { value: 'analysis', label: '分析' },
+  { value: 'guest_preview', label: '游客预览' },
+  { value: 'scanner_ai', label: 'Scanner AI' },
+  { value: 'agent_chat', label: 'Agent Chat' },
+  { value: 'provider_market_data', label: 'Provider 数据' },
+];
+
+const QUOTA_OPERATION_OPTIONS: Array<{ value: QuotaDryRunOperation; label: string }> = [
+  { value: 'estimate', label: 'estimate' },
+  { value: 'reserve', label: 'reserve' },
+  { value: 'consume', label: 'consume' },
+  { value: 'release', label: 'release' },
+];
+
+const ENFORCEMENT_OPTIONS: Array<{ value: QuotaEnforcementMode; label: string }> = [
+  { value: 'disabled', label: 'disabled' },
+  { value: 'dry_run', label: 'dry_run' },
+  { value: 'enabled', label: 'enabled 策略模拟' },
+];
 
 function formatDate(value?: string | null): string {
   return value ? formatDateTime(value) : '--';
@@ -95,6 +126,37 @@ function sanitizedError(error: unknown): ParsedApiError {
     message: parsed.message || '成本观测快照暂不可用。',
     rawMessage: '',
   };
+}
+
+function sanitizedQuotaError(error: unknown): ParsedApiError {
+  const parsed = getParsedApiError(error);
+  return {
+    ...parsed,
+    title: '读取配额诊断失败',
+    message: parsed.status === 403
+      ? '当前账号没有成本观测权限。'
+      : parsed.isTimeoutError
+      ? '配额诊断请求超时，请稍后重试。'
+      : parsed.message || '配额诊断暂不可用。',
+    rawMessage: '',
+    details: undefined,
+  };
+}
+
+function clampTokenEstimate(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.min(Math.max(Math.trunc(parsed), 0), 2_000_000);
+}
+
+function enforcementLabel(value?: QuotaEnforcementMode | string): string {
+  if (value === 'disabled') return 'disabled';
+  if (value === 'enabled') return 'enabled 策略模拟';
+  return 'dry_run';
+}
+
+function reasonLabel(value?: string | null): string {
+  return value && value.trim() ? value.trim().slice(0, 96) : 'none';
 }
 
 const ReadOnlyBadges: React.FC<{ data?: AdminCostSummaryResponse | null }> = ({ data }) => {
@@ -304,6 +366,183 @@ const DeveloperDetails: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }
   </Disclosure>
 );
 
+const QuotaDryRunPanel: React.FC = () => {
+  const { canReadCostObservability } = useProductSurface();
+  const [routeFamily, setRouteFamily] = useState('analysis');
+  const [tokenEstimateInput, setTokenEstimateInput] = useState('4000');
+  const [operation, setOperation] = useState<QuotaDryRunOperation>('estimate');
+  const [enforcementMode, setEnforcementMode] = useState<QuotaEnforcementMode>('dry_run');
+  const [reservationId, setReservationId] = useState('');
+  const [state, setState] = useState<QuotaDryRunState>({ loading: false, error: null, data: null });
+
+  useEffect(() => {
+    if (!canReadCostObservability) {
+      return;
+    }
+    let alive = true;
+    void adminCostApi.runQuotaDryRun({
+      routeFamily,
+      tokenEstimate: clampTokenEstimate(tokenEstimateInput),
+      operation: 'estimate',
+      enforcementMode,
+    })
+      .then((data) => {
+        if (alive) setState({ loading: false, error: null, data });
+      })
+      .catch((error) => {
+        if (alive) setState({ loading: false, error: sanitizedQuotaError(error), data: null });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [canReadCostObservability, enforcementMode, routeFamily, tokenEstimateInput]);
+
+  if (!canReadCostObservability) {
+    return null;
+  }
+
+  const tokenEstimate = clampTokenEstimate(tokenEstimateInput);
+  const canSubmit = operation === 'estimate' || operation === 'reserve' || reservationId.trim().length > 0;
+  const data = state.data;
+
+  const runDiagnostic = () => {
+    setState((current) => ({ ...current, loading: true, error: null }));
+    void adminCostApi.runQuotaDryRun({
+      routeFamily,
+      tokenEstimate,
+      operation,
+      enforcementMode,
+      reservationId: reservationId.trim() || undefined,
+      actualUnits: operation === 'consume' ? tokenEstimate : undefined,
+    })
+      .then((next) => setState({ loading: false, error: null, data: next }))
+      .catch((error) => setState({ loading: false, error: sanitizedQuotaError(error), data: null }));
+  };
+
+  return (
+    <GlassCard as="section" className="p-4 md:p-5" data-testid="quota-dry-run-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <Gauge className="mt-1 h-4 w-4 shrink-0 text-cyan-200" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Quota Pilot</p>
+            <h2 className="mt-1 text-lg font-semibold text-white">配额试运行诊断</h2>
+          </div>
+        </div>
+        <Badge variant="info" className="border-cyan-300/20 bg-cyan-400/8 text-cyan-100">
+          当前为试运行/诊断，不会阻断真实请求
+        </Badge>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-4">
+        <SummaryTile label="状态" value={state.loading ? 'checking' : data?.status || '--'} tone={data?.wouldBlock ? 'warn' : 'info'} />
+        <SummaryTile label="模式" value={enforcementLabel(data?.enforcementMode || enforcementMode)} tone="warn" />
+        <SummaryTile label="估算 Units" value={compactNumber(data?.estimatedUnits)} tone="info" />
+        <SummaryTile label="判定" value={data?.wouldBlock ? 'would block' : data?.allowed ? 'allowed' : '--'} tone={data?.wouldBlock ? 'warn' : 'good'} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-12">
+        <div className="min-w-0 xl:col-span-3">
+          <Select
+            label="Route family"
+            value={routeFamily}
+            options={ROUTE_FAMILY_OPTIONS}
+            placeholder=""
+            onChange={setRouteFamily}
+          />
+        </div>
+        <label className="min-w-0 xl:col-span-3">
+          <span className="theme-field-label mb-2 block">Token estimate</span>
+          <input
+            className="h-10 w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 font-mono text-sm text-white outline-none transition focus:border-emerald-500/50"
+            inputMode="numeric"
+            min={0}
+            max={2_000_000}
+            value={tokenEstimateInput}
+            onChange={(event) => setTokenEstimateInput(String(clampTokenEstimate(event.target.value)))}
+          />
+        </label>
+        <div className="min-w-0 xl:col-span-3">
+          <Select
+            label="Enforcement mode"
+            value={enforcementMode}
+            options={ENFORCEMENT_OPTIONS}
+            placeholder=""
+            onChange={(value) => setEnforcementMode(value as QuotaEnforcementMode)}
+          />
+        </div>
+        <div className="min-w-0 xl:col-span-3">
+          <Select
+            label="Dry-run operation"
+            value={operation}
+            options={QUOTA_OPERATION_OPTIONS}
+            placeholder=""
+            onChange={(value) => setOperation(value as QuotaDryRunOperation)}
+          />
+        </div>
+      </div>
+
+      {operation === 'consume' || operation === 'release' ? (
+        <label className="mt-3 block min-w-0">
+          <span className="theme-field-label mb-2 block">Reservation ID</span>
+          <input
+            className="h-10 w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 font-mono text-sm text-white outline-none transition focus:border-emerald-500/50"
+            value={reservationId}
+            onChange={(event) => setReservationId(event.target.value.slice(0, 128))}
+            placeholder="dry-run reservation id"
+          />
+        </label>
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 text-xs leading-5 text-white/48">
+          <span className="text-white/64">Reason:</span> <span className={cn('font-mono', data?.wouldBlock ? 'text-amber-200' : 'text-white/62')}>{reasonLabel(data?.reasonCode)}</span>
+        </div>
+        <button
+          type="button"
+          className="rounded-lg border border-cyan-300/20 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-100 transition hover:border-cyan-200/35 hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-45"
+          onClick={runDiagnostic}
+          disabled={state.loading || !canSubmit}
+        >
+          {state.loading ? '诊断中' : '运行 dry-run'}
+        </button>
+      </div>
+
+      {data?.wouldBlock ? (
+        <div className="mt-4 rounded-2xl border border-amber-300/18 bg-amber-400/8 px-4 py-3 text-sm text-amber-100" role="status">
+          dry-run 结果显示该策略会阻断；真实请求未被阻断。
+        </div>
+      ) : null}
+      {state.error ? <div className="mt-4"><ApiErrorAlert error={state.error} /></div> : null}
+
+      <Disclosure
+        summary="开发者 / Quota 响应形状"
+        className="mt-4"
+        bodyClassName="rounded-2xl border border-white/5 bg-black/20 p-4"
+      >
+        <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
+          <div className="min-w-0">
+            <dt className="text-white/32">diagnosticOnly</dt>
+            <dd className="font-mono text-white/64">{String(data?.metadata.diagnosticOnly ?? true)}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-white/32">liveEnforcement</dt>
+            <dd className="font-mono text-white/64">{String(data?.metadata.liveEnforcement ?? false)}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-white/32">noExternalCalls</dt>
+            <dd className="font-mono text-white/64">{String(data?.metadata.noExternalCalls ?? true)}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-white/32">redaction</dt>
+            <dd className="break-words font-mono text-white/64">{data?.metadata.redaction.join(', ') || '--'}</dd>
+          </div>
+        </dl>
+      </Disclosure>
+    </GlassCard>
+  );
+};
+
 const AdminCostObservabilityPage: React.FC = () => {
   const [filters, setFilters] = useState<Required<AdminCostSummaryParams>>({
     window: '24h',
@@ -393,6 +632,7 @@ const AdminCostObservabilityPage: React.FC = () => {
                     <SummaryTile label="Scanner AI" value={`${compactNumber(data.summary.scannerAiCompleted)} / ${compactNumber(data.summary.scannerAiAttempts)}`} tone="info" />
                   </div>
                 </GlassCard>
+                <QuotaDryRunPanel />
 
                 <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
                   <SectionCard icon={<Activity className="h-4 w-4" />} eyebrow="LLM" title="LLM 调用">

@@ -6,10 +6,20 @@ const { getDuplicateSummary } = vi.hoisted(() => ({
   getDuplicateSummary: vi.fn(),
 }));
 
+const { runQuotaDryRun, capabilityState } = vi.hoisted(() => ({
+  runQuotaDryRun: vi.fn(),
+  capabilityState: { canReadCostObservability: true },
+}));
+
 vi.mock('../../api/adminCost', () => ({
   adminCostApi: {
     getDuplicateSummary,
+    runQuotaDryRun,
   },
+}));
+
+vi.mock('../../hooks/useProductSurface', () => ({
+  useProductSurface: () => capabilityState,
 }));
 
 vi.mock('../../contexts/UiLanguageContext', () => ({
@@ -170,9 +180,32 @@ const populatedPayload = {
   },
 };
 
+const quotaAllowedPayload = {
+  allowed: true,
+  wouldBlock: false,
+  status: 'allowed',
+  reasonCode: null,
+  routeFamily: 'analysis',
+  estimatedUnits: 4,
+  enforcementMode: 'dry_run',
+  operation: 'estimate',
+  reservationId: null,
+  metadata: {
+    diagnosticOnly: true,
+    liveEnforcement: false,
+    noExternalCalls: true,
+    dataSources: ['quota_policy_definitions'],
+    redaction: ['credentials', 'stack_details'],
+    rawPrompt: 'SHOULD_NOT_RENDER_QUOTA',
+    apiKey: 'sk-quota-should-not-render',
+  },
+};
+
 describe('AdminCostObservabilityPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    capabilityState.canReadCostObservability = true;
+    runQuotaDryRun.mockResolvedValue(quotaAllowedPayload);
   });
 
   it('renders mocked duplicate-cost summary with read-only, no-external-call, and observational badges', async () => {
@@ -191,6 +224,7 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('Guest Preview / Report duplicate candidates')).toBeInTheDocument();
     expect(screen.getByText('限制与数据质量')).toBeInTheDocument();
     expect(screen.getByText('counter_snapshot_not_timestamped')).toBeInTheDocument();
+    expect(screen.getByText('配额试运行诊断')).toBeInTheDocument();
   });
 
   it('keeps developer details collapsed and does not render secret-like strings in the DOM', async () => {
@@ -203,6 +237,8 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.queryByText('SHOULD_NOT_RENDER_PAYLOAD')).not.toBeInTheDocument();
     expect(screen.queryByText('sk-should-not-render')).not.toBeInTheDocument();
     expect(screen.queryByText('https://provider.example/path?token=secret')).not.toBeInTheDocument();
+    expect(screen.queryByText('SHOULD_NOT_RENDER_QUOTA')).not.toBeInTheDocument();
+    expect(screen.queryByText('sk-quota-should-not-render')).not.toBeInTheDocument();
   });
 
   it('renders loading state without implying billing exactness', () => {
@@ -285,5 +321,95 @@ describe('AdminCostObservabilityPage', () => {
     });
     const lastCall = getDuplicateSummary.mock.calls.at(-1)?.[0] || {};
     expect(Object.keys(lastCall).sort()).toEqual(['area', 'bucket', 'limit', 'window']);
+  });
+
+  it('runs quota dry-run estimate for users with cost observability capability', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+    runQuotaDryRun.mockResolvedValue({
+      ...quotaAllowedPayload,
+      estimatedUnits: 17,
+      reasonCode: 'within_budget',
+    });
+
+    render(<AdminCostObservabilityPage />);
+
+    expect(await screen.findByText('配额试运行诊断')).toBeInTheDocument();
+    await waitFor(() => expect(runQuotaDryRun).toHaveBeenCalled());
+    expect(screen.getByText('17')).toBeInTheDocument();
+    expect(screen.getByText('within_budget')).toBeInTheDocument();
+    expect(runQuotaDryRun.mock.calls[0][0]).toMatchObject({
+      routeFamily: 'analysis',
+      tokenEstimate: 4000,
+      operation: 'estimate',
+      enforcementMode: 'dry_run',
+    });
+  });
+
+  it('hides quota panel and does not fetch quota dry-run without cost observability capability', async () => {
+    capabilityState.canReadCostObservability = false;
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+
+    render(<AdminCostObservabilityPage />);
+
+    expect(await screen.findByRole('heading', { name: '成本观测' })).toBeInTheDocument();
+    expect(screen.queryByTestId('quota-dry-run-panel')).not.toBeInTheDocument();
+    expect(runQuotaDryRun).not.toHaveBeenCalled();
+  });
+
+  it('renders dry-run would-block as a compact warning without implying live blocking', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+    runQuotaDryRun.mockResolvedValue({
+      ...quotaAllowedPayload,
+      allowed: false,
+      wouldBlock: true,
+      status: 'blocked',
+      reasonCode: 'budget_exceeded',
+      estimatedUnits: 3000,
+    });
+
+    render(<AdminCostObservabilityPage />);
+
+    expect(await screen.findByText('budget_exceeded')).toBeInTheDocument();
+    expect(screen.getByText('would block')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('真实请求未被阻断');
+    expect(screen.queryByText('已阻止真实调用')).not.toBeInTheDocument();
+  });
+
+  it('renders sanitized quota 403 and 500 errors', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+    runQuotaDryRun.mockRejectedValueOnce({ response: { status: 403, data: { detail: { message: 'token=secret raw stack' } } } });
+
+    render(<AdminCostObservabilityPage />);
+
+    expect(await screen.findByText('读取配额诊断失败')).toBeInTheDocument();
+    expect(screen.getByText('当前账号没有成本观测权限。')).toBeInTheDocument();
+    expect(screen.queryByText(/token=secret/)).not.toBeInTheDocument();
+
+    runQuotaDryRun.mockRejectedValueOnce({ response: { status: 500, data: { detail: { message: 'stack trace apiKey=secret' } } } });
+    fireEvent.click(screen.getByRole('button', { name: '运行 dry-run' }));
+
+    await waitFor(() => expect(screen.getAllByText('读取配额诊断失败').length).toBeGreaterThan(0));
+    expect(screen.getByText('服务器暂时不可用，请稍后重试。')).toBeInTheDocument();
+    expect(screen.queryByText('apiKey=secret')).not.toBeInTheDocument();
+  });
+
+  it('keeps quota developer details collapsed by default', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+
+    render(<AdminCostObservabilityPage />);
+
+    expect(await screen.findByText('开发者 / Quota 响应形状')).toBeInTheDocument();
+    expect(screen.getByText('diagnosticOnly')).not.toBeVisible();
+  });
+
+  it('keeps the cost page within the viewport width in jsdom layout checks', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 390 });
+    Object.defineProperty(document.documentElement, 'scrollWidth', { configurable: true, value: 390 });
+
+    render(<AdminCostObservabilityPage />);
+
+    expect(await screen.findByTestId('quota-dry-run-panel')).toBeInTheDocument();
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
   });
 });

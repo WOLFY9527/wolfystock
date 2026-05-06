@@ -4,6 +4,8 @@ import { toCamelCase } from './utils';
 export type AdminCostWindowKey = '15m' | '1h' | '24h' | '7d';
 export type AdminCostBucket = 'hour' | 'day';
 export type AdminCostArea = 'all' | 'llm' | 'provider' | 'market-cache' | 'scanner-ai';
+export type QuotaDryRunOperation = 'estimate' | 'reserve' | 'consume' | 'release';
+export type QuotaEnforcementMode = 'disabled' | 'dry_run' | 'enabled';
 
 export interface AdminCostSummaryParams {
   window?: AdminCostWindowKey;
@@ -118,6 +120,36 @@ export interface AdminCostSummaryResponse {
   metadata: AdminCostMetadata;
 }
 
+export interface QuotaDryRunRequest {
+  routeFamily: string;
+  tokenEstimate?: number;
+  estimatedUnits?: number;
+  operation?: QuotaDryRunOperation;
+  enforcementMode?: QuotaEnforcementMode;
+  reservationId?: string;
+  actualUnits?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface QuotaDryRunResponse {
+  allowed: boolean;
+  wouldBlock: boolean;
+  status: string;
+  reasonCode?: string | null;
+  routeFamily: string;
+  estimatedUnits: number;
+  enforcementMode: QuotaEnforcementMode;
+  operation: QuotaDryRunOperation;
+  reservationId?: string | null;
+  metadata: {
+    diagnosticOnly: boolean;
+    liveEnforcement: boolean;
+    noExternalCalls: boolean;
+    dataSources: string[];
+    redaction: string[];
+  };
+}
+
 const EMPTY_OVERVIEW: AdminCostOverview = {
   llmCalls: 0,
   llmUsageCalls: 0,
@@ -150,6 +182,36 @@ function toSafeQuery(params: AdminCostSummaryParams): Record<string, unknown> {
     bucket: params.bucket || 'hour',
     area: params.area || 'all',
     limit: Math.min(Math.max(Number(params.limit || 50), 1), 200),
+  };
+}
+
+function clampNonNegativeInteger(value: unknown, max: number): number | undefined {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return undefined;
+  return Math.min(Math.max(Math.trunc(parsed), 0), max);
+}
+
+function sanitizeQuotaDryRunRequest(params: QuotaDryRunRequest): Record<string, unknown> {
+  const operation: QuotaDryRunOperation = ['estimate', 'reserve', 'consume', 'release'].includes(params.operation || '')
+    ? params.operation as QuotaDryRunOperation
+    : 'estimate';
+  const enforcementMode: QuotaEnforcementMode = ['disabled', 'dry_run', 'enabled'].includes(params.enforcementMode || '')
+    ? params.enforcementMode as QuotaEnforcementMode
+    : 'dry_run';
+  const reservationId = typeof params.reservationId === 'string' ? params.reservationId.trim().slice(0, 128) : '';
+
+  return {
+    routeFamily: String(params.routeFamily || 'analysis').trim().slice(0, 64) || 'analysis',
+    tokenEstimate: clampNonNegativeInteger(params.tokenEstimate, 2_000_000),
+    estimatedUnits: clampNonNegativeInteger(params.estimatedUnits, 2_000_000),
+    operation,
+    enforcementMode,
+    reservationId: reservationId || undefined,
+    actualUnits: clampNonNegativeInteger(params.actualUnits, 2_000_000),
+    metadata: {
+      source: 'admin_quota_dry_run_ui',
+      diagnosticOnly: true,
+    },
   };
 }
 
@@ -200,11 +262,41 @@ function normalizeSummary(payload: Record<string, unknown>): AdminCostSummaryRes
   };
 }
 
+function normalizeQuotaDryRun(payload: Record<string, unknown>): QuotaDryRunResponse {
+  const normalized = toCamelCase<QuotaDryRunResponse>(payload);
+  return {
+    allowed: normalized.allowed === true,
+    wouldBlock: normalized.wouldBlock === true,
+    status: normalized.status || 'unknown',
+    reasonCode: normalized.reasonCode || null,
+    routeFamily: normalized.routeFamily || 'analysis',
+    estimatedUnits: Number(normalized.estimatedUnits || 0),
+    enforcementMode: normalized.enforcementMode || 'dry_run',
+    operation: normalized.operation || 'estimate',
+    reservationId: normalized.reservationId || null,
+    metadata: {
+      diagnosticOnly: normalized.metadata?.diagnosticOnly !== false,
+      liveEnforcement: normalized.metadata?.liveEnforcement === true,
+      noExternalCalls: normalized.metadata?.noExternalCalls !== false,
+      dataSources: safeArray<string>(normalized.metadata?.dataSources),
+      redaction: safeArray<string>(normalized.metadata?.redaction),
+    },
+  };
+}
+
 export const adminCostApi = {
   async getDuplicateSummary(params: AdminCostSummaryParams = {}): Promise<AdminCostSummaryResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/cost/duplicate-summary', {
       params: toSafeQuery(params),
     });
     return normalizeSummary(response.data);
+  },
+
+  async runQuotaDryRun(params: QuotaDryRunRequest): Promise<QuotaDryRunResponse> {
+    const response = await apiClient.post<Record<string, unknown>>(
+      '/api/v1/admin/cost/quota-dry-run',
+      sanitizeQuotaDryRunRequest(params),
+    );
+    return normalizeQuotaDryRun(response.data);
   },
 };
