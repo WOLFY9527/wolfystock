@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -15,11 +16,12 @@ from src.admin_rbac import (
     ADMIN_RBAC_CAPABILITIES,
     ADMIN_RBAC_ROLES,
     SUPER_ADMIN_ROLE,
+    SUPPORT_ADMIN_ROLE,
     expand_admin_capabilities,
     has_admin_capability,
 )
-from src.multi_user import ROLE_ADMIN, ROLE_USER
-from src.storage import AdminRole, AdminRoleCapability, DatabaseManager
+from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, ROLE_ADMIN, ROLE_USER
+from src.storage import AdminRole, AdminRoleCapability, AdminUserRole, DatabaseManager
 
 
 def _current_user(*, role: str, is_admin: bool) -> CurrentUser:
@@ -95,6 +97,169 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
             require_admin_user(regular)
         self.assertEqual(exc.exception.status_code, 403)
         self.assertEqual(exc.exception.detail["error"], "admin_required")
+
+    def test_legacy_admin_passes_required_capability_dependency(self) -> None:
+        from api.deps import require_admin_capability
+
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True)
+        dependency = require_admin_capability("users:read")
+
+        self.assertIs(dependency(admin), admin)
+
+    def test_required_capability_dependency_rejects_non_admin(self) -> None:
+        from api.deps import require_admin_capability
+
+        regular = _current_user(role=ROLE_USER, is_admin=False)
+        dependency = require_admin_capability("users:read")
+
+        with self.assertRaises(HTTPException) as exc:
+            dependency(regular)
+        self.assertEqual(exc.exception.status_code, 403)
+        self.assertEqual(exc.exception.detail["error"], "admin_required")
+
+    def test_required_capability_dependency_rejects_scoped_admin_without_capability(self) -> None:
+        from api.deps import require_admin_capability
+
+        self.db.create_or_update_app_user(
+            user_id="support-admin-1",
+            username="support",
+            display_name="Support",
+            role=ROLE_ADMIN,
+            password_hash=None,
+            is_active=True,
+        )
+        with self.db.get_session() as session:
+            session.add(AdminUserRole(user_id="support-admin-1", role_key=SUPPORT_ADMIN_ROLE))
+            session.commit()
+        admin = CurrentUser(
+            user_id="support-admin-1",
+            username="support",
+            display_name="Support",
+            role=ROLE_ADMIN,
+            is_admin=True,
+            is_authenticated=True,
+            transitional=False,
+            auth_enabled=True,
+        )
+        dependency = require_admin_capability("users:security:write")
+
+        with self.assertRaises(HTTPException) as exc:
+            dependency(admin)
+        self.assertEqual(exc.exception.status_code, 403)
+        self.assertEqual(exc.exception.detail["error"], "admin_capability_required")
+        self.assertNotIn("support-admin", str(exc.exception.detail))
+        self.assertNotIn("users:read", str(exc.exception.detail))
+
+    def test_any_capability_dependency_accepts_any_matching_capability(self) -> None:
+        from api.deps import require_any_admin_capability
+
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True)
+        dependency = require_any_admin_capability(["secrets:read", "users:read"])
+
+        self.assertIs(dependency(admin), admin)
+
+    def test_unknown_capability_dependency_fails_without_inventory_leakage(self) -> None:
+        from api.deps import require_admin_capability
+
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True)
+        dependency = require_admin_capability("secrets:read")
+
+        with self.assertRaises(HTTPException) as exc:
+            dependency(admin)
+        detail_text = str(exc.exception.detail).lower()
+        self.assertEqual(exc.exception.status_code, 403)
+        self.assertNotIn("users:read", detail_text)
+        self.assertNotIn("super-admin", detail_text)
+        self.assertNotIn("raw-session-id", detail_text)
+
+    def test_sensitive_reason_helper_accepts_bounded_reason(self) -> None:
+        from api.deps import require_sensitive_reason
+
+        self.assertEqual("support verified request", require_sensitive_reason(" support verified request "))
+
+    def test_sensitive_reason_helper_rejects_missing_or_overlong_reason(self) -> None:
+        from api.deps import require_sensitive_reason
+
+        for reason in ("", "   ", "x" * 501):
+            with self.assertRaises(HTTPException) as exc:
+                require_sensitive_reason(reason)
+            self.assertEqual(exc.exception.status_code, 400)
+            self.assertIn(exc.exception.detail["error"], {"reason_required", "validation_error"})
+
+    def test_self_destructive_helper_blocks_self_action(self) -> None:
+        from api.deps import assert_not_self_destructive_action
+
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True)
+
+        with self.assertRaises(HTTPException) as exc:
+            assert_not_self_destructive_action(admin, "user-1")
+        self.assertEqual(exc.exception.status_code, 403)
+        self.assertEqual(exc.exception.detail["error"], "self_action_blocked")
+
+    def test_last_super_admin_helper_blocks_removing_last_super_admin(self) -> None:
+        from api.deps import assert_not_last_super_admin
+
+        self.db.create_or_update_app_user(
+            user_id="admin-only",
+            username="admin-only",
+            display_name="Only Admin",
+            role=ROLE_ADMIN,
+            password_hash=None,
+            is_active=True,
+        )
+        self.db.create_or_update_app_user(
+            user_id=BOOTSTRAP_ADMIN_USER_ID,
+            username="admin",
+            display_name="Bootstrap Admin",
+            role=ROLE_ADMIN,
+            password_hash=None,
+            is_active=False,
+        )
+
+        with self.assertRaises(HTTPException) as exc:
+            assert_not_last_super_admin("admin-only")
+        self.assertEqual(exc.exception.status_code, 409)
+        self.assertEqual(exc.exception.detail["error"], "last_super_admin_blocked")
+
+    def test_last_super_admin_helper_allows_when_another_super_admin_remains(self) -> None:
+        from api.deps import assert_not_last_super_admin
+
+        self.db.create_or_update_app_user(
+            user_id="admin-1",
+            username="admin1",
+            display_name="Admin One",
+            role=ROLE_ADMIN,
+            password_hash=None,
+            is_active=True,
+        )
+        self.db.create_or_update_app_user(
+            user_id="admin-2",
+            username="admin2",
+            display_name="Admin Two",
+            role=ROLE_ADMIN,
+            password_hash=None,
+            is_active=True,
+        )
+
+        self.assertIsNone(assert_not_last_super_admin("admin-1"))
+
+    def test_recent_admin_reauth_helper_is_safe_unsupported_without_metadata(self) -> None:
+        from api.deps import require_recent_admin_reauth
+
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True)
+
+        with self.assertRaises(HTTPException) as exc:
+            require_recent_admin_reauth(admin)
+        self.assertEqual(exc.exception.status_code, 403)
+        self.assertEqual(exc.exception.detail["error"], "admin_reauth_required")
+
+    def test_recent_admin_reauth_helper_accepts_recent_explicit_metadata(self) -> None:
+        from api.deps import require_recent_admin_reauth
+
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True)
+        reauthenticated_at = datetime.now() - timedelta(minutes=3)
+
+        self.assertIs(require_recent_admin_reauth(admin, reauthenticated_at=reauthenticated_at), admin)
 
     def test_capability_output_contains_no_secret_like_fields(self) -> None:
         user = _current_user(role=ROLE_ADMIN, is_admin=True)

@@ -5,6 +5,27 @@ Mode: docs-only authorization design. No runtime behavior changed.
 
 Implementation note, 2026-05-06:
 
+- Phase R2 backend helper primitives have landed in `api/deps.py` without
+  migrating any production route. The new helpers are
+  `require_admin_capability(capability)`,
+  `require_any_admin_capability(capabilities)`,
+  `require_sensitive_reason(...)`, `require_recent_admin_reauth(...)`,
+  `assert_not_self_destructive_action(...)`, and
+  `assert_not_last_super_admin(...)`. They first preserve the existing
+  authenticated admin identity requirement, then use the Phase R1
+  `expand_admin_capabilities(user)` / `has_admin_capability(user, capability)`
+  helpers for capability decisions.
+- Phase R2 denial responses are sanitized and do not reveal role inventory,
+  password hashes, raw sessions, cookies, tokens, API keys, secrets, broker
+  credentials, or `.env` values. `require_recent_admin_reauth(...)` currently
+  fails closed when no explicit recent-reauth metadata is supplied, because the
+  current route dependency state does not yet carry a wired reauth source.
+- Existing route authorization behavior remains unchanged in Phase R2:
+  production routes still use `require_admin_user()` where they did before.
+  The new helpers are covered by backend tests and are reserved for later route
+  migrations. Broad allow/deny audit writes are intentionally deferred until a
+  route migration phase can attach safe route context.
+
 - Phase R1 compatibility has landed as a read-only schema/helper layer. SQLite
   initialization now creates and seeds `admin_roles`,
   `admin_role_capabilities`, and `admin_user_roles` with the built-in

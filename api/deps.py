@@ -11,15 +11,18 @@ API 依赖注入模块
 """
 
 from dataclasses import dataclass, field
-from typing import Generator
+from datetime import datetime, timedelta
+from typing import Callable, Generator, Sequence
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from src.admin_rbac import expand_admin_capabilities
+from src.admin_rbac import expand_admin_capabilities, has_admin_capability
 from src.auth import COOKIE_NAME, get_session_identity, is_auth_enabled
+from src.multi_user import ROLE_ADMIN
 from src.storage import DatabaseManager
 from src.config import get_config, Config
+from src.repositories.auth_repo import AuthRepository
 from src.services.system_config_service import SystemConfigService
 
 
@@ -221,3 +224,139 @@ def require_admin_user(current_user: CurrentUser = Depends(get_current_user)) ->
             detail={"error": "admin_required", "message": "Admin access required"},
         )
     return current_user
+
+
+def _admin_capabilities_for_user(current_user: CurrentUser) -> set[str]:
+    cached = set(getattr(current_user, "admin_capabilities", ()) or ())
+    if cached:
+        return cached
+    return expand_admin_capabilities(current_user)
+
+
+def _raise_admin_capability_required() -> None:
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "error": "admin_capability_required",
+            "message": "Required admin capability is not available",
+        },
+    )
+
+
+def require_admin_capability(capability: str) -> Callable[[CurrentUser], CurrentUser]:
+    """Build a future route dependency for one admin capability.
+
+    Phase R2 intentionally leaves existing routes on ``require_admin_user()``.
+    """
+    normalized = str(capability or "").strip()
+
+    def dependency(current_user: CurrentUser = Depends(require_admin_user)) -> CurrentUser:
+        admin_user = require_admin_user(current_user)
+        if not normalized or normalized not in _admin_capabilities_for_user(admin_user):
+            _raise_admin_capability_required()
+        return admin_user
+
+    return dependency
+
+
+def require_any_admin_capability(capabilities: Sequence[str]) -> Callable[[CurrentUser], CurrentUser]:
+    """Build a future route dependency that accepts any listed capability."""
+    normalized = tuple(str(capability or "").strip() for capability in capabilities if str(capability or "").strip())
+
+    def dependency(current_user: CurrentUser = Depends(require_admin_user)) -> CurrentUser:
+        admin_user = require_admin_user(current_user)
+        effective = _admin_capabilities_for_user(admin_user)
+        if not normalized or not any(capability in effective for capability in normalized):
+            _raise_admin_capability_required()
+        return admin_user
+
+    return dependency
+
+
+def require_sensitive_reason(reason: str, *, max_length: int = 500) -> str:
+    """Validate a bounded admin action reason without exposing request details."""
+    normalized = str(reason or "").strip()
+    if not normalized:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "reason_required", "message": "reason is required"},
+        )
+    if len(normalized) > max_length:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "validation_error", "message": "reason is too long"},
+        )
+    return normalized
+
+
+def require_recent_admin_reauth(
+    current_user: CurrentUser,
+    *,
+    reauthenticated_at: datetime | None = None,
+    max_age_minutes: int = 15,
+) -> CurrentUser:
+    """Validate recent admin reauthentication metadata when a route supplies it.
+
+    Current route dependencies do not yet carry reauth metadata, so missing
+    metadata fails closed until a later phase wires an unlock/reauth source.
+    """
+    admin_user = require_admin_user(current_user)
+    observed_at = reauthenticated_at or getattr(admin_user, "admin_reauthenticated_at", None)
+    if not isinstance(observed_at, datetime):
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "admin_reauth_required", "message": "Recent admin reauthentication required"},
+        )
+
+    now = datetime.now(tz=observed_at.tzinfo) if observed_at.tzinfo else datetime.now()
+    if now - observed_at > timedelta(minutes=max(1, max_age_minutes)):
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "admin_reauth_required", "message": "Recent admin reauthentication required"},
+        )
+    return admin_user
+
+
+def assert_not_self_destructive_action(current_user: CurrentUser, target_user_id: str) -> None:
+    """Block future self-destructive admin actions before service execution."""
+    actor_id = str(getattr(current_user, "user_id", "") or "").strip()
+    target_id = str(target_user_id or "").strip()
+    if actor_id and target_id and actor_id == target_id:
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "self_action_blocked", "message": "Admins cannot perform this action on themselves"},
+        )
+
+
+def assert_not_last_super_admin(target_user_id: str, *, repo: AuthRepository | None = None) -> None:
+    """Block future actions that would remove or disable the last super-admin."""
+    normalized_target = str(target_user_id or "").strip()
+    if not normalized_target:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "validation_error", "message": "Invalid user_id"},
+        )
+
+    auth_repo = repo or AuthRepository()
+    target_user = auth_repo.get_app_user(normalized_target)
+    if target_user is None:
+        return
+    if not _is_active_admin_with_super_capability(target_user):
+        return
+
+    active_super_admin_count = sum(
+        1 for user in auth_repo.list_app_users() if _is_active_admin_with_super_capability(user)
+    )
+    if active_super_admin_count <= 1:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "last_super_admin_blocked", "message": "Cannot remove the last active super-admin"},
+        )
+
+
+def _is_active_admin_with_super_capability(user: object) -> bool:
+    if str(getattr(user, "role", "") or "").strip() != ROLE_ADMIN:
+        return False
+    if not bool(getattr(user, "is_active", True)):
+        return False
+    return has_admin_capability(user, "users:security:write")
