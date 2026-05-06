@@ -23,6 +23,7 @@ from src.services.llm_instrumentation import (
     snapshot_llm_event_counters,
 )
 from src.storage import DatabaseManager
+from src.services.llm_cost_ledger_service import LlmCostLedgerService
 
 
 def _admin_user() -> CurrentUser:
@@ -253,6 +254,53 @@ class AdminCostSummaryApiTestCase(unittest.TestCase):
             response = self.client.get("/api/v1/admin/cost/duplicate-summary")
 
         self.assertEqual(response.status_code, 200)
+
+    def test_llm_ledger_summary_returns_read_only_safe_rollups(self) -> None:
+        self._as_admin()
+        self.db.upsert_model_pricing_policy(
+            policy_key="sample-openai-mini",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            pricing_unit="per_1m_tokens",
+            input_price_per_1m=0.1,
+            cached_input_price_per_1m=0.05,
+            output_price_per_1m=0.4,
+            currency="USD",
+        )
+        service = LlmCostLedgerService(db=self.db)
+        service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            metadata={"prompt": "do not leak", "safe_label": "ok"},
+        )
+
+        with patch("src.services.llm_cost_ledger_service.DatabaseManager.get_instance", return_value=self.db):
+            response = self.client.get("/api/v1/admin/cost/llm-ledger-summary")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["metadata"]["readOnly"], True)
+        self.assertEqual(payload["metadata"]["liveEnforcement"], False)
+        self.assertEqual(payload["total"]["totalTokens"], 2_000)
+        self.assertEqual(payload["byUser"][0]["dimensions"]["owner_user_id"], "user-a")
+        self.assertEqual(payload["byProviderModel"][0]["dimensions"]["provider"], "openai")
+        text = self._json_text(payload).lower()
+        self.assertNotIn("do not leak", text)
+        self.assertNotIn("secret", text)
+
+    def test_llm_ledger_summary_requires_cost_observability_capability(self) -> None:
+        response = self.client.get("/api/v1/admin/cost/llm-ledger-summary")
+        self.assertEqual(response.status_code, 401)
+
+        self._as_user()
+        forbidden = self.client.get("/api/v1/admin/cost/llm-ledger-summary")
+        self.assertEqual(forbidden.status_code, 403)
 
 
 if __name__ == "__main__":

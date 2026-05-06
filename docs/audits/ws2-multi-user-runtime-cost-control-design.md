@@ -52,6 +52,15 @@ WS2-R0 is design only. It does not implement Redis, Celery, RQ, workers, migrati
 - The endpoint response is sanitized and does not include raw prompts, provider payloads, credentials, cookies, raw session identifiers, stack traces, or secret-like request metadata.
 - Future work remains separate: selected route enforcement, admin dashboard/policy editing, provider quota buckets, circuit breaker policy, and reconciliation from actual usage.
 
+## WS2-R4B LLM cost ledger foundation note
+
+- LLM pricing policy foundation now exists through `model_pricing_policies`, with provider/model keys, per-1M input/cached-input/output prices, currency, source label/URL metadata, active flag, and effective-date ranges.
+- LLM cost ledger foundation now exists through `llm_cost_ledger`, with owner/guest dimensions, route family, call type, provider/model, prompt/cached/completion/total tokens, Decimal-safe estimated USD cost fields, pricing snapshot metadata, optional quota reservation link, request hash, status, and sanitized metadata.
+- `LlmCostLedgerService` supports synthetic usage reconciliation: it looks up effective active pricing, returns safe result codes (`ok`, `pricing_unknown`, `invalid_usage`, `pricing_inactive`), computes regular and cached input/output estimated cost, and writes sanitized ledger rows.
+- Admin read-only diagnostics now include `GET /api/v1/admin/cost/llm-ledger-summary`, guarded by `cost:observability:read`, for total, per-user, provider/model, and route-family ledger summaries.
+- This is not live enforcement and is not wired into live LLM/provider execution. No prompts, model routing/order, fallback, retry, integrity retry, provider behavior, scanner/backtest/portfolio/Options/MarketCache/DuckDB/broker/notification behavior changed.
+- Future work remains separate: live instrumentation integration, provider response reconciliation, quota consume/release reconciliation, pricing source update workflow, admin dashboard UX, retention/aggregation policy, and budget enforcement.
+
 ## 2. Current deployment assumptions
 
 - API single-process assumption: `docs/DEPLOY.md` and `docs/deploy-webui-cloud.md` currently state that `/api/v1/analysis/*` task queue and SSE state are process-local and should stay single-process unless sticky routing is intentionally provided.

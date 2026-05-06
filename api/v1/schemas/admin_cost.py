@@ -144,3 +144,30 @@ class QuotaDryRunResponse(_AdminCostModel):
     operation: Literal["estimate", "reserve", "consume", "release"] = "estimate"
     reservation_id: Optional[str] = Field(default=None, alias="reservationId")
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class LlmLedgerSummaryTotal(_AdminCostModel):
+    calls: int = 0
+    prompt_tokens: int = Field(default=0, alias="promptTokens")
+    cached_input_tokens: int = Field(default=0, alias="cachedInputTokens")
+    completion_tokens: int = Field(default=0, alias="completionTokens")
+    total_tokens: int = Field(default=0, alias="totalTokens")
+    total_cost_usd: str = Field(default="0", alias="totalCostUsd")
+
+
+class LlmLedgerSummaryRollup(_AdminCostModel):
+    group: str
+    calls: int = 0
+    total_tokens: int = Field(default=0, alias="totalTokens")
+    total_cost_usd: str = Field(default="0", alias="totalCostUsd")
+    dimensions: Dict[str, str] = Field(default_factory=dict)
+
+
+class LlmLedgerSummaryResponse(_AdminCostModel):
+    generated_at: str = Field(alias="generatedAt")
+    window: DuplicateCostSummaryWindow
+    total: LlmLedgerSummaryTotal
+    by_user: List[LlmLedgerSummaryRollup] = Field(default_factory=list, alias="byUser")
+    by_provider_model: List[LlmLedgerSummaryRollup] = Field(default_factory=list, alias="byProviderModel")
+    by_route_family: List[LlmLedgerSummaryRollup] = Field(default_factory=list, alias="byRouteFamily")
+    metadata: Dict[str, Any] = Field(default_factory=dict)

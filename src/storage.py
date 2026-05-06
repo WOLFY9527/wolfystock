@@ -32,6 +32,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     Integer,
+    Numeric,
     ForeignKey,
     Index,
     UniqueConstraint,
@@ -700,6 +701,129 @@ class QuotaReservation(Base):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+        }
+
+
+class ModelPricingPolicy(Base):
+    """Effective-dated LLM model pricing policy foundation."""
+
+    __tablename__ = 'model_pricing_policies'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    policy_key = Column(String(160), nullable=False, unique=True, index=True)
+    provider = Column(String(64), nullable=False, index=True)
+    model = Column(String(128), nullable=False, index=True)
+    pricing_unit = Column(String(32), nullable=False, default="per_1m_tokens")
+    input_price_per_1m = Column(Numeric(18, 8), nullable=False, default=0)
+    cached_input_price_per_1m = Column(Numeric(18, 8))
+    output_price_per_1m = Column(Numeric(18, 8), nullable=False, default=0)
+    currency = Column(String(8), nullable=False, default="USD", index=True)
+    effective_from = Column(DateTime, nullable=False, index=True)
+    effective_until = Column(DateTime, index=True)
+    source_label = Column(String(128))
+    source_url = Column(String(500))
+    active = Column(Boolean, nullable=False, default=True, index=True)
+    metadata_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        Index('ix_model_pricing_provider_model_effective', 'provider', 'model', 'active', 'effective_from', 'effective_until'),
+        Index('ix_model_pricing_active_updated', 'active', 'updated_at'),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        metadata = DatabaseManager._safe_json_loads(self.metadata_json, {}) if self.metadata_json else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        return {
+            'policy_key': self.policy_key,
+            'provider': self.provider,
+            'model': self.model,
+            'pricing_unit': self.pricing_unit,
+            'input_price_per_1m': str(self.input_price_per_1m or 0),
+            'cached_input_price_per_1m': str(self.cached_input_price_per_1m) if self.cached_input_price_per_1m is not None else None,
+            'output_price_per_1m': str(self.output_price_per_1m or 0),
+            'currency': self.currency,
+            'effective_from': self.effective_from.isoformat() if self.effective_from else None,
+            'effective_until': self.effective_until.isoformat() if self.effective_until else None,
+            'source_label': self.source_label,
+            'source_url': self.source_url,
+            'active': bool(self.active),
+            'metadata': metadata,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class LLMCostLedger(Base):
+    """Durable estimated LLM cost ledger, separate from live enforcement."""
+
+    __tablename__ = 'llm_cost_ledger'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ledger_id = Column(String(64), nullable=False, unique=True, index=True)
+    owner_user_id = Column(String(64), ForeignKey('app_users.id'), nullable=True, index=True)
+    guest_bucket_hash = Column(String(128), index=True)
+    route_family = Column(String(64), nullable=False, index=True)
+    call_type = Column(String(64), nullable=False, index=True)
+    provider = Column(String(64), nullable=False, index=True)
+    model = Column(String(128), nullable=False, index=True)
+    prompt_tokens = Column(Integer, nullable=False, default=0)
+    cached_input_tokens = Column(Integer, nullable=False, default=0)
+    cache_miss_input_tokens = Column(Integer, nullable=False, default=0)
+    completion_tokens = Column(Integer, nullable=False, default=0)
+    total_tokens = Column(Integer, nullable=False, default=0)
+    input_cost_usd = Column(Numeric(18, 8), nullable=False, default=0)
+    cached_input_cost_usd = Column(Numeric(18, 8), nullable=False, default=0)
+    output_cost_usd = Column(Numeric(18, 8), nullable=False, default=0)
+    total_cost_usd = Column(Numeric(18, 8), nullable=False, default=0)
+    pricing_policy_key = Column(String(160), index=True)
+    pricing_snapshot_json = Column(Text)
+    quota_reservation_id = Column(String(64), index=True)
+    request_hash = Column(String(128), index=True)
+    status = Column(String(32), nullable=False, default="ok", index=True)
+    metadata_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        Index('ix_llm_cost_ledger_owner_created', 'owner_user_id', 'created_at'),
+        Index('ix_llm_cost_ledger_owner_route_created', 'owner_user_id', 'route_family', 'created_at'),
+        Index('ix_llm_cost_ledger_provider_model_created', 'provider', 'model', 'created_at'),
+        Index('ix_llm_cost_ledger_route_created', 'route_family', 'created_at'),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        metadata = DatabaseManager._safe_json_loads(self.metadata_json, {}) if self.metadata_json else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        snapshot = DatabaseManager._safe_json_loads(self.pricing_snapshot_json, {}) if self.pricing_snapshot_json else {}
+        if not isinstance(snapshot, dict):
+            snapshot = {}
+        return {
+            'ledger_id': self.ledger_id,
+            'owner_user_id': self.owner_user_id,
+            'guest_bucket_hash': self.guest_bucket_hash,
+            'route_family': self.route_family,
+            'call_type': self.call_type,
+            'provider': self.provider,
+            'model': self.model,
+            'prompt_tokens': int(self.prompt_tokens or 0),
+            'cached_input_tokens': int(self.cached_input_tokens or 0),
+            'cache_miss_input_tokens': int(self.cache_miss_input_tokens or 0),
+            'completion_tokens': int(self.completion_tokens or 0),
+            'total_tokens': int(self.total_tokens or 0),
+            'input_cost_usd': str(self.input_cost_usd or 0),
+            'cached_input_cost_usd': str(self.cached_input_cost_usd or 0),
+            'output_cost_usd': str(self.output_cost_usd or 0),
+            'total_cost_usd': str(self.total_cost_usd or 0),
+            'pricing_policy_key': self.pricing_policy_key,
+            'pricing_snapshot': snapshot,
+            'quota_reservation_id': self.quota_reservation_id,
+            'request_hash': self.request_hash,
+            'status': self.status,
+            'metadata': metadata,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
 
@@ -2203,6 +2327,18 @@ class DatabaseManager:
             self._add_column_if_missing(conn, "quota_reservations", "model_tier", "VARCHAR(64)")
             self._add_column_if_missing(conn, "quota_reservations", "reason_code", "VARCHAR(64)")
             self._add_column_if_missing(conn, "quota_reservations", "metadata_json", "TEXT")
+            self._add_column_if_missing(conn, "model_pricing_policies", "source_label", "VARCHAR(128)")
+            self._add_column_if_missing(conn, "model_pricing_policies", "source_url", "VARCHAR(500)")
+            self._add_column_if_missing(conn, "model_pricing_policies", "metadata_json", "TEXT")
+            self._add_column_if_missing(conn, "llm_cost_ledger", "owner_user_id", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "llm_cost_ledger", "guest_bucket_hash", "VARCHAR(128)")
+            self._add_column_if_missing(conn, "llm_cost_ledger", "route_family", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "llm_cost_ledger", "cached_input_tokens", "INTEGER NOT NULL DEFAULT 0")
+            self._add_column_if_missing(conn, "llm_cost_ledger", "cache_miss_input_tokens", "INTEGER NOT NULL DEFAULT 0")
+            self._add_column_if_missing(conn, "llm_cost_ledger", "quota_reservation_id", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "llm_cost_ledger", "request_hash", "VARCHAR(128)")
+            self._add_column_if_missing(conn, "llm_cost_ledger", "status", "VARCHAR(32) NOT NULL DEFAULT 'ok'")
+            self._add_column_if_missing(conn, "llm_cost_ledger", "metadata_json", "TEXT")
             self._add_column_if_missing(
                 conn,
                 "market_scanner_runs",
@@ -2383,6 +2519,42 @@ class DatabaseManager:
                 "ix_quota_reservation_status_expires",
                 "quota_reservations",
                 "status, expires_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_model_pricing_provider_model_effective",
+                "model_pricing_policies",
+                "provider, model, active, effective_from, effective_until",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_model_pricing_active_updated",
+                "model_pricing_policies",
+                "active, updated_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_llm_cost_ledger_owner_created",
+                "llm_cost_ledger",
+                "owner_user_id, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_llm_cost_ledger_owner_route_created",
+                "llm_cost_ledger",
+                "owner_user_id, route_family, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_llm_cost_ledger_provider_model_created",
+                "llm_cost_ledger",
+                "provider, model, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_llm_cost_ledger_route_created",
+                "llm_cost_ledger",
+                "route_family, created_at",
             )
             self._create_index_if_missing(
                 conn,
@@ -3772,6 +3944,292 @@ class DatabaseManager:
                 query.order_by(asc(QuotaPolicyDefinition.scope_type), asc(QuotaPolicyDefinition.policy_key))
             ).scalars().all()
             return [self._quota_policy_payload(row) for row in rows]
+
+    @staticmethod
+    def _normalize_cost_label(value: Optional[str], *, limit: int = 128, lowercase: bool = True) -> Optional[str]:
+        text = sanitize_message(str(value or "").strip())
+        if lowercase:
+            text = text.lower()
+        text = text[:limit]
+        return text or None
+
+    @staticmethod
+    def _sanitize_llm_cost_metadata(value: Any) -> Dict[str, Any]:
+        """Sanitize LLM cost metadata and drop prompts, payloads, sessions, and secrets."""
+        blocked_key_fragments = (
+            "api_key",
+            "apikey",
+            "auth",
+            "cookie",
+            "credential",
+            "exception",
+            "payload",
+            "password",
+            "private_key",
+            "prompt",
+            "raw",
+            "request",
+            "response",
+            "secret",
+            "session",
+            "stack",
+            "token",
+            "trace",
+            "traceback",
+            "url",
+            "webhook",
+        )
+
+        def scrub(obj: Any) -> Any:
+            if isinstance(obj, dict):
+                cleaned: Dict[str, Any] = {}
+                for key, item in obj.items():
+                    key_text = str(key)
+                    key_lower = key_text.lower()
+                    if is_sensitive_key(key_text) or any(fragment in key_lower for fragment in blocked_key_fragments):
+                        continue
+                    scrubbed = scrub(item)
+                    if scrubbed is not None:
+                        cleaned[key_text[:80]] = scrubbed
+                return cleaned
+            if isinstance(obj, list):
+                values = [scrub(item) for item in obj[:50]]
+                return [item for item in values if item is not None]
+            if isinstance(obj, tuple):
+                values = [scrub(item) for item in obj[:50]]
+                return [item for item in values if item is not None]
+            if isinstance(obj, str):
+                text = obj.strip()
+                lowered = text.lower()
+                if (
+                    "http://" in lowered
+                    or "https://" in lowered
+                    or "traceback (most recent call last)" in lowered
+                    or "api_key" in lowered
+                    or "token=" in lowered
+                    or "cookie=" in lowered
+                    or "session=" in lowered
+                    or "authorization:" in lowered
+                    or "bearer " in lowered
+                ):
+                    return None
+                return sanitize_message(text)[:500]
+            return obj
+
+        sanitized = sanitize_metadata(scrub(value or {}))
+        return sanitized if isinstance(sanitized, dict) else {}
+
+    def upsert_model_pricing_policy(
+        self,
+        *,
+        policy_key: str,
+        provider: str,
+        model: str,
+        pricing_unit: str = "per_1m_tokens",
+        input_price_per_1m: Any = 0,
+        cached_input_price_per_1m: Any = None,
+        output_price_per_1m: Any = 0,
+        currency: str = "USD",
+        effective_from: Optional[datetime] = None,
+        effective_until: Optional[datetime] = None,
+        source_label: Optional[str] = None,
+        source_url: Optional[str] = None,
+        active: bool = True,
+        metadata_json: Optional[Any] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        normalized_key = self._normalize_cost_label(policy_key, limit=160, lowercase=False)
+        provider_key = self._normalize_cost_label(provider, limit=64)
+        model_key = self._normalize_cost_label(model, limit=128)
+        unit_key = self._normalize_cost_label(pricing_unit, limit=32) or "per_1m_tokens"
+        currency_key = (self._normalize_cost_label(currency, limit=8, lowercase=False) or "USD").upper()
+        if not normalized_key:
+            raise ValueError("policy_key is required")
+        if not provider_key or not model_key:
+            raise ValueError("provider and model are required")
+        now = datetime.now()
+        effective_start = effective_from or now
+        raw_metadata = metadata if metadata is not None else metadata_json
+        safe_metadata = self._sanitize_llm_cost_metadata(raw_metadata or {})
+        with self.session_scope() as session:
+            row = session.execute(
+                select(ModelPricingPolicy)
+                .where(ModelPricingPolicy.policy_key == normalized_key)
+                .limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                row = ModelPricingPolicy(policy_key=normalized_key, created_at=now)
+                session.add(row)
+            row.provider = provider_key
+            row.model = model_key
+            row.pricing_unit = unit_key
+            row.input_price_per_1m = input_price_per_1m or 0
+            row.cached_input_price_per_1m = cached_input_price_per_1m
+            row.output_price_per_1m = output_price_per_1m or 0
+            row.currency = currency_key
+            row.effective_from = effective_start
+            row.effective_until = effective_until
+            row.source_label = sanitize_message(str(source_label or "").strip())[:128] or None
+            row.source_url = sanitize_message(str(source_url or "").strip())[:500] or None
+            row.active = bool(active)
+            row.metadata_json = self._safe_json_dumps(safe_metadata)
+            row.updated_at = now
+            session.flush()
+            return row.to_dict()
+
+    def get_model_pricing_policy(
+        self,
+        *,
+        provider: str,
+        model: str,
+        at: Optional[datetime] = None,
+        include_inactive: bool = False,
+    ) -> Optional[ModelPricingPolicy]:
+        provider_key = self._normalize_cost_label(provider, limit=64)
+        model_key = self._normalize_cost_label(model, limit=128)
+        if not provider_key or not model_key:
+            return None
+        effective_time = at or datetime.now()
+        with self.get_session() as session:
+            query = (
+                select(ModelPricingPolicy)
+                .where(
+                    ModelPricingPolicy.provider == provider_key,
+                    ModelPricingPolicy.model == model_key,
+                    ModelPricingPolicy.effective_from <= effective_time,
+                    or_(ModelPricingPolicy.effective_until.is_(None), ModelPricingPolicy.effective_until > effective_time),
+                )
+                .order_by(desc(ModelPricingPolicy.active), desc(ModelPricingPolicy.effective_from), desc(ModelPricingPolicy.updated_at))
+                .limit(1)
+            )
+            if not include_inactive:
+                query = query.where(ModelPricingPolicy.active.is_(True))
+            row = session.execute(query).scalar_one_or_none()
+            if row is None:
+                return None
+            session.expunge(row)
+            return row
+
+    def record_llm_cost_ledger(self, **kwargs: Any) -> Dict[str, Any]:
+        now = kwargs.get("created_at") or datetime.now()
+        metadata = self._sanitize_llm_cost_metadata(kwargs.get("metadata") or {})
+        snapshot = self._sanitize_llm_cost_metadata(kwargs.get("pricing_snapshot") or {})
+        row = LLMCostLedger(
+            ledger_id=str(kwargs.get("ledger_id") or "")[:64],
+            owner_user_id=self._normalize_cost_label(kwargs.get("owner_user_id"), limit=64, lowercase=False),
+            guest_bucket_hash=self._normalize_cost_label(kwargs.get("guest_bucket_hash"), limit=128, lowercase=False),
+            route_family=self._normalize_cost_label(kwargs.get("route_family"), limit=64) or "analysis",
+            call_type=self._normalize_cost_label(kwargs.get("call_type"), limit=64) or "analysis",
+            provider=self._normalize_cost_label(kwargs.get("provider"), limit=64) or "unknown",
+            model=self._normalize_cost_label(kwargs.get("model"), limit=128) or "unknown",
+            prompt_tokens=max(0, int(kwargs.get("prompt_tokens") or 0)),
+            cached_input_tokens=max(0, int(kwargs.get("cached_input_tokens") or 0)),
+            cache_miss_input_tokens=max(0, int(kwargs.get("cache_miss_input_tokens") or 0)),
+            completion_tokens=max(0, int(kwargs.get("completion_tokens") or 0)),
+            total_tokens=max(0, int(kwargs.get("total_tokens") or 0)),
+            input_cost_usd=kwargs.get("input_cost_usd") or 0,
+            cached_input_cost_usd=kwargs.get("cached_input_cost_usd") or 0,
+            output_cost_usd=kwargs.get("output_cost_usd") or 0,
+            total_cost_usd=kwargs.get("total_cost_usd") or 0,
+            pricing_policy_key=self._normalize_cost_label(kwargs.get("pricing_policy_key"), limit=160, lowercase=False),
+            pricing_snapshot_json=self._safe_json_dumps(snapshot),
+            quota_reservation_id=self._normalize_cost_label(kwargs.get("quota_reservation_id"), limit=64, lowercase=False),
+            request_hash=self._normalize_cost_label(kwargs.get("request_hash"), limit=128, lowercase=False),
+            status=self._normalize_cost_label(kwargs.get("status"), limit=32) or "ok",
+            metadata_json=self._safe_json_dumps(metadata),
+            created_at=now,
+        )
+        if not row.ledger_id:
+            raise ValueError("ledger_id is required")
+        with self.session_scope() as session:
+            session.add(row)
+            session.flush()
+            return row.to_dict()
+
+    @staticmethod
+    def _decimal_sum_label(value: Any) -> str:
+        text = f"{float(value or 0):.6f}"
+        return text.rstrip("0").rstrip(".") if "." in text else text
+
+    def get_llm_cost_ledger_summary(
+        self,
+        *,
+        from_dt: datetime,
+        to_dt: datetime,
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        safe_limit = max(1, min(int(limit or 50), 200))
+        with self.session_scope() as session:
+            base_filter = and_(LLMCostLedger.created_at >= from_dt, LLMCostLedger.created_at <= to_dt)
+            total = session.execute(
+                select(
+                    func.count(LLMCostLedger.id).label("calls"),
+                    func.coalesce(func.sum(LLMCostLedger.prompt_tokens), 0).label("prompt_tokens"),
+                    func.coalesce(func.sum(LLMCostLedger.cached_input_tokens), 0).label("cached_input_tokens"),
+                    func.coalesce(func.sum(LLMCostLedger.completion_tokens), 0).label("completion_tokens"),
+                    func.coalesce(func.sum(LLMCostLedger.total_tokens), 0).label("total_tokens"),
+                    func.coalesce(func.sum(LLMCostLedger.total_cost_usd), 0).label("total_cost_usd"),
+                ).where(base_filter)
+            ).one()
+
+            def grouped(*columns):
+                rows = session.execute(
+                    select(
+                        *columns,
+                        func.count(LLMCostLedger.id).label("calls"),
+                        func.coalesce(func.sum(LLMCostLedger.total_tokens), 0).label("total_tokens"),
+                        func.coalesce(func.sum(LLMCostLedger.total_cost_usd), 0).label("total_cost_usd"),
+                    )
+                    .where(base_filter)
+                    .group_by(*columns)
+                    .order_by(desc(func.sum(LLMCostLedger.total_cost_usd)), desc(func.sum(LLMCostLedger.total_tokens)))
+                    .limit(safe_limit)
+                ).all()
+                return rows
+
+            by_user_rows = grouped(LLMCostLedger.owner_user_id)
+            by_provider_model_rows = grouped(LLMCostLedger.provider, LLMCostLedger.model)
+            by_route_rows = grouped(LLMCostLedger.route_family)
+
+        return {
+            "total": {
+                "calls": int(total.calls or 0),
+                "prompt_tokens": int(total.prompt_tokens or 0),
+                "cached_input_tokens": int(total.cached_input_tokens or 0),
+                "completion_tokens": int(total.completion_tokens or 0),
+                "total_tokens": int(total.total_tokens or 0),
+                "total_cost_usd": self._decimal_sum_label(total.total_cost_usd),
+            },
+            "by_user": [
+                {
+                    "owner_user_id": row[0] or "guest_or_unknown",
+                    "calls": int(row.calls or 0),
+                    "total_tokens": int(row.total_tokens or 0),
+                    "total_cost_usd": self._decimal_sum_label(row.total_cost_usd),
+                }
+                for row in by_user_rows
+            ],
+            "by_provider_model": [
+                {
+                    "provider": row[0],
+                    "model": row[1],
+                    "provider_model": f"{row[0]}|{row[1]}",
+                    "calls": int(row.calls or 0),
+                    "total_tokens": int(row.total_tokens or 0),
+                    "total_cost_usd": self._decimal_sum_label(row.total_cost_usd),
+                }
+                for row in by_provider_model_rows
+            ],
+            "by_route_family": [
+                {
+                    "route_family": row[0],
+                    "calls": int(row.calls or 0),
+                    "total_tokens": int(row.total_tokens or 0),
+                    "total_cost_usd": self._decimal_sum_label(row.total_cost_usd),
+                }
+                for row in by_route_rows
+            ],
+        }
 
     _PROVIDER_CIRCUIT_STATES = {
         "closed",
