@@ -17,6 +17,9 @@ create table if not exists app_users (
     updated_at timestamptz not null default now()
 );
 
+create index if not exists idx_app_users_role_active
+    on app_users (role, is_active);
+
 create table if not exists app_user_sessions (
     session_id text primary key,
     user_id text not null references app_users(id),
@@ -29,6 +32,12 @@ create table if not exists app_user_sessions (
 create index if not exists idx_app_user_sessions_user_expiry
     on app_user_sessions (user_id, expires_at desc);
 
+create index if not exists idx_app_user_sessions_user_revoked_expiry
+    on app_user_sessions (user_id, revoked_at, expires_at desc);
+
+create index if not exists ix_app_user_sessions_last_seen_at
+    on app_user_sessions (last_seen_at);
+
 create table if not exists guest_sessions (
     session_id text primary key,
     session_kind text not null default 'anonymous_preview',
@@ -39,6 +48,12 @@ create table if not exists guest_sessions (
     origin_json jsonb not null default '{}'::jsonb,
     transient_state_json jsonb not null default '{}'::jsonb
 );
+
+create index if not exists idx_guest_sessions_expires
+    on guest_sessions (expires_at);
+
+create index if not exists idx_guest_sessions_started
+    on guest_sessions (started_at);
 
 create table if not exists user_preferences (
     user_id text primary key references app_users(id),

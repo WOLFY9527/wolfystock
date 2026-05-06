@@ -53,7 +53,12 @@ _PHASE_A_TABLES = {
     "notification_targets",
 }
 _PHASE_A_INDEXES = {
+    "idx_app_users_role_active",
+    "ix_app_user_sessions_last_seen_at",
     "idx_app_user_sessions_user_expiry",
+    "idx_app_user_sessions_user_revoked_expiry",
+    "idx_guest_sessions_expires",
+    "idx_guest_sessions_started",
     "idx_notification_targets_user_channel",
 }
 
@@ -71,7 +76,7 @@ class PhaseAAppUser(PhaseABase):
     updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.now)
 
     __table_args__ = (
-        Index("ix_phase_a_app_user_role_active", "role", "is_active"),
+        Index("idx_app_users_role_active", "role", "is_active"),
     )
 
 
@@ -86,7 +91,8 @@ class PhaseAAppUserSession(PhaseABase):
     revoked_at = Column(DateTime(timezone=True), index=True)
 
     __table_args__ = (
-        Index("ix_phase_a_app_user_session_user_expiry", "user_id", "expires_at"),
+        Index("idx_app_user_sessions_user_expiry", "user_id", "expires_at"),
+        Index("idx_app_user_sessions_user_revoked_expiry", "user_id", "revoked_at", "expires_at"),
     )
 
 
@@ -103,6 +109,8 @@ class PhaseAGuestSession(PhaseABase):
     transient_state_json = Column(JSON, nullable=False, default=dict)
 
     __table_args__ = (
+        Index("idx_guest_sessions_expires", "expires_at"),
+        Index("idx_guest_sessions_started", "started_at"),
         CheckConstraint(
             "status in ('active', 'expired', 'revoked')",
             name="ck_phase_a_guest_sessions_status",

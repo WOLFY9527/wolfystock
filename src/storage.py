@@ -313,6 +313,7 @@ class AppUserSession(Base):
 
     __table_args__ = (
         Index('ix_app_user_session_user_expiry', 'user_id', 'expires_at'),
+        Index('ix_app_user_session_user_revoked_expiry', 'user_id', 'revoked_at', 'expires_at'),
         Index('ix_app_user_session_revoked', 'revoked_at'),
     )
 
@@ -1894,6 +1895,24 @@ class DatabaseManager:
 
             self._create_index_if_missing(
                 conn,
+                "ix_app_user_session_user_expiry",
+                "app_user_sessions",
+                "user_id, expires_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_app_user_session_user_revoked_expiry",
+                "app_user_sessions",
+                "user_id, revoked_at, expires_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_auth_rate_limit_type_expiry",
+                "auth_rate_limit_buckets",
+                "bucket_type, expires_at",
+            )
+            self._create_index_if_missing(
+                conn,
                 "ix_analysis_owner_created",
                 "analysis_history",
                 "owner_id, created_at",
@@ -1948,9 +1967,39 @@ class DatabaseManager:
             )
             self._create_index_if_missing(
                 conn,
+                "ix_durable_task_owner_created",
+                "durable_task_states",
+                "owner_user_id, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_durable_task_owner_status_created",
+                "durable_task_states",
+                "owner_user_id, status, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_durable_task_status_updated",
+                "durable_task_states",
+                "status, updated_at",
+            )
+            self._create_index_if_missing(
+                conn,
                 "ix_durable_task_status_lease",
                 "durable_task_states",
                 "status, lease_expires_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_durable_task_states_idempotency_key_hash",
+                "durable_task_states",
+                "idempotency_key_hash",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_durable_task_states_dedupe_key_hash",
+                "durable_task_states",
+                "dedupe_key_hash",
             )
             self._create_index_if_missing(
                 conn,

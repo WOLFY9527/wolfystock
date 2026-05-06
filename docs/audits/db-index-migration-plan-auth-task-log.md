@@ -38,6 +38,15 @@ Excluded:
 
 No runtime/schema changes are made in this planning pass.
 
+## Batch A implementation note
+
+Implemented on 2026-05-06 as an additive index-only pass for auth/users/sessions and durable task/progress storage.
+
+- SQLite/local initialization and compatibility migrations now add or confirm the portable Batch A indexes for `app_user_sessions`, `auth_rate_limit_buckets`, `durable_task_states`, and `durable_task_progress_events`.
+- Phase A PostgreSQL baseline metadata and SQL now include `app_users(role, is_active)`, `app_user_sessions(user_id, revoked_at, expires_at)`, `app_user_sessions(last_seen_at)`, and guest-session lifecycle indexes. The guest table currently uses `started_at` as its creation lifecycle timestamp, so Batch A indexes that field instead of adding a new `created_at` column.
+- PostgreSQL partial indexes and concurrent/online deployment remain future production rollout optimizations; this batch keeps the local/schema path portable and does not force PostgreSQL-only partial index syntax into SQLite initialization.
+- Runtime auth/session semantics, durable task status/progress semantics, quota behavior, provider/cache behavior, RBAC routes, scanner/backtest/portfolio calculations, LLM/provider routing, notification routing, DuckDB, and broker/order paths were not changed.
+
 ## 2. Proposed index batch A: auth/users/sessions
 
 | Table | Columns | Query / use case | PostgreSQL notes | SQLite / local compatibility | Risk |
