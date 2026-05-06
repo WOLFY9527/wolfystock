@@ -67,7 +67,6 @@ export function createMockAdminUser(options: MockAdminUserOptions = {}): Current
 
   return user;
 }
-
 export function createMockAuthStatus(currentUser: CurrentUser | null): AuthStatusResponse {
   return {
     authEnabled: true,
@@ -78,4 +77,3 @@ export function createMockAuthStatus(currentUser: CurrentUser | null): AuthStatu
     currentUser,
   };
 }
-

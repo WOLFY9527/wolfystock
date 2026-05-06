@@ -43,4 +43,3 @@ describe('admin auth browser harness payloads', () => {
     expect(serialized).not.toMatch(/cookie|session_id|token|password|secret|api[_-]?key|webhook/i);
   });
 });
-
