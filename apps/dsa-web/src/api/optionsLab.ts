@@ -194,9 +194,29 @@ export type OptionsDecisionResponse = {
   ivGreeks: {
     ivReadiness: number | null;
     ivRankStatus: 'unavailable' | 'available' | string;
+    ivRank?: number | null;
+    ivPercentile?: number | null;
+    ivRankSource?: string | null;
+    ivRankConfidence?: string | null;
     warnings?: string[] | null;
     dteBucket?: string | null;
   } | null;
+  ivRank?: number | null;
+  ivPercentile?: number | null;
+  ivRankStatus?: 'unavailable' | 'available' | string | null;
+  expectedMove?: {
+    expectedMoveAbs?: number | null;
+    expectedMovePct?: number | null;
+    expectedMoveSource?: 'straddle_mid' | 'iv_dte' | 'unavailable' | string | null;
+    expectedMoveWarnings?: string[] | null;
+  } | null;
+  optimizer?: {
+    preferredStrategyKey?: OptionsStrategyType | null;
+    optimizerLabel?: '数据不足，禁止判断' | '不建议交易' | '仅观察' | '可关注替代结构' | '有条件可交易' | string | null;
+    alternatives?: OptionsOptimizerAlternative[] | null;
+    noTradeReason?: string | null;
+  } | null;
+  rankedAlternatives?: OptionsOptimizerAlternative[] | null;
   breakeven: {
     breakeven?: number | null;
     requiredMovePct?: number | null;
@@ -227,6 +247,22 @@ export type OptionsDecisionResponse = {
     asOf?: string | null;
   } | null;
   metadata?: OptionsStrategyCompareMetadata | null;
+};
+
+export type OptionsOptimizerAlternative = {
+  strategyKey: OptionsStrategyType;
+  dataQualityTier: 'live_usable' | 'delayed_usable' | 'synthetic_demo_only' | 'insufficient' | string;
+  liquidityScore: number | null;
+  breakevenPressure?: number | null;
+  maxLoss?: number | null;
+  maxGain?: number | null;
+  riskRewardRatio?: number | null;
+  expectedMoveAlignment?: number | null;
+  ivReadiness?: number | null;
+  tradeQualityScore: number | null;
+  decisionLabel: string | null;
+  primaryReasons?: string[] | null;
+  riskWarnings?: string[] | null;
 };
 
 const FIXTURE_METADATA: OptionsLabMetadata = {
@@ -404,9 +440,74 @@ function fixtureDecision(symbol: string): OptionsDecisionResponse {
     ivGreeks: {
       ivReadiness: 82,
       ivRankStatus: 'unavailable',
+      ivRank: null,
+      ivPercentile: null,
       warnings: ['iv_rank_unavailable'],
       dteBucket: 'standard',
     },
+    ivRank: null,
+    ivPercentile: null,
+    ivRankStatus: 'unavailable',
+    expectedMove: {
+      expectedMoveAbs: 7.5,
+      expectedMovePct: 14.3,
+      expectedMoveSource: 'straddle_mid',
+      expectedMoveWarnings: ['expected_move_uses_fixture_mid_prices'],
+    },
+    optimizer: {
+      preferredStrategyKey: null,
+      optimizerLabel: '数据不足，禁止判断',
+      noTradeReason: 'data_quality_not_decision_grade',
+      alternatives: [
+        {
+          strategyKey: 'bull_call_spread',
+          dataQualityTier: 'synthetic_demo_only',
+          liquidityScore: 76,
+          breakevenPressure: 0.08,
+          maxLoss: 230,
+          maxGain: 270,
+          riskRewardRatio: 1.17,
+          expectedMoveAlignment: 90,
+          ivReadiness: 82,
+          tradeQualityScore: 35,
+          decisionLabel: '数据不足，禁止判断',
+          primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+          riskWarnings: ['不可用于真实交易判断'],
+        },
+        {
+          strategyKey: 'long_call',
+          dataQualityTier: 'synthetic_demo_only',
+          liquidityScore: 76,
+          breakevenPressure: 10.1,
+          maxLoss: 270,
+          maxGain: null,
+          riskRewardRatio: null,
+          expectedMoveAlignment: 80,
+          ivReadiness: 82,
+          tradeQualityScore: 35,
+          decisionLabel: '数据不足，禁止判断',
+          primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+          riskWarnings: ['不可用于真实交易判断'],
+        },
+      ],
+    },
+    rankedAlternatives: [
+      {
+        strategyKey: 'bull_call_spread',
+        dataQualityTier: 'synthetic_demo_only',
+        liquidityScore: 76,
+        breakevenPressure: 0.08,
+        maxLoss: 230,
+        maxGain: 270,
+        riskRewardRatio: 1.17,
+        expectedMoveAlignment: 90,
+        ivReadiness: 82,
+        tradeQualityScore: 35,
+        decisionLabel: '数据不足，禁止判断',
+        primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+        riskWarnings: ['不可用于真实交易判断'],
+      },
+    ],
     breakeven: {
       breakeven: 52.3,
       requiredMovePct: -0.08,

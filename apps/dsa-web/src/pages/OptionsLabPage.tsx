@@ -154,6 +154,20 @@ function dataTierLabel(value?: string | null): string {
   return '--';
 }
 
+function expectedMoveSourceLabel(value?: string | null): string {
+  if (value === 'straddle_mid') return 'ATM Straddle Mid';
+  if (value === 'iv_dte') return 'IV / DTE';
+  if (value === 'unavailable') return '不可用';
+  return '--';
+}
+
+function noTradeReasonLabel(value?: string | null): string {
+  if (value === 'data_quality_not_decision_grade') return '数据质量未达到可判断等级';
+  if (value === 'all_candidates_have_weak_edge_or_unfavorable_risk_reward') return '候选结构边际优势或风险回报不足';
+  if (value === 'no_supported_strategy_candidates') return '暂无可比较候选结构';
+  return value ? limitationLabel(value) : '暂无';
+}
+
 function metricTone(value?: number | null): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 'text-white/75';
   if (value > 0) return 'text-emerald-300';
@@ -542,6 +556,14 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
   const liquidityWarnings = asArray(decision?.liquidity?.liquidityWarnings);
   const ivWarnings = asArray(decision?.ivGreeks?.warnings);
   const allWarnings = [...new Set([...dataWarnings, ...liquidityWarnings, ...ivWarnings, ...riskWarnings])];
+  const expectedMove = decision?.expectedMove;
+  const optimizer = decision?.optimizer;
+  const rankedAlternatives = asArray(decision?.rankedAlternatives).length
+    ? asArray(decision?.rankedAlternatives)
+    : asArray(optimizer?.alternatives);
+  const ivRankStatus = decision?.ivRankStatus || decision?.ivGreeks?.ivRankStatus;
+  const ivRank = decision?.ivRank ?? decision?.ivGreeks?.ivRank;
+  const ivPercentile = decision?.ivPercentile ?? decision?.ivGreeks?.ivPercentile;
   const labelTone = label === '数据不足，禁止判断' || label === '不建议'
     ? 'text-rose-200'
     : label === '仅观察'
@@ -549,7 +571,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
       : 'text-amber-100';
   return (
     <section className={cn(panelClass, 'xl:col-span-12')} data-testid="options-lab-decision-engine">
-      <SectionHeader eyebrow="Decision Engine R1" title="交易质量判断" icon={ShieldCheck}>
+      <SectionHeader eyebrow="Decision Engine R2" title="交易质量判断" icon={ShieldCheck}>
         <div className="flex flex-wrap justify-end gap-2">
           <Pill tone="warn">{label}</Pill>
           <Pill tone="info">{dataTierLabel(decision?.dataQuality?.dataQualityTier)}</Pill>
@@ -584,6 +606,27 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
               <p className="mt-1 text-sm text-white/52">所需波动：{ratio(decision?.breakeven?.requiredMovePct)}</p>
             </div>
             <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
+              <p className={labelClass}>IV Rank / Percentile</p>
+              {ivRankStatus === 'available' ? (
+                <>
+                  <p className="mt-2 font-mono text-lg font-semibold text-cyan-100">{number(ivRank, 1)} / {number(ivPercentile, 1)}</p>
+                  <p className="mt-1 text-sm text-white/52">来源：{decision?.ivGreeks?.ivRankSource === 'synthetic_fixture_proxy' ? 'Fixture Proxy' : decision?.ivGreeks?.ivRankSource || '--'}</p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-2 font-mono text-lg font-semibold text-white/62">IV Rank 不可用</p>
+                  <p className="mt-1 text-sm text-white/52">缺少历史 IV 或代理序列，置信度降低。</p>
+                </>
+              )}
+            </div>
+            <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
+              <p className={labelClass}>Expected Move</p>
+              <p className="mt-2 font-mono text-lg font-semibold text-white">{money(expectedMove?.expectedMoveAbs)}</p>
+              <p className="mt-1 text-sm text-white/52">{ratio(expectedMove?.expectedMovePct)} · {expectedMoveSourceLabel(expectedMove?.expectedMoveSource)}</p>
+            </div>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
               <p className={labelClass}>主要原因</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {(reasons.length ? reasons : ['数据不足，禁止判断']).slice(0, 4).map((reason) => (
@@ -598,6 +641,49 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
                   <Pill key={warning} tone="warn">{warningLabel(warning)}</Pill>
                 ))}
               </div>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-cyan-300/10 bg-white/[0.02] p-4" data-testid="options-lab-strategy-optimizer">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className={labelClass}>策略优化</p>
+                <p className="mt-2 text-lg font-semibold text-white">推荐状态：{optimizer?.optimizerLabel || '数据不足，禁止判断'}</p>
+                <p className="mt-1 text-sm leading-6 text-white/52">
+                  {optimizer?.preferredStrategyKey
+                    ? `可关注：${strategyChineseLabel(optimizer.preferredStrategyKey)}`
+                    : `不交易：${noTradeReasonLabel(optimizer?.noTradeReason)}`}
+                </p>
+              </div>
+              <Pill tone={optimizer?.optimizerLabel === '有条件可交易' ? 'good' : 'warn'}>
+                {optimizer?.optimizerLabel || '数据不足，禁止判断'}
+              </Pill>
+            </div>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              {(rankedAlternatives.length ? rankedAlternatives : []).slice(0, 4).map((alternative, index) => (
+                <div key={`${alternative.strategyKey}-${index}`} className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white">{index + 1}. {strategyChineseLabel(alternative.strategyKey)}</p>
+                      <p className="mt-1 text-xs text-white/42">{dataTierLabel(alternative.dataQualityTier)} · {alternative.decisionLabel || '数据不足，禁止判断'}</p>
+                    </div>
+                    <p className="shrink-0 font-mono text-sm font-semibold text-cyan-100">{number(alternative.tradeQualityScore)}</p>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-white/55">
+                    <span>最大亏损 {money(alternative.maxLoss)}</span>
+                    <span>风险收益 {number(alternative.riskRewardRatio, 2)}</span>
+                    <span>EM 对齐 {number(alternative.expectedMoveAlignment)}</span>
+                    <span>IV 就绪 {number(alternative.ivReadiness)}</span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {asArray(alternative.primaryReasons).slice(0, 2).map((reason) => (
+                      <Pill key={reason} tone="warn">{warningLabel(reason)}</Pill>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {!rankedAlternatives.length ? (
+                <p className="rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/45">暂无可排序替代结构。</p>
+              ) : null}
             </div>
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
@@ -627,7 +713,9 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
             <div className="mt-4 grid gap-2 text-xs leading-5 text-white/45">
               <p>Source: {decision?.freshness?.source || '--'}</p>
               <p>Freshness: {decision?.freshness?.freshness || '--'}</p>
-              <p>IV Rank: {decision?.ivGreeks?.ivRankStatus === 'available' ? 'Available' : 'IV Rank 不可用'}</p>
+              <p>IV Rank: {ivRankStatus === 'available' ? `${number(ivRank, 2)} / ${number(ivPercentile, 2)}` : 'IV Rank 不可用'}</p>
+              <p>Expected Move Source: {expectedMoveSourceLabel(expectedMove?.expectedMoveSource)}</p>
+              <p>Optimizer: {optimizer?.optimizerLabel || '--'}</p>
               <p>Disclosure: {decision?.noAdviceDisclosure || '--'}</p>
             </div>
           </details>

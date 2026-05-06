@@ -489,6 +489,155 @@ def test_decision_synthetic_fixture_forces_demo_only_insufficient_label() -> Non
     assert response.trade_quality_score <= 35
     assert "synthetic_or_fixture_data_not_decision_grade" in response.data_quality.blocking_reasons
     assert response.metadata.no_external_calls is True
+    assert response.optimizer.optimizer_label == "数据不足，禁止判断"
+    assert response.optimizer.preferred_strategy_key is None
+    assert all(item.decision_label != "有条件可交易" for item in response.ranked_alternatives)
+
+
+def test_decision_iv_rank_unavailable_returns_safe_status_no_crash(tmp_path: Path) -> None:
+    fixture = json.loads(Path("tests/fixtures/options/tem_chain.json").read_text(encoding="utf-8"))
+    fixture.pop("historicalIvProxy", None)
+    path = tmp_path / "tem_no_iv_history.json"
+    path.write_text(json.dumps(fixture), encoding="utf-8")
+
+    response = OptionsLabService(fixture_path=path).evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "bull_call_spread",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+        }
+    )
+
+    assert response.iv_rank_status == "unavailable"
+    assert response.iv_rank is None
+    assert response.iv_percentile is None
+    assert "iv_rank_unavailable" in response.iv_greeks.warnings
+    assert "IV Rank 不可用，波动率位置置信度不足" in response.primary_reasons
+
+
+def test_decision_iv_rank_synthetic_fixture_proxy_computes_rank_percentile() -> None:
+    response = _service().evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "bull_call_spread",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+        }
+    )
+
+    assert response.iv_rank_status == "available"
+    assert response.iv_rank == 64.44
+    assert response.iv_percentile == 71.43
+    assert response.iv_greeks.iv_rank_source == "synthetic_fixture_proxy"
+    assert response.iv_greeks.iv_rank_confidence == "test_only_low_confidence"
+
+
+def test_decision_expected_move_from_iv_dte_when_straddle_mid_missing(tmp_path: Path) -> None:
+    fixture = json.loads(Path("tests/fixtures/options/tem_chain.json").read_text(encoding="utf-8"))
+    for contract in fixture["contracts"]:
+        if contract["side"] != "call":
+            contract["bid"] = None
+            contract["ask"] = None
+    path = tmp_path / "tem_iv_expected_move.json"
+    path.write_text(json.dumps(fixture), encoding="utf-8")
+
+    response = OptionsLabService(fixture_path=path).evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "long_call",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "legs": [
+                {
+                    "action": "buy",
+                    "side": "call",
+                    "contractSymbol": "TEM260619C00055000",
+                    "expiration": "2026-06-19",
+                    "strike": 55,
+                }
+            ],
+        }
+    )
+
+    assert response.expected_move.expected_move_source == "iv_dte"
+    assert response.expected_move.expected_move_abs == 12.01
+    assert response.expected_move.expected_move_pct == 22.92
+
+
+def test_decision_expected_move_unavailable_reduces_confidence(tmp_path: Path) -> None:
+    fixture = json.loads(Path("tests/fixtures/options/tem_chain.json").read_text(encoding="utf-8"))
+    for contract in fixture["contracts"]:
+        contract["bid"] = None
+        contract["ask"] = None
+        contract["impliedVolatility"] = None
+    path = tmp_path / "tem_no_expected_move.json"
+    path.write_text(json.dumps(fixture), encoding="utf-8")
+
+    response = OptionsLabService(fixture_path=path).evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "long_call",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+        }
+    )
+
+    assert response.expected_move.expected_move_source == "unavailable"
+    assert response.expected_move.expected_move_abs is None
+    assert response.trade_quality_score <= 35
+    assert "expected_move_unavailable_degrade_confidence" in response.risk_warnings
+
+
+def test_decision_optimizer_ranks_debit_spread_over_long_call_when_risk_reward_is_better() -> None:
+    response = _service().evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "long_call",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskBudget": 600,
+        }
+    )
+
+    keys = [item.strategy_key for item in response.ranked_alternatives]
+    assert keys.index("bull_call_spread") < keys.index("long_call")
+    spread = next(item for item in response.ranked_alternatives if item.strategy_key == "bull_call_spread")
+    long_call = next(item for item in response.ranked_alternatives if item.strategy_key == "long_call")
+    assert spread.risk_reward_ratio is not None
+    assert long_call.risk_reward_ratio is None
+    assert response.optimizer.no_trade_reason == "data_quality_not_decision_grade"
+
+
+def test_decision_optimizer_returns_no_trade_when_all_candidates_are_weak(tmp_path: Path) -> None:
+    fixture = json.loads(Path("tests/fixtures/options/tem_chain.json").read_text(encoding="utf-8"))
+    for contract in fixture["contracts"]:
+        contract["volume"] = 0
+        contract["openInterest"] = 0
+        contract["bid"] = 0.1
+        contract["ask"] = 2.5
+        contract["impliedVolatility"] = 1.4
+    path = tmp_path / "tem_weak_candidates.json"
+    path.write_text(json.dumps(fixture), encoding="utf-8")
+
+    response = OptionsLabService(fixture_path=path).evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "long_call",
+            "expiration": "2026-06-19",
+            "targetPrice": 52.5,
+            "targetDate": "2026-06-19",
+        }
+    )
+
+    assert response.optimizer.preferred_strategy_key is None
+    assert response.optimizer.optimizer_label in {"数据不足，禁止判断", "不建议交易", "仅观察"}
+    assert response.optimizer.no_trade_reason is not None
 
 
 def test_decision_missing_greeks_caps_score_and_warns() -> None:

@@ -85,8 +85,42 @@ describe('optionsLabApi fixture fallback boundaries', () => {
         iv_greeks: {
           iv_readiness: 60,
           iv_rank_status: 'unavailable',
+          iv_rank: null,
+          iv_percentile: null,
           warnings: ['iv_rank_unavailable'],
         },
+        iv_rank: null,
+        iv_percentile: null,
+        iv_rank_status: 'unavailable',
+        expected_move: {
+          expected_move_abs: 7.5,
+          expected_move_pct: 14.31,
+          expected_move_source: 'straddle_mid',
+          expected_move_warnings: ['expected_move_uses_fixture_mid_prices'],
+        },
+        optimizer: {
+          preferred_strategy_key: null,
+          optimizer_label: '数据不足，禁止判断',
+          no_trade_reason: 'data_quality_not_decision_grade',
+          alternatives: [
+            {
+              strategy_key: 'bull_call_spread',
+              data_quality_tier: 'synthetic_demo_only',
+              liquidity_score: 76,
+              breakeven_pressure: 0.19,
+              max_loss: 230,
+              max_gain: 270,
+              risk_reward_ratio: 1.17,
+              expected_move_alignment: 92,
+              iv_readiness: 82,
+              trade_quality_score: 35,
+              decision_label: '数据不足，禁止判断',
+              primary_reasons: ['当前为 synthetic delayed / 演示数据'],
+              risk_warnings: ['不可用于真实交易判断'],
+            },
+          ],
+        },
+        ranked_alternatives: [],
         breakeven: {
           breakeven: 57.7,
           required_move_pct: 10.11,
@@ -124,6 +158,12 @@ describe('optionsLabApi fixture fallback boundaries', () => {
       decisionLabel: '数据不足，禁止判断',
       dataQuality: {
         dataQualityTier: 'synthetic_demo_only',
+      },
+      expectedMove: {
+        expectedMoveSource: 'straddle_mid',
+      },
+      optimizer: {
+        optimizerLabel: '数据不足，禁止判断',
       },
     });
     expect(apiClient.post).toHaveBeenCalledWith('/api/v1/options/decision/evaluate', expect.objectContaining({

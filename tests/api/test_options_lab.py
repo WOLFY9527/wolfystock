@@ -433,6 +433,14 @@ def test_decision_endpoint_returns_safe_demo_only_contract_quality() -> None:
         assert payload["dataQuality"]["dataQualityTier"] == "synthetic_demo_only"
         assert payload["decisionLabel"] == "数据不足，禁止判断"
         assert payload["tradeQualityScore"] <= 35
+        assert payload["ivRankStatus"] == "available"
+        assert payload["ivRank"] == 68.89
+        assert payload["ivPercentile"] == 71.43
+        assert payload["expectedMove"]["expectedMoveSource"] == "straddle_mid"
+        assert payload["expectedMove"]["expectedMoveAbs"] == 7.5
+        assert payload["optimizer"]["optimizerLabel"] == "数据不足，禁止判断"
+        assert payload["optimizer"]["preferredStrategyKey"] is None
+        assert payload["rankedAlternatives"]
         assert payload["metadata"]["noExternalCalls"] is True
         assert payload["metadata"]["noOrderPlacement"] is True
         assert "not personalized financial advice" in payload["noAdviceDisclosure"]

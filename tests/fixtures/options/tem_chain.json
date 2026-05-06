@@ -12,6 +12,15 @@
   },
   "chainAsOf": "2026-05-06T13:45:00Z",
   "source": "synthetic_options_lab_fixture",
+  "historicalIvProxy": [
+    {"date": "2026-04-01", "iv": 0.35, "source": "synthetic_fixture_proxy"},
+    {"date": "2026-04-08", "iv": 0.42, "source": "synthetic_fixture_proxy"},
+    {"date": "2026-04-15", "iv": 0.5, "source": "synthetic_fixture_proxy"},
+    {"date": "2026-04-22", "iv": 0.58, "source": "synthetic_fixture_proxy"},
+    {"date": "2026-04-29", "iv": 0.62, "source": "synthetic_fixture_proxy"},
+    {"date": "2026-05-06", "iv": 0.7, "source": "synthetic_fixture_proxy"},
+    {"date": "2026-05-13", "iv": 0.8, "source": "synthetic_fixture_proxy"}
+  ],
   "expirations": [
     {
       "date": "2026-06-19",

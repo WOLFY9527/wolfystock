@@ -235,8 +235,73 @@ function mockHappyPath() {
     ivGreeks: {
       ivReadiness: 82,
       ivRankStatus: 'unavailable',
+      ivRank: null,
+      ivPercentile: null,
       warnings: ['iv_rank_unavailable'],
     },
+    ivRank: null,
+    ivPercentile: null,
+    ivRankStatus: 'unavailable',
+    expectedMove: {
+      expectedMoveAbs: 7.5,
+      expectedMovePct: 14.31,
+      expectedMoveSource: 'straddle_mid',
+      expectedMoveWarnings: ['expected_move_uses_fixture_mid_prices'],
+    },
+    optimizer: {
+      preferredStrategyKey: null,
+      optimizerLabel: '数据不足，禁止判断',
+      noTradeReason: 'data_quality_not_decision_grade',
+      alternatives: [
+        {
+          strategyKey: 'bull_call_spread',
+          dataQualityTier: 'synthetic_demo_only',
+          liquidityScore: 76,
+          breakevenPressure: 0.19,
+          maxLoss: 230,
+          maxGain: 270,
+          riskRewardRatio: 1.17,
+          expectedMoveAlignment: 92,
+          ivReadiness: 82,
+          tradeQualityScore: 35,
+          decisionLabel: '数据不足，禁止判断',
+          primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+          riskWarnings: ['不可用于真实交易判断'],
+        },
+        {
+          strategyKey: 'long_call',
+          dataQualityTier: 'synthetic_demo_only',
+          liquidityScore: 76,
+          breakevenPressure: 10.11,
+          maxLoss: 270,
+          maxGain: null,
+          riskRewardRatio: null,
+          expectedMoveAlignment: 80,
+          ivReadiness: 82,
+          tradeQualityScore: 35,
+          decisionLabel: '数据不足，禁止判断',
+          primaryReasons: ['IV Rank 不可用，波动率位置置信度不足'],
+          riskWarnings: ['iv_rank_unavailable_degrade_confidence'],
+        },
+      ],
+    },
+    rankedAlternatives: [
+      {
+        strategyKey: 'bull_call_spread',
+        dataQualityTier: 'synthetic_demo_only',
+        liquidityScore: 76,
+        breakevenPressure: 0.19,
+        maxLoss: 230,
+        maxGain: 270,
+        riskRewardRatio: 1.17,
+        expectedMoveAlignment: 92,
+        ivReadiness: 82,
+        tradeQualityScore: 35,
+        decisionLabel: '数据不足，禁止判断',
+        primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+        riskWarnings: ['不可用于真实交易判断'],
+      },
+    ],
     breakeven: {
       breakeven: 52.3,
       requiredMovePct: -0.19,
@@ -332,19 +397,73 @@ describe('OptionsLabPage', () => {
     expect(within(section).getAllByText('仅供情景分析，不构成交易建议').length).toBeGreaterThan(0);
   });
 
-  it('renders the R1 decision section with synthetic demo-only guardrails', async () => {
+  it('renders the R2 decision section with IV rank, expected move, optimizer, and synthetic guardrails', async () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-decision-engine');
     expect(within(section).getByText('交易质量判断')).toBeInTheDocument();
     await waitFor(() => {
-      expect(within(section).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
+      expect(within(section).getByText('Expected Move')).toBeInTheDocument();
     });
-    expect(within(section).getByText('当前为 synthetic delayed / 演示数据')).toBeInTheDocument();
-    expect(within(section).getByText('不可用于真实交易判断')).toBeInTheDocument();
+    expect(within(section).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
+    expect(within(section).getAllByText('当前为 synthetic delayed / 演示数据').length).toBeGreaterThan(0);
+    expect(within(section).getAllByText('不可用于真实交易判断').length).toBeGreaterThan(0);
     expect(within(section).getByText('波动率 / Greeks 就绪度')).toBeInTheDocument();
-    expect(within(section).getByText('IV Rank 不可用')).toBeInTheDocument();
+    expect(within(section).getAllByText('IV Rank 不可用').length).toBeGreaterThan(0);
+    expect(within(section).getByText('Expected Move')).toBeInTheDocument();
+    expect(within(section).getByText('$7.50')).toBeInTheDocument();
+    expect(within(section).getByText('策略优化')).toBeInTheDocument();
+    expect(within(section).getByText('推荐状态：数据不足，禁止判断')).toBeInTheDocument();
+    expect(within(section).getByText(/不交易：数据质量未达到可判断等级/)).toBeInTheDocument();
+    expect(within(section).getAllByText(/牛市看涨价差/).length).toBeGreaterThan(0);
     expect(document.body.textContent || '').not.toContain('有条件可交易');
+  });
+
+  it('renders no-trade optimizer state without black-screening', async () => {
+    vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValueOnce({
+      symbol: 'TEM',
+      strategy: 'long_call',
+      dataQuality: {
+        dataQualityScore: 45,
+        dataQualityTier: 'insufficient',
+        sourceType: 'unknown',
+        blockingReasons: ['missing_bid_ask'],
+      },
+      liquidity: { liquidityScore: 20, spreadPct: 80, liquidityWarnings: ['wide_bid_ask_spread'] },
+      ivGreeks: { ivReadiness: 30, ivRankStatus: 'unavailable', warnings: ['iv_rank_unavailable'] },
+      ivRank: null,
+      ivPercentile: null,
+      ivRankStatus: 'unavailable',
+      expectedMove: {
+        expectedMoveAbs: null,
+        expectedMovePct: null,
+        expectedMoveSource: 'unavailable',
+        expectedMoveWarnings: ['expected_move_unavailable'],
+      },
+      optimizer: {
+        preferredStrategyKey: null,
+        optimizerLabel: '不建议交易',
+        noTradeReason: 'all_candidates_have_weak_edge_or_unfavorable_risk_reward',
+        alternatives: [],
+      },
+      rankedAlternatives: [],
+      breakeven: { breakeven: 57.7, requiredMovePct: 10.11, targetPriceStatus: 'target_below_breakeven', score: 35 },
+      riskReward: { maxLoss: 270, maxGain: null, riskRewardRatio: null, score: 30, warnings: ['max_gain_not_defined_for_long_option'] },
+      tradeQualityScore: 28,
+      decisionLabel: '不建议',
+      primaryReasons: ['数据质量、流动性与风险回报需同时复核'],
+      riskWarnings: ['expected_move_unavailable_degrade_confidence'],
+      noAdviceDisclosure: 'Analytical output only; not personalized financial advice.',
+      freshness: { source: 'fixture', freshness: 'synthetic_delayed', asOf: '2026-05-06T09:45:00Z' },
+      metadata: { readOnly: true, noExternalCalls: true },
+    } as never);
+
+    renderPage();
+
+    const optimizer = await screen.findByTestId('options-lab-strategy-optimizer');
+    expect(within(optimizer).getByText('推荐状态：不建议交易')).toBeInTheDocument();
+    expect(within(optimizer).getByText(/不交易：候选结构边际优势或风险回报不足/)).toBeInTheDocument();
+    expect(within(optimizer).getByText('暂无可排序替代结构。')).toBeInTheDocument();
   });
 
   it('renders missing Greeks and liquidity warnings in the decision section', async () => {

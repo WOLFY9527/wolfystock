@@ -130,7 +130,9 @@ OptionRiskProfile = Literal["conservative", "balanced", "aggressive"]
 OptionStrategy = Literal["long_call", "long_put", "bull_call_spread", "bear_put_spread"]
 OptionsDataQualityTier = Literal["live_usable", "delayed_usable", "synthetic_demo_only", "insufficient"]
 OptionsDecisionLabel = Literal["数据不足，禁止判断", "不建议", "仅观察", "有条件可交易", "高风险，仅小仓验证"]
+OptionsOptimizerLabel = Literal["数据不足，禁止判断", "不建议交易", "仅观察", "可关注替代结构", "有条件可交易"]
 OptionsIvRankStatus = Literal["unavailable", "available"]
+OptionsExpectedMoveSource = Literal["straddle_mid", "iv_dte", "unavailable"]
 
 
 class OptionsAnalyzeRequest(_OptionsModel):
@@ -320,6 +322,10 @@ class OptionsDecisionLiquidity(_OptionsModel):
 class OptionsDecisionIvGreeks(_OptionsModel):
     iv_readiness: float = Field(alias="ivReadiness")
     iv_rank_status: OptionsIvRankStatus = Field(alias="ivRankStatus")
+    iv_rank: Optional[float] = Field(default=None, alias="ivRank")
+    iv_percentile: Optional[float] = Field(default=None, alias="ivPercentile")
+    iv_rank_source: Optional[str] = Field(default=None, alias="ivRankSource")
+    iv_rank_confidence: Optional[str] = Field(default=None, alias="ivRankConfidence")
     warnings: List[str] = Field(default_factory=list)
     dte_bucket: str = Field(default="unknown", alias="dteBucket")
 
@@ -352,12 +358,48 @@ class OptionsDecisionFreshness(_OptionsModel):
     as_of: Optional[str] = Field(default=None, alias="asOf")
 
 
+class OptionsExpectedMove(_OptionsModel):
+    expected_move_abs: Optional[float] = Field(default=None, alias="expectedMoveAbs")
+    expected_move_pct: Optional[float] = Field(default=None, alias="expectedMovePct")
+    expected_move_source: OptionsExpectedMoveSource = Field(alias="expectedMoveSource")
+    expected_move_warnings: List[str] = Field(default_factory=list, alias="expectedMoveWarnings")
+
+
+class OptionsOptimizerAlternative(_OptionsModel):
+    strategy_key: OptionStrategy = Field(alias="strategyKey")
+    data_quality_tier: OptionsDataQualityTier = Field(alias="dataQualityTier")
+    liquidity_score: float = Field(alias="liquidityScore")
+    breakeven_pressure: Optional[float] = Field(default=None, alias="breakevenPressure")
+    max_loss: Optional[float] = Field(default=None, alias="maxLoss")
+    max_gain: Optional[float] = Field(default=None, alias="maxGain")
+    risk_reward_ratio: Optional[float] = Field(default=None, alias="riskRewardRatio")
+    expected_move_alignment: float = Field(alias="expectedMoveAlignment")
+    iv_readiness: float = Field(alias="ivReadiness")
+    trade_quality_score: float = Field(alias="tradeQualityScore")
+    decision_label: OptionsDecisionLabel = Field(alias="decisionLabel")
+    primary_reasons: List[str] = Field(default_factory=list, alias="primaryReasons")
+    risk_warnings: List[str] = Field(default_factory=list, alias="riskWarnings")
+
+
+class OptionsDecisionOptimizer(_OptionsModel):
+    preferred_strategy_key: Optional[OptionStrategy] = Field(default=None, alias="preferredStrategyKey")
+    optimizer_label: OptionsOptimizerLabel = Field(alias="optimizerLabel")
+    alternatives: List[OptionsOptimizerAlternative] = Field(default_factory=list)
+    no_trade_reason: Optional[str] = Field(default=None, alias="noTradeReason")
+
+
 class OptionsDecisionResponse(_OptionsModel):
     symbol: str
     strategy: OptionStrategy
     data_quality: OptionsDecisionDataQuality = Field(alias="dataQuality")
     liquidity: OptionsDecisionLiquidity
     iv_greeks: OptionsDecisionIvGreeks = Field(alias="ivGreeks")
+    iv_rank: Optional[float] = Field(default=None, alias="ivRank")
+    iv_percentile: Optional[float] = Field(default=None, alias="ivPercentile")
+    iv_rank_status: OptionsIvRankStatus = Field(alias="ivRankStatus")
+    expected_move: OptionsExpectedMove = Field(alias="expectedMove")
+    optimizer: OptionsDecisionOptimizer
+    ranked_alternatives: List[OptionsOptimizerAlternative] = Field(default_factory=list, alias="rankedAlternatives")
     breakeven: OptionsDecisionBreakeven
     risk_reward: OptionsDecisionRiskReward = Field(alias="riskReward")
     trade_quality_score: float = Field(alias="tradeQualityScore")
