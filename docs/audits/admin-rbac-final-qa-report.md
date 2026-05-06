@@ -150,7 +150,8 @@ Console/page errors:
 ## Gaps / Remaining Production Blockers
 
 - MFA is still not implemented.
-- Recent reauth still lacks a real wired source.
+- Recent reauth is now wired only to the Phase 3B admin user security write
+  pilot; broader sensitive route coverage remains future work.
 - Role management UI and capability mutation governance are still absent.
 - Audit fail-closed policy remains future work.
 - R5 removal of the coarse admin fallback remains future work.

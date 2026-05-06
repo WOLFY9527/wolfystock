@@ -26,6 +26,7 @@ def _reset_auth_globals() -> None:
     auth._password_hash_salt = None
     auth._password_hash_stored = None
     auth._rate_limit = {}
+    auth._admin_reauth_markers = {}
 
 
 class AuthSecurityHardeningTestCase(unittest.TestCase):
@@ -104,6 +105,16 @@ class AuthSecurityHardeningTestCase(unittest.TestCase):
         return self.client.post(
             "/api/v1/auth/login",
             json={"username": username, "password": password},
+            headers=headers,
+        )
+
+    def _reauth_admin(self, *, origin: str | None = None):
+        headers = {"X-Forwarded-For": "198.51.100.10"}
+        if origin:
+            headers["Origin"] = origin
+        return self.client.post(
+            "/api/v1/auth/reauth",
+            json={"password": "adminpass123"},
             headers=headers,
         )
 
@@ -197,6 +208,8 @@ class AuthSecurityHardeningTestCase(unittest.TestCase):
     def test_csrf_origin_rejects_cross_site_admin_post_and_allows_trusted_origin(self) -> None:
         login = self._login("admin", "adminpass123", origin="https://app.example.test")
         self.assertEqual(login.status_code, 200)
+        reauth = self._reauth_admin(origin="https://app.example.test")
+        self.assertEqual(reauth.status_code, 200)
 
         with patch.dict(os.environ, {"APP_ENV": "production"}, clear=False):
             rejected = self.client.post(
@@ -222,6 +235,8 @@ class AuthSecurityHardeningTestCase(unittest.TestCase):
     def test_local_dev_allows_missing_origin_for_cookie_write(self) -> None:
         login = self._login("admin", "adminpass123", origin="http://localhost:5173")
         self.assertEqual(login.status_code, 200)
+        reauth = self._reauth_admin(origin="http://localhost:5173")
+        self.assertEqual(reauth.status_code, 200)
 
         response = self.client.post(
             "/api/v1/admin/users/user-1/disable",

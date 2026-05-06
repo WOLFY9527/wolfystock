@@ -380,7 +380,7 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
                 "admin_logs.py": 6,
                 "admin_notifications.py": 7,
                 "admin_portfolio.py": 4,
-                "admin_security.py": 3,
+                "admin_security.py": 1,
                 "system_config.py": 9,
             },
             usages,

@@ -5,8 +5,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from api.deps import CurrentUser, require_admin_capability
+from api.deps import CurrentUser, require_admin_capability, require_recent_admin_reauth
 from api.v1.schemas.admin_security import AdminSecurityActionRequest, AdminSecurityActionResponse
+from src.auth import get_admin_reauth_max_age_seconds
 from src.services.admin_security_service import AdminSecurityError, AdminSecurityResult, AdminSecurityService
 
 router = APIRouter()
@@ -39,6 +40,15 @@ def _raise_service_error(exc: AdminSecurityError) -> None:
     ) from None
 
 
+def _require_admin_security_write(
+    current_user: CurrentUser = Depends(require_admin_capability("users:security:write")),
+) -> CurrentUser:
+    if current_user.transitional and not current_user.auth_enabled and not current_user.is_authenticated:
+        return current_user
+    max_age_minutes = max(1, get_admin_reauth_max_age_seconds() // 60)
+    return require_recent_admin_reauth(current_user, max_age_minutes=max_age_minutes)
+
+
 @router.post(
     "/users/{user_id}/disable",
     response_model=AdminSecurityActionResponse,
@@ -47,7 +57,7 @@ def _raise_service_error(exc: AdminSecurityError) -> None:
 def disable_admin_user(
     user_id: str,
     body: AdminSecurityActionRequest,
-    current_user: CurrentUser = Depends(require_admin_capability("users:security:write")),
+    current_user: CurrentUser = Depends(_require_admin_security_write),
 ) -> AdminSecurityActionResponse:
     _require_confirmation(body, "DISABLE")
     try:
@@ -70,7 +80,7 @@ def disable_admin_user(
 def enable_admin_user(
     user_id: str,
     body: AdminSecurityActionRequest,
-    current_user: CurrentUser = Depends(require_admin_capability("users:security:write")),
+    current_user: CurrentUser = Depends(_require_admin_security_write),
 ) -> AdminSecurityActionResponse:
     _require_confirmation(body, "ENABLE")
     try:
@@ -92,7 +102,7 @@ def enable_admin_user(
 def revoke_admin_user_sessions(
     user_id: str,
     body: AdminSecurityActionRequest,
-    current_user: CurrentUser = Depends(require_admin_capability("users:security:write")),
+    current_user: CurrentUser = Depends(_require_admin_security_write),
 ) -> AdminSecurityActionResponse:
     _require_confirmation(body, "REVOKE_SESSIONS")
     if body.scope != "all":

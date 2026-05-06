@@ -28,19 +28,27 @@ def _reset_auth_globals() -> None:
     auth._password_hash_salt = None
     auth._password_hash_stored = None
     auth._rate_limit = {}
+    auth._admin_reauth_markers = {}
 
 
-def _admin_user(user_id: str = BOOTSTRAP_ADMIN_USER_ID) -> CurrentUser:
+def _admin_user(
+    user_id: str = BOOTSTRAP_ADMIN_USER_ID,
+    *,
+    is_authenticated: bool = False,
+    transitional: bool = True,
+    auth_enabled: bool = False,
+    session_id: str | None = None,
+) -> CurrentUser:
     return CurrentUser(
         user_id=user_id,
         username="admin" if user_id == BOOTSTRAP_ADMIN_USER_ID else user_id,
         display_name="Admin",
         role="admin",
         is_admin=True,
-        is_authenticated=True,
-        transitional=False,
-        auth_enabled=True,
-        session_id="admin-session-raw",
+        is_authenticated=is_authenticated,
+        transitional=transitional,
+        auth_enabled=auth_enabled,
+        session_id=session_id,
     )
 
 
@@ -70,16 +78,36 @@ class AdminSecurityApiTestCase(unittest.TestCase):
 
         from api.v1.endpoints import admin_security, auth as auth_endpoint
 
+        self.env_patch = patch.dict(
+            os.environ,
+            {
+                "DATABASE_PATH": str(self.db_path),
+                "ADMIN_AUTH_ENABLED": "true",
+                "ADMIN_REAUTH_MAX_AGE_MINUTES": "15",
+            },
+            clear=False,
+        )
+        self.auth_enabled_patch = patch.object(auth, "_is_auth_enabled_from_env", return_value=True)
+        self.data_dir_patch = patch.object(auth, "_get_data_dir", return_value=self.data_dir)
+        self.env_patch.start()
+        self.auth_enabled_patch.start()
+        self.data_dir_patch.start()
+        auth._auth_enabled = True
+
         self.app = FastAPI()
         self.app.include_router(admin_security.router, prefix="/api/v1/admin")
         self.app.include_router(auth_endpoint.router, prefix="/api/v1/auth")
         self.client = TestClient(self.app)
         self.now = datetime.now()
         self._seed_users()
+        auth.set_initial_password("adminpass123")
 
     def tearDown(self) -> None:
         self.client.close()
         self.app.dependency_overrides.clear()
+        self.data_dir_patch.stop()
+        self.auth_enabled_patch.stop()
+        self.env_patch.stop()
         DatabaseManager.reset_instance()
         _reset_auth_globals()
         self.temp_dir.cleanup()
@@ -155,6 +183,24 @@ class AdminSecurityApiTestCase(unittest.TestCase):
 
     def _as_user(self) -> None:
         self.app.dependency_overrides[get_current_user] = _regular_user
+
+    def _login_admin_session(self):
+        response = self.client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "adminpass123"},
+        )
+        self.assertEqual(response.status_code, 200)
+        session_cookie = response.cookies.get(auth.COOKIE_NAME)
+        self.assertTrue(session_cookie)
+        identity = auth.get_session_identity(session_cookie)
+        self.assertIsNotNone(identity)
+        self.assertTrue(identity.session_id)
+        return session_cookie, identity
+
+    def _reauth_admin_session(self) -> None:
+        response = self.client.post("/api/v1/auth/reauth", json={"password": "adminpass123"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
 
     @staticmethod
     def _json_text(response) -> str:
@@ -243,6 +289,113 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         self.assertEqual(response.json()["detail"]["error"], "admin_capability_required")
         self.assertTrue(self._user_is_active("user-1"))
         self.assertEqual(self._active_session_count("user-1"), 2)
+        self._assert_safe_payload(response)
+
+    def test_authenticated_admin_security_write_requires_recent_reauth(self) -> None:
+        self._login_admin_session()
+
+        response = self.client.post(
+            "/api/v1/admin/users/user-1/disable",
+            json={"reason": "confirmed compromise report", "confirm": "DISABLE"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"]["error"], "admin_reauth_required")
+        self.assertTrue(self._user_is_active("user-1"))
+        self._assert_safe_payload(response)
+
+    def test_authenticated_admin_security_write_accepts_after_valid_reauth(self) -> None:
+        self._login_admin_session()
+        self._reauth_admin_session()
+
+        response = self.client.post(
+            "/api/v1/admin/users/user-1/disable",
+            json={"reason": "confirmed compromise report", "confirm": "DISABLE", "revokeSessions": True},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["action"], "disable")
+        self.assertEqual(response.json()["sessionsRevoked"], 2)
+        self.assertFalse(self._user_is_active("user-1"))
+        self._assert_safe_payload(response)
+
+    def test_authenticated_admin_security_write_rejects_expired_reauth(self) -> None:
+        _, identity = self._login_admin_session()
+        self._reauth_admin_session()
+        auth.mark_admin_session_reauthenticated(
+            user_id=identity.user_id,
+            session_id=identity.session_id,
+            reauthenticated_at=datetime.now() - timedelta(minutes=20),
+        )
+
+        response = self.client.post(
+            "/api/v1/admin/users/user-1/disable",
+            json={"reason": "confirmed compromise report", "confirm": "DISABLE"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"]["error"], "admin_reauth_required")
+        self.assertTrue(self._user_is_active("user-1"))
+        self._assert_safe_payload(response)
+
+    def test_authenticated_admin_security_write_rejects_after_session_revocation(self) -> None:
+        _, identity = self._login_admin_session()
+        self._reauth_admin_session()
+        self.db.revoke_app_user_session(identity.session_id)
+
+        response = self.client.post(
+            "/api/v1/admin/users/user-1/disable",
+            json={"reason": "confirmed compromise report", "confirm": "DISABLE"},
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertTrue(self._user_is_active("user-1"))
+        self._assert_safe_payload(response)
+
+    def test_wrong_password_cannot_create_reauth_marker_for_security_write(self) -> None:
+        self._login_admin_session()
+        reauth = self.client.post("/api/v1/auth/reauth", json={"password": "wrongpass"})
+        self.assertEqual(reauth.status_code, 401)
+
+        response = self.client.post(
+            "/api/v1/admin/users/user-1/revoke-sessions",
+            json={"reason": "device reported lost", "confirm": "REVOKE_SESSIONS", "scope": "all"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"]["error"], "admin_reauth_required")
+        self.assertEqual(self._active_session_count("user-1"), 2)
+        self._assert_safe_payload(response)
+
+    def test_non_admin_cannot_reauth_for_admin_security_write(self) -> None:
+        login = self.client.post(
+            "/api/v1/auth/login",
+            json={"username": "alice", "password": "userpass123"},
+        )
+        self.assertEqual(login.status_code, 200)
+        reauth = self.client.post("/api/v1/auth/reauth", json={"password": "userpass123"})
+        self.assertEqual(reauth.status_code, 403)
+        self.assertEqual(reauth.json()["error"], "admin_required")
+
+        response = self.client.post(
+            "/api/v1/admin/users/user-1/disable",
+            json={"reason": "support request", "confirm": "DISABLE"},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(self._user_is_active("user-1"))
+        self._assert_safe_payload(response)
+
+    def test_auth_disabled_transitional_admin_security_write_remains_compatible(self) -> None:
+        self._as_admin()
+
+        response = self.client.post(
+            "/api/v1/admin/users/user-1/revoke-sessions",
+            json={"reason": "local dev maintenance", "confirm": "REVOKE_SESSIONS", "scope": "all"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["sessionsRevoked"], 2)
+        self.assertEqual(self._active_session_count("user-1"), 0)
         self._assert_safe_payload(response)
 
     def test_admin_can_disable_target_and_optionally_revoke_sessions(self) -> None:

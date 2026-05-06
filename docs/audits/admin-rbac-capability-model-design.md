@@ -5,6 +5,17 @@ Mode: docs-only authorization design. No runtime behavior changed.
 
 Implementation note, 2026-05-06:
 
+- Security Phase 3B route pilot has landed for the existing admin user security
+  writes only: `POST /api/v1/admin/users/{user_id}/disable`, `POST
+  /api/v1/admin/users/{user_id}/enable`, and `POST
+  /api/v1/admin/users/{user_id}/revoke-sessions` now keep
+  `users:security:write` and also require a recent session-bound
+  `POST /api/v1/auth/reauth` marker for authenticated admin sessions. The
+  existing auth-disabled transitional local admin path remains compatible
+  through an explicit bypass limited to unauthenticated transitional users.
+  This phase does not wire recent reauth to system config routes, logs,
+  notifications, providers, portfolio reads, scanner, backtest, DuckDB,
+  broker/order paths, MFA, password KDF upgrades, or role-management UI.
 - Phase R3b route migration has landed for the next narrow ops-sensitive
   backend route set only. Admin log reads now require `ops:logs:read`; admin
   log cleanup requires `ops:logs:write`; system config read/schema/validate
