@@ -1,5 +1,9 @@
 # Admin RBAC Final QA Report
 
+Status: Superseded
+Owner domain: Admin RBAC and security governance
+Related docs: `docs/audits/admin-rbac-r5-coarse-fallback-removal-plan.md`, `docs/audits/public-launch-gap-register.md`
+
 Date: 2026-05-06
 Branch checked: `main`
 Mode: QA / security regression for completed RBAC R3, R3b, R4A, and R4B.

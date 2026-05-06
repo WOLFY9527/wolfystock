@@ -1,8 +1,12 @@
 # WolfyStock Frontend Design Conformance Audit
 
-Date: 2026-05-05 Asia/Shanghai  
-Repository: `/Users/yehengli/daily_stock_analysis`  
-Branch: `main`  
+Status: Partial
+Owner domain: Frontend visual audit
+Related docs: `docs/audits/wolfystock-global-codebase-audit.md`, `docs/audits/wolfystock-css-cleanup-closure-report.md`
+
+Date: 2026-05-05 Asia/Shanghai
+Repository: `/Users/yehengli/daily_stock_analysis`
+Branch: `main`
 Mode: audit/report only; no product code, tests, CSS, backend/API, package, config, runtime, or changelog changes
 
 ## 1. Executive Summary

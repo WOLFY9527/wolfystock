@@ -1,5 +1,9 @@
 # DB Index Migration Plan: Auth, Tasks, Logs, and LLM Observability
 
+Status: Superseded
+Owner domain: Database readiness
+Replacement or related docs: `docs/audits/db-index-batch-b-execution-provider-cost-plan.md`, `docs/audits/db-production-readiness-index-retention-audit.md`
+
 Date: 2026-05-06
 Mode: docs-only planning artifact. No runtime code, schema, migrations, tests, live DB contents, or secrets were changed or inspected.
 

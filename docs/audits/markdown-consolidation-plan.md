@@ -1,5 +1,9 @@
 # Audit Markdown Consolidation Plan
 
+Status: Current
+Owner domain: Documentation governance
+Related docs: `docs/audits/markdown-inventory.md`, `docs/audits/final-pre-push-audit.md`
+
 Mode: docs-only consolidation plan. No audit files, runbooks, product code,
 tests, frontend code, `docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md`, or
 `docs/CHANGELOG.md` were modified by this task.

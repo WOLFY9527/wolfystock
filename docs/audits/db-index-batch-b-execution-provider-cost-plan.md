@@ -1,5 +1,9 @@
 # DB Index Batch B: Execution, Provider, and Cost Observability Plan
 
+Status: Partial
+Owner domain: Database readiness
+Related docs: `docs/audits/db-index-migration-plan-auth-task-log.md`, `docs/audits/db-production-readiness-index-retention-audit.md`
+
 Date: 2026-05-07
 Mode: docs-first planning plus non-destructive smoke scaffold. No production database contents, runtime auth/security behavior, provider fallback/runtime behavior, cost/quota enforcement, portfolio/backtest calculations, Options, Data Pipeline, or MarketCache behavior were changed or inspected.
 

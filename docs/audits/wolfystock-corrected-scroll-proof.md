@@ -1,5 +1,9 @@
 # WolfyStock Corrected Scroll Proof
 
+Status: Partial
+Owner domain: Frontend CSS and DOM verification
+Related docs: `docs/audits/wolfystock-css-cleanup-closure-report.md`, `docs/audits/wolfystock-css-ownership-inventory.md`
+
 Date: 2026-05-05 Asia/Shanghai
 Repository: `/Users/yehengli/daily_stock_analysis`
 Branch: `main`

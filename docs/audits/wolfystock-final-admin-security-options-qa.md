@@ -1,5 +1,9 @@
 # WolfyStock Final Admin / Security / Options QA
 
+Status: Superseded
+Owner domain: Launch readiness QA
+Replacement or related docs: `docs/audits/public-launch-gap-register.md`, `docs/audits/deployment-readiness-checklist.md`
+
 Date: 2026-05-06
 Mode: verification/report. No runtime behavior changed.
 

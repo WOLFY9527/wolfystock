@@ -1,5 +1,9 @@
 # WS2 Provider Circuit Breaker Data Model Migration Plan
 
+Status: Partial
+Owner domain: Provider and MarketCache readiness
+Related docs: `docs/audits/ws2-provider-quota-circuit-breaker-policy-design.md`, `docs/audits/provider-marketcache-instrumentation-validation-plan.md`
+
 Date: 2026-05-06
 Mode: docs-only migration planning. No migrations, runtime provider behavior, provider ordering/fallback, MarketCache TTL/SWR/cold-start behavior, quota enforcement, schema code, tests, live providers, or servers were changed.
 

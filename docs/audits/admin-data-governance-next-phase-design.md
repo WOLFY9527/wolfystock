@@ -1,5 +1,9 @@
 # Admin Data Governance Next Phase Design
 
+Status: Partial
+Owner domain: Admin data governance
+Related docs: `docs/audits/admin-data-control-center-design.md`, `docs/audits/admin-user-directory-api-design.md`, `docs/audits/admin-user-activity-timeline-api-design.md`
+
 Date: 2026-05-06
 Mode: docs-only design. No runtime behavior changed.
 

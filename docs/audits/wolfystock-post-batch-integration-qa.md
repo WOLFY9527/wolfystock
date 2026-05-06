@@ -1,5 +1,9 @@
 # WolfyStock Post-Batch Integration QA
 
+Status: Superseded
+Owner domain: Launch readiness QA
+Replacement or related docs: `docs/audits/public-launch-gap-register.md`, `docs/audits/final-pre-push-audit.md`
+
 Date: 2026-05-06
 Mode: QA/reporting. No runtime behavior changes intended.
 

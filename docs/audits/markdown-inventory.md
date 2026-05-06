@@ -1,5 +1,9 @@
 # Markdown Inventory
 
+Status: Current
+Owner domain: Documentation governance
+Related docs: `docs/audits/markdown-consolidation-plan.md`, `docs/audits/final-pre-push-audit.md`
+
 Date: 2026-05-07
 Branch checked: `main`
 Mode: docs-only inventory. No markdown files were deleted or moved.

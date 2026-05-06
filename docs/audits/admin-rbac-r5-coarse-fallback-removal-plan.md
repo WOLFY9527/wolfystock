@@ -1,5 +1,9 @@
 # Admin RBAC R5 Coarse Fallback Removal Plan
 
+Status: Deferred
+Owner domain: Admin RBAC and security governance
+Related docs: `docs/audits/admin-rbac-capability-model-design.md`, `docs/audits/public-launch-gap-register.md`
+
 Date: 2026-05-07
 Mode: docs-only migration and governance plan. No runtime behavior changed.
 

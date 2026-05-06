@@ -1,5 +1,9 @@
 # Data Pipeline R2 Progressive Enrichment
 
+Status: Partial
+Owner domain: Data pipeline and report quality
+Related docs: `docs/audits/data-quality-user-disclosure-policy.md`
+
 Date: 2026-05-07
 
 Data Pipeline R2 adds a progressive enrichment contract to the existing fast decision data quality report. The quick decision path still depends on required and important data only; optional news, sentiment, and detailed fundamentals are reported through enrichment metadata instead of failing the main analysis.

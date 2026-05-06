@@ -1,5 +1,9 @@
 # Security Phase 3C/3D Password KDF Upgrade Plan
 
+Status: Partial
+Owner domain: Production security
+Related docs: `docs/audits/security-mfa-secret-storage-hardening-plan.md`, `docs/audits/production-security-hardening-audit.md`
+
 Date: 2026-05-06
 Branch checked: `main`
 Mode: docs-only security design / migration plan. No runtime auth behavior,

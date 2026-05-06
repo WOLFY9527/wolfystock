@@ -1,5 +1,9 @@
 # WolfyStock Phase 0 Bundle And Design Inventory
 
+Status: Superseded
+Owner domain: Frontend bundle and design inventory
+Replacement or related docs: `docs/audits/wolfystock-bundle-composition-report.md`, `docs/audits/wolfystock-echarts-chart-workspace-audit.md`
+
 Date: 2026-05-05 Asia/Shanghai
 Repository: `/Users/yehengli/daily_stock_analysis`
 Branch: `main`

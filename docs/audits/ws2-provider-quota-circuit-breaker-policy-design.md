@@ -1,5 +1,9 @@
 # WS2-R5 Provider Quota and Circuit Breaker Policy Design
 
+Status: Deferred
+Owner domain: Provider and MarketCache readiness
+Related docs: `docs/audits/ws2-provider-circuit-data-model-plan.md`, `docs/audits/provider-fallback-budget-reporting-design.md`
+
 Date: 2026-05-06
 Mode: docs-only design. No runtime behavior, provider ordering, fallback behavior, MarketCache behavior, schema, migrations, enforcement code, tests, live providers, or servers were changed.
 

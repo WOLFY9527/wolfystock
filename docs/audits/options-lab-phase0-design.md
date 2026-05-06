@@ -1,5 +1,9 @@
 # Options Lab Phase 0 Design
 
+Status: Superseded
+Owner domain: Options Lab
+Replacement or related docs: `docs/audits/options-provider-adapter-contract.md`, `docs/audits/trading-no-advice-product-policy.md`
+
 Date: 2026-05-06
 Mode: docs-only product/data/API design. No runtime behavior changed.
 

@@ -1,5 +1,9 @@
 # WolfyStock Bundle Composition Report
 
+Status: Superseded
+Owner domain: Frontend bundle and visual audit
+Replacement or related docs: `docs/audits/wolfystock-echarts-chart-workspace-audit.md`, `docs/audits/wolfystock-phase0-bundle-design-inventory.md`
+
 Date: 2026-05-05 Asia/Shanghai
 Repository: `/Users/yehengli/daily_stock_analysis`
 Branch: `main`

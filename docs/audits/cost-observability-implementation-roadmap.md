@@ -1,5 +1,9 @@
 # Cost Observability Implementation Roadmap
 
+Status: Partial
+Owner domain: Cost observability and quota governance
+Related docs: `docs/audits/cost-observability-design-index.md`, `docs/audits/cost-system-final-qa-matrix.md`
+
 Date: 2026-05-06
 Mode: docs-only planning. No runtime behavior changed.
 

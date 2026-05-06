@@ -1,5 +1,9 @@
 # Admin User Activity Timeline API Design
 
+Status: Partial
+Owner domain: Admin data governance
+Related docs: `docs/audits/admin-data-control-center-design.md`, `docs/audits/admin-data-governance-next-phase-design.md`
+
 Date: 2026-05-06
 
 Mode: docs-only API design. No runtime behavior changed.

@@ -1,5 +1,9 @@
 # Production Security Hardening Audit
 
+Status: Partial
+Owner domain: Production security
+Related docs: `docs/audits/security-password-kdf-upgrade-plan.md`, `docs/audits/security-mfa-secret-storage-hardening-plan.md`, `docs/audits/public-launch-gap-register.md`
+
 Date: 2026-05-06
 Mode: static security audit. No runtime behavior changed.
 

@@ -1,5 +1,9 @@
 # Security Phase 3E Admin MFA Backend Foundation
 
+Status: Superseded
+Owner domain: Production security
+Replacement or related docs: `docs/audits/security-mfa-secret-storage-hardening-plan.md`, `docs/audits/production-security-hardening-audit.md`
+
 Date: 2026-05-07
 Branch checked: `main`
 

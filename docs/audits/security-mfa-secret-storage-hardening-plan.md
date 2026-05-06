@@ -1,5 +1,9 @@
 # Security MFA Secret Storage Hardening Plan
 
+Status: Deferred
+Owner domain: Production security
+Related docs: `docs/audits/security-admin-mfa-backend-foundation.md`, `docs/audits/production-security-hardening-audit.md`
+
 Date: 2026-05-07
 Branch checked: `main`
 Mode: docs-only security design / rollout plan. No runtime auth or MFA code,
