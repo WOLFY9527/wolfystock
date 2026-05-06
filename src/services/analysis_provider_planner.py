@@ -114,6 +114,29 @@ class _CircuitState:
     half_open: bool = False
 
 
+@dataclass
+class _ProviderHealth:
+    provider: str
+    category: DataCategory
+    timeout_count: int = 0
+    rate_limited_count: int = 0
+    auth_error_count: int = 0
+    missing_required_fields_count: int = 0
+    last_failure_at: Optional[float] = None
+    cooldown_until: Optional[float] = None
+
+
+FAST_DECISION_TIMEOUT_SECONDS = {
+    DataCategory.QUOTE: 1.2,
+    DataCategory.HISTORICAL_PRICES: 2.5,
+    DataCategory.TECHNICAL_INDICATORS: 2.5,
+    DataCategory.FUNDAMENTALS: 2.5,
+    DataCategory.EARNINGS: 2.5,
+    DataCategory.NEWS: 1.5,
+    DataCategory.SENTIMENT: 1.5,
+}
+
+
 def _normalize_market(symbol: str, market: Optional[str]) -> str:
     if market:
         normalized = str(market).strip().lower()
@@ -207,6 +230,27 @@ def build_analysis_provider_plan(
     )
 
 
+def build_fast_decision_provider_plan(
+    symbol: str,
+    *,
+    market: Optional[str] = None,
+    categories: Optional[Iterable[DataCategory | str]] = None,
+) -> AnalysisProviderPlan:
+    plan = build_analysis_provider_plan(symbol, market=market, categories=categories)
+    categories_with_fast_budget = {
+        category: CategoryProviderPlan(
+            category=category_plan.category,
+            providers=list(category_plan.providers),
+            timeout_seconds=FAST_DECISION_TIMEOUT_SECONDS.get(category, category_plan.timeout_seconds),
+            cache_ttl_seconds=category_plan.cache_ttl_seconds,
+            max_attempts=category_plan.max_attempts,
+            required_fields=category_plan.required_fields,
+        )
+        for category, category_plan in plan.categories.items()
+    }
+    return AnalysisProviderPlan(symbol=plan.symbol, market=plan.market, categories=categories_with_fast_budget)
+
+
 class AnalysisProviderExecutor:
     def __init__(
         self,
@@ -221,6 +265,7 @@ class AnalysisProviderExecutor:
         self._cache: dict[str, _CacheEntry] = {}
         self._inflight: dict[str, Future] = {}
         self._circuits: dict[str, _CircuitState] = {}
+        self._health: dict[str, _ProviderHealth] = {}
         self._lock = threading.RLock()
         self._call_pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="provider_call_")
 
@@ -292,7 +337,7 @@ class AnalysisProviderExecutor:
                 )
                 duration_ms = int((time.monotonic() - started) * 1000)
                 if not sufficient(data):
-                    self._record_failure(provider, category_plan.category)
+                    self._record_failure(provider, category_plan.category, "missing_required_fields")
                     self._emit_provider_event(
                         "provider_insufficient_payload",
                         provider=provider,
@@ -391,7 +436,7 @@ class AnalysisProviderExecutor:
             except Exception as exc:
                 duration_ms = int((time.monotonic() - started) * 1000)
                 reason = self._classify_exception(exc)
-                self._record_failure(provider, category_plan.category)
+                self._record_failure(provider, category_plan.category, reason)
                 self._emit_provider_event(
                     "provider_call_failed",
                     provider=provider,
@@ -648,21 +693,33 @@ class AnalysisProviderExecutor:
                 return False
             return True
 
-    def _record_failure(self, provider: str, category: DataCategory) -> None:
+    def _record_failure(self, provider: str, category: DataCategory, reason: str = "unknown_error") -> None:
         key = f"{provider}:{category.value}"
         now = time.time()
         with self._lock:
             state = self._circuits.setdefault(key, _CircuitState())
             state.failures = [ts for ts in state.failures if now - ts <= self.failure_window_seconds]
             state.failures.append(now)
+            health = self._health.setdefault(key, _ProviderHealth(provider=provider, category=category))
+            health.last_failure_at = now
+            if reason == "timeout":
+                health.timeout_count += 1
+            elif reason == "rate_limited":
+                health.rate_limited_count += 1
+            elif reason == "auth_error":
+                health.auth_error_count += 1
+            elif reason in {"missing_required_fields", "invalid_payload", "insufficient_payload"}:
+                health.missing_required_fields_count += 1
             if len(state.failures) >= self.failure_threshold:
                 state.opened_at = now
                 state.half_open = False
+                health.cooldown_until = now + self.cooldown_seconds
 
     def _record_success(self, provider: str, category: DataCategory) -> None:
         key = f"{provider}:{category.value}"
         with self._lock:
             self._circuits.pop(key, None)
+            self._health.pop(key, None)
 
     @staticmethod
     def _classify_exception(exc: Exception) -> str:
@@ -672,7 +729,9 @@ class AnalysisProviderExecutor:
             return "rate_limited"
         status = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
         text = str(exc).lower()
-        if status in {403, 429} or "429" in text or "quota" in text or "rate limit" in text:
+        if status == 403 or "forbidden" in text or "unauthorized" in text or "auth" in text:
+            return "auth_error"
+        if status == 429 or "429" in text or "quota" in text or "rate limit" in text:
             return "rate_limited"
         if status and int(status) >= 500:
             return "provider_unavailable"
@@ -697,6 +756,34 @@ class AnalysisProviderExecutor:
         normalized_params = "&".join(f"{key}={params[key]}" for key in sorted(params))
         return f"{provider}:{category.value}:{str(symbol or '').strip().upper()}:{normalized_params}"
 
+    def hot_path_health_snapshot(self) -> dict[str, Any]:
+        now = time.time()
+        with self._lock:
+            provider_timeouts: list[str] = []
+            provider_cooldowns: list[str] = []
+            counters: dict[str, dict[str, Any]] = {}
+            for key, health in self._health.items():
+                label = f"{health.provider}:{health.category.value}"
+                if health.timeout_count:
+                    provider_timeouts.append(label)
+                if health.cooldown_until and health.cooldown_until > now:
+                    provider_cooldowns.append(label)
+                counters[key] = {
+                    "provider": health.provider,
+                    "category": health.category.value,
+                    "timeout_count": health.timeout_count,
+                    "rate_limited_count": health.rate_limited_count,
+                    "auth_error_count": health.auth_error_count,
+                    "missing_required_fields_count": health.missing_required_fields_count,
+                    "last_failure_at": health.last_failure_at,
+                    "cooldown_until": health.cooldown_until,
+                }
+            return {
+                "provider_timeouts": provider_timeouts,
+                "provider_cooldowns": provider_cooldowns,
+                "counters": counters,
+            }
+
 
 _DEFAULT_EXECUTOR: Optional[AnalysisProviderExecutor] = None
 _DEFAULT_EXECUTOR_LOCK = threading.Lock()
@@ -720,5 +807,6 @@ __all__ = [
     "ProviderQuotaExceeded",
     "ProviderTimeout",
     "build_analysis_provider_plan",
+    "build_fast_decision_provider_plan",
     "get_analysis_provider_executor",
 ]

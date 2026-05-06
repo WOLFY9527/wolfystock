@@ -89,6 +89,19 @@ const defaultHistoryReport = {
     takeProfit: '133.50',
   },
   details: {
+    dataQualityReport: {
+      dataQualityTier: 'analysis_grade',
+      dataQualityScore: 68,
+      requiredAvailable: true,
+      importantMissing: ['fundamentals.eps'],
+      optionalMissing: ['optional_enrichment_pending'],
+      staleSources: [],
+      providerTimeouts: ['gnews:news'],
+      providerCooldowns: ['fmp:fundamentals'],
+      confidenceCap: 70,
+      reasonCodes: ['important_data_missing', 'optional_enrichment_missing'],
+      freshness: { marketSessionDate: '2026-05-05' },
+    },
     standardReport: {
       summaryPanel: {
         stock: 'Oracle',
@@ -116,6 +129,19 @@ const defaultHistoryReport = {
         { label: 'Free Cash Flow', value: '$12.1B' },
       ],
     },
+  },
+  dataQualityReport: {
+    dataQualityTier: 'analysis_grade',
+    dataQualityScore: 68,
+    requiredAvailable: true,
+    importantMissing: ['fundamentals.eps'],
+    optionalMissing: ['optional_enrichment_pending'],
+    staleSources: [],
+    providerTimeouts: ['gnews:news'],
+    providerCooldowns: ['fmp:fundamentals'],
+    confidenceCap: 70,
+    reasonCodes: ['important_data_missing', 'optional_enrichment_missing'],
+    freshness: { marketSessionDate: '2026-05-05' },
   },
   decisionTrace: {
     engineVersion: 'analysis_decision_trace_v1',
@@ -372,6 +398,22 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByTestId('home-bento-card-workflow')).not.toBeInTheDocument();
     expect(screen.queryByText('先给出区间，再决定节奏。')).not.toBeInTheDocument();
     expect(screen.queryByText('最近没有基本面特征')).not.toBeInTheDocument();
+  });
+
+  it('renders data quality compact panel without leaking raw provider details', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    const panel = screen.getByTestId('home-bento-data-quality-panel');
+    expect(panel).toHaveTextContent('数据等级: 分析级');
+    expect(panel).toHaveTextContent('置信度上限 70');
+    expect(panel).toHaveTextContent('fundamentals.eps');
+    expect(panel).toHaveTextContent('可选增强数据仍在补充');
+    expect(panel).toHaveTextContent('gnews:news');
+    expect(panel).toHaveTextContent('fmp:fundamentals');
+    expect(screen.getByTestId('home-bento-data-quality-developer')).not.toHaveAttribute('open');
+    expect(panel).not.toHaveTextContent(/api[_-]?key|token|secret|stack trace|sk-/i);
   });
 
   it('switches decision and strategy tones when the user prefers CN market colors', async () => {

@@ -1216,6 +1216,7 @@ def _build_analysis_report(
             raw_result=details_data,
             context_snapshot=context_snapshot,
             standard_report=details_data.get("standard_report"),
+            data_quality_report=details_data.get("data_quality_report") or report_data.get("dataQualityReport"),
             financial_report=extracted_fundamental.get("financial_report"),
             dividend_metrics=extracted_fundamental.get("dividend_metrics"),
         )
@@ -1226,4 +1227,5 @@ def _build_analysis_report(
         strategy=strategy,
         details=details,
         decision_trace=report_data.get("decision_trace"),
+        data_quality_report=report_data.get("dataQualityReport") or details_data.get("data_quality_report"),
     )

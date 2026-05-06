@@ -177,6 +177,7 @@ class ReportDetails(BaseModel):
     raw_ai_response: Optional[Any] = Field(None, description="原始 AI 响应（如有）")
     context_snapshot: Optional[Any] = Field(None, description="分析时上下文快照（JSON）")
     standard_report: Optional[Any] = Field(None, description="统一标准报告数据结构（JSON）")
+    data_quality_report: Optional[Any] = Field(None, description="决策关键数据质量报告（可选）")
     financial_report: Optional[Any] = Field(None, description="结构化财报摘要（来自 fundamental_context）")
     dividend_metrics: Optional[Any] = Field(None, description="结构化分红指标（含 TTM 口径）")
 
@@ -218,6 +219,7 @@ class AnalysisReport(BaseModel):
     strategy: Optional[ReportStrategy] = Field(None, description="策略点位区")
     details: Optional[ReportDetails] = Field(None, description="详情区")
     decision_trace: Optional[Any] = Field(None, description="决策溯源元数据（可选）")
+    data_quality_report: Optional[Any] = Field(None, description="决策关键数据质量报告（可选）")
     report_quality: Optional[Any] = Field(None, description="报告完整性/溯源状态摘要（可选）")
 
 

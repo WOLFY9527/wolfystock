@@ -46,6 +46,18 @@ def _nested_get(payload: Any, *path: str) -> Any:
     return current
 
 
+def _extract_data_quality_report(result: Any) -> Optional[Dict[str, Any]]:
+    runtime = getattr(result, "runtime_execution", None)
+    if isinstance(runtime, dict) and isinstance(runtime.get("data_quality_report"), dict):
+        return runtime["data_quality_report"]
+    dashboard = getattr(result, "dashboard", None)
+    if isinstance(dashboard, dict):
+        structured = dashboard.get("structured_analysis")
+        if isinstance(structured, dict) and isinstance(structured.get("data_quality_report"), dict):
+            return structured["data_quality_report"]
+    return None
+
+
 class AnalysisService:
     """
     分析服务
@@ -222,8 +234,9 @@ class AnalysisService:
             query_id=query_id,
             report_type=report_type,
         )
+        data_quality_report = _extract_data_quality_report(result)
 
-        return {
+        payload = {
             "meta": {
                 "query_id": query_id,
                 "stock_code": result.code,
@@ -264,6 +277,12 @@ class AnalysisService:
             },
             "decision_trace": decision_trace,
         }
+        if data_quality_report:
+            payload["dataQualityReport"] = data_quality_report
+            payload["meta"]["dataQualityReport"] = data_quality_report
+            payload["details"]["data_quality_report"] = data_quality_report
+            payload["details"]["analysis_result"]["dataQualityReport"] = data_quality_report
+        return payload
 
     @staticmethod
     def _normalize_action(value: Any) -> str:

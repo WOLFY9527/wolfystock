@@ -38,6 +38,7 @@ export interface ReportMeta {
   currentPrice?: number;
   changePct?: number;
   modelUsed?: string;  // LLM model used for analysis
+  dataQualityReport?: DataQualityReport;
 }
 
 /** Sentiment label */
@@ -313,10 +314,27 @@ export interface ReportDetails {
   rawResult?: Record<string, unknown>;
   contextSnapshot?: Record<string, unknown>;
   standardReport?: StandardReport;
+  dataQualityReport?: DataQualityReport;
   analysisResult?: Record<string, unknown>;
   rawAiResponse?: string | Record<string, unknown>;
   financialReport?: Record<string, unknown>;
   dividendMetrics?: Record<string, unknown>;
+}
+
+export type DataQualityTier = 'decision_grade' | 'analysis_grade' | 'partial' | 'insufficient' | string;
+
+export interface DataQualityReport {
+  dataQualityTier?: DataQualityTier;
+  dataQualityScore?: number;
+  requiredAvailable?: boolean;
+  importantMissing?: string[];
+  optionalMissing?: string[];
+  staleSources?: string[];
+  providerTimeouts?: string[];
+  providerCooldowns?: string[];
+  confidenceCap?: number;
+  reasonCodes?: string[];
+  freshness?: Record<string, unknown>;
 }
 
 export interface DecisionTraceField {
@@ -480,6 +498,7 @@ export interface AnalysisReport {
   strategy?: ReportStrategy;
   details?: ReportDetails;
   decisionTrace?: DecisionTrace;
+  dataQualityReport?: DataQualityReport;
   contractMeta?: FrontendReportContractMeta;
   reportQuality?: ReportQuality;
 }

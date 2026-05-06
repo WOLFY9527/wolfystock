@@ -17,7 +17,7 @@ import time
 import uuid
 import json
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError, as_completed
 from datetime import date, datetime, timedelta, timezone, time as clock_time
 from typing import List, Dict, Any, Optional, Tuple, Callable
 from zoneinfo import ZoneInfo
@@ -44,9 +44,10 @@ from src.services.social_sentiment_service import SocialSentimentService
 from src.services.analysis_provider_planner import (
     DataCategory,
     ProviderCategoryResult,
-    build_analysis_provider_plan,
+    build_fast_decision_provider_plan,
     get_analysis_provider_executor,
 )
+from src.services.data_criticality import build_data_quality_report
 from src.enums import ReportType
 from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from src.core.trading_calendar import get_market_for_stock, is_market_open
@@ -76,6 +77,17 @@ _MARKET_TZ = {
     "us": "America/New_York",
     "cn": "Asia/Shanghai",
 }
+OPTIONAL_ENRICHMENT_TIMEOUT_SECONDS = 1.5
+_OPTIONAL_ENRICHMENT_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="analysis_optional_enrichment_")
+
+
+def _resolve_optional_enrichment(future: Future, timeout_seconds: float) -> tuple[Any, bool, Optional[str]]:
+    try:
+        return future.result(timeout=timeout_seconds), False, None
+    except TimeoutError:
+        return None, True, "timeout"
+    except Exception:
+        return None, False, "failed"
 
 
 class StockAnalysisPipeline:
@@ -542,6 +554,7 @@ class StockAnalysisPipeline:
             news_context = None
             news_items: List[Dict[str, Any]] = []
             social_context = None
+            optional_enrichment_pending = False
             if self.search_service.is_available:
                 self._emit_progress(
                     progress_callback,
@@ -551,12 +564,29 @@ class StockAnalysisPipeline:
                 )
                 logger.info(f"{stock_name}({code}) 开始多维度情报搜索...")
 
-                # 使用多维度搜索（最多5次搜索）
-                intel_results = self.search_service.search_comprehensive_intel(
+                intel_future = _OPTIONAL_ENRICHMENT_POOL.submit(
+                    self.search_service.search_comprehensive_intel,
                     stock_code=code,
                     stock_name=stock_name,
-                    max_searches=5
+                    max_searches=5,
                 )
+                intel_results, timed_out, failed_reason = _resolve_optional_enrichment(
+                    intel_future,
+                    OPTIONAL_ENRICHMENT_TIMEOUT_SECONDS,
+                )
+                if timed_out:
+                    optional_enrichment_pending = True
+                    diagnostics["news_status"] = "skipped"
+                    diagnostics["failure_reasons"].append("optional_news_timeout")
+                    logger.warning(
+                        "OptionalNewsTimedOut symbol=%s timeout_seconds=%s",
+                        code,
+                        OPTIONAL_ENRICHMENT_TIMEOUT_SECONDS,
+                    )
+                elif failed_reason:
+                    diagnostics["news_status"] = "failed"
+                    diagnostics["failure_reasons"].append("optional_news_failed")
+                    logger.warning("%s(%s) 可选新闻增强失败，继续快速决策", stock_name, code)
 
                 # 格式化情报报告
                 if intel_results:
@@ -612,7 +642,28 @@ class StockAnalysisPipeline:
             # Step 4.5: Social sentiment intelligence (US stocks only)
             if self.social_sentiment_service.is_available and is_us_stock_code(code):
                 try:
-                    social_context = self.social_sentiment_service.get_social_context(code)
+                    social_future = _OPTIONAL_ENRICHMENT_POOL.submit(
+                        self.social_sentiment_service.get_social_context,
+                        code,
+                    )
+                    social_context, timed_out, failed_reason = _resolve_optional_enrichment(
+                        social_future,
+                        OPTIONAL_ENRICHMENT_TIMEOUT_SECONDS,
+                    )
+                    if timed_out:
+                        optional_enrichment_pending = True
+                        diagnostics["sentiment_status"] = "failed"
+                        diagnostics["sentiment_reason"] = "optional_sentiment_timeout"
+                        diagnostics["failure_reasons"].append("optional_sentiment_timeout")
+                        logger.warning(
+                            "OptionalSentimentTimedOut symbol=%s timeout_seconds=%s",
+                            code,
+                            OPTIONAL_ENRICHMENT_TIMEOUT_SECONDS,
+                        )
+                    elif failed_reason:
+                        diagnostics["sentiment_status"] = "failed"
+                        diagnostics["sentiment_reason"] = "optional_sentiment_failed"
+                        diagnostics["failure_reasons"].append("optional_sentiment_failed")
                     if social_context:
                         diagnostics["sentiment_provider"] = "social_sentiment_service"
                         logger.info(f"{stock_name}({code}) Social sentiment data retrieved")
@@ -795,6 +846,14 @@ class StockAnalysisPipeline:
                 alpha_errors=alpha_errors + yfinance_errors,
             )
             enhanced_context.update(multidim_blocks)
+            data_quality_report = build_data_quality_report(
+                context=enhanced_context,
+                data_quality=enhanced_context.get("data_quality", {}),
+                diagnostics=diagnostics,
+                provider_health=get_analysis_provider_executor().hot_path_health_snapshot(),
+                optional_enrichment_pending=optional_enrichment_pending,
+            ).to_api_dict()
+            enhanced_context["data_quality_report"] = data_quality_report
             if social_context:
                 enhanced_context["social_context"] = social_context
             tech = multidim_blocks.get("technicals", {})
@@ -845,6 +904,7 @@ class StockAnalysisPipeline:
             # Step 7.7: price_position fallback
             if result:
                 fill_price_position_if_needed(result, trend_result, realtime_quote)
+                self._apply_data_quality_caps(result, enhanced_context.get("data_quality_report", {}))
                 result = self._stabilize_analysis_result(
                     code=code,
                     query_id=query_id,
@@ -914,7 +974,7 @@ class StockAnalysisPipeline:
         ]
         if include_quote:
             categories.append(DataCategory.QUOTE)
-        plan = build_analysis_provider_plan(code, market=market, categories=categories)
+        plan = build_fast_decision_provider_plan(code, market=market, categories=categories)
         providers_by_category = {
             DataCategory.QUOTE: {
                 "finnhub": lambda: get_finnhub_quote(code),
@@ -975,6 +1035,22 @@ class StockAnalysisPipeline:
         return payload
 
     @staticmethod
+    def _apply_data_quality_caps(result: AnalysisResult, data_quality_report: Dict[str, Any]) -> None:
+        if not isinstance(data_quality_report, dict):
+            return
+        cap = data_quality_report.get("confidenceCap")
+        try:
+            cap_value = int(cap)
+        except (TypeError, ValueError):
+            return
+        if isinstance(getattr(result, "sentiment_score", None), (int, float)) and result.sentiment_score > cap_value:
+            result.sentiment_score = cap_value
+        if data_quality_report.get("dataQualityTier") == "insufficient":
+            result.decision_type = "data_insufficient"
+            if not str(getattr(result, "operation_advice", "") or "").strip():
+                result.operation_advice = "数据不足，暂不做高置信决策"
+
+    @staticmethod
     def _inject_structured_blocks_into_result(result: AnalysisResult, enhanced_context: Dict[str, Any]) -> None:
         dashboard = result.dashboard if isinstance(result.dashboard, dict) else {}
         dashboard.setdefault("structured_analysis", {})
@@ -997,6 +1073,7 @@ class StockAnalysisPipeline:
             sentiment_block.setdefault("social_context", enhanced_context.get("social_context"))
             structured["sentiment_analysis"] = sentiment_block
         structured["data_quality"] = enhanced_context.get("data_quality", {})
+        structured["data_quality_report"] = enhanced_context.get("data_quality_report", {})
         structured["realtime_context"] = enhanced_context.get("realtime", {})
         structured["market_context"] = {
             "today": enhanced_context.get("today", {}),
@@ -1242,6 +1319,7 @@ class StockAnalysisPipeline:
                     ]),
                 },
             },
+            "data_quality_report": enhanced_context.get("data_quality_report", {}),
             "notification": getattr(result, "notification_result", None),
             "steps": [
                 {

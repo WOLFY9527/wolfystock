@@ -25,7 +25,7 @@ import {
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
-import type { AnalysisReport, DecisionTrace, HistoryItem, ReportQuality, StandardReport, StandardReportChecklistItem, StandardReportField, TaskProgressModule } from '../types/analysis';
+import type { AnalysisReport, DataQualityReport, DecisionTrace, HistoryItem, ReportQuality, StandardReport, StandardReportChecklistItem, StandardReportField, TaskProgressModule } from '../types/analysis';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
 import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
 import {
@@ -1089,6 +1089,96 @@ function DecisionTracePanel({ trace, locale, quality }: { trace?: DecisionTrace;
         ) : null}
       </details>
     </div>
+  );
+}
+
+function getDataQualityReport(report: AnalysisReport | null): DataQualityReport | undefined {
+  if (!report) return undefined;
+  return report.dataQualityReport
+    || report.details?.dataQualityReport
+    || report.meta.dataQualityReport
+    || (readObjectField(report, ['details', 'analysisResult', 'dataQualityReport']) as DataQualityReport | undefined);
+}
+
+function dataQualityTierLabel(tier: string | undefined, locale: DashboardLocale): string {
+  const normalized = String(tier || '').trim();
+  const zh: Record<string, string> = {
+    decision_grade: '决策级',
+    analysis_grade: '分析级',
+    partial: '部分数据',
+    insufficient: '数据不足',
+  };
+  const en: Record<string, string> = {
+    decision_grade: 'Decision grade',
+    analysis_grade: 'Analysis grade',
+    partial: 'Partial data',
+    insufficient: 'Insufficient',
+  };
+  return (locale === 'en' ? en : zh)[normalized] || (locale === 'en' ? 'Unknown' : '未确认');
+}
+
+function DataQualityCompactPanel({ report, locale }: { report: DataQualityReport | undefined; locale: DashboardLocale }) {
+  if (!report) return null;
+  const isEnglish = locale === 'en';
+  const missingCritical = report.requiredAvailable === false
+    ? (isEnglish ? 'Required quote/candle data missing' : '缺失关键行情或 K 线数据')
+    : report.importantMissing?.slice(0, 3).join('、') || (isEnglish ? 'No required gaps' : '关键数据已满足');
+  const optionalText = report.optionalMissing?.length
+    ? report.optionalMissing.includes('optional_enrichment_pending')
+      ? (isEnglish ? 'Optional enrichment is still filling in' : '可选增强数据仍在补充')
+      : `${isEnglish ? 'Optional missing' : '可选数据缺失'}：${report.optionalMissing.slice(0, 3).join('、')}`
+    : (isEnglish ? 'Optional enrichment available or not material' : '可选增强数据无重大缺口');
+  const providerLabels = [...(report.providerTimeouts || []), ...(report.providerCooldowns || [])].slice(0, 4);
+
+  return (
+    <section
+      className="rounded-[24px] border border-white/8 bg-white/[0.025] p-4"
+      data-testid="home-bento-data-quality-panel"
+    >
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold tracking-[0] text-white/50">
+            {isEnglish ? 'Data Quality' : '数据质量'}
+          </p>
+          <p className="mt-1 text-lg font-semibold tracking-[0] text-white">
+            {isEnglish ? 'Grade' : '数据等级'}: {dataQualityTierLabel(report.dataQualityTier, locale)}
+          </p>
+        </div>
+        <TraceBadge tone={report.dataQualityTier === 'insufficient' ? 'missing' : report.dataQualityTier === 'decision_grade' ? 'used' : 'warning'}>
+          {isEnglish ? 'Cap' : '置信度上限'} {report.confidenceCap ?? '--'}
+        </TraceBadge>
+      </div>
+      <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
+            {isEnglish ? 'Critical Gaps' : '缺失关键数据'}
+          </p>
+          <p className="mt-1 break-words text-sm text-white/72">{missingCritical}</p>
+        </div>
+        <div className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">
+            {isEnglish ? 'Enrichment' : '增强数据'}
+          </p>
+          <p className="mt-1 break-words text-sm text-white/72">{optionalText}</p>
+        </div>
+      </div>
+      {providerLabels.length ? (
+        <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+          {providerLabels.map((label) => <TraceBadge key={label}>{label}</TraceBadge>)}
+        </div>
+      ) : null}
+      <details
+        className="mt-3 rounded-xl border border-white/6 bg-black/10 px-3 py-2"
+        data-testid="home-bento-data-quality-developer"
+      >
+        <summary className="cursor-pointer text-[11px] font-semibold tracking-[0] text-white/58">
+          {isEnglish ? 'Developer Details' : '开发者细节'}
+        </summary>
+        <p className="mt-2 break-words text-xs text-white/50">
+          {(report.reasonCodes || []).join('、') || (isEnglish ? 'No reason codes.' : '暂无原因码。')}
+        </p>
+      </details>
+    </section>
   );
 }
 
@@ -3189,6 +3279,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const activeDrawerPayload = activeDrawer && copy ? buildDrawerPayload(locale, copy, activeDrawer) : null;
   const activeDecisionTrace = useMemo(() => (activeTraceReport ? getDecisionTrace(activeTraceReport) : undefined), [activeTraceReport]);
   const activeReportQuality = useMemo(() => getReportQuality(activeTraceReport), [activeTraceReport]);
+  const activeDataQualityReport = useMemo(() => getDataQualityReport(activeTraceReport), [activeTraceReport]);
   const sourceSummary = useMemo(() => buildTraceSummary(activeDecisionTrace, activeReportQuality), [activeDecisionTrace, activeReportQuality]);
   const reanalysisTicker = useMemo(() => {
     const candidate = normalizeTickerQuery(activeTraceReport?.meta.stockCode) || normalizeTickerQuery(dashboardData.ticker);
@@ -3744,6 +3835,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           detailLabel={readyCopy.strategy.detailLabel}
                           onOpenDetails={() => setActiveDrawer('strategy')}
                         />
+                        {activeDataQualityReport ? (
+                          <div className="mt-6">
+                            <DataQualityCompactPanel report={activeDataQualityReport} locale={locale} />
+                          </div>
+                        ) : null}
                         <div
                           className="mt-6 grid w-full grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:flex-1"
                           data-testid="home-bento-secondary-grid"

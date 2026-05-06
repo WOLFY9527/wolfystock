@@ -1,5 +1,6 @@
 import type {
   AnalysisReport,
+  DataQualityReport,
   DecisionTrace,
   FrontendReportContractMeta,
   ReportDetails,
@@ -276,6 +277,25 @@ const normalizeAnalysisReport = (
     (details as Record<string, unknown> | undefined)?.analysisResult
       ?? (details as Record<string, unknown> | undefined)?.analysis_result,
   ));
+  const dataQualityCandidates = [
+    (report as unknown as Record<string, unknown>).dataQualityReport,
+    toRecord((report as unknown as Record<string, unknown>).data_quality_report),
+    meta.dataQualityReport,
+    toRecord((meta as unknown as Record<string, unknown>).data_quality_report),
+    details?.dataQualityReport,
+    toRecord(details?.data_quality_report),
+    normalizedAnalysisResult?.dataQualityReport,
+    toRecord(normalizedAnalysisResult?.data_quality_report),
+    rawResult?.dataQualityReport,
+    toRecord(rawResult?.data_quality_report),
+    toRecord(rawResult?.dashboard)?.structuredAnalysis
+      ? toRecord(toRecord(rawResult?.dashboard)?.structuredAnalysis)?.dataQualityReport
+      : undefined,
+  ];
+  const dataQualityMatch = dataQualityCandidates.find((candidate) => toRecord(candidate));
+  const normalizedDataQualityReport = (
+    dataQualityMatch ? camelizeDeep(dataQualityMatch) : undefined
+  ) as DataQualityReport | undefined;
   const payloadVariant: FrontendReportContractMeta['payloadVariant'] = normalizedStandardReport
     ? 'standard_report'
     : report.details
@@ -289,6 +309,7 @@ const normalizeAnalysisReport = (
     ? {
         ...report.details,
         standardReport: normalizedStandardReport,
+        dataQualityReport: normalizedDataQualityReport,
         analysisResult: normalizedAnalysisResult,
       }
     : report.details;
@@ -313,6 +334,7 @@ const normalizeAnalysisReport = (
     },
     details: normalizedDetails,
     decisionTrace: normalizedDecisionTrace,
+    dataQualityReport: normalizedDataQualityReport,
     contractMeta: {
       payloadVariant,
       standardReportSource,

@@ -141,6 +141,39 @@ describe('normalizeFrontendReportContract', () => {
     });
   });
 
+  it('normalizes dataQualityReport from snake_case details', () => {
+    const normalized = normalizeFrontendReportContract({
+      meta: {
+        queryId: 'q-quality',
+        stockCode: 'AAPL',
+        stockName: 'Apple',
+        reportType: 'detailed',
+        createdAt: '2026-05-06T00:00:00Z',
+      },
+      summary: {
+        analysisSummary: 'Partial but usable.',
+        operationAdvice: 'Hold',
+        trendPrediction: 'Sideways',
+        sentimentScore: 61,
+      },
+      details: {
+        data_quality_report: {
+          data_quality_tier: 'insufficient',
+          data_quality_score: 32,
+          required_available: false,
+          confidence_cap: 40,
+          optional_missing: ['news'],
+          provider_timeouts: ['gnews:news'],
+          reason_codes: ['required_data_missing'],
+        },
+      } as never,
+    });
+
+    expect(normalized.dataQualityReport?.dataQualityTier).toBe('insufficient');
+    expect(normalized.dataQualityReport?.confidenceCap).toBe(40);
+    expect(normalized.details?.dataQualityReport?.optionalMissing).toEqual(['news']);
+  });
+
   it('keeps structured standardReport summary blocks for compact web rendering', () => {
     const standardReport = {
       summaryPanel: {
