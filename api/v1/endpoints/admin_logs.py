@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.deps import CurrentUser, require_admin_user
+from api.deps import CurrentUser, require_admin_capability
 from api.v1.schemas.admin_logs import (
     AdminLogCleanupRequest,
     AdminLogCleanupResponse,
@@ -161,7 +161,7 @@ def _list_execution_logs(
     summary="Summarize admin log storage health",
 )
 def get_log_storage_summary(
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
 ):
     service = AdminLogsRetentionService()
     return AdminLogStorageSummaryModel(**service.storage_summary())
@@ -174,7 +174,7 @@ def get_log_storage_summary(
 )
 def cleanup_admin_logs(
     request: AdminLogCleanupRequest,
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:logs:write")),
 ):
     service = AdminLogsRetentionService()
     try:
@@ -231,7 +231,7 @@ def list_execution_logs_root(
     offset: int = Query(default=0, ge=0),
     page: Optional[int] = Query(default=None, ge=1),
     cursor: Optional[str] = Query(default=None),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
 ):
     del task_id, task_id_alias, min_level, min_level_alias, level, provider, model, channel
     service = ExecutionLogService()
@@ -289,7 +289,7 @@ def list_execution_log_sessions(
     offset: int = Query(default=0, ge=0),
     page: Optional[int] = Query(default=None, ge=1),
     cursor: Optional[str] = Query(default=None),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
 ):
     return _list_execution_logs(
         task_id=_coalesce_query_text(task_id, task_id_alias),
@@ -319,7 +319,7 @@ def list_execution_log_sessions(
 )
 def get_execution_log_session_detail(
     session_id: str,
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
 ):
     service = ExecutionLogService()
     detail = service.get_session_detail(session_id)
@@ -341,7 +341,7 @@ def get_execution_log_session_detail(
 )
 def get_business_event_detail(
     event_id: str,
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
 ):
     service = ExecutionLogService()
     detail = service.get_business_event_detail(event_id)

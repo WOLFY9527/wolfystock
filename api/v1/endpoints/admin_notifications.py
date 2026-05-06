@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from api.deps import CurrentUser, require_admin_user
+from api.deps import CurrentUser, require_admin_capability
 from api.v1.schemas.admin_notifications import (
     NotificationChannelCreateRequest,
     NotificationChannelListResponse,
@@ -133,7 +133,7 @@ def _service_error(exc: Exception) -> HTTPException:
     summary="List admin notification channels",
 )
 def list_notification_channels(
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:notifications:read")),
 ):
     service = NotificationService()
     return NotificationChannelListResponse(
@@ -149,7 +149,7 @@ def list_notification_channels(
 )
 def create_notification_channel(
     request: NotificationChannelCreateRequest,
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:notifications:write")),
 ):
     try:
         return NotificationChannelModel(**NotificationService().create_channel(**request.model_dump()))
@@ -165,7 +165,7 @@ def create_notification_channel(
 def update_notification_channel(
     channel_id: int,
     request: NotificationChannelUpdateRequest,
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:notifications:write")),
 ):
     try:
         return NotificationChannelModel(
@@ -184,7 +184,7 @@ def update_notification_channel(
 )
 def delete_notification_channel(
     channel_id: int,
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:notifications:write")),
 ):
     try:
         NotificationService().delete_channel(channel_id)
@@ -205,7 +205,7 @@ def test_notification_channel(
     channel_id: int,
     request: Request,
     dry_run: bool = Query(default=False),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:notifications:write")),
 ):
     try:
         result = NotificationService().test_channel(channel_id, dry_run=(dry_run is True))
@@ -236,7 +236,7 @@ def list_notifications(
     include_acknowledged: bool = Query(default=True),
     limit: int = Query(default=100, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:notifications:read")),
 ):
     try:
         return NotificationEventListResponse(
@@ -259,7 +259,7 @@ def list_notifications(
 )
 def acknowledge_notification(
     event_id: int,
-    current_user: CurrentUser = Depends(require_admin_user),
+    current_user: CurrentUser = Depends(require_admin_capability("ops:notifications:write")),
 ):
     try:
         event = NotificationService().acknowledge_event(event_id, acknowledged_by=current_user.user_id)

@@ -29,6 +29,7 @@ def _admin_user() -> CurrentUser:
         is_authenticated=True,
         transitional=False,
         auth_enabled=True,
+        admin_capabilities=("ops:notifications:read", "ops:notifications:write"),
     )
 
 

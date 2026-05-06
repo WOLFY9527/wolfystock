@@ -7,7 +7,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.deps import CurrentUser, get_system_config_service, require_admin_user
+from api.deps import CurrentUser, get_system_config_service, require_admin_capability
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.system_config import (
     FactoryResetSystemRequest,
@@ -52,7 +52,7 @@ router = APIRouter()
 def get_system_config(
     include_schema: bool = Query(True, description="Whether to include schema metadata"),
     service: SystemConfigService = Depends(get_system_config_service),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:system_config:read")),
 ) -> SystemConfigResponse:
     """Load and return current system configuration."""
     try:
@@ -85,7 +85,7 @@ def get_system_config(
 def update_system_config(
     request: UpdateSystemConfigRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    current_user: CurrentUser = Depends(require_admin_user),
+    current_user: CurrentUser = Depends(require_admin_capability("ops:system_config:write")),
 ) -> UpdateSystemConfigResponse:
     """Validate and persist system configuration updates."""
     try:
@@ -140,7 +140,7 @@ def update_system_config(
 def validate_system_config(
     request: ValidateSystemConfigRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:system_config:read")),
 ) -> ValidateSystemConfigResponse:
     """Run pre-save validation only."""
     try:
@@ -171,7 +171,7 @@ def validate_system_config(
 def test_llm_channel(
     request: TestLLMChannelRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:providers:write")),
 ) -> TestLLMChannelResponse:
     """Validate and test one channel definition without writing `.env`."""
     try:
@@ -218,7 +218,7 @@ def test_llm_channel(
 def test_custom_data_source(
     request: TestCustomDataSourceRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:providers:write")),
 ) -> TestCustomDataSourceResponse:
     """Validate and test one custom data source without writing `.env`."""
     try:
@@ -256,7 +256,7 @@ def test_custom_data_source(
 def test_builtin_data_source(
     request: TestBuiltinDataSourceRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:providers:write")),
 ) -> TestBuiltinDataSourceResponse:
     """Validate one built-in provider with real remote endpoint checks."""
     try:
@@ -291,7 +291,7 @@ def test_builtin_data_source(
 )
 def get_system_config_schema(
     service: SystemConfigService = Depends(get_system_config_service),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:system_config:read")),
 ) -> SystemConfigSchemaResponse:
     """Return schema metadata for system configuration fields."""
     try:
@@ -322,7 +322,7 @@ def get_system_config_schema(
 )
 def reset_runtime_caches(
     service: SystemConfigService = Depends(get_system_config_service),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:system_config:write")),
 ) -> SystemAdminActionResponse:
     """Run a bounded admin maintenance action for runtime cache reset."""
     try:
@@ -355,7 +355,7 @@ def reset_runtime_caches(
 def factory_reset_system(
     request: FactoryResetSystemRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    current_user: CurrentUser = Depends(require_admin_user),
+    current_user: CurrentUser = Depends(require_admin_capability("ops:system_config:write")),
 ) -> SystemAdminActionResponse:
     """Run the bounded destructive factory reset flow."""
     try:

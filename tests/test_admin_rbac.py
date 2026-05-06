@@ -279,7 +279,7 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, text)
 
-    def test_only_r3_pilot_admin_routes_use_capability_dependencies(self) -> None:
+    def test_only_r3_pilot_and_r3b_admin_routes_use_capability_dependencies(self) -> None:
         endpoint_dir = Path(__file__).resolve().parents[1] / "api" / "v1" / "endpoints"
         usages: dict[str, int] = {}
         for path in endpoint_dir.glob("*.py"):
@@ -290,8 +290,11 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
 
         self.assertEqual(
             {
+                "admin_logs.py": 6,
+                "admin_notifications.py": 7,
                 "admin_portfolio.py": 4,
                 "admin_security.py": 3,
+                "system_config.py": 9,
             },
             usages,
         )

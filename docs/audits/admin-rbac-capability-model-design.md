@@ -5,6 +5,18 @@ Mode: docs-only authorization design. No runtime behavior changed.
 
 Implementation note, 2026-05-06:
 
+- Phase R3b route migration has landed for the next narrow ops-sensitive
+  backend route set only. Admin log reads now require `ops:logs:read`; admin
+  log cleanup requires `ops:logs:write`; system config read/schema/validate
+  routes require `ops:system_config:read`; config writes, runtime cache reset,
+  and factory reset require `ops:system_config:write`; LLM/data-source probes
+  require `ops:providers:write`; notification/channel reads require
+  `ops:notifications:read`; notification channel writes/tests and notification
+  acknowledgements require `ops:notifications:write`. Existing coarse admins
+  remain allowed through compatibility capability expansion. This phase does
+  not migrate all admin routes, frontend navigation, role management UI, MFA,
+  provider routing, notification delivery semantics, scanner/backtest/portfolio
+  logic, Options Lab, or WS2 runtime behavior.
 - Phase R4A backend capability summary contract has landed on the existing
   current-user auth contract. `GET /api/v1/auth/status`, `GET
   /api/v1/auth/me`, and login responses now expose a sanitized, sorted
@@ -18,7 +30,8 @@ Implementation note, 2026-05-06:
   admin routes were migrated in R4A. The response does not expose password
   hashes, raw sessions, cookies, tokens, API keys, secrets, broker/provider
   credentials, `.env` values, raw role mapping internals, or grant metadata.
-  Phase R4B frontend navigation is still pending.
+  Phase R4B frontend capability gating landed separately; R3b does not change
+  frontend navigation.
 - Phase R3 pilot route migration has landed for the intentionally narrow
   high-risk subset from the route matrix: admin security writes now require
   `users:security:write`, and admin portfolio visibility reads now require
