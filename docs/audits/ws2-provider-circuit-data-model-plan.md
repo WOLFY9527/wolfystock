@@ -35,6 +35,18 @@ This plan explicitly does not implement:
 - No enforcement was added. Runtime provider behavior, provider ordering/fallback, MarketCache TTL/SWR/cold-start/background refresh/payload shape, scanner/backtest/portfolio/Options/RBAC, notification, DuckDB, broker/order, and LLM routing remain unchanged.
 - Remaining work: dry-run provider counters, read-only admin diagnostics API, dashboard surfacing, and a separately approved enforcement pilot.
 
+## WS2-R5 read-only diagnostics API implementation note
+
+- Read-only admin diagnostics endpoints have landed for the existing storage foundation:
+  - `GET /api/v1/admin/providers/circuits`
+  - `GET /api/v1/admin/providers/circuits/events`
+  - `GET /api/v1/admin/providers/quota-windows`
+  - `GET /api/v1/admin/providers/probe-events`
+- The endpoints require `ops:providers:read` and return bounded labels/aggregates only: provider, provider category, route family, state, reason bucket, cooldown timestamp, safe operator action reference, quota window counters, probe result bucket, and lifecycle timestamps.
+- Responses intentionally omit metadata blobs, owner/guest identifiers, raw provider payloads, raw URLs/query strings, API keys, tokens, cookies, raw session ids, exception text, stack traces, credentials, and developer/internal storage details.
+- This landed as diagnostics only. It does not add provider enforcement, live quota enforcement, provider ordering/fallback changes, MarketCache TTL/SWR/cold-start/background refresh/payload-shape changes, Data Pipeline hot-path changes, frontend dashboard UI, or live provider/LLM calls.
+- Frontend dashboard surfacing remains future work and should stay read-only/observational until a separately approved enforcement pilot exists.
+
 ## 2. Proposed tables
 
 Design only. Names are proposed for a later additive schema pass.

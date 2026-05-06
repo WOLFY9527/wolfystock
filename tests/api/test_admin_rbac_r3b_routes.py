@@ -220,6 +220,20 @@ def test_system_config_read_write_and_provider_probe_capabilities() -> None:
     ).status_code == 200
 
 
+def test_provider_circuit_diagnostics_require_provider_read_capability() -> None:
+    read_client = _client(_user(capabilities=("ops:providers:read",)))
+    assert read_client.get("/api/v1/admin/providers/circuits").status_code == 200
+    assert read_client.get("/api/v1/admin/providers/circuits/events").status_code == 200
+    assert read_client.get("/api/v1/admin/providers/quota-windows").status_code == 200
+    assert read_client.get("/api/v1/admin/providers/probe-events").status_code == 200
+
+    write_only_client = _client(_user(capabilities=("ops:providers:write",)))
+    denied = write_only_client.get("/api/v1/admin/providers/circuits")
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["error"] == "admin_capability_required"
+    _assert_sanitized_denial(denied)
+
+
 def test_notification_reads_and_state_changes_use_notification_capabilities(monkeypatch) -> None:
     monkeypatch.setattr("api.v1.endpoints.admin_notifications.NotificationService", FakeNotificationService)
 
