@@ -2,6 +2,7 @@
 """Unit tests for src.auth module."""
 
 import hashlib
+import json
 import os
 import secrets
 import tempfile
@@ -9,6 +10,7 @@ import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+import base64
 
 import src.auth as auth
 
@@ -19,6 +21,7 @@ def _reset_auth_globals() -> None:
     auth._session_secret = None
     auth._password_hash_salt = None
     auth._password_hash_stored = None
+    auth._password_hash_value = None
     auth._rate_limit = {}
 
 
@@ -69,6 +72,38 @@ class AuthPasswordHashTestCase(unittest.TestCase):
             "sha256", b"x", salt=salt, iterations=auth.PBKDF2_ITERATIONS
         )
         self.assertFalse(auth._verify_password_hash("y", salt, derived))
+
+    def test_new_versioned_password_hash_verifies(self) -> None:
+        stored = auth.hash_password_for_storage("testpass123")
+
+        self.assertTrue(stored.startswith(auth.PASSWORD_KDF_PREFIX))
+        self.assertIn("$alg=pbkdf2-sha256$", stored)
+        self.assertIn("iter=600000", stored)
+        self.assertTrue(auth.verify_password_hash_string("testpass123", stored))
+        self.assertFalse(auth.verify_password_hash_string("wrongpass", stored))
+        self.assertFalse(auth.password_hash_needs_upgrade(stored))
+        self.assertNotIn("testpass123", stored)
+
+    def test_legacy_hash_verifies_and_needs_upgrade(self) -> None:
+        salt = secrets.token_bytes(32)
+        derived = hashlib.pbkdf2_hmac(
+            "sha256", b"testpass123", salt=salt, iterations=auth.PBKDF2_ITERATIONS
+        )
+        legacy = (
+            f"{base64.standard_b64encode(salt).decode('ascii')}:"
+            f"{base64.standard_b64encode(derived).decode('ascii')}"
+        )
+
+        self.assertTrue(auth.verify_password_hash_string("testpass123", legacy))
+        self.assertFalse(auth.verify_password_hash_string("wrongpass", legacy))
+        self.assertTrue(auth.password_hash_needs_upgrade(legacy))
+
+    def test_unsupported_hash_fails_safely(self) -> None:
+        unsupported = "$wolfystock$kdf=v9$alg=future$params=x$salt=y$hash=z"
+
+        self.assertFalse(auth.verify_password_hash_string("testpass123", unsupported))
+        self.assertFalse(auth.password_hash_needs_upgrade(unsupported))
+        self.assertNotIn("testpass123", json.dumps({"ok": False}))
 
 
 class AuthSessionTestCase(unittest.TestCase):

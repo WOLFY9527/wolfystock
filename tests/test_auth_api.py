@@ -2,8 +2,11 @@
 """Integration tests for auth API endpoints (login, logout, change-password, API protection)."""
 
 import asyncio
+import base64
+import hashlib
 import json
 import os
+import secrets
 import sys
 import tempfile
 import unittest
@@ -36,6 +39,7 @@ def _reset_auth_globals() -> None:
     auth._session_secret = None
     auth._password_hash_salt = None
     auth._password_hash_stored = None
+    auth._password_hash_value = None
     auth._rate_limit = {}
     auth._admin_reauth_markers = {}
 
@@ -94,6 +98,20 @@ class AuthApiTestCase(unittest.TestCase):
     @staticmethod
     def _json_response_body(response) -> dict:
         return json.loads(response.body.decode("utf-8"))
+
+    @staticmethod
+    def _legacy_hash(password: str) -> str:
+        salt = secrets.token_bytes(32)
+        derived = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt=salt,
+            iterations=auth.PBKDF2_ITERATIONS,
+        )
+        return (
+            f"{base64.standard_b64encode(salt).decode('ascii')}:"
+            f"{base64.standard_b64encode(derived).decode('ascii')}"
+        )
 
     def _login_admin(self, password: str = "passwd6"):
         return asyncio.run(
@@ -410,6 +428,143 @@ class AuthApiTestCase(unittest.TestCase):
         for forbidden in ("password_hash", "wrong-pass", "dsa_session", "cookie", "token", "secret", "traceback"):
             self.assertNotIn(forbidden, text)
         self.assertNotIn(b"wrong-pass", response.body)
+
+    def test_legacy_bootstrap_hash_upgrades_on_successful_login(self) -> None:
+        legacy_hash = self._legacy_hash("legacy-pass")
+        (self.data_dir / ".admin_password_hash").write_text(legacy_hash, encoding="utf-8")
+        auth.refresh_auth_state()
+
+        response = self._login_admin(password="legacy-pass")
+
+        self.assertEqual(response.status_code, 200)
+        upgraded_file_hash = (self.data_dir / ".admin_password_hash").read_text(encoding="utf-8").strip()
+        self.assertNotEqual(upgraded_file_hash, legacy_hash)
+        self.assertTrue(upgraded_file_hash.startswith(auth.PASSWORD_KDF_PREFIX))
+        self.assertTrue(auth.verify_password_hash_string("legacy-pass", upgraded_file_hash))
+        mirrored_user = DatabaseManager.get_instance().get_app_user(BOOTSTRAP_ADMIN_USER_ID)
+        self.assertIsNotNone(mirrored_user)
+        self.assertEqual(getattr(mirrored_user, "password_hash", None), upgraded_file_hash)
+
+    def test_wrong_bootstrap_password_does_not_upgrade_legacy_hash(self) -> None:
+        legacy_hash = self._legacy_hash("legacy-pass")
+        (self.data_dir / ".admin_password_hash").write_text(legacy_hash, encoding="utf-8")
+        auth.refresh_auth_state()
+
+        response = self._login_admin(password="wrong-pass")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            (self.data_dir / ".admin_password_hash").read_text(encoding="utf-8").strip(),
+            legacy_hash,
+        )
+
+    def test_legacy_app_user_hash_upgrades_on_successful_login(self) -> None:
+        legacy_hash = self._legacy_hash("legacy-pass")
+        db = DatabaseManager.get_instance()
+        db.create_or_update_app_user(
+            user_id="user-legacy",
+            username="legacy-user",
+            display_name="Legacy User",
+            role="user",
+            password_hash=legacy_hash,
+            is_active=True,
+        )
+
+        response = asyncio.run(
+            auth_endpoint.auth_login(
+                self._build_request(),
+                auth_endpoint.LoginRequest(username="legacy-user", password="legacy-pass"),
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        row = db.get_app_user("user-legacy")
+        upgraded_hash = getattr(row, "password_hash", "")
+        self.assertTrue(upgraded_hash.startswith(auth.PASSWORD_KDF_PREFIX))
+        self.assertTrue(auth.verify_password_hash_string("legacy-pass", upgraded_hash))
+
+    def test_wrong_app_user_password_does_not_upgrade_legacy_hash(self) -> None:
+        legacy_hash = self._legacy_hash("legacy-pass")
+        db = DatabaseManager.get_instance()
+        db.create_or_update_app_user(
+            user_id="user-legacy",
+            username="legacy-user",
+            display_name="Legacy User",
+            role="user",
+            password_hash=legacy_hash,
+            is_active=True,
+        )
+
+        response = asyncio.run(
+            auth_endpoint.auth_login(
+                self._build_request(),
+                auth_endpoint.LoginRequest(username="legacy-user", password="wrong-pass"),
+            )
+        )
+
+        self.assertEqual(response.status_code, 401)
+        row = db.get_app_user("user-legacy")
+        self.assertEqual(getattr(row, "password_hash", ""), legacy_hash)
+
+    def test_reauth_succeeds_after_legacy_bootstrap_hash_upgrade(self) -> None:
+        legacy_hash = self._legacy_hash("legacy-pass")
+        (self.data_dir / ".admin_password_hash").write_text(legacy_hash, encoding="utf-8")
+        auth.refresh_auth_state()
+        login_response = self._login_admin(password="legacy-pass")
+        self.assertEqual(login_response.status_code, 200)
+        session_cookie = self._extract_session_cookie(login_response)
+        upgraded_file_hash = (self.data_dir / ".admin_password_hash").read_text(encoding="utf-8").strip()
+        self.assertTrue(upgraded_file_hash.startswith(auth.PASSWORD_KDF_PREFIX))
+
+        response = asyncio.run(
+            auth_endpoint.auth_reauth(
+                self._build_request(cookies={auth.COOKIE_NAME: session_cookie}),
+                auth_endpoint.ReauthRequest(password="legacy-pass"),
+            )
+        )
+
+        self.assertEqual(response["ok"], True)
+        text = json.dumps(response, ensure_ascii=False).lower()
+        for forbidden in (
+            "password_hash",
+            "legacy-pass",
+            "pbkdf2-sha256",
+            "wolfystock",
+            "cookie",
+            "token",
+            "secret",
+        ):
+            self.assertNotIn(forbidden, text)
+
+    def test_unsupported_app_user_hash_fails_safely_without_exposure(self) -> None:
+        unsupported_hash = "$wolfystock$kdf=v9$alg=future$params=x$salt=y$hash=z"
+        db = DatabaseManager.get_instance()
+        db.create_or_update_app_user(
+            user_id="user-unsupported",
+            username="unsupported-user",
+            display_name="Unsupported User",
+            role="user",
+            password_hash=unsupported_hash,
+            is_active=True,
+        )
+
+        response = asyncio.run(
+            auth_endpoint.auth_login(
+                self._build_request(),
+                auth_endpoint.LoginRequest(username="unsupported-user", password="user-pass"),
+            )
+        )
+
+        self.assertEqual(response.status_code, 401)
+        body = self._json_response_body(response)
+        self.assertEqual(body["error"], "invalid_login")
+        text = json.dumps(body, ensure_ascii=False)
+        self.assertNotIn("user-pass", text)
+        self.assertNotIn("wolfystock", text)
+        self.assertEqual(
+            getattr(db.get_app_user("user-unsupported"), "password_hash", None),
+            unsupported_hash,
+        )
 
     def test_reauth_rejects_unauthenticated_user(self) -> None:
         response = asyncio.run(

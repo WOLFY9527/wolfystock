@@ -35,6 +35,10 @@ from src.multi_user import (
 
 COOKIE_NAME = "dsa_session"
 PBKDF2_ITERATIONS = 100_000
+PBKDF2_TARGET_ITERATIONS = 600_000
+PASSWORD_KDF_PREFIX = "$wolfystock$kdf=v1"
+PASSWORD_KDF_ALGORITHM = "pbkdf2-sha256"
+PASSWORD_KDF_PARAMS = f"iter={PBKDF2_TARGET_ITERATIONS},digest=sha256"
 RATE_LIMIT_WINDOW_SEC = 300
 RATE_LIMIT_MAX_FAILURES = 5
 ACCOUNT_RATE_LIMIT_MAX_FAILURES = 5
@@ -53,6 +57,7 @@ _auth_enabled: Optional[bool] = None
 _session_secret: Optional[bytes] = None
 _password_hash_salt: Optional[bytes] = None
 _password_hash_stored: Optional[bytes] = None
+_password_hash_value: Optional[str] = None
 _rate_limit: dict[str, Tuple[int, float]] = {}
 _admin_reauth_markers: dict[str, datetime] = {}
 _rate_limit_lock = None
@@ -77,6 +82,12 @@ class SessionIdentity:
     @property
     def is_admin(self) -> bool:
         return self.role == ROLE_ADMIN
+
+
+@dataclass(frozen=True)
+class PasswordHashVerification:
+    verified: bool
+    needs_upgrade: bool = False
 
 
 def _get_lock():
@@ -202,27 +213,88 @@ def _verify_password_hash(submitted: str, salt: bytes, stored_hash: bytes) -> bo
     return hmac.compare_digest(computed, stored_hash)
 
 
+def _verify_password_hash_string_detailed(submitted: str, stored_value: Optional[str]) -> PasswordHashVerification:
+    """Verify a stored password hash and report whether it should be upgraded."""
+    value = str(stored_value or "").strip()
+    if not value:
+        return PasswordHashVerification(False)
+
+    if value.startswith(PASSWORD_KDF_PREFIX):
+        fields = _parse_password_kdf_fields(value)
+        if not fields or fields.get("alg") != PASSWORD_KDF_ALGORITHM:
+            return PasswordHashVerification(False)
+        params = _parse_password_kdf_params(fields.get("params", ""))
+        if params.get("digest") != "sha256":
+            return PasswordHashVerification(False)
+        try:
+            iterations = int(params.get("iter", "0"))
+            salt = _urlsafe_b64decode(fields.get("salt", ""))
+            stored_hash = _urlsafe_b64decode(fields.get("hash", ""))
+        except (ValueError, TypeError):
+            return PasswordHashVerification(False)
+        if iterations <= 0 or not salt or not stored_hash:
+            return PasswordHashVerification(False)
+        computed = hashlib.pbkdf2_hmac(
+            "sha256",
+            submitted.encode("utf-8"),
+            salt=salt,
+            iterations=iterations,
+            dklen=len(stored_hash),
+        )
+        verified = hmac.compare_digest(computed, stored_hash)
+        return PasswordHashVerification(
+            verified=verified,
+            needs_upgrade=verified and (iterations < PBKDF2_TARGET_ITERATIONS or len(stored_hash) < 32),
+        )
+
+    parsed = _parse_password_hash(value)
+    if parsed is None:
+        return PasswordHashVerification(False)
+    salt, stored_hash = parsed
+    verified = _verify_password_hash(submitted, salt, stored_hash)
+    return PasswordHashVerification(verified=verified, needs_upgrade=verified)
+
+
 def _build_password_hash_entry(password: str) -> str:
-    """Build the persisted salt:hash entry used by admin and app-user credentials."""
+    """Build the persisted versioned password-hash entry."""
     salt = secrets.token_bytes(32)
     derived = hashlib.pbkdf2_hmac(
         "sha256",
         password.encode("utf-8"),
         salt=salt,
-        iterations=PBKDF2_ITERATIONS,
+        iterations=PBKDF2_TARGET_ITERATIONS,
+        dklen=32,
     )
-    salt_b64 = base64.standard_b64encode(salt).decode("ascii")
-    hash_b64 = base64.standard_b64encode(derived).decode("ascii")
-    return f"{salt_b64}:{hash_b64}"
+    return (
+        f"{PASSWORD_KDF_PREFIX}"
+        f"$alg={PASSWORD_KDF_ALGORITHM}"
+        f"$params={PASSWORD_KDF_PARAMS}"
+        f"$salt={_urlsafe_b64encode(salt)}"
+        f"$hash={_urlsafe_b64encode(derived)}"
+    )
 
 
 def verify_password_hash_string(submitted: str, stored_value: Optional[str]) -> bool:
     """Verify a password against a persisted app-user/admin hash string."""
-    parsed = _parse_password_hash(str(stored_value or "").strip())
-    if parsed is None:
+    return _verify_password_hash_string_detailed(submitted, stored_value).verified
+
+
+def password_hash_needs_upgrade(stored_value: Optional[str]) -> bool:
+    """Return whether a stored hash is recognized but below the current KDF policy."""
+    value = str(stored_value or "").strip()
+    if not value:
         return False
-    salt, stored_hash = parsed
-    return _verify_password_hash(submitted, salt, stored_hash)
+    if value.startswith(PASSWORD_KDF_PREFIX):
+        fields = _parse_password_kdf_fields(value)
+        if not fields or fields.get("alg") != PASSWORD_KDF_ALGORITHM:
+            return False
+        params = _parse_password_kdf_params(fields.get("params", ""))
+        try:
+            stored_hash = _urlsafe_b64decode(fields.get("hash", ""))
+            return int(params.get("iter", "0")) < PBKDF2_TARGET_ITERATIONS or len(stored_hash) < 32
+        except (ValueError, TypeError):
+            return False
+    return _parse_password_hash(value) is not None
 
 
 def hash_password_for_storage(password: str) -> str:
@@ -233,23 +305,42 @@ def hash_password_for_storage(password: str) -> str:
     return _build_password_hash_entry(password)
 
 
+def _password_hash_bytes_for_cache(value: str) -> Optional[Tuple[bytes, bytes]]:
+    parsed = _parse_password_hash(value)
+    if parsed is not None:
+        return parsed
+    fields = _parse_password_kdf_fields(value)
+    if not fields:
+        return None
+    try:
+        salt = _urlsafe_b64decode(fields.get("salt", ""))
+        stored_hash = _urlsafe_b64decode(fields.get("hash", ""))
+    except (ValueError, TypeError):
+        return None
+    if salt and stored_hash:
+        return (salt, stored_hash)
+    return None
+
+
 def _load_credential_from_file() -> bool:
     """Load credential from file into module globals. Returns True if loaded."""
-    global _password_hash_salt, _password_hash_stored
+    global _password_hash_salt, _password_hash_stored, _password_hash_value
 
     path = _get_credential_path()
     if not path.exists():
         _password_hash_salt = None
         _password_hash_stored = None
+        _password_hash_value = None
         return False
 
     try:
         raw = path.read_text().strip()
-        parsed = _parse_password_hash(raw)
+        parsed = _password_hash_bytes_for_cache(raw)
         if parsed is None:
             logger.warning("Invalid .admin_password_hash format, ignoring")
             return False
         _password_hash_salt, _password_hash_stored = parsed
+        _password_hash_value = raw
         return True
     except OSError as e:
         logger.error("Failed to read credential file: %s", e)
@@ -315,7 +406,37 @@ def verify_stored_password(password: str) -> bool:
     """Verify password against stored credential even when auth is disabled."""
     if not has_stored_password():
         return False
-    return _verify_password_hash(password, _password_hash_salt, _password_hash_stored)
+    return verify_password_hash_string(password, _password_hash_value)
+
+
+def _write_bootstrap_password_hash(content: str) -> bool:
+    data_dir = _get_data_dir()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    cred_path = _get_credential_path()
+    try:
+        tmp_path = cred_path.with_suffix(".tmp")
+        tmp_path.write_text(content)
+        tmp_path.chmod(0o600)
+        tmp_path.replace(cred_path)
+        _load_credential_from_file()
+        _sync_bootstrap_admin_password_hash(content)
+        return True
+    except OSError as e:
+        logger.error("Failed to write credential file: %s", e)
+        return False
+
+
+def verify_stored_password_and_upgrade(password: str) -> bool:
+    """Verify the bootstrap-admin credential and upgrade recognized legacy hashes."""
+    if not has_stored_password():
+        return False
+    stored_value = _password_hash_value
+    result = _verify_password_hash_string_detailed(password, stored_value)
+    if result.verified and result.needs_upgrade:
+        upgraded = _build_password_hash_entry(password)
+        if not _write_bootstrap_password_hash(upgraded):
+            logger.warning("Failed to upgrade bootstrap admin password KDF")
+    return result.verified
 
 
 def is_password_set() -> bool:
@@ -427,6 +548,30 @@ def _urlsafe_b64encode(data: bytes) -> str:
 def _urlsafe_b64decode(value: str) -> bytes:
     padding = "=" * (-len(value) % 4)
     return base64.urlsafe_b64decode(f"{value}{padding}".encode("ascii"))
+
+
+def _parse_password_kdf_fields(value: str) -> Optional[dict[str, str]]:
+    if not value.startswith(PASSWORD_KDF_PREFIX):
+        return None
+    fields: dict[str, str] = {}
+    parts = value.split("$")
+    if len(parts) != 7 or parts[1] != "wolfystock" or parts[2] != "kdf=v1":
+        return None
+    for part in parts[3:]:
+        key, sep, val = part.partition("=")
+        if sep != "=" or not key or not val:
+            return None
+        fields[key] = val
+    return fields
+
+
+def _parse_password_kdf_params(value: str) -> dict[str, str]:
+    params: dict[str, str] = {}
+    for item in value.split(","):
+        key, sep, val = item.partition("=")
+        if sep == "=" and key and val:
+            params[key] = val
+    return params
 
 
 def _sign_payload(secret: bytes, payload: str) -> str:
@@ -660,23 +805,11 @@ def set_initial_password(password: str) -> Optional[str]:
     if err:
         return err
 
-    data_dir = _get_data_dir()
-    data_dir.mkdir(parents=True, exist_ok=True)
-    cred_path = _get_credential_path()
-
     content = _build_password_hash_entry(password)
 
-    try:
-        tmp_path = cred_path.with_suffix(".tmp")
-        tmp_path.write_text(content)
-        tmp_path.chmod(0o600)
-        tmp_path.replace(cred_path)
-        _load_credential_from_file()
-        _sync_bootstrap_admin_password_hash(content)
+    if _write_bootstrap_password_hash(content):
         return None
-    except OSError as e:
-        logger.error("Failed to write credential file: %s", e)
-        return "密码保存失败"
+    return "密码保存失败"
 
 
 def verify_password(password: str) -> bool:
@@ -697,28 +830,18 @@ def change_password(current: str, new: str) -> Optional[str]:
 
     if not current or not current.strip():
         return "请输入当前密码"
-    if not _verify_password_hash(current, _password_hash_salt, _password_hash_stored):
+    if not verify_stored_password(current):
         return "当前密码错误"
 
     err = _validate_password(new)
     if err:
         return err
 
-    cred_path = _get_credential_path()
     content = _build_password_hash_entry(new)
 
-    try:
-        tmp_path = cred_path.with_suffix(".tmp")
-        tmp_path.write_text(content)
-        tmp_path.chmod(0o600)
-        tmp_path.replace(cred_path)
-        # Reload into memory so subsequent verify_password uses new hash
-        _load_credential_from_file()
-        _sync_bootstrap_admin_password_hash(content)
+    if _write_bootstrap_password_hash(content):
         return None
-    except OSError as e:
-        logger.error("Failed to write credential file: %s", e)
-        return "密码保存失败"
+    return "密码保存失败"
 
 
 def create_session(
@@ -1014,23 +1137,11 @@ def overwrite_password(new_password: str) -> Optional[str]:
     if err:
         return err
 
-    data_dir = _get_data_dir()
-    data_dir.mkdir(parents=True, exist_ok=True)
-    cred_path = _get_credential_path()
-
     content = _build_password_hash_entry(new_password)
 
-    try:
-        tmp_path = cred_path.with_suffix(".tmp")
-        tmp_path.write_text(content)
-        tmp_path.chmod(0o600)
-        tmp_path.replace(cred_path)
-        _load_credential_from_file()
-        _sync_bootstrap_admin_password_hash(content)
+    if _write_bootstrap_password_hash(content):
         return None
-    except OSError as e:
-        logger.error("Failed to write credential file: %s", e)
-        return "密码保存失败"
+    return "密码保存失败"
 
 
 def reset_password_cli() -> int:

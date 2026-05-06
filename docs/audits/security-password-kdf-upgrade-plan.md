@@ -1,4 +1,4 @@
-# Security Phase 3C Password KDF Upgrade Plan
+# Security Phase 3C/3D Password KDF Upgrade Plan
 
 Date: 2026-05-06
 Branch checked: `main`
@@ -50,6 +50,29 @@ Future implementation scope:
 - Use the new format for all new password writes.
 - Preserve bootstrap-admin compatibility until the legacy credential file is
   retired by a separate auth migration.
+
+Implementation note, Security Phase 3D:
+
+- KDF support has landed in the auth foundation.
+- Argon2id and bcrypt were not available in the current project/runtime and were
+  not added as new dependencies in this scoped pass.
+- New password writes now use a versioned stronger PBKDF2-HMAC-SHA256 format
+  with 600,000 iterations, a 32-byte random salt, and a 32-byte derived hash:
+  `$wolfystock$kdf=v1$alg=pbkdf2-sha256$params=iter=600000,digest=sha256$salt=<base64url>$hash=<base64url>`.
+- Existing unversioned `salt_b64:hash_b64` PBKDF2 hashes continue to verify as
+  legacy hashes.
+- Successful login, admin password unlock, auth settings current-password
+  verification, and `POST /api/v1/auth/reauth` opportunistically rewrite
+  recognized legacy hashes to the versioned format. Wrong passwords,
+  unsupported hashes, disabled users, and rate-limited attempts do not upgrade.
+- Bootstrap-admin file-backed compatibility is preserved: the legacy
+  `data/.admin_password_hash` source remains authoritative during the
+  transitional phase and the mirrored `app_users.password_hash` value is updated
+  after a successful bootstrap-admin upgrade.
+- Remaining work: MFA, password reset governance, optional forced reset for
+  unsupported hashes, production calibration of Argon2id/bcrypt if those
+  dependencies become approved, and any future password metadata fields such as
+  `password_upgraded_at`.
 
 Explicitly not changed in this task:
 

@@ -41,8 +41,9 @@ from src.auth import (
     safe_identifier_hash,
     set_initial_password,
     get_session_identity,
+    password_hash_needs_upgrade,
+    verify_stored_password_and_upgrade,
     verify_password_hash_string,
-    verify_stored_password,
     ensure_bootstrap_admin_user_password_hash,
 )
 from src.config import Config, setup_env
@@ -468,6 +469,25 @@ def _persist_session_for_user(*, request: Request, user_id: str, username: str, 
     )
 
 
+def _upgrade_app_user_password_hash_if_needed(user_row, password: str):
+    stored_hash = getattr(user_row, "password_hash", None)
+    if not password_hash_needs_upgrade(stored_hash):
+        return user_row
+    try:
+        new_hash = hash_password_for_storage(password)
+        return AuthRepository().create_or_update_app_user(
+            user_id=str(user_row.id),
+            username=str(user_row.username),
+            display_name=getattr(user_row, "display_name", None) or str(user_row.username),
+            role=str(user_row.role),
+            password_hash=new_hash,
+            is_active=bool(getattr(user_row, "is_active", True)),
+        )
+    except Exception as exc:  # pragma: no cover - best-effort compatibility path
+        logger.warning("Failed to upgrade app user password KDF: %s", exc)
+        return user_row
+
+
 def _delete_session_cookie(response: Response, request: Request) -> None:
     params = _cookie_params(request)
     response.delete_cookie(
@@ -636,10 +656,12 @@ async def auth_reauth(request: Request, body: ReauthRequest):
     verified = False
     if current_user.user_id == BOOTSTRAP_ADMIN_USER_ID:
         ensure_bootstrap_admin_user_password_hash()
-        verified = verify_stored_password(password)
+        verified = verify_stored_password_and_upgrade(password)
     else:
         user_row = AuthRepository().get_app_user(current_user.user_id)
         verified = bool(user_row and verify_password_hash_string(password, getattr(user_row, "password_hash", None)))
+        if verified and user_row is not None:
+            _upgrade_app_user_password_hash_if_needed(user_row, password)
 
     if not verified:
         _record_login_failure_and_audit(
@@ -749,10 +771,12 @@ async def auth_verify_password(request: Request, body: VerifyPasswordRequest):
         verified = False
         if bootstrap_admin:
             ensure_bootstrap_admin_user_password_hash()
-            verified = verify_stored_password(password)
+            verified = verify_stored_password_and_upgrade(password)
         else:
             user_row = AuthRepository().get_app_user(current_user.user_id)
             verified = bool(user_row and verify_password_hash_string(password, getattr(user_row, "password_hash", None)))
+            if verified and user_row is not None:
+                _upgrade_app_user_password_hash_if_needed(user_row, password)
         if not verified:
             _record_login_failure_and_audit(
                 request,
@@ -875,7 +899,7 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
                             "message": "Too many failed attempts. Please try again later.",
                         },
                     )
-                if not verify_stored_password(current_password):
+                if not verify_stored_password_and_upgrade(current_password):
                     record_login_failure(ip)
                     return JSONResponse(
                         status_code=401,
@@ -902,7 +926,7 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
                             "message": "Too many failed attempts. Please try again later.",
                         },
                     )
-                if not verify_stored_password(current_password):
+                if not verify_stored_password_and_upgrade(current_password):
                     record_login_failure(ip)
                     return JSONResponse(
                         status_code=401,
@@ -1064,7 +1088,7 @@ async def auth_login(request: Request, body: LoginRequest):
             ensure_bootstrap_admin_user_password_hash()
             user_row = repo.get_app_user(BOOTSTRAP_ADMIN_USER_ID)
             created_user = True
-        elif not verify_stored_password(password):
+        elif not verify_stored_password_and_upgrade(password):
             _record_login_failure_and_audit(
                 request,
                 ip=ip,
@@ -1177,6 +1201,8 @@ async def auth_login(request: Request, body: LoginRequest):
                     user_id=str(getattr(user_row, "id", "") or ""),
                 )
                 return _generic_login_error()
+            else:
+                user_row = _upgrade_app_user_password_hash_if_needed(user_row, password)
 
     had_failures = has_rate_limit_failures(ip, username)
     clear_rate_limit(ip, username)
