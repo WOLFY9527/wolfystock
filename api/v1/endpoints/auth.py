@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import os
 import secrets
+from datetime import timedelta
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request
@@ -23,6 +24,7 @@ from src.auth import (
     clear_rate_limit,
     create_admin_unlock_token,
     create_session,
+    get_admin_reauth_max_age_seconds,
     get_client_ip,
     get_session_expiry_datetime,
     has_rate_limit_failures,
@@ -32,6 +34,7 @@ from src.auth import (
     is_password_changeable,
     is_password_set,
     is_production_mode,
+    mark_admin_session_reauthenticated,
     record_login_failure,
     refresh_auth_state,
     rotate_session_secret,
@@ -101,6 +104,12 @@ class VerifyPasswordRequest(BaseModel):
 
     password: str = Field(default="", description="Admin password")
     password_confirm: str | None = Field(default=None, alias="passwordConfirm", description="Confirm password when setting initial secret")
+
+
+class ReauthRequest(BaseModel):
+    """Recent admin reauthentication request body."""
+
+    password: str = Field(default="", description="Current password")
 
 
 class CurrentUserResponse(BaseModel):
@@ -587,6 +596,79 @@ async def auth_update_notification_preferences(request: Request, body: UserNotif
         discord_enabled=body.discord_enabled,
     )
     return _serialize_user_notification_preferences(current_user.user_id)
+
+
+@router.post(
+    "/reauth",
+    summary="Recently reauthenticate current admin session",
+    description="Verifies the current admin password and records a short-lived session-bound reauth marker.",
+)
+async def auth_reauth(request: Request, body: ReauthRequest):
+    current_user, error_response = _require_admin_current_user(request)
+    if error_response is not None:
+        return error_response
+    if not current_user.is_authenticated or not current_user.session_id:
+        return JSONResponse(
+            status_code=401,
+            content={"error": "unauthorized", "message": "Login required"},
+        )
+
+    password = (body.password or "").strip()
+    if not password:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "password_required", "message": "请输入当前密码"},
+        )
+
+    ip = get_client_ip(request)
+    if not check_rate_limit(ip, current_user.username, admin=True):
+        _audit_login_event(
+            request=request,
+            action="security.reauth_rate_limited",
+            username=current_user.username,
+            outcome="rate_limited",
+            status="failed",
+            user_id=current_user.user_id,
+            admin=True,
+        )
+        return _rate_limited_error()
+
+    verified = False
+    if current_user.user_id == BOOTSTRAP_ADMIN_USER_ID:
+        ensure_bootstrap_admin_user_password_hash()
+        verified = verify_stored_password(password)
+    else:
+        user_row = AuthRepository().get_app_user(current_user.user_id)
+        verified = bool(user_row and verify_password_hash_string(password, getattr(user_row, "password_hash", None)))
+
+    if not verified:
+        _record_login_failure_and_audit(
+            request,
+            ip=ip,
+            username=current_user.username,
+            outcome="invalid_password",
+            user_id=current_user.user_id,
+            admin=True,
+        )
+        return _generic_login_error()
+
+    reauthenticated_at = mark_admin_session_reauthenticated(
+        user_id=current_user.user_id,
+        session_id=current_user.session_id,
+    )
+    if reauthenticated_at is None:
+        return JSONResponse(
+            status_code=403,
+            content={"error": "admin_reauth_required", "message": "Recent admin reauthentication required"},
+        )
+
+    clear_rate_limit(ip, current_user.username)
+    ttl_seconds = get_admin_reauth_max_age_seconds()
+    return {
+        "ok": True,
+        "ttlSeconds": ttl_seconds,
+        "reauthExpiresAt": (reauthenticated_at + timedelta(seconds=ttl_seconds)).isoformat(),
+    }
 
 
 @router.post(

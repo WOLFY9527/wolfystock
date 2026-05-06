@@ -41,6 +41,7 @@ ACCOUNT_RATE_LIMIT_MAX_FAILURES = 5
 SESSION_MAX_AGE_HOURS_DEFAULT = 24
 ADMIN_SESSION_IDLE_TIMEOUT_MINUTES_DEFAULT = 30
 ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT = 120
+ADMIN_REAUTH_MAX_AGE_MINUTES_DEFAULT = 15
 ADMIN_UNLOCK_TOKEN_PURPOSE = "admin_settings_unlock"
 MIN_PASSWORD_LEN = 6
 SESSION_TOKEN_VERSION = "v2"
@@ -53,6 +54,7 @@ _session_secret: Optional[bytes] = None
 _password_hash_salt: Optional[bytes] = None
 _password_hash_stored: Optional[bytes] = None
 _rate_limit: dict[str, Tuple[int, float]] = {}
+_admin_reauth_markers: dict[str, datetime] = {}
 _rate_limit_lock = None
 
 _PRODUCTION_ENV_VALUES = {"prod", "production"}
@@ -348,6 +350,17 @@ def _get_admin_unlock_max_age_seconds() -> int:
         )
     except ValueError:
         max_age_minutes = ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT
+    return max(60, max_age_minutes * 60)
+
+
+def get_admin_reauth_max_age_seconds() -> int:
+    """Read recent admin reauth ttl from env."""
+    try:
+        max_age_minutes = int(
+            os.getenv("ADMIN_REAUTH_MAX_AGE_MINUTES", str(ADMIN_REAUTH_MAX_AGE_MINUTES_DEFAULT))
+        )
+    except ValueError:
+        max_age_minutes = ADMIN_REAUTH_MAX_AGE_MINUTES_DEFAULT
     return max(60, max_age_minutes * 60)
 
 
@@ -760,6 +773,74 @@ def verify_admin_unlock_token(value: str) -> bool:
     """Verify signed admin-unlock token and enforce expiry."""
     identity = get_admin_unlock_identity(value)
     return identity is not None and identity.is_admin
+
+
+def _admin_reauth_marker_key(user_id: str | None, session_id: str | None) -> str | None:
+    normalized_user_id = str(user_id or "").strip()
+    normalized_session_id = str(session_id or "").strip()
+    if not normalized_user_id or not normalized_session_id:
+        return None
+    secret = _load_session_secret()
+    if not secret:
+        return None
+    payload = f"{normalized_user_id}:{normalized_session_id}"
+    return hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _purge_expired_admin_reauth_markers(now: datetime | None = None) -> None:
+    observed_now = _datetime_as_utc(now or datetime.now(timezone.utc))
+    ttl = timedelta(seconds=get_admin_reauth_max_age_seconds())
+    expired_keys = [
+        key
+        for key, reauthenticated_at in _admin_reauth_markers.items()
+        if observed_now - _datetime_as_utc(reauthenticated_at) > ttl
+    ]
+    for key in expired_keys:
+        _admin_reauth_markers.pop(key, None)
+
+
+def mark_admin_session_reauthenticated(
+    *,
+    user_id: str,
+    session_id: str,
+    reauthenticated_at: datetime | None = None,
+) -> datetime | None:
+    """Record a process-local recent admin reauth marker for one authenticated session."""
+    marker_key = _admin_reauth_marker_key(user_id, session_id)
+    if marker_key is None:
+        return None
+    observed_at = reauthenticated_at or datetime.now(timezone.utc)
+    _purge_expired_admin_reauth_markers(observed_at)
+    _admin_reauth_markers[marker_key] = observed_at
+    return observed_at
+
+
+def get_admin_session_reauthenticated_at(
+    *,
+    user_id: str,
+    session_id: str,
+    max_age_seconds: int | None = None,
+) -> datetime | None:
+    """Return the recent reauth timestamp for one session when present and unexpired."""
+    marker_key = _admin_reauth_marker_key(user_id, session_id)
+    if marker_key is None:
+        return None
+    observed_at = _admin_reauth_markers.get(marker_key)
+    if observed_at is None:
+        return None
+    now = datetime.now(timezone.utc)
+    ttl_seconds = max(60, int(max_age_seconds or get_admin_reauth_max_age_seconds()))
+    if now - _datetime_as_utc(observed_at) > timedelta(seconds=ttl_seconds):
+        _admin_reauth_markers.pop(marker_key, None)
+        return None
+    return observed_at
+
+
+def clear_admin_session_reauth(*, user_id: str, session_id: str) -> None:
+    """Clear any recent admin reauth marker for one session."""
+    marker_key = _admin_reauth_marker_key(user_id, session_id)
+    if marker_key is not None:
+        _admin_reauth_markers.pop(marker_key, None)
 
 
 def get_client_ip(request) -> str:

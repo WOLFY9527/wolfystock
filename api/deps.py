@@ -18,7 +18,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from src.admin_rbac import expand_admin_capabilities, has_admin_capability
-from src.auth import COOKIE_NAME, get_session_identity, is_auth_enabled
+from src.auth import COOKIE_NAME, get_admin_session_reauthenticated_at, get_session_identity, is_auth_enabled
 from src.multi_user import ROLE_ADMIN
 from src.storage import DatabaseManager
 from src.config import get_config, Config
@@ -295,13 +295,26 @@ def require_recent_admin_reauth(
     reauthenticated_at: datetime | None = None,
     max_age_minutes: int = 15,
 ) -> CurrentUser:
-    """Validate recent admin reauthentication metadata when a route supplies it.
-
-    Current route dependencies do not yet carry reauth metadata, so missing
-    metadata fails closed until a later phase wires an unlock/reauth source.
-    """
+    """Validate recent admin reauthentication for the current admin session."""
     admin_user = require_admin_user(current_user)
     observed_at = reauthenticated_at or getattr(admin_user, "admin_reauthenticated_at", None)
+    if observed_at is None:
+        session_id = str(getattr(admin_user, "session_id", "") or "").strip()
+        user_id = str(getattr(admin_user, "user_id", "") or "").strip()
+        if session_id and user_id:
+            session_row = DatabaseManager.get_instance().get_app_user_session(session_id)
+            if (
+                session_row is not None
+                and str(getattr(session_row, "user_id", "") or "") == user_id
+                and getattr(session_row, "revoked_at", None) is None
+            ):
+                expires_at = getattr(session_row, "expires_at", None)
+                if not isinstance(expires_at, datetime) or datetime.now(tz=expires_at.tzinfo) <= expires_at:
+                    observed_at = get_admin_session_reauthenticated_at(
+                        user_id=user_id,
+                        session_id=session_id,
+                        max_age_seconds=max(1, max_age_minutes) * 60,
+                    )
     if not isinstance(observed_at, datetime):
         raise HTTPException(
             status_code=403,

@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import HTTPException
 from sqlalchemy import inspect, select
 
+import src.auth as auth
 from api.deps import CurrentUser, require_admin_user
 from src.admin_rbac import (
     ADMIN_RBAC_CAPABILITIES,
@@ -46,6 +47,8 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
         self.db = DatabaseManager(db_url=f"sqlite:///{self.db_path}")
 
     def tearDown(self) -> None:
+        auth._admin_reauth_markers = {}
+        auth._session_secret = None
         DatabaseManager.reset_instance()
         self.temp_dir.cleanup()
 
@@ -260,6 +263,89 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
         reauthenticated_at = datetime.now() - timedelta(minutes=3)
 
         self.assertIs(require_recent_admin_reauth(admin, reauthenticated_at=reauthenticated_at), admin)
+
+    def test_recent_admin_reauth_helper_accepts_session_bound_marker(self) -> None:
+        from api.deps import require_recent_admin_reauth
+
+        auth._session_secret = b"1" * 32
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True)
+        session_id = "session-bound-marker"
+        object.__setattr__(admin, "session_id", session_id)
+        self.db.create_or_update_app_user(
+            user_id=admin.user_id,
+            username=admin.username,
+            display_name=admin.display_name or admin.username,
+            role=ROLE_ADMIN,
+            password_hash=None,
+            is_active=True,
+        )
+        self.db.create_app_user_session(
+            session_id=session_id,
+            user_id=admin.user_id,
+            expires_at=datetime.now() + timedelta(hours=1),
+        )
+        auth.mark_admin_session_reauthenticated(user_id=admin.user_id, session_id=session_id)
+
+        self.assertIs(require_recent_admin_reauth(admin), admin)
+
+    def test_recent_admin_reauth_helper_rejects_expired_session_marker(self) -> None:
+        from api.deps import require_recent_admin_reauth
+
+        auth._session_secret = b"2" * 32
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True)
+        session_id = "expired-marker-session"
+        object.__setattr__(admin, "session_id", session_id)
+        self.db.create_or_update_app_user(
+            user_id=admin.user_id,
+            username=admin.username,
+            display_name=admin.display_name or admin.username,
+            role=ROLE_ADMIN,
+            password_hash=None,
+            is_active=True,
+        )
+        self.db.create_app_user_session(
+            session_id=session_id,
+            user_id=admin.user_id,
+            expires_at=datetime.now() + timedelta(hours=1),
+        )
+        auth.mark_admin_session_reauthenticated(
+            user_id=admin.user_id,
+            session_id=session_id,
+            reauthenticated_at=datetime.now() - timedelta(minutes=20),
+        )
+
+        with self.assertRaises(HTTPException) as exc:
+            require_recent_admin_reauth(admin, max_age_minutes=15)
+        self.assertEqual(exc.exception.status_code, 403)
+        self.assertEqual(exc.exception.detail["error"], "admin_reauth_required")
+
+    def test_recent_admin_reauth_helper_rejects_revoked_session_marker(self) -> None:
+        from api.deps import require_recent_admin_reauth
+
+        auth._session_secret = b"3" * 32
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True)
+        session_id = "revoked-marker-session"
+        object.__setattr__(admin, "session_id", session_id)
+        self.db.create_or_update_app_user(
+            user_id=admin.user_id,
+            username=admin.username,
+            display_name=admin.display_name or admin.username,
+            role=ROLE_ADMIN,
+            password_hash=None,
+            is_active=True,
+        )
+        self.db.create_app_user_session(
+            session_id=session_id,
+            user_id=admin.user_id,
+            expires_at=datetime.now() + timedelta(hours=1),
+        )
+        auth.mark_admin_session_reauthenticated(user_id=admin.user_id, session_id=session_id)
+        self.db.revoke_app_user_session(session_id)
+
+        with self.assertRaises(HTTPException) as exc:
+            require_recent_admin_reauth(admin)
+        self.assertEqual(exc.exception.status_code, 403)
+        self.assertEqual(exc.exception.detail["error"], "admin_reauth_required")
 
     def test_capability_output_contains_no_secret_like_fields(self) -> None:
         user = _current_user(role=ROLE_ADMIN, is_admin=True)

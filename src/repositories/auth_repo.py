@@ -94,7 +94,27 @@ class AuthRepository:
         )
 
     def revoke_app_user_session(self, session_id: str) -> bool:
-        return self.db.revoke_app_user_session(session_id)
+        session_row = self.db.get_app_user_session(session_id)
+        revoked = self.db.revoke_app_user_session(session_id)
+        if revoked and session_row is not None:
+            from src.auth import clear_admin_session_reauth
+
+            clear_admin_session_reauth(
+                user_id=str(getattr(session_row, "user_id", "") or ""),
+                session_id=str(session_id or ""),
+            )
+        return revoked
 
     def revoke_all_app_user_sessions(self, user_id: str) -> int:
-        return self.db.revoke_all_app_user_sessions(user_id)
+        session_rows = list(self.db.list_app_user_sessions(user_id))
+        revoked = self.db.revoke_all_app_user_sessions(user_id)
+        if revoked:
+            from src.auth import clear_admin_session_reauth
+
+            for row in session_rows:
+                if getattr(row, "revoked_at", None) is None:
+                    clear_admin_session_reauth(
+                        user_id=str(getattr(row, "user_id", "") or ""),
+                        session_id=str(getattr(row, "session_id", "") or ""),
+                    )
+        return revoked

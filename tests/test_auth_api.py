@@ -37,6 +37,7 @@ def _reset_auth_globals() -> None:
     auth._password_hash_salt = None
     auth._password_hash_stored = None
     auth._rate_limit = {}
+    auth._admin_reauth_markers = {}
 
 
 class AuthApiTestCase(unittest.TestCase):
@@ -360,7 +361,67 @@ class AuthApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
         self.assertIn(b'"error":"invalid_login"', response.body)
+
+    def test_reauth_succeeds_for_valid_current_admin_password(self) -> None:
+        login_response = self._login_admin(password="passwd6")
+        self.assertEqual(login_response.status_code, 200)
+        session_cookie = self._extract_session_cookie(login_response)
+
+        response = asyncio.run(
+            auth_endpoint.auth_reauth(
+                self._build_request(cookies={auth.COOKIE_NAME: session_cookie}),
+                auth_endpoint.ReauthRequest(password="passwd6"),
+            )
+        )
+
+        self.assertEqual(response["ok"], True)
+        self.assertGreaterEqual(response["ttlSeconds"], 60)
+        self.assertIn("reauthExpiresAt", response)
+        text = json.dumps(response, ensure_ascii=False).lower()
+        for forbidden in (
+            "password_hash",
+            "passwd6",
+            "dsa_session",
+            "cookie",
+            "token",
+            "api_key",
+            "secret",
+            ".env",
+            "traceback",
+        ):
+            self.assertNotIn(forbidden, text)
+
+    def test_reauth_rejects_wrong_password_safely(self) -> None:
+        login_response = self._login_admin(password="passwd6")
+        self.assertEqual(login_response.status_code, 200)
+        session_cookie = self._extract_session_cookie(login_response)
+
+        response = asyncio.run(
+            auth_endpoint.auth_reauth(
+                self._build_request(cookies={auth.COOKIE_NAME: session_cookie}),
+                auth_endpoint.ReauthRequest(password="wrong-pass"),
+            )
+        )
+
+        self.assertEqual(response.status_code, 401)
+        body = self._json_response_body(response)
+        self.assertEqual(body["error"], "invalid_login")
+        text = json.dumps(body, ensure_ascii=False).lower()
+        for forbidden in ("password_hash", "wrong-pass", "dsa_session", "cookie", "token", "secret", "traceback"):
+            self.assertNotIn(forbidden, text)
         self.assertNotIn(b"wrong-pass", response.body)
+
+    def test_reauth_rejects_unauthenticated_user(self) -> None:
+        response = asyncio.run(
+            auth_endpoint.auth_reauth(
+                self._build_request(),
+                auth_endpoint.ReauthRequest(password="passwd6"),
+            )
+        )
+
+        self.assertEqual(response.status_code, 401)
+        body = self._json_response_body(response)
+        self.assertEqual(body["error"], "unauthorized")
 
     def test_logout_clears_cookie(self) -> None:
         response = asyncio.run(auth_endpoint.auth_logout(self._build_request()))
