@@ -66,6 +66,7 @@ from src.multi_user import (
     normalize_role,
     normalize_scope,
 )
+from src.admin_rbac import ADMIN_RBAC_ROLE_CAPABILITIES, ADMIN_RBAC_ROLES
 from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE
 from src.postgres_identity_store import PostgresPhaseAStore
 from src.postgres_analysis_chat_store import PostgresPhaseBStore
@@ -330,6 +331,52 @@ class AuthRateLimitBucket(Base):
 
     __table_args__ = (
         Index('ix_auth_rate_limit_type_expiry', 'bucket_type', 'expires_at'),
+    )
+
+
+class AdminRole(Base):
+    """Seeded admin role metadata for the RBAC compatibility layer."""
+
+    __tablename__ = 'admin_roles'
+
+    role_key = Column(String(64), primary_key=True)
+    display_name = Column(String(128), nullable=False)
+    description = Column(Text)
+    built_in = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class AdminRoleCapability(Base):
+    """Seeded role-to-capability mapping for read-only expansion."""
+
+    __tablename__ = 'admin_role_capabilities'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    role_key = Column(String(64), ForeignKey('admin_roles.role_key'), nullable=False, index=True)
+    capability = Column(String(96), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+    __table_args__ = (
+        UniqueConstraint('role_key', 'capability', name='uix_admin_role_capability'),
+        Index('ix_admin_role_capability_lookup', 'role_key', 'capability'),
+    )
+
+
+class AdminUserRole(Base):
+    """Optional explicit user-to-admin-role assignment for future phases."""
+
+    __tablename__ = 'admin_user_roles'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(64), ForeignKey('app_users.id'), nullable=False, index=True)
+    role_key = Column(String(64), ForeignKey('admin_roles.role_key'), nullable=False, index=True)
+    assigned_at = Column(DateTime, default=datetime.now, index=True)
+    assigned_by = Column(String(64))
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'role_key', name='uix_admin_user_role'),
+        Index('ix_admin_user_role_lookup', 'user_id', 'role_key'),
     )
 
 
@@ -1560,6 +1607,7 @@ class DatabaseManager:
         bootstrap_user_id = BOOTSTRAP_ADMIN_USER_ID
         with self._engine.begin() as conn:
             self._ensure_bootstrap_admin_user_row(conn)
+            self._seed_admin_rbac_compatibility_rows(conn)
 
             self._add_column_if_missing(conn, "analysis_history", "owner_id", "VARCHAR(64)")
             self._add_column_if_missing(conn, "analysis_history", "is_test", "BOOLEAN NOT NULL DEFAULT 0")
@@ -1728,6 +1776,65 @@ class DatabaseManager:
                 "created_at": now,
                 "updated_at": now,
             },
+        )
+
+    @staticmethod
+    def _seed_admin_rbac_compatibility_rows(conn) -> None:
+        now = datetime.now()
+        role_rows = [
+            {
+                "role_key": role_key,
+                "display_name": role_key.replace("-", " ").title(),
+                "description": "Built-in admin RBAC compatibility role",
+                "created_at": now,
+                "updated_at": now,
+            }
+            for role_key in ADMIN_RBAC_ROLES
+        ]
+        conn.exec_driver_sql(
+            """
+            INSERT OR IGNORE INTO admin_roles (
+                role_key,
+                display_name,
+                description,
+                built_in,
+                created_at,
+                updated_at
+            ) VALUES (
+                :role_key,
+                :display_name,
+                :description,
+                1,
+                :created_at,
+                :updated_at
+            )
+            """,
+            role_rows,
+        )
+
+        capability_rows = []
+        for role_key, capabilities in ADMIN_RBAC_ROLE_CAPABILITIES.items():
+            for capability in capabilities:
+                capability_rows.append(
+                    {
+                        "role_key": role_key,
+                        "capability": capability,
+                        "created_at": now,
+                    }
+                )
+        conn.exec_driver_sql(
+            """
+            INSERT OR IGNORE INTO admin_role_capabilities (
+                role_key,
+                capability,
+                created_at
+            ) VALUES (
+                :role_key,
+                :capability,
+                :created_at
+            )
+            """,
+            capability_rows,
         )
 
     def _migrate_backtest_summaries_table(self, conn, *, bootstrap_user_id: str) -> None:
@@ -2280,6 +2387,62 @@ class DatabaseManager:
                 reverse=True,
             )
         return legacy_rows
+
+    def list_admin_roles(self) -> List[str]:
+        with self.get_session() as session:
+            return [
+                str(value)
+                for value in session.execute(
+                    select(AdminRole.role_key).order_by(asc(AdminRole.role_key))
+                ).scalars().all()
+                if str(value or "").strip()
+            ]
+
+    def list_admin_role_capabilities(self, role_key: str) -> List[str]:
+        normalized_role = str(role_key or "").strip()
+        if not normalized_role:
+            return []
+        with self.get_session() as session:
+            return [
+                str(value)
+                for value in session.execute(
+                    select(AdminRoleCapability.capability)
+                    .where(AdminRoleCapability.role_key == normalized_role)
+                    .order_by(asc(AdminRoleCapability.capability))
+                ).scalars().all()
+                if str(value or "").strip()
+            ]
+
+    def list_admin_user_roles(self, user_id: str) -> List[str]:
+        normalized_user_id = str(user_id or "").strip()
+        if not normalized_user_id:
+            return []
+        with self.get_session() as session:
+            return [
+                str(value)
+                for value in session.execute(
+                    select(AdminUserRole.role_key)
+                    .where(AdminUserRole.user_id == normalized_user_id)
+                    .order_by(asc(AdminUserRole.role_key))
+                ).scalars().all()
+                if str(value or "").strip()
+            ]
+
+    def list_admin_capabilities_for_user(self, user_id: str) -> List[str]:
+        role_keys = self.list_admin_user_roles(user_id)
+        if not role_keys:
+            return []
+        with self.get_session() as session:
+            return [
+                str(value)
+                for value in session.execute(
+                    select(AdminRoleCapability.capability)
+                    .where(AdminRoleCapability.role_key.in_(role_keys))
+                    .distinct()
+                    .order_by(asc(AdminRoleCapability.capability))
+                ).scalars().all()
+                if str(value or "").strip()
+            ]
 
     def list_app_user_sessions(self, user_id: Optional[str] = None) -> List[Any]:
         legacy_rows = self._sqlite_list_app_user_sessions(user_id)

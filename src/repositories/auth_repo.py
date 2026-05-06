@@ -65,6 +65,15 @@ class AuthRepository:
     def list_app_user_sessions(self, user_id: str | None = None):
         return self.db.list_app_user_sessions(user_id)
 
+    def list_admin_role_capabilities(self, role_key: str):
+        return self.db.list_admin_role_capabilities(role_key)
+
+    def list_admin_user_roles(self, user_id: str):
+        return self.db.list_admin_user_roles(user_id)
+
+    def list_admin_capabilities_for_user(self, user_id: str):
+        return self.db.list_admin_capabilities_for_user(user_id)
+
     def create_or_update_app_user(
         self,
         *,

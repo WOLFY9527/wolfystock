@@ -3,6 +3,25 @@
 Date: 2026-05-06
 Mode: docs-only authorization design. No runtime behavior changed.
 
+Implementation note, 2026-05-06:
+
+- Phase R1 compatibility has landed as a read-only schema/helper layer. SQLite
+  initialization now creates and seeds `admin_roles`,
+  `admin_role_capabilities`, and `admin_user_roles` with the built-in
+  `super-admin`, `security-admin`, `support-admin`, and `ops-admin` roles plus
+  the capability taxonomy below.
+- Existing coarse admin users (`role == "admin"` or resolved `is_admin`) expand
+  to super-admin-equivalent capabilities for compatibility. Non-admin users
+  expand to no admin capabilities.
+- The new helpers `expand_admin_capabilities(user)` and
+  `has_admin_capability(user, capability)` are read-only metadata helpers for
+  future phases. Current route authorization behavior is intentionally
+  unchanged: admin routes still rely on `require_admin_user()` and no route has
+  migrated to capability enforcement yet.
+- Phase R1 does not implement MFA, role-management UI, capability overrides,
+  route migration, frontend navigation changes, or any scanner/backtest/
+  portfolio/provider/MarketCache/AI/notification/DuckDB behavior changes.
+
 ## 1. Purpose
 
 WolfyStock's current admin authorization posture is intentionally simple: a

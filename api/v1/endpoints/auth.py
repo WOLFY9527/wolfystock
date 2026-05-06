@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from api.deps import get_system_config_service, resolve_current_user
+from src.admin_rbac import expand_admin_capabilities
 from src.auth import (
     ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT,
     COOKIE_NAME,
@@ -112,6 +113,7 @@ class CurrentUserResponse(BaseModel):
     transitional: bool = False
     auth_enabled: bool = Field(alias="authEnabled")
     legacy_admin: bool = Field(default=False, alias="legacyAdmin")
+    admin_capabilities: list[str] = Field(default_factory=list, alias="adminCapabilities")
 
 
 class UserNotificationPreferencesRequest(BaseModel):
@@ -253,6 +255,7 @@ def _serialize_current_user(request: Request) -> dict | None:
         transitional=current_user.transitional,
         authEnabled=current_user.auth_enabled,
         legacyAdmin=current_user.legacy_admin,
+        adminCapabilities=sorted(getattr(current_user, "admin_capabilities", ()) or ()),
     ).model_dump(by_alias=True)
 
 
@@ -834,6 +837,7 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
             transitional=False,
             authEnabled=True,
             legacyAdmin=current_user.legacy_admin,
+            adminCapabilities=sorted(getattr(current_user, "admin_capabilities", ()) or ()),
         ).model_dump(by_alias=True)
         resp = JSONResponse(content=content)
         _set_session_cookie(resp, session_val, request)
@@ -1086,6 +1090,7 @@ async def auth_login(request: Request, body: LoginRequest):
                 transitional=False,
                 authEnabled=True,
                 legacyAdmin=False,
+                adminCapabilities=sorted(expand_admin_capabilities(user_row)),
             ).model_dump(by_alias=True),
         }
     )

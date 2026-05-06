@@ -10,12 +10,13 @@ API 依赖注入模块
 3. 提供服务层依赖
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Generator
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from src.admin_rbac import expand_admin_capabilities
 from src.auth import COOKIE_NAME, get_session_identity, is_auth_enabled
 from src.storage import DatabaseManager
 from src.config import get_config, Config
@@ -36,6 +37,7 @@ class CurrentUser:
     auth_enabled: bool
     session_id: str | None = None
     legacy_admin: bool = False
+    admin_capabilities: tuple[str, ...] = field(default_factory=tuple)
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -119,6 +121,11 @@ def resolve_current_user(request: Request) -> CurrentUser | None:
                 session_id=identity.session_id,
                 legacy_admin=identity.legacy_admin,
             )
+            object.__setattr__(
+                current_user,
+                "admin_capabilities",
+                tuple(sorted(expand_admin_capabilities(current_user))),
+            )
             if state is not None:
                 state.current_user = current_user
             return current_user
@@ -136,6 +143,11 @@ def resolve_current_user(request: Request) -> CurrentUser | None:
             auth_enabled=False,
             session_id=None,
             legacy_admin=False,
+        )
+        object.__setattr__(
+            current_user,
+            "admin_capabilities",
+            tuple(sorted(expand_admin_capabilities(current_user))),
         )
         if state is not None:
             state.current_user = current_user
