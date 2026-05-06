@@ -11,7 +11,8 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.services.llm_cost_ledger_service import LlmCostLedgerService
-from src.storage import DatabaseManager, LLMCostLedger, ModelPricingPolicy
+from src.services.quota_policy_service import QuotaPolicyService
+from src.storage import DatabaseManager, LLMCostLedger, ModelPricingPolicy, QuotaReservation
 
 
 def _fresh_db() -> DatabaseManager:
@@ -43,6 +44,19 @@ class LlmCostLedgerServiceTestCase(unittest.TestCase):
         }
         payload.update(kwargs)
         self.db.upsert_model_pricing_policy(**payload)
+
+    def _reserve_quota(self, **kwargs):
+        service = QuotaPolicyService(db=self.db, enforcement_enabled=True)
+        payload = {
+            "owner_user_id": "user-a",
+            "route_family": "analysis",
+            "token_estimate": 1000,
+        }
+        payload.update(kwargs)
+        result = service.reserve_quota(**payload)
+        self.assertTrue(result.allowed)
+        self.assertTrue(result.reservation_id)
+        return result
 
     def test_pricing_lookup_by_provider_model_and_effective_date(self) -> None:
         self._seed_policy()
@@ -317,6 +331,176 @@ class LlmCostLedgerServiceTestCase(unittest.TestCase):
         )
 
         self.assertEqual(result.status, "ok")
+
+    def test_reconcile_usage_with_valid_reservation_consumes_it(self) -> None:
+        self._seed_policy()
+        reservation = self._reserve_quota()
+
+        result = self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            quota_reservation_id=reservation.reservation_id,
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertIsNotNone(result.quota_reconciliation)
+        self.assertEqual(result.quota_reconciliation.result_code, "reconciled_consumed")
+        with self.db.session_scope() as session:
+            row = session.query(QuotaReservation).filter_by(reservation_id=reservation.reservation_id).one()
+            self.assertEqual(row.status, "consumed")
+
+    def test_pricing_unknown_releases_reservation_without_consuming(self) -> None:
+        reservation = self._reserve_quota()
+
+        result = self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="unknown",
+            model="missing-model",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            quota_reservation_id=reservation.reservation_id,
+        )
+
+        self.assertEqual(result.status, "pricing_unknown")
+        self.assertIsNotNone(result.quota_reconciliation)
+        self.assertEqual(result.quota_reconciliation.result_code, "pricing_unknown_no_consume")
+        with self.db.session_scope() as session:
+            row = session.query(QuotaReservation).filter_by(reservation_id=reservation.reservation_id).one()
+            self.assertEqual(row.status, "released")
+
+    def test_invalid_usage_releases_reservation_without_consuming(self) -> None:
+        self._seed_policy()
+        reservation = self._reserve_quota()
+
+        result = self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=10,
+            cached_input_tokens=20,
+            completion_tokens=1,
+            total_tokens=11,
+            quota_reservation_id=reservation.reservation_id,
+        )
+
+        self.assertEqual(result.status, "invalid_usage")
+        self.assertIsNotNone(result.quota_reconciliation)
+        self.assertEqual(result.quota_reconciliation.result_code, "invalid_usage_no_consume")
+        with self.db.session_scope() as session:
+            row = session.query(QuotaReservation).filter_by(reservation_id=reservation.reservation_id).one()
+            self.assertEqual(row.status, "released")
+
+    def test_missing_reservation_returns_safe_code(self) -> None:
+        self._seed_policy()
+
+        result = self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            quota_reservation_id="qres_missing",
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertIsNotNone(result.quota_reconciliation)
+        self.assertEqual(result.quota_reconciliation.result_code, "reservation_missing")
+
+    def test_expired_reservation_returns_safe_code(self) -> None:
+        self._seed_policy()
+        reservation = self._reserve_quota(expires_at=datetime.now() - timedelta(seconds=1))
+
+        result = self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            quota_reservation_id=reservation.reservation_id,
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertIsNotNone(result.quota_reconciliation)
+        self.assertEqual(result.quota_reconciliation.result_code, "reservation_expired")
+        with self.db.session_scope() as session:
+            row = session.query(QuotaReservation).filter_by(reservation_id=reservation.reservation_id).one()
+            self.assertEqual(row.status, "expired")
+
+    def test_terminal_reservation_is_idempotent(self) -> None:
+        self._seed_policy()
+        reservation = self._reserve_quota()
+        QuotaPolicyService(db=self.db, enforcement_enabled=True).consume_reservation(
+            reservation_id=reservation.reservation_id
+        )
+
+        result = self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            quota_reservation_id=reservation.reservation_id,
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertIsNotNone(result.quota_reconciliation)
+        self.assertEqual(result.quota_reconciliation.result_code, "reservation_already_terminal")
+        with self.db.session_scope() as session:
+            row = session.query(QuotaReservation).filter_by(reservation_id=reservation.reservation_id).one()
+            self.assertEqual(row.status, "consumed")
+
+    def test_quota_reconciliation_failure_does_not_change_ledger_write_result(self) -> None:
+        self._seed_policy()
+        reservation = self._reserve_quota()
+
+        class BrokenQuotaPolicy:
+            def consume_reservation(self, **_kwargs):
+                raise RuntimeError("secret stack trace should not leak")
+
+            def release_reservation(self, **_kwargs):
+                raise RuntimeError("secret stack trace should not leak")
+
+        service = LlmCostLedgerService(db=self.db, quota_policy_service=BrokenQuotaPolicy())
+
+        result = service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            quota_reservation_id=reservation.reservation_id,
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertIsNotNone(result.ledger_id)
+        self.assertIsNotNone(result.quota_reconciliation)
+        self.assertEqual(result.quota_reconciliation.result_code, "reconciliation_error")
+        self.assertNotIn("secret", str(result.quota_reconciliation))
+        with self.db.session_scope() as session:
+            self.assertEqual(session.query(LLMCostLedger).count(), 1)
 
 
 if __name__ == "__main__":

@@ -69,8 +69,10 @@ WS2-R0 is design only. It does not implement Redis, Celery, RQ, workers, migrati
 - No raw prompts, raw provider payloads, credentials, cookies, raw session identifiers, stack traces, or secret-like metadata are stored by the observer.
 - Missing active pricing policy remains safe: the ledger row records `pricing_unknown` with zero estimated cost according to `LlmCostLedgerService`; there is no live price fetch or pricing-page scrape.
 - Per-user accounting is precise only where the caller passes `owner_user_id` or a guest bucket into the usage seam. Current analyzer/agent usage paths continue to preserve existing behavior and may still write global/null-owner ledger rows until owner context propagation is completed.
-- Quota reservation reconciliation is not consumed or released unless a future caller passes a safe `quota_reservation_id`; live quota enforcement remains out of scope.
-- Future work remains separate: complete owner/guest propagation at product route boundaries, connect safe quota reservation reconciliation, improve admin dashboard UX, and add retention/aggregation polish.
+- Quota reservation reconciliation now has a narrow synthetic helper behind `LlmCostLedgerService.reconcile_usage(...)`. It only runs when a caller already passes a safe `quota_reservation_id`, consumes reserved quota after successful priced cost calculation, releases reserved quota for `pricing_unknown` / `pricing_inactive` / `invalid_usage` no-consume outcomes, and returns safe reconciliation result codes for missing, expired, terminal, or helper-error cases.
+- The helper is best-effort and does not make quota reservations mandatory. A helper failure cannot break the ledger write or change user-visible LLM success behavior.
+- Live quota enforcement remains out of scope. No prompts, model routing/order, provider fallback/retry, LLM/provider calls, scanner/backtest/portfolio/Options/MarketCache/DuckDB/broker/notification behavior changed.
+- Future work remains separate: complete owner/guest propagation at product route boundaries, route-boundary reservation ids, budget burn-down UI, an explicit enforcement pilot, improved admin dashboard UX, and retention/aggregation polish.
 
 ## WS2-R4C pricing policy update workflow note
 

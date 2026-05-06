@@ -9,7 +9,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from src.storage import DatabaseManager, ModelPricingPolicy
+from src.storage import DatabaseManager, ModelPricingPolicy, QuotaReservation
 
 
 _MILLION = Decimal("1000000")
@@ -45,6 +45,186 @@ class LedgerWriteResult:
     status: str
     ledger_id: Optional[str] = None
     cost: Optional[CostCalculationResult] = None
+    quota_reconciliation: Optional["QuotaReservationReconciliationResult"] = None
+
+
+@dataclass(frozen=True)
+class QuotaReservationReconciliationResult:
+    result_code: str
+    reservation_id: Optional[str] = None
+    action: Optional[str] = None
+    quota_status: Optional[str] = None
+    reason_code: Optional[str] = None
+
+
+class QuotaReservationReconciliationHelper:
+    """Best-effort bridge from synthetic cost ledger rows to quota reservations."""
+
+    TERMINAL_STATUSES = {"consumed", "released", "expired"}
+
+    def __init__(self, *, db: DatabaseManager, quota_policy_service: Optional[Any] = None) -> None:
+        self.db = db
+        self._quota_policy_service = quota_policy_service
+
+    def reconcile(
+        self,
+        *,
+        cost_result: Optional[CostCalculationResult] = None,
+        ledger_row: Optional[Dict[str, Any]] = None,
+        quota_reservation_id: Optional[str] = None,
+        now: Optional[datetime] = None,
+    ) -> QuotaReservationReconciliationResult:
+        reservation_id = self._normalize_reservation_id(
+            quota_reservation_id
+            or getattr(cost_result, "quota_reservation_id", None)
+            or (ledger_row or {}).get("quota_reservation_id")
+        )
+        if not reservation_id:
+            return QuotaReservationReconciliationResult(result_code="no_reservation")
+
+        status = str(
+            getattr(cost_result, "status", None)
+            or (ledger_row or {}).get("status")
+            or "pricing_unknown"
+        ).strip().lower()
+        current_time = now or datetime.now()
+
+        try:
+            reservation = self._read_reservation(reservation_id)
+            if reservation is None:
+                return QuotaReservationReconciliationResult(
+                    result_code="reservation_missing",
+                    reservation_id=reservation_id,
+                    reason_code="reservation_missing",
+                )
+            if reservation.status in self.TERMINAL_STATUSES:
+                return self._terminal_result(reservation_id=reservation_id, status=reservation.status)
+            if reservation.status != "reserved":
+                return self._terminal_result(reservation_id=reservation_id, status=reservation.status)
+            if reservation.expires_at <= current_time:
+                return self._expire_reserved_reservation(reservation_id=reservation_id, now=current_time)
+
+            if status == "ok":
+                return self._consume(reservation_id=reservation_id, now=current_time)
+            if status in {"pricing_unknown", "pricing_inactive"}:
+                return self._release(
+                    reservation_id=reservation_id,
+                    now=current_time,
+                    result_code="pricing_unknown_no_consume",
+                )
+            if status == "invalid_usage":
+                return self._release(
+                    reservation_id=reservation_id,
+                    now=current_time,
+                    result_code="invalid_usage_no_consume",
+                )
+            return self._release(
+                reservation_id=reservation_id,
+                now=current_time,
+                result_code="reconciled_released",
+            )
+        except Exception:
+            return QuotaReservationReconciliationResult(
+                result_code="reconciliation_error",
+                reservation_id=reservation_id,
+                reason_code="reconciliation_error",
+            )
+
+    def _quota_service(self) -> Any:
+        if self._quota_policy_service is None:
+            from src.services.quota_policy_service import QuotaPolicyService
+
+            self._quota_policy_service = QuotaPolicyService(db=self.db, enforcement_enabled=True)
+        return self._quota_policy_service
+
+    def _read_reservation(self, reservation_id: str) -> Optional[QuotaReservation]:
+        with self.db.session_scope() as session:
+            row = session.query(QuotaReservation).filter_by(reservation_id=reservation_id).one_or_none()
+            if row is not None:
+                session.expunge(row)
+            return row
+
+    def _consume(self, *, reservation_id: str, now: datetime) -> QuotaReservationReconciliationResult:
+        decision = self._quota_service().consume_reservation(reservation_id=reservation_id, now=now)
+        if decision.allowed and decision.status == "consumed":
+            return QuotaReservationReconciliationResult(
+                result_code="reconciled_consumed",
+                reservation_id=reservation_id,
+                action="consume",
+                quota_status=decision.status,
+            )
+        return self._decision_failure_result(decision=decision, reservation_id=reservation_id, action="consume")
+
+    def _release(
+        self,
+        *,
+        reservation_id: str,
+        now: datetime,
+        result_code: str,
+    ) -> QuotaReservationReconciliationResult:
+        decision = self._quota_service().release_reservation(reservation_id=reservation_id, now=now)
+        if decision.allowed and decision.status == "released":
+            return QuotaReservationReconciliationResult(
+                result_code=result_code,
+                reservation_id=reservation_id,
+                action="release",
+                quota_status=decision.status,
+            )
+        return self._decision_failure_result(decision=decision, reservation_id=reservation_id, action="release")
+
+    def _expire_reserved_reservation(self, *, reservation_id: str, now: datetime) -> QuotaReservationReconciliationResult:
+        decision = self._quota_service().release_reservation(reservation_id=reservation_id, now=now)
+        return QuotaReservationReconciliationResult(
+            result_code="reservation_expired",
+            reservation_id=reservation_id,
+            action="expire",
+            quota_status=decision.status,
+            reason_code="reservation_expired",
+        )
+
+    @staticmethod
+    def _decision_failure_result(
+        *,
+        decision: Any,
+        reservation_id: str,
+        action: str,
+    ) -> QuotaReservationReconciliationResult:
+        if getattr(decision, "reason_code", None) == "reservation_expired" or getattr(decision, "status", None) == "expired":
+            return QuotaReservationReconciliationResult(
+                result_code="reservation_expired",
+                reservation_id=reservation_id,
+                action=action,
+                quota_status=getattr(decision, "status", None),
+                reason_code="reservation_expired",
+            )
+        return QuotaReservationReconciliationResult(
+            result_code="reservation_already_terminal",
+            reservation_id=reservation_id,
+            action=action,
+            quota_status=getattr(decision, "status", None),
+            reason_code=getattr(decision, "reason_code", None),
+        )
+
+    @staticmethod
+    def _terminal_result(*, reservation_id: str, status: Optional[str]) -> QuotaReservationReconciliationResult:
+        if status == "expired":
+            return QuotaReservationReconciliationResult(
+                result_code="reservation_expired",
+                reservation_id=reservation_id,
+                quota_status=status,
+                reason_code="reservation_expired",
+            )
+        return QuotaReservationReconciliationResult(
+            result_code="reservation_already_terminal",
+            reservation_id=reservation_id,
+            quota_status=status,
+            reason_code="reservation_already_terminal",
+        )
+
+    @staticmethod
+    def _normalize_reservation_id(value: Optional[str]) -> Optional[str]:
+        text = str(value or "").strip()
+        return text[:64] if text else None
 
 
 class LlmCostLedgerService:
@@ -52,8 +232,9 @@ class LlmCostLedgerService:
 
     SAFE_RESULT_CODES = {"ok", "pricing_unknown", "invalid_usage", "pricing_inactive"}
 
-    def __init__(self, *, db: Optional[DatabaseManager] = None) -> None:
+    def __init__(self, *, db: Optional[DatabaseManager] = None, quota_policy_service: Optional[Any] = None) -> None:
         self.db = db or DatabaseManager.get_instance()
+        self._quota_policy_service = quota_policy_service
 
     def sanitize_metadata(self, metadata: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         return self.db._sanitize_llm_cost_metadata(metadata or {})
@@ -198,7 +379,22 @@ class LlmCostLedgerService:
             metadata=metadata or {},
             created_at=at or datetime.now(),
         )
-        return LedgerWriteResult(status=cost.status, ledger_id=ledger_id, cost=cost)
+        quota_reconciliation = None
+        if quota_reservation_id:
+            quota_reconciliation = QuotaReservationReconciliationHelper(
+                db=self.db,
+                quota_policy_service=self._quota_policy_service,
+            ).reconcile(
+                cost_result=cost,
+                quota_reservation_id=quota_reservation_id,
+                now=at,
+            )
+        return LedgerWriteResult(
+            status=cost.status,
+            ledger_id=ledger_id,
+            cost=cost,
+            quota_reconciliation=quota_reconciliation,
+        )
 
     def get_summary(self, *, from_dt: datetime, to_dt: datetime, limit: int = 50) -> Dict[str, Any]:
         return self.db.get_llm_cost_ledger_summary(from_dt=from_dt, to_dt=to_dt, limit=limit)
