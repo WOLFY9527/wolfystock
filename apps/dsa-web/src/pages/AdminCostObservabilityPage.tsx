@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, AlertTriangle, BarChart3, Coins, DatabaseZap, Gauge, Radar, ShieldCheck } from 'lucide-react';
+import { Activity, AlertTriangle, BarChart3, Coins, DatabaseZap, Gauge, Radar, ShieldCheck, Tags } from 'lucide-react';
 import {
   adminCostApi,
   type AdminCostArea,
@@ -12,6 +12,8 @@ import {
   type AdminCostWindowKey,
   type LlmLedgerSummaryResponse,
   type LlmLedgerSummaryRollup,
+  type ModelPricingPoliciesResponse,
+  type ModelPricingPolicyItem,
   type QuotaDryRunOperation,
   type QuotaDryRunResponse,
   type QuotaEnforcementMode,
@@ -38,6 +40,12 @@ type LedgerState = {
   loading: boolean;
   error: ParsedApiError | null;
   data: LlmLedgerSummaryResponse | null;
+};
+
+type PricingPolicyState = {
+  loading: boolean;
+  error: ParsedApiError | null;
+  data: ModelPricingPoliciesResponse | null;
 };
 
 const WINDOW_OPTIONS: Array<{ value: AdminCostWindowKey; label: string }> = [
@@ -169,6 +177,21 @@ function sanitizedLedgerError(error: unknown): ParsedApiError {
       : parsed.isTimeoutError
       ? 'LLM 成本账本请求超时，请稍后重试。'
       : parsed.message || 'LLM 成本账本暂不可用。',
+    rawMessage: '',
+    details: undefined,
+  };
+}
+
+function sanitizedPricingPolicyError(error: unknown): ParsedApiError {
+  const parsed = getParsedApiError(error);
+  return {
+    ...parsed,
+    title: '读取模型价格策略失败',
+    message: parsed.status === 403
+      ? '当前账号没有成本观测权限。'
+      : parsed.isTimeoutError
+      ? '模型价格策略请求超时，请稍后重试。'
+      : parsed.message || '模型价格策略暂不可用。',
     rawMessage: '',
     details: undefined,
   };
@@ -419,6 +442,18 @@ function pricingCount(data: LlmLedgerSummaryResponse, key: 'pricing_unknown' | '
   return typeof totalValue === 'number' ? totalValue : null;
 }
 
+function pricePerMillion(value?: string | null, currency = 'USD'): string {
+  if (value === null || value === undefined || value === '') return '--';
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '--';
+  const formatted = Math.abs(numeric) > 0 && Math.abs(numeric) < 0.01 ? numeric.toFixed(6) : numeric.toFixed(4);
+  return `${currency} ${formatted}`;
+}
+
+function sourceLabel(policy: ModelPricingPolicyItem): string {
+  return policy.sourceLabel?.trim() || '本地策略';
+}
+
 const LedgerRollupList: React.FC<{
   items: LlmLedgerSummaryRollup[];
   empty: string;
@@ -580,6 +615,152 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
             </dl>
           </Disclosure>
         </>
+      ) : null}
+    </GlassCard>
+  );
+};
+
+const PricingPolicyPanel: React.FC = () => {
+  const { canReadCostObservability } = useProductSurface();
+  const [state, setState] = useState<PricingPolicyState>({ loading: true, error: null, data: null });
+
+  useEffect(() => {
+    if (!canReadCostObservability) {
+      return;
+    }
+    let alive = true;
+    void adminCostApi.getModelPricingPolicies()
+      .then((data) => {
+        if (alive) setState({ loading: false, error: null, data });
+      })
+      .catch((error) => {
+        if (alive) setState({ loading: false, error: sanitizedPricingPolicyError(error), data: null });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [canReadCostObservability]);
+
+  if (!canReadCostObservability) {
+    return null;
+  }
+
+  const policies = state.data?.policies || [];
+
+  return (
+    <GlassCard as="section" className="p-4 md:p-5" data-testid="model-pricing-policy-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <Tags className="mt-1 h-4 w-4 shrink-0 text-cyan-200" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Pricing Policies</p>
+            <h2 className="mt-1 text-lg font-semibold text-white">模型价格策略</h2>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="info" className="border-cyan-300/20 bg-cyan-400/8 text-cyan-100">
+            激活 {compactNumber(state.data?.activeCount)}
+          </Badge>
+          <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">
+            手动维护
+          </Badge>
+        </div>
+      </div>
+
+      <p className="mt-4 rounded-2xl border border-amber-300/16 bg-amber-400/8 px-4 py-3 text-xs leading-5 text-amber-100/86">
+        价格由本地策略维护，需定期按供应商官网更新；估算值不等同于供应商账单。
+      </p>
+
+      {state.loading ? (
+        <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/50">正在读取模型价格策略</p>
+      ) : null}
+      {state.error ? <div className="mt-4"><ApiErrorAlert error={state.error} /></div> : null}
+      {!state.loading && !state.error && policies.length === 0 ? (
+        <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/45">暂无模型价格策略</p>
+      ) : null}
+
+      {policies.length > 0 ? (
+        <div className="mt-4 grid gap-3">
+          {policies.map((policy) => (
+            <article
+              key={`${policy.provider}-${policy.model}-${policy.effectiveFrom || 'na'}`}
+              className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3.5"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="break-words font-mono text-sm font-semibold text-white">
+                    {policy.provider} / {policy.model}
+                  </p>
+                  <p className="mt-1 text-[11px] text-white/42">
+                    {formatDate(policy.effectiveFrom)} - {formatDate(policy.effectiveUntil)}
+                  </p>
+                </div>
+                <Badge
+                  variant={policy.active ? 'success' : 'default'}
+                  className={policy.active ? 'border-emerald-300/20 bg-emerald-400/10 text-emerald-100' : 'border-white/10 bg-white/[0.04] text-white/50'}
+                >
+                  {policy.active ? 'active' : 'inactive'}
+                </Badge>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="min-w-0 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">Input / 1M</p>
+                  <p className="mt-1 font-mono text-sm text-cyan-100">{pricePerMillion(policy.inputPricePer1m, policy.currency)}</p>
+                </div>
+                <div className="min-w-0 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">Cached / 1M</p>
+                  <p className="mt-1 font-mono text-sm text-cyan-100">{pricePerMillion(policy.cachedInputPricePer1m, policy.currency)}</p>
+                </div>
+                <div className="min-w-0 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">Output / 1M</p>
+                  <p className="mt-1 font-mono text-sm text-cyan-100">{pricePerMillion(policy.outputPricePer1m, policy.currency)}</p>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/44">
+                <span className="min-w-0 truncate rounded-full border border-white/5 bg-white/[0.02] px-2.5 py-1">{policy.currency}</span>
+                {policy.sourceUrl ? (
+                  <a
+                    className="min-w-0 break-words rounded-full border border-cyan-300/15 bg-cyan-400/8 px-2.5 py-1 text-cyan-100 transition hover:border-cyan-200/35"
+                    href={policy.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {sourceLabel(policy)}
+                  </a>
+                ) : (
+                  <span className="min-w-0 break-words rounded-full border border-white/5 bg-white/[0.02] px-2.5 py-1">{sourceLabel(policy)}</span>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {state.data ? (
+        <Disclosure
+          summary="开发者 / 价格策略响应形状"
+          className="mt-4"
+          bodyClassName="rounded-2xl border border-white/5 bg-black/20 p-4"
+        >
+          <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
+            <div className="min-w-0">
+              <dt className="text-white/32">readOnly</dt>
+              <dd className="font-mono text-white/64">{String(state.data.metadata.readOnly)}</dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="text-white/32">manualMaintenance</dt>
+              <dd className="font-mono text-white/64">{String(state.data.metadata.manualMaintenance)}</dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="text-white/32">dataSources</dt>
+              <dd className="break-words font-mono text-white/64">{state.data.metadata.dataSources.join(', ') || '--'}</dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="text-white/32">redaction</dt>
+              <dd className="break-words font-mono text-white/64">{state.data.metadata.redaction.join(', ') || '--'}</dd>
+            </div>
+          </dl>
+        </Disclosure>
       ) : null}
     </GlassCard>
   );
@@ -853,6 +1034,7 @@ const AdminCostObservabilityPage: React.FC = () => {
                 </GlassCard>
                 <QuotaDryRunPanel />
                 <LlmLedgerPanel key={`${filters.window}-${filters.bucket}-${filters.limit}`} filters={filters} />
+                <PricingPolicyPanel />
 
                 <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
                   <SectionCard icon={<Activity className="h-4 w-4" />} eyebrow="LLM" title="LLM 调用">

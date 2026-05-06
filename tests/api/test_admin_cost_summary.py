@@ -302,6 +302,72 @@ class AdminCostSummaryApiTestCase(unittest.TestCase):
         forbidden = self.client.get("/api/v1/admin/cost/llm-ledger-summary")
         self.assertEqual(forbidden.status_code, 403)
 
+    def test_model_pricing_policies_returns_read_only_sanitized_rows(self) -> None:
+        self._as_admin()
+        self.db.upsert_model_pricing_policy(
+            policy_key="active-openai-mini",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            pricing_unit="per_1m_tokens",
+            input_price_per_1m=0.1,
+            cached_input_price_per_1m=0.05,
+            output_price_per_1m=0.4,
+            currency="USD",
+            source_label="OpenAI pricing page",
+            source_url="https://openai.com/api/pricing/?token=secret",
+            metadata={"api_key": "should-not-leak", "notes": "safe"},
+            active=True,
+        )
+        self.db.upsert_model_pricing_policy(
+            policy_key="inactive-deepseek-chat",
+            provider="deepseek",
+            model="deepseek/deepseek-chat",
+            pricing_unit="per_1m_tokens",
+            input_price_per_1m=0.05,
+            cached_input_price_per_1m=None,
+            output_price_per_1m=0.2,
+            currency="USD",
+            source_label="DeepSeek pricing page",
+            source_url="file:///tmp/unsafe",
+            metadata={"raw_provider_payload": "should-not-leak"},
+            active=False,
+        )
+
+        with patch("api.v1.endpoints.admin_cost.DatabaseManager.get_instance", return_value=self.db):
+            response = self.client.get("/api/v1/admin/cost/model-pricing-policies")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["metadata"]["readOnly"], True)
+        self.assertEqual(payload["metadata"]["noExternalCalls"], True)
+        self.assertEqual(payload["metadata"]["liveEnforcement"], False)
+        self.assertEqual(payload["metadata"]["manualMaintenance"], True)
+        self.assertEqual(payload["activeCount"], 1)
+        self.assertEqual(len(payload["policies"]), 2)
+        active = payload["policies"][0]
+        inactive = payload["policies"][1]
+        self.assertEqual(active["provider"], "openai")
+        self.assertEqual(active["model"], "openai/gpt-4o-mini")
+        self.assertEqual(active["inputPricePer1m"], "0.10000000")
+        self.assertEqual(active["cachedInputPricePer1m"], "0.05000000")
+        self.assertEqual(active["outputPricePer1m"], "0.40000000")
+        self.assertEqual(active["sourceUrl"], "https://openai.com/api/pricing/?token=***")
+        self.assertEqual(inactive["active"], False)
+        self.assertIsNone(inactive["sourceUrl"])
+        text = self._json_text(payload).lower()
+        self.assertNotIn("should-not-leak", text)
+        self.assertNotIn("policy_key", text)
+        self.assertNotIn("metadata_json", text)
+        self.assertNotIn("token=secret", text)
+
+    def test_model_pricing_policies_requires_cost_observability_capability(self) -> None:
+        response = self.client.get("/api/v1/admin/cost/model-pricing-policies")
+        self.assertEqual(response.status_code, 401)
+
+        self._as_user()
+        forbidden = self.client.get("/api/v1/admin/cost/model-pricing-policies")
+        self.assertEqual(forbidden.status_code, 403)
+
 
 if __name__ == "__main__":
     unittest.main()

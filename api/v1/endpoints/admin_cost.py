@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import desc, select
 
 from api.deps import CurrentUser, require_admin_capability, require_admin_user
 from api.v1.schemas.admin_cost import (
@@ -14,12 +15,16 @@ from api.v1.schemas.admin_cost import (
     LlmLedgerSummaryResponse,
     LlmLedgerSummaryRollup,
     LlmLedgerSummaryTotal,
+    ModelPricingPoliciesResponse,
+    ModelPricingPolicyItem,
     QuotaDryRunRequest,
     QuotaDryRunResponse,
 )
 from src.services.duplicate_cost_summary_service import DuplicateCostSummaryService
 from src.services.llm_cost_ledger_service import LlmCostLedgerService
 from src.services.quota_policy_service import QuotaPolicyService
+from src.storage import DatabaseManager, ModelPricingPolicy
+from src.utils.security import sanitize_message, sanitize_url
 
 router = APIRouter()
 
@@ -28,6 +33,33 @@ _LEDGER_WINDOWS = {
     "7d": timedelta(days=7),
     "30d": timedelta(days=30),
 }
+
+
+def _safe_source_url(value: object) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    lowered = text.lower()
+    if not (lowered.startswith("https://") or lowered.startswith("http://")):
+        return None
+    return sanitize_url(sanitize_message(text))[:500]
+
+
+def _pricing_policy_item(row: ModelPricingPolicy) -> ModelPricingPolicyItem:
+    return ModelPricingPolicyItem(
+        provider=str(row.provider or "unknown"),
+        model=str(row.model or "unknown"),
+        inputPricePer1m=str(row.input_price_per_1m or 0),
+        cachedInputPricePer1m=str(row.cached_input_price_per_1m) if row.cached_input_price_per_1m is not None else None,
+        outputPricePer1m=str(row.output_price_per_1m or 0),
+        currency=str(row.currency or "USD"),
+        effectiveFrom=row.effective_from.isoformat() if row.effective_from else None,
+        effectiveUntil=row.effective_until.isoformat() if row.effective_until else None,
+        active=bool(row.active),
+        sourceLabel=sanitize_message(str(row.source_label or "").strip())[:128] or None,
+        sourceUrl=_safe_source_url(row.source_url),
+        updatedAt=row.updated_at.isoformat() if row.updated_at else None,
+    )
 
 
 @router.get(
@@ -204,5 +236,48 @@ def get_llm_ledger_summary(
             "liveEnforcement": False,
             "dataSources": ["llm_cost_ledger", "model_pricing_policies"],
             "redaction": ["prompts_omitted", "provider_payloads_omitted", "credentials_omitted", "safe_hash_labels_only"],
+        },
+    )
+
+
+@router.get(
+    "/cost/model-pricing-policies",
+    response_model=ModelPricingPoliciesResponse,
+    summary="Get read-only model pricing policies",
+)
+def get_model_pricing_policies(
+    limit: int = Query(default=200, ge=1, le=500),
+    _: CurrentUser = Depends(require_admin_capability("cost:observability:read")),
+) -> ModelPricingPoliciesResponse:
+    now = datetime.now()
+    db = DatabaseManager.get_instance()
+    with db.get_session() as session:
+        rows = (
+            session.execute(
+                select(ModelPricingPolicy)
+                .order_by(
+                    desc(ModelPricingPolicy.active),
+                    ModelPricingPolicy.provider,
+                    ModelPricingPolicy.model,
+                    desc(ModelPricingPolicy.effective_from),
+                    desc(ModelPricingPolicy.updated_at),
+                )
+                .limit(limit)
+            )
+            .scalars()
+            .all()
+        )
+
+    return ModelPricingPoliciesResponse(
+        generatedAt=now.isoformat(),
+        activeCount=sum(1 for row in rows if bool(row.active)),
+        policies=[_pricing_policy_item(row) for row in rows],
+        metadata={
+            "readOnly": True,
+            "noExternalCalls": True,
+            "liveEnforcement": False,
+            "manualMaintenance": True,
+            "dataSources": ["model_pricing_policies"],
+            "redaction": ["metadata_omitted", "internal_row_fields_omitted", "secret_like_source_url_params_masked"],
         },
     )

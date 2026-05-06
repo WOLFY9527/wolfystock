@@ -171,3 +171,25 @@ class LlmLedgerSummaryResponse(_AdminCostModel):
     by_provider_model: List[LlmLedgerSummaryRollup] = Field(default_factory=list, alias="byProviderModel")
     by_route_family: List[LlmLedgerSummaryRollup] = Field(default_factory=list, alias="byRouteFamily")
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ModelPricingPolicyItem(_AdminCostModel):
+    provider: str
+    model: str
+    input_price_per_1m: str = Field(alias="inputPricePer1m")
+    cached_input_price_per_1m: Optional[str] = Field(default=None, alias="cachedInputPricePer1m")
+    output_price_per_1m: str = Field(alias="outputPricePer1m")
+    currency: str
+    effective_from: Optional[str] = Field(default=None, alias="effectiveFrom")
+    effective_until: Optional[str] = Field(default=None, alias="effectiveUntil")
+    active: bool
+    source_label: Optional[str] = Field(default=None, alias="sourceLabel")
+    source_url: Optional[str] = Field(default=None, alias="sourceUrl")
+    updated_at: Optional[str] = Field(default=None, alias="updatedAt")
+
+
+class ModelPricingPoliciesResponse(_AdminCostModel):
+    generated_at: str = Field(alias="generatedAt")
+    active_count: int = Field(default=0, alias="activeCount")
+    policies: List[ModelPricingPolicyItem] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)

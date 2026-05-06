@@ -200,6 +200,35 @@ export interface LlmLedgerSummaryResponse {
   };
 }
 
+export interface ModelPricingPolicyItem {
+  provider: string;
+  model: string;
+  inputPricePer1m: string;
+  cachedInputPricePer1m?: string | null;
+  outputPricePer1m: string;
+  currency: string;
+  effectiveFrom?: string | null;
+  effectiveUntil?: string | null;
+  active: boolean;
+  sourceLabel?: string | null;
+  sourceUrl?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface ModelPricingPoliciesResponse {
+  generatedAt: string;
+  activeCount: number;
+  policies: ModelPricingPolicyItem[];
+  metadata: {
+    readOnly: boolean;
+    noExternalCalls: boolean;
+    liveEnforcement: boolean;
+    manualMaintenance: boolean;
+    dataSources: string[];
+    redaction: string[];
+  };
+}
+
 const EMPTY_OVERVIEW: AdminCostOverview = {
   llmCalls: 0,
   llmUsageCalls: 0,
@@ -397,6 +426,41 @@ function normalizeLedgerSummary(payload: Record<string, unknown>): LlmLedgerSumm
   };
 }
 
+function normalizePricingPolicy(item: Partial<ModelPricingPolicyItem>): ModelPricingPolicyItem {
+  return {
+    provider: String(item.provider || 'unknown'),
+    model: String(item.model || 'unknown'),
+    inputPricePer1m: String(item.inputPricePer1m ?? '0'),
+    cachedInputPricePer1m: item.cachedInputPricePer1m == null ? null : String(item.cachedInputPricePer1m),
+    outputPricePer1m: String(item.outputPricePer1m ?? '0'),
+    currency: String(item.currency || 'USD'),
+    effectiveFrom: item.effectiveFrom || null,
+    effectiveUntil: item.effectiveUntil || null,
+    active: item.active === true,
+    sourceLabel: item.sourceLabel || null,
+    sourceUrl: item.sourceUrl || null,
+    updatedAt: item.updatedAt || null,
+  };
+}
+
+function normalizePricingPolicies(payload: Record<string, unknown>): ModelPricingPoliciesResponse {
+  const normalized = toCamelCase<ModelPricingPoliciesResponse>(payload);
+  const policies = safeArray<Partial<ModelPricingPolicyItem>>(normalized.policies).map(normalizePricingPolicy);
+  return {
+    generatedAt: normalized.generatedAt || '',
+    activeCount: Number(normalized.activeCount ?? policies.filter((policy) => policy.active).length),
+    policies,
+    metadata: {
+      readOnly: normalized.metadata?.readOnly === true,
+      noExternalCalls: normalized.metadata?.noExternalCalls === true,
+      liveEnforcement: normalized.metadata?.liveEnforcement === true,
+      manualMaintenance: normalized.metadata?.manualMaintenance === true,
+      dataSources: safeArray<string>(normalized.metadata?.dataSources),
+      redaction: safeArray<string>(normalized.metadata?.redaction),
+    },
+  };
+}
+
 export const adminCostApi = {
   async getDuplicateSummary(params: AdminCostSummaryParams = {}): Promise<AdminCostSummaryResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/cost/duplicate-summary', {
@@ -418,5 +482,10 @@ export const adminCostApi = {
       params: toSafeLedgerQuery(params),
     });
     return normalizeLedgerSummary(response.data);
+  },
+
+  async getModelPricingPolicies(): Promise<ModelPricingPoliciesResponse> {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/cost/model-pricing-policies');
+    return normalizePricingPolicies(response.data);
   },
 };

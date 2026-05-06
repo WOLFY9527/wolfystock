@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminCostObservabilityPage from '../AdminCostObservabilityPage';
 
@@ -6,8 +6,9 @@ const { getDuplicateSummary } = vi.hoisted(() => ({
   getDuplicateSummary: vi.fn(),
 }));
 
-const { getLlmLedgerSummary, runQuotaDryRun, capabilityState } = vi.hoisted(() => ({
+const { getLlmLedgerSummary, getModelPricingPolicies, runQuotaDryRun, capabilityState } = vi.hoisted(() => ({
   getLlmLedgerSummary: vi.fn(),
+  getModelPricingPolicies: vi.fn(),
   runQuotaDryRun: vi.fn(),
   capabilityState: { canReadCostObservability: true },
 }));
@@ -16,6 +17,7 @@ vi.mock('../../api/adminCost', () => ({
   adminCostApi: {
     getDuplicateSummary,
     getLlmLedgerSummary,
+    getModelPricingPolicies,
     runQuotaDryRun,
   },
 }));
@@ -271,12 +273,59 @@ const ledgerPayload = {
   },
 };
 
+const pricingPoliciesPayload = {
+  generatedAt: '2026-05-06T10:40:00+08:00',
+  activeCount: 1,
+  policies: [
+    {
+      provider: 'openai',
+      model: 'openai/gpt-4o-mini',
+      inputPricePer1m: '0.10000000',
+      cachedInputPricePer1m: '0.05000000',
+      outputPricePer1m: '0.40000000',
+      currency: 'USD',
+      effectiveFrom: '2026-01-01T00:00:00',
+      effectiveUntil: null,
+      active: true,
+      sourceLabel: 'OpenAI pricing page',
+      sourceUrl: 'https://openai.com/api/pricing/',
+      updatedAt: '2026-05-06T10:00:00',
+      metadata: { apiKey: 'SHOULD_NOT_RENDER_POLICY_KEY' },
+    },
+    {
+      provider: 'deepseek',
+      model: 'deepseek/deepseek-chat',
+      inputPricePer1m: '0.05000000',
+      cachedInputPricePer1m: null,
+      outputPricePer1m: '0.20000000',
+      currency: 'USD',
+      effectiveFrom: '2025-01-01T00:00:00',
+      effectiveUntil: '2026-01-01T00:00:00',
+      active: false,
+      sourceLabel: 'DeepSeek pricing page',
+      sourceUrl: 'https://api-docs.deepseek.com/quick_start/pricing?token=SHOULD_NOT_RENDER',
+      updatedAt: '2026-05-05T10:00:00',
+      rawMetadata: 'SHOULD_NOT_RENDER_RAW_POLICY_METADATA',
+    },
+  ],
+  metadata: {
+    readOnly: true,
+    noExternalCalls: true,
+    liveEnforcement: false,
+    manualMaintenance: true,
+    dataSources: ['model_pricing_policies'],
+    redaction: ['metadata_omitted'],
+    stackTrace: 'SHOULD_NOT_RENDER_POLICY_STACK',
+  },
+};
+
 describe('AdminCostObservabilityPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     capabilityState.canReadCostObservability = true;
     runQuotaDryRun.mockResolvedValue(quotaAllowedPayload);
     getLlmLedgerSummary.mockResolvedValue(ledgerPayload);
+    getModelPricingPolicies.mockResolvedValue(pricingPoliciesPayload);
   });
 
   it('renders mocked duplicate-cost summary with read-only, no-external-call, and observational badges', async () => {
@@ -297,6 +346,7 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('counter_snapshot_not_timestamped')).toBeInTheDocument();
     expect(screen.getByText('配额试运行诊断')).toBeInTheDocument();
     expect(screen.getByText('LLM 成本账本')).toBeInTheDocument();
+    expect(screen.getByText('模型价格策略')).toBeInTheDocument();
   });
 
   it('keeps developer details collapsed and does not render secret-like strings in the DOM', async () => {
@@ -315,6 +365,10 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.queryByText('LEDGER_PAYLOAD_SHOULD_NOT_RENDER')).not.toBeInTheDocument();
     expect(screen.queryByText('sk-ledger-should-not-render')).not.toBeInTheDocument();
     expect(screen.queryByText('LEDGER_STACK_SHOULD_NOT_RENDER')).not.toBeInTheDocument();
+    expect(screen.queryByText('SHOULD_NOT_RENDER_POLICY_KEY')).not.toBeInTheDocument();
+    expect(screen.queryByText('SHOULD_NOT_RENDER_RAW_POLICY_METADATA')).not.toBeInTheDocument();
+    expect(screen.queryByText('SHOULD_NOT_RENDER_POLICY_STACK')).not.toBeInTheDocument();
+    expect(screen.queryByText('SHOULD_NOT_RENDER')).not.toBeInTheDocument();
   });
 
   it('renders loading state without implying billing exactness', () => {
@@ -472,6 +526,39 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('暂无功能成本记录')).toBeInTheDocument();
   });
 
+  it('renders model pricing policies for users with cost observability capability', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+
+    render(<AdminCostObservabilityPage />);
+
+    const panel = await screen.findByTestId('model-pricing-policy-panel');
+    expect(getModelPricingPolicies).toHaveBeenCalledTimes(1);
+    expect(within(panel).getByText('模型价格策略')).toBeInTheDocument();
+    expect(within(panel).getByText('价格由本地策略维护，需定期按供应商官网更新；估算值不等同于供应商账单。')).toBeInTheDocument();
+    expect(within(panel).getByText('激活 1')).toBeInTheDocument();
+    expect(within(panel).getByText('openai / openai/gpt-4o-mini')).toBeInTheDocument();
+    expect(within(panel).getByText('deepseek / deepseek/deepseek-chat')).toBeInTheDocument();
+    expect(within(panel).getByText('USD 0.1000')).toBeInTheDocument();
+    expect(within(panel).getAllByText('USD 0.0500').length).toBeGreaterThan(0);
+    expect(within(panel).getByText('USD 0.4000')).toBeInTheDocument();
+    expect(within(panel).getByRole('link', { name: 'OpenAI pricing page' })).toHaveAttribute('href', 'https://openai.com/api/pricing/');
+    expect(within(panel).getByText('active')).toBeInTheDocument();
+    expect(within(panel).getByText('inactive')).toBeInTheDocument();
+  });
+
+  it('renders compact empty model pricing policy state', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+    getModelPricingPolicies.mockResolvedValue({
+      ...pricingPoliciesPayload,
+      activeCount: 0,
+      policies: [],
+    });
+
+    render(<AdminCostObservabilityPage />);
+
+    expect(await screen.findByText('暂无模型价格策略')).toBeInTheDocument();
+  });
+
   it('does not fetch or render LLM ledger without cost observability capability', async () => {
     capabilityState.canReadCostObservability = false;
     getDuplicateSummary.mockResolvedValue(populatedPayload);
@@ -481,6 +568,17 @@ describe('AdminCostObservabilityPage', () => {
     expect(await screen.findByRole('heading', { name: '成本观测' })).toBeInTheDocument();
     expect(screen.queryByTestId('llm-ledger-panel')).not.toBeInTheDocument();
     expect(getLlmLedgerSummary).not.toHaveBeenCalled();
+  });
+
+  it('does not fetch or render pricing policies without cost observability capability', async () => {
+    capabilityState.canReadCostObservability = false;
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+
+    render(<AdminCostObservabilityPage />);
+
+    expect(await screen.findByRole('heading', { name: '成本观测' })).toBeInTheDocument();
+    expect(screen.queryByTestId('model-pricing-policy-panel')).not.toBeInTheDocument();
+    expect(getModelPricingPolicies).not.toHaveBeenCalled();
   });
 
   it('hides quota panel and does not fetch quota dry-run without cost observability capability', async () => {
@@ -550,6 +648,27 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.queryByText('apiKey=secret')).not.toBeInTheDocument();
   });
 
+  it('renders sanitized pricing policy 403 and 500 errors without leaking backend details', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+    getModelPricingPolicies.mockRejectedValueOnce({ response: { status: 403, data: { detail: { message: 'token=secret raw metadata' } } } });
+
+    render(<AdminCostObservabilityPage />);
+
+    expect(await screen.findByText('读取模型价格策略失败')).toBeInTheDocument();
+    expect(screen.getByText('当前账号没有成本观测权限。')).toBeInTheDocument();
+    expect(screen.queryByText(/token=secret/)).not.toBeInTheDocument();
+
+    cleanup();
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+    getModelPricingPolicies.mockRejectedValueOnce({ response: { status: 500, data: { detail: { message: 'stack trace apiKey=secret' } } } });
+
+    render(<AdminCostObservabilityPage />);
+
+    await waitFor(() => expect(screen.getAllByText('读取模型价格策略失败').length).toBeGreaterThan(0));
+    expect(screen.getByText('服务器暂时不可用，请稍后重试。')).toBeInTheDocument();
+    expect(screen.queryByText('apiKey=secret')).not.toBeInTheDocument();
+  });
+
   it('keeps quota developer details collapsed by default', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
@@ -567,6 +686,16 @@ describe('AdminCostObservabilityPage', () => {
     const panel = await screen.findByTestId('llm-ledger-panel');
     await waitFor(() => expect(within(panel).getByText('开发者 / LLM 账本响应形状')).toBeInTheDocument());
     expect(within(panel).getByText('liveEnforcement')).not.toBeVisible();
+  });
+
+  it('keeps pricing policy developer details collapsed by default', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+
+    render(<AdminCostObservabilityPage />);
+
+    const panel = await screen.findByTestId('model-pricing-policy-panel');
+    await waitFor(() => expect(within(panel).getByText('开发者 / 价格策略响应形状')).toBeInTheDocument());
+    expect(within(panel).getByText('manualMaintenance')).not.toBeVisible();
   });
 
   it('keeps the cost page within the viewport width in jsdom layout checks', async () => {

@@ -376,7 +376,7 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
 
         self.assertEqual(
             {
-                "admin_cost.py": 2,
+                "admin_cost.py": 3,
                 "admin_logs.py": 6,
                 "admin_notifications.py": 7,
                 "admin_portfolio.py": 4,
