@@ -7,7 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.deps import CurrentUser, require_admin_user
+from api.deps import CurrentUser, require_admin_capability
 from api.v1.schemas.admin_portfolio import (
     AdminHoldingListResponse,
     AdminPortfolioAccountDetailResponse,
@@ -79,7 +79,7 @@ def _record_audit(
 def get_admin_portfolio_summary(
     user_id: str,
     include_inactive: bool = Query(default=False),
-    current_user: CurrentUser = Depends(require_admin_user),
+    current_user: CurrentUser = Depends(require_admin_capability("users:portfolio:read")),
 ) -> AdminPortfolioSummaryResponse:
     normalized_user_id = _normalize_user_id(user_id)
     service = _service_or_404(normalized_user_id)
@@ -110,7 +110,7 @@ def list_admin_user_holdings(
     include_zero: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0, le=10000),
-    current_user: CurrentUser = Depends(require_admin_user),
+    current_user: CurrentUser = Depends(require_admin_capability("users:portfolio:read")),
 ) -> AdminHoldingListResponse:
     normalized_user_id = _normalize_user_id(user_id)
     service = _service_or_404(normalized_user_id)
@@ -161,7 +161,7 @@ def list_admin_user_portfolio_activity(
     account_id: Optional[int] = Query(default=None, ge=1),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0, le=10000),
-    current_user: CurrentUser = Depends(require_admin_user),
+    current_user: CurrentUser = Depends(require_admin_capability("users:portfolio:read")),
 ) -> AdminPortfolioActivityResponse:
     normalized_user_id = _normalize_user_id(user_id)
     service = _service_or_404(normalized_user_id)
@@ -206,7 +206,7 @@ def list_admin_user_portfolio_activity(
 def get_admin_portfolio_account_detail(
     user_id: str,
     account_id: int,
-    current_user: CurrentUser = Depends(require_admin_user),
+    current_user: CurrentUser = Depends(require_admin_capability("users:portfolio:read")),
 ) -> AdminPortfolioAccountDetailResponse:
     normalized_user_id = _normalize_user_id(user_id)
     if account_id <= 0:

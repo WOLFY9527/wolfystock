@@ -14,8 +14,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
+from src.admin_rbac import OPS_ADMIN_ROLE
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.storage import (
+    AdminUserRole,
     AppUser,
     DatabaseManager,
     ExecutionLogSession,
@@ -32,10 +34,10 @@ from src.storage import (
 )
 
 
-def _admin_user() -> CurrentUser:
+def _admin_user(user_id: str = BOOTSTRAP_ADMIN_USER_ID) -> CurrentUser:
     return CurrentUser(
-        user_id=BOOTSTRAP_ADMIN_USER_ID,
-        username="admin",
+        user_id=user_id,
+        username="admin" if user_id == BOOTSTRAP_ADMIN_USER_ID else user_id,
         display_name="Admin",
         role="admin",
         is_admin=True,
@@ -99,6 +101,14 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
             is_active=True,
         )
         self.db.create_or_update_app_user(
+            user_id="ops-admin-1",
+            username="ops-admin",
+            display_name="Ops Admin",
+            role="admin",
+            password_hash="pbkdf2:ops-secret-hash",
+            is_active=True,
+        )
+        self.db.create_or_update_app_user(
             user_id="user-2",
             username="bob",
             display_name="Bob Other",
@@ -107,6 +117,7 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
             is_active=True,
         )
         with self.db.get_session() as session:
+            session.add(AdminUserRole(user_id="ops-admin-1", role_key=OPS_ADMIN_ROLE))
             account_a = PortfolioAccount(
                 owner_id="user-1",
                 name="Alice Main",
@@ -306,8 +317,8 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
             )
             session.commit()
 
-    def _as_admin(self) -> None:
-        self.app.dependency_overrides[get_current_user] = _admin_user
+    def _as_admin(self, user_id: str = BOOTSTRAP_ADMIN_USER_ID) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _admin_user(user_id)
 
     def _as_user(self) -> None:
         self.app.dependency_overrides[get_current_user] = _regular_user
@@ -349,6 +360,7 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
             "payload_json",
             "payloadJson",
             "password_hash",
+            "pbkdf2:ops-secret-hash",
             "admin-session-raw",
             "user-session-raw",
         ]
@@ -378,6 +390,17 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
         self._as_user()
         forbidden = self.client.get("/api/v1/admin/users/user-1/portfolio-summary")
         self.assertEqual(forbidden.status_code, 403)
+
+    def test_admin_without_portfolio_read_capability_is_denied_safely_and_read_only(self) -> None:
+        self._as_admin("ops-admin-1")
+        before = self._portfolio_counts()
+
+        response = self.client.get("/api/v1/admin/users/user-1/portfolio-summary")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"]["error"], "admin_capability_required")
+        self.assertEqual(self._portfolio_counts(), before)
+        self._assert_safe_json(response)
 
     def test_missing_target_user_returns_404(self) -> None:
         self._as_admin()

@@ -17,8 +17,9 @@ from fastapi.testclient import TestClient
 import src.auth as auth
 from api.deps import CurrentUser, get_current_user
 from src.auth import hash_password_for_storage
+from src.admin_rbac import SUPPORT_ADMIN_ROLE
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
-from src.storage import AppUserSession, DatabaseManager, ExecutionLogSession
+from src.storage import AdminUserRole, AppUserSession, DatabaseManager, ExecutionLogSession
 
 
 def _reset_auth_globals() -> None:
@@ -102,6 +103,14 @@ class AdminSecurityApiTestCase(unittest.TestCase):
             is_active=True,
         )
         self.db.create_or_update_app_user(
+            user_id="support-admin-1",
+            username="support-admin",
+            display_name="Support Admin",
+            role="admin",
+            password_hash="pbkdf2:support-secret-hash",
+            is_active=True,
+        )
+        self.db.create_or_update_app_user(
             user_id="user-1",
             username="alice",
             display_name="Alice Analyst",
@@ -110,6 +119,7 @@ class AdminSecurityApiTestCase(unittest.TestCase):
             is_active=True,
         )
         with self.db.get_session() as session:
+            session.add(AdminUserRole(user_id="support-admin-1", role_key=SUPPORT_ADMIN_ROLE))
             session.add_all(
                 [
                     AppUserSession(
@@ -172,6 +182,7 @@ class AdminSecurityApiTestCase(unittest.TestCase):
             "password_hash",
             "pbkdf2:admin-secret-hash",
             "pbkdf2:admin2-secret-hash",
+            "pbkdf2:support-secret-hash",
             self.user_password_hash,
             "raw-active-session-token",
             "raw-active-session-token-2",
@@ -219,6 +230,20 @@ class AdminSecurityApiTestCase(unittest.TestCase):
             json={"reason": "support request", "confirm": "DISABLE"},
         )
         self.assertEqual(forbidden.status_code, 403)
+
+    def test_admin_without_security_write_capability_is_denied_safely(self) -> None:
+        self._as_admin("support-admin-1")
+
+        response = self.client.post(
+            "/api/v1/admin/users/user-1/disable",
+            json={"reason": "support request", "confirm": "DISABLE"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"]["error"], "admin_capability_required")
+        self.assertTrue(self._user_is_active("user-1"))
+        self.assertEqual(self._active_session_count("user-1"), 2)
+        self._assert_safe_payload(response)
 
     def test_admin_can_disable_target_and_optionally_revoke_sessions(self) -> None:
         self._as_admin()
@@ -290,6 +315,14 @@ class AdminSecurityApiTestCase(unittest.TestCase):
             display_name="Admin Two",
             role="admin",
             password_hash="pbkdf2:admin2-secret-hash",
+            is_active=False,
+        )
+        self.db.create_or_update_app_user(
+            user_id="support-admin-1",
+            username="support-admin",
+            display_name="Support Admin",
+            role="admin",
+            password_hash="pbkdf2:support-secret-hash",
             is_active=False,
         )
         self._as_admin(user_id="admin-2")

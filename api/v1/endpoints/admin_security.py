@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from api.deps import CurrentUser, require_admin_user
+from api.deps import CurrentUser, require_admin_capability
 from api.v1.schemas.admin_security import AdminSecurityActionRequest, AdminSecurityActionResponse
 from src.services.admin_security_service import AdminSecurityError, AdminSecurityResult, AdminSecurityService
 
@@ -47,7 +47,7 @@ def _raise_service_error(exc: AdminSecurityError) -> None:
 def disable_admin_user(
     user_id: str,
     body: AdminSecurityActionRequest,
-    current_user: CurrentUser = Depends(require_admin_user),
+    current_user: CurrentUser = Depends(require_admin_capability("users:security:write")),
 ) -> AdminSecurityActionResponse:
     _require_confirmation(body, "DISABLE")
     try:
@@ -70,7 +70,7 @@ def disable_admin_user(
 def enable_admin_user(
     user_id: str,
     body: AdminSecurityActionRequest,
-    current_user: CurrentUser = Depends(require_admin_user),
+    current_user: CurrentUser = Depends(require_admin_capability("users:security:write")),
 ) -> AdminSecurityActionResponse:
     _require_confirmation(body, "ENABLE")
     try:
@@ -92,7 +92,7 @@ def enable_admin_user(
 def revoke_admin_user_sessions(
     user_id: str,
     body: AdminSecurityActionRequest,
-    current_user: CurrentUser = Depends(require_admin_user),
+    current_user: CurrentUser = Depends(require_admin_capability("users:security:write")),
 ) -> AdminSecurityActionResponse:
     _require_confirmation(body, "REVOKE_SESSIONS")
     if body.scope != "all":

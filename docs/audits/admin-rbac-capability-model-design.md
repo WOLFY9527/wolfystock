@@ -5,6 +5,13 @@ Mode: docs-only authorization design. No runtime behavior changed.
 
 Implementation note, 2026-05-06:
 
+- Phase R3 pilot route migration has landed for the intentionally narrow
+  high-risk subset from the route matrix: admin security writes now require
+  `users:security:write`, and admin portfolio visibility reads now require
+  `users:portfolio:read`. Existing coarse admins remain allowed through the R1
+  compatibility expansion. This phase does not migrate the broader admin
+  surface, frontend navigation, role management UI, or non-admin runtime
+  behavior.
 - Phase R2 backend helper primitives have landed in `api/deps.py` without
   migrating any production route. The new helpers are
   `require_admin_capability(capability)`,
