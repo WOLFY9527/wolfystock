@@ -202,9 +202,9 @@ sudo firewall-cmd --reload
 
 ---
 
-## 可选：Nginx 反向代理（绑定域名 / 80 端口）
+## 可选：Nginx 反向代理（公网推荐）
 
-如果你有域名，或者不想在地址里带 `:8000`，可以用 Nginx 做反向代理，把 80/443 端口流量转发给后端服务。
+如果你有域名，或者不想在地址里带 `:8000`，可以用 Nginx 做反向代理，把 80/443 端口流量转发给后端服务。公网部署不要把后端 `:8000` 直接暴露给互联网；建议防火墙只允许本机或内网访问后端端口，对外只开放 80/443。
 
 ### 安装 Nginx
 
@@ -216,14 +216,34 @@ sudo apt update && sudo apt install -y nginx
 sudo yum install -y nginx
 ```
 
-### 配置文件示例
+### 生产 HTTPS 配置模板
 
-新建文件 `/etc/nginx/conf.d/stock-analyzer.conf`，内容如下（把 `your-domain.com` 改成你的域名或 IP）：
+先用 Certbot 或其他证书方案准备 TLS 证书，再新建 `/etc/nginx/conf.d/stock-analyzer.conf`。把 `your-domain.com` 和证书路径替换成你的域名与证书文件：
 
 ```nginx
 server {
     listen 80;
     server_name your-domain.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
+
+    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+
+    client_max_body_size 10m;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout 60s;
+    proxy_read_timeout 300s;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
 
     location / {
         proxy_pass http://127.0.0.1:8000;
@@ -232,10 +252,18 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        # 支持 WebSocket（Agent 对话页面需要）
+        # 支持 WebSocket / SSE 长连接
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+        proxy_buffering off;
+    }
+
+    location /assets/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        expires 7d;
+        add_header Cache-Control "public, max-age=604800, immutable" always;
     }
 }
 ```
@@ -247,11 +275,12 @@ sudo nginx -t            # 检查配置有没有语法错误
 sudo systemctl reload nginx
 ```
 
-配置成功后，直接用 `http://your-domain.com` 访问即可，不需要带端口号。
+配置成功后，直接用 `https://your-domain.com` 访问即可，不需要带端口号。
 
 > **使用 Nginx 后的注意事项**：
-> - 如果你开启了 Web 登录认证（`ADMIN_AUTH_ENABLED=true`），建议在 `.env` 中把 `TRUST_X_FORWARDED_FOR=true` 一并打开，否则系统可能无法正确识别真实 IP。
-> - 如需 HTTPS，可以用 [Certbot](https://certbot.eff.org/) 自动申请免费的 Let's Encrypt 证书。
+> - 如果你开启了 Web 登录认证（`ADMIN_AUTH_ENABLED=true`），建议在 `.env` 中设置 `APP_ENV=production`、`TRUST_X_FORWARDED_FOR=true`、`CORS_ORIGINS=https://your-domain.com`，必要时同步设置 `CSRF_TRUSTED_ORIGINS=https://your-domain.com`。
+> - 只有可信反向代理在前面时才开启 `TRUST_X_FORWARDED_FOR=true`；直连公网时保持 `false`，避免客户端伪造来源 IP 与协议。
+> - 如果必须临时调试 HTTP，请只在内网或本机使用，公网入口应保持 HTTPS-only。
 
 ---
 

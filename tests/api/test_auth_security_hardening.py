@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,7 +17,7 @@ from fastapi.testclient import TestClient
 import src.auth as auth
 from api.middlewares.auth import add_auth_middleware
 from src.auth import hash_password_for_storage
-from src.storage import DatabaseManager, ExecutionLogSession
+from src.storage import AppUserSession, DatabaseManager, ExecutionLogSession
 
 
 def _reset_auth_globals() -> None:
@@ -55,6 +56,7 @@ class AuthSecurityHardeningTestCase(unittest.TestCase):
                 "AUTH_RATE_LIMIT_WINDOW_SECONDS": "300",
                 "AUTH_ACCOUNT_RATE_LIMIT_MAX_FAILURES": "2",
                 "AUTH_ADMIN_RATE_LIMIT_MAX_FAILURES": "2",
+                "ADMIN_SESSION_IDLE_TIMEOUT_MINUTES": "15",
                 "CORS_ORIGINS": "https://app.example.test",
                 "CSRF_TRUSTED_ORIGINS": "https://app.example.test",
             },
@@ -167,6 +169,30 @@ class AuthSecurityHardeningTestCase(unittest.TestCase):
         self.assertIn("SameSite=lax", set_cookie)
         self.assertIn("Secure", set_cookie)
         self.assertIn("Max-Age=", set_cookie)
+
+    def test_admin_idle_timeout_expires_and_revokes_inactive_session(self) -> None:
+        login = self._login("admin", "adminpass123", origin="https://app.example.test")
+        self.assertEqual(login.status_code, 200)
+        session_cookie = login.cookies.get(auth.COOKIE_NAME)
+        self.assertTrue(session_cookie)
+        identity = auth.get_session_identity(session_cookie)
+        self.assertIsNotNone(identity)
+        self.assertTrue(identity.is_admin)
+        self.assertTrue(identity.session_id)
+
+        with self.db.get_session() as db_session:
+            row = db_session.query(AppUserSession).filter_by(session_id=identity.session_id).one()
+            row.last_seen_at = datetime.now() - timedelta(minutes=16)
+            db_session.commit()
+
+        response = self.client.get("/api/v1/auth/me")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "unauthorized")
+        self.assertIsNone(auth.get_session_identity(session_cookie))
+        with self.db.get_session() as db_session:
+            row = db_session.query(AppUserSession).filter_by(session_id=identity.session_id).one()
+            self.assertIsNotNone(row.revoked_at)
 
     def test_csrf_origin_rejects_cross_site_admin_post_and_allows_trusted_origin(self) -> None:
         login = self._login("admin", "adminpass123", origin="https://app.example.test")

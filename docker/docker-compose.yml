@@ -64,5 +64,6 @@ services:
     container_name: stock-server
     command: ["python", "main.py", "--serve-only", "--host", "0.0.0.0", "--port", "${API_PORT:-8000}"]
     # 若使用 network_mode: host，则以下 ports 映射无效，端口由 command 中的 --port 指定
+    # 公网生产部署建议通过 HTTPS 反向代理暴露 80/443，不要直接公开后端 :8000。
     ports:
       - "${API_PORT:-8000}:${API_PORT:-8000}"

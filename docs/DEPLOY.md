@@ -87,7 +87,24 @@ docker-compose -f ./docker/docker-compose.yml exec stock-analyzer python main.py
 - 不要把提供 `/api/v1/analysis/*` 和 `/api/v1/analysis/tasks/stream` 的 API 服务直接扩成多 worker / 多实例负载均衡，除非你已经自行提供 sticky routing 且能接受进程级任务可见性边界。
 - Docker Compose 当前 `server` 服务默认就是单容器单进程路径，符合这一前提。
 
-### 4.2 启动后检查
+### 4.2 公网反向代理安全基线
+
+公网部署建议把 API/Web 服务绑定在 `127.0.0.1:8000` 或只允许内网访问，不要把后端 `:8000` 直接暴露到互联网。对外入口使用 Nginx / 云负载均衡 / CDN 终止 HTTPS，并转发到后端服务。
+
+最低基线：
+
+- 对外只开放 80/443，80 统一跳转到 HTTPS。
+- 启用 HSTS、`X-Content-Type-Options`、`Referrer-Policy`、frame deny / `frame-ancestors`、`Permissions-Policy`。
+- 设置请求体大小限制和连接/读取超时，避免无限制上传或长连接耗尽。
+- 正确传递 `Host`、`X-Real-IP`、`X-Forwarded-For`、`X-Forwarded-Proto`。
+- 仅在可信代理前置时设置 `TRUST_X_FORWARDED_FOR=true`；直连公网保持 `false`。
+- 生产 `.env` 设置 `APP_ENV=production`、`ADMIN_AUTH_ENABLED=true`、显式 `CORS_ORIGINS=https://你的域名`，必要时同步 `CSRF_TRUSTED_ORIGINS`。
+- SSE / WebSocket 路径需要 HTTP/1.1 upgrade 与较长 `proxy_read_timeout`。
+- 前端静态资源可在代理层加短期缓存；API 响应不要做共享缓存。
+
+完整 Nginx HTTPS 模板见 [云服务器 Web 界面访问指南](deploy-webui-cloud.md#可选nginx-反向代理公网推荐)。
+
+### 4.3 启动后检查
 
 ```bash
 # 存活检查：仅确认进程能响应
@@ -97,7 +114,7 @@ curl -fsS http://127.0.0.1:8000/api/health/live
 curl -fsS http://127.0.0.1:8000/api/health/ready
 ```
 
-### 4.3 WS1 基线捕获（部署前）
+### 4.4 WS1 基线捕获（部署前）
 
 > 目标：只做基线采集与验证，不做任何性能优化或架构改造。
 
@@ -119,7 +136,7 @@ python3 scripts/ws1_baseline_capture.py \
 # 3) 基线结果默认输出到 reports/ws1_baseline/baseline_<UTC时间>.json
 ```
 
-### 4.4 Canonical clean-checkout smoke（仅使用仓库已提交脚本）
+### 4.5 Canonical clean-checkout smoke（仅使用仓库已提交脚本）
 
 ```bash
 # 干净 checkout 示例
@@ -133,7 +150,7 @@ python3 scripts/smoke_backtest_standard.py
 python3 scripts/smoke_backtest_rule.py
 ```
 
-### 4.5 目标主机 queue/SSE 单进程验证清单
+### 4.6 目标主机 queue/SSE 单进程验证清单
 
 ```bash
 # 1) 目标主机单进程启动
@@ -166,7 +183,7 @@ curl -N "http://127.0.0.1:8000/api/v1/analysis/tasks/stream?task_id=${TASK_ID}" 
 curl -fsS "http://127.0.0.1:8000/api/v1/analysis/status/${TASK_ID}"
 ```
 
-### 4.6 回滚检查清单（WS1 部署验证专用）
+### 4.7 回滚检查清单（WS1 部署验证专用）
 
 ```bash
 # A. 停止新版本

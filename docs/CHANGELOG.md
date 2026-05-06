@@ -1,5 +1,9 @@
 ## 2026-05-06
 
+- 🔐 **Security Phase 2 session/header/proxy hardening** — 后端现在对管理员会话增加 `ADMIN_SESSION_IDLE_TIMEOUT_MINUTES` 空闲超时，复用现有 `app_user_sessions.last_seen_at` 元数据并保留 `ADMIN_SESSION_MAX_AGE_HOURS` 绝对有效期；过期管理员会话在校验时撤销。FastAPI 响应新增 baseline security headers，HSTS 仅在 production + HTTPS 上下文返回。部署文档补充 HTTPS reverse proxy 模板、HSTS、body size、timeout、proxy headers、SSE/WebSocket 与不要直接公开后端 `:8000` 的生产建议。本阶段不改变密码 KDF、MFA、RBAC、scanner/backtest/portfolio/provider/MarketCache/AI/notification/DuckDB 或 Options Lab 行为。
+
+- 🧪 **Options Lab Phase 3 Backend Scoring / Scenario Engine** — 新增 backend-only `POST /api/v1/options/analyze` 与 `POST /api/v1/options/scenario`，继续仅使用 synthetic `TEM` fixture，不接入 live option provider、LLM、broker execution、order placement、portfolio mutation、scanner/backtest、MarketCache、AI、notification 或 DuckDB 行为。Analyze 现在为 long call / long put 生成 0-100 bounded deterministic sub-score、grade、drivers、assumptions、data confidence 与 no-advice disclosure；Scenario 提供到期日 deterministic payoff grid、premium at risk、breakeven、required move 与 max loss，并明确 Phase 3 不提供到期前理论定价、spreads 或交易建议。
+
 - 🧪 **Options Lab Phase 2 Frontend Shell** — 新增 `/zh/options-lab` 前端只读期权实验室壳层，包含中文情景假设、标的快照、到期日过滤、Calls/Puts 模拟链表、候选排序/策略比较/情景收益占位与显式风险披露。当前阶段使用 mocked / fixture-compatible 数据，不接入 live option provider、LLM、broker execution、portfolio mutation、order CTA、scanner/backtest、MarketCache、AI、notification 或 DuckDB 行为，也不显示 raw provider payload、request URL、API key、token、secret 或 stack trace。
 
 - 🔐 **Public auth hardening Phase 1** — Web 登录失败现在统一返回不可枚举的 generic error，失败/限流/失败后成功登录会写入脱敏 security execution log；登录限流从进程内 IP-only 扩展为持久化 IP + account 哈希桶，生产模式强制 Secure session cookie，Cookie 认证的写请求增加 Origin/Referer 校验，生产 CORS 禁止 wildcard 并要求显式 `CORS_ORIGINS`。本阶段不改变密码 KDF、MFA、RBAC、portfolio/scanner/backtest/provider/MarketCache/AI/notification/DuckDB 行为。

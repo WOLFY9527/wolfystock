@@ -39,6 +39,7 @@ RATE_LIMIT_WINDOW_SEC = 300
 RATE_LIMIT_MAX_FAILURES = 5
 ACCOUNT_RATE_LIMIT_MAX_FAILURES = 5
 SESSION_MAX_AGE_HOURS_DEFAULT = 24
+ADMIN_SESSION_IDLE_TIMEOUT_MINUTES_DEFAULT = 30
 ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT = 120
 ADMIN_UNLOCK_TOKEN_PURPOSE = "admin_settings_unlock"
 MIN_PASSWORD_LEN = 6
@@ -359,6 +360,22 @@ def _get_session_max_age_seconds() -> int:
     return max(300, max_age_hours * 3600)
 
 
+def _get_admin_session_idle_timeout_seconds() -> int:
+    """Read admin idle timeout. A value of 0 disables idle expiry."""
+    try:
+        minutes = int(
+            os.getenv(
+                "ADMIN_SESSION_IDLE_TIMEOUT_MINUTES",
+                str(ADMIN_SESSION_IDLE_TIMEOUT_MINUTES_DEFAULT),
+            )
+        )
+    except ValueError:
+        minutes = ADMIN_SESSION_IDLE_TIMEOUT_MINUTES_DEFAULT
+    if minutes <= 0:
+        return 0
+    return max(60, minutes * 60)
+
+
 def is_production_mode() -> bool:
     """Return whether runtime env indicates production deployment."""
     for name in ("APP_ENV", "ENVIRONMENT", "DSA_ENV"):
@@ -378,6 +395,16 @@ def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
 def get_session_expiry_datetime() -> datetime:
     """Return the UTC expiration timestamp for a newly created app-user session."""
     return datetime.now(timezone.utc) + timedelta(seconds=_get_session_max_age_seconds())
+
+
+def _datetime_as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _elapsed_since_datetime(value: datetime) -> timedelta:
+    if value.tzinfo:
+        return datetime.now(timezone.utc) - value.astimezone(timezone.utc)
+    return datetime.now() - value
 
 
 def _urlsafe_b64encode(data: bytes) -> str:
@@ -489,12 +516,19 @@ def _resolve_v2_identity(value: str, *, expected_kind: str) -> Optional[SessionI
                 return None
             if session_row.revoked_at is not None:
                 return None
+            now_utc = datetime.now(timezone.utc)
             expires_at_dt = getattr(session_row, "expires_at", None)
             if isinstance(expires_at_dt, datetime):
-                now_utc = datetime.now(timezone.utc)
-                expires_at_check = expires_at_dt if expires_at_dt.tzinfo else expires_at_dt.replace(tzinfo=timezone.utc)
-                if now_utc > expires_at_check:
+                if now_utc > _datetime_as_utc(expires_at_dt):
                     return None
+            if role == ROLE_ADMIN:
+                idle_timeout_seconds = _get_admin_session_idle_timeout_seconds()
+                last_seen_at = getattr(session_row, "last_seen_at", None)
+                if idle_timeout_seconds and isinstance(last_seen_at, datetime):
+                    if _elapsed_since_datetime(last_seen_at) > timedelta(seconds=idle_timeout_seconds):
+                        db.revoke_app_user_session(session_id)
+                        return None
+                db.touch_app_user_session(session_id)
         except Exception as exc:  # pragma: no cover - defensive validation path
             logger.warning("Failed to validate app_user_session %s: %s", session_id, exc)
             return None

@@ -6,7 +6,8 @@ Mode: static security audit. No runtime behavior changed.
 Implementation note, 2026-05-06:
 
 - Phase 1 auth/session hardening has landed for the first blocker-reduction pass: login throttling now uses durable database-backed IP and account hash buckets, login failure responses are generic, failed/rate-limited/success-after-failure login events are written through sanitized execution-log security events, production cookies are forced Secure when production mode is detected, cookie-authenticated unsafe methods enforce trusted Origin/Referer checks, and production CORS now rejects wildcard mode or missing explicit `CORS_ORIGINS`.
-- This does not close the remaining public-exposure blockers: password KDF upgrade, MFA, RBAC/capability split, production reverse-proxy/security-header templates, dependency/container scanning, and broader log/secret hardening remain separate tasks.
+- Phase 2 session/header/proxy hardening has landed for a bounded production-deployment risk reduction pass: admin sessions now enforce configurable idle expiry with existing `app_user_sessions.last_seen_at` metadata while preserving absolute max-age, stale admin sessions are revoked on validation, responses include baseline browser security headers, HSTS is emitted only when production mode sees HTTPS, and deployment docs now include a HTTPS reverse-proxy hardening template with no-direct-public-`:8000` guidance.
+- This does not close the remaining public-exposure blockers: password KDF upgrade, MFA, RBAC/capability split, dependency/container scanning follow-up, and broader log/secret hardening remain separate tasks.
 
 ## 1. Executive summary
 
