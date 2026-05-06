@@ -1,12 +1,28 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminUsersPage from '../AdminUsersPage';
 
-const { listUsers, getUserDetail, listUserActivity } = vi.hoisted(() => ({
+const {
+  disableAdminUser,
+  enableAdminUser,
+  getAdminUserHoldings,
+  getAdminUserPortfolioActivity,
+  getAdminUserPortfolioSummary,
+  getUserDetail,
+  listUserActivity,
+  listUsers,
+  revokeAdminUserSessions,
+} = vi.hoisted(() => ({
+  disableAdminUser: vi.fn(),
+  enableAdminUser: vi.fn(),
+  getAdminUserHoldings: vi.fn(),
+  getAdminUserPortfolioActivity: vi.fn(),
+  getAdminUserPortfolioSummary: vi.fn(),
   listUsers: vi.fn(),
   getUserDetail: vi.fn(),
   listUserActivity: vi.fn(),
+  revokeAdminUserSessions: vi.fn(),
 }));
 
 vi.mock('../../api/adminUsers', async () => {
@@ -14,10 +30,16 @@ vi.mock('../../api/adminUsers', async () => {
   return {
     ...actual,
     adminUsersApi: {
+      disableAdminUser,
+      enableAdminUser,
+      getAdminUserHoldings,
+      getAdminUserPortfolioActivity,
+      getAdminUserPortfolioSummary,
       listUsers,
       getUserDetail,
       listUserActivity,
       listActivity: vi.fn(),
+      revokeAdminUserSessions,
     },
   };
 });
@@ -110,6 +132,99 @@ const activityPayload = {
   limitations: ['raw_payloads_excluded'],
 };
 
+const portfolioSummaryPayload = {
+  userId: 'user-123',
+  accountCount: 2,
+  activeAccountCount: 1,
+  baseCurrencies: ['USD', 'CNY'],
+  accounts: [
+    {
+      id: 101,
+      name: 'Growth Main',
+      broker: 'IBKR',
+      market: 'US',
+      baseCurrency: 'USD',
+      isActive: true,
+      brokerAccountHandle: 'IBKR-****-42',
+      createdAt: '2026-05-01T00:00:00+08:00',
+      updatedAt: '2026-05-06T00:00:00+08:00',
+      broker_token: 'broker-token-never-render',
+      sync_metadata_json: '{"secret":"never"}',
+    },
+  ],
+  totalCash: { amount: 1000, currency: 'USD' },
+  totalMarketValue: { amount: 25000, currency: 'USD' },
+  totalEquity: { amount: 26000, currency: 'USD' },
+  realizedPnl: { amount: 125, currency: 'USD' },
+  unrealizedPnl: { amount: 450, currency: 'USD' },
+  ledgerCounts: { trades: 8, cashEvents: 2, corporateActions: 1 },
+  brokerSyncSummary: {
+    connections: 1,
+    statuses: { success: 1 },
+    lastSyncAt: '2026-05-06T00:00:00+08:00',
+    fxStale: false,
+    payload_json: 'payload-json-never-render',
+  },
+  limitations: ['read_only_projection'],
+};
+
+const holdingsPayload = {
+  items: [
+    {
+      accountId: 101,
+      accountName: 'Growth Main',
+      broker: 'IBKR',
+      brokerAccountHandle: 'IBKR-****-42',
+      symbol: 'AAPL',
+      market: 'US',
+      currency: 'USD',
+      quantity: 10,
+      avgCost: 150,
+      lastPrice: 180,
+      marketValueBase: 1800,
+      unrealizedPnlBase: 300,
+      valuationCurrency: 'USD',
+      fxStatus: 'current',
+      updatedAt: '2026-05-06T00:00:00+08:00',
+      api_key: 'api-key-never-render',
+    },
+  ],
+  total: 1,
+  limit: 50,
+  offset: 0,
+  hasMore: false,
+  limitations: [],
+};
+
+const portfolioActivityPayload = {
+  items: [
+    {
+      idHash: 'evt_9f8d',
+      type: 'trade',
+      accountId: 101,
+      accountName: 'Growth Main',
+      eventDate: '2026-05-05',
+      symbol: 'AAPL',
+      market: 'US',
+      currency: 'USD',
+      side: 'buy',
+      direction: null,
+      actionType: null,
+      quantity: 2,
+      price: 178,
+      amount: 356,
+      createdAt: '2026-05-05T10:00:00+08:00',
+      raw_broker_payload: 'raw-broker-payload-never-render',
+    },
+  ],
+  total: 1,
+  limit: 30,
+  offset: 0,
+  hasMore: false,
+  summary: { trades: 8, cashEvents: 2, corporateActions: 1 },
+  limitations: [],
+};
+
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -133,6 +248,14 @@ function expectNoSecrets() {
     'raw-prompt-never-render',
     'provider-payload-never-render',
     'stack-trace-never-render',
+    'broker-token-never-render',
+    'payload-json-never-render',
+    'api-key-never-render',
+    'raw-broker-payload-never-render',
+    'sync_metadata_json',
+    'payload_json',
+    'broker token',
+    'api key',
     'password_hash',
   ].forEach((secret) => {
     expect(body).not.toHaveTextContent(secret);
@@ -177,9 +300,8 @@ describe('AdminUsersPage', () => {
 
     expect(await screen.findByText('Identity')).toBeInTheDocument();
     expect(screen.getByText('sess_4f8a1c9b')).toBeInTheDocument();
-    expect(screen.getByText('安全 · 后续')).toBeInTheDocument();
-    expect(screen.getByText('组合 · 后续')).toBeInTheDocument();
-    expect(screen.getByText('安全操作后续开放')).toBeDisabled();
+    expect(screen.getByRole('link', { name: '安全' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '组合' })).toBeInTheDocument();
     expectNoSecrets();
   });
 
@@ -214,5 +336,139 @@ describe('AdminUsersPage', () => {
     renderAt('/zh/admin/users/user-123/activity');
 
     expect(await screen.findByText('当前时间窗口内暂无活动')).toBeInTheDocument();
+  });
+
+  it('loads portfolio summary, holdings, and activity as a read-only tab without raw broker details', async () => {
+    getUserDetail.mockResolvedValue(detailPayload);
+    getAdminUserPortfolioSummary.mockResolvedValue(portfolioSummaryPayload);
+    getAdminUserHoldings.mockResolvedValue(holdingsPayload);
+    getAdminUserPortfolioActivity.mockResolvedValue(portfolioActivityPayload);
+
+    renderAt('/zh/admin/users/user-123');
+
+    fireEvent.click(await screen.findByRole('link', { name: '组合' }));
+
+    expect(await screen.findByText('组合只读总览')).toBeInTheDocument();
+    expect((await screen.findAllByText('AAPL')).length).toBeGreaterThan(0);
+    expect(screen.getByText('组合账户')).toBeInTheDocument();
+    expect(screen.getByText('持仓明细')).toBeInTheDocument();
+    expect(screen.getByText('组合活动')).toBeInTheDocument();
+    expect(screen.getAllByText('Growth Main').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('IBKR-****-42').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('只读投影').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /同步|导入|重放|刷新 FX/ })).not.toBeInTheDocument();
+    expect(getAdminUserPortfolioSummary).toHaveBeenCalledWith('user-123', expect.objectContaining({ includeInactive: true }));
+    expect(getAdminUserHoldings).toHaveBeenCalledWith('user-123', expect.objectContaining({ limit: 50 }));
+    expect(getAdminUserPortfolioActivity).toHaveBeenCalledWith('user-123', expect.objectContaining({ limit: 30 }));
+    expectNoSecrets();
+  });
+
+  it('renders portfolio empty and error states', async () => {
+    getUserDetail.mockResolvedValue(detailPayload);
+    getAdminUserPortfolioSummary.mockResolvedValueOnce({ ...portfolioSummaryPayload, accountCount: 0, activeAccountCount: 0, accounts: [] });
+    getAdminUserHoldings.mockResolvedValueOnce({ ...holdingsPayload, items: [], total: 0 });
+    getAdminUserPortfolioActivity.mockResolvedValueOnce({ ...portfolioActivityPayload, items: [], total: 0 });
+
+    const { unmount } = renderAt('/zh/admin/users/user-123');
+    fireEvent.click(await screen.findByRole('link', { name: '组合' }));
+    expect(await screen.findByText('该用户暂无组合账户')).toBeInTheDocument();
+    expect(screen.getByText('暂无持仓')).toBeInTheDocument();
+    expect(screen.getByText('暂无组合活动')).toBeInTheDocument();
+    unmount();
+
+    getUserDetail.mockResolvedValue(detailPayload);
+    getAdminUserPortfolioSummary.mockRejectedValueOnce(new Error('forbidden payload_json raw-stack-trace'));
+    getAdminUserHoldings.mockResolvedValueOnce({ ...holdingsPayload, items: [], total: 0 });
+    getAdminUserPortfolioActivity.mockResolvedValueOnce({ ...portfolioActivityPayload, items: [], total: 0 });
+    renderAt('/zh/admin/users/user-123');
+    fireEvent.click(await screen.findByRole('link', { name: '组合' }));
+    await waitFor(() => expect(screen.getByText('读取组合数据失败')).toBeInTheDocument());
+    expectNoSecrets();
+  });
+
+  it('renders active user security actions and requires reason plus typed confirmation', async () => {
+    getUserDetail.mockResolvedValue(detailPayload);
+    disableAdminUser.mockResolvedValue({
+      targetUserId: 'user-123',
+      action: 'disable',
+      status: 'completed',
+      changed: true,
+      sessionsRevoked: 1,
+      auditEventId: 'audit_evt_disable_1',
+      message: 'completed',
+    });
+
+    renderAt('/zh/admin/users/user-123');
+    fireEvent.click(await screen.findByRole('link', { name: '安全' }));
+
+    expect(await screen.findByText('安全控制 S1')).toBeInTheDocument();
+    const disableCard = screen.getByTestId('security-action-disable');
+    expect(within(disableCard).getByRole('button', { name: '禁用账户' })).toBeDisabled();
+
+    fireEvent.change(within(disableCard).getByLabelText('操作原因'), { target: { value: '合规审查' } });
+    fireEvent.change(within(disableCard).getByLabelText('输入 DISABLE 确认'), { target: { value: 'WRONG' } });
+    expect(within(disableCard).getByRole('button', { name: '禁用账户' })).toBeDisabled();
+
+    fireEvent.change(within(disableCard).getByLabelText('输入 DISABLE 确认'), { target: { value: 'DISABLE' } });
+    fireEvent.click(within(disableCard).getByLabelText('同时撤销活跃会话'));
+    fireEvent.click(within(disableCard).getByRole('button', { name: '禁用账户' }));
+
+    await waitFor(() => expect(disableAdminUser).toHaveBeenCalledWith('user-123', {
+      reason: '合规审查',
+      confirm: 'DISABLE',
+      revokeSessions: true,
+    }));
+    expect(await screen.findByText('audit_evt_disable_1')).toBeInTheDocument();
+    expectNoSecrets();
+  });
+
+  it('renders inactive user enable action and calls the enable API', async () => {
+    getUserDetail.mockResolvedValue({ ...detailPayload, user: { ...userItem, isActive: false } });
+    enableAdminUser.mockResolvedValue({
+      targetUserId: 'user-123',
+      action: 'enable',
+      status: 'completed',
+      changed: true,
+      sessionsRevoked: 0,
+      auditEventId: 'audit_evt_enable_1',
+      message: 'enabled',
+    });
+
+    renderAt('/zh/admin/users/user-123');
+    fireEvent.click(await screen.findByRole('link', { name: '安全' }));
+
+    const enableCard = await screen.findByTestId('security-action-enable');
+    fireEvent.change(within(enableCard).getByLabelText('操作原因'), { target: { value: '复核通过' } });
+    fireEvent.change(within(enableCard).getByLabelText('输入 ENABLE 确认'), { target: { value: 'ENABLE' } });
+    fireEvent.click(within(enableCard).getByRole('button', { name: '启用账户' }));
+
+    await waitFor(() => expect(enableAdminUser).toHaveBeenCalledWith('user-123', {
+      reason: '复核通过',
+      confirm: 'ENABLE',
+    }));
+    expect(await screen.findByText('audit_evt_enable_1')).toBeInTheDocument();
+    expect(screen.queryByTestId('security-action-disable')).not.toBeInTheDocument();
+    expectNoSecrets();
+  });
+
+  it('requires typed confirmation for session revocation and renders sanitized blocked errors', async () => {
+    getUserDetail.mockResolvedValue(detailPayload);
+    revokeAdminUserSessions.mockRejectedValue(new Error('blocked self raw-session-id cookie token stack trace'));
+
+    renderAt('/zh/admin/users/user-123');
+    fireEvent.click(await screen.findByRole('link', { name: '安全' }));
+
+    const revokeCard = await screen.findByTestId('security-action-revoke-sessions');
+    fireEvent.change(within(revokeCard).getByLabelText('操作原因'), { target: { value: '会话风险复核' } });
+    fireEvent.change(within(revokeCard).getByLabelText('输入 REVOKE_SESSIONS 确认'), { target: { value: 'REVOKE_SESSIONS' } });
+    fireEvent.click(within(revokeCard).getByRole('button', { name: '撤销全部会话' }));
+
+    await waitFor(() => expect(revokeAdminUserSessions).toHaveBeenCalledWith('user-123', {
+      reason: '会话风险复核',
+      confirm: 'REVOKE_SESSIONS',
+      scope: 'all',
+    }));
+    await waitFor(() => expect(screen.getByText('安全操作失败')).toBeInTheDocument());
+    expectNoSecrets();
   });
 });

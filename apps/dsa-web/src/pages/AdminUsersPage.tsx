@@ -17,6 +17,11 @@ import {
   type AdminActivityEvent,
   type AdminActivityParams,
   type AdminActivityResponse,
+  type AdminHoldingListResponse,
+  type AdminMoneyAmount,
+  type AdminPortfolioActivityResponse,
+  type AdminPortfolioSummaryResponse,
+  type AdminSecurityActionResponse,
   type AdminSessionSummary,
   type AdminUserDetailResponse,
   type AdminUserListItem,
@@ -24,16 +29,26 @@ import {
   type AdminUserListResponse,
 } from '../api/adminUsers';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Badge, Disclosure, GlassCard, Input, Select } from '../components/common';
+import { ApiErrorAlert, Badge, Button, Checkbox, Disclosure, GlassCard, Input, Select } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { cn } from '../utils/cn';
-import { formatDateTime } from '../utils/format';
+import { formatCurrency, formatDateTime, formatNumber } from '../utils/format';
 
 type PageMode = 'directory' | 'detail' | 'activity';
+type DetailTabKey = 'detail' | 'portfolio' | 'security';
 type LoadState<T> = {
   loading: boolean;
   error: ParsedApiError | null;
   data: T | null;
+};
+type SecurityActionKey = 'disable' | 'enable' | 'revoke_sessions';
+type SecurityActionFormState = {
+  reason: string;
+  confirm: string;
+  revokeSessions: boolean;
+  loading: boolean;
+  error: ParsedApiError | null;
+  result: AdminSecurityActionResponse | null;
 };
 
 const USER_LIMIT = 50;
@@ -142,6 +157,62 @@ function statusTone(value?: string | null): string {
   if (['failed', 'revoked', 'inactive'].includes(normalized)) return 'border-rose-300/30 bg-rose-500/12 text-rose-100';
   if (['partial', 'warning', 'expired', 'timeout'].includes(normalized)) return 'border-amber-300/25 bg-amber-400/10 text-amber-100';
   return 'border-white/10 bg-white/[0.04] text-white/62';
+}
+
+function tabFromSearch(search: string): DetailTabKey {
+  const value = new URLSearchParams(search).get('tab');
+  if (value === 'portfolio' || value === 'security') return value;
+  return 'detail';
+}
+
+function formatMoney(value?: AdminMoneyAmount | null): string {
+  if (!value) return '--';
+  return formatCurrency(value.amount, { currency: value.currency || 'USD' });
+}
+
+function compactNumber(value?: number | null): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
+  return formatNumber(value, 2);
+}
+
+function limitationText(value: string): string {
+  if (value === 'read_only_projection') return '只读投影';
+  if (value === 'raw_payloads_excluded') return '原始载荷已排除';
+  if (value === 'broker_credentials_excluded') return '经纪商凭证已排除';
+  if (value === 'partial_data') return '部分数据';
+  if (value === 'forbidden') return '权限不足';
+  return value.replace(/_/g, ' ');
+}
+
+function sanitizedActionError(error: unknown): ParsedApiError {
+  const parsed = getParsedApiError(error);
+  return {
+    ...parsed,
+    title: '安全操作失败',
+    message: '操作未完成。请检查权限、目标用户状态、是否为自身账户或最后一个管理员保护。',
+    rawMessage: '',
+  };
+}
+
+function sanitizedPortfolioError(error: unknown): ParsedApiError {
+  const parsed = getParsedApiError(error);
+  return {
+    ...parsed,
+    title: '读取组合数据失败',
+    message: parsed.status === 403 ? '当前权限不能查看该用户组合状态。' : '组合安全投影暂不可用，请稍后重试。',
+    rawMessage: '',
+  };
+}
+
+function freshSecurityActionState(): SecurityActionFormState {
+  return {
+    reason: '',
+    confirm: '',
+    revokeSessions: false,
+    loading: false,
+    error: null,
+    result: null,
+  };
 }
 
 function adminLogHref(raw?: string | null, locale = 'zh'): string | null {
@@ -381,13 +452,13 @@ const DirectoryView: React.FC<{
   );
 };
 
-const DetailTabs: React.FC<{ active: PageMode; userId: string; locale: 'zh' | 'en' }> = ({ active, userId, locale }) => {
+const DetailTabs: React.FC<{ active: PageMode; activeDetailTab: DetailTabKey; userId: string; locale: 'zh' | 'en' }> = ({ active, activeDetailTab, userId, locale }) => {
   const base = locale === 'en' ? `/en/admin/users/${encodeURIComponent(userId)}` : `/zh/admin/users/${encodeURIComponent(userId)}`;
   const items = [
     { key: 'detail', label: '概览', href: base, disabled: false },
     { key: 'activity', label: '活动', href: `${base}/activity`, disabled: false },
-    { key: 'security', label: '安全', href: '#security', disabled: true },
-    { key: 'portfolio', label: '组合', href: '#portfolio', disabled: true },
+    { key: 'portfolio', label: '组合', href: `${base}?tab=portfolio`, disabled: false },
+    { key: 'security', label: '安全', href: `${base}?tab=security`, disabled: false },
     { key: 'analysis', label: '分析', href: '#analysis', disabled: true },
     { key: 'scanner', label: 'Scanner', href: '#scanner', disabled: true },
     { key: 'backtest', label: 'Backtest', href: '#backtest', disabled: true },
@@ -405,7 +476,7 @@ const DetailTabs: React.FC<{ active: PageMode; userId: string; locale: 'zh' | 'e
           to={item.href}
           className={cn(
             'inline-flex min-h-9 shrink-0 items-center rounded-lg border px-3 text-xs font-semibold transition',
-            (active === 'activity' && item.key === 'activity') || (active === 'detail' && item.key === 'detail')
+            (active === 'activity' && item.key === 'activity') || (active === 'detail' && activeDetailTab === item.key)
               ? 'border-cyan-300/25 bg-cyan-400/10 text-cyan-100'
               : 'border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:text-white',
           )}
@@ -467,6 +538,325 @@ const FuturePlaceholders: React.FC = () => (
     </div>
   </GlassCard>
 );
+
+const PortfolioTab: React.FC<{
+  summaryState: LoadState<AdminPortfolioSummaryResponse>;
+  holdingsState: LoadState<AdminHoldingListResponse>;
+  activityState: LoadState<AdminPortfolioActivityResponse>;
+}> = ({ summaryState, holdingsState, activityState }) => {
+  const summary = summaryState.data;
+  const holdings = holdingsState.data?.items || [];
+  const activities = activityState.data?.items || [];
+  const brokerStatuses = Object.entries(summary?.brokerSyncSummary.statuses || {});
+  return (
+    <div className="grid min-h-0 grid-cols-1 gap-5 xl:grid-cols-12">
+      <div className="min-w-0 xl:col-span-8">
+        <GlassCard as="section" className="p-4 md:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Portfolio</p>
+              <h2 className="mt-1 text-lg font-semibold text-white">组合只读总览</h2>
+              <p className="mt-1 max-w-2xl text-xs leading-5 text-white/46">仅展示账户、估值、持仓和账本活动的安全投影；不会触发同步、导入、重放、FX 刷新或组合数据修改。</p>
+            </div>
+            <Badge variant="info" className="border-cyan-300/25 bg-cyan-400/10 text-cyan-100">只读投影</Badge>
+          </div>
+          {summaryState.error ? (
+            <div className="mt-4">
+              <ApiErrorAlert error={summaryState.error} />
+            </div>
+          ) : null}
+          {summaryState.loading && !summary ? (
+            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+              {[0, 1, 2, 3].map((item) => <div key={item} className="h-20 animate-pulse rounded-2xl border border-white/5 bg-white/[0.025]" />)}
+            </div>
+          ) : summary ? (
+            <>
+              <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <SummaryTile label="账户数" value={`${summary.accountCount} / ${summary.activeAccountCount}`} tone="info" />
+                <SummaryTile label="现金" value={formatMoney(summary.totalCash)} tone="neutral" />
+                <SummaryTile label="市值" value={formatMoney(summary.totalMarketValue)} tone="good" />
+                <SummaryTile label="权益" value={formatMoney(summary.totalEquity)} tone="good" />
+                <SummaryTile label="已实现 P&L" value={formatMoney(summary.realizedPnl)} tone={summary.realizedPnl.amount >= 0 ? 'good' : 'danger'} />
+                <SummaryTile label="未实现 P&L" value={formatMoney(summary.unrealizedPnl)} tone={summary.unrealizedPnl.amount >= 0 ? 'good' : 'danger'} />
+                <SummaryTile label="交易/现金/公司行动" value={`${summary.ledgerCounts.trades}/${summary.ledgerCounts.cashEvents}/${summary.ledgerCounts.corporateActions}`} tone="info" />
+                <SummaryTile label="币种" value={summary.baseCurrencies.join(' / ') || '--'} tone="neutral" />
+              </div>
+              {summary.accountCount === 0 ? (
+                <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-6 text-sm text-white/50">该用户暂无组合账户</p>
+              ) : (
+                <div className="mt-5">
+                  <h3 className="text-sm font-semibold text-white">组合账户</h3>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    {summary.accounts.map((account) => (
+                      <article key={account.id} className="rounded-2xl border border-white/5 bg-black/20 p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-white">{account.name}</p>
+                            <p className="mt-1 truncate font-mono text-[11px] text-white/42">{text(account.brokerAccountHandle, 'masked')}</p>
+                          </div>
+                          <span className={cn('inline-flex min-h-6 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', statusTone(account.isActive ? 'active' : 'inactive'))}>
+                            {account.isActive ? '活跃' : '停用'}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-white/44">
+                          <span>Broker <b className="block truncate text-white/70">{text(account.broker)}</b></span>
+                          <span>Market <b className="block truncate text-white/70">{text(account.market)}</b></span>
+                          <span>Currency <b className="block truncate text-white/70">{text(account.baseCurrency)}</b></span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="mt-5 rounded-2xl border border-cyan-300/10 bg-cyan-400/8 px-4 py-3 text-xs leading-5 text-cyan-50/70">
+                Broker sync summary: {summary.brokerSyncSummary.connections} connections · last sync {formatDate(summary.brokerSyncSummary.lastSyncAt)} · FX {summary.brokerSyncSummary.fxStale ? 'stale' : 'current'}
+                {brokerStatuses.length ? ` · ${brokerStatuses.map(([key, value]) => `${key}:${value}`).join(' ')}` : ''}
+              </div>
+              {summary.limitations.length ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {summary.limitations.map((item) => <Badge key={item} variant="default" className="border-white/10 bg-white/[0.04] text-white/58">{limitationText(item)}</Badge>)}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </GlassCard>
+      </div>
+      <div className="grid min-w-0 gap-5 xl:col-span-4">
+        <GlassCard as="section" className="p-4 md:p-5">
+          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Guardrails</p>
+          <h2 className="mt-1 text-base font-semibold text-white">限制 / 审计感知</h2>
+          <div className="mt-4 grid gap-2 text-xs leading-5 text-white/50">
+            <p className="rounded-xl border border-white/5 bg-black/20 px-3 py-2">组合视图只读，不提供修正、导入、同步、重放或外部调用按钮。</p>
+            <p className="rounded-xl border border-white/5 bg-black/20 px-3 py-2">经纪商账户仅显示 masked handle；原始 payload、sync metadata 和凭证不会进入界面。</p>
+          </div>
+        </GlassCard>
+      </div>
+      <div className="min-w-0 xl:col-span-7">
+        <GlassCard as="section" className="p-4 md:p-5">
+          <h2 className="text-base font-semibold text-white">持仓明细</h2>
+          {holdingsState.error ? <div className="mt-3"><ApiErrorAlert error={holdingsState.error} /></div> : null}
+          {holdingsState.loading && holdings.length === 0 ? (
+            <div className="mt-4 h-32 animate-pulse rounded-2xl border border-white/5 bg-white/[0.025]" />
+          ) : holdings.length === 0 ? (
+            <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-6 text-sm text-white/50">暂无持仓</p>
+          ) : (
+            <div className="mt-4 overflow-x-auto no-scrollbar">
+              <table className="w-full min-w-[620px] text-left text-xs">
+                <thead className="text-white/34">
+                  <tr>
+                    <th className="py-2 pr-3">标的</th>
+                    <th className="py-2 pr-3">账户</th>
+                    <th className="py-2 pr-3">数量</th>
+                    <th className="py-2 pr-3">市值</th>
+                    <th className="py-2 pr-3">未实现 P&L</th>
+                    <th className="py-2">FX</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 text-white/62">
+                  {holdings.map((item) => (
+                    <tr key={`${item.accountId}-${item.symbol}`}>
+                      <td className="py-3 pr-3 font-mono text-white">{item.symbol}</td>
+                      <td className="py-3 pr-3">{item.accountName}</td>
+                      <td className="py-3 pr-3 font-mono">{compactNumber(item.quantity)}</td>
+                      <td className="py-3 pr-3 font-mono">{formatCurrency(item.marketValueBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</td>
+                      <td className={cn('py-3 pr-3 font-mono', item.unrealizedPnlBase >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{formatCurrency(item.unrealizedPnlBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</td>
+                      <td className="py-3">{item.fxStatus}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </GlassCard>
+      </div>
+      <div className="min-w-0 xl:col-span-5">
+        <GlassCard as="section" className="p-4 md:p-5">
+          <h2 className="text-base font-semibold text-white">组合活动</h2>
+          {activityState.error ? <div className="mt-3"><ApiErrorAlert error={activityState.error} /></div> : null}
+          {activityState.loading && activities.length === 0 ? (
+            <div className="mt-4 h-32 animate-pulse rounded-2xl border border-white/5 bg-white/[0.025]" />
+          ) : activities.length === 0 ? (
+            <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-6 text-sm text-white/50">暂无组合活动</p>
+          ) : (
+            <div className="mt-4 grid gap-3">
+              {activities.slice(0, 8).map((item) => (
+                <article key={item.idHash} className="rounded-2xl border border-white/5 bg-black/20 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-mono text-sm font-semibold text-white">{item.symbol || item.type}</p>
+                      <p className="mt-1 text-[11px] text-white/42">{item.accountName} · {formatDate(item.eventDate)}</p>
+                    </div>
+                    <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/58">{item.type}</Badge>
+                  </div>
+                  <p className="mt-2 truncate text-[11px] text-white/50">
+                    {text(item.side || item.direction || item.actionType, 'activity')} · qty {text(item.quantity)} · amount {text(item.amount)}
+                  </p>
+                </article>
+              ))}
+            </div>
+          )}
+        </GlassCard>
+      </div>
+    </div>
+  );
+};
+
+const SecurityActionCard: React.FC<{
+  actionKey: SecurityActionKey;
+  title: string;
+  description: string;
+  confirmPhrase: string;
+  buttonLabel: string;
+  available: boolean;
+  danger?: boolean;
+  state: SecurityActionFormState;
+  onChange: (patch: Partial<SecurityActionFormState>) => void;
+  onSubmit: () => void;
+}> = ({ actionKey, title, description, confirmPhrase, buttonLabel, available, danger = false, state, onChange, onSubmit }) => {
+  const canSubmit = available && state.reason.trim().length > 0 && state.confirm === confirmPhrase && !state.loading;
+  return (
+    <GlassCard as="section" className="p-4 md:p-5" data-testid={`security-action-${actionKey.replace('_sessions', '-sessions')}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Security Action</p>
+          <h3 className="mt-1 text-base font-semibold text-white">{title}</h3>
+          <p className="mt-1 max-w-xl text-xs leading-5 text-white/46">{description}</p>
+        </div>
+        <span className={cn('inline-flex min-h-6 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', available ? statusTone('warning') : 'border-white/10 bg-white/[0.04] text-white/35')}>
+          {available ? '可执行' : '当前状态不可用'}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <Input
+          label="操作原因"
+          value={state.reason}
+          disabled={!available || state.loading}
+          placeholder="请输入审计原因"
+          onChange={(event) => onChange({ reason: event.target.value })}
+        />
+        <Input
+          label={`输入 ${confirmPhrase} 确认`}
+          value={state.confirm}
+          disabled={!available || state.loading}
+          placeholder={confirmPhrase}
+          onChange={(event) => onChange({ confirm: event.target.value })}
+        />
+      </div>
+      {actionKey === 'disable' ? (
+        <Checkbox
+          label="同时撤销活跃会话"
+          checked={state.revokeSessions}
+          disabled={!available || state.loading}
+          containerClassName="mt-4"
+          onChange={(event) => onChange({ revokeSessions: event.target.checked })}
+        />
+      ) : null}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Button
+          variant={danger ? 'danger-subtle' : 'gradient'}
+          size="sm"
+          isLoading={state.loading}
+          disabled={!canSubmit}
+          onClick={onSubmit}
+        >
+          {buttonLabel}
+        </Button>
+        {!available ? <span className="text-xs text-white/35">账户当前状态不适用该操作。</span> : null}
+      </div>
+      {state.error ? (
+        <div className="mt-4">
+          <ApiErrorAlert error={state.error} />
+        </div>
+      ) : null}
+      {state.result ? (
+        <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-xs leading-5 text-emerald-50/80">
+          <p>状态: {statusLabel(state.result.status)} · 会话撤销 {state.result.sessionsRevoked}</p>
+          {state.result.auditEventId ? <p className="mt-1 font-mono text-emerald-100">{state.result.auditEventId}</p> : null}
+        </div>
+      ) : null}
+    </GlassCard>
+  );
+};
+
+const SecurityTab: React.FC<{
+  detail: AdminUserDetailResponse;
+  actionState: Record<SecurityActionKey, SecurityActionFormState>;
+  updateAction: (key: SecurityActionKey, patch: Partial<SecurityActionFormState>) => void;
+  submitAction: (key: SecurityActionKey) => void;
+}> = ({ detail, actionState, updateAction, submitAction }) => {
+  const user = detail.user;
+  return (
+    <div className="grid min-h-0 grid-cols-1 gap-5 xl:grid-cols-12">
+      <div className="min-w-0 xl:col-span-4">
+        <GlassCard as="section" className="p-4 md:p-5">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Security S1</p>
+              <h2 className="mt-1 text-base font-semibold text-white">安全控制 S1</h2>
+            </div>
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <SummaryTile label="账户状态" value={user.isActive ? '活跃' : '停用'} tone={user.isActive ? 'good' : 'danger'} />
+            <SummaryTile label="活跃会话" value={user.sessionSummary.activeCount} tone="info" />
+            <SummaryTile label="密码状态" value={passwordStateLabel(user.passwordState)} tone={user.passwordState === 'unset' ? 'warn' : 'neutral'} />
+            <SummaryTile label="角色" value={user.role === 'admin' ? '管理员' : user.role} tone="neutral" />
+          </div>
+          <p className="mt-4 rounded-2xl border border-cyan-300/10 bg-cyan-400/8 px-3 py-3 text-xs leading-5 text-cyan-50/70">
+            安全状态查看和控制操作都会被审计；响应不会返回密码、哈希、Cookie、token 或原始 session id。
+          </p>
+          <Disclosure summary="后续阶段占位" className="mt-4" bodyClassName="rounded-xl border border-white/5 bg-white/[0.025] p-3">
+            <div className="grid gap-2 text-xs text-white/42">
+              <p>reset-password 后续阶段，不在本次实现。</p>
+              <p>force-password-change 后续阶段，不在本次实现。</p>
+              <p>unlock / RBAC capability model 后续阶段，不在本次实现。</p>
+            </div>
+          </Disclosure>
+        </GlassCard>
+      </div>
+      <div className="grid min-w-0 gap-5 xl:col-span-8">
+        {user.isActive ? (
+          <SecurityActionCard
+            actionKey="disable"
+            title="禁用账户"
+            description="停用目标用户账户。可选择同步撤销活跃会话；不会展示任何凭证或原始会话值。"
+            confirmPhrase="DISABLE"
+            buttonLabel="禁用账户"
+            available
+            danger
+            state={actionState.disable}
+            onChange={(patch) => updateAction('disable', patch)}
+            onSubmit={() => submitAction('disable')}
+          />
+        ) : (
+          <SecurityActionCard
+            actionKey="enable"
+            title="启用账户"
+            description="恢复目标用户账户访问状态。该操作仍需审计原因和 typed confirmation。"
+            confirmPhrase="ENABLE"
+            buttonLabel="启用账户"
+            available
+            state={actionState.enable}
+            onChange={(patch) => updateAction('enable', patch)}
+            onSubmit={() => submitAction('enable')}
+          />
+        )}
+        <SecurityActionCard
+          actionKey="revoke_sessions"
+          title="撤销全部会话"
+          description="撤销目标用户全部应用会话，仅返回数量和审计结果，不返回任何 raw session id。"
+          confirmPhrase="REVOKE_SESSIONS"
+          buttonLabel="撤销全部会话"
+          available
+          danger
+          state={actionState.revoke_sessions}
+          onChange={(patch) => updateAction('revoke_sessions', patch)}
+          onSubmit={() => submitAction('revoke_sessions')}
+        />
+      </div>
+    </div>
+  );
+};
 
 const DetailOverview: React.FC<{ detail: AdminUserDetailResponse; locale: 'zh' | 'en' }> = ({ detail, locale }) => {
   const { user } = detail;
@@ -710,11 +1100,20 @@ const AdminUsersPage: React.FC = () => {
   const navigate = useNavigate();
   const { language } = useI18n();
   const mode: PageMode = userId ? (location.pathname.endsWith('/activity') ? 'activity' : 'detail') : 'directory';
+  const activeDetailTab = mode === 'detail' ? tabFromSearch(location.search) : 'detail';
   const [filters, setFilters] = useState<AdminUserListParams>({ status: 'all', sort: 'created_at_desc', limit: USER_LIMIT, offset: 0 });
   const [activityFilters, setActivityFilters] = useState<AdminActivityParams>({ limit: ACTIVITY_LIMIT, offset: 0, includeAdmin: false, includeSystem: false });
   const [usersState, setUsersState] = useState<LoadState<AdminUserListResponse>>({ loading: false, error: null, data: null });
   const [detailState, setDetailState] = useState<LoadState<AdminUserDetailResponse>>({ loading: false, error: null, data: null });
   const [activityState, setActivityState] = useState<LoadState<AdminActivityResponse>>({ loading: false, error: null, data: null });
+  const [portfolioSummaryState, setPortfolioSummaryState] = useState<LoadState<AdminPortfolioSummaryResponse>>({ loading: false, error: null, data: null });
+  const [holdingsState, setHoldingsState] = useState<LoadState<AdminHoldingListResponse>>({ loading: false, error: null, data: null });
+  const [portfolioActivityState, setPortfolioActivityState] = useState<LoadState<AdminPortfolioActivityResponse>>({ loading: false, error: null, data: null });
+  const [securityActionState, setSecurityActionState] = useState<Record<SecurityActionKey, SecurityActionFormState>>({
+    disable: freshSecurityActionState(),
+    enable: freshSecurityActionState(),
+    revoke_sessions: freshSecurityActionState(),
+  });
 
   const loadUsers = useCallback(() => {
     setUsersState((state) => ({ ...state, loading: true, error: null }));
@@ -737,6 +1136,52 @@ const AdminUsersPage: React.FC = () => {
       .catch((error) => setActivityState({ loading: false, error: getParsedApiError(error), data: null }));
   }, [activityFilters]);
 
+  const loadPortfolio = useCallback((targetUserId: string) => {
+    setPortfolioSummaryState((state) => ({ ...state, loading: true, error: null }));
+    setHoldingsState((state) => ({ ...state, loading: true, error: null }));
+    setPortfolioActivityState((state) => ({ ...state, loading: true, error: null }));
+    void adminUsersApi.getAdminUserPortfolioSummary(targetUserId, { includeInactive: true })
+      .then((data) => setPortfolioSummaryState({ loading: false, error: null, data }))
+      .catch((error) => setPortfolioSummaryState({ loading: false, error: sanitizedPortfolioError(error), data: null }));
+    void adminUsersApi.getAdminUserHoldings(targetUserId, { limit: 50, offset: 0 })
+      .then((data) => setHoldingsState({ loading: false, error: null, data }))
+      .catch((error) => setHoldingsState({ loading: false, error: sanitizedPortfolioError(error), data: null }));
+    void adminUsersApi.getAdminUserPortfolioActivity(targetUserId, { limit: 30, offset: 0 })
+      .then((data) => setPortfolioActivityState({ loading: false, error: null, data }))
+      .catch((error) => setPortfolioActivityState({ loading: false, error: sanitizedPortfolioError(error), data: null }));
+  }, []);
+
+  const updateSecurityAction = useCallback((key: SecurityActionKey, patch: Partial<SecurityActionFormState>) => {
+    setSecurityActionState((state) => ({
+      ...state,
+      [key]: { ...state[key], ...patch, error: patch.error === undefined ? state[key].error : patch.error },
+    }));
+  }, []);
+
+  const submitSecurityAction = useCallback((key: SecurityActionKey) => {
+    if (!userId) return;
+    const current = securityActionState[key];
+    const reason = current.reason.trim();
+    setSecurityActionState((state) => ({ ...state, [key]: { ...state[key], loading: true, error: null, result: null } }));
+    const request = key === 'disable'
+      ? adminUsersApi.disableAdminUser(userId, { reason, confirm: current.confirm, revokeSessions: current.revokeSessions })
+      : key === 'enable'
+      ? adminUsersApi.enableAdminUser(userId, { reason, confirm: current.confirm })
+      : adminUsersApi.revokeAdminUserSessions(userId, { reason, confirm: current.confirm, scope: 'all' });
+    void request
+      .then((result) => {
+        setSecurityActionState((state) => ({
+          ...state,
+          [key]: { ...state[key], loading: false, error: null, result },
+        }));
+        loadDetail(userId);
+      })
+      .catch((error) => setSecurityActionState((state) => ({
+        ...state,
+        [key]: { ...state[key], loading: false, error: sanitizedActionError(error), result: null },
+      })));
+  }, [loadDetail, securityActionState, userId]);
+
   useEffect(() => {
     if (userId) return;
     const timer = window.setTimeout(() => loadUsers(), 0);
@@ -754,6 +1199,12 @@ const AdminUsersPage: React.FC = () => {
     const timer = window.setTimeout(() => loadActivity(userId), 0);
     return () => window.clearTimeout(timer);
   }, [loadActivity, mode, userId]);
+
+  useEffect(() => {
+    if (!userId || mode !== 'detail' || activeDetailTab !== 'portfolio') return;
+    const timer = window.setTimeout(() => loadPortfolio(userId), 0);
+    return () => window.clearTimeout(timer);
+  }, [activeDetailTab, loadPortfolio, mode, userId]);
 
   const activeUser = detailState.data?.user || null;
   const directoryPath = language === 'en' ? '/en/admin/users' : '/zh/admin/users';
@@ -783,13 +1234,17 @@ const AdminUsersPage: React.FC = () => {
     if (!detailState.data) return null;
     return (
       <div className="grid gap-5">
-        <DetailTabs active={mode} userId={userId} locale={language} />
+        <DetailTabs active={mode} activeDetailTab={activeDetailTab} userId={userId} locale={language} />
         {mode === 'activity'
           ? <ActivityTimeline state={activityState} filters={activityFilters} setFilters={setActivityFilters} reload={() => loadActivity(userId)} />
+          : activeDetailTab === 'portfolio'
+          ? <PortfolioTab summaryState={portfolioSummaryState} holdingsState={holdingsState} activityState={portfolioActivityState} />
+          : activeDetailTab === 'security'
+          ? <SecurityTab detail={detailState.data} actionState={securityActionState} updateAction={updateSecurityAction} submitAction={submitSecurityAction} />
           : <DetailOverview detail={detailState.data} locale={language} />}
       </div>
     );
-  }, [activityFilters, activityState, detailState, directoryPath, filters, language, loadActivity, loadUsers, mode, navigate, userId, usersState]);
+  }, [activeDetailTab, activityFilters, activityState, detailState, directoryPath, filters, holdingsState, language, loadActivity, loadUsers, mode, navigate, portfolioActivityState, portfolioSummaryState, securityActionState, submitSecurityAction, updateSecurityAction, userId, usersState]);
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto no-scrollbar py-5 md:py-6">
