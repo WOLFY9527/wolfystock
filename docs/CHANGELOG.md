@@ -1,5 +1,7 @@
 ## 2026-05-06
 
+- 🧾 **Duplicate-Cost Admin Summary Backend Phase 2** — 新增只读、管理员专用 API：`GET /api/v1/admin/cost/duplicate-summary`，聚合当前进程内 LLM、provider fallback/cache、MarketCache 与 Scanner AI instrumentation counters，并在可用时补充既有 `llm_usage` accounting summary。响应包含 `summary / llm / providers / marketCache / scannerAi / limitations / metadata`，明确 `readOnly=true`、`noExternalCalls=true`、`countersSource=process_local` 与 `exactness=observational_not_billing`；counter snapshot 不支持历史窗口时通过 limitations 明示，不伪造历史 bucket。该接口不调用 LLM/provider，不触发 MarketCache refresh、scanner/backtest/portfolio/report/notification/DuckDB 行为，也不返回 raw prompt/message/provider payload/URL/API key/token/session id/stack trace/cache key/candidate payload/report output。
+
 - 🔐 **Admin Data Control Center Backend Phase 1/2** — 新增只读、管理员专用的用户目录、用户详情与活动时间线 API：`GET /api/v1/admin/users`、`GET /api/v1/admin/users/{user_id}`、`GET /api/v1/admin/users/{user_id}/activity`、`GET /api/v1/admin/activity`。响应只返回安全投影：用户基础字段、派生 `passwordState`、会话计数、脱敏会话 handle、活动事件的哈希 request/session/entity 引用与已脱敏 metadata；不返回 `password_hash`、原始 session id、cookie、token、API key、prompt/provider payload、request body、stack trace 或 analysis raw payload。首版活动时间线以 Execution Logs、AnalysisHistory 和 auth session snapshot 为保守来源，scanner/backtest/portfolio 深投影后续单独实现；不改变认证、授权、Portfolio accounting、Scanner 排名、Backtest 计算、provider/MarketCache、AI/LLM、notification 或 DuckDB 行为。
 
 ## 2026-05-05

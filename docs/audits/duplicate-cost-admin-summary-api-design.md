@@ -227,6 +227,14 @@ Phase 2: backend-only read-only summary
 - Include synthetic-data tests only in the future implementation task.
 - Return clear `dataSources`, `limitations`, `readOnly`, and `noExternalCalls` metadata.
 
+Phase 2 implementation note (2026-05-06):
+
+- Added the read-only admin endpoint `GET /api/v1/admin/cost/duplicate-summary`.
+- The implementation aggregates the existing process-local instrumentation counter snapshot and existing `llm_usage` accounting summary when available. It does not call LLMs, providers, MarketCache refresh paths, scanner/backtest/portfolio tasks, report generation, config writes, execution-log writes, notifications, or DuckDB runtime.
+- Responses include `summary`, `llm`, `providers`, `marketCache`, `scannerAi`, `limitations`, and `metadata`, with `readOnly=true`, `noExternalCalls=true`, `countersSource=process_local`, and `exactness=observational_not_billing`.
+- Process-local counters are not timestamped, so `window` and `bucket` are contract fields only for the counter snapshot; the endpoint returns this limitation instead of pretending to provide historical buckets.
+- Response rollups use bounded labels and safe hash labels only. Raw prompts, messages, provider/news payloads, URLs/query strings, API keys/tokens, full user/session ids, stack traces, raw response bodies, raw cache keys, raw candidate payloads, and raw reports are not returned.
+
 Phase 3: optional admin frontend dashboard
 
 - Add UI only after the backend contract stabilizes.
@@ -258,4 +266,3 @@ Future Codex implementation must:
 3. Optional admin frontend dashboard after the backend response contract is stable.
 4. Guest preview repeat-cost report design using hashed guest/session and freshness keys.
 5. MarketCache hit/stale/miss summary endpoint or section, reusing the read-only pattern in `MarketProviderOperationsService.get_operations()`.
-
