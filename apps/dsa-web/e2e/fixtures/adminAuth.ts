@@ -139,6 +139,143 @@ function llmLedgerSummaryPayload() {
   };
 }
 
+function modelPricingPoliciesPayload() {
+  return {
+    generated_at: timestamp,
+    active_count: 1,
+    policies: [
+      {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        currency: 'USD',
+        input_price_per_1m: '0.1500',
+        cached_input_price_per_1m: '0.0750',
+        output_price_per_1m: '0.6000',
+        effective_from: '2026-01-01T00:00:00+08:00',
+        effective_until: null,
+        source_label: 'OpenAI pricing page',
+        source_url: 'https://openai.com/api/pricing/',
+        active: true,
+      },
+    ],
+    metadata: {
+      read_only: true,
+      no_external_calls: true,
+      live_enforcement: false,
+      manual_maintenance: true,
+      data_sources: ['model_pricing_policies'],
+      redaction: ['credentials_omitted', 'provider_payloads_omitted'],
+    },
+  };
+}
+
+function providerCircuitMetadata() {
+  return {
+    read_only: true,
+    no_external_calls: true,
+    live_enforcement: false,
+    provider_behavior_changed: false,
+    market_cache_behavior_changed: false,
+    data_sources: ['provider_circuit_state'],
+    limit: 50,
+    redaction: ['credentials_omitted', 'stack_details_omitted'],
+    filters: {},
+  };
+}
+
+function providerCircuitStatesPayload() {
+  return {
+    generated_at: timestamp,
+    items: [
+      {
+        provider: 'mock-provider',
+        provider_category: 'llm',
+        route_family: 'analysis',
+        state: 'closed',
+        reason_bucket: 'success',
+        cooldown_until: null,
+        created_at: timestamp,
+        updated_at: timestamp,
+      },
+    ],
+    metadata: providerCircuitMetadata(),
+  };
+}
+
+function providerCircuitEventsPayload() {
+  return {
+    generated_at: timestamp,
+    items: [
+      {
+        provider: 'mock-provider',
+        provider_category: 'llm',
+        route_family: 'analysis',
+        event_type: 'state_transition',
+        from_state: 'half_open',
+        to_state: 'closed',
+        reason_bucket: 'success',
+        request_count_bucket: '1-10',
+        duration_bucket_ms: 250,
+        failure_count_bucket: '0',
+        created_at: timestamp,
+      },
+    ],
+    metadata: providerCircuitMetadata(),
+  };
+}
+
+function providerQuotaWindowsPayload() {
+  return {
+    generated_at: timestamp,
+    items: [
+      {
+        provider: 'mock-provider',
+        provider_category: 'llm',
+        route_family: 'analysis',
+        window_type: 'minute',
+        window_start: timestamp,
+        window_end: timestamp,
+        request_count: 8,
+        reserved_units: 4,
+        consumed_units: 4,
+        released_units: 0,
+        rejected_count: 0,
+        success_count: 8,
+        failure_count: 0,
+        timeout_count: 0,
+        provider_429_count: 0,
+        provider_403_count: 0,
+        fallback_count: 1,
+        probe_count: 1,
+        cache_only_count: 0,
+        stale_served_count: 0,
+        created_at: timestamp,
+        updated_at: timestamp,
+      },
+    ],
+    metadata: providerCircuitMetadata(),
+  };
+}
+
+function providerProbeEventsPayload() {
+  return {
+    generated_at: timestamp,
+    items: [
+      {
+        provider: 'mock-provider',
+        provider_category: 'llm',
+        route_family: 'analysis',
+        probe_type: 'half_open_probe',
+        probe_source: 'diagnostic_scheduler',
+        result_bucket: 'success',
+        duration_bucket_ms: 120,
+        created_at: timestamp,
+      },
+    ],
+    metadata: providerCircuitMetadata(),
+  };
+}
+
 function adminUsersPayload() {
   return {
     items: [{
@@ -251,6 +388,21 @@ export async function installAdminAuthHarness(
     if (method === 'GET' && path === '/api/v1/admin/cost/llm-ledger-summary') {
       return fulfillJson(route, llmLedgerSummaryPayload());
     }
+    if (method === 'GET' && path === '/api/v1/admin/cost/model-pricing-policies') {
+      return fulfillJson(route, modelPricingPoliciesPayload());
+    }
+    if (method === 'GET' && path === '/api/v1/admin/providers/circuits') {
+      return fulfillJson(route, providerCircuitStatesPayload());
+    }
+    if (method === 'GET' && path === '/api/v1/admin/providers/circuits/events') {
+      return fulfillJson(route, providerCircuitEventsPayload());
+    }
+    if (method === 'GET' && path === '/api/v1/admin/providers/quota-windows') {
+      return fulfillJson(route, providerQuotaWindowsPayload());
+    }
+    if (method === 'GET' && path === '/api/v1/admin/providers/probe-events') {
+      return fulfillJson(route, providerProbeEventsPayload());
+    }
     if (method === 'GET' && path === '/api/v1/admin/users') {
       return fulfillJson(route, adminUsersPayload());
     }
@@ -284,6 +436,11 @@ export async function openAdminRouteWithHarness(
 
 export async function expectNoHorizontalOverflow(page: Page) {
   await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+}
+
+export async function expectNoRawSecretLikeText(page: Page) {
+  const bodyText = await page.locator('body').innerText();
+  expect(bodyText).not.toMatch(/(?:sk-[a-z0-9_-]{12,}|bearer\s+[a-z0-9._-]+|api[_-]?key\s*[=:]|password\s*[=:]|session[_-]?id\s*[=:]|secret\s*[=:])/i);
 }
 
 export const test = base.extend<AdminAuthFixtures>({
