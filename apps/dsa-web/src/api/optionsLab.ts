@@ -308,116 +308,6 @@ function fixtureChain(symbol: string, expiration = FIXTURE_EXPIRATION): OptionsC
   };
 }
 
-function fixtureStrategyComparison(symbol: string, request: OptionsStrategyCompareRequest): OptionsStrategyCompareResponse {
-  const targetPrice = request.targetPrice || 65;
-  const targetDate = request.targetDate || FIXTURE_EXPIRATION;
-  const requestedStrategies = request.strategies?.length
-    ? request.strategies
-    : ['long_call', 'long_put', 'bull_call_spread', 'bear_put_spread'];
-  const allStrategies: OptionsStrategyComparison[] = [
-    {
-      strategyType: 'long_call',
-      legs: [{ action: 'buy', side: 'call', contractSymbol: `${symbol}260619C00055000`, expiration: FIXTURE_EXPIRATION, strike: 55, mid: 4.23, quantity: 1 }],
-      netDebit: 423,
-      maxLoss: 423,
-      maxGain: null,
-      breakeven: 59.23,
-      requiredMovePct: 13.17,
-      payoffAtTarget: 577,
-      riskRewardRatio: null,
-      liquidityWarnings: [],
-      ivThetaNotes: ['iv_and_theta_can_change_strategy_value_before_expiration'],
-      suitabilityNotes: ['comparison_uses_user_assumptions_and_fixture_mid_prices', `direction_assumption_${request.direction}`, `risk_profile_${request.riskProfile}`],
-      limitations: ['fixture_backed_defined_risk_only'],
-      noAdviceDisclosure: 'Analytical comparison under explicit assumptions only; not investment advice or an instruction.',
-    },
-    {
-      strategyType: 'long_put',
-      legs: [{ action: 'buy', side: 'put', contractSymbol: `${symbol}260619P00050000`, expiration: FIXTURE_EXPIRATION, strike: 50, mid: 3.35, quantity: 1 }],
-      netDebit: 335,
-      maxLoss: 335,
-      maxGain: null,
-      breakeven: 46.65,
-      requiredMovePct: -10.87,
-      payoffAtTarget: -335,
-      riskRewardRatio: null,
-      liquidityWarnings: [],
-      ivThetaNotes: ['iv_and_theta_can_change_strategy_value_before_expiration'],
-      suitabilityNotes: ['comparison_uses_user_assumptions_and_fixture_mid_prices', `direction_assumption_${request.direction}`, `risk_profile_${request.riskProfile}`],
-      limitations: ['fixture_backed_defined_risk_only'],
-      noAdviceDisclosure: 'Analytical comparison under explicit assumptions only; not investment advice or an instruction.',
-    },
-    {
-      strategyType: 'bull_call_spread',
-      legs: [
-        { action: 'buy', side: 'call', contractSymbol: `${symbol}260619C00055000`, expiration: FIXTURE_EXPIRATION, strike: 55, mid: 4.23, quantity: 1 },
-        { action: 'sell', side: 'call', contractSymbol: `${symbol}260619C00060000`, expiration: FIXTURE_EXPIRATION, strike: 60, mid: 2.28, quantity: 1 },
-      ],
-      netDebit: 195,
-      maxLoss: 195,
-      maxGain: 305,
-      breakeven: 56.95,
-      requiredMovePct: 8.81,
-      payoffAtTarget: 305,
-      riskRewardRatio: 1.56,
-      liquidityWarnings: [],
-      ivThetaNotes: ['iv_and_theta_can_change_strategy_value_before_expiration'],
-      suitabilityNotes: ['comparison_uses_user_assumptions_and_fixture_mid_prices', 'defined_risk_debit_spread_caps_loss_and_gain'],
-      limitations: ['fixture_backed_defined_risk_only'],
-      noAdviceDisclosure: 'Analytical comparison under explicit assumptions only; not investment advice or an instruction.',
-    },
-    {
-      strategyType: 'bear_put_spread',
-      legs: [
-        { action: 'buy', side: 'put', contractSymbol: `${symbol}260619P00050000`, expiration: FIXTURE_EXPIRATION, strike: 50, mid: 3.35, quantity: 1 },
-        { action: 'sell', side: 'put', contractSymbol: `${symbol}260619P00045000`, expiration: FIXTURE_EXPIRATION, strike: 45, mid: 1.6, quantity: 1 },
-      ],
-      netDebit: 175,
-      maxLoss: 175,
-      maxGain: 325,
-      breakeven: 48.25,
-      requiredMovePct: -7.82,
-      payoffAtTarget: -175,
-      riskRewardRatio: 1.86,
-      liquidityWarnings: ['thin_liquidity_in_one_or_more_legs'],
-      ivThetaNotes: ['iv_and_theta_can_change_strategy_value_before_expiration'],
-      suitabilityNotes: ['comparison_uses_user_assumptions_and_fixture_mid_prices', 'defined_risk_debit_spread_caps_loss_and_gain'],
-      limitations: ['fixture_backed_defined_risk_only'],
-      noAdviceDisclosure: 'Analytical comparison under explicit assumptions only; not investment advice or an instruction.',
-    },
-  ];
-
-  return {
-    symbol,
-    underlying: FIXTURE_UNDERLYING as unknown as Record<string, unknown>,
-    assumptions: {
-      direction: request.direction,
-      targetPrice,
-      targetDate,
-      maxPremium: request.maxPremium,
-      riskProfile: request.riskProfile,
-      strategies: requestedStrategies,
-      contractMultiplier: 100,
-      pricingMode: 'expiration_intrinsic_minus_mid_debit',
-    },
-    strategies: allStrategies.filter((strategy) => requestedStrategies.includes(strategy.strategyType)),
-    limitations: ['fixture_backed_defined_risk_only', 'analytical_only_not_advice'],
-    metadata: {
-      readOnly: true,
-      fixtureBacked: true,
-      syntheticData: true,
-      noExternalCalls: true,
-      noLlmCalls: true,
-      noOrderPlacement: true,
-      noBrokerConnection: true,
-      noPortfolioMutation: true,
-      noTradingRecommendation: true,
-      strategyEngine: 'fixture_frontend_phase4',
-      forceRefreshIgnored: Boolean(request.forceRefresh),
-    },
-  };
-}
-
 function normalizeSymbol(symbol: string): string {
   return symbol.trim().toUpperCase() || 'TEM';
 }
@@ -425,15 +315,6 @@ function normalizeSymbol(symbol: string): string {
 async function getOrFixture<T>(path: string, fixture: T): Promise<T> {
   try {
     const response = await apiClient.get<Record<string, unknown>>(path);
-    return toCamelCase<T>(response.data);
-  } catch {
-    return fixture;
-  }
-}
-
-async function postOrFixture<T>(path: string, body: unknown, fixture: T): Promise<T> {
-  try {
-    const response = await apiClient.post<Record<string, unknown>>(path, body);
     return toCamelCase<T>(response.data);
   } catch {
     return fixture;
@@ -463,6 +344,7 @@ export const optionsLabApi = {
         ? request.strategies
         : ['long_call', 'long_put', 'bull_call_spread', 'bear_put_spread'],
     };
-    return postOrFixture('/api/v1/options/strategies/compare', payload, fixtureStrategyComparison(normalized, payload));
+    return apiClient.post<Record<string, unknown>>('/api/v1/options/strategies/compare', payload)
+      .then((response) => toCamelCase<OptionsStrategyCompareResponse>(response.data));
   },
 };

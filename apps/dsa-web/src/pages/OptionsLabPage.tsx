@@ -23,8 +23,12 @@ type LoadState = {
   summary: OptionsUnderlyingSummaryResponse | null;
   expirations: OptionsExpirationsResponse | null;
   chain: OptionsChainResponse | null;
+};
+
+type ComparisonState = {
+  loading: boolean;
+  error: string | null;
   comparison: OptionsStrategyCompareResponse | null;
-  comparisonError: string | null;
 };
 
 const DIRECTION_OPTIONS: Array<{ value: OptionsDirection; label: string }> = [
@@ -50,6 +54,8 @@ const RISK_WARNINGS = [
 
 const EMPTY_CONTRACTS: OptionContract[] = [];
 const EMPTY_EXPIRATIONS: OptionsExpiration[] = [];
+const COMPARISON_LOADING_TIMEOUT_MS = 12000;
+const COMPARISON_EMPTY_MESSAGE = '先选择可用到期日并加载合约后，再进入策略对比。';
 
 const fieldClass = 'h-10 w-full rounded-xl border border-white/10 bg-white/[0.02] px-3 font-mono text-sm text-white outline-none transition-all placeholder:text-white/20 focus:border-emerald-400/50 focus:bg-white/[0.05]';
 const labelClass = 'text-[10px] font-bold uppercase tracking-[0.18em] text-white/40';
@@ -422,13 +428,13 @@ const StrategyCard: React.FC<{ strategy: OptionsStrategyComparison }> = ({ strat
 };
 
 const StrategyComparisonPanel: React.FC<{
-  comparison: OptionsStrategyCompareResponse | null;
+  comparisonState: ComparisonState;
   loading: boolean;
-  error: string | null;
+  emptyMessage: string | null;
   chain: OptionsChainResponse | null;
-}> = ({ comparison, loading, error, chain }) => {
-  const strategies = comparison?.strategies || [];
-  const freshness = chain?.underlying?.freshness || (comparison?.metadata.fixtureBacked ? 'fixture' : null);
+}> = ({ comparisonState, loading, emptyMessage, chain }) => {
+  const strategies = comparisonState.comparison?.strategies || [];
+  const freshness = chain?.underlying?.freshness || (comparisonState.comparison?.metadata.fixtureBacked ? 'fixture' : null);
   return (
     <section className={cn(panelClass, 'xl:col-span-12')} data-testid="options-lab-strategy-comparison">
       <SectionHeader eyebrow="Phase 4" title="策略对比" icon={Layers3}>
@@ -440,16 +446,22 @@ const StrategyComparisonPanel: React.FC<{
       <p className="mt-4 rounded-2xl border border-cyan-300/10 bg-cyan-400/8 px-4 py-3 text-sm leading-6 text-cyan-100/78">
         仅供情景分析，不构成交易建议。对比使用当前标的、到期日与目标价格假设，展示定义风险结构下的权利金、盈亏边界与风险收益关系。
       </p>
-      {loading ? (
+      {emptyMessage ? (
+        <div className="mt-5 rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-4 text-sm leading-6 text-white/55">
+          <p className="text-sm font-semibold text-white/78">等待策略对比前提</p>
+          <p className="mt-2">{emptyMessage}</p>
+        </div>
+      ) : null}
+      {!emptyMessage && loading ? (
         <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 font-mono text-sm text-cyan-100">正在计算策略对比...</p>
       ) : null}
-      {!loading && error ? (
-        <p className="mt-5 rounded-2xl border border-rose-300/20 bg-rose-500/10 px-4 py-4 text-sm text-rose-100">{error}</p>
+      {!emptyMessage && !loading && comparisonState.error ? (
+        <p className="mt-5 rounded-2xl border border-rose-300/20 bg-rose-500/10 px-4 py-4 text-sm text-rose-100">{comparisonState.error}</p>
       ) : null}
-      {!loading && !error && strategies.length === 0 ? (
+      {!emptyMessage && !loading && !comparisonState.error && strategies.length === 0 ? (
         <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/45">当前假设下暂无可比较策略。</p>
       ) : null}
-      {!loading && !error && strategies.length > 0 ? (
+      {!emptyMessage && !loading && !comparisonState.error && strategies.length > 0 ? (
         <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-4">
           {strategies.map((strategy) => (
             <StrategyCard key={strategy.strategyType} strategy={strategy} />
@@ -465,11 +477,11 @@ const StrategyComparisonPanel: React.FC<{
           <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
         </summary>
         <div className="mt-4 grid gap-2 text-xs leading-5 text-white/45">
-          <p>策略引擎：{comparison?.metadata.strategyEngine || '--'}</p>
-          <p>本地数据：{comparison?.metadata.fixtureBacked === false ? '未确认' : '是'}</p>
-          <p>忽略强制刷新：{comparison?.metadata.forceRefreshIgnored ? '是' : '否'}</p>
-          <p>假设：{comparison ? JSON.stringify(comparison.assumptions) : '--'}</p>
-          <p>限制：{(comparison?.limitations || []).map(limitationLabel).join(' · ') || '--'}</p>
+          <p>策略引擎：{comparisonState.comparison?.metadata.strategyEngine || '--'}</p>
+          <p>本地数据：{comparisonState.comparison?.metadata.fixtureBacked === false ? '未确认' : '是'}</p>
+          <p>忽略强制刷新：{comparisonState.comparison?.metadata.forceRefreshIgnored ? '是' : '否'}</p>
+          <p>假设：{comparisonState.comparison ? JSON.stringify(comparisonState.comparison.assumptions) : '--'}</p>
+          <p>限制：{(comparisonState.comparison?.limitations || []).map(limitationLabel).join(' · ') || '--'}</p>
         </div>
       </details>
     </section>
@@ -539,8 +551,11 @@ const OptionsLabPage: React.FC = () => {
     summary: null,
     expirations: null,
     chain: null,
+  });
+  const [comparisonState, setComparisonState] = useState<ComparisonState>({
+    loading: false,
+    error: null,
     comparison: null,
-    comparisonError: null,
   });
 
   useEffect(() => {
@@ -552,7 +567,6 @@ const OptionsLabPage: React.FC = () => {
           ...current,
           loading: true,
           error: null,
-          comparisonError: null,
         }));
         const [summary, expirations] = await Promise.all([
           optionsLabApi.getUnderlyingSummary(activeSymbol),
@@ -572,31 +586,6 @@ const OptionsLabPage: React.FC = () => {
           expirations,
           chain,
         }));
-        try {
-          const comparison = await optionsLabApi.compareStrategies({
-            symbol: activeSymbol,
-            direction,
-            targetPrice: Number(targetPrice) || 65,
-            targetDate: targetDate || nextExpiration,
-            maxPremium: Number(riskBudget) > 0 ? Number(riskBudget) : undefined,
-            riskProfile,
-            strategies: ['long_call', 'long_put', 'bull_call_spread', 'bear_put_spread'],
-            forceRefresh: true,
-          });
-          if (ignored) return;
-          setState((current) => ({
-            ...current,
-            comparison,
-            comparisonError: null,
-          }));
-        } catch {
-          if (ignored) return;
-          setState((current) => ({
-            ...current,
-            comparison: null,
-            comparisonError: '策略对比暂不可用。请稍后重试或调整假设。',
-          }));
-        }
       } catch {
         if (ignored) return;
         setState((current) => ({
@@ -604,8 +593,6 @@ const OptionsLabPage: React.FC = () => {
           loading: false,
           error: '期权链暂不可用。请稍后重试或调整标的。',
           chain: null,
-          comparison: null,
-          comparisonError: null,
         }));
       }
     }
@@ -615,7 +602,90 @@ const OptionsLabPage: React.FC = () => {
     return () => {
       ignored = true;
     };
-  }, [activeSymbol, direction, reloadKey, riskBudget, riskProfile, selectedExpiration, targetDate, targetPrice]);
+  }, [activeSymbol, reloadKey, selectedExpiration]);
+
+  useEffect(() => {
+    let ignored = false;
+    let timeoutId: number | undefined;
+
+    async function loadComparison() {
+      const targetPriceValue = Number(targetPrice);
+      const hasTargetPrice = Number.isFinite(targetPriceValue) && targetPriceValue > 0;
+      const hasTargetDate = targetDate.trim().length > 0;
+      const hasExpirations = (state.expirations?.expirations.length || 0) > 0;
+      const hasContracts = Boolean((state.chain?.calls.length || 0) || (state.chain?.puts.length || 0));
+      const baseReady = !state.loading && !state.error && state.summary && state.expirations && state.chain;
+      const comparisonReady = Boolean(baseReady && hasTargetPrice && hasTargetDate && hasExpirations && hasContracts);
+
+      if (!comparisonReady) {
+        return;
+      }
+
+      setComparisonState({
+        loading: true,
+        error: null,
+        comparison: null,
+      });
+
+      timeoutId = window.setTimeout(() => {
+        if (ignored) return;
+        setComparisonState({
+          loading: false,
+          error: '策略对比暂不可用。请稍后重试或调整假设。',
+          comparison: null,
+        });
+      }, COMPARISON_LOADING_TIMEOUT_MS);
+
+      try {
+        const comparison = await optionsLabApi.compareStrategies({
+          symbol: activeSymbol,
+          direction,
+          targetPrice: targetPriceValue,
+          targetDate,
+          maxPremium: Number(riskBudget) > 0 ? Number(riskBudget) : undefined,
+          riskProfile,
+          strategies: ['long_call', 'long_put', 'bull_call_spread', 'bear_put_spread'],
+          forceRefresh: true,
+        });
+        if (ignored) return;
+        window.clearTimeout(timeoutId);
+        setComparisonState({
+          loading: false,
+          error: null,
+          comparison,
+        });
+      } catch {
+        if (ignored) return;
+        window.clearTimeout(timeoutId);
+        setComparisonState({
+          loading: false,
+          error: '策略对比暂不可用。请稍后重试或调整假设。',
+          comparison: null,
+        });
+      }
+    }
+
+    void loadComparison();
+
+    return () => {
+      ignored = true;
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [
+    activeSymbol,
+    direction,
+    riskBudget,
+    riskProfile,
+    state.chain,
+    state.error,
+    state.expirations,
+    state.loading,
+    state.summary,
+    targetDate,
+    targetPrice,
+  ]);
 
   const handleSubmit = useCallback(() => {
     const normalized = symbolInput.trim().toUpperCase() || 'TEM';
@@ -638,6 +708,18 @@ const OptionsLabPage: React.FC = () => {
   const puts = state.chain?.puts || EMPTY_CONTRACTS;
   const hasChainRows = calls.length > 0 || puts.length > 0;
   const topCall = useMemo(() => calls[0], [calls]);
+  const comparisonEmptyMessage = useMemo(() => {
+    if (state.loading) return '正在加载基础数据，稍后将自动计算策略对比。';
+    if (state.error) return '期权链暂不可用，策略对比已暂停。';
+    const targetPriceValue = Number(targetPrice);
+    const hasTargetPrice = Number.isFinite(targetPriceValue) && targetPriceValue > 0;
+    const hasTargetDate = targetDate.trim().length > 0;
+    const hasExpirations = expirations.length > 0;
+    const hasContracts = hasChainRows;
+    if (!state.summary || !state.expirations || !state.chain) return COMPARISON_EMPTY_MESSAGE;
+    if (!hasTargetPrice || !hasTargetDate || !hasExpirations || !hasContracts) return COMPARISON_EMPTY_MESSAGE;
+    return null;
+  }, [expirations.length, hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
 
   return (
     <main className="min-h-screen w-full bg-[#050505] px-4 py-5 text-white md:px-8 xl:px-10">
@@ -716,7 +798,7 @@ const OptionsLabPage: React.FC = () => {
           />
         </div>
 
-        <StrategyComparisonPanel comparison={state.comparison} loading={state.loading} error={state.comparisonError} chain={state.chain} />
+        <StrategyComparisonPanel comparisonState={comparisonState} loading={comparisonState.loading} emptyMessage={comparisonEmptyMessage} chain={state.chain} />
 
         <RiskWarnings />
         <DeveloperDetails state={state} />

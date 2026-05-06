@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OptionsLabPage from '../OptionsLabPage';
@@ -258,10 +258,12 @@ describe('OptionsLabPage', () => {
 
     const section = await screen.findByTestId('options-lab-strategy-comparison');
     expect(within(section).getByText('策略对比')).toBeInTheDocument();
-    expect(within(section).getByText('看涨期权多头')).toBeInTheDocument();
-    expect(within(section).getByText('看跌期权多头')).toBeInTheDocument();
-    expect(within(section).getByText('牛市看涨价差')).toBeInTheDocument();
-    expect(within(section).getByText('熊市看跌价差')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(section).getByText('看涨期权多头')).toBeInTheDocument();
+      expect(within(section).getByText('看跌期权多头')).toBeInTheDocument();
+      expect(within(section).getByText('牛市看涨价差')).toBeInTheDocument();
+      expect(within(section).getByText('熊市看跌价差')).toBeInTheDocument();
+    });
     ['净支出', '最大亏损', '最大收益', '盈亏平衡', '目标价格收益', '风险收益比'].forEach((label) => {
       expect(within(section).getAllByText(label).length).toBeGreaterThan(0);
     });
@@ -269,6 +271,75 @@ describe('OptionsLabPage', () => {
     expect(within(section).getAllByText('IV 与 Theta 会改变到期前估值').length).toBeGreaterThan(0);
     expect(within(section).getByText(/至少一腿隐含波动率偏高/)).toBeInTheDocument();
     expect(within(section).getAllByText('仅供情景分析，不构成交易建议').length).toBeGreaterThan(0);
+  });
+
+  it('does not fire compare before required assumptions are ready and shows a compact empty state', async () => {
+    vi.mocked(optionsLabApi.compareStrategies).mockClear();
+    vi.mocked(optionsLabApi.getExpirations).mockResolvedValueOnce({
+      symbol: 'TEM',
+      expirations: [],
+      metadata: {
+        readOnly: true,
+        noExternalCallsInTests: true,
+        limitations: ['mocked_frontend_shell'],
+      },
+    });
+    vi.mocked(optionsLabApi.getOptionChain).mockResolvedValueOnce({
+      symbol: 'TEM',
+      expiration: '2026-06-19',
+      underlying: null,
+      calls: [],
+      puts: [],
+      filtersApplied: {},
+      chainAsOf: '2026-05-06T09:45:00-04:00',
+      source: 'fixture',
+      limitations: ['provider_validation_required'],
+      metadata: {
+        readOnly: true,
+        noExternalCallsInTests: true,
+        limitations: ['mocked_frontend_shell'],
+      },
+    });
+    renderPage();
+
+    expect(await screen.findByText('暂无可用到期日。')).toBeInTheDocument();
+    expect(screen.getByText('等待策略对比前提')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('先选择可用到期日并加载合约后，再进入策略对比。')).toBeInTheDocument();
+    });
+    expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
+  });
+
+  it('keeps the base page usable when compare returns 500', async () => {
+    vi.mocked(optionsLabApi.compareStrategies).mockRejectedValueOnce({
+      response: { status: 500, data: { detail: { error: 'strategy_engine_down' } } },
+      message: 'Internal Server Error',
+    });
+    renderPage();
+
+    expect(await screen.findByText('期权实验室')).toBeInTheDocument();
+    const section = await screen.findByTestId('options-lab-strategy-comparison');
+    expect(within(section).getByText('策略对比')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(section).getByText('策略对比暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
+    });
+    expect(screen.getByText('TEM260619C00055000')).toBeInTheDocument();
+  });
+
+  it('keeps the base page usable when compare returns 404', async () => {
+    vi.mocked(optionsLabApi.compareStrategies).mockRejectedValueOnce({
+      response: { status: 404, data: { detail: { error: 'not_found' } } },
+      message: 'Not Found',
+    });
+    renderPage();
+
+    expect(await screen.findByText('期权实验室')).toBeInTheDocument();
+    const section = await screen.findByTestId('options-lab-strategy-comparison');
+    expect(within(section).getByText('策略对比')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(section).getByText('策略对比暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
+    });
+    expect(screen.getByText('TEM260619C00055000')).toBeInTheDocument();
   });
 
   it('keeps freshness and developer details collapsed by default', async () => {
