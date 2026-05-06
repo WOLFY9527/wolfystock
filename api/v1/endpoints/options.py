@@ -18,7 +18,11 @@ from api.v1.schemas.options import (
     OptionsStrategyCompareResponse,
     OptionUnderlyingSummaryResponse,
 )
-from src.services.options_lab_service import OptionsLabService, OptionsLabUnsupportedSymbol
+from src.services.options_lab_service import (
+    OptionsLabProviderUnavailable,
+    OptionsLabService,
+    OptionsLabUnsupportedSymbol,
+)
 
 router = APIRouter()
 
@@ -37,6 +41,16 @@ def _unsupported_response(exc: OptionsLabUnsupportedSymbol) -> HTTPException:
     )
 
 
+def _provider_unavailable_response(exc: OptionsLabProviderUnavailable) -> HTTPException:
+    return HTTPException(
+        status_code=400,
+        detail={
+            "error": exc.code,
+            "message": "Requested Options Lab provider is fixture-only, disabled, or not implemented.",
+        },
+    )
+
+
 @router.get(
     "/underlyings/{symbol}/summary",
     response_model=OptionUnderlyingSummaryResponse,
@@ -45,11 +59,18 @@ def _unsupported_response(exc: OptionsLabUnsupportedSymbol) -> HTTPException:
 def get_options_underlying_summary(
     symbol: str,
     force_refresh: bool = Query(default=False, alias="forceRefresh"),
+    market_data_provider: str = Query(default="synthetic_fixture", alias="marketDataProvider"),
 ) -> OptionUnderlyingSummaryResponse:
     try:
-        return _service().get_summary(symbol, force_refresh=force_refresh)
+        return _service().get_summary(
+            symbol,
+            force_refresh=force_refresh,
+            market_data_provider=market_data_provider,
+        )
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
+    except OptionsLabProviderUnavailable as exc:
+        raise _provider_unavailable_response(exc) from exc
 
 
 @router.get(
@@ -60,11 +81,18 @@ def get_options_underlying_summary(
 def get_options_expirations(
     symbol: str,
     force_refresh: bool = Query(default=False, alias="forceRefresh"),
+    market_data_provider: str = Query(default="synthetic_fixture", alias="marketDataProvider"),
 ) -> OptionExpirationsResponse:
     try:
-        return _service().get_expirations(symbol, force_refresh=force_refresh)
+        return _service().get_expirations(
+            symbol,
+            force_refresh=force_refresh,
+            market_data_provider=market_data_provider,
+        )
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
+    except OptionsLabProviderUnavailable as exc:
+        raise _provider_unavailable_response(exc) from exc
 
 
 @router.get(
@@ -80,6 +108,7 @@ def get_options_chain(
     max_spread_pct: float | None = Query(default=None, alias="maxSpreadPct", ge=0),
     include_greeks: bool = Query(default=True, alias="includeGreeks"),
     force_refresh: bool = Query(default=False, alias="forceRefresh"),
+    market_data_provider: str = Query(default="synthetic_fixture", alias="marketDataProvider"),
 ) -> OptionChainResponse:
     try:
         return _service().get_chain(
@@ -90,9 +119,12 @@ def get_options_chain(
             max_spread_pct=max_spread_pct,
             include_greeks=include_greeks,
             force_refresh=force_refresh,
+            market_data_provider=market_data_provider,
         )
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
+    except OptionsLabProviderUnavailable as exc:
+        raise _provider_unavailable_response(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": str(exc)}) from exc
 
@@ -107,6 +139,8 @@ def analyze_options(request: OptionsAnalyzeRequest) -> OptionsAnalyzeResponse:
         return _service().analyze(request)
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
+    except OptionsLabProviderUnavailable as exc:
+        raise _provider_unavailable_response(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": str(exc)}) from exc
 
@@ -121,6 +155,8 @@ def evaluate_options_decision(request: OptionsDecisionRequest) -> OptionsDecisio
         return _service().evaluate_decision(request)
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
+    except OptionsLabProviderUnavailable as exc:
+        raise _provider_unavailable_response(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": str(exc)}) from exc
 
@@ -135,6 +171,8 @@ def analyze_options_scenario(request: OptionsScenarioRequest) -> OptionsScenario
         return _service().scenario(request)
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
+    except OptionsLabProviderUnavailable as exc:
+        raise _provider_unavailable_response(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": str(exc)}) from exc
 
@@ -149,5 +187,7 @@ def compare_options_strategies(request: OptionsStrategyCompareRequest) -> Option
         return _service().compare_strategies(request)
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
+    except OptionsLabProviderUnavailable as exc:
+        raise _provider_unavailable_response(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": str(exc)}) from exc

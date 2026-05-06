@@ -73,12 +73,18 @@ def test_tem_chain_returns_calls_puts_and_safe_derived_fields() -> None:
     assert [contract.side for contract in response.calls] == ["call", "call", "call"]
     assert [contract.side for contract in response.puts] == ["put", "put"]
     assert response.calls[0].mid == 5.0
+    assert response.calls[0].multiplier == 100
     assert response.calls[0].moneyness == "itm"
     assert response.calls[1].moneyness == "otm"
     assert response.calls[0].spread_pct == 8.0
     assert response.calls[2].liquidity_bucket == "thin"
     assert response.calls[0].greeks is not None
+    assert response.calls[0].freshness == "synthetic_delayed"
+    assert response.calls[0].provider_quality == "synthetic_demo_only"
+    assert response.calls[0].data_quality["tradeable"] is False
     assert response.limitations.no_order_placement is True
+    assert response.metadata.provider_name == "synthetic_fixture"
+    assert response.metadata.live_provider_enabled is False
 
 
 def test_chain_filters_side_expiration_liquidity_spread_and_greeks() -> None:
@@ -716,6 +722,27 @@ def test_decision_delayed_non_live_data_cannot_emit_tradeable_label(tmp_path: Pa
     assert response.data_quality.data_quality_tier == "delayed_usable"
     assert response.decision_label != "有条件可交易"
     assert response.trade_quality_score <= 75
+
+
+def test_decision_delayed_fixture_provider_selection_cannot_emit_tradeable_label() -> None:
+    response = _service().evaluate_decision(
+        {
+            "symbol": "TEM",
+            "marketDataProvider": "delayed_fixture",
+            "strategy": "bull_call_spread",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskBudget": 600,
+        }
+    )
+
+    assert response.metadata.provider_name == "delayed_fixture"
+    assert response.metadata.provider_capabilities["liveEnabled"] is False
+    assert response.data_quality.data_quality_tier == "delayed_usable"
+    assert response.freshness.freshness == "delayed"
+    assert response.decision_label != "有条件可交易"
+    assert all(item.decision_label != "有条件可交易" for item in response.ranked_alternatives)
 
 
 def test_decision_long_call_breakeven_realism_calculation() -> None:

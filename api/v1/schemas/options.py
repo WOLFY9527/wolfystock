@@ -40,6 +40,9 @@ class OptionsMetadata(_OptionsModel):
     scoring_engine: str = Field(default="not_implemented_until_scoring_phase", alias="scoringEngine")
     strategy_engine: str = Field(default="not_implemented_until_later_phase", alias="strategyEngine")
     force_refresh_ignored: bool = Field(default=False, alias="forceRefreshIgnored")
+    provider_name: str = Field(default="synthetic_fixture", alias="providerName")
+    provider_capabilities: Dict[str, Any] = Field(default_factory=dict, alias="providerCapabilities")
+    live_provider_enabled: bool = Field(default=False, alias="liveProviderEnabled")
 
 
 class OptionExpirationItem(_OptionsModel):
@@ -66,6 +69,7 @@ class OptionContract(_OptionsModel):
     side: Literal["call", "put"]
     expiration: str
     strike: float
+    multiplier: int = 100
     bid: Optional[float] = None
     ask: Optional[float] = None
     mid: Optional[float] = None
@@ -83,6 +87,9 @@ class OptionContract(_OptionsModel):
     )
     as_of: str = Field(alias="asOf")
     source: str
+    freshness: str = "unknown"
+    provider_quality: Optional[str] = Field(default=None, alias="providerQuality")
+    data_quality: Dict[str, Any] = Field(default_factory=dict, alias="dataQuality")
     warnings: List[str] = Field(default_factory=list)
 
 
@@ -137,6 +144,7 @@ OptionsExpectedMoveSource = Literal["straddle_mid", "iv_dte", "unavailable"]
 
 class OptionsAnalyzeRequest(_OptionsModel):
     symbol: str
+    market_data_provider: str = Field(default="synthetic_fixture", alias="marketDataProvider")
     direction: OptionDirection
     target_price: float = Field(alias="targetPrice", gt=0)
     target_date: str = Field(alias="targetDate")
@@ -197,6 +205,7 @@ class OptionsAnalyzeResponse(_OptionsModel):
 
 class OptionsScenarioRequest(_OptionsModel):
     symbol: str
+    market_data_provider: str = Field(default="synthetic_fixture", alias="marketDataProvider")
     strategy: Literal["long_call", "long_put"]
     contract_symbol: Optional[str] = Field(default=None, alias="contractSymbol")
     expiration: Optional[str] = None
@@ -235,6 +244,7 @@ class OptionsScenarioResponse(_OptionsModel):
 
 class OptionsStrategyCompareRequest(_OptionsModel):
     symbol: str
+    market_data_provider: str = Field(default="synthetic_fixture", alias="marketDataProvider")
     direction: OptionDirection
     target_price: float = Field(alias="targetPrice", gt=0)
     target_date: str = Field(alias="targetDate")
@@ -293,6 +303,7 @@ class OptionsDecisionLeg(_OptionsModel):
 
 class OptionsDecisionRequest(_OptionsModel):
     symbol: str
+    market_data_provider: str = Field(default="synthetic_fixture", alias="marketDataProvider")
     strategy: OptionStrategy
     expiration: Optional[str] = None
     legs: List[OptionsDecisionLeg] = Field(default_factory=list)

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import copy
 from datetime import date, datetime
-import json
 import math
 import re
 from pathlib import Path
@@ -50,9 +49,18 @@ from api.v1.schemas.options import (
     OptionsStrategyLeg,
     OptionUnderlyingSummaryResponse,
 )
+from src.services.options_market_data_provider import (
+    DEFAULT_OPTIONS_FIXTURE_PATH,
+    DEFAULT_OPTIONS_PROVIDER_NAME,
+    OptionsMarketDataProvider,
+    OptionsProviderError,
+    OptionsProviderUnavailable,
+    OptionsProviderUnsupportedSymbol,
+    create_options_market_data_provider,
+)
 
 
-DEFAULT_FIXTURE_PATH = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "options" / "tem_chain.json"
+DEFAULT_FIXTURE_PATH = DEFAULT_OPTIONS_FIXTURE_PATH
 PHASE1_WARNING_CODES = [
     "synthetic_fixture_data",
     "options_are_high_risk",
@@ -110,15 +118,45 @@ class OptionsLabUnsupportedSymbol(ValueError):
         super().__init__("Options Lab Phase 1 supports fixture-backed US listed equity options only.")
 
 
+class OptionsLabProviderUnavailable(ValueError):
+    """Raised when a requested options market data provider is disabled."""
+
+    def __init__(self, provider_name: str, code: str = "options_provider_not_implemented") -> None:
+        self.provider_name = provider_name
+        self.code = code
+        super().__init__("Options provider is disabled or not implemented for Options Lab.")
+
+
 class OptionsLabService:
     """Read-only normalizer for synthetic Options Lab fixtures."""
 
-    def __init__(self, fixture_path: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        fixture_path: Optional[Path] = None,
+        market_data_provider: Optional[OptionsMarketDataProvider] = None,
+        provider_name: str = DEFAULT_OPTIONS_PROVIDER_NAME,
+    ) -> None:
         self.fixture_path = fixture_path or DEFAULT_FIXTURE_PATH
+        self.provider_name = provider_name
+        if market_data_provider is not None:
+            self.market_data_provider = market_data_provider
+        else:
+            try:
+                self.market_data_provider = create_options_market_data_provider(
+                    provider_name=provider_name,
+                    fixture_path=self.fixture_path,
+                )
+            except OptionsProviderUnavailable as exc:
+                raise OptionsLabProviderUnavailable(exc.provider_name, code=exc.code) from exc
 
-    def get_summary(self, symbol: str, force_refresh: bool = False) -> OptionUnderlyingSummaryResponse:
-        fixture = self._fixture_for_symbol(symbol)
-        metadata = self._metadata(force_refresh=force_refresh)
+    def get_summary(
+        self,
+        symbol: str,
+        force_refresh: bool = False,
+        market_data_provider: Optional[str] = None,
+    ) -> OptionUnderlyingSummaryResponse:
+        fixture = self._fixture_for_symbol(symbol, market_data_provider=market_data_provider)
+        metadata = self._metadata(force_refresh=force_refresh, fixture=fixture)
         underlying = self._safe_underlying(fixture)
         return OptionUnderlyingSummaryResponse(
             symbol=fixture["symbol"],
@@ -127,7 +165,8 @@ class OptionsLabService:
             underlying=underlying,
             optionsAvailability={
                 "supported": True,
-                "provider": "synthetic_fixture",
+                "provider": fixture.get("providerName") or fixture.get("source") or "unknown",
+                "providerCapabilities": fixture.get("providerCapabilities") or {},
                 "limitations": ["fixture_only", "provider_validation_required_later"],
             },
             asOf=fixture["chainAsOf"],
@@ -136,8 +175,13 @@ class OptionsLabService:
             metadata=metadata,
         )
 
-    def get_expirations(self, symbol: str, force_refresh: bool = False) -> OptionExpirationsResponse:
-        fixture = self._fixture_for_symbol(symbol)
+    def get_expirations(
+        self,
+        symbol: str,
+        force_refresh: bool = False,
+        market_data_provider: Optional[str] = None,
+    ) -> OptionExpirationsResponse:
+        fixture = self._fixture_for_symbol(symbol, market_data_provider=market_data_provider)
         expirations = [
             OptionExpirationItem(
                 date=str(item["date"]),
@@ -145,7 +189,7 @@ class OptionsLabService:
                 type=str(item.get("type") or "unknown"),
                 chainAvailable=bool(item.get("chainAvailable", True)),
                 asOf=str(item.get("asOf") or fixture["chainAsOf"]),
-                source=fixture["source"],
+                source=str(item.get("source") or fixture["source"]),
                 warnings=list(item.get("warnings") or []),
             )
             for item in sorted(fixture.get("expirations") or [], key=lambda row: str(row.get("date") or ""))
@@ -157,7 +201,7 @@ class OptionsLabService:
             asOf=fixture["chainAsOf"],
             source=fixture["source"],
             warnings=list(PHASE1_WARNING_CODES),
-            metadata=self._metadata(force_refresh=force_refresh),
+            metadata=self._metadata(force_refresh=force_refresh, fixture=fixture),
         )
 
     def get_chain(
@@ -169,8 +213,9 @@ class OptionsLabService:
         max_spread_pct: Optional[float] = None,
         include_greeks: bool = True,
         force_refresh: bool = False,
+        market_data_provider: Optional[str] = None,
     ) -> OptionChainResponse:
-        fixture = self._fixture_for_symbol(symbol)
+        fixture = self._fixture_for_symbol(symbol, market_data_provider=market_data_provider)
         normalized_side = (side or "both").strip().lower()
         if normalized_side not in {"call", "put", "both"}:
             raise ValueError("side must be call, put, or both")
@@ -211,12 +256,12 @@ class OptionsLabService:
             chainAsOf=fixture["chainAsOf"],
             source=fixture["source"],
             warnings=list(PHASE1_WARNING_CODES),
-            metadata=self._metadata(force_refresh=force_refresh),
+            metadata=self._metadata(force_refresh=force_refresh, fixture=fixture),
         )
 
     def analyze(self, request: OptionsAnalyzeRequest | Dict[str, Any]) -> OptionsAnalyzeResponse:
         parsed = self._parse_analyze_request(request)
-        fixture = self._fixture_for_symbol(parsed.symbol)
+        fixture = self._fixture_for_symbol(parsed.symbol, market_data_provider=parsed.market_data_provider)
         contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
         target_date = self._parse_date(parsed.target_date)
         strategies = self._supported_strategies(parsed.strategies)
@@ -273,6 +318,7 @@ class OptionsLabService:
             limitations=list(PHASE3_LIMITATIONS),
             metadata=self._metadata(
                 force_refresh=parsed.force_refresh,
+                fixture=fixture,
                 scoring_engine=SCORING_MODEL_VERSION,
                 strategy_engine=SCENARIO_MODEL_VERSION,
             ),
@@ -280,7 +326,7 @@ class OptionsLabService:
 
     def scenario(self, request: OptionsScenarioRequest | Dict[str, Any]) -> OptionsScenarioResponse:
         parsed = self._parse_scenario_request(request)
-        fixture = self._fixture_for_symbol(parsed.symbol)
+        fixture = self._fixture_for_symbol(parsed.symbol, market_data_provider=parsed.market_data_provider)
         contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
         side = "call" if parsed.strategy == "long_call" else "put"
         contract = self._select_contract(
@@ -323,6 +369,7 @@ class OptionsLabService:
             limitations=list(PHASE3_LIMITATIONS),
             metadata=self._metadata(
                 force_refresh=parsed.force_refresh,
+                fixture=fixture,
                 scoring_engine=SCORING_MODEL_VERSION,
                 strategy_engine=SCENARIO_MODEL_VERSION,
             ),
@@ -333,7 +380,7 @@ class OptionsLabService:
     ) -> OptionsStrategyCompareResponse:
         parsed = self._parse_strategy_compare_request(request)
         requested = self._validate_compare_strategies(parsed.strategies)
-        fixture = self._fixture_for_symbol(parsed.symbol)
+        fixture = self._fixture_for_symbol(parsed.symbol, market_data_provider=parsed.market_data_provider)
         contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
         underlying_price = float((fixture.get("underlying") or {}).get("price") or 0)
         target_date = self._parse_date(parsed.target_date)
@@ -372,6 +419,7 @@ class OptionsLabService:
             limitations=list(PHASE4_LIMITATIONS),
             metadata=self._metadata(
                 force_refresh=parsed.force_refresh,
+                fixture=fixture,
                 scoring_engine=SCORING_MODEL_VERSION,
                 strategy_engine=STRATEGY_COMPARE_MODEL_VERSION,
             ),
@@ -379,7 +427,7 @@ class OptionsLabService:
 
     def evaluate_decision(self, request: OptionsDecisionRequest | Dict[str, Any]) -> OptionsDecisionResponse:
         parsed = self._parse_decision_request(request)
-        fixture = self._fixture_for_symbol(parsed.symbol)
+        fixture = self._fixture_for_symbol(parsed.symbol, market_data_provider=parsed.market_data_provider)
         contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
         if parsed.scenario_assumptions.get("omitGreeks"):
             contracts = [contract.model_copy(update={"greeks": None}) for contract in contracts]
@@ -469,6 +517,7 @@ class OptionsLabService:
             ),
             metadata=self._metadata(
                 force_refresh=parsed.force_refresh,
+                fixture=fixture,
                 scoring_engine=DECISION_ENGINE_MODEL_VERSION,
                 strategy_engine=DECISION_ENGINE_MODEL_VERSION,
             ),
@@ -1182,15 +1231,33 @@ class OptionsLabService:
             riskRewardRatio=best.risk_reward_ratio,
         )
 
-    def _fixture_for_symbol(self, symbol: str) -> Dict[str, Any]:
+    def _fixture_for_symbol(self, symbol: str, market_data_provider: Optional[str] = None) -> Dict[str, Any]:
         normalized = self._normalize_symbol(symbol)
-        if normalized != "TEM" or not self._is_us_equity_symbol(normalized):
+        if not self._is_us_equity_symbol(normalized):
             raise OptionsLabUnsupportedSymbol(normalized)
-        with self.fixture_path.open("r", encoding="utf-8") as handle:
-            fixture = json.load(handle)
+        provider = self._provider_for_request(market_data_provider)
+        try:
+            fixture = provider.get_chain(normalized)
+        except OptionsProviderUnsupportedSymbol as exc:
+            raise OptionsLabUnsupportedSymbol(exc.symbol, code=exc.code) from exc
+        except OptionsProviderUnavailable as exc:
+            raise OptionsLabProviderUnavailable(exc.provider_name, code=exc.code) from exc
+        except OptionsProviderError as exc:
+            raise OptionsLabProviderUnavailable(market_data_provider or self.provider_name, code=exc.code) from exc
         if str(fixture.get("symbol") or "").upper() != normalized:
             raise OptionsLabUnsupportedSymbol(normalized)
         return fixture
+
+    def _provider_for_request(self, market_data_provider: Optional[str]) -> OptionsMarketDataProvider:
+        if not market_data_provider or market_data_provider == self.market_data_provider.provider_name:
+            return self.market_data_provider
+        try:
+            return create_options_market_data_provider(
+                provider_name=market_data_provider,
+                fixture_path=self.fixture_path,
+            )
+        except OptionsProviderUnavailable as exc:
+            raise OptionsLabProviderUnavailable(exc.provider_name, code=exc.code) from exc
 
     @staticmethod
     def _normalize_symbol(symbol: str) -> str:
@@ -1203,13 +1270,19 @@ class OptionsLabService:
     @staticmethod
     def _metadata(
         force_refresh: bool = False,
+        fixture: Optional[Dict[str, Any]] = None,
         scoring_engine: str = "not_implemented_until_scoring_phase",
         strategy_engine: str = "not_implemented_until_later_phase",
     ) -> OptionsMetadata:
+        capabilities = dict((fixture or {}).get("providerCapabilities") or {})
+        provider_name = str((fixture or {}).get("providerName") or DEFAULT_OPTIONS_PROVIDER_NAME)
         return OptionsMetadata(
             forceRefreshIgnored=bool(force_refresh),
             scoringEngine=scoring_engine,
             strategyEngine=strategy_engine,
+            providerName=provider_name,
+            providerCapabilities=capabilities,
+            liveProviderEnabled=bool(capabilities.get("liveEnabled", False)),
         )
 
     @staticmethod
@@ -1218,9 +1291,10 @@ class OptionsLabService:
         return {
             "price": underlying.get("price"),
             "changePct": underlying.get("changePct"),
-            "source": "synthetic_fixture",
+            "source": underlying.get("source") or fixture.get("source") or "unknown",
             "asOf": underlying.get("asOf") or fixture.get("chainAsOf"),
             "freshness": underlying.get("freshness") or "synthetic_delayed",
+            "providerQuality": underlying.get("providerQuality") or fixture.get("providerQuality"),
         }
 
     def _contracts_for_fixture(self, fixture: Dict[str, Any], include_greeks: bool) -> Iterable[OptionContract]:
@@ -1245,6 +1319,7 @@ class OptionsLabService:
                 side=str(item.get("side") or "").lower(),
                 expiration=expiration,
                 strike=float(item.get("strike") or 0),
+                multiplier=int(item.get("multiplier") or fixture.get("multiplier") or CONTRACT_MULTIPLIER),
                 bid=bid,
                 ask=ask,
                 mid=mid,
@@ -1266,8 +1341,18 @@ class OptionsLabService:
                 spreadPct=spread_pct,
                 liquidityBucket=self._liquidity_bucket(spread_pct, self._int_or_none(item.get("openInterest"))),
                 asOf=fixture["chainAsOf"],
-                source=fixture["source"],
-                warnings=["synthetic_fixture_data", "delayed_or_stale_data_possible"],
+                source=str(item.get("source") or fixture["source"]),
+                freshness=str(item.get("freshness") or (fixture.get("underlying") or {}).get("freshness") or "unknown"),
+                providerQuality=item.get("providerQuality") or fixture.get("providerQuality"),
+                dataQuality=dict(item.get("dataQuality") or fixture.get("dataQuality") or {}),
+                warnings=list(
+                    dict.fromkeys(
+                        list(item.get("warnings") or [])
+                        + [
+                            "delayed_or_stale_data_possible",
+                        ]
+                    )
+                ),
             )
 
     @staticmethod

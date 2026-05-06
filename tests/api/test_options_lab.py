@@ -73,8 +73,14 @@ def test_chain_endpoint_filters_side_expiration_liquidity_and_spread() -> None:
         ]
         assert payload["puts"] == []
         assert all(item["greeks"] is None for item in payload["calls"])
+        assert payload["calls"][0]["multiplier"] == 100
+        assert payload["calls"][0]["freshness"] == "synthetic_delayed"
+        assert payload["calls"][0]["providerQuality"] == "synthetic_demo_only"
+        assert payload["calls"][0]["dataQuality"]["tradeable"] is False
         assert payload["filtersApplied"]["forceRefresh"] is True
         assert payload["metadata"]["forceRefreshIgnored"] is True
+        assert payload["metadata"]["providerName"] == "synthetic_fixture"
+        assert payload["metadata"]["liveProviderEnabled"] is False
     finally:
         client.close()
 
@@ -102,6 +108,22 @@ def test_unsupported_symbol_returns_sanitized_error() -> None:
         assert response.json()["detail"] == {
             "error": "unsupported_symbol_or_market",
             "message": "Options Lab Phase 1 supports fixture-backed US listed equity options only.",
+        }
+    finally:
+        client.close()
+
+
+def test_chain_endpoint_rejects_live_provider_selection_without_live_calls() -> None:
+    client = _client()
+    try:
+        response = client.get(
+            "/api/v1/options/underlyings/TEM/chain",
+            params={"marketDataProvider": "tradier"},
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == {
+            "error": "options_provider_not_implemented",
+            "message": "Requested Options Lab provider is fixture-only, disabled, or not implemented.",
         }
     finally:
         client.close()
@@ -492,5 +514,32 @@ def test_decision_endpoint_excludes_raw_payloads_and_live_provider_paths() -> No
             "trade ticket",
         ]:
             assert value not in text
+    finally:
+        client.close()
+
+
+def test_decision_endpoint_delayed_fixture_keeps_tradeability_cap() -> None:
+    client = _client()
+    try:
+        response = client.post(
+            "/api/v1/options/decision/evaluate",
+            json={
+                "symbol": "TEM",
+                "marketDataProvider": "delayed_fixture",
+                "strategy": "bull_call_spread",
+                "expiration": "2026-06-19",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+                "riskBudget": 600,
+            },
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["metadata"]["providerName"] == "delayed_fixture"
+        assert payload["metadata"]["providerCapabilities"]["liveEnabled"] is False
+        assert payload["dataQuality"]["dataQualityTier"] == "delayed_usable"
+        assert payload["freshness"]["freshness"] == "delayed"
+        assert payload["decisionLabel"] != "有条件可交易"
+        assert all(item["decisionLabel"] != "有条件可交易" for item in payload["rankedAlternatives"])
     finally:
         client.close()
