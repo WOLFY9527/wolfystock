@@ -503,6 +503,10 @@ Phase 1:
 - Add no frontend dependency on live providers.
 - Preserve provider ordering and cache behavior outside the new options namespace.
 
+Phase 1 implementation note (2026-05-06):
+
+- Delivered a fixture-backed backend-only `TEM` option chain API with safe normalized schemas, no live provider/LLM/broker calls in tests, and read-only limitations metadata. Scoring, scenario comparison, and portfolio/broker integration remain deferred.
+
 Phase 2:
 
 - Options Lab frontend with mocked data and no live provider dependency.
