@@ -54,7 +54,7 @@ from sqlalchemy.exc import IntegrityError
 
 from src.config import get_config
 from src.core.trading_calendar import MARKET_TIMEZONE, get_market_for_stock
-from src.utils.security import sanitize_message, sanitize_metadata
+from src.utils.security import is_sensitive_key, sanitize_message, sanitize_metadata
 from src.multi_user import (
     BOOTSTRAP_ADMIN_DISPLAY_NAME,
     BOOTSTRAP_ADMIN_USER_ID,
@@ -459,6 +459,66 @@ class AnalysisHistory(Base):
             'take_profit': self.take_profit,
             'is_test': bool(self.is_test),
             'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class DurableTaskState(Base):
+    """
+    Durable task/progress state for owner-scoped status reads.
+
+    This is a WS2-R1 foundation table. It mirrors process-local task state and
+    deliberately stores only bounded, sanitized metadata.
+    """
+
+    __tablename__ = 'durable_task_states'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(64), nullable=False, unique=True, index=True)
+    owner_user_id = Column(String(64), ForeignKey('app_users.id'), nullable=False, index=True)
+    task_type = Column(String(32), nullable=False, index=True)
+    route_family = Column(String(64))
+    status = Column(String(32), nullable=False, index=True)
+    progress = Column(Integer, nullable=False, default=0)
+    current_step = Column(Text)
+    error_code = Column(String(64))
+    error_summary = Column(Text)
+    idempotency_key_hash = Column(String(128), index=True)
+    dedupe_key_hash = Column(String(128), index=True)
+    metadata_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False, index=True)
+    started_at = Column(DateTime)
+    completed_at = Column(DateTime)
+    failed_at = Column(DateTime)
+    cancelled_at = Column(DateTime)
+
+    __table_args__ = (
+        Index('ix_durable_task_owner_created', 'owner_user_id', 'created_at'),
+        Index('ix_durable_task_owner_status_created', 'owner_user_id', 'status', 'created_at'),
+        Index('ix_durable_task_status_updated', 'status', 'updated_at'),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        metadata = DatabaseManager._safe_json_loads(self.metadata_json, {}) if self.metadata_json else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        return {
+            'task_id': self.task_id,
+            'owner_user_id': self.owner_user_id,
+            'task_type': self.task_type,
+            'route_family': self.route_family,
+            'status': self.status,
+            'progress': int(self.progress or 0),
+            'current_step': self.current_step,
+            'error_code': self.error_code,
+            'error_summary': self.error_summary,
+            'metadata': metadata,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'failed_at': self.failed_at.isoformat() if self.failed_at else None,
+            'cancelled_at': self.cancelled_at.isoformat() if self.cancelled_at else None,
         }
 
 
@@ -2340,6 +2400,234 @@ class DatabaseManager:
         if self.get_app_user(normalized) is None:
             raise ValueError(f"Unknown app user: {normalized}")
         return normalized
+
+    @staticmethod
+    def _hash_optional_key(value: Optional[str]) -> Optional[str]:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _sanitize_task_metadata(value: Any) -> Dict[str, Any]:
+        """Sanitize durable task metadata and drop secret-like keys entirely."""
+        def scrub(obj: Any) -> Any:
+            if isinstance(obj, dict):
+                cleaned: Dict[str, Any] = {}
+                for key, item in obj.items():
+                    key_text = str(key)
+                    if is_sensitive_key(key_text):
+                        continue
+                    cleaned[key_text[:80]] = scrub(item)
+                return cleaned
+            if isinstance(obj, list):
+                return [scrub(item) for item in obj[:50]]
+            if isinstance(obj, tuple):
+                return [scrub(item) for item in obj[:50]]
+            if isinstance(obj, str):
+                return sanitize_message(obj)[:500]
+            return obj
+
+        sanitized = sanitize_metadata(scrub(value or {}))
+        return sanitized if isinstance(sanitized, dict) else {}
+
+    @staticmethod
+    def _sanitize_task_error_summary(value: Any) -> Optional[str]:
+        text = sanitize_message(str(value or "").strip())
+        if not text:
+            return None
+        if "Traceback (most recent call last)" in text or "\n" in text:
+            return "Task failed; see server logs for sanitized details"
+        return text[:240]
+
+    @staticmethod
+    def _durable_task_payload(row: DurableTaskState) -> Dict[str, Any]:
+        return row.to_dict()
+
+    def create_durable_task_state(
+        self,
+        *,
+        task_id: str,
+        owner_user_id: Optional[str],
+        task_type: str,
+        status: str = "pending",
+        progress: int = 0,
+        current_step: Optional[str] = None,
+        route_family: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        dedupe_key: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        normalized_task_id = str(task_id or "").strip()
+        if not normalized_task_id:
+            raise ValueError("task_id is required")
+        resolved_owner_id = self.require_user_id(owner_user_id)
+        now = datetime.now()
+        safe_metadata = self._sanitize_task_metadata(metadata or {})
+        with self.session_scope() as session:
+            row = session.execute(
+                select(DurableTaskState)
+                .where(DurableTaskState.task_id == normalized_task_id)
+                .limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                row = DurableTaskState(
+                    task_id=normalized_task_id,
+                    owner_user_id=resolved_owner_id,
+                    task_type=str(task_type or "analysis")[:32],
+                    created_at=now,
+                )
+                session.add(row)
+            row.owner_user_id = resolved_owner_id
+            row.task_type = str(task_type or "analysis")[:32]
+            row.route_family = str(route_family or "")[:64] or None
+            row.status = str(status or "pending")[:32]
+            row.progress = max(0, min(int(progress or 0), 100))
+            row.current_step = sanitize_message(str(current_step or ""))[:500] or None
+            row.idempotency_key_hash = self._hash_optional_key(idempotency_key)
+            row.dedupe_key_hash = self._hash_optional_key(dedupe_key)
+            row.metadata_json = self._safe_json_dumps(safe_metadata)
+            row.updated_at = now
+            if row.status in {"processing", "running"} and row.started_at is None:
+                row.started_at = now
+            session.flush()
+            return self._durable_task_payload(row)
+
+    def update_durable_task_state(
+        self,
+        *,
+        task_id: str,
+        owner_user_id: Optional[str] = None,
+        status: Optional[str] = None,
+        progress: Optional[int] = None,
+        current_step: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        started_at: Optional[datetime] = None,
+        completed_at: Optional[datetime] = None,
+        failed_at: Optional[datetime] = None,
+        cancelled_at: Optional[datetime] = None,
+        error_code: Optional[str] = None,
+        error_summary: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        normalized_task_id = str(task_id or "").strip()
+        if not normalized_task_id:
+            return None
+        resolved_owner_id = self.require_user_id(owner_user_id) if owner_user_id else None
+        now = datetime.now()
+        with self.session_scope() as session:
+            query = select(DurableTaskState).where(DurableTaskState.task_id == normalized_task_id)
+            if resolved_owner_id:
+                query = query.where(DurableTaskState.owner_user_id == resolved_owner_id)
+            row = session.execute(query.limit(1)).scalar_one_or_none()
+            if row is None:
+                return None
+            if status is not None:
+                row.status = str(status or "")[:32]
+            if progress is not None:
+                row.progress = max(0, min(int(progress or 0), 100))
+            if current_step is not None:
+                row.current_step = sanitize_message(str(current_step or ""))[:500] or None
+            if metadata is not None:
+                prior = self._safe_json_loads(row.metadata_json, {})
+                if not isinstance(prior, dict):
+                    prior = {}
+                prior.update(self._sanitize_task_metadata(metadata))
+                row.metadata_json = self._safe_json_dumps(prior)
+            if started_at is not None:
+                row.started_at = started_at
+            if completed_at is not None:
+                row.completed_at = completed_at
+            if failed_at is not None:
+                row.failed_at = failed_at
+            if cancelled_at is not None:
+                row.cancelled_at = cancelled_at
+            if error_code is not None:
+                row.error_code = str(error_code or "")[:64] or None
+            if error_summary is not None:
+                row.error_summary = self._sanitize_task_error_summary(error_summary)
+            row.updated_at = now
+            session.flush()
+            return self._durable_task_payload(row)
+
+    def mark_durable_task_completed(
+        self,
+        *,
+        task_id: str,
+        owner_user_id: Optional[str] = None,
+        current_step: str = "分析完成",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        now = datetime.now()
+        return self.update_durable_task_state(
+            task_id=task_id,
+            owner_user_id=owner_user_id,
+            status="completed",
+            progress=100,
+            current_step=current_step,
+            metadata=metadata,
+            completed_at=now,
+        )
+
+    def mark_durable_task_failed(
+        self,
+        *,
+        task_id: str,
+        owner_user_id: Optional[str] = None,
+        error_code: Optional[str] = None,
+        error_summary: Optional[str] = None,
+        current_step: str = "分析失败",
+    ) -> Optional[Dict[str, Any]]:
+        now = datetime.now()
+        return self.update_durable_task_state(
+            task_id=task_id,
+            owner_user_id=owner_user_id,
+            status="failed",
+            progress=100,
+            current_step=current_step,
+            failed_at=now,
+            completed_at=now,
+            error_code=error_code,
+            error_summary=error_summary,
+        )
+
+    def get_durable_task_state(
+        self,
+        *,
+        task_id: str,
+        owner_user_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        normalized_task_id = str(task_id or "").strip()
+        if not normalized_task_id:
+            return None
+        resolved_owner_id = self.require_user_id(owner_user_id)
+        with self.get_session() as session:
+            row = session.execute(
+                select(DurableTaskState)
+                .where(
+                    DurableTaskState.task_id == normalized_task_id,
+                    DurableTaskState.owner_user_id == resolved_owner_id,
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            return self._durable_task_payload(row) if row is not None else None
+
+    def list_recent_durable_task_states(
+        self,
+        *,
+        owner_user_id: Optional[str],
+        status: Optional[str] = None,
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        resolved_owner_id = self.require_user_id(owner_user_id)
+        safe_limit = max(1, min(int(limit or 20), 100))
+        with self.get_session() as session:
+            query = select(DurableTaskState).where(DurableTaskState.owner_user_id == resolved_owner_id)
+            if status:
+                query = query.where(DurableTaskState.status == str(status).strip())
+            rows = session.execute(
+                query.order_by(desc(DurableTaskState.created_at)).limit(safe_limit)
+            ).scalars().all()
+            return [self._durable_task_payload(row) for row in rows]
 
     def get_app_user(self, user_id: str) -> Optional[AppUser]:
         normalized = str(user_id or "").strip()

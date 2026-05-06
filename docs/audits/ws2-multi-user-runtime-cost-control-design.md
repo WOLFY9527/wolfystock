@@ -11,6 +11,13 @@ That shape is not enough for public multi-user usage. Once the deployment has ma
 
 WS2-R0 is design only. It does not implement Redis, Celery, RQ, workers, migrations, API changes, frontend changes, dependencies, or runtime behavior.
 
+## WS2-R1 implementation note
+
+- Durable task/progress state is now backed by a new `durable_task_states` table and narrow `DatabaseManager` helpers for create/update/complete/fail/read flows.
+- Owner-scoped `/api/v1/analysis/status/{task_id}` reads now check the in-memory queue first, then durable state for the authenticated owner, then the existing analysis-history fallback for completed tasks.
+- The current process-local queue/SSE implementation remains in place. No worker, Redis, Celery, RQ, Kafka, or external queue cutover has been introduced.
+- Remaining WS2 work stays queued for later passes: WS2-R2 worker prototype, WS2-R3 external SSE/polling state, WS2-R4 quota enforcement, and WS2-R5 provider circuit breaker policy.
+
 ## 2. Current deployment assumptions
 
 - API single-process assumption: `docs/DEPLOY.md` and `docs/deploy-webui-cloud.md` currently state that `/api/v1/analysis/*` task queue and SSE state are process-local and should stay single-process unless sticky routing is intentionally provided.

@@ -468,6 +468,73 @@ class AnalysisTaskQueue:
                 "max_workers": self._max_workers,
                 "warning": warning,
             }
+
+    @staticmethod
+    def _durable_metadata_for_task(task: TaskInfo, *, force_refresh: Optional[bool] = None) -> Dict[str, Any]:
+        metadata: Dict[str, Any] = {
+            "stock_code": task.stock_code,
+            "stock_name": task.stock_name,
+            "report_type": task.report_type,
+            "selection_source": task.selection_source,
+        }
+        if force_refresh is not None:
+            metadata["force_refresh"] = bool(force_refresh)
+        return {key: value for key, value in metadata.items() if value not in (None, "")}
+
+    @staticmethod
+    def _mirror_durable_task_create(task: TaskInfo, *, force_refresh: bool) -> None:
+        """Best-effort WS2-R1 mirror; failures leave process-local queue semantics unchanged."""
+        try:
+            from src.storage import DatabaseManager
+
+            db = DatabaseManager.get_instance()
+            db.create_durable_task_state(
+                task_id=task.task_id,
+                owner_user_id=task.owner_id,
+                task_type="analysis",
+                route_family="/api/v1/analysis",
+                status=task.status.value,
+                progress=task.progress,
+                current_step=task.message,
+                dedupe_key=_dedupe_stock_code_key(task.stock_code, task.owner_id),
+                metadata=AnalysisTaskQueue._durable_metadata_for_task(task, force_refresh=force_refresh),
+            )
+        except Exception as exc:
+            logger.warning("[TaskQueue] Durable task create mirror failed for task_id=%s: %s", task.task_id, type(exc).__name__)
+
+    @staticmethod
+    def _mirror_durable_task_update(
+        task: TaskInfo,
+        *,
+        status: Optional[str] = None,
+        progress: Optional[int] = None,
+        current_step: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        started_at: Optional[datetime] = None,
+        completed_at: Optional[datetime] = None,
+        failed_at: Optional[datetime] = None,
+        error_code: Optional[str] = None,
+        error_summary: Optional[str] = None,
+    ) -> None:
+        try:
+            from src.storage import DatabaseManager
+
+            db = DatabaseManager.get_instance()
+            db.update_durable_task_state(
+                task_id=task.task_id,
+                owner_user_id=task.owner_id,
+                status=status,
+                progress=progress,
+                current_step=current_step,
+                metadata=metadata,
+                started_at=started_at,
+                completed_at=completed_at,
+                failed_at=failed_at,
+                error_code=error_code,
+                error_summary=error_summary,
+            )
+        except Exception as exc:
+            logger.warning("[TaskQueue] Durable task update mirror failed for task_id=%s: %s", task.task_id, type(exc).__name__)
     
     # ========== 任务提交与查询 ==========
     
@@ -611,6 +678,7 @@ class AnalysisTaskQueue:
                 )
                 self._tasks[task_id] = task_info
                 self._analyzing_stocks[dedupe_key] = task_id
+                self._mirror_durable_task_create(task_info, force_refresh=force_refresh)
 
                 try:
                     future = self.executor.submit(
@@ -769,6 +837,13 @@ class AnalysisTaskQueue:
                 configured_execution=task.execution,
                 owner_id=task.owner_id,
             )
+            self._mirror_durable_task_update(
+                task,
+                status=TaskStatus.PROCESSING.value,
+                progress=task.progress,
+                current_step=task.message,
+                started_at=task.started_at,
+            )
             return task.to_dict()
 
     def _mark_task_completed(
@@ -792,6 +867,14 @@ class AnalysisTaskQueue:
             task.stock_name = artifacts["stock_name"] or task.stock_name
             session_id = task.execution_session_id
             self._release_analyzing_stock_locked(task)
+            self._mirror_durable_task_update(
+                task,
+                status=TaskStatus.COMPLETED.value,
+                progress=100,
+                current_step=task.message,
+                completed_at=task.completed_at,
+                metadata={"query_id": artifacts["query_id"], "stock_name": task.stock_name},
+            )
             payload = task.to_dict()
 
         if session_id:
@@ -817,6 +900,16 @@ class AnalysisTaskQueue:
             task.message = f"分析失败: {error_message[:50]}"
             session_id = task.execution_session_id
             self._release_analyzing_stock_locked(task)
+            self._mirror_durable_task_update(
+                task,
+                status=TaskStatus.FAILED.value,
+                progress=100,
+                current_step="分析失败",
+                completed_at=task.completed_at,
+                failed_at=task.completed_at,
+                error_code="analysis_failed",
+                error_summary=error_message,
+            )
             payload = task.to_dict()
 
         if session_id:
@@ -924,6 +1017,13 @@ class AnalysisTaskQueue:
             task.progress = max(0, min(int(progress), 99))
             task.message = message
             task.execution = self._merge_execution_stage(task.execution, stage_key=stage_key, detail=message)
+            self._mirror_durable_task_update(
+                task,
+                status=TaskStatus.PROCESSING.value,
+                progress=task.progress,
+                current_step=message,
+                metadata={"stage": stage_key},
+            )
             payload = task.to_dict()
 
         self._broadcast_event("task_updated", payload)

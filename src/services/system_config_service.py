@@ -211,7 +211,30 @@ class SystemConfigService:
 
         task = get_task_queue().get_task(task_id, owner_id=owner_id)
         if task is None:
-            return None
+            try:
+                from src.storage import DatabaseManager
+
+                state = DatabaseManager.get_instance().get_durable_task_state(
+                    task_id=task_id,
+                    owner_user_id=owner_id,
+                )
+            except Exception:
+                state = None
+            if not state:
+                return None
+            metadata = state.get("metadata") if isinstance(state.get("metadata"), dict) else {}
+            return {
+                "task_id": state.get("task_id") or task_id,
+                "stock_code": metadata.get("stock_code") or "",
+                "stock_name": metadata.get("stock_name"),
+                "status": state.get("status") or "pending",
+                "progress": int(state.get("progress") or 0),
+                "message": state.get("current_step"),
+                "updated_at": state.get("updated_at"),
+                "execution_session_id": None,
+                "modules": [],
+                "final_result": None,
+            }
 
         task_result = task.result if isinstance(task.result, dict) else None
         updated_at = (

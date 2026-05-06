@@ -855,6 +855,42 @@ def _format_sse_event(event_type: str, data: Dict[str, Any]) -> str:
     return f"event: {event_type}\ndata: {json.dumps(jsonable_encoder(data), ensure_ascii=False)}\n\n"
 
 
+def _load_owner_durable_analysis_task(task_id: str, owner_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    try:
+        from src.storage import DatabaseManager
+
+        return DatabaseManager.get_instance().get_durable_task_state(
+            task_id=task_id,
+            owner_user_id=owner_id,
+        )
+    except ValueError:
+        return None
+    except Exception as exc:
+        logger.warning(
+            "读取 durable analysis task 状态失败: task_id=%s error=%s",
+            task_id,
+            type(exc).__name__,
+        )
+        return None
+
+
+def _task_status_from_durable_state(task_id: str, state: Dict[str, Any]) -> TaskStatus:
+    metadata = state.get("metadata") if isinstance(state.get("metadata"), dict) else {}
+    status = str(state.get("status") or "pending").strip().lower()
+    if status not in {"pending", "processing", "completed", "failed"}:
+        status = "processing"
+    return TaskStatus(
+        task_id=task_id,
+        status=status,
+        progress=max(0, min(int(state.get("progress") or 0), 100)),
+        result=None,
+        error=state.get("error_summary") if status == "failed" else None,
+        stock_name=metadata.get("stock_name"),
+        original_query=None,
+        selection_source=metadata.get("selection_source"),
+    )
+
+
 # ============================================================
 # GET /status/{task_id} - 查询单个任务状态
 # ============================================================
@@ -903,6 +939,10 @@ def get_analysis_status(
             original_query=task.original_query,
             selection_source=task.selection_source,
         )
+
+    durable_state = _load_owner_durable_analysis_task(task_id, owner_id)
+    if durable_state and str(durable_state.get("status") or "").lower() != "completed":
+        return _task_status_from_durable_state(task_id, durable_state)
     
     # 2. 从数据库查询已完成的记录
     try:
@@ -971,6 +1011,9 @@ def get_analysis_status(
                 "message": f"查询任务状态失败: {str(e)}"
             }
         )
+
+    if durable_state:
+        return _task_status_from_durable_state(task_id, durable_state)
 
     # 3. 任务不存在
     raise HTTPException(
