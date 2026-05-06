@@ -703,6 +703,323 @@ class QuotaReservation(Base):
         }
 
 
+class ProviderQuotaPolicy(Base):
+    """Provider quota policy foundation, not wired into runtime enforcement."""
+
+    __tablename__ = 'provider_quota_policies'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    policy_key = Column(String(128), nullable=False, unique=True, index=True)
+    scope_type = Column(String(32), nullable=False, index=True)
+    owner_user_id = Column(String(64), ForeignKey('app_users.id'), nullable=True, index=True)
+    guest_bucket_hash = Column(String(128), index=True)
+    provider = Column(String(64), nullable=False, index=True)
+    provider_category = Column(String(64), index=True)
+    route_family = Column(String(64), index=True)
+    window_type = Column(String(16), nullable=False, index=True)
+    request_cap = Column(Integer)
+    budget_unit_cap = Column(Integer)
+    retry_cap = Column(Integer)
+    timeout_cap_ms = Column(Integer)
+    fallback_cap = Column(Integer)
+    enabled = Column(Boolean, nullable=False, default=True, index=True)
+    effective_from = Column(DateTime)
+    effective_until = Column(DateTime)
+    metadata_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        Index('ix_provider_quota_policy_provider_route', 'scope_type', 'provider', 'provider_category', 'route_family', 'enabled'),
+        Index('ix_provider_quota_policy_owner_provider', 'owner_user_id', 'provider', 'provider_category', 'route_family', 'enabled'),
+        Index('ix_provider_quota_policy_guest_provider', 'guest_bucket_hash', 'provider', 'route_family', 'enabled'),
+        Index('ix_provider_quota_policy_effective', 'enabled', 'effective_from', 'effective_until'),
+        Index('ix_provider_quota_policy_dashboard', 'provider', 'route_family', 'updated_at'),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        metadata = DatabaseManager._safe_json_loads(self.metadata_json, {}) if self.metadata_json else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        return {
+            'policy_key': self.policy_key,
+            'scope_type': self.scope_type,
+            'owner_user_id': self.owner_user_id,
+            'guest_bucket_hash': self.guest_bucket_hash,
+            'provider': self.provider,
+            'provider_category': self.provider_category,
+            'route_family': self.route_family,
+            'window_type': self.window_type,
+            'request_cap': self.request_cap,
+            'budget_unit_cap': self.budget_unit_cap,
+            'retry_cap': self.retry_cap,
+            'timeout_cap_ms': self.timeout_cap_ms,
+            'fallback_cap': self.fallback_cap,
+            'enabled': bool(self.enabled),
+            'effective_from': self.effective_from.isoformat() if self.effective_from else None,
+            'effective_until': self.effective_until.isoformat() if self.effective_until else None,
+            'metadata': metadata,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ProviderQuotaWindow(Base):
+    """Provider request/unit counters for one synthetic accounting window."""
+
+    __tablename__ = 'provider_quota_windows'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    policy_key = Column(String(128), index=True)
+    owner_user_id = Column(String(64), ForeignKey('app_users.id'), nullable=True, index=True)
+    guest_bucket_hash = Column(String(128), index=True)
+    provider = Column(String(64), nullable=False, index=True)
+    provider_category = Column(String(64), index=True)
+    route_family = Column(String(64), index=True)
+    window_type = Column(String(16), nullable=False, index=True)
+    window_start = Column(DateTime, nullable=False, index=True)
+    window_end = Column(DateTime, nullable=False, index=True)
+    request_count = Column(Integer, nullable=False, default=0)
+    reserved_units = Column(Integer, nullable=False, default=0)
+    consumed_units = Column(Integer, nullable=False, default=0)
+    released_units = Column(Integer, nullable=False, default=0)
+    rejected_count = Column(Integer, nullable=False, default=0)
+    success_count = Column(Integer, nullable=False, default=0)
+    failure_count = Column(Integer, nullable=False, default=0)
+    timeout_count = Column(Integer, nullable=False, default=0)
+    provider_429_count = Column(Integer, nullable=False, default=0)
+    provider_403_count = Column(Integer, nullable=False, default=0)
+    fallback_count = Column(Integer, nullable=False, default=0)
+    probe_count = Column(Integer, nullable=False, default=0)
+    cache_only_count = Column(Integer, nullable=False, default=0)
+    stale_served_count = Column(Integer, nullable=False, default=0)
+    metadata_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        Index('ix_provider_quota_window_owner_provider', 'owner_user_id', 'provider', 'route_family', 'window_start', 'window_end'),
+        Index('ix_provider_quota_window_provider_route', 'provider', 'provider_category', 'route_family', 'window_start', 'window_end'),
+        Index('ix_provider_quota_window_probe', 'provider', 'route_family', 'provider_category', 'window_start'),
+        Index('ix_provider_quota_window_updated', 'updated_at'),
+        Index('ix_provider_quota_window_start', 'window_start'),
+        Index('ix_provider_quota_window_end', 'window_end'),
+        Index('ix_provider_quota_window_burn', 'provider', 'route_family', 'consumed_units', 'window_end'),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        metadata = DatabaseManager._safe_json_loads(self.metadata_json, {}) if self.metadata_json else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        return {
+            'policy_key': self.policy_key,
+            'owner_user_id': self.owner_user_id,
+            'guest_bucket_hash': self.guest_bucket_hash,
+            'provider': self.provider,
+            'provider_category': self.provider_category,
+            'route_family': self.route_family,
+            'window_type': self.window_type,
+            'window_start': self.window_start.isoformat() if self.window_start else None,
+            'window_end': self.window_end.isoformat() if self.window_end else None,
+            'request_count': int(self.request_count or 0),
+            'reserved_units': int(self.reserved_units or 0),
+            'consumed_units': int(self.consumed_units or 0),
+            'released_units': int(self.released_units or 0),
+            'rejected_count': int(self.rejected_count or 0),
+            'success_count': int(self.success_count or 0),
+            'failure_count': int(self.failure_count or 0),
+            'timeout_count': int(self.timeout_count or 0),
+            'provider_429_count': int(self.provider_429_count or 0),
+            'provider_403_count': int(self.provider_403_count or 0),
+            'fallback_count': int(self.fallback_count or 0),
+            'probe_count': int(self.probe_count or 0),
+            'cache_only_count': int(self.cache_only_count or 0),
+            'stale_served_count': int(self.stale_served_count or 0),
+            'metadata': metadata,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ProviderCircuitState(Base):
+    """Current durable provider circuit state for future read-only checks."""
+
+    __tablename__ = 'provider_circuit_states'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    scope_type = Column(String(32), nullable=False, index=True)
+    owner_user_id = Column(String(64), ForeignKey('app_users.id'), nullable=True, index=True)
+    guest_bucket_hash = Column(String(128), index=True)
+    provider = Column(String(64), nullable=False, index=True)
+    provider_category = Column(String(64), index=True)
+    route_family = Column(String(64), index=True)
+    state = Column(String(32), nullable=False, index=True)
+    reason_bucket = Column(String(64), index=True)
+    previous_state = Column(String(32))
+    opened_at = Column(DateTime)
+    cooldown_until = Column(DateTime, index=True)
+    half_open_started_at = Column(DateTime)
+    half_open_sample_limit = Column(Integer, nullable=False, default=0)
+    half_open_sample_count = Column(Integer, nullable=False, default=0)
+    success_sample_count = Column(Integer, nullable=False, default=0)
+    failure_sample_count = Column(Integer, nullable=False, default=0)
+    failure_count = Column(Integer, nullable=False, default=0)
+    success_count = Column(Integer, nullable=False, default=0)
+    last_transition_event_id = Column(Integer, index=True)
+    operator_action_ref = Column(String(128), index=True)
+    metadata_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        Index('ix_provider_circuit_state_provider_route', 'provider', 'provider_category', 'route_family', 'state'),
+        Index('ix_provider_circuit_state_cooldown', 'provider', 'cooldown_until'),
+        Index('ix_provider_circuit_state_owner', 'owner_user_id', 'provider', 'route_family', 'state'),
+        Index('ix_provider_circuit_state_guest', 'guest_bucket_hash', 'provider', 'route_family', 'state'),
+        Index('ix_provider_circuit_state_status_updated', 'state', 'updated_at'),
+        Index('ix_provider_circuit_state_provider_status', 'provider', 'state', 'updated_at'),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        metadata = DatabaseManager._safe_json_loads(self.metadata_json, {}) if self.metadata_json else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        return {
+            'id': self.id,
+            'scope_type': self.scope_type,
+            'owner_user_id': self.owner_user_id,
+            'guest_bucket_hash': self.guest_bucket_hash,
+            'provider': self.provider,
+            'provider_category': self.provider_category,
+            'route_family': self.route_family,
+            'state': self.state,
+            'reason_bucket': self.reason_bucket,
+            'previous_state': self.previous_state,
+            'opened_at': self.opened_at.isoformat() if self.opened_at else None,
+            'cooldown_until': self.cooldown_until.isoformat() if self.cooldown_until else None,
+            'half_open_started_at': self.half_open_started_at.isoformat() if self.half_open_started_at else None,
+            'half_open_sample_limit': int(self.half_open_sample_limit or 0),
+            'half_open_sample_count': int(self.half_open_sample_count or 0),
+            'success_sample_count': int(self.success_sample_count or 0),
+            'failure_sample_count': int(self.failure_sample_count or 0),
+            'failure_count': int(self.failure_count or 0),
+            'success_count': int(self.success_count or 0),
+            'last_transition_event_id': self.last_transition_event_id,
+            'operator_action_ref': self.operator_action_ref,
+            'metadata': metadata,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ProviderCircuitEvent(Base):
+    """Append-only provider circuit transition and policy event history."""
+
+    __tablename__ = 'provider_circuit_events'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    state_id = Column(Integer, index=True)
+    event_type = Column(String(32), nullable=False, index=True)
+    from_state = Column(String(32), index=True)
+    to_state = Column(String(32), index=True)
+    reason_bucket = Column(String(64), index=True)
+    owner_user_id = Column(String(64), ForeignKey('app_users.id'), nullable=True, index=True)
+    guest_bucket_hash = Column(String(128), index=True)
+    provider = Column(String(64), nullable=False, index=True)
+    provider_category = Column(String(64), index=True)
+    route_family = Column(String(64), index=True)
+    request_count_bucket = Column(String(32))
+    duration_bucket_ms = Column(Integer)
+    failure_count_bucket = Column(String(32))
+    quota_window_start = Column(DateTime)
+    quota_window_end = Column(DateTime)
+    operator_action_ref = Column(String(128), index=True)
+    metadata_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        Index('ix_provider_circuit_event_created', 'created_at'),
+        Index('ix_provider_circuit_event_provider_time', 'provider', 'provider_category', 'route_family', 'created_at'),
+        Index('ix_provider_circuit_event_to_state_time', 'to_state', 'created_at'),
+        Index('ix_provider_circuit_event_operator_time', 'operator_action_ref', 'created_at'),
+        Index('ix_provider_circuit_event_owner_time', 'owner_user_id', 'created_at'),
+        Index('ix_provider_circuit_event_type_time', 'event_type', 'created_at'),
+        Index('ix_provider_circuit_event_reason_time', 'reason_bucket', 'created_at'),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        metadata = DatabaseManager._safe_json_loads(self.metadata_json, {}) if self.metadata_json else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        return {
+            'id': self.id,
+            'state_id': self.state_id,
+            'event_type': self.event_type,
+            'from_state': self.from_state,
+            'to_state': self.to_state,
+            'reason_bucket': self.reason_bucket,
+            'owner_user_id': self.owner_user_id,
+            'guest_bucket_hash': self.guest_bucket_hash,
+            'provider': self.provider,
+            'provider_category': self.provider_category,
+            'route_family': self.route_family,
+            'request_count_bucket': self.request_count_bucket,
+            'duration_bucket_ms': self.duration_bucket_ms,
+            'failure_count_bucket': self.failure_count_bucket,
+            'quota_window_start': self.quota_window_start.isoformat() if self.quota_window_start else None,
+            'quota_window_end': self.quota_window_end.isoformat() if self.quota_window_end else None,
+            'operator_action_ref': self.operator_action_ref,
+            'metadata': metadata,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class ProviderProbeEvent(Base):
+    """Bounded admin or synthetic probe event storage, separate from live provider calls."""
+
+    __tablename__ = 'provider_probe_events'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    probe_type = Column(String(32), nullable=False, index=True)
+    probe_source = Column(String(32), nullable=False, index=True)
+    actor_user_id = Column(String(64), ForeignKey('app_users.id'), nullable=True, index=True)
+    provider = Column(String(64), nullable=False, index=True)
+    provider_category = Column(String(64), index=True)
+    route_family = Column(String(64), index=True)
+    state_id = Column(Integer, index=True)
+    result_bucket = Column(String(64), nullable=False, index=True)
+    duration_bucket_ms = Column(Integer)
+    metadata_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    __table_args__ = (
+        Index('ix_provider_probe_event_provider_time', 'provider', 'provider_category', 'probe_type', 'created_at'),
+        Index('ix_provider_probe_event_actor_time', 'actor_user_id', 'created_at'),
+        Index('ix_provider_probe_event_result_time', 'result_bucket', 'created_at'),
+        Index('ix_provider_probe_event_state_time', 'state_id', 'created_at'),
+        Index('ix_provider_probe_event_created', 'created_at'),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        metadata = DatabaseManager._safe_json_loads(self.metadata_json, {}) if self.metadata_json else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        return {
+            'id': self.id,
+            'probe_type': self.probe_type,
+            'probe_source': self.probe_source,
+            'actor_user_id': self.actor_user_id,
+            'provider': self.provider,
+            'provider_category': self.provider_category,
+            'route_family': self.route_family,
+            'state_id': self.state_id,
+            'result_bucket': self.result_bucket,
+            'duration_bucket_ms': self.duration_bucket_ms,
+            'metadata': metadata,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class ExecutionLogSession(Base):
     """
     管理员可观测执行会话（D2）。
@@ -2067,6 +2384,66 @@ class DatabaseManager:
                 "quota_reservations",
                 "status, expires_at",
             )
+            self._create_index_if_missing(
+                conn,
+                "ix_provider_quota_policy_provider_route",
+                "provider_quota_policies",
+                "scope_type, provider, provider_category, route_family, enabled",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_provider_quota_policy_owner_provider",
+                "provider_quota_policies",
+                "owner_user_id, provider, provider_category, route_family, enabled",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_provider_quota_window_provider_route",
+                "provider_quota_windows",
+                "provider, provider_category, route_family, window_start, window_end",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_provider_quota_window_end",
+                "provider_quota_windows",
+                "window_end",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_provider_circuit_state_provider_route",
+                "provider_circuit_states",
+                "provider, provider_category, route_family, state",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_provider_circuit_state_provider_status",
+                "provider_circuit_states",
+                "provider, state, updated_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_provider_circuit_event_provider_time",
+                "provider_circuit_events",
+                "provider, provider_category, route_family, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_provider_circuit_event_to_state_time",
+                "provider_circuit_events",
+                "to_state, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_provider_probe_event_provider_time",
+                "provider_probe_events",
+                "provider, provider_category, probe_type, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_provider_probe_event_result_time",
+                "provider_probe_events",
+                "result_bucket, created_at",
+            )
 
             self._migrate_backtest_summaries_table(conn, bootstrap_user_id=bootstrap_user_id)
 
@@ -3395,6 +3772,530 @@ class DatabaseManager:
                 query.order_by(asc(QuotaPolicyDefinition.scope_type), asc(QuotaPolicyDefinition.policy_key))
             ).scalars().all()
             return [self._quota_policy_payload(row) for row in rows]
+
+    _PROVIDER_CIRCUIT_STATES = {
+        "closed",
+        "open",
+        "half_open",
+        "degraded_cache_only",
+        "disabled_by_operator",
+        "provider_quota_depleted",
+    }
+    _PROVIDER_CIRCUIT_REASONS = {
+        "timeout",
+        "provider_429",
+        "provider_403",
+        "provider_5xx",
+        "malformed_payload",
+        "insufficient_payload",
+        "auth_or_key_invalid",
+        "network_error",
+        "quota_policy_block",
+        "operator_disabled",
+        "synthetic_test",
+        "recovered",
+    }
+
+    @staticmethod
+    def _normalize_provider_label(value: Any, *, required: bool = True) -> Optional[str]:
+        text = sanitize_message(str(value or "").strip().lower())[:64]
+        if required and not text:
+            raise ValueError("provider is required")
+        return text or None
+
+    @staticmethod
+    def _normalize_provider_dimension(value: Any, limit: int = 64) -> Optional[str]:
+        text = sanitize_message(str(value or "").strip().lower())[:limit]
+        return text or None
+
+    @staticmethod
+    def _optional_equals(column, value: Optional[str]):
+        return column.is_(None) if value is None else column == value
+
+    @staticmethod
+    def _sanitize_provider_circuit_metadata(value: Any) -> Dict[str, Any]:
+        """Sanitize provider circuit metadata and drop raw payload/secret-like keys."""
+        blocked_key_fragments = (
+            "api_key",
+            "apikey",
+            "auth",
+            "cookie",
+            "credential",
+            "exception",
+            "payload",
+            "password",
+            "private_key",
+            "query",
+            "request",
+            "response",
+            "secret",
+            "session",
+            "stack",
+            "token",
+            "traceback",
+            "url",
+            "webhook",
+        )
+
+        def scrub(obj: Any) -> Any:
+            if isinstance(obj, dict):
+                cleaned: Dict[str, Any] = {}
+                for key, item in obj.items():
+                    key_text = str(key)
+                    key_lower = key_text.lower()
+                    if is_sensitive_key(key_text) or any(fragment in key_lower for fragment in blocked_key_fragments):
+                        continue
+                    scrubbed = scrub(item)
+                    if scrubbed is not None:
+                        cleaned[key_text[:80]] = scrubbed
+                return cleaned
+            if isinstance(obj, list):
+                values = [scrub(item) for item in obj[:50]]
+                return [item for item in values if item is not None]
+            if isinstance(obj, tuple):
+                values = [scrub(item) for item in obj[:50]]
+                return [item for item in values if item is not None]
+            if isinstance(obj, str):
+                text = obj.strip()
+                lowered = text.lower()
+                if (
+                    "http://" in lowered
+                    or "https://" in lowered
+                    or "traceback (most recent call last)" in lowered
+                    or "api_key" in lowered
+                    or "token=" in lowered
+                    or "cookie=" in lowered
+                    or "session=" in lowered
+                ):
+                    return None
+                return sanitize_message(text)[:500]
+            return obj
+
+        sanitized = sanitize_metadata(scrub(value or {}))
+        return sanitized if isinstance(sanitized, dict) else {}
+
+    @staticmethod
+    def _provider_circuit_state_payload(row: ProviderCircuitState) -> Dict[str, Any]:
+        return row.to_dict()
+
+    @staticmethod
+    def _provider_circuit_event_payload(row: ProviderCircuitEvent) -> Dict[str, Any]:
+        return row.to_dict()
+
+    @staticmethod
+    def _provider_quota_window_payload(row: ProviderQuotaWindow) -> Dict[str, Any]:
+        return row.to_dict()
+
+    @staticmethod
+    def _provider_probe_event_payload(row: ProviderProbeEvent) -> Dict[str, Any]:
+        return row.to_dict()
+
+    def _provider_circuit_state_query(
+        self,
+        *,
+        scope_type: str,
+        owner_user_id: Optional[str],
+        guest_bucket_hash: Optional[str],
+        provider: str,
+        provider_category: Optional[str],
+        route_family: Optional[str],
+    ):
+        return select(ProviderCircuitState).where(
+            ProviderCircuitState.scope_type == scope_type,
+            self._optional_equals(ProviderCircuitState.owner_user_id, owner_user_id),
+            self._optional_equals(ProviderCircuitState.guest_bucket_hash, guest_bucket_hash),
+            ProviderCircuitState.provider == provider,
+            self._optional_equals(ProviderCircuitState.provider_category, provider_category),
+            self._optional_equals(ProviderCircuitState.route_family, route_family),
+        )
+
+    def upsert_provider_circuit_state(
+        self,
+        *,
+        provider: str,
+        state: str,
+        scope_type: str = "provider",
+        provider_category: Optional[str] = None,
+        route_family: Optional[str] = None,
+        owner_user_id: Optional[str] = None,
+        guest_bucket_hash: Optional[str] = None,
+        reason_bucket: Optional[str] = None,
+        cooldown_until: Optional[datetime] = None,
+        half_open_started_at: Optional[datetime] = None,
+        half_open_sample_limit: Optional[int] = None,
+        half_open_sample_count: Optional[int] = None,
+        success_sample_count: Optional[int] = None,
+        failure_sample_count: Optional[int] = None,
+        failure_count: Optional[int] = None,
+        success_count: Optional[int] = None,
+        operator_action_ref: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        now: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        normalized_provider = self._normalize_provider_label(provider)
+        normalized_scope = self._normalize_provider_dimension(scope_type, 32) or "provider"
+        normalized_state = self._normalize_provider_dimension(state, 32) or "closed"
+        if normalized_state not in self._PROVIDER_CIRCUIT_STATES:
+            raise ValueError("unsupported provider circuit state")
+        normalized_reason = self._normalize_provider_dimension(reason_bucket, 64)
+        if normalized_reason and normalized_reason not in self._PROVIDER_CIRCUIT_REASONS:
+            raise ValueError("unsupported provider circuit reason bucket")
+        normalized_category = self._normalize_provider_dimension(provider_category, 64)
+        normalized_route = self._normalize_provider_dimension(route_family, 64)
+        normalized_owner = sanitize_message(str(owner_user_id or "").strip())[:64] or None
+        normalized_guest = sanitize_message(str(guest_bucket_hash or "").strip())[:128] or None
+        current_time = now or datetime.now()
+        safe_metadata = self._sanitize_provider_circuit_metadata(metadata or {})
+        safe_operator_ref = sanitize_message(str(operator_action_ref or "").strip())[:128] or None
+
+        with self.session_scope() as session:
+            row = session.execute(
+                self._provider_circuit_state_query(
+                    scope_type=normalized_scope,
+                    owner_user_id=normalized_owner,
+                    guest_bucket_hash=normalized_guest,
+                    provider=normalized_provider,
+                    provider_category=normalized_category,
+                    route_family=normalized_route,
+                ).limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                row = ProviderCircuitState(
+                    scope_type=normalized_scope,
+                    owner_user_id=normalized_owner,
+                    guest_bucket_hash=normalized_guest,
+                    provider=normalized_provider,
+                    provider_category=normalized_category,
+                    route_family=normalized_route,
+                    created_at=current_time,
+                )
+                session.add(row)
+            previous = row.state
+            row.previous_state = previous if previous and previous != normalized_state else row.previous_state
+            row.state = normalized_state
+            row.reason_bucket = normalized_reason
+            row.cooldown_until = cooldown_until
+            row.half_open_started_at = half_open_started_at
+            row.half_open_sample_limit = max(0, int(half_open_sample_limit or 0)) if half_open_sample_limit is not None else int(row.half_open_sample_limit or 0)
+            row.half_open_sample_count = max(0, int(half_open_sample_count or 0)) if half_open_sample_count is not None else int(row.half_open_sample_count or 0)
+            row.success_sample_count = max(0, int(success_sample_count or 0)) if success_sample_count is not None else int(row.success_sample_count or 0)
+            row.failure_sample_count = max(0, int(failure_sample_count or 0)) if failure_sample_count is not None else int(row.failure_sample_count or 0)
+            row.failure_count = max(0, int(failure_count or 0)) if failure_count is not None else int(row.failure_count or 0)
+            row.success_count = max(0, int(success_count or 0)) if success_count is not None else int(row.success_count or 0)
+            row.opened_at = current_time if normalized_state in {"open", "degraded_cache_only", "provider_quota_depleted"} and row.opened_at is None else row.opened_at
+            if normalized_state == "closed":
+                row.opened_at = None
+                row.cooldown_until = None
+            row.operator_action_ref = safe_operator_ref
+            row.metadata_json = self._safe_json_dumps(safe_metadata)
+            row.updated_at = current_time
+            session.flush()
+            return self._provider_circuit_state_payload(row)
+
+    def get_provider_circuit_state(
+        self,
+        *,
+        provider: str,
+        scope_type: str = "provider",
+        provider_category: Optional[str] = None,
+        route_family: Optional[str] = None,
+        owner_user_id: Optional[str] = None,
+        guest_bucket_hash: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        normalized_provider = self._normalize_provider_label(provider)
+        with self.get_session() as session:
+            row = session.execute(
+                self._provider_circuit_state_query(
+                    scope_type=self._normalize_provider_dimension(scope_type, 32) or "provider",
+                    owner_user_id=sanitize_message(str(owner_user_id or "").strip())[:64] or None,
+                    guest_bucket_hash=sanitize_message(str(guest_bucket_hash or "").strip())[:128] or None,
+                    provider=normalized_provider,
+                    provider_category=self._normalize_provider_dimension(provider_category, 64),
+                    route_family=self._normalize_provider_dimension(route_family, 64),
+                ).limit(1)
+            ).scalar_one_or_none()
+            return self._provider_circuit_state_payload(row) if row is not None else None
+
+    def append_provider_circuit_event(
+        self,
+        *,
+        provider: str,
+        event_type: str,
+        from_state: Optional[str] = None,
+        to_state: Optional[str] = None,
+        state_id: Optional[int] = None,
+        reason_bucket: Optional[str] = None,
+        provider_category: Optional[str] = None,
+        route_family: Optional[str] = None,
+        owner_user_id: Optional[str] = None,
+        guest_bucket_hash: Optional[str] = None,
+        request_count_bucket: Optional[str] = None,
+        duration_bucket_ms: Optional[int] = None,
+        failure_count_bucket: Optional[str] = None,
+        quota_window_start: Optional[datetime] = None,
+        quota_window_end: Optional[datetime] = None,
+        operator_action_ref: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        created_at: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        normalized_provider = self._normalize_provider_label(provider)
+        normalized_reason = self._normalize_provider_dimension(reason_bucket, 64)
+        if normalized_reason and normalized_reason not in self._PROVIDER_CIRCUIT_REASONS:
+            raise ValueError("unsupported provider circuit reason bucket")
+        current_time = created_at or datetime.now()
+        row = ProviderCircuitEvent(
+            state_id=state_id,
+            event_type=self._normalize_provider_dimension(event_type, 32) or "state_transition",
+            from_state=self._normalize_provider_dimension(from_state, 32),
+            to_state=self._normalize_provider_dimension(to_state, 32),
+            reason_bucket=normalized_reason,
+            owner_user_id=sanitize_message(str(owner_user_id or "").strip())[:64] or None,
+            guest_bucket_hash=sanitize_message(str(guest_bucket_hash or "").strip())[:128] or None,
+            provider=normalized_provider,
+            provider_category=self._normalize_provider_dimension(provider_category, 64),
+            route_family=self._normalize_provider_dimension(route_family, 64),
+            request_count_bucket=sanitize_message(str(request_count_bucket or "").strip())[:32] or None,
+            duration_bucket_ms=max(0, int(duration_bucket_ms or 0)) if duration_bucket_ms is not None else None,
+            failure_count_bucket=sanitize_message(str(failure_count_bucket or "").strip())[:32] or None,
+            quota_window_start=quota_window_start,
+            quota_window_end=quota_window_end,
+            operator_action_ref=sanitize_message(str(operator_action_ref or "").strip())[:128] or None,
+            metadata_json=self._safe_json_dumps(self._sanitize_provider_circuit_metadata(metadata or {})),
+            created_at=current_time,
+        )
+        with self.session_scope() as session:
+            session.add(row)
+            session.flush()
+            return self._provider_circuit_event_payload(row)
+
+    def transition_provider_circuit_state(
+        self,
+        *,
+        provider: str,
+        to_state: str,
+        scope_type: str = "provider",
+        provider_category: Optional[str] = None,
+        route_family: Optional[str] = None,
+        owner_user_id: Optional[str] = None,
+        guest_bucket_hash: Optional[str] = None,
+        reason_bucket: Optional[str] = None,
+        cooldown_until: Optional[datetime] = None,
+        half_open_started_at: Optional[datetime] = None,
+        half_open_sample_limit: Optional[int] = None,
+        half_open_sample_count: Optional[int] = None,
+        success_sample_count: Optional[int] = None,
+        failure_sample_count: Optional[int] = None,
+        failure_count: Optional[int] = None,
+        success_count: Optional[int] = None,
+        operator_action_ref: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        now: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        current = self.get_provider_circuit_state(
+            provider=provider,
+            scope_type=scope_type,
+            provider_category=provider_category,
+            route_family=route_family,
+            owner_user_id=owner_user_id,
+            guest_bucket_hash=guest_bucket_hash,
+        )
+        from_state = str((current or {}).get("state") or "closed")
+        state = self.upsert_provider_circuit_state(
+            provider=provider,
+            state=to_state,
+            scope_type=scope_type,
+            provider_category=provider_category,
+            route_family=route_family,
+            owner_user_id=owner_user_id,
+            guest_bucket_hash=guest_bucket_hash,
+            reason_bucket=reason_bucket,
+            cooldown_until=cooldown_until,
+            half_open_started_at=half_open_started_at,
+            half_open_sample_limit=half_open_sample_limit,
+            half_open_sample_count=half_open_sample_count,
+            success_sample_count=success_sample_count,
+            failure_sample_count=failure_sample_count,
+            failure_count=failure_count,
+            success_count=success_count,
+            operator_action_ref=operator_action_ref,
+            metadata=metadata,
+            now=now,
+        )
+        event = self.append_provider_circuit_event(
+            provider=provider,
+            event_type="state_transition",
+            from_state=from_state,
+            to_state=to_state,
+            state_id=int(state["id"]),
+            reason_bucket=reason_bucket,
+            provider_category=provider_category,
+            route_family=route_family,
+            owner_user_id=owner_user_id,
+            guest_bucket_hash=guest_bucket_hash,
+            operator_action_ref=operator_action_ref,
+            metadata=metadata,
+            created_at=now,
+        )
+        with self.session_scope() as session:
+            row = session.get(ProviderCircuitState, int(state["id"]))
+            if row is not None:
+                row.last_transition_event_id = int(event["id"])
+                row.previous_state = from_state
+                row.updated_at = now or datetime.now()
+                session.flush()
+                state = self._provider_circuit_state_payload(row)
+        state["transition_event"] = event
+        return state
+
+    def list_current_provider_circuits(
+        self,
+        *,
+        provider: Optional[str] = None,
+        state: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 100), 500))
+        with self.get_session() as session:
+            query = select(ProviderCircuitState)
+            if provider:
+                query = query.where(ProviderCircuitState.provider == self._normalize_provider_label(provider))
+            if state:
+                query = query.where(ProviderCircuitState.state == self._normalize_provider_dimension(state, 32))
+            rows = session.execute(
+                query.order_by(desc(ProviderCircuitState.updated_at), asc(ProviderCircuitState.provider)).limit(safe_limit)
+            ).scalars().all()
+            return [self._provider_circuit_state_payload(row) for row in rows]
+
+    def update_provider_quota_window_counters(
+        self,
+        *,
+        provider: str,
+        window_type: str,
+        window_start: datetime,
+        window_end: datetime,
+        policy_key: Optional[str] = None,
+        provider_category: Optional[str] = None,
+        route_family: Optional[str] = None,
+        owner_user_id: Optional[str] = None,
+        guest_bucket_hash: Optional[str] = None,
+        request_delta: int = 0,
+        reserved_units_delta: int = 0,
+        consumed_units_delta: int = 0,
+        released_units_delta: int = 0,
+        rejected_delta: int = 0,
+        success_delta: int = 0,
+        failure_delta: int = 0,
+        timeout_delta: int = 0,
+        provider_429_delta: int = 0,
+        provider_403_delta: int = 0,
+        fallback_delta: int = 0,
+        probe_delta: int = 0,
+        cache_only_delta: int = 0,
+        stale_served_delta: int = 0,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        normalized_provider = self._normalize_provider_label(provider)
+        normalized_category = self._normalize_provider_dimension(provider_category, 64)
+        normalized_route = self._normalize_provider_dimension(route_family, 64)
+        normalized_owner = sanitize_message(str(owner_user_id or "").strip())[:64] or None
+        normalized_guest = sanitize_message(str(guest_bucket_hash or "").strip())[:128] or None
+        normalized_window_type = self._normalize_provider_dimension(window_type, 16) or "custom"
+        safe_policy_key = sanitize_message(str(policy_key or "").strip())[:128] or None
+        safe_metadata = self._sanitize_provider_circuit_metadata(metadata or {})
+        now = datetime.now()
+
+        def add_count(current: Any, delta: int) -> int:
+            return max(0, int(current or 0) + int(delta or 0))
+
+        with self.session_scope() as session:
+            row = session.execute(
+                select(ProviderQuotaWindow)
+                .where(
+                    self._optional_equals(ProviderQuotaWindow.policy_key, safe_policy_key),
+                    self._optional_equals(ProviderQuotaWindow.owner_user_id, normalized_owner),
+                    self._optional_equals(ProviderQuotaWindow.guest_bucket_hash, normalized_guest),
+                    ProviderQuotaWindow.provider == normalized_provider,
+                    self._optional_equals(ProviderQuotaWindow.provider_category, normalized_category),
+                    self._optional_equals(ProviderQuotaWindow.route_family, normalized_route),
+                    ProviderQuotaWindow.window_type == normalized_window_type,
+                    ProviderQuotaWindow.window_start == window_start,
+                    ProviderQuotaWindow.window_end == window_end,
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                row = ProviderQuotaWindow(
+                    policy_key=safe_policy_key,
+                    owner_user_id=normalized_owner,
+                    guest_bucket_hash=normalized_guest,
+                    provider=normalized_provider,
+                    provider_category=normalized_category,
+                    route_family=normalized_route,
+                    window_type=normalized_window_type,
+                    window_start=window_start,
+                    window_end=window_end,
+                    created_at=now,
+                )
+                session.add(row)
+            row.request_count = add_count(row.request_count, request_delta)
+            row.reserved_units = add_count(row.reserved_units, reserved_units_delta)
+            row.consumed_units = add_count(row.consumed_units, consumed_units_delta)
+            row.released_units = add_count(row.released_units, released_units_delta)
+            row.rejected_count = add_count(row.rejected_count, rejected_delta)
+            row.success_count = add_count(row.success_count, success_delta)
+            row.failure_count = add_count(row.failure_count, failure_delta)
+            row.timeout_count = add_count(row.timeout_count, timeout_delta)
+            row.provider_429_count = add_count(row.provider_429_count, provider_429_delta)
+            row.provider_403_count = add_count(row.provider_403_count, provider_403_delta)
+            row.fallback_count = add_count(row.fallback_count, fallback_delta)
+            row.probe_count = add_count(row.probe_count, probe_delta)
+            row.cache_only_count = add_count(row.cache_only_count, cache_only_delta)
+            row.stale_served_count = add_count(row.stale_served_count, stale_served_delta)
+            if metadata is not None:
+                prior = self._safe_json_loads(row.metadata_json, {})
+                if not isinstance(prior, dict):
+                    prior = {}
+                prior.update(safe_metadata)
+                row.metadata_json = self._safe_json_dumps(prior)
+            row.updated_at = now
+            session.flush()
+            return self._provider_quota_window_payload(row)
+
+    def record_provider_probe_event(
+        self,
+        *,
+        provider: str,
+        probe_type: str,
+        result_bucket: str,
+        probe_source: str = "synthetic",
+        actor_user_id: Optional[str] = None,
+        provider_category: Optional[str] = None,
+        route_family: Optional[str] = None,
+        state_id: Optional[int] = None,
+        duration_bucket_ms: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        created_at: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        normalized_result = self._normalize_provider_dimension(result_bucket, 64) or "success"
+        if normalized_result not in self._PROVIDER_CIRCUIT_REASONS and normalized_result != "success":
+            raise ValueError("unsupported provider probe result bucket")
+        row = ProviderProbeEvent(
+            probe_type=self._normalize_provider_dimension(probe_type, 32) or "synthetic_fixture",
+            probe_source=self._normalize_provider_dimension(probe_source, 32) or "synthetic",
+            actor_user_id=sanitize_message(str(actor_user_id or "").strip())[:64] or None,
+            provider=self._normalize_provider_label(provider),
+            provider_category=self._normalize_provider_dimension(provider_category, 64),
+            route_family=self._normalize_provider_dimension(route_family, 64),
+            state_id=state_id,
+            result_bucket=normalized_result,
+            duration_bucket_ms=max(0, int(duration_bucket_ms or 0)) if duration_bucket_ms is not None else None,
+            metadata_json=self._safe_json_dumps(self._sanitize_provider_circuit_metadata(metadata or {})),
+            created_at=created_at or datetime.now(),
+        )
+        with self.session_scope() as session:
+            session.add(row)
+            session.flush()
+            return self._provider_probe_event_payload(row)
 
     def get_app_user(self, user_id: str) -> Optional[AppUser]:
         normalized = str(user_id or "").strip()

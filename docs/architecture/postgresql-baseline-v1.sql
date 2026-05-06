@@ -630,3 +630,210 @@ create table if not exists market_data_usage_refs (
     created_at timestamptz not null default now(),
     unique (entity_type, entity_id, usage_role, dataset_version_id)
 );
+
+create table if not exists provider_quota_policies (
+    id bigserial primary key,
+    policy_key text not null unique,
+    scope_type text not null,
+    owner_user_id text references app_users(id),
+    guest_bucket_hash text,
+    provider text not null,
+    provider_category text,
+    route_family text,
+    window_type text not null,
+    request_cap integer,
+    budget_unit_cap integer,
+    retry_cap integer,
+    timeout_cap_ms integer,
+    fallback_cap integer,
+    enabled boolean not null default true,
+    effective_from timestamptz,
+    effective_until timestamptz,
+    metadata_json jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create index if not exists ix_provider_quota_policy_provider_route
+    on provider_quota_policies (scope_type, provider, provider_category, route_family, enabled);
+
+create index if not exists ix_provider_quota_policy_owner_provider
+    on provider_quota_policies (owner_user_id, provider, provider_category, route_family, enabled);
+
+create index if not exists ix_provider_quota_policy_guest_provider
+    on provider_quota_policies (guest_bucket_hash, provider, route_family, enabled);
+
+create index if not exists ix_provider_quota_policy_effective
+    on provider_quota_policies (enabled, effective_from, effective_until);
+
+create index if not exists ix_provider_quota_policy_dashboard
+    on provider_quota_policies (provider, route_family, updated_at);
+
+create table if not exists provider_quota_windows (
+    id bigserial primary key,
+    policy_key text,
+    owner_user_id text references app_users(id),
+    guest_bucket_hash text,
+    provider text not null,
+    provider_category text,
+    route_family text,
+    window_type text not null,
+    window_start timestamptz not null,
+    window_end timestamptz not null,
+    request_count integer not null default 0,
+    reserved_units integer not null default 0,
+    consumed_units integer not null default 0,
+    released_units integer not null default 0,
+    rejected_count integer not null default 0,
+    success_count integer not null default 0,
+    failure_count integer not null default 0,
+    timeout_count integer not null default 0,
+    provider_429_count integer not null default 0,
+    provider_403_count integer not null default 0,
+    fallback_count integer not null default 0,
+    probe_count integer not null default 0,
+    cache_only_count integer not null default 0,
+    stale_served_count integer not null default 0,
+    metadata_json jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create index if not exists ix_provider_quota_window_owner_provider
+    on provider_quota_windows (owner_user_id, provider, route_family, window_start, window_end);
+
+create index if not exists ix_provider_quota_window_provider_route
+    on provider_quota_windows (provider, provider_category, route_family, window_start, window_end);
+
+create index if not exists ix_provider_quota_window_probe
+    on provider_quota_windows (provider, route_family, provider_category, window_start);
+
+create index if not exists ix_provider_quota_window_updated
+    on provider_quota_windows (updated_at);
+
+create index if not exists ix_provider_quota_window_start
+    on provider_quota_windows (window_start);
+
+create index if not exists ix_provider_quota_window_end
+    on provider_quota_windows (window_end);
+
+create index if not exists ix_provider_quota_window_burn
+    on provider_quota_windows (provider, route_family, consumed_units, window_end);
+
+create table if not exists provider_circuit_states (
+    id bigserial primary key,
+    scope_type text not null,
+    owner_user_id text references app_users(id),
+    guest_bucket_hash text,
+    provider text not null,
+    provider_category text,
+    route_family text,
+    state text not null,
+    reason_bucket text,
+    previous_state text,
+    opened_at timestamptz,
+    cooldown_until timestamptz,
+    half_open_started_at timestamptz,
+    half_open_sample_limit integer not null default 0,
+    half_open_sample_count integer not null default 0,
+    success_sample_count integer not null default 0,
+    failure_sample_count integer not null default 0,
+    failure_count integer not null default 0,
+    success_count integer not null default 0,
+    last_transition_event_id bigint,
+    operator_action_ref text,
+    metadata_json jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create index if not exists ix_provider_circuit_state_provider_route
+    on provider_circuit_states (provider, provider_category, route_family, state);
+
+create index if not exists ix_provider_circuit_state_cooldown
+    on provider_circuit_states (provider, cooldown_until);
+
+create index if not exists ix_provider_circuit_state_owner
+    on provider_circuit_states (owner_user_id, provider, route_family, state);
+
+create index if not exists ix_provider_circuit_state_guest
+    on provider_circuit_states (guest_bucket_hash, provider, route_family, state);
+
+create index if not exists ix_provider_circuit_state_status_updated
+    on provider_circuit_states (state, updated_at);
+
+create index if not exists ix_provider_circuit_state_provider_status
+    on provider_circuit_states (provider, state, updated_at);
+
+create table if not exists provider_circuit_events (
+    id bigserial primary key,
+    state_id bigint,
+    event_type text not null,
+    from_state text,
+    to_state text,
+    reason_bucket text,
+    owner_user_id text references app_users(id),
+    guest_bucket_hash text,
+    provider text not null,
+    provider_category text,
+    route_family text,
+    request_count_bucket text,
+    duration_bucket_ms integer,
+    failure_count_bucket text,
+    quota_window_start timestamptz,
+    quota_window_end timestamptz,
+    operator_action_ref text,
+    metadata_json jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default now()
+);
+
+create index if not exists ix_provider_circuit_event_created
+    on provider_circuit_events (created_at);
+
+create index if not exists ix_provider_circuit_event_provider_time
+    on provider_circuit_events (provider, provider_category, route_family, created_at);
+
+create index if not exists ix_provider_circuit_event_to_state_time
+    on provider_circuit_events (to_state, created_at);
+
+create index if not exists ix_provider_circuit_event_operator_time
+    on provider_circuit_events (operator_action_ref, created_at);
+
+create index if not exists ix_provider_circuit_event_owner_time
+    on provider_circuit_events (owner_user_id, created_at);
+
+create index if not exists ix_provider_circuit_event_type_time
+    on provider_circuit_events (event_type, created_at);
+
+create index if not exists ix_provider_circuit_event_reason_time
+    on provider_circuit_events (reason_bucket, created_at);
+
+create table if not exists provider_probe_events (
+    id bigserial primary key,
+    probe_type text not null,
+    probe_source text not null,
+    actor_user_id text references app_users(id),
+    provider text not null,
+    provider_category text,
+    route_family text,
+    state_id bigint,
+    result_bucket text not null,
+    duration_bucket_ms integer,
+    metadata_json jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default now()
+);
+
+create index if not exists ix_provider_probe_event_provider_time
+    on provider_probe_events (provider, provider_category, probe_type, created_at);
+
+create index if not exists ix_provider_probe_event_actor_time
+    on provider_probe_events (actor_user_id, created_at);
+
+create index if not exists ix_provider_probe_event_result_time
+    on provider_probe_events (result_bucket, created_at);
+
+create index if not exists ix_provider_probe_event_state_time
+    on provider_probe_events (state_id, created_at);
+
+create index if not exists ix_provider_probe_event_created
+    on provider_probe_events (created_at);

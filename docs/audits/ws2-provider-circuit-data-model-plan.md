@@ -27,6 +27,14 @@ This plan explicitly does not implement:
 - no frontend/admin dashboard implementation;
 - no scanner, backtest, portfolio, Options Lab, RBAC, notification, DuckDB, broker, LLM, or live provider behavior change.
 
+## WS2-R5 storage foundation implementation note
+
+- Provider circuit/quota storage foundation has landed with additive SQLite/local ORM tables and matching PostgreSQL baseline DDL for `provider_quota_policies`, `provider_quota_windows`, `provider_circuit_states`, `provider_circuit_events`, and `provider_probe_events`.
+- Narrow `DatabaseManager` helpers now cover synthetic-only circuit state upsert/read, state transition plus event append, current circuit listing, provider quota window counter updates, probe event recording, and provider circuit metadata sanitization.
+- Synthetic tests cover initialization, state transitions, quota-depleted/operator-disabled states, quota window counters, metadata redaction, and no live provider path usage.
+- No enforcement was added. Runtime provider behavior, provider ordering/fallback, MarketCache TTL/SWR/cold-start/background refresh/payload shape, scanner/backtest/portfolio/Options/RBAC, notification, DuckDB, broker/order, and LLM routing remain unchanged.
+- Remaining work: dry-run provider counters, read-only admin diagnostics API, dashboard surfacing, and a separately approved enforcement pilot.
+
 ## 2. Proposed tables
 
 Design only. Names are proposed for a later additive schema pass.
