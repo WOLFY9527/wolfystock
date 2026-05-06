@@ -69,6 +69,82 @@ class QuotaPolicyService:
         token_units = max(1, math.ceil(max(0, int(token_estimate or 0)) / 1000))
         return self.route_weight(route_family) * token_units
 
+    def evaluate_quota(
+        self,
+        *,
+        owner_user_id: Optional[str],
+        route_family: str,
+        provider: Optional[str] = None,
+        model_tier: Optional[str] = None,
+        token_estimate: Optional[int] = None,
+        estimated_units: Optional[int] = None,
+        now: Optional[datetime] = None,
+    ) -> QuotaDecision:
+        """Evaluate quota policy without creating a reservation."""
+        route_key = self.classify_route_family(route_family)
+        units = max(
+            1,
+            int(estimated_units)
+            if estimated_units is not None
+            else self.estimate_budget_units(route_family=route_key, token_estimate=token_estimate),
+        )
+        if not self.enforcement_enabled:
+            return QuotaDecision(allowed=True, status="disabled", estimated_units=units)
+
+        current_time = now or datetime.now()
+        provider_key = self._normalize_optional(provider, lowercase=True)
+        model_key = self._normalize_optional(model_tier, lowercase=True)
+        policies = list(self._matching_policies(route_key, provider_key, model_key))
+
+        if self.global_kill_switch or self._policy_kill_switch_enabled(policies):
+            return self._reject("global_kill_switch", estimated_units=units)
+        if any(not bool(policy.get("enabled", True)) for policy in policies):
+            return self._reject("quota_disabled", estimated_units=units)
+
+        token_cap = self._minimum_cap(policies, "token_cap")
+        if token_cap is not None and int(token_estimate or 0) > token_cap:
+            return self._reject("token_cap_exceeded", estimated_units=units)
+
+        with self.db.session_scope() as session:
+            daily_start, _daily_end = self._window_bounds("daily", current_time)
+            monthly_start, _monthly_end = self._window_bounds("monthly", current_time)
+
+            if self._budget_exceeded(
+                session=session,
+                owner_user_id=owner_user_id,
+                window_type="daily",
+                window_start=daily_start,
+                budget_units=self._minimum_cap(policies, "daily_budget_units"),
+                estimate_units=units,
+            ):
+                return self._reject("budget_exceeded", estimated_units=units)
+            if self._budget_exceeded(
+                session=session,
+                owner_user_id=owner_user_id,
+                window_type="monthly",
+                window_start=monthly_start,
+                budget_units=self._minimum_cap(policies, "monthly_budget_units"),
+                estimate_units=units,
+            ):
+                return self._reject("budget_exceeded", estimated_units=units)
+
+            route_cap = self._minimum_cap(
+                [policy for policy in policies if policy.get("scope_type") == "route"],
+                "request_cap",
+            )
+            if route_cap is not None:
+                route_requests = self._request_count(
+                    session=session,
+                    owner_user_id=None,
+                    route_family=route_key,
+                    window_type="daily",
+                    window_start=daily_start,
+                )
+                if route_requests + 1 > route_cap:
+                    return self._reject("route_cap_exceeded", estimated_units=units)
+
+        return QuotaDecision(allowed=True, status="allowed", estimated_units=units)
+
     def reserve_quota(
         self,
         *,
@@ -456,6 +532,7 @@ class QuotaPolicyService:
         *,
         status: str = "rejected",
         reservation_id: Optional[str] = None,
+        estimated_units: int = 0,
     ) -> QuotaDecision:
         safe_reason = reason_code if reason_code in self.SAFE_REJECTION_REASON_CODES else "budget_exceeded"
         return QuotaDecision(
@@ -463,4 +540,5 @@ class QuotaPolicyService:
             status=status,
             reason_code=safe_reason,
             reservation_id=reservation_id,
+            estimated_units=estimated_units,
         )

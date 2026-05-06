@@ -116,3 +116,31 @@ class DuplicateCostSummaryResponse(_AdminCostModel):
     scanner_ai: DuplicateCostScannerAiSection = Field(alias="scannerAi")
     limitations: List[DuplicateCostLimitation] = Field(default_factory=list)
     metadata: DuplicateCostMetadata
+
+
+class QuotaDryRunRequest(_AdminCostModel):
+    owner_user_id: Optional[str] = Field(default=None, alias="ownerUserId")
+    route_family: str = Field(default="analysis", alias="routeFamily")
+    provider: Optional[str] = None
+    model_tier: Optional[str] = Field(default=None, alias="modelTier")
+    token_estimate: Optional[int] = Field(default=None, alias="tokenEstimate", ge=0)
+    estimated_units: Optional[int] = Field(default=None, alias="estimatedUnits", ge=0)
+    enforcement_mode: Literal["disabled", "dry_run", "enabled"] = Field(default="dry_run", alias="enforcementMode")
+    operation: Literal["estimate", "reserve", "consume", "release"] = "estimate"
+    reservation_id: Optional[str] = Field(default=None, alias="reservationId")
+    actual_units: Optional[int] = Field(default=None, alias="actualUnits", ge=0)
+    global_kill_switch: bool = Field(default=False, alias="globalKillSwitch")
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class QuotaDryRunResponse(_AdminCostModel):
+    allowed: bool
+    would_block: bool = Field(default=False, alias="wouldBlock")
+    status: str
+    reason_code: Optional[str] = Field(default=None, alias="reasonCode")
+    route_family: str = Field(default="analysis", alias="routeFamily")
+    estimated_units: int = Field(default=0, alias="estimatedUnits")
+    enforcement_mode: Literal["disabled", "dry_run", "enabled"] = Field(default="dry_run", alias="enforcementMode")
+    operation: Literal["estimate", "reserve", "consume", "release"] = "estimate"
+    reservation_id: Optional[str] = Field(default=None, alias="reservationId")
+    metadata: Dict[str, Any] = Field(default_factory=dict)

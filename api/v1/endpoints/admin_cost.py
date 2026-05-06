@@ -5,9 +5,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.deps import CurrentUser, require_admin_user
-from api.v1.schemas.admin_cost import DuplicateCostSummaryResponse
+from api.deps import CurrentUser, require_admin_capability, require_admin_user
+from api.v1.schemas.admin_cost import DuplicateCostSummaryResponse, QuotaDryRunRequest, QuotaDryRunResponse
 from src.services.duplicate_cost_summary_service import DuplicateCostSummaryService
+from src.services.quota_policy_service import QuotaPolicyService
 
 router = APIRouter()
 
@@ -36,3 +37,76 @@ def get_duplicate_cost_summary(
             status_code=400,
             detail={"error": "validation_error", "message": str(exc)},
         ) from exc
+
+
+@router.post(
+    "/cost/quota-dry-run",
+    response_model=QuotaDryRunResponse,
+    summary="Evaluate quota policy through a dry-run diagnostic path",
+)
+def run_quota_dry_run(
+    request: QuotaDryRunRequest,
+    _: CurrentUser = Depends(require_admin_capability("cost:observability:read")),
+) -> QuotaDryRunResponse:
+    route_family = QuotaPolicyService().classify_route_family(request.route_family)
+    enforcement_enabled = request.enforcement_mode != "disabled"
+    service = QuotaPolicyService(
+        enforcement_enabled=enforcement_enabled,
+        global_kill_switch=bool(request.global_kill_switch),
+    )
+
+    if request.operation == "estimate":
+        decision = service.evaluate_quota(
+            owner_user_id=request.owner_user_id,
+            route_family=route_family,
+            provider=request.provider,
+            model_tier=request.model_tier,
+            token_estimate=request.token_estimate,
+            estimated_units=request.estimated_units,
+        )
+    elif request.operation == "reserve":
+        decision = service.reserve_quota(
+            owner_user_id=request.owner_user_id,
+            route_family=route_family,
+            provider=request.provider,
+            model_tier=request.model_tier,
+            token_estimate=request.token_estimate,
+            estimated_units=request.estimated_units,
+            metadata={
+                **request.metadata,
+                "source": "admin_quota_dry_run",
+                "diagnostic_only": True,
+            },
+        )
+    elif request.operation == "consume":
+        decision = service.consume_reservation(
+            reservation_id=request.reservation_id,
+            actual_units=request.actual_units,
+        )
+    else:
+        decision = service.release_reservation(reservation_id=request.reservation_id)
+
+    return QuotaDryRunResponse(
+        allowed=bool(decision.allowed),
+        wouldBlock=not bool(decision.allowed),
+        status=decision.status,
+        reasonCode=decision.reason_code,
+        routeFamily=route_family,
+        estimatedUnits=int(decision.estimated_units or 0),
+        enforcementMode=request.enforcement_mode,
+        operation=request.operation,
+        reservationId=decision.reservation_id,
+        metadata={
+            "diagnosticOnly": True,
+            "liveEnforcement": False,
+            "noExternalCalls": True,
+            "dataSources": ["quota_policy_definitions", "quota_usage_windows", "quota_reservations"],
+            "redaction": [
+                "prompt_content",
+                "provider_payload",
+                "credentials",
+                "session_references",
+                "stack_details",
+            ],
+        },
+    )

@@ -44,6 +44,14 @@ WS2-R0 is design only. It does not implement Redis, Celery, RQ, workers, migrati
 - No live LLM/provider calls were added, and no LLM prompts, model routing, provider fallback, scanner AI behavior, MarketCache behavior, Options Lab behavior, portfolio/backtest/scanner calculations, notifications, broker/order paths, or DuckDB production runtime were changed.
 - Remaining WS2-R4 work: route integration/enforcement, admin dashboard and policy editing, provider quota buckets, circuit breaker policy, actual usage reconciliation from provider responses, and retention/cleanup dry runs for quota ledgers.
 
+## WS2-R4A dry-run/pilot integration note
+
+- Admin cost diagnostics now include `POST /api/v1/admin/cost/quota-dry-run`, guarded by `cost:observability:read`, for quota policy dry-run / pilot evaluation.
+- The endpoint classifies route family, estimates budget units, returns safe decision metadata, and supports explicit diagnostic `reserve`, `consume`, and `release` operations against the existing synthetic quota reservation tables.
+- Default behavior remains non-blocking: no live route enforcement, no user workflow blocking, no provider/LLM blocking, and no scanner/backtest/portfolio/Options/MarketCache/DuckDB/broker/notification behavior change.
+- The endpoint response is sanitized and does not include raw prompts, provider payloads, credentials, cookies, raw session identifiers, stack traces, or secret-like request metadata.
+- Future work remains separate: selected route enforcement, admin dashboard/policy editing, provider quota buckets, circuit breaker policy, and reconciliation from actual usage.
+
 ## 2. Current deployment assumptions
 
 - API single-process assumption: `docs/DEPLOY.md` and `docs/deploy-webui-cloud.md` currently state that `/api/v1/analysis/*` task queue and SSE state are process-local and should stay single-process unless sticky routing is intentionally provided.
