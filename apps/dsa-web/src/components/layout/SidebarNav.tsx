@@ -125,7 +125,14 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
 }) => {
   const location = useLocation();
   const { authEnabled, logout } = useAuth();
-  const { isGuest, isAdminAccount } = useProductSurface();
+  const {
+    isGuest,
+    canReadCostObservability,
+    canReadNotifications,
+    canReadProviders,
+    canReadSystemConfig,
+    canReadUsers,
+  } = useProductSurface();
   const { language, t, toggleLanguage } = useI18n();
   const completionBadge = useAgentChatStore((state) => state.completionBadge);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -248,7 +255,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </NavLink>
   ) : null;
 
-  const systemAction = isAdminAccount ? (
+  const systemAction = canReadSystemConfig ? (
     <NavLink
       to={consolePath}
       onClick={onNavigate}
@@ -272,7 +279,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </NavLink>
   ) : null;
 
-  const notificationAction = isAdminAccount ? (
+  const notificationAction = canReadNotifications ? (
     <NavLink
       to={notificationsPath}
       onClick={onNavigate}
@@ -296,7 +303,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </NavLink>
   ) : null;
 
-  const marketProviderAction = isAdminAccount ? (
+  const marketProviderAction = canReadProviders ? (
     <NavLink
       to={marketProvidersPath}
       onClick={onNavigate}
@@ -320,7 +327,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </NavLink>
   ) : null;
 
-  const userGovernanceAction = isAdminAccount ? (
+  const userGovernanceAction = canReadUsers ? (
     <NavLink
       to={userGovernancePath}
       onClick={onNavigate}
@@ -344,7 +351,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </NavLink>
   ) : null;
 
-  const costObservabilityAction = isAdminAccount ? (
+  const costObservabilityAction = canReadCostObservability ? (
     <NavLink
       to={costObservabilityPath}
       onClick={onNavigate}

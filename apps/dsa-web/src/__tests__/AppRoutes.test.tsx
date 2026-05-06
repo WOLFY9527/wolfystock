@@ -3,6 +3,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppContent } from '../App';
 import { isPreviewRoutePath } from '../utils/appRouteGuards';
+import type { AdminCapabilityFlags } from '../utils/adminCapabilities';
 
 const { useAuthMock, useProductSurfaceMock, setCurrentRouteMock, setLanguageMock, languageState } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
@@ -11,6 +12,30 @@ const { useAuthMock, useProductSurfaceMock, setCurrentRouteMock, setLanguageMock
   setLanguageMock: vi.fn(),
   languageState: { value: 'zh' as 'zh' | 'en' },
 }));
+
+const noCapabilities: AdminCapabilityFlags = {
+  canReadUsers: false,
+  canReadUserActivity: false,
+  canReadUserPortfolio: false,
+  canWriteUserSecurity: false,
+  canReadCostObservability: false,
+  canReadOpsLogs: false,
+  canReadProviders: false,
+  canReadNotifications: false,
+  canReadSystemConfig: false,
+};
+
+const fullCapabilities: AdminCapabilityFlags = {
+  canReadUsers: true,
+  canReadUserActivity: true,
+  canReadUserPortfolio: true,
+  canWriteUserSecurity: true,
+  canReadCostObservability: true,
+  canReadOpsLogs: true,
+  canReadProviders: true,
+  canReadNotifications: true,
+  canReadSystemConfig: true,
+};
 
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
@@ -173,6 +198,7 @@ describe('AppContent route flows', () => {
       isGuest: true,
       isAdmin: false,
       isAdminMode: false,
+      adminCapabilities: noCapabilities,
     });
     languageState.value = 'en';
   });
@@ -207,6 +233,7 @@ describe('AppContent route flows', () => {
       isGuest: false,
       isAdmin: false,
       isAdminMode: false,
+      adminCapabilities: noCapabilities,
     });
 
     languageState.value = 'en';
@@ -282,6 +309,7 @@ describe('AppContent route flows', () => {
       isGuest: false,
       isAdmin: false,
       isAdminMode: false,
+      adminCapabilities: noCapabilities,
     });
 
     renderAt('/login?redirect=%2Fportfolio');
@@ -351,6 +379,7 @@ describe('AppContent route flows', () => {
       isGuest: false,
       isAdmin: true,
       isAdminMode: false,
+      adminCapabilities: fullCapabilities,
     });
 
     renderAt('/settings/system');
@@ -370,6 +399,7 @@ describe('AppContent route flows', () => {
       isGuest: false,
       isAdmin: true,
       isAdminMode: true,
+      adminCapabilities: fullCapabilities,
     });
 
     renderAt('/settings/system');
@@ -389,11 +419,60 @@ describe('AppContent route flows', () => {
       isGuest: false,
       isAdmin: true,
       isAdminMode: true,
+      adminCapabilities: fullCapabilities,
     });
 
     renderAt('/zh/admin/market-providers');
 
     await waitFor(() => expect(screen.getByText('market-provider-operations-page')).toBeInTheDocument());
+  });
+
+  it('blocks an admin account from market providers when capability fields are absent', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: true,
+      isAdminAccount: true,
+      isAdminMode: true,
+      adminCapabilities: noCapabilities,
+    });
+
+    renderAt('/zh/admin/market-providers');
+
+    expect(await screen.findByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeInTheDocument();
+    expect(screen.queryByText('market-provider-operations-page')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['/zh/admin/logs', { ...noCapabilities, canReadOpsLogs: true }, 'admin-logs-page'],
+    ['/zh/admin/notifications', { ...noCapabilities, canReadNotifications: true }, 'admin-notifications-page'],
+    ['/zh/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
+    ['/zh/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
+    ['/zh/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
+  ])('renders %s only with its matching capability', async (path, adminCapabilities, pageText) => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: true,
+      isAdminMode: true,
+      adminCapabilities,
+    });
+
+    renderAt(path);
+
+    await waitFor(() => expect(screen.getByText(pageText)).toBeInTheDocument());
   });
 
   it('renders the localized cost observability route for admin accounts', async () => {
@@ -408,6 +487,7 @@ describe('AppContent route flows', () => {
       isGuest: false,
       isAdmin: true,
       isAdminMode: true,
+      adminCapabilities: fullCapabilities,
     });
 
     renderAt('/zh/admin/cost-observability');
@@ -427,6 +507,7 @@ describe('AppContent route flows', () => {
       isGuest: false,
       isAdmin: false,
       isAdminMode: false,
+      adminCapabilities: noCapabilities,
     });
 
     renderAt('/zh/admin/cost-observability');
@@ -449,6 +530,7 @@ describe('AppContent route flows', () => {
         isGuest: false,
         isAdmin: true,
         isAdminMode: true,
+        adminCapabilities: fullCapabilities,
       });
 
       renderAt(path);
@@ -469,6 +551,7 @@ describe('AppContent route flows', () => {
       isGuest: false,
       isAdmin: false,
       isAdminMode: false,
+      adminCapabilities: noCapabilities,
     });
 
     renderAt('/scanner');
@@ -488,6 +571,7 @@ describe('AppContent route flows', () => {
       isGuest: false,
       isAdmin: false,
       isAdminMode: false,
+      adminCapabilities: noCapabilities,
     });
 
     renderAt('/backtest/compare?runIds=101,202');
@@ -507,6 +591,7 @@ describe('AppContent route flows', () => {
       isGuest: false,
       isAdmin: false,
       isAdminMode: false,
+      adminCapabilities: noCapabilities,
     });
 
     renderAt('/zh/options-lab');
@@ -528,6 +613,7 @@ describe('AppContent route flows', () => {
         isGuest: false,
         isAdmin: false,
         isAdminMode: false,
+        adminCapabilities: noCapabilities,
       });
 
       renderAt(path);

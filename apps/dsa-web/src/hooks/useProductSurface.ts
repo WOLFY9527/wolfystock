@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getStoredUiLanguage } from '../i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname, shouldLocalizePath } from '../utils/localeRouting';
+import { resolveAdminCapabilityFlags } from '../utils/adminCapabilities';
 import {
   ADMIN_SURFACE_MODE_STORAGE_KEY,
   getAdminSurfaceModeServerSnapshot,
@@ -83,6 +84,7 @@ export function useProductSurface() {
   );
   const role = resolveProductSurfaceRole({ authEnabled, loggedIn, currentUser });
   const isAdminAccount = role === 'admin';
+  const adminCapabilities = resolveAdminCapabilityFlags(currentUser);
 
   useEffect(() => {
     if (!isAdminAccount && storedAdminSurfaceMode !== 'user') {
@@ -119,6 +121,8 @@ export function useProductSurface() {
     isUser: role === 'user',
     isAdmin: role === 'admin',
     isAdminAccount,
+    adminCapabilities,
+    ...adminCapabilities,
     surfaceMode,
     isAdminMode,
     isUserMode,

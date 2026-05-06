@@ -10,6 +10,16 @@ export type CurrentUser = {
   transitional: boolean;
   authEnabled: boolean;
   legacyAdmin?: boolean;
+  adminCapabilities?: string[];
+  canReadUsers?: boolean;
+  canReadUserActivity?: boolean;
+  canReadUserPortfolio?: boolean;
+  canWriteUserSecurity?: boolean;
+  canReadCostObservability?: boolean;
+  canReadOpsLogs?: boolean;
+  canReadProviders?: boolean;
+  canReadNotifications?: boolean;
+  canReadSystemConfig?: boolean;
 };
 
 export type AuthStatusResponse = {

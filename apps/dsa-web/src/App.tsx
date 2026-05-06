@@ -15,6 +15,7 @@ import {
 import type { UiLanguage } from './i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from './utils/localeRouting';
 import { isPreviewRoutePath } from './utils/appRouteGuards';
+import { canAccessAdminPath } from './utils/adminCapabilities';
 import { useAgentChatStore } from './stores/agentChatStore';
 
 const APP_BOOT_SPLASH_MIN_MS = 950;
@@ -208,11 +209,21 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
 export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const { language } = useI18n();
-  const { isAdmin, isGuest } = useProductSurface();
+  const { adminCapabilities, isAdminAccount, isGuest } = useProductSurface();
   const routePathname = stripLocalePrefix(location.pathname);
-  const gateCopy = getAdminSurfaceCopy(routePathname, language, isGuest);
+  const baseGateCopy = getAdminSurfaceCopy(routePathname, language, isGuest);
+  const gateCopy = isAdminAccount
+    ? {
+      ...baseGateCopy,
+      statusLabel: language === 'en' ? 'Capability Required' : '需要管理员能力',
+      title: language === 'en' ? 'This admin surface requires an additional capability' : '这个管理页面需要对应管理员能力',
+      description: language === 'en'
+        ? 'Your account is signed in as admin, but this frontend surface is hidden unless the current-user capability summary grants the matching read or write capability.'
+        : '当前账号已是管理员，但该前端页面只在 current-user 能力摘要授予对应读写能力时开放。',
+    }
+    : baseGateCopy;
 
-  if (isAdmin) {
+  if (canAccessAdminPath(routePathname, adminCapabilities)) {
     return <>{children}</>;
   }
 

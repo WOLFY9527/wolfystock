@@ -13,6 +13,7 @@ const {
   listUserActivity,
   listUsers,
   revokeAdminUserSessions,
+  useProductSurfaceMock,
 } = vi.hoisted(() => ({
   disableAdminUser: vi.fn(),
   enableAdminUser: vi.fn(),
@@ -23,6 +24,7 @@ const {
   getUserDetail: vi.fn(),
   listUserActivity: vi.fn(),
   revokeAdminUserSessions: vi.fn(),
+  useProductSurfaceMock: vi.fn(),
 }));
 
 vi.mock('../../api/adminUsers', async () => {
@@ -50,6 +52,18 @@ vi.mock('../../contexts/UiLanguageContext', () => ({
     t: (key: string) => key,
   }),
 }));
+
+vi.mock('../../hooks/useProductSurface', () => ({
+  useProductSurface: () => useProductSurfaceMock(),
+}));
+
+const fullCapabilities = {
+  canReadUsers: true,
+  canReadUserActivity: true,
+  canReadUserPortfolio: true,
+  canReadOpsLogs: true,
+  canWriteUserSecurity: true,
+};
 
 const userItem = {
   id: 'user-123',
@@ -265,6 +279,7 @@ function expectNoSecrets() {
 describe('AdminUsersPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useProductSurfaceMock.mockReturnValue(fullCapabilities);
   });
 
   it('renders the user directory with safe fields and no raw secrets', async () => {
@@ -278,6 +293,21 @@ describe('AdminUsersPage', () => {
     expect(screen.getByText('用户目录')).toBeInTheDocument();
     expect(screen.getByText('只读')).toBeInTheDocument();
     expect(screen.getByText('Admin Logs')).toHaveAttribute('href', '/zh/admin/logs?user_id=user-123');
+    expectNoSecrets();
+  });
+
+  it('hides admin log drill-through links without ops log capability', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      ...fullCapabilities,
+      canReadOpsLogs: false,
+    });
+    listUsers.mockResolvedValue({ items: [userItem], total: 1, limit: 50, offset: 0, hasMore: false });
+
+    renderAt('/zh/admin/users');
+
+    expect(await screen.findByText('Alice')).toBeInTheDocument();
+    expect(screen.queryByText('Admin Logs')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('/zh/admin/logs');
     expectNoSecrets();
   });
 
@@ -363,6 +393,44 @@ describe('AdminUsersPage', () => {
     expectNoSecrets();
   });
 
+  it('hides portfolio tab and does not fetch portfolio data when portfolio capability is missing', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      ...fullCapabilities,
+      canReadUserPortfolio: false,
+    });
+    getUserDetail.mockResolvedValue(detailPayload);
+
+    renderAt('/zh/admin/users/user-123');
+
+    expect(await screen.findByText('Identity')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '组合' })).not.toBeInTheDocument();
+    expect(screen.getByText('组合 · 后续')).toBeInTheDocument();
+    expect(getAdminUserPortfolioSummary).not.toHaveBeenCalled();
+    expect(getAdminUserHoldings).not.toHaveBeenCalled();
+    expect(getAdminUserPortfolioActivity).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('Growth Main');
+    expectNoSecrets();
+  });
+
+  it('does not fetch or render portfolio data from a direct portfolio tab URL without capability', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      ...fullCapabilities,
+      canReadUserPortfolio: false,
+    });
+    getUserDetail.mockResolvedValue(detailPayload);
+
+    renderAt('/zh/admin/users/user-123?tab=portfolio');
+
+    expect(await screen.findByText('不可查看用户组合')).toBeInTheDocument();
+    expect(screen.getByText('当前账号缺少组合读取权限，前端不会请求或渲染组合账户、持仓或活动数据。')).toBeInTheDocument();
+    expect(screen.queryByText('组合只读总览')).not.toBeInTheDocument();
+    expect(getAdminUserPortfolioSummary).not.toHaveBeenCalled();
+    expect(getAdminUserHoldings).not.toHaveBeenCalled();
+    expect(getAdminUserPortfolioActivity).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('Growth Main');
+    expectNoSecrets();
+  });
+
   it('renders portfolio empty and error states', async () => {
     getUserDetail.mockResolvedValue(detailPayload);
     getAdminUserPortfolioSummary.mockResolvedValueOnce({ ...portfolioSummaryPayload, accountCount: 0, activeAccountCount: 0, accounts: [] });
@@ -419,6 +487,25 @@ describe('AdminUsersPage', () => {
       revokeSessions: true,
     }));
     expect(await screen.findByText('audit_evt_disable_1')).toBeInTheDocument();
+    expectNoSecrets();
+  });
+
+  it('hides security write actions when security write capability is missing', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      ...fullCapabilities,
+      canWriteUserSecurity: false,
+    });
+    getUserDetail.mockResolvedValue(detailPayload);
+
+    renderAt('/zh/admin/users/user-123?tab=security');
+
+    expect(await screen.findByText('不可执行安全操作')).toBeInTheDocument();
+    expect(screen.getByText('当前账号缺少用户安全写入权限，前端不会渲染禁用、启用或撤销会话按钮。')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '禁用账户' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '撤销全部会话' })).not.toBeInTheDocument();
+    expect(disableAdminUser).not.toHaveBeenCalled();
+    expect(enableAdminUser).not.toHaveBeenCalled();
+    expect(revokeAdminUserSessions).not.toHaveBeenCalled();
     expectNoSecrets();
   });
 

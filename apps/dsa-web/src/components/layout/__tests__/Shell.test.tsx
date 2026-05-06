@@ -79,6 +79,18 @@ const ShellRailFixture = () => {
 
 const settleDrawerMotion = () => new Promise((resolve) => window.setTimeout(resolve, 260));
 const settleDrawerStability = () => new Promise((resolve) => window.setTimeout(resolve, 480));
+const fullCapabilityAdminUser = {
+  isAdmin: true,
+  canReadUsers: true,
+  canReadUserActivity: true,
+  canReadUserPortfolio: true,
+  canWriteUserSecurity: true,
+  canReadCostObservability: true,
+  canReadOpsLogs: true,
+  canReadProviders: true,
+  canReadNotifications: true,
+  canReadSystemConfig: true,
+};
 
 describe('Shell', () => {
   beforeEach(() => {
@@ -279,7 +291,7 @@ describe('Shell', () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
-      currentUser: { isAdmin: true },
+      currentUser: fullCapabilityAdminUser,
       logout: mockLogout,
     });
 
@@ -470,7 +482,7 @@ describe('Shell', () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
-      currentUser: { isAdmin: true },
+      currentUser: fullCapabilityAdminUser,
       logout: mockLogout,
     });
 
@@ -492,7 +504,7 @@ describe('Shell', () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
-      currentUser: { isAdmin: true },
+      currentUser: fullCapabilityAdminUser,
       logout: mockLogout,
     });
 
@@ -524,6 +536,66 @@ describe('Shell', () => {
     expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.logout') })).toBeInTheDocument();
     expect(actionIsland.querySelectorAll('[data-testid="shell-header-utility-divider"]')).toHaveLength(2);
+  });
+
+  it('hides capability-specific admin nav entries when current user lacks them', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: {
+        isAdmin: true,
+        canReadUsers: true,
+        canReadCostObservability: true,
+        canReadOpsLogs: false,
+        canReadProviders: false,
+        canReadNotifications: false,
+        canReadSystemConfig: false,
+      },
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.userGovernance') })).toBeInTheDocument();
+    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.costObservability') })).toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
+  });
+
+  it('fails closed for sensitive admin nav when capability fields are absent', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: { isAdmin: true },
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.userGovernance') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.costObservability') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
   });
 
   it('resets mobile drawer and archive rail state when crossing back to desktop', async () => {

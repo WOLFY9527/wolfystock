@@ -31,6 +31,7 @@ import {
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { ApiErrorAlert, Badge, Button, Checkbox, Disclosure, GlassCard, Input, Select } from '../components/common';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
 import { formatCurrency, formatDateTime, formatNumber } from '../utils/format';
 
@@ -350,9 +351,9 @@ const FilterRail: React.FC<{
   </GlassCard>
 );
 
-const UserRow: React.FC<{ user: AdminUserListItem; locale: 'zh' | 'en' }> = ({ user, locale }) => {
+const UserRow: React.FC<{ user: AdminUserListItem; locale: 'zh' | 'en'; canReadOpsLogs: boolean }> = ({ user, locale, canReadOpsLogs }) => {
   const href = locale === 'en' ? `/en/admin/users/${encodeURIComponent(user.id)}` : `/zh/admin/users/${encodeURIComponent(user.id)}`;
-  const adminLogs = adminLogHref(user.links?.adminLogs, locale);
+  const adminLogs = canReadOpsLogs ? adminLogHref(user.links?.adminLogs, locale) : null;
   return (
     <article className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-4 transition hover:border-white/10 hover:bg-white/[0.03]">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -410,7 +411,8 @@ const DirectoryView: React.FC<{
   filters: AdminUserListParams;
   setFilters: (next: AdminUserListParams) => void;
   reload: () => void;
-}> = ({ state, filters, setFilters, reload }) => {
+  canReadOpsLogs: boolean;
+}> = ({ state, filters, setFilters, reload, canReadOpsLogs }) => {
   const { language } = useI18n();
   const users = state.data?.items || [];
   return (
@@ -443,7 +445,7 @@ const DirectoryView: React.FC<{
             <div className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-8 text-sm text-white/50">暂无符合条件的用户</div>
           ) : (
             <div className="mt-4 grid gap-3">
-              {users.map((user) => <UserRow key={user.id} user={user} locale={language} />)}
+              {users.map((user) => <UserRow key={user.id} user={user} locale={language} canReadOpsLogs={canReadOpsLogs} />)}
             </div>
           )}
         </GlassCard>
@@ -452,13 +454,21 @@ const DirectoryView: React.FC<{
   );
 };
 
-const DetailTabs: React.FC<{ active: PageMode; activeDetailTab: DetailTabKey; userId: string; locale: 'zh' | 'en' }> = ({ active, activeDetailTab, userId, locale }) => {
+const DetailTabs: React.FC<{
+  active: PageMode;
+  activeDetailTab: DetailTabKey;
+  userId: string;
+  locale: 'zh' | 'en';
+  canReadUserActivity: boolean;
+  canReadUserPortfolio: boolean;
+  canWriteUserSecurity: boolean;
+}> = ({ active, activeDetailTab, userId, locale, canReadUserActivity, canReadUserPortfolio, canWriteUserSecurity }) => {
   const base = locale === 'en' ? `/en/admin/users/${encodeURIComponent(userId)}` : `/zh/admin/users/${encodeURIComponent(userId)}`;
   const items = [
     { key: 'detail', label: '概览', href: base, disabled: false },
-    { key: 'activity', label: '活动', href: `${base}/activity`, disabled: false },
-    { key: 'portfolio', label: '组合', href: `${base}?tab=portfolio`, disabled: false },
-    { key: 'security', label: '安全', href: `${base}?tab=security`, disabled: false },
+    { key: 'activity', label: '活动', href: `${base}/activity`, disabled: !canReadUserActivity },
+    { key: 'portfolio', label: '组合', href: `${base}?tab=portfolio`, disabled: !canReadUserPortfolio },
+    { key: 'security', label: '安全', href: `${base}?tab=security`, disabled: !canWriteUserSecurity },
     { key: 'analysis', label: '分析', href: '#analysis', disabled: true },
     { key: 'scanner', label: 'Scanner', href: '#scanner', disabled: true },
     { key: 'backtest', label: 'Backtest', href: '#backtest', disabled: true },
@@ -701,6 +711,19 @@ const PortfolioTab: React.FC<{
   );
 };
 
+const UnavailableAdminCapability: React.FC<{ title: string; description: string }> = ({ title, description }) => (
+  <GlassCard as="section" className="p-5 md:p-6">
+    <div className="flex items-start gap-3">
+      <LockKeyhole className="mt-1 h-4 w-4 text-amber-200" aria-hidden="true" />
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Capability Required</p>
+        <h2 className="mt-1 text-base font-semibold text-white">{title}</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-white/52">{description}</p>
+      </div>
+    </div>
+  </GlassCard>
+);
+
 const SecurityActionCard: React.FC<{
   actionKey: SecurityActionKey;
   title: string;
@@ -858,9 +881,9 @@ const SecurityTab: React.FC<{
   );
 };
 
-const DetailOverview: React.FC<{ detail: AdminUserDetailResponse; locale: 'zh' | 'en' }> = ({ detail, locale }) => {
+const DetailOverview: React.FC<{ detail: AdminUserDetailResponse; locale: 'zh' | 'en'; canReadOpsLogs: boolean }> = ({ detail, locale, canReadOpsLogs }) => {
   const { user } = detail;
-  const adminLogs = adminLogHref(detail.dataLinks.adminLogs || user.links?.adminLogs, locale);
+  const adminLogs = canReadOpsLogs ? adminLogHref(detail.dataLinks.adminLogs || user.links?.adminLogs, locale) : null;
   return (
     <div className="grid min-h-0 grid-cols-1 gap-5 xl:grid-cols-12">
       <div className="min-w-0 xl:col-span-8">
@@ -1099,6 +1122,13 @@ const AdminUsersPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { language } = useI18n();
+  const {
+    canReadUsers,
+    canReadUserActivity,
+    canReadUserPortfolio,
+    canReadOpsLogs,
+    canWriteUserSecurity,
+  } = useProductSurface();
   const mode: PageMode = userId ? (location.pathname.endsWith('/activity') ? 'activity' : 'detail') : 'directory';
   const activeDetailTab = mode === 'detail' ? tabFromSearch(location.search) : 'detail';
   const [filters, setFilters] = useState<AdminUserListParams>({ status: 'all', sort: 'created_at_desc', limit: USER_LIMIT, offset: 0 });
@@ -1116,27 +1146,31 @@ const AdminUsersPage: React.FC = () => {
   });
 
   const loadUsers = useCallback(() => {
+    if (!canReadUsers) return;
     setUsersState((state) => ({ ...state, loading: true, error: null }));
     void adminUsersApi.listUsers(filters)
       .then((data) => setUsersState({ loading: false, error: null, data }))
       .catch((error) => setUsersState({ loading: false, error: getParsedApiError(error), data: null }));
-  }, [filters]);
+  }, [canReadUsers, filters]);
 
   const loadDetail = useCallback((targetUserId: string) => {
+    if (!canReadUsers) return;
     setDetailState((state) => ({ ...state, loading: true, error: null }));
     void adminUsersApi.getUserDetail(targetUserId)
       .then((data) => setDetailState({ loading: false, error: null, data }))
       .catch((error) => setDetailState({ loading: false, error: getParsedApiError(error), data: null }));
-  }, []);
+  }, [canReadUsers]);
 
   const loadActivity = useCallback((targetUserId: string) => {
+    if (!canReadUserActivity) return;
     setActivityState((state) => ({ ...state, loading: true, error: null }));
     void adminUsersApi.listUserActivity(targetUserId, activityFilters)
       .then((data) => setActivityState({ loading: false, error: null, data }))
       .catch((error) => setActivityState({ loading: false, error: getParsedApiError(error), data: null }));
-  }, [activityFilters]);
+  }, [activityFilters, canReadUserActivity]);
 
   const loadPortfolio = useCallback((targetUserId: string) => {
+    if (!canReadUserPortfolio) return;
     setPortfolioSummaryState((state) => ({ ...state, loading: true, error: null }));
     setHoldingsState((state) => ({ ...state, loading: true, error: null }));
     setPortfolioActivityState((state) => ({ ...state, loading: true, error: null }));
@@ -1149,7 +1183,7 @@ const AdminUsersPage: React.FC = () => {
     void adminUsersApi.getAdminUserPortfolioActivity(targetUserId, { limit: 30, offset: 0 })
       .then((data) => setPortfolioActivityState({ loading: false, error: null, data }))
       .catch((error) => setPortfolioActivityState({ loading: false, error: sanitizedPortfolioError(error), data: null }));
-  }, []);
+  }, [canReadUserPortfolio]);
 
   const updateSecurityAction = useCallback((key: SecurityActionKey, patch: Partial<SecurityActionFormState>) => {
     setSecurityActionState((state) => ({
@@ -1211,7 +1245,10 @@ const AdminUsersPage: React.FC = () => {
 
   const content = useMemo(() => {
     if (!userId) {
-      return <DirectoryView state={usersState} filters={filters} setFilters={setFilters} reload={loadUsers} />;
+      return <DirectoryView state={usersState} filters={filters} setFilters={setFilters} reload={loadUsers} canReadOpsLogs={canReadOpsLogs} />;
+    }
+    if (!canReadUsers) {
+      return <UnavailableAdminCapability title="不可查看用户资料" description="当前账号缺少用户治理读取权限，前端不会请求或渲染用户详情。后端授权仍是最终边界。" />;
     }
     if (detailState.loading && !detailState.data) {
       return <div className="h-64 animate-pulse rounded-[24px] border border-white/5 bg-white/[0.025]" />;
@@ -1234,17 +1271,31 @@ const AdminUsersPage: React.FC = () => {
     if (!detailState.data) return null;
     return (
       <div className="grid gap-5">
-        <DetailTabs active={mode} activeDetailTab={activeDetailTab} userId={userId} locale={language} />
+        <DetailTabs
+          active={mode}
+          activeDetailTab={activeDetailTab}
+          userId={userId}
+          locale={language}
+          canReadUserActivity={canReadUserActivity}
+          canReadUserPortfolio={canReadUserPortfolio}
+          canWriteUserSecurity={canWriteUserSecurity}
+        />
         {mode === 'activity'
-          ? <ActivityTimeline state={activityState} filters={activityFilters} setFilters={setActivityFilters} reload={() => loadActivity(userId)} />
+          ? canReadUserActivity
+            ? <ActivityTimeline state={activityState} filters={activityFilters} setFilters={setActivityFilters} reload={() => loadActivity(userId)} />
+            : <UnavailableAdminCapability title="不可查看用户活动" description="当前账号缺少用户活动读取权限，前端不会请求或渲染活动时间线。" />
           : activeDetailTab === 'portfolio'
-          ? <PortfolioTab summaryState={portfolioSummaryState} holdingsState={holdingsState} activityState={portfolioActivityState} />
+          ? canReadUserPortfolio
+            ? <PortfolioTab summaryState={portfolioSummaryState} holdingsState={holdingsState} activityState={portfolioActivityState} />
+            : <UnavailableAdminCapability title="不可查看用户组合" description="当前账号缺少组合读取权限，前端不会请求或渲染组合账户、持仓或活动数据。" />
           : activeDetailTab === 'security'
-          ? <SecurityTab detail={detailState.data} actionState={securityActionState} updateAction={updateSecurityAction} submitAction={submitSecurityAction} />
-          : <DetailOverview detail={detailState.data} locale={language} />}
+          ? canWriteUserSecurity
+            ? <SecurityTab detail={detailState.data} actionState={securityActionState} updateAction={updateSecurityAction} submitAction={submitSecurityAction} />
+            : <UnavailableAdminCapability title="不可执行安全操作" description="当前账号缺少用户安全写入权限，前端不会渲染禁用、启用或撤销会话按钮。" />
+          : <DetailOverview detail={detailState.data} locale={language} canReadOpsLogs={canReadOpsLogs} />}
       </div>
     );
-  }, [activeDetailTab, activityFilters, activityState, detailState, directoryPath, filters, holdingsState, language, loadActivity, loadUsers, mode, navigate, portfolioActivityState, portfolioSummaryState, securityActionState, submitSecurityAction, updateSecurityAction, userId, usersState]);
+  }, [activeDetailTab, activityFilters, activityState, canReadOpsLogs, canReadUserActivity, canReadUserPortfolio, canReadUsers, canWriteUserSecurity, detailState, directoryPath, filters, holdingsState, language, loadActivity, loadUsers, mode, navigate, portfolioActivityState, portfolioSummaryState, securityActionState, submitSecurityAction, updateSecurityAction, userId, usersState]);
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto no-scrollbar py-5 md:py-6">
