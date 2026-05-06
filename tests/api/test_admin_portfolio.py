@@ -356,6 +356,10 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
             "SECRET_API_KEY",
             "POSITION_SECRET",
             "SNAPSHOT_SECRET",
+            "BOB_SECRET_TOKEN",
+            "BOB_POSITION_SECRET",
+            "BOB-RAW-BROKER-ACCOUNT",
+            "BOB-POSITION-SECRET",
             "sync_metadata_json",
             "payload_json",
             "payloadJson",
@@ -473,6 +477,23 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(self._portfolio_counts(), before)
         self._assert_safe_json(response)
         self._assert_audit_event("admin_portfolio.activity_viewed")
+
+    def test_admin_portfolio_export_like_reads_exclude_other_users_and_broker_secrets(self) -> None:
+        self._as_admin()
+
+        responses = [
+            self.client.get("/api/v1/admin/users/user-1/portfolio-summary"),
+            self.client.get("/api/v1/admin/users/user-1/holdings", params={"limit": 200}),
+            self.client.get("/api/v1/admin/users/user-1/portfolio-activity", params={"limit": 200}),
+            self.client.get(f"/api/v1/admin/users/user-1/portfolio/accounts/{self.account_a_id}"),
+        ]
+
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+            text = self._json_text(response)
+            self.assertNotIn("MSFT", text)
+            self.assertNotIn("user-2", text)
+            self._assert_safe_json(response)
 
 
 if __name__ == "__main__":

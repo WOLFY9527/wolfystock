@@ -53,6 +53,7 @@ from src.services.portfolio_service import (
     PortfolioService,
 )
 from src.services.execution_log_service import ExecutionLogService
+from src.utils.security import sanitize_message
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +132,7 @@ def _conflict_error(*, error: str, message: str) -> HTTPException:
 def _ibkr_sync_error(exc: PortfolioIbkrSyncError) -> HTTPException:
     return HTTPException(
         status_code=max(400, int(exc.status_code or 400)),
-        detail={"error": exc.code, "message": str(exc)},
+        detail={"error": exc.code, "message": sanitize_message(str(exc))},
     )
 
 

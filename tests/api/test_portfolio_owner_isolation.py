@@ -248,6 +248,41 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
             self.assertNotIn("BOB-ACCOUNT-REF", self._json_text(response))
         self.assertEqual(self._portfolio_counts(), before)
 
+    def test_export_like_portfolio_reads_do_not_cross_owner_boundaries(self) -> None:
+        alice_account = self._create_account(self.alice_client, "Alice Export")
+        bob_account = self._create_account(self.bob_client, "Bob Export")
+        self._seed_activity(self.alice_client, alice_account, "AAPL", "alice-export-trade")
+        self._seed_activity(self.bob_client, bob_account, "MSFT", "bob-export-trade")
+        before = self._portfolio_counts()
+
+        export_reads = [
+            self.alice_client.get("/api/v1/portfolio/accounts", params={"include_inactive": True}),
+            self.alice_client.get("/api/v1/portfolio/trades", params={"page_size": 100}),
+            self.alice_client.get("/api/v1/portfolio/cash-ledger", params={"page_size": 100}),
+            self.alice_client.get("/api/v1/portfolio/corporate-actions", params={"page_size": 100}),
+            self.alice_client.get("/api/v1/portfolio/snapshot", params={"as_of": "2026-01-03"}),
+        ]
+
+        for response in export_reads:
+            self.assertEqual(response.status_code, 200)
+            text = self._json_text(response)
+            self.assertNotIn("MSFT", text)
+            self.assertNotIn("bob-export-trade", text)
+
+        rejected_exports = [
+            self.alice_client.get("/api/v1/portfolio/trades", params={"account_id": bob_account, "page_size": 100}),
+            self.alice_client.get("/api/v1/portfolio/cash-ledger", params={"account_id": bob_account, "page_size": 100}),
+            self.alice_client.get("/api/v1/portfolio/corporate-actions", params={"account_id": bob_account, "page_size": 100}),
+            self.alice_client.get("/api/v1/portfolio/snapshot", params={"account_id": bob_account, "as_of": "2026-01-03"}),
+            self.alice_client.get("/api/v1/portfolio/risk", params={"account_id": bob_account, "as_of": "2026-01-03"}),
+        ]
+        for response in rejected_exports:
+            self.assertIn(response.status_code, {400, 404})
+            text = self._json_text(response)
+            self.assertNotIn("MSFT", text)
+            self.assertNotIn("bob-export-trade", text)
+        self.assertEqual(self._portfolio_counts(), before)
+
     def test_import_idempotency_stays_with_authenticated_owner(self) -> None:
         alice_account = self._create_account(self.alice_client, "Alice Import")
         bob_account = self._create_account(self.bob_client, "Bob Import")

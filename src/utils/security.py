@@ -7,15 +7,15 @@ import re
 from typing import Any
 
 _SENSITIVE_KEY_RE = re.compile(
-    r"(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|token|authorization|bearer|credential|private[-_]?key|secret|password)",
+    r"(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?token|token|authorization|bearer|credential|private[-_]?key|secret|password)",
     re.IGNORECASE,
 )
 _QUERY_SECRET_RE = re.compile(
-    r"([?&](?:api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|token|authorization|secret|password|credential|private[-_]?key)=)[^&#\s]+",
+    r"([?&](?:api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?token|token|authorization|secret|password|credential|private[-_]?key)=)[^&#\s]+",
     re.IGNORECASE,
 )
 _KV_SECRET_RE = re.compile(
-    r"\b(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|token|authorization|secret|password|credential|private[-_]?key)\b\s*[:=]\s*([^\s,;&]+)",
+    r"\b(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?token|token|authorization|secret|password|credential|private[-_]?key)\b\s*[:=]\s*([^\s,;&]+)",
     re.IGNORECASE,
 )
 _AUTH_HEADER_RE = re.compile(r"\b(Authorization)\s*:\s*([^\r\n,;]+)", re.IGNORECASE)

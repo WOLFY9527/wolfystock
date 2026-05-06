@@ -21,6 +21,7 @@ from src.repositories.portfolio_repo import (
     PortfolioRepository,
 )
 from src.services.fx_rate_service import default_fx_rate_service
+from src.utils.security import sanitize_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -3718,7 +3719,8 @@ class PortfolioService:
             try:
                 parsed = json.loads(row.sync_metadata_json)
                 if isinstance(parsed, dict):
-                    sync_metadata = parsed
+                    sanitized = sanitize_metadata(parsed)
+                    sync_metadata = sanitized if isinstance(sanitized, dict) else {}
             except Exception:
                 sync_metadata = {}
         return {

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -90,6 +91,10 @@ class PortfolioApiTestCase(unittest.TestCase):
             ]
         )
         self.db.save_daily_data(df, code=symbol, data_source="portfolio-api-test")
+
+    @staticmethod
+    def _json_text(response) -> str:
+        return json.dumps(response.json(), ensure_ascii=False, sort_keys=True)
 
     @staticmethod
     def _ibkr_flex_xml_bytes() -> bytes:
@@ -529,6 +534,47 @@ class PortfolioApiTestCase(unittest.TestCase):
         detail = duplicate_resp.json()
         self.assertEqual(detail.get("error"), "conflict")
 
+    def test_broker_connection_read_payload_redacts_sensitive_metadata(self) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Sensitive", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+
+        create_resp = self.client.post(
+            "/api/v1/portfolio/broker-connections",
+            json={
+                "portfolio_account_id": account_id,
+                "broker_type": "ibkr",
+                "broker_name": "Interactive Brokers",
+                "connection_name": "Primary IBKR",
+                "broker_account_ref": "U1234567",
+                "import_mode": "api",
+                "status": "active",
+                "sync_metadata": {
+                    "source": "flex",
+                    "api_key": "SECRET_API_KEY",
+                    "nested": {"token": "SECRET_TOKEN", "ok": True},
+                    "note": "bearer abc.def.ghi",
+                },
+            },
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        created = create_resp.json()
+        self.assertEqual(created["sync_metadata"]["source"], "flex")
+        self.assertEqual(created["sync_metadata"]["api_key"], "***")
+        self.assertEqual(created["sync_metadata"]["nested"]["token"], "***")
+        self.assertNotIn("SECRET_API_KEY", self._json_text(create_resp))
+        self.assertNotIn("SECRET_TOKEN", self._json_text(create_resp))
+        self.assertNotIn("bearer abc.def.ghi", self._json_text(create_resp))
+
+        list_resp = self.client.get("/api/v1/portfolio/broker-connections")
+        self.assertEqual(list_resp.status_code, 200)
+        self.assertNotIn("SECRET_API_KEY", self._json_text(list_resp))
+        self.assertNotIn("SECRET_TOKEN", self._json_text(list_resp))
+        self.assertNotIn("bearer abc.def.ghi", self._json_text(list_resp))
+
     def test_generic_broker_import_endpoints_support_ibkr(self) -> None:
         account_resp = self.client.post(
             "/api/v1/portfolio/accounts",
@@ -642,6 +688,33 @@ class PortfolioApiTestCase(unittest.TestCase):
                 "message": "当前 IBKR session 已失效、未授权或未连上可访问账户。",
             },
         )
+
+    @patch("api.v1.endpoints.portfolio.PortfolioIbkrSyncService.sync_read_only_account_state")
+    def test_ibkr_sync_endpoint_sanitizes_secret_like_error_text(self, sync_mock: MagicMock) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Global", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+
+        sync_mock.side_effect = PortfolioIbkrSyncError(
+            code="ibkr_session_expired",
+            message="session_token=SECRET_SESSION_TOKEN was rejected",
+            status_code=400,
+        )
+
+        resp = self.client.post(
+            "/api/v1/portfolio/sync/ibkr",
+            json={
+                "account_id": account_id,
+                "session_token": "SECRET_SESSION_TOKEN",
+            },
+        )
+        self.assertEqual(resp.status_code, 400)
+        text = self._json_text(resp)
+        self.assertNotIn("SECRET_SESSION_TOKEN", text)
+        self.assertIn("***", text)
 
     @patch("api.v1.endpoints.portfolio.PortfolioIbkrSyncService.sync_read_only_account_state")
     def test_ibkr_sync_endpoint_surfaces_mapping_conflict(self, sync_mock: MagicMock) -> None:
