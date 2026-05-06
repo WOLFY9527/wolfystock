@@ -9,11 +9,11 @@ import secrets
 from datetime import timedelta
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from api.deps import get_system_config_service, resolve_current_user
+from api.deps import get_system_config_service, require_recent_admin_reauth, resolve_current_user
 from src.admin_rbac import expand_admin_capabilities
 from src.auth import (
     ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT,
@@ -51,6 +51,13 @@ from src.core.config_manager import ConfigManager
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, BOOTSTRAP_ADMIN_USERNAME, ROLE_ADMIN, ROLE_USER
 from src.repositories.auth_repo import AuthRepository
 from src.services.execution_log_service import ExecutionLogService
+from src.services.admin_mfa_service import (
+    create_enrollment_challenge,
+    disable_mfa,
+    enable_mfa,
+    record_mfa_verification,
+    verify_totp_code,
+)
 from src.services.system_config_service import SystemConfigService
 from src.utils.security import sanitize_metadata
 
@@ -111,6 +118,12 @@ class ReauthRequest(BaseModel):
     """Recent admin reauthentication request body."""
 
     password: str = Field(default="", description="Current password")
+
+
+class MfaCodeRequest(BaseModel):
+    """MFA verification request body."""
+
+    code: str = Field(default="", description="Six-digit MFA code")
 
 
 class CurrentUserResponse(BaseModel):
@@ -451,6 +464,15 @@ def _require_admin_current_user(request: Request):
     return current_user, None
 
 
+def _require_recent_admin_reauth_response(current_user):
+    try:
+        max_age_minutes = max(1, get_admin_reauth_max_age_seconds() // 60)
+        require_recent_admin_reauth(current_user, max_age_minutes=max_age_minutes)
+    except HTTPException as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return None
+
+
 def _persist_session_for_user(*, request: Request, user_id: str, username: str, role: str) -> str:
     session_id = secrets.token_hex(16)
     expires_at = get_session_expiry_datetime()
@@ -690,6 +712,149 @@ async def auth_reauth(request: Request, body: ReauthRequest):
         "ok": True,
         "ttlSeconds": ttl_seconds,
         "reauthExpiresAt": (reauthenticated_at + timedelta(seconds=ttl_seconds)).isoformat(),
+    }
+
+
+@router.post(
+    "/mfa/enroll/start",
+    summary="Start admin MFA enrollment",
+    description="Creates a non-enforcing admin MFA enrollment challenge. Login enforcement remains disabled.",
+)
+async def auth_mfa_enroll_start(request: Request):
+    current_user, error_response = _require_admin_current_user(request)
+    if error_response is not None:
+        return error_response
+    if not current_user.is_authenticated or not current_user.session_id:
+        return JSONResponse(
+            status_code=401,
+            content={"error": "unauthorized", "message": "Login required"},
+        )
+
+    repo = AuthRepository()
+    user_row = repo.get_app_user(current_user.user_id)
+    if user_row is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "user_not_found", "message": "Current user not found"},
+        )
+
+    challenge = create_enrollment_challenge(
+        user_id=current_user.user_id,
+        username=current_user.username,
+        repo=repo,
+    )
+    return {
+        "ok": True,
+        "status": "pending",
+        "secret": challenge.secret,
+        "provisioningUri": challenge.provisioning_uri,
+        "storageMode": challenge.storage_mode,
+        "mfaRequiredForLogin": False,
+    }
+
+
+@router.post(
+    "/mfa/enroll/verify",
+    summary="Verify admin MFA enrollment",
+    description="Verifies an enrollment code and enables MFA metadata. Login enforcement remains disabled.",
+)
+async def auth_mfa_enroll_verify(request: Request, body: MfaCodeRequest):
+    current_user, error_response = _require_admin_current_user(request)
+    if error_response is not None:
+        return error_response
+    reauth_error = _require_recent_admin_reauth_response(current_user)
+    if reauth_error is not None:
+        return reauth_error
+
+    repo = AuthRepository()
+    user_row = repo.get_app_user(current_user.user_id)
+    if user_row is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "user_not_found", "message": "Current user not found"},
+        )
+    secret_ref = getattr(user_row, "mfa_secret_ref", None)
+    if not secret_ref:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "mfa_enrollment_not_started", "message": "MFA enrollment has not been started"},
+        )
+    if not verify_totp_code(secret_ref=secret_ref, code=body.code):
+        return JSONResponse(
+            status_code=401,
+            content={"error": "invalid_mfa_code", "message": "Invalid MFA code"},
+        )
+
+    enable_mfa(user_id=current_user.user_id, secret_ref=secret_ref, repo=repo)
+    return {
+        "ok": True,
+        "status": "enabled",
+        "mfaRequiredForLogin": False,
+    }
+
+
+@router.post(
+    "/mfa/verify",
+    summary="Verify current admin MFA code",
+    description="Verifies an MFA code for the current admin session. Login enforcement remains disabled.",
+)
+async def auth_mfa_verify(request: Request, body: MfaCodeRequest):
+    current_user, error_response = _require_admin_current_user(request)
+    if error_response is not None:
+        return error_response
+
+    repo = AuthRepository()
+    user_row = repo.get_app_user(current_user.user_id)
+    if user_row is None or not getattr(user_row, "mfa_enabled", False):
+        return JSONResponse(
+            status_code=400,
+            content={"error": "mfa_not_enabled", "message": "MFA is not enabled"},
+        )
+    secret_ref = getattr(user_row, "mfa_secret_ref", None)
+    if not verify_totp_code(secret_ref=secret_ref, code=body.code):
+        return JSONResponse(
+            status_code=401,
+            content={"error": "invalid_mfa_code", "message": "Invalid MFA code"},
+        )
+
+    record_mfa_verification(
+        user_id=current_user.user_id,
+        secret_ref=secret_ref,
+        enabled=True,
+        repo=repo,
+    )
+    return {
+        "ok": True,
+        "verified": True,
+        "mfaRequiredForLogin": False,
+    }
+
+
+@router.post(
+    "/mfa/disable",
+    summary="Disable admin MFA",
+    description="Disables admin MFA metadata for the current admin after recent reauthentication.",
+)
+async def auth_mfa_disable(request: Request):
+    current_user, error_response = _require_admin_current_user(request)
+    if error_response is not None:
+        return error_response
+    reauth_error = _require_recent_admin_reauth_response(current_user)
+    if reauth_error is not None:
+        return reauth_error
+
+    repo = AuthRepository()
+    user_row = repo.get_app_user(current_user.user_id)
+    if user_row is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "user_not_found", "message": "Current user not found"},
+        )
+    disable_mfa(user_id=current_user.user_id, repo=repo)
+    return {
+        "ok": True,
+        "status": "disabled",
+        "mfaRequiredForLogin": False,
     }
 
 

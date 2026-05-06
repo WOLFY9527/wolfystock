@@ -13,6 +13,12 @@ create table if not exists app_users (
     role text not null check (role in ('user', 'admin')),
     is_active boolean not null default true,
     password_hash text,
+    mfa_enabled boolean not null default false,
+    mfa_secret_ref text,
+    mfa_recovery_codes_hash text,
+    mfa_created_at timestamptz,
+    mfa_enabled_at timestamptz,
+    mfa_last_verified_at timestamptz,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );

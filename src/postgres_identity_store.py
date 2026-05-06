@@ -72,6 +72,12 @@ class PhaseAAppUser(PhaseABase):
     role = Column(String(16), nullable=False, default=ROLE_USER, index=True)
     is_active = Column(Boolean, nullable=False, default=True, index=True)
     password_hash = Column(Text)
+    mfa_enabled = Column(Boolean, nullable=False, default=False, index=True)
+    mfa_secret_ref = Column(Text)
+    mfa_recovery_codes_hash = Column(Text)
+    mfa_created_at = Column(DateTime(timezone=True), index=True)
+    mfa_enabled_at = Column(DateTime(timezone=True), index=True)
+    mfa_last_verified_at = Column(DateTime(timezone=True), index=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.now)
 
@@ -281,6 +287,12 @@ class PostgresPhaseAStore:
         role: str = ROLE_USER,
         display_name: Optional[str] = None,
         password_hash: Optional[str] = None,
+        mfa_enabled: Optional[bool] = None,
+        mfa_secret_ref: Optional[str] = None,
+        mfa_recovery_codes_hash: Optional[str] = None,
+        mfa_created_at: Optional[datetime] = None,
+        mfa_enabled_at: Optional[datetime] = None,
+        mfa_last_verified_at: Optional[datetime] = None,
         is_active: bool = True,
         created_at: Optional[datetime] = None,
         updated_at: Optional[datetime] = None,
@@ -305,6 +317,12 @@ class PostgresPhaseAStore:
                     username=normalized_username,
                     display_name=(display_name or "").strip() or None,
                     password_hash=password_hash,
+                    mfa_enabled=bool(mfa_enabled) if mfa_enabled is not None else False,
+                    mfa_secret_ref=mfa_secret_ref,
+                    mfa_recovery_codes_hash=mfa_recovery_codes_hash,
+                    mfa_created_at=mfa_created_at,
+                    mfa_enabled_at=mfa_enabled_at,
+                    mfa_last_verified_at=mfa_last_verified_at,
                     role=normalized_role,
                     is_active=bool(is_active),
                     created_at=created_at or now,
@@ -315,6 +333,18 @@ class PostgresPhaseAStore:
                 row.username = normalized_username
                 row.display_name = (display_name or "").strip() or row.display_name
                 row.password_hash = password_hash if password_hash is not None else row.password_hash
+                if mfa_enabled is not None:
+                    row.mfa_enabled = bool(mfa_enabled)
+                if mfa_secret_ref is not None:
+                    row.mfa_secret_ref = mfa_secret_ref
+                if mfa_recovery_codes_hash is not None:
+                    row.mfa_recovery_codes_hash = mfa_recovery_codes_hash
+                if mfa_created_at is not None:
+                    row.mfa_created_at = mfa_created_at
+                if mfa_enabled_at is not None:
+                    row.mfa_enabled_at = mfa_enabled_at
+                if mfa_last_verified_at is not None:
+                    row.mfa_last_verified_at = mfa_last_verified_at
                 row.role = normalized_role
                 row.is_active = bool(is_active)
                 row.updated_at = now

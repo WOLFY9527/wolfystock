@@ -290,6 +290,12 @@ class AppUser(Base):
     username = Column(String(128), nullable=False, unique=True, index=True)
     display_name = Column(String(128))
     password_hash = Column(String(255))
+    mfa_enabled = Column(Boolean, nullable=False, default=False, index=True)
+    mfa_secret_ref = Column(Text)
+    mfa_recovery_codes_hash = Column(Text)
+    mfa_created_at = Column(DateTime, index=True)
+    mfa_enabled_at = Column(DateTime, index=True)
+    mfa_last_verified_at = Column(DateTime, index=True)
     role = Column(String(16), nullable=False, default=ROLE_USER, index=True)
     is_active = Column(Boolean, nullable=False, default=True, index=True)
     created_at = Column(DateTime, default=datetime.now, index=True)
@@ -2339,6 +2345,12 @@ class DatabaseManager:
             self._add_column_if_missing(conn, "llm_cost_ledger", "request_hash", "VARCHAR(128)")
             self._add_column_if_missing(conn, "llm_cost_ledger", "status", "VARCHAR(32) NOT NULL DEFAULT 'ok'")
             self._add_column_if_missing(conn, "llm_cost_ledger", "metadata_json", "TEXT")
+            self._add_column_if_missing(conn, "app_users", "mfa_enabled", "BOOLEAN NOT NULL DEFAULT 0")
+            self._add_column_if_missing(conn, "app_users", "mfa_secret_ref", "TEXT")
+            self._add_column_if_missing(conn, "app_users", "mfa_recovery_codes_hash", "TEXT")
+            self._add_column_if_missing(conn, "app_users", "mfa_created_at", "DATETIME")
+            self._add_column_if_missing(conn, "app_users", "mfa_enabled_at", "DATETIME")
+            self._add_column_if_missing(conn, "app_users", "mfa_last_verified_at", "DATETIME")
             self._add_column_if_missing(
                 conn,
                 "market_scanner_runs",
@@ -3014,6 +3026,12 @@ class DatabaseManager:
         role: str = ROLE_USER,
         display_name: Optional[str] = None,
         password_hash: Optional[str] = None,
+        mfa_enabled: Optional[bool] = None,
+        mfa_secret_ref: Optional[str] = None,
+        mfa_recovery_codes_hash: Optional[str] = None,
+        mfa_created_at: Optional[datetime] = None,
+        mfa_enabled_at: Optional[datetime] = None,
+        mfa_last_verified_at: Optional[datetime] = None,
         is_active: bool = True,
     ) -> AppUser:
         normalized_id = str(user_id or "").strip()
@@ -3034,6 +3052,12 @@ class DatabaseManager:
                     username=normalized_username,
                     display_name=(display_name or "").strip() or None,
                     password_hash=password_hash,
+                    mfa_enabled=bool(mfa_enabled) if mfa_enabled is not None else False,
+                    mfa_secret_ref=mfa_secret_ref,
+                    mfa_recovery_codes_hash=mfa_recovery_codes_hash,
+                    mfa_created_at=mfa_created_at,
+                    mfa_enabled_at=mfa_enabled_at,
+                    mfa_last_verified_at=mfa_last_verified_at,
                     role=normalized_role,
                     is_active=bool(is_active),
                 )
@@ -3042,9 +3066,55 @@ class DatabaseManager:
                 row.username = normalized_username
                 row.display_name = (display_name or "").strip() or row.display_name
                 row.password_hash = password_hash if password_hash is not None else row.password_hash
+                if mfa_enabled is not None:
+                    row.mfa_enabled = bool(mfa_enabled)
+                if mfa_secret_ref is not None:
+                    row.mfa_secret_ref = mfa_secret_ref
+                if mfa_recovery_codes_hash is not None:
+                    row.mfa_recovery_codes_hash = mfa_recovery_codes_hash
+                if mfa_created_at is not None:
+                    row.mfa_created_at = mfa_created_at
+                if mfa_enabled_at is not None:
+                    row.mfa_enabled_at = mfa_enabled_at
+                if mfa_last_verified_at is not None:
+                    row.mfa_last_verified_at = mfa_last_verified_at
                 row.role = normalized_role
                 row.is_active = bool(is_active)
                 row.updated_at = datetime.now()
+            session.commit()
+            session.refresh(row)
+            return row
+
+    def _sqlite_update_app_user_mfa(
+        self,
+        *,
+        user_id: str,
+        mfa_enabled: bool,
+        mfa_secret_ref: Optional[str] = None,
+        mfa_recovery_codes_hash: Optional[str] = None,
+        mfa_created_at: Optional[datetime] = None,
+        mfa_enabled_at: Optional[datetime] = None,
+        mfa_last_verified_at: Optional[datetime] = None,
+    ) -> Optional[AppUser]:
+        normalized_id = str(user_id or "").strip()
+        if not normalized_id:
+            return None
+        with self.get_session() as session:
+            row = session.execute(
+                select(AppUser).where(AppUser.id == normalized_id).limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            row.mfa_enabled = bool(mfa_enabled)
+            row.mfa_secret_ref = mfa_secret_ref
+            row.mfa_recovery_codes_hash = mfa_recovery_codes_hash
+            if mfa_created_at is not None:
+                row.mfa_created_at = mfa_created_at
+            if mfa_enabled_at is not None:
+                row.mfa_enabled_at = mfa_enabled_at
+            if mfa_last_verified_at is not None:
+                row.mfa_last_verified_at = mfa_last_verified_at
+            row.updated_at = datetime.now()
             session.commit()
             session.refresh(row)
             return row
@@ -3208,6 +3278,12 @@ class DatabaseManager:
             role=str(row.role),
             display_name=getattr(row, "display_name", None),
             password_hash=getattr(row, "password_hash", None),
+            mfa_enabled=bool(getattr(row, "mfa_enabled", False)),
+            mfa_secret_ref=getattr(row, "mfa_secret_ref", None),
+            mfa_recovery_codes_hash=getattr(row, "mfa_recovery_codes_hash", None),
+            mfa_created_at=getattr(row, "mfa_created_at", None),
+            mfa_enabled_at=getattr(row, "mfa_enabled_at", None),
+            mfa_last_verified_at=getattr(row, "mfa_last_verified_at", None),
             is_active=bool(getattr(row, "is_active", True)),
             created_at=getattr(row, "created_at", None),
             updated_at=getattr(row, "updated_at", None),
@@ -4885,6 +4961,12 @@ class DatabaseManager:
         role: str = ROLE_USER,
         display_name: Optional[str] = None,
         password_hash: Optional[str] = None,
+        mfa_enabled: Optional[bool] = None,
+        mfa_secret_ref: Optional[str] = None,
+        mfa_recovery_codes_hash: Optional[str] = None,
+        mfa_created_at: Optional[datetime] = None,
+        mfa_enabled_at: Optional[datetime] = None,
+        mfa_last_verified_at: Optional[datetime] = None,
         is_active: bool = True,
     ) -> AppUser:
         normalized_id = str(user_id or "").strip()
@@ -4902,6 +4984,12 @@ class DatabaseManager:
                 role=normalized_role,
                 display_name=display_name,
                 password_hash=password_hash,
+                mfa_enabled=mfa_enabled,
+                mfa_secret_ref=mfa_secret_ref,
+                mfa_recovery_codes_hash=mfa_recovery_codes_hash,
+                mfa_created_at=mfa_created_at,
+                mfa_enabled_at=mfa_enabled_at,
+                mfa_last_verified_at=mfa_last_verified_at,
                 is_active=bool(is_active),
             )
 
@@ -4911,7 +4999,57 @@ class DatabaseManager:
             role=normalized_role,
             display_name=display_name,
             password_hash=password_hash,
+            mfa_enabled=mfa_enabled,
+            mfa_secret_ref=mfa_secret_ref,
+            mfa_recovery_codes_hash=mfa_recovery_codes_hash,
+            mfa_created_at=mfa_created_at,
+            mfa_enabled_at=mfa_enabled_at,
+            mfa_last_verified_at=mfa_last_verified_at,
             is_active=bool(is_active),
+        )
+
+    def update_app_user_mfa(
+        self,
+        *,
+        user_id: str,
+        mfa_enabled: bool,
+        mfa_secret_ref: Optional[str] = None,
+        mfa_recovery_codes_hash: Optional[str] = None,
+        mfa_created_at: Optional[datetime] = None,
+        mfa_enabled_at: Optional[datetime] = None,
+        mfa_last_verified_at: Optional[datetime] = None,
+    ) -> Optional[AppUser]:
+        normalized_id = str(user_id or "").strip()
+        if not normalized_id:
+            return None
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            row = self._phase_a_store.get_app_user(normalized_id)
+            if row is None:
+                return None
+            return self._phase_a_store.upsert_app_user(
+                user_id=str(row.id),
+                username=str(row.username),
+                role=str(row.role),
+                display_name=getattr(row, "display_name", None),
+                password_hash=getattr(row, "password_hash", None),
+                mfa_enabled=mfa_enabled,
+                mfa_secret_ref=mfa_secret_ref,
+                mfa_recovery_codes_hash=mfa_recovery_codes_hash,
+                mfa_created_at=mfa_created_at,
+                mfa_enabled_at=mfa_enabled_at,
+                mfa_last_verified_at=mfa_last_verified_at,
+                is_active=bool(getattr(row, "is_active", True)),
+                created_at=getattr(row, "created_at", None),
+                updated_at=datetime.now(),
+            )
+        return self._sqlite_update_app_user_mfa(
+            user_id=normalized_id,
+            mfa_enabled=mfa_enabled,
+            mfa_secret_ref=mfa_secret_ref,
+            mfa_recovery_codes_hash=mfa_recovery_codes_hash,
+            mfa_created_at=mfa_created_at,
+            mfa_enabled_at=mfa_enabled_at,
+            mfa_last_verified_at=mfa_last_verified_at,
         )
 
     def create_app_user_session(

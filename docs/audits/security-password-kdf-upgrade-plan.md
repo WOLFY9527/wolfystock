@@ -74,6 +74,17 @@ Implementation note, Security Phase 3D:
   dependencies become approved, and any future password metadata fields such as
   `password_upgraded_at`.
 
+Implementation note, Security Phase 3E:
+
+- Admin MFA backend foundation has landed without login enforcement.
+- `app_users` now carries MFA status, secret-reference, recovery-code hash
+  placeholder, and created/enabled/last-verified timestamps.
+- The current TOTP path is a scaffold because no production secret encryption
+  service exists in the auth stack. Tests use `WOLFYSTOCK_MFA_TEST_SECRET` and a
+  deterministic `test-only:` reference; production login enforcement remains
+  blocked until encrypted/external secret storage and recovery-code issuance are
+  implemented.
+
 Explicitly not changed in this task:
 
 - No production login, reauth, settings-unlock, or change-password behavior.

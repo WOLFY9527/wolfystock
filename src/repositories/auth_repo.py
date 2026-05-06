@@ -59,6 +59,27 @@ class AuthRepository:
     def get_app_user_by_username(self, username: str):
         return self.db.get_app_user_by_username(username)
 
+    def update_app_user_mfa(
+        self,
+        *,
+        user_id: str,
+        mfa_enabled: bool,
+        mfa_secret_ref: str | None = None,
+        mfa_recovery_codes_hash: str | None = None,
+        mfa_created_at: datetime | None = None,
+        mfa_enabled_at: datetime | None = None,
+        mfa_last_verified_at: datetime | None = None,
+    ):
+        return self.db.update_app_user_mfa(
+            user_id=user_id,
+            mfa_enabled=mfa_enabled,
+            mfa_secret_ref=mfa_secret_ref,
+            mfa_recovery_codes_hash=mfa_recovery_codes_hash,
+            mfa_created_at=mfa_created_at,
+            mfa_enabled_at=mfa_enabled_at,
+            mfa_last_verified_at=mfa_last_verified_at,
+        )
+
     def list_app_users(self):
         return self.db.list_app_users()
 
