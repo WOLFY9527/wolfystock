@@ -22,6 +22,13 @@ class RuleBacktestReopenAcceptanceTestCase(unittest.TestCase):
         Config._instance = None
         DatabaseManager.reset_instance()
         self.db = DatabaseManager.get_instance()
+        self._ensure_market_history_patcher = patch.object(
+            RuleBacktestService,
+            "_ensure_market_history",
+            return_value=0,
+        )
+        self._ensure_market_history_patcher.start()
+        self._ensure_market_history_patcher_active = True
 
         with self.db.get_session() as session:
             closes = [10, 10.2, 10.1, 10.5, 11.0, 11.6, 11.8, 11.2, 10.8, 10.2, 9.9, 10.3, 10.9, 11.4, 11.9, 12.1, 11.7, 11.1, 10.7, 10.4, 10.8, 11.3, 11.8, 12.2]
@@ -39,6 +46,9 @@ class RuleBacktestReopenAcceptanceTestCase(unittest.TestCase):
             session.commit()
 
     def tearDown(self) -> None:
+        if getattr(self, "_ensure_market_history_patcher_active", False):
+            self._ensure_market_history_patcher.stop()
+            self._ensure_market_history_patcher_active = False
         DatabaseManager.reset_instance()
         self._temp_dir.cleanup()
 
