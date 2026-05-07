@@ -131,6 +131,26 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertEqual(payload["excludedInputCount"], 1)
         self.assertGreater(payload["confidence"], 0)
 
+    def test_delayed_real_inputs_keep_discounted_confidence(self) -> None:
+        service = MarketOverviewService()
+        inputs = {
+            "futures": {
+                "items": [
+                    {"symbol": "ES", "value": 5238, "changePercent": 0.2, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+                    {"symbol": "NQ", "value": 18320, "changePercent": 0.4, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+                    {"symbol": "YM", "value": 39000, "changePercent": -0.1, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+                ]
+            }
+        }
+
+        trust = service._summarize_market_temperature_confidence(inputs)
+
+        self.assertEqual(trust["reliableInputCount"], 3)
+        self.assertEqual(trust["fallbackInputCount"], 0)
+        self.assertEqual(trust["excludedInputCount"], 0)
+        self.assertEqual(trust["confidence"], 0.7)
+        self.assertLess(trust["confidence"], 1.0)
+
     def test_missing_required_market_inputs_blocks_temperature_decision_output(self) -> None:
         service = MarketOverviewService()
         inputs = {

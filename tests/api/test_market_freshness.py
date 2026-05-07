@@ -198,6 +198,12 @@ class MarketFreshnessCacheTestCase(unittest.TestCase):
         self.assertEqual(stale_payload["freshness"], "stale")
         self.assertTrue(stale_payload["isStale"])
         self.assertTrue(stale_payload["isRefreshing"])
+        self.assertEqual(stale_payload["updatedAt"], stale_as_of)
+        self.assertEqual(stale_payload["asOf"], stale_as_of)
+        self.assertEqual(stale_payload["items"][0]["updatedAt"], stale_as_of)
+        self.assertEqual(stale_payload["items"][0]["asOf"], stale_as_of)
+        self.assertEqual(stale_payload["items"][0]["freshness"], "stale")
+        self.assertTrue(stale_payload["items"][0]["isStale"])
         self.assertEqual(stale_payload["providerHealth"]["status"], "refreshing")
         self.assertNotEqual(stale_payload["freshness"], "live")
         release_refresh.set()
@@ -239,7 +245,7 @@ class MarketFreshnessCacheTestCase(unittest.TestCase):
         self.assertEqual(synthetic["confidenceWeight"], 0.0)
         self.assertEqual(delayed["kind"], "real")
         self.assertTrue(delayed["isReliable"])
-        self.assertLess(delayed["confidenceWeight"], 1.0)
+        self.assertEqual(delayed["confidenceWeight"], 0.7)
 
     def test_overview_indices_slow_cold_fetch_returns_fallback_quickly(self) -> None:
         service = MarketOverviewService()
