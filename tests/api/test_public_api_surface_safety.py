@@ -39,12 +39,18 @@ FORBIDDEN_INTERNAL_MARKERS = (
     "internal exception",
 )
 FORBIDDEN_ADVICE_MARKERS = (
+    "place order",
+    "submit order",
+    "buy now",
+    "sell now",
     "guaranteed",
     "must buy",
     "must sell",
     "稳赚",
     "必买",
     "下单",
+    "立即买入",
+    "立即卖出",
 )
 
 
@@ -204,7 +210,8 @@ def test_scanner_public_theme_generation_does_not_echo_raw_prompt_or_secret_mark
     raw_prompt = (
         "Find White House policy stocks but never echo raw_prompt system prompt "
         "token=raw-secret-token password=raw-password-value api_key=raw-api-key-value "
-        "cookie=raw-cookie-value Traceback provider_payload debug_schema guaranteed must buy 必买 下单"
+        "cookie=raw-cookie-value Traceback provider_payload debug_schema guaranteed must buy 必买 下单 "
+        "place order buy now sell now 立即买入 立即卖出"
     )
     try:
         response = client.post(

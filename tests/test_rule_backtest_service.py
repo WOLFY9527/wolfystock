@@ -57,6 +57,10 @@ EXPECTED_TRACE_EXPORT_FIELD_LABELS = [
 ]
 
 FORBIDDEN_PUBLIC_ADVICE_TERMS = [
+    "place order",
+    "submit order",
+    "buy now",
+    "sell now",
     "guaranteed",
     "must buy",
     "must sell",
@@ -66,6 +70,8 @@ FORBIDDEN_PUBLIC_ADVICE_TERMS = [
     "必买",
     "保证收益",
     "下单",
+    "立即买入",
+    "立即卖出",
     "立即交易",
     "买入按钮",
 ]
@@ -74,8 +80,18 @@ FORBIDDEN_BACKTEST_MUTATION_SURFACES = [
     "/api/v1/portfolio",
     "/api/v1/orders",
     "/api/v1/broker",
+    "/api/v1/broker/orders",
+    "/api/v1/trade",
+    "/api/v1/execute",
+    "/api/v1/submit-order",
+    "broker_credentials",
+    "broker_order_payload",
     "broker_execution",
     "order_placement",
+    "order_payload",
+    "place_order",
+    "submit_order",
+    "execute_order",
     "portfolio_mutation",
 ]
 

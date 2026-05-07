@@ -145,8 +145,14 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
             "BOB_SECRET_API_KEY",
             "BOB_SECRET_TOKEN",
             "BOB_SESSION_TOKEN",
+            "broker_credentials",
+            "brokerOrderPayload",
+            "execute_order",
+            "order_payload",
             "payload_json",
+            "place_order",
             "raw_provider_payload",
+            "submit_order",
             "sync_metadata_json",
         ]
         for needle in forbidden:

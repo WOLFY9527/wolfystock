@@ -20,6 +20,10 @@ from tests.test_market_scanner_service import (
 
 
 FORBIDDEN_DIRECTIVE_TERMS = (
+    "place order",
+    "submit order",
+    "buy now",
+    "sell now",
     "guaranteed",
     "must buy",
     "must sell",
@@ -27,6 +31,8 @@ FORBIDDEN_DIRECTIVE_TERMS = (
     "稳赚",
     "必买",
     "下单",
+    "立即买入",
+    "立即卖出",
     "立即交易",
     "保证收益",
 )
