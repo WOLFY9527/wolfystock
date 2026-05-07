@@ -117,6 +117,20 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
 
         self.assertIs(dependency(admin), admin)
 
+    def test_explicit_capability_payload_keeps_legacy_admin_from_expanding_to_other_capabilities(self) -> None:
+        from api.deps import require_admin_capability
+
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True, legacy_admin=True, admin_capabilities=("users:read",))
+        allowed = require_admin_capability("users:read")
+        denied = require_admin_capability("users:security:write")
+
+        self.assertIs(allowed(admin), admin)
+        with self.assertRaises(HTTPException) as exc:
+            denied(admin)
+        self.assertEqual(exc.exception.status_code, 403)
+        self.assertEqual(exc.exception.detail["error"], "admin_capability_required")
+        self.assertNotIn("users:security:write", str(exc.exception.detail))
+
     def test_missing_capability_cache_fails_closed_for_capability_dependency(self) -> None:
         from api.deps import require_admin_capability
 

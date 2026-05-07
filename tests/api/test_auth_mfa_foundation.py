@@ -375,6 +375,22 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertNotIn("mfaRequired", payload)
 
+    def test_mfa_login_enforcement_denies_admin_without_complete_mfa_state_and_no_session_cookie(self) -> None:
+        with patch("api.v1.endpoints.auth.ExecutionLogService") as service_cls:
+            recorder = service_cls.return_value
+            with patch.dict(os.environ, {"WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true"}, clear=False):
+                response = self.client.post(
+                    "/api/v1/auth/login",
+                    json={"username": "admin", "password": "adminpass123"},
+                )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "mfa_required")
+        self.assertNotIn("set-cookie", {key.lower(): value for key, value in response.headers.items()})
+        audit_text = repr(recorder.record_admin_action.call_args_list)
+        self.assertIn("mfa_state_incomplete", audit_text)
+        self.assertNotIn("adminpass123", response.text + audit_text)
+
     def test_mfa_login_enforcement_admin_only_pilot_skips_user_accounts_with_audit(self) -> None:
         self.db.create_or_update_app_user(
             user_id="user-1",
