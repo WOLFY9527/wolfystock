@@ -12,10 +12,11 @@ which covered the first production-critical auth/session and durable
 task/progress lookup paths, and through a local dry-run PostgreSQL
 backup/restore/PITR preflight that validates simulated metadata, backup
 artifact presence, timestamp sanity, schema compatibility, PITR window/WAL
-archive metadata, sanitized evidence output, and temp-only restore target
-isolation. Batch B indexes, retention implementation, cleanup jobs,
-PostgreSQL backup automation, and real isolated restore drill evidence remain
-future work.
+archive metadata, sanitized evidence output, temp-only restore target
+isolation, and an optional sanitized real-drill evidence artifact. Batch B
+indexes, retention implementation, cleanup jobs, PostgreSQL backup automation,
+and an actual accepted isolated restore/PITR evidence artifact remain future
+work.
 
 This plan defines the retention tiers, backup policy, restore drill scope, validation checklist, rollback/failure handling, and future Codex prompts needed before public onboarding. It is intentionally planning-only and does not authorize cleanup, migration, DB access, schema changes, or runtime behavior changes.
 
@@ -267,6 +268,62 @@ paths/DSNs, and any real restore by default. Passing this preflight does not
 prove that PostgreSQL backup, encryption, PITR, or restore infrastructure
 works. It only produces safe launch readiness evidence that the drill inputs and
 isolation plan are coherent before running a real isolated restore.
+
+### 7.2 Real Restore/PITR Evidence Artifact
+
+The same checker can validate a sanitized evidence artifact from an externally
+executed isolated PostgreSQL restore/PITR drill:
+
+```bash
+scripts/backup_restore_drill_check.sh \
+  --metadata tests/fixtures/ops/backup_restore_preflight_metadata.json \
+  --restore-target /tmp/wolfystock-restore-drill/restored.pg \
+  --max-age-hours 99999 \
+  --real-restore-evidence /path/to/sanitized-real-restore-evidence.json
+```
+
+This option is validation-only. It does not run `pg_restore`, create a
+database, connect to PostgreSQL, open network sockets, read production env
+files, run migrations, or mutate backup infrastructure. Without
+`--real-restore-evidence`, the checker must continue to report:
+
+```text
+Real restore/PITR execution: pending (no real evidence artifact supplied)
+```
+
+Accepted real-drill evidence must use
+`schema_version=wolfystock_restore_drill_evidence_v1` and include:
+
+- `drill_id`, `captured_at`, `database_engine=postgresql`, and
+  `source_environment` set to `staging`, `synthetic`, `sanitized`, or
+  `anonymized`.
+- `restore_target.isolated=true`,
+  `restore_target.target_type=isolated_postgresql`, and
+  `restore_target.production_target=false`.
+- `execution.execution_opt_in=true`,
+  `execution.restore_executed=true`, `execution.restore_status=pass`,
+  `execution.pitr_executed=true`, `execution.pitr_status=pass`, and
+  `execution.network_calls_performed_by_checker=false`.
+- `rpo_minutes_observed` and `rto_minutes_observed` as non-negative integer
+  observations.
+- `post_restore_checks` with `pass` for app boot, storage readiness, auth
+  login, owner isolation, durable task polling, sanitized admin logs, cost
+  observability, sanitized provider diagnostics, scanner artifact read,
+  backtest artifact read, portfolio replay, and Batch A index presence.
+- `sanitization.evidence_redacted=true`,
+  `sanitization.secrets_printed=false`,
+  `sanitization.raw_dsn_present=false`,
+  `sanitization.raw_tokens_present=false`, and
+  `sanitization.raw_passwords_present=false`.
+- `blockers=[]`.
+
+The artifact must not contain raw DSNs, passwords, tokens, API keys, cookies,
+private keys, webhook URLs, real env values, raw provider payloads, raw prompts,
+or production private data. Sensitive fields may only carry redacted sentinel
+values such as `[redacted]`. If any required check is pending/failing or any
+secret-like value is present, the checker rejects the artifact without printing
+the sensitive value. Public launch remains **NO-GO** until a real isolated
+restore/PITR artifact is supplied and accepted.
 
 ## 8. Rollback and Failure Plan
 

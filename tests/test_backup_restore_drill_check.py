@@ -107,6 +107,59 @@ def _write_metadata(
     return metadata_path
 
 
+def _write_real_restore_evidence(repo: Path, *, overrides: dict | None = None) -> Path:
+    evidence_path = repo / "tests" / "fixtures" / "ops" / "real_restore_drill_evidence.json"
+    payload = {
+        "schema_version": "wolfystock_restore_drill_evidence_v1",
+        "drill_id": "isolated-restore-2026-05-07",
+        "captured_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "database_engine": "postgresql",
+        "source_environment": "staging",
+        "restore_target": {
+            "isolated": True,
+            "target_type": "isolated_postgresql",
+            "target_label": "staging-restore-drill",
+            "production_target": False,
+        },
+        "execution": {
+            "execution_opt_in": True,
+            "restore_executed": True,
+            "restore_status": "pass",
+            "pitr_executed": True,
+            "pitr_status": "pass",
+            "network_calls_performed_by_checker": False,
+        },
+        "rpo_minutes_observed": 10,
+        "rto_minutes_observed": 42,
+        "post_restore_checks": {
+            "app_boot": "pass",
+            "storage_readiness": "pass",
+            "auth_login": "pass",
+            "owner_isolation": "pass",
+            "durable_task_poll": "pass",
+            "admin_logs_sanitized": "pass",
+            "cost_observability": "pass",
+            "provider_diagnostics_sanitized": "pass",
+            "scanner_artifact_read": "pass",
+            "backtest_artifact_read": "pass",
+            "portfolio_replay": "pass",
+            "batch_a_indexes": "pass",
+        },
+        "sanitization": {
+            "evidence_redacted": True,
+            "secrets_printed": False,
+            "raw_dsn_present": False,
+            "raw_tokens_present": False,
+            "raw_passwords_present": False,
+        },
+        "blockers": [],
+    }
+    if overrides:
+        payload.update(overrides)
+    evidence_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return evidence_path
+
+
 def test_backup_restore_drill_check_prints_production_like_preflight_evidence(tmp_path):
     repo = _init_repo(tmp_path)
     artifact_path = tmp_path / "backup-artifacts" / "synthetic-backup.sqlite"
@@ -135,9 +188,109 @@ def test_backup_restore_drill_check_prints_production_like_preflight_evidence(tm
     assert "Restore target isolation: accepted" in result.stdout
     assert "Restore execution: disabled by default" in result.stdout
     assert "Dry-run evidence: suitable for launch readiness review" in result.stdout
+    assert "Real restore/PITR execution: pending (no real evidence artifact supplied)" in result.stdout
     assert "python3 -m pytest tests/test_backup_restore_drill_smoke.py -q" in result.stdout
     assert "bash -n scripts/backup_restore_drill_check.sh" in result.stdout
     assert "No production DB, migration, PostgreSQL restore, network, or backup infrastructure action is performed" in result.stdout
+
+
+def test_backup_restore_drill_check_accepts_real_restore_evidence_artifact(tmp_path):
+    repo = _init_repo(tmp_path)
+    artifact_path = tmp_path / "backup-artifacts" / "synthetic-backup.dump"
+    artifact_path.parent.mkdir()
+    artifact_path.write_text("synthetic backup placeholder\n", encoding="utf-8")
+    metadata_path = _write_metadata(repo, artifact_path)
+    evidence_path = _write_real_restore_evidence(repo)
+
+    result = _drill_check(
+        repo,
+        "--metadata",
+        str(metadata_path),
+        "--restore-target",
+        str(tmp_path / "scratch" / "restore.pg"),
+        "--real-restore-evidence",
+        str(evidence_path),
+    )
+
+    assert result.returncode == 0
+    assert "Real restore/PITR evidence: accepted" in result.stdout
+    assert "Real restore execution: externally supplied evidence only; checker did not execute restore" in result.stdout
+    assert "Restore execution status: pass" in result.stdout
+    assert "PITR execution status: pass" in result.stdout
+    assert "Post-restore checks: 12 passed" in result.stdout
+    assert "Real restore/PITR execution: pending" not in result.stdout
+
+
+def test_backup_restore_drill_check_rejects_real_evidence_with_unredacted_dsn(tmp_path):
+    repo = _init_repo(tmp_path)
+    artifact_path = tmp_path / "backup-artifacts" / "synthetic-backup.dump"
+    artifact_path.parent.mkdir()
+    artifact_path.write_text("synthetic backup placeholder\n", encoding="utf-8")
+    metadata_path = _write_metadata(repo, artifact_path)
+    unsafe_dsn = "postgresql://restore_user:super-secret-password@localhost:5432/wolfystock_restore"
+    evidence_path = _write_real_restore_evidence(
+        repo,
+        overrides={
+            "restore_target": {
+                "isolated": True,
+                "target_type": "isolated_postgresql",
+                "target_label": "staging-restore-drill",
+                "production_target": False,
+                "restore_dsn": unsafe_dsn,
+            },
+        },
+    )
+
+    result = _drill_check(
+        repo,
+        "--metadata",
+        str(metadata_path),
+        "--restore-target",
+        str(tmp_path / "scratch" / "restore.pg"),
+        "--real-restore-evidence",
+        str(evidence_path),
+    )
+
+    combined_output = result.stdout + result.stderr
+    assert result.returncode == 1
+    assert "[FAIL] Real restore evidence contains unredacted sensitive value" in result.stderr
+    assert unsafe_dsn not in combined_output
+    assert "super-secret-password" not in combined_output
+    assert "wolfystock_restore" not in combined_output
+
+
+def test_backup_restore_drill_check_rejects_incomplete_real_restore_evidence(tmp_path):
+    repo = _init_repo(tmp_path)
+    artifact_path = tmp_path / "backup-artifacts" / "synthetic-backup.dump"
+    artifact_path.parent.mkdir()
+    artifact_path.write_text("synthetic backup placeholder\n", encoding="utf-8")
+    metadata_path = _write_metadata(repo, artifact_path)
+    evidence_path = _write_real_restore_evidence(
+        repo,
+        overrides={
+            "execution": {
+                "execution_opt_in": True,
+                "restore_executed": True,
+                "restore_status": "pass",
+                "pitr_executed": False,
+                "pitr_status": "pending",
+                "network_calls_performed_by_checker": False,
+            },
+        },
+    )
+
+    result = _drill_check(
+        repo,
+        "--metadata",
+        str(metadata_path),
+        "--restore-target",
+        str(tmp_path / "scratch" / "restore.pg"),
+        "--real-restore-evidence",
+        str(evidence_path),
+    )
+
+    assert result.returncode == 1
+    assert "[FAIL] Real restore evidence PITR execution must be pass" in result.stderr
 
 
 def test_backup_restore_drill_check_rejects_unsafe_db_path(tmp_path):

@@ -219,6 +219,9 @@ Remaining blockers:
   metadata, artifact presence, timestamp sanity, schema compatibility,
   PITR/WAL archive metadata, sanitized evidence output, and temp-only restore
   target isolation.
+- [x] A sanitized real-drill evidence artifact contract exists and is validated
+  only as externally supplied evidence; the checker does not execute restore
+  commands by default.
 - [x] Admin log retention tiers are explicit and test-backed:
   `admin_logs_standard`, `admin_logs_minimum_protected`, and
   `admin_logs_storage_pressure`.
@@ -235,6 +238,8 @@ Remaining blockers:
   behavior, sensitive/debug payload patterns, sanitized timeout/action output,
   and attachable JSON evidence.
 - [ ] Isolated PostgreSQL backup/restore execution is still missing.
+- [ ] Real isolated PostgreSQL restore/PITR evidence is still pending until an
+  accepted sanitized evidence artifact is supplied.
 - [ ] Real HTTPS staging ingress smoke evidence is still missing; the new
   preflight must be run against a synthetic staging URL with explicit opt-in.
 - [ ] Encrypted backup infrastructure, PITR execution, restore smoke, and
