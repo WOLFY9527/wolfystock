@@ -7,17 +7,24 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SMOKE_TEST_PATH="${ROOT_DIR}/tests/test_backup_restore_drill_smoke.py"
 METADATA_PATH=""
 RESTORE_TARGET_PATH="${DATABASE_PATH:-}"
+RESTORE_DSN=""
 MAX_AGE_HOURS="72"
 EXPECTED_SCHEMA_VERSION="backup_restore_preflight_v1"
+EXPECTED_APPLICATION_SCHEMA_VERSION="wolfystock_ops_readiness_v1"
+SAFE_TEST_DSN_ENV="WOLFYSTOCK_RESTORE_PREFLIGHT_SAFE_TEST_DSN"
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/backup_restore_drill_check.sh --metadata PATH --restore-target PATH [--max-age-hours HOURS]
+Usage: scripts/backup_restore_drill_check.sh --metadata PATH --restore-target PATH [--max-age-hours HOURS] [--restore-dsn DSN]
 
-Run a dry-run, production-like backup/restore drill preflight against simulated
-metadata. The checker validates artifact presence, timestamp freshness, schema
-compatibility, and restore target isolation without restoring databases or
-touching production systems.
+Run a dry-run, production-like PostgreSQL backup/restore/PITR preflight against
+simulated metadata. The checker validates artifact presence, timestamp
+freshness, schema compatibility, PITR/WAL evidence, and restore target
+isolation without restoring databases or touching production systems.
+
+--restore-dsn is validation-only. Any DSN is refused unless
+WOLFYSTOCK_RESTORE_PREFLIGHT_SAFE_TEST_DSN=1 is set, and even then only local
+synthetic/test restore targets are accepted.
 USAGE
 }
 
@@ -44,7 +51,7 @@ refuse_unsafe_restore_target() {
     return 0
   fi
 
-  echo "[FAIL] Unsafe restore target refused: ${path}" >&2
+  echo "[FAIL] Unsafe restore target refused" >&2
   echo "Only temp-like paths under /tmp, /private/tmp, /var/folders, or /private/var/folders are accepted." >&2
   exit 1
 }
@@ -53,14 +60,56 @@ refuse_existing_restore_target() {
   local path="$1"
 
   if [[ -e "${path}" ]]; then
-    echo "[FAIL] Restore target already exists: ${path}" >&2
+    echo "[FAIL] Restore target already exists" >&2
     echo "Use a fresh temp-only target to avoid accidental overwrite planning." >&2
     exit 1
   fi
 }
 
+validate_restore_dsn() {
+  local dsn="$1"
+
+  if [[ -z "${dsn}" ]]; then
+    echo "Restore DSN: not provided (synthetic path-only preflight)"
+    return 0
+  fi
+
+  python3 - "${dsn}" "${SAFE_TEST_DSN_ENV}" <<'PY'
+import os
+import sys
+from urllib.parse import urlsplit
+
+dsn = sys.argv[1]
+safe_test_env = sys.argv[2]
+
+def fail(message: str) -> None:
+    print(f"[FAIL] {message}", file=sys.stderr)
+    sys.exit(1)
+
+if os.environ.get(safe_test_env) != "1":
+    fail("Restore DSN refused: set explicit safe test mode for validation-only local DSNs")
+
+parsed = urlsplit(dsn)
+if parsed.scheme not in {"postgresql", "postgres"} or not parsed.hostname:
+    fail("Restore DSN refused: expected local PostgreSQL DSN")
+
+host = (parsed.hostname or "").lower()
+database_name = parsed.path.lstrip("/").lower()
+combined = f"{host}/{database_name}"
+
+if host not in {"localhost", "127.0.0.1", "::1"}:
+    fail("Restore DSN refused: host is not local")
+if not database_name.startswith(("wolfystock_restore_", "synthetic_", "test_")):
+    fail("Restore DSN refused: database name must be synthetic/test restore target")
+if any(marker in combined for marker in ("prod", "production", "primary", "live")):
+    fail("Restore DSN refused: production-like DSN marker")
+
+print("Restore DSN: accepted (local synthetic/test target, value redacted)")
+PY
+}
+
 validate_backup_metadata() {
-  python3 - "${METADATA_PATH}" "${MAX_AGE_HOURS}" "${EXPECTED_SCHEMA_VERSION}" <<'PY'
+  python3 - "${METADATA_PATH}" "${MAX_AGE_HOURS}" "${EXPECTED_SCHEMA_VERSION}" "${EXPECTED_APPLICATION_SCHEMA_VERSION}" <<'PY'
 import json
 import sys
 from datetime import datetime, timedelta, timezone
@@ -69,78 +118,126 @@ from pathlib import Path
 metadata_path = Path(sys.argv[1])
 max_age_hours = int(sys.argv[2])
 expected_schema = sys.argv[3]
+expected_application_schema = sys.argv[4]
+
+
+def fail(message: str) -> None:
+    print(f"[FAIL] {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+def parse_timestamp(field_name: str, raw_value: object) -> datetime:
+    value = str(raw_value or "")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        fail(f"{field_name} timestamp is invalid")
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def resolve_required_file(raw_path: object, label: str) -> Path:
+    path = Path(str(raw_path or ""))
+    if not path.is_absolute():
+        path = metadata_path.parent / path
+    path = path.resolve()
+    if not path.is_file():
+        fail(f"{label} missing")
+    return path
 
 if not metadata_path.is_file():
-    print(f"[FAIL] Backup metadata is required and must exist: {metadata_path}", file=sys.stderr)
-    sys.exit(1)
+    fail("Backup metadata is required and must exist")
 
 try:
     payload = json.loads(metadata_path.read_text(encoding="utf-8"))
 except json.JSONDecodeError as exc:
-    print(f"[FAIL] Backup metadata is not valid JSON: {exc}", file=sys.stderr)
-    sys.exit(1)
+    fail(f"Backup metadata is not valid JSON: {exc}")
 
-required_fields = {"backup_id", "created_at", "artifact_path", "schema_version", "source_environment"}
+required_fields = {
+    "backup_id",
+    "created_at",
+    "artifact_path",
+    "schema_version",
+    "application_schema_version",
+    "database_engine",
+    "source_environment",
+    "pitr",
+}
 missing_fields = sorted(required_fields - set(payload))
 if missing_fields:
-    print(f"[FAIL] Backup metadata missing fields: {', '.join(missing_fields)}", file=sys.stderr)
-    sys.exit(1)
+    fail(f"Backup metadata missing fields: {', '.join(missing_fields)}")
 
 schema_version = str(payload.get("schema_version") or "")
 if schema_version != expected_schema:
-    print(
-        f"[FAIL] Incompatible backup metadata schema: {schema_version} "
+    fail(
+        f"Incompatible backup metadata schema: {schema_version} "
         f"(expected {expected_schema})",
-        file=sys.stderr,
     )
-    sys.exit(1)
+
+application_schema_version = str(payload.get("application_schema_version") or "")
+if application_schema_version != expected_application_schema:
+    fail(
+        "Incompatible application schema metadata "
+        f"(expected {expected_application_schema})"
+    )
+
+database_engine = str(payload.get("database_engine") or "").strip().lower()
+if database_engine != "postgresql":
+    fail("Backup metadata database_engine must be postgresql for this preflight")
 
 raw_created_at = str(payload.get("created_at") or "")
-try:
-    created_at = datetime.fromisoformat(raw_created_at.replace("Z", "+00:00"))
-except ValueError:
-    print(f"[FAIL] Backup metadata timestamp is invalid: {raw_created_at}", file=sys.stderr)
-    sys.exit(1)
-if created_at.tzinfo is None:
-    created_at = created_at.replace(tzinfo=timezone.utc)
-created_at = created_at.astimezone(timezone.utc)
+created_at = parse_timestamp("Backup metadata", raw_created_at)
 
 now = datetime.now(timezone.utc)
 if created_at > now + timedelta(minutes=5):
-    print(f"[FAIL] Backup metadata timestamp is in the future: {raw_created_at}", file=sys.stderr)
-    sys.exit(1)
+    fail("Backup metadata timestamp is in the future")
 age = now - created_at
 if age > timedelta(hours=max_age_hours):
-    print(
-        f"[FAIL] Stale backup metadata: age_hours={age.total_seconds() / 3600:.1f}, "
+    fail(
+        f"Stale backup metadata: age_hours={age.total_seconds() / 3600:.1f}, "
         f"max_age_hours={max_age_hours}",
-        file=sys.stderr,
     )
-    sys.exit(1)
 
-raw_artifact_path = str(payload.get("artifact_path") or "")
-artifact_path = Path(raw_artifact_path)
-if not artifact_path.is_absolute():
-    artifact_path = metadata_path.parent / artifact_path
-artifact_path = artifact_path.resolve()
-if not artifact_path.is_file():
-    print(f"[FAIL] Backup artifact missing: {artifact_path}", file=sys.stderr)
-    sys.exit(1)
+artifact_path = resolve_required_file(payload.get("artifact_path"), "Backup artifact")
 
 source_environment = str(payload.get("source_environment") or "").strip().lower()
 if source_environment not in {"synthetic", "sanitized", "anonymized"}:
-    print(
-        f"[FAIL] Backup metadata source_environment must be synthetic, sanitized, or anonymized: "
-        f"{source_environment}",
-        file=sys.stderr,
+    fail(
+        f"Backup metadata source_environment must be synthetic, sanitized, or anonymized: "
+        f"{source_environment}"
     )
-    sys.exit(1)
 
-print(f"Backup metadata: accepted ({metadata_path})")
+raw_pitr = payload.get("pitr")
+if not isinstance(raw_pitr, dict):
+    fail("PITR metadata must be an object")
+pitr_required_fields = {"target_time", "window_start", "window_end", "wal_archive_path", "restore_point_label"}
+pitr_missing_fields = sorted(field for field in pitr_required_fields if not raw_pitr.get(field))
+if pitr_missing_fields:
+    fail(f"PITR metadata missing fields: {', '.join(pitr_missing_fields)}")
+
+pitr_target = parse_timestamp("PITR target_time", raw_pitr.get("target_time"))
+pitr_window_start = parse_timestamp("PITR window_start", raw_pitr.get("window_start"))
+pitr_window_end = parse_timestamp("PITR window_end", raw_pitr.get("window_end"))
+if pitr_window_start > pitr_window_end:
+    fail("PITR window_start must be before window_end")
+if not (pitr_window_start <= pitr_target <= pitr_window_end):
+    fail("PITR target_time is outside the available restore window")
+
+wal_archive_path = resolve_required_file(raw_pitr.get("wal_archive_path"), "WAL/archive metadata")
+restore_point_label = str(raw_pitr.get("restore_point_label") or "")
+if any(marker in restore_point_label.lower() for marker in ("password", "token", "secret", "dsn")):
+    fail("PITR restore_point_label must be sanitized")
+
+print("Backup metadata: accepted")
 print(f"Backup id: {payload['backup_id']}")
-print(f"Backup artifact: present ({artifact_path})")
+print(f"Backup artifact: present (bytes={artifact_path.stat().st_size})")
 print(f"Backup timestamp: fresh ({created_at.isoformat().replace('+00:00', 'Z')}, max_age_hours={max_age_hours})")
 print(f"Schema compatibility: ok ({schema_version})")
+print(f"Application schema compatibility: ok ({application_schema_version})")
+print("PITR metadata: validated")
+print(f"PITR target: within window ({pitr_target.isoformat().replace('+00:00', 'Z')})")
+print(f"WAL/archive metadata: present (bytes={wal_archive_path.stat().st_size})")
 print(f"Source environment: {source_environment}")
 PY
 }
@@ -183,6 +280,15 @@ while [[ "$#" -gt 0 ]]; do
       MAX_AGE_HOURS="$2"
       shift 2
       ;;
+    --restore-dsn)
+      if [[ "$#" -lt 2 ]]; then
+        echo "[FAIL] --restore-dsn requires a value" >&2
+        usage >&2
+        exit 2
+      fi
+      RESTORE_DSN="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -216,11 +322,15 @@ refuse_unsafe_restore_target "${RESTORE_TARGET_PATH}"
 refuse_existing_restore_target "${RESTORE_TARGET_PATH}"
 
 echo "Production-like backup/restore drill preflight"
+echo "Database engine: PostgreSQL"
+echo "PITR evidence: enabled"
 echo "Mode: dry-run/simulated"
 echo "Smoke test: tests/test_backup_restore_drill_smoke.py: present"
+validate_restore_dsn "${RESTORE_DSN}"
 validate_backup_metadata
-echo "Restore target isolation: accepted (temp-only) -> ${RESTORE_TARGET_PATH}"
+echo "Restore target isolation: accepted (temp-only, target does not exist)"
+echo "Restore execution: disabled by default (preflight only; no restore command is invoked)"
 echo "Dry-run evidence: suitable for launch readiness review"
 echo "Focused test command: python3 -m pytest tests/test_backup_restore_drill_smoke.py -q"
 echo "Optional check command: bash -n scripts/backup_restore_drill_check.sh"
-echo "No production DB, migration, PostgreSQL, or backup infrastructure action is performed."
+echo "No production DB, migration, PostgreSQL restore, network, or backup infrastructure action is performed."

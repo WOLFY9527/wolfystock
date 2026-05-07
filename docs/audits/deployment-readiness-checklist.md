@@ -215,9 +215,10 @@ Status:
 Remaining blockers:
 
 - [ ] Index Batch B remains for broader owner/status/time/admin drilldown paths.
-- [x] Local dry-run backup/restore drill preflight exists for simulated
-  metadata, artifact presence, timestamp sanity, schema compatibility, and
-  temp-only restore target isolation.
+- [x] Local dry-run backup/restore/PITR drill preflight exists for simulated
+  metadata, artifact presence, timestamp sanity, schema compatibility,
+  PITR/WAL archive metadata, sanitized evidence output, and temp-only restore
+  target isolation.
 - [x] Admin log retention tiers are explicit and test-backed:
   `admin_logs_standard`, `admin_logs_minimum_protected`, and
   `admin_logs_storage_pressure`.
@@ -233,11 +234,11 @@ Remaining blockers:
   `/api/health/live`, unauthenticated `/api/v1/admin/users` fail-closed
   behavior, sensitive/debug payload patterns, sanitized timeout/action output,
   and attachable JSON evidence.
-- [ ] Isolated PostgreSQL backup/restore drill is still missing.
+- [ ] Isolated PostgreSQL backup/restore execution is still missing.
 - [ ] Real HTTPS staging ingress smoke evidence is still missing; the new
   preflight must be run against a synthetic staging URL with explicit opt-in.
-- [ ] Encrypted backup, PITR targets, restore smoke, and rollback runbook must
-  be documented and exercised before public onboarding.
+- [ ] Encrypted backup infrastructure, PITR execution, restore smoke, and
+  rollback runbook must be documented and exercised before public onboarding.
 - [ ] Retention tiers are still missing for task progress, terminal task state,
   LLM usage, scanner/backtest artifacts, provider counters, guest/cache
   metadata, and future Options cache rows.
@@ -339,7 +340,8 @@ The following must all be true before public multi-user deployment:
   blocked behind a documented compensating control.
 - [ ] Backup/restore dry-run preflight passes with fresh synthetic or sanitized
   metadata and a temp-only restore target.
-- [ ] Backup/restore drill passes in an isolated environment.
+- [ ] Real isolated PostgreSQL backup/restore drill passes in an isolated
+  environment.
 - [ ] Rollback plan is written, including last-good commit/image, DB restore
   decision point, health checks, and owner-isolation smoke.
 - [ ] Retention dry-run reports exist for high-growth domains.

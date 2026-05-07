@@ -9,11 +9,13 @@ Current public multi-user deployment verdict for this slice: **NO-GO until reten
 
 The current database readiness posture has improved through DB Index Batch A,
 which covered the first production-critical auth/session and durable
-task/progress lookup paths, and through a local dry-run backup/restore
-preflight that validates simulated metadata, artifact presence, timestamp
-sanity, schema compatibility, and temp-only restore target isolation. Batch B
-indexes, retention implementation, cleanup jobs, PostgreSQL backup automation,
-and real restore drill evidence remain future work.
+task/progress lookup paths, and through a local dry-run PostgreSQL
+backup/restore/PITR preflight that validates simulated metadata, backup
+artifact presence, timestamp sanity, schema compatibility, PITR window/WAL
+archive metadata, sanitized evidence output, and temp-only restore target
+isolation. Batch B indexes, retention implementation, cleanup jobs,
+PostgreSQL backup automation, and real isolated restore drill evidence remain
+future work.
 
 This plan defines the retention tiers, backup policy, restore drill scope, validation checklist, rollback/failure handling, and future Codex prompts needed before public onboarding. It is intentionally planning-only and does not authorize cleanup, migration, DB access, schema changes, or runtime behavior changes.
 
@@ -21,8 +23,10 @@ Public deployment blockers covered by this document:
 
 - Retention tiers are not yet accepted for high-growth operational and user-owned tables.
 - Backup policy is not yet proven for encrypted PostgreSQL production data.
-- Local dry-run restore preflight evidence exists, but real isolated
-  PostgreSQL, staging, and PITR restore drill evidence has not been produced.
+- Local dry-run PostgreSQL restore/PITR evidence preflight exists, but real
+  isolated PostgreSQL restore execution, staging restore smoke, encrypted
+  backup infrastructure proof, and PITR execution evidence have not been
+  produced.
 - Post-restore smoke checks are not yet standardized across auth, task polling, admin logs, cost observability, and portfolio/backtest artifacts.
 
 ## 2. Scope and Non-goals
@@ -245,15 +249,24 @@ synthetic or sanitized metadata. The metadata must include:
 - `created_at`
 - `artifact_path`
 - `schema_version=backup_restore_preflight_v1`
+- `application_schema_version=wolfystock_ops_readiness_v1`
+- `database_engine=postgresql`
 - `source_environment` set to `synthetic`, `sanitized`, or `anonymized`
+- `pitr.target_time`
+- `pitr.window_start`
+- `pitr.window_end`
+- `pitr.wal_archive_path`
+- `pitr.restore_point_label`
 
 The preflight is intentionally dry-run only. It verifies backup artifact
-presence, timestamp freshness, schema compatibility, and restore target
-isolation; it refuses missing or stale metadata and refuses non-temp restore
-targets. Passing this preflight does not prove that PostgreSQL backup,
-encryption, PITR, or restore infrastructure works. It only produces safe launch
-readiness evidence that the drill inputs and isolation plan are coherent before
-running a real isolated restore.
+presence, timestamp freshness, metadata/application schema compatibility, PITR
+target-within-window metadata, WAL/archive marker presence, optional local
+safe-test DSN hygiene, sanitized output, and restore target isolation; it
+refuses missing or stale metadata, non-temp restore targets, production-like
+paths/DSNs, and any real restore by default. Passing this preflight does not
+prove that PostgreSQL backup, encryption, PITR, or restore infrastructure
+works. It only produces safe launch readiness evidence that the drill inputs and
+isolation plan are coherent before running a real isolated restore.
 
 ## 8. Rollback and Failure Plan
 

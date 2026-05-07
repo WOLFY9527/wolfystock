@@ -3,5 +3,14 @@
   "created_at": "2026-05-07T00:00:00Z",
   "artifact_path": "backup_restore_preflight_artifact.marker",
   "schema_version": "backup_restore_preflight_v1",
-  "source_environment": "synthetic"
+  "application_schema_version": "wolfystock_ops_readiness_v1",
+  "database_engine": "postgresql",
+  "source_environment": "synthetic",
+  "pitr": {
+    "target_time": "2026-05-07T00:10:00Z",
+    "window_start": "2026-05-07T00:00:00Z",
+    "window_end": "2026-05-07T00:20:00Z",
+    "wal_archive_path": "backup_restore_preflight_wal_archive.marker",
+    "restore_point_label": "synthetic-pitr-readiness"
+  }
 }
