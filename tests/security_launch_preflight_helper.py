@@ -70,7 +70,9 @@ class SecurityLaunchPreflight:
     break_glass_enabled_by_default: bool
     coarse_admin_fallback_present: bool
     coarse_admin_fallback_status: str
+    coarse_admin_fallback_default_enabled: bool
     coarse_admin_fallback_disable_preflight_ready: bool
+    coarse_admin_fallback_guarded_disable_switch_available: bool
     coarse_admin_fallback_production_switch_ready: bool
     coarse_admin_fallback_production_switch_status: str
     coarse_admin_fallback_switch_evidence: dict[str, bool]
@@ -78,6 +80,7 @@ class SecurityLaunchPreflight:
     missing_capability_dependency_fail_closed: bool
     missing_admin_capabilities_fail_closed: bool
     missing_admin_capabilities_payload: dict
+    public_launch_dependency_inventory_complete: bool
     public_launch_legacy_admin_route_dependencies: dict[str, tuple[str, ...]]
     launch_blockers: tuple[str, ...]
     rollback_safe_next_step: str
@@ -255,8 +258,14 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
         "public_launch_dependency_inventory_complete": public_launch_dependency_inventory_complete,
         "runtime_default_changed": False,
     }
+    guarded_disable_switch_available = (
+        coarse_fallback_disable_preflight_ready and public_launch_dependency_inventory_complete
+    )
+    switch_evidence["guarded_disable_switch_available"] = guarded_disable_switch_available
     blockers = []
-    if coarse_fallback_present:
+    if fallback_default_enabled and guarded_disable_switch_available:
+        blockers.append("coarse_admin_fallback_default_enabled_until_switch_applied")
+    elif coarse_fallback_present:
         blockers.append("coarse_admin_fallback_present")
     if not public_launch_dependency_inventory_complete:
         blockers.append("admin_route_capability_dependency_gap")
@@ -266,11 +275,8 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
         blockers.append("mfa_login_enforcement_enabled_by_default")
     if break_glass_default:
         blockers.append("mfa_break_glass_enabled_by_default")
-    production_switch_ready = (
-        coarse_fallback_disable_preflight_ready
-        and public_launch_dependency_inventory_complete
-        and not coarse_fallback_present
-    )
+    production_switch_ready = guarded_disable_switch_available
+    production_switch_status = "guarded_disable_available" if production_switch_ready else "blocked"
 
     return SecurityLaunchPreflight(
         mfa_enforcement_enabled_by_default=mfa_default,
@@ -279,9 +285,11 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
         break_glass_enabled_by_default=break_glass_default,
         coarse_admin_fallback_present=coarse_fallback_present,
         coarse_admin_fallback_status="transitional" if coarse_fallback_present else "removed",
+        coarse_admin_fallback_default_enabled=fallback_default_enabled,
         coarse_admin_fallback_disable_preflight_ready=coarse_fallback_disable_preflight_ready,
+        coarse_admin_fallback_guarded_disable_switch_available=guarded_disable_switch_available,
         coarse_admin_fallback_production_switch_ready=production_switch_ready,
-        coarse_admin_fallback_production_switch_status="ready" if production_switch_ready else "blocked",
+        coarse_admin_fallback_production_switch_status=production_switch_status,
         coarse_admin_fallback_switch_evidence=switch_evidence,
         explicit_capability_grants_without_fallback=explicit_capability_grants_work,
         missing_capability_dependency_fail_closed=missing_capability_dependency_fail_closed,
@@ -289,8 +297,10 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
             value is False for value in flag_values
         ),
         missing_admin_capabilities_payload=payload,
+        public_launch_dependency_inventory_complete=public_launch_dependency_inventory_complete,
         public_launch_legacy_admin_route_dependencies=inventory.legacy_admin_dependencies,
         launch_blockers=tuple(blockers),
-        rollback_safe_next_step="Do not remove coarse admin fallback until R5 inventory, observe-mode telemetry, "
-        "explicit role assignments, MFA/reauth evidence, fail-closed browser proof, and rollback evidence are complete.",
+        rollback_safe_next_step="Set WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED=false only for the guarded "
+        "production-disable path; do not delete the compatibility code until explicit role assignments, telemetry, "
+        "MFA/reauth evidence, fail-closed browser proof, and rollback evidence are complete.",
     )

@@ -141,13 +141,16 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertFalse(report.break_glass_enabled_by_default)
         self.assertTrue(report.coarse_admin_fallback_present)
         self.assertEqual(report.coarse_admin_fallback_status, "transitional")
+        self.assertTrue(report.coarse_admin_fallback_default_enabled)
         self.assertTrue(report.coarse_admin_fallback_disable_preflight_ready)
-        self.assertEqual(report.coarse_admin_fallback_production_switch_status, "blocked")
-        self.assertFalse(report.coarse_admin_fallback_production_switch_ready)
+        self.assertTrue(report.coarse_admin_fallback_guarded_disable_switch_available)
+        self.assertEqual(report.coarse_admin_fallback_production_switch_status, "guarded_disable_available")
+        self.assertTrue(report.coarse_admin_fallback_production_switch_ready)
+        self.assertTrue(report.public_launch_dependency_inventory_complete)
         self.assertNotIn("admin_route_capability_dependency_gap", report.launch_blockers)
         self.assertTrue(report.explicit_capability_grants_without_fallback)
         self.assertTrue(report.missing_capability_dependency_fail_closed)
-        self.assertIn("coarse_admin_fallback_present", report.launch_blockers)
+        self.assertIn("coarse_admin_fallback_default_enabled_until_switch_applied", report.launch_blockers)
         self.assertTrue(report.missing_admin_capabilities_fail_closed)
 
     def test_mfa_default_remains_non_enforcing_even_after_enrollment(self) -> None:
@@ -228,14 +231,16 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertEqual(set(ADMIN_RBAC_CAPABILITIES), capabilities)
         self.assertTrue(report.coarse_admin_fallback_present)
         self.assertEqual(report.coarse_admin_fallback_status, "transitional")
-        self.assertIn("coarse_admin_fallback_present", report.launch_blockers)
-        self.assertIn("remove coarse admin fallback", report.rollback_safe_next_step)
+        self.assertTrue(report.coarse_admin_fallback_default_enabled)
+        self.assertTrue(report.coarse_admin_fallback_guarded_disable_switch_available)
+        self.assertIn("coarse_admin_fallback_default_enabled_until_switch_applied", report.launch_blockers)
+        self.assertIn("WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED=false", report.rollback_safe_next_step)
 
     def test_coarse_fallback_production_switch_status_reports_no_route_gap(self) -> None:
         report = build_security_launch_preflight()
 
-        self.assertEqual(report.coarse_admin_fallback_production_switch_status, "blocked")
-        self.assertFalse(report.coarse_admin_fallback_production_switch_ready)
+        self.assertEqual(report.coarse_admin_fallback_production_switch_status, "guarded_disable_available")
+        self.assertTrue(report.coarse_admin_fallback_production_switch_ready)
         self.assertEqual(
             {
                 "fallback_default_enabled": True,
@@ -246,11 +251,13 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
                 "sanitized_denials_without_fallback": True,
                 "public_launch_dependency_inventory_complete": True,
                 "runtime_default_changed": False,
+                "guarded_disable_switch_available": True,
             },
             report.coarse_admin_fallback_switch_evidence,
         )
         self.assertEqual({}, report.public_launch_legacy_admin_route_dependencies)
         self.assertNotIn("admin_route_capability_dependency_gap", report.launch_blockers)
+        self.assertTrue(report.public_launch_dependency_inventory_complete)
 
     def test_role_capability_payloads_do_not_leak_secrets_or_session_data(self) -> None:
         login = self._login_admin()
