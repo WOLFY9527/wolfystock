@@ -62,6 +62,7 @@ beforeAll(() => {
 afterEach(() => {
   window.innerWidth = 1024;
   window.dispatchEvent(new Event('resize'));
+  document.body.style.overflow = '';
 });
 
 const ShellRailFixture = () => {
@@ -636,8 +637,8 @@ describe('Shell', () => {
 
     await waitFor(() => {
       expect(screen.queryAllByRole('dialog')).toHaveLength(0);
+      expect(document.body.style.overflow).toBe('');
     });
-    expect(document.body.style.overflow).toBe('');
 
     window.innerWidth = 390;
     await act(async () => {

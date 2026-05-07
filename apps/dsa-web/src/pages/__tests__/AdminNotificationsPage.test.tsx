@@ -142,7 +142,7 @@ describe('AdminNotificationsPage', () => {
     render(<AdminNotificationsPage />);
 
     expect(await screen.findByText('管理员通知')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '刷新' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '刷新' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '创建通道' })).toBeInTheDocument();
     expect(screen.getByText('通知规则')).toBeInTheDocument();
     expect(screen.getByText('通知事件')).toBeInTheDocument();
