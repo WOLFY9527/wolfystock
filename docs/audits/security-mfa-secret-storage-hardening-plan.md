@@ -16,7 +16,12 @@ TOTP secrets as a versioned AES-GCM encrypted envelope in the existing
 new non-test enrollment, `WOLFYSTOCK_MFA_SECRET_KEY_ID` is stored only as
 envelope metadata, `test-only:` and legacy plaintext TOTP references remain
 read-compatible, and `placeholder-sha256:` remains migration-incomplete and
-non-verifiable. Login MFA enforcement remains disabled.
+non-verifiable. A disabled-by-default login enforcement pilot contract now
+exists behind `WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED=false`; it requires
+TOTP or consumes one valid recovery code only when explicitly enabled. The
+separate break-glass pilot remains disabled by default behind
+`WOLFYSTOCK_MFA_LOGIN_BREAK_GLASS_ENABLED=false` and requires an explicit,
+sanitized audit trail. Global login MFA enforcement remains disabled.
 
 ## 1. Current scaffold and production gap
 
@@ -392,10 +397,12 @@ Backup/restore tests:
 Current enforcement blockers:
 
 - No approved production TOTP secret encryption or external secret storage.
-- No final MFA-required login/session contract.
-- No recovery-code fallback integration into enforced login.
-- No break-glass/admin recovery procedure for lost device plus lost recovery
-  codes.
+- No final global MFA-required login/session contract beyond the disabled pilot.
+- Recovery-code fallback exists only inside the disabled pilot and is not yet a
+  production rollout.
+- Break-glass/admin recovery exists only as an explicit disabled pilot switch;
+  the production lost-device plus lost-recovery-codes procedure is still a
+  blocker.
 - No production key custody, rotation, restore, and missing-key runbook.
 - No audit policy for decrypt failures, rotation, disable, and recovery-code
   usage under enforcement.

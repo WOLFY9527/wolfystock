@@ -79,6 +79,17 @@ class LoginRequest(BaseModel):
     create_user: bool = Field(default=False, alias="createUser", description="Whether to create a new normal user account")
     password: str = Field(default="", description="Password")
     password_confirm: str | None = Field(default=None, alias="passwordConfirm", description="Confirm (first-time)")
+    mfa_code: str | None = Field(default=None, alias="mfaCode", description="Pilot MFA TOTP code")
+    mfa_recovery_code: str | None = Field(
+        default=None,
+        alias="mfaRecoveryCode",
+        description="Pilot MFA recovery code",
+    )
+    break_glass_reason: str | None = Field(
+        default=None,
+        alias="breakGlassReason",
+        description="Explicit admin break-glass reason for MFA recovery pilot",
+    )
 
 
 class ChangePasswordRequest(BaseModel):
@@ -386,6 +397,128 @@ def _audit_login_event(
         )
     except Exception as exc:
         logger.warning("Failed to record auth security event: %s", exc)
+
+
+def _env_flag_enabled(name: str) -> bool:
+    return str(os.getenv(name) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_mfa_login_enforcement_enabled() -> bool:
+    """Disabled-by-default pilot switch for MFA enforcement at login."""
+    return _env_flag_enabled("WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED")
+
+
+def _is_mfa_login_break_glass_enabled() -> bool:
+    """Disabled-by-default pilot switch for explicit admin MFA break-glass."""
+    return _env_flag_enabled("WOLFYSTOCK_MFA_LOGIN_BREAK_GLASS_ENABLED")
+
+
+def _mfa_required_error() -> JSONResponse:
+    return JSONResponse(
+        status_code=401,
+        content={
+            "error": "mfa_required",
+            "message": "MFA verification required",
+            "mfaRequired": True,
+        },
+    )
+
+
+def _audit_mfa_login_event(
+    *,
+    request: Request,
+    action: str,
+    username: str,
+    outcome: str,
+    user_id: str | None,
+    status: str = "failed",
+    break_glass_reason: str | None = None,
+) -> None:
+    safe_detail = sanitize_metadata(
+        {
+            "outcome": outcome,
+            "account_hash": safe_identifier_hash(username, prefix="acct"),
+            "user_hash": safe_identifier_hash(user_id, prefix="user") if user_id else None,
+            "ip_hash": safe_identifier_hash(get_client_ip(request), prefix="ip"),
+            "user_agent_hash": safe_identifier_hash(request.headers.get("User-Agent"), prefix="ua"),
+            "admin_flow": True,
+            "mfa_login_enforcement": True,
+            "break_glass_reason_provided": bool(str(break_glass_reason or "").strip()),
+            "break_glass_reason_hash": (
+                safe_identifier_hash(break_glass_reason, prefix="reason")
+                if str(break_glass_reason or "").strip()
+                else None
+            ),
+        }
+    )
+    try:
+        ExecutionLogService().record_admin_action(
+            action=action,
+            message=f"Security MFA login event: {outcome}",
+            actor={"actor_type": "anonymous", "role": "anonymous"},
+            subsystem="security",
+            destructive=False,
+            detail=safe_detail,
+            overall_status=status,
+            result={"event": action, "metadata": safe_detail},
+        )
+    except Exception as exc:
+        logger.warning("Failed to record MFA auth security event: %s", exc)
+
+
+def _verify_login_mfa_requirement(
+    *,
+    request: Request,
+    username: str,
+    user_row,
+    body: LoginRequest,
+) -> JSONResponse | None:
+    if not _is_mfa_login_enforcement_enabled():
+        return None
+    if str(getattr(user_row, "role", "")) != ROLE_ADMIN:
+        return None
+
+    user_id = str(getattr(user_row, "id", "") or "")
+    secret_ref = getattr(user_row, "mfa_secret_ref", None)
+    mfa_enabled = bool(getattr(user_row, "mfa_enabled", False))
+    if mfa_enabled and secret_ref and verify_totp_code(secret_ref=secret_ref, code=body.mfa_code):
+        return None
+
+    if mfa_enabled and body.mfa_recovery_code:
+        result = verify_recovery_code(user_id=user_id, code=body.mfa_recovery_code, repo=AuthRepository())
+        if result.verified:
+            _audit_mfa_login_event(
+                request=request,
+                action="security.mfa_recovery_code_login",
+                username=username,
+                outcome="mfa_recovery_code_success",
+                user_id=user_id,
+                status="completed",
+            )
+            return None
+
+    reason = str(body.break_glass_reason or "").strip()
+    if reason and _is_mfa_login_break_glass_enabled():
+        _audit_mfa_login_event(
+            request=request,
+            action="security.mfa_break_glass_login",
+            username=username,
+            outcome="mfa_break_glass_success",
+            user_id=user_id,
+            status="completed",
+            break_glass_reason=reason,
+        )
+        return None
+
+    _audit_mfa_login_event(
+        request=request,
+        action="security.mfa_login_required",
+        username=username,
+        outcome="mfa_required",
+        user_id=user_id,
+        break_glass_reason=reason,
+    )
+    return _mfa_required_error()
 
 
 def _record_login_failure_and_audit(
@@ -1474,6 +1607,15 @@ async def auth_login(request: Request, body: LoginRequest):
                 return _generic_login_error()
             else:
                 user_row = _upgrade_app_user_password_hash_if_needed(user_row, password)
+
+    mfa_error = _verify_login_mfa_requirement(
+        request=request,
+        username=username,
+        user_row=user_row,
+        body=body,
+    )
+    if mfa_error is not None:
+        return mfa_error
 
     had_failures = has_rate_limit_failures(ip, username)
     clear_rate_limit(ip, username)

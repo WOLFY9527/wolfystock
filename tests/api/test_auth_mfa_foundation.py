@@ -102,6 +102,16 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         return response
 
+    def _enable_admin_mfa_and_recovery_codes(self):
+        self._login_admin()
+        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_TEST_SECRET": TEST_MFA_SECRET}, clear=False):
+            self.client.post("/api/v1/auth/mfa/enroll/start")
+            self._reauth_admin()
+            self.client.post("/api/v1/auth/mfa/enroll/verify", json={"code": _totp_code(TEST_MFA_SECRET)})
+        generated = self.client.post("/api/v1/auth/mfa/recovery-codes/generate")
+        self.assertEqual(generated.status_code, 200)
+        return generated.json()["recoveryCodes"]
+
     def _reauth_admin(self):
         response = self.client.post("/api/v1/auth/reauth", json={"password": "adminpass123"})
         self.assertEqual(response.status_code, 200)
@@ -353,6 +363,145 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
         self.assertNotIn(challenge.secret, rendered)
         self.assertNotIn(challenge.provisioning_uri, rendered)
         self.assertNotIn(challenge.secret_ref, rendered)
+
+    def test_mfa_login_enforcement_disabled_keeps_current_login_behavior(self) -> None:
+        self._enable_admin_mfa_and_recovery_codes()
+
+        response = self.client.post("/api/v1/auth/login", json={"username": "admin", "password": "adminpass123"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertNotIn("mfaRequired", payload)
+
+    def test_mfa_login_enforcement_enabled_accepts_verified_totp(self) -> None:
+        self._enable_admin_mfa_and_recovery_codes()
+
+        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true"}, clear=False):
+            missing = self.client.post("/api/v1/auth/login", json={"username": "admin", "password": "adminpass123"})
+            accepted = self.client.post(
+                "/api/v1/auth/login",
+                json={"username": "admin", "password": "adminpass123", "mfaCode": _totp_code(TEST_MFA_SECRET)},
+            )
+
+        self.assertEqual(missing.status_code, 401)
+        self.assertEqual(missing.json()["error"], "mfa_required")
+        self.assertEqual(accepted.status_code, 200)
+        self.assertTrue(accepted.json()["ok"])
+        self.assertNotIn(TEST_MFA_SECRET, missing.text + accepted.text)
+
+    def test_mfa_login_enforcement_enabled_accepts_recovery_code_once(self) -> None:
+        recovery_code = self._enable_admin_mfa_and_recovery_codes()[0]
+
+        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true"}, clear=False):
+            accepted = self.client.post(
+                "/api/v1/auth/login",
+                json={
+                    "username": "admin",
+                    "password": "adminpass123",
+                    "mfaRecoveryCode": recovery_code,
+                },
+            )
+            replay = self.client.post(
+                "/api/v1/auth/login",
+                json={
+                    "username": "admin",
+                    "password": "adminpass123",
+                    "mfaRecoveryCode": recovery_code,
+                },
+            )
+
+        self.assertEqual(accepted.status_code, 200)
+        self.assertTrue(accepted.json()["ok"])
+        self.assertEqual(replay.status_code, 401)
+        self.assertEqual(replay.json()["error"], "mfa_required")
+        self.assertNotIn(recovery_code, accepted.text + replay.text)
+
+    def test_mfa_login_enforcement_fails_safely_for_missing_or_invalid_state(self) -> None:
+        self._enable_admin_mfa_and_recovery_codes()
+        repo = AuthRepository(self.db)
+        repo.update_app_user_mfa(
+            user_id="bootstrap-admin",
+            mfa_enabled=True,
+            mfa_secret_ref=None,
+            mfa_recovery_codes_hash=None,
+            mfa_created_at=None,
+            mfa_enabled_at=None,
+            mfa_last_verified_at=None,
+        )
+
+        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true"}, clear=False):
+            response = self.client.post(
+                "/api/v1/auth/login",
+                json={"username": "admin", "password": "adminpass123", "mfaCode": _totp_code(TEST_MFA_SECRET)},
+            )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "mfa_required")
+        self.assertNotIn(TEST_MFA_SECRET, response.text)
+
+    def test_mfa_break_glass_login_requires_explicit_flag_reason_and_audit(self) -> None:
+        self._enable_admin_mfa_and_recovery_codes()
+
+        with patch("api.v1.endpoints.auth.ExecutionLogService") as service_cls:
+            recorder = service_cls.return_value
+            with patch.dict(os.environ, {"WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true"}, clear=False):
+                blocked = self.client.post(
+                    "/api/v1/auth/login",
+                    json={
+                        "username": "admin",
+                        "password": "adminpass123",
+                        "breakGlassReason": "lost-device-support-ticket",
+                    },
+                )
+            with patch.dict(
+                os.environ,
+                {
+                    "WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true",
+                    "WOLFYSTOCK_MFA_LOGIN_BREAK_GLASS_ENABLED": "true",
+                },
+                clear=False,
+            ):
+                accepted = self.client.post(
+                    "/api/v1/auth/login",
+                    json={
+                        "username": "admin",
+                        "password": "adminpass123",
+                        "breakGlassReason": "lost-device-support-ticket",
+                    },
+                )
+
+        self.assertEqual(blocked.status_code, 401)
+        self.assertEqual(blocked.json()["error"], "mfa_required")
+        self.assertEqual(accepted.status_code, 200)
+        recorder.record_admin_action.assert_called()
+        actions = [call.kwargs.get("action") for call in recorder.record_admin_action.call_args_list]
+        self.assertIn("security.mfa_break_glass_login", actions)
+        rendered_calls = repr(recorder.record_admin_action.call_args_list)
+        self.assertNotIn(TEST_MFA_SECRET, rendered_calls)
+
+    def test_mfa_login_enforcement_responses_and_audit_do_not_leak_secrets(self) -> None:
+        recovery_code = self._enable_admin_mfa_and_recovery_codes()[0]
+
+        with patch("api.v1.endpoints.auth.ExecutionLogService") as service_cls:
+            recorder = service_cls.return_value
+            with patch.dict(os.environ, {"WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true"}, clear=False):
+                rejected = self.client.post(
+                    "/api/v1/auth/login",
+                    json={
+                        "username": "admin",
+                        "password": "adminpass123",
+                        "mfaCode": "000000",
+                        "mfaRecoveryCode": "BAD-CODE-0000",
+                    },
+                )
+
+        self.assertEqual(rejected.status_code, 401)
+        response_text = rejected.text
+        audit_text = repr(recorder.record_admin_action.call_args_list)
+        self.assertNotIn(TEST_MFA_SECRET, response_text + audit_text)
+        self.assertNotIn(recovery_code, response_text + audit_text)
+        self.assertNotIn("otpauth://", response_text + audit_text)
 
 
 if __name__ == "__main__":
