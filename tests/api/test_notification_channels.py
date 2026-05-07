@@ -182,6 +182,115 @@ class NotificationChannelsTestCase(unittest.TestCase):
         self.assertEqual(self.delivery.webhook_calls, [])
         self.assertEqual(event["delivery_status"], "no_channels")
 
+    def test_default_delivery_requires_explicit_opt_in_route_and_target(self) -> None:
+        event = self.service.emit_event(
+            event_type="admin_logs.storage",
+            severity="critical",
+            title="Storage critical",
+            message="Storage threshold exceeded",
+            payload={"session_id": "run-1"},
+            fingerprint="storage:explicit-opt-in",
+        )
+
+        self.assertEqual(event["delivery_status"], "no_channels")
+        self.assertEqual(self.delivery.webhook_calls, [])
+        with self.assertRaises(ValueError):
+            self.service.create_channel(
+                name="missing webhook target",
+                type="webhook",
+                enabled=True,
+                severity_min="warning",
+                event_types=["admin_logs.storage"],
+                config={},
+            )
+        with self.assertRaises(ValueError):
+            self.service.create_channel(
+                name="missing system channel",
+                type="system_channel",
+                enabled=True,
+                severity_min="warning",
+                event_types=["admin_logs.storage"],
+                config={},
+            )
+
+    def test_log_info_debug_events_are_not_exposed_to_admin_notifications(self) -> None:
+        self.service.create_channel(
+            name="Ops inbox",
+            type="in_app",
+            enabled=True,
+            severity_min="info",
+            event_types=["admin_logs.event"],
+            config={},
+        )
+
+        info_event = self.service.emit_log_event(
+            log_level="INFO",
+            category="notification",
+            event_name="NotificationRouteDebug",
+            message="configured webhook internals",
+            session_id="debug-session",
+        )
+        debug_event = self.service.emit_log_event(
+            log_level="DEBUG",
+            category="notification",
+            event_name="NotificationRouteDebug",
+            message="configured webhook internals",
+            session_id="debug-session",
+        )
+
+        self.assertIsNone(info_event)
+        self.assertIsNone(debug_event)
+        self.assertEqual(self.service.list_events()["items"], [])
+
+    def test_alert_payload_redacts_sensitive_credentials_before_storage_and_delivery(self) -> None:
+        self.service.create_channel(
+            name="ops webhook",
+            type="webhook",
+            enabled=True,
+            severity_min="warning",
+            event_types=["admin_logs.storage"],
+            config={"webhook_url": "https://hooks.example.test/alert", "token": "route-token"},
+        )
+
+        event = self.service.emit_event(
+            event_type="admin_logs.storage",
+            severity="critical",
+            title="Storage critical",
+            message="Storage threshold exceeded",
+            payload={
+                "token": "raw-token",
+                "password": "raw-password",
+                "api_key": "raw-api-key",
+                "session_cookie": "raw-cookie",
+                "broker_credentials": {"account": "acct-1", "password": "broker-password"},
+                "provider_credentials": {"apiKey": "provider-api-key"},
+                "webhook_url": "https://hooks.example.test/services/raw/path",
+                "trade_order": {"symbol": "AAPL", "side": "BUY"},
+                "portfolio_mutation": {"action": "rebalance"},
+            },
+            fingerprint="storage:sensitive-payload",
+        )
+
+        self.assertEqual(event["delivery_status"], "delivered")
+        delivered_payload = self.delivery.webhook_calls[0]["payload"]
+        stored_payload = self.service.list_events()["items"][0]["payload"]
+        for payload in (event["payload"], delivered_payload["payload"], stored_payload):
+            payload_text = str(payload)
+            self.assertNotIn("raw-token", payload_text)
+            self.assertNotIn("raw-password", payload_text)
+            self.assertNotIn("raw-api-key", payload_text)
+            self.assertNotIn("raw-cookie", payload_text)
+            self.assertNotIn("broker-password", payload_text)
+            self.assertNotIn("provider-api-key", payload_text)
+            self.assertNotIn("/services/raw/path", payload_text)
+            self.assertEqual(payload["token"], "********")
+            self.assertEqual(payload["password"], "********")
+            self.assertEqual(payload["api_key"], "********")
+            self.assertEqual(payload["session_cookie"], "********")
+            self.assertEqual(payload["webhook_url"], "https://hooks.example.test/***")
+            self.assertEqual(payload["trade_order"]["symbol"], "AAPL")
+            self.assertEqual(payload["portfolio_mutation"]["action"], "rebalance")
+
     def test_existing_system_channel_sends_through_configured_notifier(self) -> None:
         sent_messages: list[str] = []
 
@@ -374,8 +483,49 @@ class NotificationChannelsTestCase(unittest.TestCase):
         channels = failing.list_channels()
 
         self.assertEqual(event["delivery_status"], "failed")
-        self.assertIn("mock webhook failure", channels[0]["last_error"])
+        self.assertEqual(channels[0]["last_error"], "Webhook delivery failed")
+        self.assertEqual(channels[0]["last_error_summary"], "Webhook delivery failed")
         self.assertEqual(channels[0]["last_error_code"], "webhook_delivery_failed")
+
+    def test_delivery_failure_status_is_sanitized_for_admin_surfaces(self) -> None:
+        failing = NotificationService(
+            db=self.db,
+            delivery_client=FakeDeliveryClient(
+                fail=True,
+                failure_message=(
+                    "Traceback (most recent call last): provider failed "
+                    "token=raw-token password=raw-password api_key=raw-api-key "
+                    "cookie=raw-cookie https://hooks.example.test/services/raw/path"
+                ),
+            ),
+        )
+        channel = failing.create_channel(
+            name="failing webhook",
+            type="webhook",
+            enabled=True,
+            severity_min="warning",
+            event_types=[],
+            config={"webhook_url": "https://hooks.example.test/fail", "token": "route-token"},
+        )
+
+        with patch("api.v1.endpoints.admin_notifications.NotificationService", return_value=failing):
+            payload = admin_notifications.test_notification_channel(
+                channel_id=channel["id"],
+                request=SimpleNamespace(headers={"accept-language": "en-US"}),
+                _=_admin_user(),
+            ).model_dump()
+
+        channels = failing.list_channels()
+        combined = f"{payload} {channels}"
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["error_code"], "webhook_delivery_failed")
+        self.assertIn("Webhook delivery failed", payload["error"])
+        self.assertNotIn("Traceback", combined)
+        self.assertNotIn("raw-token", combined)
+        self.assertNotIn("raw-password", combined)
+        self.assertNotIn("raw-api-key", combined)
+        self.assertNotIn("raw-cookie", combined)
+        self.assertNotIn("/services/raw/path", combined)
 
     def test_ssl_delivery_failure_is_classified_and_localized_by_request_language(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -419,7 +569,7 @@ class NotificationChannelsTestCase(unittest.TestCase):
 
             channels = failing.list_channels()
             self.assertEqual(channels[0]["last_error_code"], "ssl_certificate_verify_failed")
-            self.assertIn("CERTIFICATE_VERIFY_FAILED", channels[0]["last_error"])
+            self.assertEqual(channels[0]["last_error"], "SSL certificate verification failed")
 
     def test_test_channel_missing_route_returns_clean_error(self) -> None:
         with patch("api.v1.endpoints.admin_notifications.NotificationService", return_value=self.service), self.assertRaises(HTTPException) as raised:

@@ -31,7 +31,18 @@ LOG_LEVEL_TO_SEVERITY = {
 }
 CHANNEL_TYPES = {"in_app", "webhook", "system_channel"}
 MASKED_VALUE = "********"
-SENSITIVE_KEYS = ("secret", "token", "password", "authorization", "bearer")
+SENSITIVE_KEYS = (
+    "secret",
+    "token",
+    "password",
+    "authorization",
+    "bearer",
+    "api_key",
+    "apikey",
+    "cookie",
+    "session",
+    "credential",
+)
 SSL_CERTIFICATE_ERROR_RE = re.compile(
     r"certificate verify failed|CERTIFICATE_VERIFY_FAILED|ssl certificate verification failed|"
     r"ssl 证书.*失败|证书.*验证失败|证书校验失败",
@@ -159,17 +170,60 @@ def _mask_webhook_url(value: Any) -> str:
 
 
 def _mask_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    masked: Dict[str, Any] = {}
-    for key, value in (config or {}).items():
-        key_text = str(key)
-        lower_key = key_text.lower()
-        if key_text == "webhook_url":
-            masked[key_text] = _mask_webhook_url(value)
-        elif any(token in lower_key for token in SENSITIVE_KEYS):
-            masked[key_text] = MASKED_VALUE if value else ""
-        else:
-            masked[key_text] = value
-    return masked
+    return _sanitize_mapping(config or {})
+
+
+def _is_sensitive_key(key: Any) -> bool:
+    lower_key = str(key or "").lower()
+    return any(token in lower_key for token in SENSITIVE_KEYS)
+
+
+def _sanitize_text(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if "traceback" in text.lower():
+        return "notification delivery failed"
+    sensitive_text_pattern = (
+        r"(?i)\b(webhook_url|token|password|secret|api[_-]?key|session[_-]?id|"
+        r"session|cookie|authorization|bearer)\s*[:=]\s*([^\s,;]+)"
+    )
+    return re.sub(
+        sensitive_text_pattern,
+        lambda match: f"{match.group(1)}={MASKED_VALUE}",
+        text,
+    )
+
+
+def _sanitize_value(key: Any, value: Any) -> Any:
+    key_text = str(key or "")
+    if key_text == "webhook_url":
+        return _mask_webhook_url(value)
+    if _is_sensitive_key(key_text):
+        return MASKED_VALUE if value else ""
+    return _sanitize_any(value)
+
+
+def _sanitize_mapping(value: Dict[str, Any]) -> Dict[str, Any]:
+    return {str(key): _sanitize_value(key, item) for key, item in (value or {}).items()}
+
+
+def _sanitize_any(value: Any) -> Any:
+    if isinstance(value, dict):
+        return _sanitize_mapping(value)
+    if isinstance(value, list):
+        return [_sanitize_any(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_any(item) for item in value)
+    if isinstance(value, set):
+        return {_sanitize_any(item) for item in value}
+    if isinstance(value, str):
+        return _sanitize_text(value)
+    return value
+
+
+def _sanitize_payload(value: Any) -> Any:
+    return _sanitize_any(value)
 
 
 def _classify_delivery_error(message: Any) -> Dict[str, Any]:
@@ -185,7 +239,6 @@ def _classify_delivery_error(message: Any) -> Dict[str, Any]:
                 "summary_zh": "SSL 证书校验失败。",
                 "action_en": "Check the webhook certificate chain, trusted CA, and hostname.",
                 "action_zh": "请检查 webhook 证书链、受信任 CA 和主机名是否匹配。",
-                "raw_message": error_text,
             },
         }
 
@@ -197,14 +250,14 @@ def _classify_delivery_error(message: Any) -> Dict[str, Any]:
                 "summary_zh": "Webhook 投递超时。",
                 "action_en": "Check webhook availability, DNS, proxy, and upstream latency.",
                 "action_zh": "请检查 webhook 可用性、DNS、代理和上游延迟。",
-                "raw_message": error_text,
             },
         }
 
     return {
         "code": "webhook_delivery_failed",
         "diagnostics": {
-            "raw_message": error_text,
+            "summary_en": "Webhook delivery failed.",
+            "summary_zh": "Webhook 投递失败。",
         },
     }
 
@@ -219,6 +272,10 @@ def _error_summary(message: Any) -> Optional[str]:
     if code == "webhook_delivery_failed":
         return "Webhook delivery failed"
     return None
+
+
+def _error_text(message: Any) -> str:
+    return _error_summary(message) or "Notification delivery failed"
 
 
 class NotificationService:
@@ -348,13 +405,13 @@ class NotificationService:
             except Exception as exc:
                 classification = _classify_delivery_error(exc)
                 row.last_tested_at = now
-                row.last_error = str(exc)
-                logger.warning("notification channel test failed: %s", exc)
+                row.last_error = _error_text(exc)
+                logger.warning("notification channel test failed: %s", _error_text(exc))
                 return {
                     "success": False,
                     "dry_run": bool(dry_run),
                     "target_summary": self._target_summary(row),
-                    "error": str(exc),
+                    "error": _error_text(exc),
                     "error_code": classification["code"],
                     "diagnostics": classification["diagnostics"],
                     "channel": self._channel_payload(row),
@@ -400,7 +457,7 @@ class NotificationService:
                 severity=severity_value,
                 title=title_value[:160],
                 message=message_value,
-                payload_json=_safe_json_dumps(payload or {}),
+                payload_json=_safe_json_dumps(_sanitize_payload(payload or {})),
                 fingerprint=fingerprint_value[:160],
                 dedupe_key=dedupe_key[:255],
                 delivery_status="pending",
@@ -502,9 +559,9 @@ class NotificationService:
                 channel.last_error = None
                 successes += 1
             except Exception as exc:
-                channel.last_error = str(exc)
+                channel.last_error = _error_text(exc)
                 failures += 1
-                logger.warning("notification delivery failed for channel %s: %s", channel.id, exc)
+                logger.warning("notification delivery failed for channel %s: %s", channel.id, _error_text(exc))
         if successes and failures:
             return "partial"
         if failures:
@@ -649,7 +706,7 @@ class NotificationService:
             "last_triggered_at": row.last_sent_at.isoformat() if row.last_sent_at else None,
             "last_sent_at": row.last_sent_at.isoformat() if row.last_sent_at else None,
             "last_status": last_status,
-            "last_error": row.last_error,
+            "last_error": _error_text(row.last_error) if row.last_error else None,
             "last_error_summary": _error_summary(row.last_error),
             "last_error_code": error_classification["code"],
             "last_error_diagnostics": error_classification["diagnostics"],
@@ -689,7 +746,7 @@ class NotificationService:
             "severity": row.severity,
             "title": row.title,
             "message": row.message or "",
-            "payload": _safe_json_loads(row.payload_json, {}),
+            "payload": _sanitize_payload(_safe_json_loads(row.payload_json, {})),
             "fingerprint": row.fingerprint,
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "acknowledged_at": row.acknowledged_at.isoformat() if row.acknowledged_at else None,
