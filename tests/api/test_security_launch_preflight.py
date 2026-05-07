@@ -158,6 +158,7 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertTrue(report.coarse_admin_fallback_guarded_disable_switch_available)
         self.assertEqual(report.coarse_admin_fallback_production_switch_status, "guarded_disable_available")
         self.assertTrue(report.coarse_admin_fallback_production_switch_ready)
+        self.assertTrue(report.coarse_admin_fallback_staging_rehearsal_ready)
         self.assertTrue(report.public_launch_dependency_inventory_complete)
         self.assertNotIn("admin_route_capability_dependency_gap", report.launch_blockers)
         self.assertTrue(report.explicit_capability_grants_without_fallback)
@@ -315,6 +316,40 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertEqual({}, report.public_launch_legacy_admin_route_dependencies)
         self.assertNotIn("admin_route_capability_dependency_gap", report.launch_blockers)
         self.assertTrue(report.public_launch_dependency_inventory_complete)
+
+    def test_coarse_fallback_disable_staging_rehearsal_evidence_is_complete(self) -> None:
+        report = build_security_launch_preflight()
+        evidence = report.coarse_admin_fallback_staging_rehearsal_evidence
+
+        self.assertTrue(report.coarse_admin_fallback_staging_rehearsal_ready)
+        self.assertEqual(
+            (
+                "cost:observability:read",
+                "ops:logs:read",
+                "ops:logs:write",
+                "ops:notifications:read",
+                "ops:notifications:write",
+                "ops:providers:read",
+                "ops:providers:write",
+                "ops:system_config:read",
+                "ops:system_config:write",
+                "users:portfolio:read",
+                "users:security:write",
+            ),
+            evidence["explicit_capability_payloads_passed"],
+        )
+        self.assertTrue(evidence["fallback_disabled_fail_closed"])
+        self.assertTrue(evidence["legacy_payloads_fail_closed"])
+        self.assertTrue(evidence["missing_payloads_fail_closed"])
+        self.assertTrue(evidence["public_launch_inventory_complete"])
+        self.assertTrue(evidence["public_launch_routes_without_legacy_admin_dependencies"])
+        self.assertTrue(evidence["denial_details_sanitized"])
+        self.assertTrue(evidence["audit_payload_sanitized"])
+        self.assertTrue(evidence["default_enabled_without_explicit_config"])
+        self.assertFalse(evidence["runtime_default_changed"])
+        rendered = json.dumps(evidence, sort_keys=True).lower()
+        for forbidden in ("raw-session-id", "raw-password", "raw-cookie", "raw-token", "super-admin", ".env"):
+            self.assertNotIn(forbidden, rendered)
 
     def test_coarse_fallback_disable_switch_is_blocked_when_route_inventory_is_incomplete(self) -> None:
         incomplete_inventory = preflight_helper.AdminRouteCapabilityInventory(

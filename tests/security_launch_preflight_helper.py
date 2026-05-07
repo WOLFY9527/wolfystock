@@ -94,6 +94,8 @@ class SecurityLaunchPreflight:
     coarse_admin_fallback_production_switch_ready: bool
     coarse_admin_fallback_production_switch_status: str
     coarse_admin_fallback_switch_evidence: dict[str, bool]
+    coarse_admin_fallback_staging_rehearsal_ready: bool
+    coarse_admin_fallback_staging_rehearsal_evidence: dict[str, object]
     explicit_capability_grants_without_fallback: bool
     missing_capability_dependency_fail_closed: bool
     missing_admin_capabilities_fail_closed: bool
@@ -253,6 +255,91 @@ def _operator_evidence_is_sanitized(value: object) -> bool:
     return all(marker.lower() not in text for marker in _FORBIDDEN_OPERATOR_EVIDENCE_VALUES)
 
 
+def build_coarse_admin_fallback_disable_rehearsal_evidence() -> dict[str, object]:
+    inventory = inventory_public_launch_admin_route_capabilities()
+    inventoried_capabilities = tuple(
+        sorted({capability for counts in inventory.capability_counts.values() for capability in counts})
+    )
+    explicit_payloads_passed: list[str] = []
+    legacy_payload_denials: list[bool] = []
+    missing_payload_denials: list[bool] = []
+
+    with patch.dict("os.environ", {"WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED": "false"}, clear=False):
+        fallback_disabled_fail_closed = expand_admin_capabilities(_legacy_admin_user()) == set()
+        for capability in inventoried_capabilities:
+            explicit_user = CurrentUser(
+                user_id=f"explicit-{capability}",
+                username="explicit-admin",
+                display_name="Explicit Admin",
+                role=ROLE_ADMIN,
+                is_admin=True,
+                is_authenticated=True,
+                transitional=False,
+                auth_enabled=True,
+                session_id="raw-session-id",
+                legacy_admin=False,
+                admin_capabilities=(capability,),
+            )
+            if require_admin_capability(capability)(explicit_user) is explicit_user:
+                explicit_payloads_passed.append(capability)
+            for user, results in (
+                (_legacy_admin_user(), legacy_payload_denials),
+                (_missing_capability_admin(), missing_payload_denials),
+            ):
+                try:
+                    require_admin_capability(capability)(user)
+                    results.append(False)
+                except HTTPException as exc:
+                    results.append(
+                        exc.status_code == 403
+                        and exc.detail.get("error") == "admin_capability_required"
+                        and _denial_is_sanitized(exc)
+                    )
+
+        role_assignment_audit_payload = build_admin_role_assignment_preflight(
+            actor=_role_assignment_actor(capabilities=(ADMIN_ROLE_ASSIGNMENT_REQUIRED_CAPABILITY,)),
+            target_user_id="target-admin",
+            role_key=SUPPORT_ADMIN_ROLE,
+            capabilities=ADMIN_RBAC_ROLE_CAPABILITIES[SUPPORT_ADMIN_ROLE],
+            audit_payload={
+                "reason": "staging-rehearsal-ticket",
+                "password": "raw-password",
+                "session_id": "raw-session-id",
+                "cookie": "raw-cookie",
+                "api_token": "raw-token",
+            },
+        )
+
+    with patch.dict("os.environ", {}, clear=True):
+        default_enabled_without_explicit_config = is_coarse_admin_fallback_enabled()
+
+    return {
+        "fallback_disabled_fail_closed": fallback_disabled_fail_closed,
+        "explicit_capability_payloads_passed": tuple(explicit_payloads_passed),
+        "legacy_payloads_fail_closed": bool(legacy_payload_denials) and all(legacy_payload_denials),
+        "missing_payloads_fail_closed": bool(missing_payload_denials) and all(missing_payload_denials),
+        "denial_details_sanitized": all(legacy_payload_denials + missing_payload_denials),
+        "audit_payload_sanitized": _role_assignment_denial_is_sanitized(role_assignment_audit_payload),
+        "public_launch_inventory_complete": inventory.capability_counts
+        == EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS,
+        "public_launch_routes_without_legacy_admin_dependencies": not inventory.legacy_admin_dependencies,
+        "default_enabled_without_explicit_config": default_enabled_without_explicit_config,
+        "runtime_default_changed": False,
+    }
+
+
+def _expected_public_launch_rehearsal_capabilities() -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            {
+                capability
+                for counts in EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS.values()
+                for capability in counts
+            }
+        )
+    )
+
+
 def build_security_launch_preflight() -> SecurityLaunchPreflight:
     """Return a test-only security launch readiness snapshot.
 
@@ -367,6 +454,20 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
         coarse_fallback_disable_preflight_ready and public_launch_dependency_inventory_complete
     )
     switch_evidence["guarded_disable_switch_available"] = guarded_disable_switch_available
+    staging_rehearsal_evidence = build_coarse_admin_fallback_disable_rehearsal_evidence()
+    staging_rehearsal_ready = bool(
+        staging_rehearsal_evidence["fallback_disabled_fail_closed"]
+        and tuple(staging_rehearsal_evidence["explicit_capability_payloads_passed"])
+        == _expected_public_launch_rehearsal_capabilities()
+        and staging_rehearsal_evidence["legacy_payloads_fail_closed"]
+        and staging_rehearsal_evidence["missing_payloads_fail_closed"]
+        and staging_rehearsal_evidence["denial_details_sanitized"]
+        and staging_rehearsal_evidence["audit_payload_sanitized"]
+        and staging_rehearsal_evidence["public_launch_inventory_complete"]
+        and staging_rehearsal_evidence["public_launch_routes_without_legacy_admin_dependencies"]
+        and staging_rehearsal_evidence["default_enabled_without_explicit_config"]
+        and not staging_rehearsal_evidence["runtime_default_changed"]
+    )
     blockers = []
     if fallback_default_enabled and guarded_disable_switch_available:
         blockers.append("coarse_admin_fallback_default_enabled_until_switch_applied")
@@ -454,6 +555,8 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
         coarse_admin_fallback_production_switch_ready=production_switch_ready,
         coarse_admin_fallback_production_switch_status=production_switch_status,
         coarse_admin_fallback_switch_evidence=switch_evidence,
+        coarse_admin_fallback_staging_rehearsal_ready=staging_rehearsal_ready,
+        coarse_admin_fallback_staging_rehearsal_evidence=staging_rehearsal_evidence,
         explicit_capability_grants_without_fallback=explicit_capability_grants_work,
         missing_capability_dependency_fail_closed=missing_capability_dependency_fail_closed,
         missing_admin_capabilities_fail_closed=not payload.get("adminCapabilities") and all(
