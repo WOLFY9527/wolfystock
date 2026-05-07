@@ -7,6 +7,7 @@ import os
 import sys
 import unittest
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -501,6 +502,209 @@ class LlmCostLedgerServiceTestCase(unittest.TestCase):
         self.assertNotIn("secret", str(result.quota_reconciliation))
         with self.db.session_scope() as session:
             self.assertEqual(session.query(LLMCostLedger).count(), 1)
+
+    def test_invoice_reconciliation_preflight_matches_external_total(self) -> None:
+        self._seed_policy()
+        self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            at=datetime(2025, 1, 2),
+        )
+
+        result = self.service.preflight_invoice_reconciliation(
+            owner_user_id="user-a",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            invoice_total_usd=Decimal("0.00075"),
+            from_dt=datetime(2025, 1, 1),
+            to_dt=datetime(2025, 1, 3),
+        )
+
+        self.assertEqual(result.state, "matched_total")
+        self.assertEqual(result.ledger_total_usd, Decimal("0.00075000"))
+        self.assertEqual(result.invoice_total_usd, Decimal("0.00075000"))
+        self.assertEqual(result.delta_usd, Decimal("0"))
+        self.assertEqual(result.warnings, ())
+        self.assertTrue(result.advisory_only)
+        self.assertFalse(result.live_invoice_ingestion)
+
+    def test_invoice_reconciliation_preflight_allows_small_tolerance_delta(self) -> None:
+        self._seed_policy()
+        self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            at=datetime(2025, 1, 2),
+        )
+
+        result = self.service.preflight_invoice_reconciliation(
+            owner_user_id="user-a",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            invoice_total_usd=Decimal("0.000755"),
+            from_dt=datetime(2025, 1, 1),
+            to_dt=datetime(2025, 1, 3),
+            tolerance_usd=Decimal("0.01"),
+        )
+
+        self.assertEqual(result.state, "within_tolerance")
+        self.assertEqual(result.delta_usd, Decimal("0.00000500"))
+        self.assertEqual(result.warnings, ())
+
+    def test_invoice_reconciliation_preflight_warns_on_provider_over_billed_and_under_counted_ledger(self) -> None:
+        self._seed_policy()
+        self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            at=datetime(2025, 1, 2),
+        )
+
+        result = self.service.preflight_invoice_reconciliation(
+            owner_user_id="user-a",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            invoice_total_usd=Decimal("0.00175"),
+            from_dt=datetime(2025, 1, 1),
+            to_dt=datetime(2025, 1, 3),
+            tolerance_usd=Decimal("0.00001"),
+        )
+
+        self.assertEqual(result.state, "provider_over_billed")
+        self.assertEqual([warning.code for warning in result.warnings], ["provider_over_billed", "ledger_under_counted"])
+        self.assertEqual(result.delta_usd, Decimal("0.00100000"))
+
+    def test_invoice_reconciliation_preflight_warns_on_ledger_over_counted(self) -> None:
+        self._seed_policy()
+        self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            at=datetime(2025, 1, 2),
+        )
+
+        result = self.service.preflight_invoice_reconciliation(
+            owner_user_id="user-a",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            invoice_total_usd=Decimal("0.00055"),
+            from_dt=datetime(2025, 1, 1),
+            to_dt=datetime(2025, 1, 3),
+            tolerance_usd=Decimal("0.00001"),
+        )
+
+        self.assertEqual(result.state, "ledger_over_counted")
+        self.assertEqual([warning.code for warning in result.warnings], ["ledger_over_counted"])
+        self.assertEqual(result.delta_usd, Decimal("-0.00020000"))
+
+    def test_invoice_reconciliation_preflight_warns_on_unknown_pricing_policy(self) -> None:
+        self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="unknown",
+            model="missing-model",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            at=datetime(2025, 1, 2),
+        )
+
+        result = self.service.preflight_invoice_reconciliation(
+            owner_user_id="user-a",
+            provider="unknown",
+            model="missing-model",
+            invoice_total_usd=Decimal("0"),
+            from_dt=datetime(2025, 1, 1),
+            to_dt=datetime(2025, 1, 3),
+        )
+
+        self.assertEqual(result.state, "pricing_unknown_warning")
+        self.assertEqual([warning.code for warning in result.warnings], ["pricing_policy_unknown"])
+        self.assertEqual(result.ledger_total_usd, Decimal("0"))
+
+    def test_invoice_reconciliation_preflight_keeps_owner_provider_model_scoping(self) -> None:
+        self._seed_policy()
+        self.db.upsert_model_pricing_policy(
+            policy_key="anthropic-sonnet",
+            provider="anthropic",
+            model="anthropic/claude-sonnet",
+            pricing_unit="per_1m_tokens",
+            input_price_per_1m=1.0,
+            cached_input_price_per_1m=None,
+            output_price_per_1m=2.0,
+            currency="USD",
+            effective_from=datetime(2025, 1, 1),
+            active=True,
+            metadata_json="{}",
+        )
+        self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            at=datetime(2025, 1, 2),
+        )
+        self.service.reconcile_usage(
+            owner_user_id="user-b",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=2_000,
+            completion_tokens=1_000,
+            total_tokens=3_000,
+            at=datetime(2025, 1, 2),
+        )
+        self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="anthropic",
+            model="anthropic/claude-sonnet",
+            prompt_tokens=500,
+            completion_tokens=500,
+            total_tokens=1_000,
+            at=datetime(2025, 1, 2),
+        )
+
+        result = self.service.preflight_invoice_reconciliation(
+            owner_user_id="user-a",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            invoice_total_usd=Decimal("0.00075"),
+            from_dt=datetime(2025, 1, 1),
+            to_dt=datetime(2025, 1, 3),
+        )
+
+        self.assertEqual(result.ledger_total_usd, Decimal("0.00075000"))
+        self.assertEqual(result.invoice_total_usd, Decimal("0.00075000"))
+        self.assertEqual(result.state, "matched_total")
 
 
 if __name__ == "__main__":

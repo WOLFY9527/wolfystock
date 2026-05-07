@@ -9,7 +9,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from src.storage import DatabaseManager, ModelPricingPolicy, QuotaReservation
+from src.storage import DatabaseManager, LLMCostLedger, ModelPricingPolicy, QuotaReservation
 
 
 _MILLION = Decimal("1000000")
@@ -46,6 +46,48 @@ class LedgerWriteResult:
     ledger_id: Optional[str] = None
     cost: Optional[CostCalculationResult] = None
     quota_reconciliation: Optional["QuotaReservationReconciliationResult"] = None
+
+
+@dataclass(frozen=True)
+class InvoiceReconciliationWarning:
+    code: str
+    severity: str = "warning"
+
+
+@dataclass(frozen=True)
+class InvoiceReconciliationPreflightResult:
+    state: str
+    owner_user_id: Optional[str]
+    provider: str
+    model: str
+    ledger_total_usd: Decimal
+    invoice_total_usd: Decimal
+    matched_total_usd: Decimal
+    delta_usd: Decimal
+    tolerance_usd: Decimal
+    warnings: tuple[InvoiceReconciliationWarning, ...] = ()
+    advisory_only: bool = True
+    live_invoice_ingestion: bool = False
+    live_enforcement: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "state": self.state,
+            "scope": {
+                "owner_user_id": self.owner_user_id,
+                "provider": self.provider,
+                "model": self.model,
+            },
+            "ledgerTotalUsd": str(self.ledger_total_usd),
+            "invoiceTotalUsd": str(self.invoice_total_usd),
+            "matchedTotalUsd": str(self.matched_total_usd),
+            "deltaUsd": str(self.delta_usd),
+            "toleranceUsd": str(self.tolerance_usd),
+            "warnings": [warning.__dict__ for warning in self.warnings],
+            "advisoryOnly": self.advisory_only,
+            "liveInvoiceIngestion": self.live_invoice_ingestion,
+            "liveEnforcement": self.live_enforcement,
+        }
 
 
 @dataclass(frozen=True)
@@ -398,6 +440,73 @@ class LlmCostLedgerService:
 
     def get_summary(self, *, from_dt: datetime, to_dt: datetime, limit: int = 50) -> Dict[str, Any]:
         return self.db.get_llm_cost_ledger_summary(from_dt=from_dt, to_dt=to_dt, limit=limit)
+
+    def preflight_invoice_reconciliation(
+        self,
+        *,
+        owner_user_id: Optional[str],
+        provider: str,
+        model: str,
+        invoice_total_usd: Decimal | str | float | int,
+        from_dt: datetime,
+        to_dt: datetime,
+        tolerance_usd: Decimal | str | float | int = Decimal("0.00001"),
+    ) -> InvoiceReconciliationPreflightResult:
+        provider_key = str(provider or "unknown").strip().lower() or "unknown"
+        model_key = str(model or "unknown").strip().lower() or "unknown"
+        owner_key = str(owner_user_id or "").strip() or None
+        invoice_total = self._quantize(Decimal(str(invoice_total_usd or 0)))
+        tolerance = abs(self._quantize(Decimal(str(tolerance_usd or 0))))
+
+        with self.db.session_scope() as session:
+            rows = session.query(
+                LLMCostLedger.total_cost_usd,
+                LLMCostLedger.status,
+                LLMCostLedger.pricing_policy_key,
+            ).filter(
+                LLMCostLedger.created_at >= from_dt,
+                LLMCostLedger.created_at <= to_dt,
+                LLMCostLedger.provider == provider_key,
+                LLMCostLedger.model == model_key,
+            )
+            if owner_key is None:
+                rows = rows.filter(LLMCostLedger.owner_user_id.is_(None))
+            else:
+                rows = rows.filter(LLMCostLedger.owner_user_id == owner_key)
+            ledger_rows = rows.all()
+
+        ledger_total = self._quantize(sum((Decimal(str(row[0] or 0)) for row in ledger_rows), Decimal("0")))
+        delta = self._quantize(invoice_total - ledger_total)
+        warnings: list[InvoiceReconciliationWarning] = []
+
+        if any((row[1] != "ok" or not row[2]) for row in ledger_rows):
+            warnings.append(InvoiceReconciliationWarning(code="pricing_policy_unknown"))
+
+        if abs(delta) <= tolerance:
+            state = "matched_total" if delta == 0 else "within_tolerance"
+        elif delta > 0:
+            state = "provider_over_billed"
+            warnings.append(InvoiceReconciliationWarning(code="provider_over_billed"))
+            warnings.append(InvoiceReconciliationWarning(code="ledger_under_counted"))
+        else:
+            state = "ledger_over_counted"
+            warnings.append(InvoiceReconciliationWarning(code="ledger_over_counted"))
+
+        if state == "matched_total" and warnings:
+            state = "pricing_unknown_warning"
+
+        return InvoiceReconciliationPreflightResult(
+            state=state,
+            owner_user_id=owner_key,
+            provider=provider_key,
+            model=model_key,
+            ledger_total_usd=ledger_total,
+            invoice_total_usd=invoice_total,
+            matched_total_usd=min(ledger_total, invoice_total),
+            delta_usd=delta,
+            tolerance_usd=tolerance,
+            warnings=tuple(warnings),
+        )
 
     @staticmethod
     def _price_tokens(tokens: int, price_per_1m: Decimal) -> Decimal:
