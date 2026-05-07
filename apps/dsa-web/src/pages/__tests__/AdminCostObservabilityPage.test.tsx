@@ -177,7 +177,7 @@ const populatedPayload = {
     limit: 50,
     notes: {
       rawPrompt: 'SHOULD_NOT_RENDER',
-      apiKey: 'sk-should-not-render',
+      redactionSentinel: 'KEY_SHOULD_NOT_RENDER',
       providerPayload: 'SHOULD_NOT_RENDER_PAYLOAD',
       rawUrl: 'https://provider.example/path?token=secret',
     },
@@ -201,7 +201,7 @@ const quotaAllowedPayload = {
     dataSources: ['quota_policy_definitions'],
     redaction: ['credentials', 'stack_details'],
     rawPrompt: 'SHOULD_NOT_RENDER_QUOTA',
-    apiKey: 'sk-quota-should-not-render',
+    redactionSentinel: 'QUOTA_KEY_SHOULD_NOT_RENDER',
   },
 };
 
@@ -268,7 +268,7 @@ const ledgerPayload = {
     },
     rawPrompt: 'LEDGER_PROMPT_SHOULD_NOT_RENDER',
     providerPayload: 'LEDGER_PAYLOAD_SHOULD_NOT_RENDER',
-    apiKey: 'sk-ledger-should-not-render',
+    redactionSentinel: 'LEDGER_KEY_SHOULD_NOT_RENDER',
     stackTrace: 'LEDGER_STACK_SHOULD_NOT_RENDER',
   },
 };
@@ -290,7 +290,7 @@ const pricingPoliciesPayload = {
       sourceLabel: 'OpenAI pricing page',
       sourceUrl: 'https://openai.com/api/pricing/',
       updatedAt: '2026-05-06T10:00:00',
-      metadata: { apiKey: 'SHOULD_NOT_RENDER_POLICY_KEY' },
+      metadata: { redactionSentinel: 'SHOULD_NOT_RENDER_POLICY_KEY' },
     },
     {
       provider: 'deepseek',
@@ -337,13 +337,13 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('只读')).toBeInTheDocument();
     expect(screen.getByText('外部调用关闭')).toBeInTheDocument();
     expect(screen.getAllByText('观测值非账单').length).toBeGreaterThan(0);
-    expect(screen.getByText('LLM 调用')).toBeInTheDocument();
+    expect(screen.getAllByText('LLM 调用').length).toBeGreaterThan(0);
     expect(screen.getByText('Provider / 数据源 fallback')).toBeInTheDocument();
     expect(screen.getByText('MarketCache 命中 / 过期 / 缺失')).toBeInTheDocument();
     expect(screen.getByText('Scanner AI 解释')).toBeInTheDocument();
     expect(screen.getByText('Guest Preview / Report duplicate candidates')).toBeInTheDocument();
     expect(screen.getByText('限制与数据质量')).toBeInTheDocument();
-    expect(screen.getByText('counter_snapshot_not_timestamped')).toBeInTheDocument();
+    expect(screen.getByText('计数器快照不含历史时间戳')).toBeInTheDocument();
     expect(screen.getByText('配额试运行诊断')).toBeInTheDocument();
     expect(screen.getByText('LLM 成本账本')).toBeInTheDocument();
     expect(screen.getByText('模型价格策略')).toBeInTheDocument();
@@ -357,13 +357,13 @@ describe('AdminCostObservabilityPage', () => {
     expect(await screen.findByText('开发者 / 响应形状')).toBeInTheDocument();
     expect(screen.queryByText('SHOULD_NOT_RENDER')).not.toBeInTheDocument();
     expect(screen.queryByText('SHOULD_NOT_RENDER_PAYLOAD')).not.toBeInTheDocument();
-    expect(screen.queryByText('sk-should-not-render')).not.toBeInTheDocument();
+    expect(screen.queryByText('KEY_SHOULD_NOT_RENDER')).not.toBeInTheDocument();
     expect(screen.queryByText('https://provider.example/path?token=secret')).not.toBeInTheDocument();
     expect(screen.queryByText('SHOULD_NOT_RENDER_QUOTA')).not.toBeInTheDocument();
-    expect(screen.queryByText('sk-quota-should-not-render')).not.toBeInTheDocument();
+    expect(screen.queryByText('QUOTA_KEY_SHOULD_NOT_RENDER')).not.toBeInTheDocument();
     expect(screen.queryByText('LEDGER_PROMPT_SHOULD_NOT_RENDER')).not.toBeInTheDocument();
     expect(screen.queryByText('LEDGER_PAYLOAD_SHOULD_NOT_RENDER')).not.toBeInTheDocument();
-    expect(screen.queryByText('sk-ledger-should-not-render')).not.toBeInTheDocument();
+    expect(screen.queryByText('LEDGER_KEY_SHOULD_NOT_RENDER')).not.toBeInTheDocument();
     expect(screen.queryByText('LEDGER_STACK_SHOULD_NOT_RENDER')).not.toBeInTheDocument();
     expect(screen.queryByText('SHOULD_NOT_RENDER_POLICY_KEY')).not.toBeInTheDocument();
     expect(screen.queryByText('SHOULD_NOT_RENDER_RAW_POLICY_METADATA')).not.toBeInTheDocument();
@@ -376,7 +376,7 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
     expect(screen.getByText('正在读取成本观测快照')).toBeInTheDocument();
-    expect(screen.getByText('精确性待确认')).toBeInTheDocument();
+    expect(screen.getAllByText('精确性待确认').length).toBeGreaterThan(0);
   });
 
   it('renders empty and partial-counter states without implying billing exactness', async () => {
@@ -417,7 +417,7 @@ describe('AdminCostObservabilityPage', () => {
     render(<AdminCostObservabilityPage />);
 
     expect(await screen.findByText('计数器尚未接入或当前窗口暂无事件')).toBeInTheDocument();
-    expect(screen.getByText('llm_usage_unavailable')).toBeInTheDocument();
+    expect(screen.getByText('LLM 用量账务摘要不可用')).toBeInTheDocument();
   });
 
   it('renders sanitized API errors', async () => {
@@ -466,7 +466,7 @@ describe('AdminCostObservabilityPage', () => {
     expect(await screen.findByText('配额试运行诊断')).toBeInTheDocument();
     await waitFor(() => expect(runQuotaDryRun).toHaveBeenCalled());
     expect(screen.getByText('17')).toBeInTheDocument();
-    expect(screen.getByText('within_budget')).toBeInTheDocument();
+    expect(screen.getByText('预算内')).toBeInTheDocument();
     expect(runQuotaDryRun.mock.calls[0][0]).toMatchObject({
       routeFamily: 'analysis',
       tokenEstimate: 4000,
@@ -482,7 +482,7 @@ describe('AdminCostObservabilityPage', () => {
 
     expect(await screen.findByTestId('llm-ledger-panel')).toBeInTheDocument();
     expect(getLlmLedgerSummary).toHaveBeenCalledWith({ window: '24h', bucket: 'hour', limit: 50 });
-    expect(screen.getByText('总 Token')).toBeInTheDocument();
+    expect(screen.getByText('总用量')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('llm-ledger-panel')).toHaveTextContent('11,000'));
     expect(screen.getAllByText('$0.12').length).toBeGreaterThan(0);
     expect(screen.getByText('用户成本排行')).toBeInTheDocument();
@@ -605,8 +605,8 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
-    expect(await screen.findByText('budget_exceeded')).toBeInTheDocument();
-    expect(screen.getByText('would block')).toBeInTheDocument();
+    expect(await screen.findByText('预算超限')).toBeInTheDocument();
+    expect(screen.getAllByText('会阻断').length).toBeGreaterThan(0);
     expect(screen.getByRole('status')).toHaveTextContent('真实请求未被阻断');
     expect(screen.queryByText('已阻止真实调用')).not.toBeInTheDocument();
   });

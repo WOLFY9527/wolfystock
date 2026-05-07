@@ -79,17 +79,18 @@ const ROUTE_FAMILY_OPTIONS = [
 ];
 
 const QUOTA_OPERATION_OPTIONS: Array<{ value: QuotaDryRunOperation; label: string }> = [
-  { value: 'estimate', label: 'estimate' },
-  { value: 'reserve', label: 'reserve' },
-  { value: 'consume', label: 'consume' },
-  { value: 'release', label: 'release' },
+  { value: 'estimate', label: '估算' },
+  { value: 'reserve', label: '预占' },
+  { value: 'consume', label: '消耗' },
+  { value: 'release', label: '释放' },
 ];
 
 const ENFORCEMENT_OPTIONS: Array<{ value: QuotaEnforcementMode; label: string }> = [
-  { value: 'disabled', label: 'disabled' },
-  { value: 'dry_run', label: 'dry_run' },
-  { value: 'enabled', label: 'enabled 策略模拟' },
+  { value: 'disabled', label: '关闭' },
+  { value: 'dry_run', label: '试运行' },
+  { value: 'enabled', label: '启用策略模拟' },
 ];
+const UNSAFE_VISIBLE_TEXT_PATTERN = /(https?:\/\/|www\.|\?|=|token|secret|cookie|session|password|bearer|apikey|api_key|stack|trace|payload|prompt|credential)/i;
 
 function formatDate(value?: string | null): string {
   return value ? formatDateTime(value) : '--';
@@ -117,8 +118,15 @@ function limitationLabel(value: string): string {
   if (value === 'observational_not_billing') return '观测值非账单';
   if (value === 'process_local_counters_reset_on_restart') return '进程内计数器会随重启清零';
   if (value === 'counter_snapshot_not_timestamped') return '计数器快照不含历史时间戳';
-  if (value === 'llm_usage_unavailable') return 'LLM usage 账务摘要不可用';
-  return value;
+  if (value === 'llm_usage_unavailable') return 'LLM 用量账务摘要不可用';
+  return safeVisibleText(value.replace(/_/g, ' '));
+}
+
+function exactnessLabel(value?: string | null): string {
+  if (value === 'observational_not_billing') return '观测值非账单';
+  if (value === 'estimated') return '估算';
+  if (value === 'exact') return '精确';
+  return '精确性待确认';
 }
 
 function hasCounters(data: AdminCostSummaryResponse): boolean {
@@ -139,7 +147,15 @@ function hasCounters(data: AdminCostSummaryResponse): boolean {
 function safeDimensionText(dimensions?: Record<string, string>): string {
   const entries = Object.entries(dimensions || {}).slice(0, 4);
   if (entries.length === 0) return '--';
-  return entries.map(([key, value]) => `${key}: ${value}`).join(' · ');
+  const labelForKey = (key: string) => {
+    if (key === 'owner_user_id' || key === 'ownerUserId') return '用户';
+    if (key === 'route_family' || key === 'routeFamily') return '功能';
+    if (key === 'provider') return 'Provider';
+    if (key === 'model') return '模型';
+    if (key === 'call_type' || key === 'callType') return '调用';
+    return safeVisibleText(key.replace(/_/g, ' '));
+  };
+  return entries.map(([key, value]) => `${labelForKey(key)}: ${safeVisibleText(value)}`).join(' · ');
 }
 
 function sanitizedError(error: unknown): ParsedApiError {
@@ -204,13 +220,31 @@ function clampTokenEstimate(value: string): number {
 }
 
 function enforcementLabel(value?: QuotaEnforcementMode | string): string {
-  if (value === 'disabled') return 'disabled';
-  if (value === 'enabled') return 'enabled 策略模拟';
-  return 'dry_run';
+  if (value === 'disabled') return '关闭';
+  if (value === 'enabled') return '启用策略模拟';
+  return '试运行';
 }
 
 function reasonLabel(value?: string | null): string {
-  return value && value.trim() ? value.trim().slice(0, 96) : 'none';
+  if (!value?.trim()) return '无';
+  if (value === 'within_budget') return '预算内';
+  if (value === 'budget_exceeded') return '预算超限';
+  if (value === 'quota_policy_block') return '配额策略会阻断';
+  if (value === 'missing_api_key' || value === 'auth_or_key_invalid') return '凭证不可用';
+  return safeVisibleText(value.replace(/_/g, ' ')).slice(0, 96);
+}
+
+function quotaStatusLabel(value?: string | null): string {
+  if (value === 'allowed') return '允许';
+  if (value === 'blocked') return '会阻断';
+  if (value === 'denied') return '拒绝';
+  return value ? safeVisibleText(value.replace(/_/g, ' ')) : '--';
+}
+
+function safeVisibleText(value?: string | null): string {
+  const text = String(value ?? '').trim();
+  if (!text) return '--';
+  return UNSAFE_VISIBLE_TEXT_PATTERN.test(text) ? '已脱敏' : text.slice(0, 96);
 }
 
 const ReadOnlyBadges: React.FC<{ data?: AdminCostSummaryResponse | null }> = ({ data }) => {
@@ -224,7 +258,7 @@ const ReadOnlyBadges: React.FC<{ data?: AdminCostSummaryResponse | null }> = ({ 
         {metadata?.noExternalCalls === false ? '外部调用未确认' : '外部调用关闭'}
       </Badge>
       <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">
-        {metadata?.exactness === 'observational_not_billing' ? '观测值非账单' : '精确性待确认'}
+        {exactnessLabel(metadata?.exactness)}
       </Badge>
     </div>
   );
@@ -292,7 +326,7 @@ const FilterRail: React.FC<{
       />
     </div>
     <p className="mt-4 rounded-xl border border-cyan-300/10 bg-cyan-400/8 px-3 py-2 text-[11px] leading-5 text-cyan-100/72">
-      仅使用 window、bucket、area、limit。没有 prompt、用户、token、URL 或 provider payload 搜索。
+      仅使用窗口、粒度、区域和数量上限；不会按用户、凭证、地址或原始供应商内容搜索。
     </p>
   </GlassCard>
 );
@@ -379,11 +413,13 @@ const LimitationsPanel: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }
               variant={item.severity === 'warning' ? 'warning' : 'info'}
               className={item.severity === 'warning' ? 'border-amber-300/25 bg-amber-400/10 text-amber-100' : 'border-cyan-300/20 bg-cyan-400/8 text-cyan-100'}
             >
-              {item.code}
+              {limitationLabel(item.code)}
             </Badge>
-            <span className="text-xs text-white/58">{limitationLabel(item.code)}</span>
+            <span className="text-xs text-white/58">{item.severity === 'warning' ? '需关注' : '信息'}</span>
           </div>
-          <p className="mt-2 text-xs leading-5 text-white/50">{item.message}</p>
+          <p className="mt-2 text-xs leading-5 text-white/50">
+            {safeVisibleText(item.message) === '已脱敏' ? limitationLabel(item.code) : safeVisibleText(item.message)}
+          </p>
         </div>
       ))}
     </div>
@@ -471,7 +507,7 @@ const LedgerRollupList: React.FC<{
             <span className="shrink-0 font-mono text-sm text-cyan-100">{moneyUsd(item.totalCostUsd)}</span>
           </div>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/42">
-            <span>Token <b className="font-mono text-white/68">{compactNumber(item.totalTokens)}</b></span>
+            <span>用量 <b className="font-mono text-white/68">{compactNumber(item.totalTokens)}</b></span>
             <span>请求 <b className="font-mono text-white/68">{compactNumber(item.requestCount ?? item.ledgerCount ?? item.calls)}</b></span>
           </div>
         </article>
@@ -527,16 +563,16 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
 
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SummaryTile label="当前窗口" value={data?.window.key || ledgerQueryFromFilters(filters).window} tone="info" />
-        <SummaryTile label="总 Token" value={compactNumber(data?.total.totalTokens)} tone="info" />
+        <SummaryTile label="总用量" value={compactNumber(data?.total.totalTokens)} tone="info" />
         <SummaryTile label="估算成本" value={moneyUsd(data?.total.totalCostUsd)} tone="warn" />
         <SummaryTile label="请求数" value={compactNumber(data ? ledgerCount(data) : undefined)} />
       </div>
 
       {data ? (
         <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-white/44">
-          <span className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-2">Prompt <b className="font-mono text-white/68">{compactNumber(data.total.promptTokens ?? data.total.inputTokens)}</b></span>
-          <span className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-2">Cached <b className="font-mono text-white/68">{compactNumber(data.total.cachedInputTokens)}</b></span>
-          <span className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-2">Completion <b className="font-mono text-white/68">{compactNumber(data.total.completionTokens ?? data.total.outputTokens)}</b></span>
+          <span className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-2">输入 <b className="font-mono text-white/68">{compactNumber(data.total.promptTokens ?? data.total.inputTokens)}</b></span>
+          <span className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-2">缓存输入 <b className="font-mono text-white/68">{compactNumber(data.total.cachedInputTokens)}</b></span>
+          <span className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-2">输出 <b className="font-mono text-white/68">{compactNumber(data.total.completionTokens ?? data.total.outputTokens)}</b></span>
         </div>
       ) : null}
 
@@ -835,16 +871,16 @@ const QuotaDryRunPanel: React.FC = () => {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-4">
-        <SummaryTile label="状态" value={state.loading ? 'checking' : data?.status || '--'} tone={data?.wouldBlock ? 'warn' : 'info'} />
+        <SummaryTile label="状态" value={state.loading ? '检查中' : quotaStatusLabel(data?.status)} tone={data?.wouldBlock ? 'warn' : 'info'} />
         <SummaryTile label="模式" value={enforcementLabel(data?.enforcementMode || enforcementMode)} tone="warn" />
-        <SummaryTile label="估算 Units" value={compactNumber(data?.estimatedUnits)} tone="info" />
-        <SummaryTile label="判定" value={data?.wouldBlock ? 'would block' : data?.allowed ? 'allowed' : '--'} tone={data?.wouldBlock ? 'warn' : 'good'} />
+        <SummaryTile label="估算单位" value={compactNumber(data?.estimatedUnits)} tone="info" />
+        <SummaryTile label="判定" value={data?.wouldBlock ? '会阻断' : data?.allowed ? '允许' : '--'} tone={data?.wouldBlock ? 'warn' : 'good'} />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-12">
         <div className="min-w-0 xl:col-span-3">
           <Select
-            label="Route family"
+            label="功能族群"
             value={routeFamily}
             options={ROUTE_FAMILY_OPTIONS}
             placeholder=""
@@ -852,7 +888,7 @@ const QuotaDryRunPanel: React.FC = () => {
           />
         </div>
         <label className="min-w-0 xl:col-span-3">
-          <span className="theme-field-label mb-2 block">Token estimate</span>
+          <span className="theme-field-label mb-2 block">用量估算</span>
           <input
             className="h-10 w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 font-mono text-sm text-white outline-none transition focus:border-emerald-500/50"
             inputMode="numeric"
@@ -864,7 +900,7 @@ const QuotaDryRunPanel: React.FC = () => {
         </label>
         <div className="min-w-0 xl:col-span-3">
           <Select
-            label="Enforcement mode"
+            label="策略模式"
             value={enforcementMode}
             options={ENFORCEMENT_OPTIONS}
             placeholder=""
@@ -873,7 +909,7 @@ const QuotaDryRunPanel: React.FC = () => {
         </div>
         <div className="min-w-0 xl:col-span-3">
           <Select
-            label="Dry-run operation"
+            label="试运行操作"
             value={operation}
             options={QUOTA_OPERATION_OPTIONS}
             placeholder=""
@@ -884,7 +920,7 @@ const QuotaDryRunPanel: React.FC = () => {
 
       {operation === 'consume' || operation === 'release' ? (
         <label className="mt-3 block min-w-0">
-          <span className="theme-field-label mb-2 block">Reservation ID</span>
+          <span className="theme-field-label mb-2 block">预占编号</span>
           <input
             className="h-10 w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 font-mono text-sm text-white outline-none transition focus:border-emerald-500/50"
             value={reservationId}
@@ -896,7 +932,7 @@ const QuotaDryRunPanel: React.FC = () => {
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 text-xs leading-5 text-white/48">
-          <span className="text-white/64">Reason:</span> <span className={cn('font-mono', data?.wouldBlock ? 'text-amber-200' : 'text-white/62')}>{reasonLabel(data?.reasonCode)}</span>
+          <span className="text-white/64">原因：</span> <span className={cn('font-mono', data?.wouldBlock ? 'text-amber-200' : 'text-white/62')}>{reasonLabel(data?.reasonCode)}</span>
         </div>
         <button
           type="button"
@@ -989,10 +1025,10 @@ const AdminCostObservabilityPage: React.FC = () => {
             <ReadOnlyBadges data={data} />
           </div>
           <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <SummaryTile label="Generated" value={formatDate(data?.generatedAt)} tone="info" />
-            <SummaryTile label="Window" value={data?.window?.key || filters.window} />
-            <SummaryTile label="Bucket" value={data?.window?.bucket || filters.bucket} />
-            <SummaryTile label="Exactness" value={data?.metadata.exactness === 'observational_not_billing' ? 'observational_not_billing' : '--'} tone="warn" />
+            <SummaryTile label="生成时间" value={formatDate(data?.generatedAt)} tone="info" />
+            <SummaryTile label="窗口" value={data?.window?.key || filters.window} />
+            <SummaryTile label="粒度" value={data?.window?.bucket || filters.bucket} />
+            <SummaryTile label="精确性" value={exactnessLabel(data?.metadata.exactness)} tone="warn" />
           </div>
         </GlassCard>
 
@@ -1023,8 +1059,8 @@ const AdminCostObservabilityPage: React.FC = () => {
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
                     <SummaryTile label="重复候选" value={compactNumber(data.summary.estimatedDuplicateCandidates)} tone="warn" />
-                    <SummaryTile label="LLM Calls" value={compactNumber(data.summary.llmCalls)} tone="info" />
-                    <SummaryTile label="Provider Calls" value={compactNumber(data.summary.providerCalls)} />
+                    <SummaryTile label="LLM 调用" value={compactNumber(data.summary.llmCalls)} tone="info" />
+                    <SummaryTile label="Provider 调用" value={compactNumber(data.summary.providerCalls)} />
                     <SummaryTile label="Fallback" value={compactNumber(data.summary.fallbackAttempts)} tone="warn" />
                     <SummaryTile label="Provider Hit" value={percent(data.summary.providerCacheHitRate)} tone="good" />
                     <SummaryTile label="MarketCache Hit" value={percent(data.summary.marketCacheHitRate)} tone="good" />
