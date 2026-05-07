@@ -161,7 +161,19 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
                 last_imported_at=self.now - timedelta(days=2),
                 last_import_source="ibkr_flex_xml",
                 last_import_fingerprint="raw-import-fingerprint-secret",
-                sync_metadata_json='{"api_key": "SECRET_API_KEY", "raw": {"token": "SECRET_TOKEN"}}',
+                sync_metadata_json=json.dumps(
+                    {
+                        "api_key": "SECRET_API_KEY",
+                        "access_token": "ACCESS_TOKEN_SECRET",
+                        "refresh_token": "REFRESH_TOKEN_SECRET",
+                        "session_token": "SESSION_TOKEN_SECRET",
+                        "sync_metadata_secret": "SYNC_METADATA_SECRET",
+                        "raw": {
+                            "token": "SECRET_TOKEN",
+                            "provider_payload": "RAW_PROVIDER_PAYLOAD_SECRET",
+                        },
+                    }
+                ),
                 created_at=self.now - timedelta(days=5),
                 updated_at=self.now - timedelta(days=1),
             )
@@ -199,7 +211,15 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
                         realized_pnl=120.0,
                         unrealized_pnl=300.0,
                         fx_stale=False,
-                        payload_json='{"token": "SECRET_TOKEN", "positions": [{"raw": true}]}',
+                        payload_json=json.dumps(
+                            {
+                                "access_token": "ACCESS_TOKEN_SECRET",
+                                "refresh_token": "REFRESH_TOKEN_SECRET",
+                                "session_token": "SESSION_TOKEN_SECRET",
+                                "provider_payload": "RAW_PROVIDER_PAYLOAD_SECRET",
+                                "positions": [{"raw": True}],
+                            }
+                        ),
                     ),
                     PortfolioBrokerSyncState(
                         owner_id="user-2",
@@ -234,7 +254,12 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
                         market_value_base=1800.0,
                         unrealized_pnl_base=300.0,
                         valuation_currency="USD",
-                        payload_json='{"secret": "POSITION_SECRET"}',
+                        payload_json=json.dumps(
+                            {
+                                "secret": "POSITION_SECRET",
+                                "provider_payload": "RAW_PROVIDER_PAYLOAD_SECRET",
+                            }
+                        ),
                     ),
                     PortfolioBrokerSyncPosition(
                         owner_id="user-2",
@@ -272,7 +297,7 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
                         price=150.0,
                         fee=1.0,
                         tax=0.0,
-                        note="raw note with SECRET_TOKEN",
+                        note="raw note with SECRET_TOKEN ACCESS_TOKEN_SECRET SESSION_TOKEN_SECRET",
                         dedup_hash="raw-dedup-secret",
                         is_active=True,
                     ),
@@ -282,7 +307,7 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
                         direction="in",
                         amount=1000.0,
                         currency="USD",
-                        note="cash secret note",
+                        note="cash secret note REFRESH_TOKEN_SECRET",
                     ),
                     PortfolioCorporateAction(
                         account_id=self.account_a_id,
@@ -292,7 +317,7 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
                         effective_date=date(2026, 5, 3),
                         action_type="cash_dividend",
                         cash_dividend_per_share=0.24,
-                        note="corporate secret note",
+                        note="corporate secret note SYNC_METADATA_SECRET",
                     ),
                     PortfolioDailySnapshot(
                         account_id=self.account_a_id,
@@ -360,8 +385,13 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
             "raw-import-fingerprint-secret",
             "raw-dedup-secret",
             "alice-trade-secret-uid",
+            "ACCESS_TOKEN_SECRET",
+            "REFRESH_TOKEN_SECRET",
+            "SESSION_TOKEN_SECRET",
             "SECRET_TOKEN",
             "SECRET_API_KEY",
+            "RAW_PROVIDER_PAYLOAD_SECRET",
+            "SYNC_METADATA_SECRET",
             "POSITION_SECRET",
             "SNAPSHOT_SECRET",
             "BOB_SECRET_TOKEN",
@@ -486,22 +516,32 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
         self._assert_safe_json(response)
         self._assert_audit_event("admin_portfolio.activity_viewed")
 
-    def test_admin_portfolio_export_like_reads_exclude_other_users_and_broker_secrets(self) -> None:
+    def test_admin_portfolio_export_redaction_matrix_excludes_raw_payloads_and_secrets(self) -> None:
         self._as_admin()
 
-        responses = [
-            self.client.get("/api/v1/admin/users/user-1/portfolio-summary"),
-            self.client.get("/api/v1/admin/users/user-1/holdings", params={"limit": 200}),
-            self.client.get("/api/v1/admin/users/user-1/portfolio-activity", params={"limit": 200}),
-            self.client.get(f"/api/v1/admin/users/user-1/portfolio/accounts/{self.account_a_id}"),
-        ]
+        matrix = {
+            "summary": self.client.get("/api/v1/admin/users/user-1/portfolio-summary"),
+            "holdings": self.client.get("/api/v1/admin/users/user-1/holdings", params={"limit": 200}),
+            "activity": self.client.get("/api/v1/admin/users/user-1/portfolio-activity", params={"limit": 200}),
+            "account_detail": self.client.get(f"/api/v1/admin/users/user-1/portfolio/accounts/{self.account_a_id}"),
+        }
 
-        for response in responses:
+        for surface, response in matrix.items():
             self.assertEqual(response.status_code, 200)
             text = self._json_text(response)
             self.assertNotIn("MSFT", text)
             self.assertNotIn("user-2", text)
             self._assert_safe_json(response)
+            self.assertNotIn("access_token", text, surface)
+            self.assertNotIn("refresh_token", text, surface)
+            self.assertNotIn("session_token", text, surface)
+            self.assertNotIn("api_key", text, surface)
+            self.assertNotIn("provider_payload", text, surface)
+            self.assertNotIn("sync_metadata_secret", text, surface)
+
+        detail = matrix["account_detail"].json()
+        self.assertEqual(detail["brokerConnections"][0]["brokerAccountHandle"], detail["account"]["brokerAccountHandle"])
+        self.assertNotIn("brokerAccountRef", self._json_text(matrix["account_detail"]))
 
 
 if __name__ == "__main__":
