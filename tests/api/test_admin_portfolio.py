@@ -401,6 +401,10 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
             "sync_metadata_json",
             "payload_json",
             "payloadJson",
+            "broker_account_ref",
+            "brokerAccountRef",
+            "brokerPositionRef",
+            "syncMetadata",
             "password_hash",
             "pbkdf2:ops-secret-hash",
             "admin-session-raw",
@@ -518,6 +522,7 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
 
     def test_admin_portfolio_export_redaction_matrix_excludes_raw_payloads_and_secrets(self) -> None:
         self._as_admin()
+        before = self._portfolio_counts()
 
         matrix = {
             "summary": self.client.get("/api/v1/admin/users/user-1/portfolio-summary"),
@@ -542,6 +547,7 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
         detail = matrix["account_detail"].json()
         self.assertEqual(detail["brokerConnections"][0]["brokerAccountHandle"], detail["account"]["brokerAccountHandle"])
         self.assertNotIn("brokerAccountRef", self._json_text(matrix["account_detail"]))
+        self.assertEqual(self._portfolio_counts(), before)
 
 
 if __name__ == "__main__":

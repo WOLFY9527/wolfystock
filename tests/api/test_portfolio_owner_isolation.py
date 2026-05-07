@@ -136,6 +136,22 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
                 "actions": session.query(PortfolioCorporateAction).count(),
             }
 
+    def _assert_public_export_safe_text(self, text: str) -> None:
+        forbidden = [
+            "ALICE_SECRET_API_KEY",
+            "ALICE_SECRET_TOKEN",
+            "ALICE_SESSION_TOKEN",
+            "ALICE_RAW_INTERNAL_SECRET",
+            "BOB_SECRET_API_KEY",
+            "BOB_SECRET_TOKEN",
+            "BOB_SESSION_TOKEN",
+            "payload_json",
+            "raw_provider_payload",
+            "sync_metadata_json",
+        ]
+        for needle in forbidden:
+            self.assertNotIn(needle, text)
+
     def _create_account(self, client: TestClient, name: str) -> int:
         response = client.post(
             "/api/v1/portfolio/accounts",
@@ -253,6 +269,45 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
         bob_account = self._create_account(self.bob_client, "Bob Export")
         self._seed_activity(self.alice_client, alice_account, "AAPL", "alice-export-trade")
         self._seed_activity(self.bob_client, bob_account, "MSFT", "bob-export-trade")
+        alice_connection = self.alice_client.post(
+            "/api/v1/portfolio/broker-connections",
+            json={
+                "portfolio_account_id": alice_account,
+                "broker_type": "ibkr",
+                "broker_name": "Interactive Brokers",
+                "connection_name": "Alice IBKR",
+                "broker_account_ref": "ALICE-ACCOUNT-REF",
+                "import_mode": "api",
+                "status": "active",
+                "sync_metadata": {
+                    "source": "flex",
+                    "api_key": "ALICE_SECRET_API_KEY",
+                    "nested": {
+                        "token": "ALICE_SECRET_TOKEN",
+                        "session_token": "ALICE_SESSION_TOKEN",
+                        "secret": "ALICE_RAW_INTERNAL_SECRET",
+                    },
+                },
+            },
+        )
+        self.assertEqual(alice_connection.status_code, 200)
+        bob_connection = self.bob_client.post(
+            "/api/v1/portfolio/broker-connections",
+            json={
+                "portfolio_account_id": bob_account,
+                "broker_type": "ibkr",
+                "broker_name": "Interactive Brokers",
+                "connection_name": "Bob IBKR",
+                "broker_account_ref": "BOB-ACCOUNT-REF",
+                "import_mode": "api",
+                "status": "active",
+                "sync_metadata": {
+                    "api_key": "BOB_SECRET_API_KEY",
+                    "nested": {"token": "BOB_SECRET_TOKEN", "session_token": "BOB_SESSION_TOKEN"},
+                },
+            },
+        )
+        self.assertEqual(bob_connection.status_code, 200)
         before = self._portfolio_counts()
 
         export_reads = [
@@ -261,6 +316,7 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
             self.alice_client.get("/api/v1/portfolio/cash-ledger", params={"page_size": 100}),
             self.alice_client.get("/api/v1/portfolio/corporate-actions", params={"page_size": 100}),
             self.alice_client.get("/api/v1/portfolio/snapshot", params={"as_of": "2026-01-03"}),
+            self.alice_client.get("/api/v1/portfolio/broker-connections"),
         ]
 
         for response in export_reads:
@@ -268,6 +324,9 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
             text = self._json_text(response)
             self.assertNotIn("MSFT", text)
             self.assertNotIn("bob-export-trade", text)
+            self.assertNotIn("BOB-ACCOUNT-REF", text)
+            self.assertNotIn("ALICE_RAW_INTERNAL_SECRET", text)
+            self._assert_public_export_safe_text(text)
 
         rejected_exports = [
             self.alice_client.get("/api/v1/portfolio/trades", params={"account_id": bob_account, "page_size": 100}),
@@ -275,12 +334,18 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
             self.alice_client.get("/api/v1/portfolio/corporate-actions", params={"account_id": bob_account, "page_size": 100}),
             self.alice_client.get("/api/v1/portfolio/snapshot", params={"account_id": bob_account, "as_of": "2026-01-03"}),
             self.alice_client.get("/api/v1/portfolio/risk", params={"account_id": bob_account, "as_of": "2026-01-03"}),
+            self.alice_client.put(
+                f"/api/v1/portfolio/broker-connections/{bob_connection.json()['id']}",
+                json={"connection_name": "stolen export"},
+            ),
         ]
         for response in rejected_exports:
             self.assertIn(response.status_code, {400, 404})
             text = self._json_text(response)
             self.assertNotIn("MSFT", text)
             self.assertNotIn("bob-export-trade", text)
+            self.assertNotIn("BOB-ACCOUNT-REF", text)
+            self._assert_public_export_safe_text(text)
         self.assertEqual(self._portfolio_counts(), before)
 
     def test_import_idempotency_stays_with_authenticated_owner(self) -> None:

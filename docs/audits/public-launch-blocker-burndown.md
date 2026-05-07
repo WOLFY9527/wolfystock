@@ -29,8 +29,9 @@ blockers:
   PostgreSQL restore/PITR drill.
 - Release secret-scan and admin browser harness coverage have improved.
 - Deployment health/readiness endpoints and Docker healthcheck coverage exist.
-- Recent safety tests exist for backtest and portfolio areas, but launch proof
-  is still incomplete.
+- Portfolio/backtest public-safety evidence now covers export-like owner
+  isolation, admin redaction, backtest export no-advice wording, missing-data
+  disclosure, and golden metric stability.
 
 ## Active blockers
 
@@ -42,6 +43,7 @@ blockers:
 | Provider circuit enforcement | Circuit diagnostics exist, but no runtime call site enforces policy. | Dry-run observer, circuit data model, and budget/fallback reporting exist. | Pilot one low-risk route with runtime circuit enforcement and rollback switch. | P0 | Provider reliability |
 | Live quota enforcement | Quota controls are still dry-run/reservation oriented. | Cost ledger and quota helper surfaces exist. | Pilot one route-boundary live quota rule with explicit block/warn behavior. | P0 | Cost / Quota |
 | Production backup/restore drill | Real PostgreSQL restore/PITR evidence is still missing. | Health/readiness checks, deployment checklist, and local dry-run preflight exist. | Execute an isolated encrypted backup/restore drill and capture post-restore smoke evidence. | P0 | Platform / DBA |
+| Portfolio/backtest public safety | Focused regression evidence exists, but final public-launch acceptance is not complete. | Export-like owner isolation, admin portfolio redaction, backtest export no-advice checks, missing-data disclosure, and golden metric fixtures exist. | Complete route-wide mutation guards, broader accounting invariants, staged owner-isolation smoke, and release-candidate no-secret/no-advice evidence. | P0 | Portfolio / Backtest |
 | Frontend / design / public smoke readiness | Public-facing smoke proof is still incomplete. | Frontend safety tests and shell/layout foundations exist. | Run the public-route browser smoke set with no-secret and owner-isolation proof. | P1 | Frontend / Release readiness |
 
 ## Notes

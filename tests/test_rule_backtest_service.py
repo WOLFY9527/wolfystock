@@ -56,6 +56,29 @@ EXPECTED_TRACE_EXPORT_FIELD_LABELS = [
     "fallback",
 ]
 
+FORBIDDEN_PUBLIC_ADVICE_TERMS = [
+    "guaranteed",
+    "must buy",
+    "must sell",
+    "ai recommends you buy",
+    "best contract",
+    "稳赚",
+    "必买",
+    "保证收益",
+    "下单",
+    "立即交易",
+    "买入按钮",
+]
+
+FORBIDDEN_BACKTEST_MUTATION_SURFACES = [
+    "/api/v1/portfolio",
+    "/api/v1/orders",
+    "/api/v1/broker",
+    "broker_execution",
+    "order_placement",
+    "portfolio_mutation",
+]
+
 
 class RuleBacktestTestCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -136,6 +159,14 @@ class RuleBacktestTestCase(unittest.TestCase):
                     )
                 )
             session.commit()
+
+    @staticmethod
+    def _assert_public_backtest_text_is_analytical(text: str) -> None:
+        normalized = text.lower()
+        for needle in FORBIDDEN_PUBLIC_ADVICE_TERMS:
+            assert needle.lower() not in normalized, needle
+        for needle in FORBIDDEN_BACKTEST_MUTATION_SURFACES:
+            assert needle.lower() not in normalized, needle
 
     @staticmethod
     def _compare_run_payload(
@@ -834,10 +865,16 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(response["no_result_reason"], "insufficient_history")
         self.assertEqual(response["trade_count"], 0)
         self.assertEqual(response["data_quality"]["bar_count"], 0)
+        self.assertTrue(response["data_quality"]["source"])
+        self.assertTrue(response["data_quality"]["warnings"])
+        self.assertIn("no_result_reason", response)
+        self.assertIn("data_quality", response["summary"])
+        self.assertEqual(response["summary"]["data_quality"]["bar_count"], 0)
         self.assertIsNotNone(response["no_result_message"])
         serialized = json.dumps(response, ensure_ascii=False, sort_keys=True)
         for forbidden in ("SECRET", "TOKEN", "api_key", "payload_json", "raw_provider_payload"):
             self.assertNotIn(forbidden, serialized)
+        self._assert_public_backtest_text_is_analytical(serialized)
 
     def test_service_normalizes_timezone_datetime_boundaries_to_dates(self) -> None:
         service = RuleBacktestService(self.db)
@@ -1426,12 +1463,14 @@ class RuleBacktestTestCase(unittest.TestCase):
         csv_text = service.get_execution_trace_export_csv_text(run_id=response["id"])
         self.assertIn("日期,标的收盘价,基准收盘价", csv_text)
         self.assertIn("fallback", csv_text)
+        self._assert_public_backtest_text_is_analytical(csv_text)
 
         payload = service.get_execution_trace_export_json(run_id=response["id"])
         self.assertEqual(payload["source"], response["execution_trace"]["source"])
         self.assertGreater(len(payload["trace_rows"]), 0)
         self.assertEqual(payload["assumptions"]["summary_text"], response["execution_trace"]["assumptions_defaults"]["summary_text"])
         self.assertEqual(payload["benchmark_summary"], response["benchmark_summary"])
+        self._assert_public_backtest_text_is_analytical(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
     def test_service_exports_support_bundle_manifest_json_from_stored_result(self) -> None:
         service = RuleBacktestService(self.db)
@@ -1479,6 +1518,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertNotIn("equity_curve", payload)
         self.assertNotIn("audit_rows", payload)
         self.assertNotIn("execution_trace", payload)
+        self._assert_public_backtest_text_is_analytical(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
     def test_service_builds_support_bundle_reproducibility_manifest_from_stored_result(self) -> None:
         service = RuleBacktestService(self.db)
@@ -1522,6 +1562,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertNotIn("equity_curve", payload)
         self.assertNotIn("audit_rows", payload)
         self.assertNotIn("execution_trace", payload)
+        self._assert_public_backtest_text_is_analytical(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
     def test_service_support_export_index_reports_manifest_and_execution_trace_exports(self) -> None:
         service = RuleBacktestService(self.db)
@@ -1576,6 +1617,7 @@ class RuleBacktestTestCase(unittest.TestCase):
             export_index["exports"][3]["endpoint_path"],
             f"/api/v1/backtest/rule/runs/{response['id']}/execution-trace.csv",
         )
+        self._assert_public_backtest_text_is_analytical(json.dumps(export_index, ensure_ascii=False, sort_keys=True))
 
     def _assert_support_bundle_export_contract(
         self,
