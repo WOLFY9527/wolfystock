@@ -24,6 +24,10 @@ from src.admin_rbac import (
 )
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, ROLE_ADMIN, ROLE_USER
 from src.storage import AdminRole, AdminRoleCapability, AdminUserRole, DatabaseManager
+from tests.security_launch_preflight_helper import (
+    EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS,
+    inventory_public_launch_admin_route_capabilities,
+)
 
 
 def _current_user(
@@ -448,6 +452,17 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
             },
             usages,
         )
+
+    def test_public_launch_admin_route_capability_inventory_is_explicit(self) -> None:
+        inventory = inventory_public_launch_admin_route_capabilities()
+
+        self.assertEqual(EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS, inventory.capability_counts)
+        self.assertEqual(
+            {"admin_cost.py": ("Depends(require_admin_user)",)},
+            inventory.legacy_admin_dependencies,
+        )
+        for capability_counts in inventory.capability_counts.values():
+            self.assertTrue(set(capability_counts).issubset(set(ADMIN_RBAC_CAPABILITIES)))
 
 
 if __name__ == "__main__":
