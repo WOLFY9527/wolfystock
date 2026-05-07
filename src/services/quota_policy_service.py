@@ -97,8 +97,75 @@ class QuotaShadowPreflight:
         }
 
 
+@dataclass(frozen=True)
+class QuotaPilotReadinessPreflight:
+    """Pilot-readiness report for quota enforcement without changing runtime wiring."""
+
+    state: str
+    reason_code: Optional[str]
+    would_block: bool
+    advisory_only: bool
+    request_blocked: bool
+    live_enforcement: bool
+    pilot_enforcement_enabled: bool
+    pilot_scope_explicit: bool
+    owner_scoped: bool
+    owner_user_id: Optional[str]
+    route_family: str
+    provider: Optional[str]
+    model_tier: Optional[str]
+    shadow_preflight: QuotaShadowPreflight
+
+    def to_dict(self) -> Dict[str, Any]:
+        shadow_payload = self.shadow_preflight.to_dict()
+        shadow_payload["ownerUserId"] = self.owner_user_id
+        return {
+            "state": self.state,
+            "reasonCode": self.reason_code,
+            "wouldBlock": self.would_block,
+            "advisoryOnly": self.advisory_only,
+            "requestBlocked": self.request_blocked,
+            "liveEnforcement": self.live_enforcement,
+            "pilot": {
+                "enforcementEnabled": self.pilot_enforcement_enabled,
+                "scopeExplicit": self.pilot_scope_explicit,
+                "ownerScoped": self.owner_scoped,
+            },
+            "scope": {
+                "ownerUserId": self.owner_user_id,
+                "routeFamily": self.route_family,
+                "provider": self.provider,
+                "modelTier": self.model_tier,
+            },
+            "shadowPreflight": shadow_payload,
+            "invoiceReconciliation": {
+                "advisoryOnly": True,
+                "enforcementWired": False,
+                "liveInvoiceIngestion": False,
+            },
+            "safety": {
+                "diagnosticOnly": True,
+                "noExternalCalls": True,
+                "liveProviderCalls": False,
+                "liveLlmCalls": False,
+                "runtimeWiringChanged": False,
+            },
+        }
+
+
 class QuotaPolicyService:
     """Budget/quota policy checks that are not wired into live providers yet."""
+
+    SENSITIVE_CONTEXT_TOKENS = (
+        "api_key",
+        "apikey",
+        "token",
+        "secret",
+        "cookie",
+        "password",
+        "credential",
+        "session",
+    )
 
     SAFE_REJECTION_REASON_CODES = {
         "budget_exceeded",
@@ -369,6 +436,68 @@ class QuotaPolicyService:
             budget_alert=budget_alert,
         )
 
+    def classify_pilot_readiness_preflight(
+        self,
+        *,
+        owner_user_id: Optional[str],
+        route_family: str,
+        provider: Optional[str] = None,
+        model_tier: Optional[str] = None,
+        token_estimate: Optional[int] = None,
+        estimated_units: Optional[int] = None,
+        pricing_status: str = "ok",
+        pilot_enforcement_enabled: bool = False,
+        pilot_route_families: Optional[Iterable[str]] = None,
+        now: Optional[datetime] = None,
+    ) -> QuotaPilotReadinessPreflight:
+        """Report pilot readiness while keeping the default mode advisory-only."""
+        route_key = self.classify_route_family(route_family)
+        shadow = self.classify_shadow_preflight(
+            owner_user_id=owner_user_id,
+            route_family=route_key,
+            provider=provider,
+            model_tier=model_tier,
+            token_estimate=token_estimate,
+            estimated_units=estimated_units,
+            pricing_status=pricing_status,
+            now=now,
+        )
+        owner_scoped = self._normalize_optional(owner_user_id) is not None
+        allowed_routes = {self.classify_route_family(value) for value in (pilot_route_families or (route_key,))}
+        route_scoped = route_key in allowed_routes
+        pilot_scope_explicit = owner_scoped and route_scoped
+        pilot_flag_enabled = bool(pilot_enforcement_enabled)
+        can_enforce = pilot_flag_enabled and pilot_scope_explicit
+        request_blocked = bool(can_enforce and shadow.would_block)
+        advisory_only = not request_blocked
+
+        state = "pilot_advisory_allow"
+        reason_code = shadow.reason_code
+        if not pilot_scope_explicit:
+            state = "pilot_scope_not_ready"
+            reason_code = "pilot_owner_scope_required" if not owner_scoped else "pilot_route_scope_required"
+        elif request_blocked:
+            state = "pilot_would_enforce_block"
+        elif shadow.would_block:
+            state = "pilot_advisory_would_block"
+
+        return QuotaPilotReadinessPreflight(
+            state=state,
+            reason_code=reason_code,
+            would_block=bool(shadow.would_block),
+            advisory_only=advisory_only,
+            request_blocked=request_blocked,
+            live_enforcement=request_blocked,
+            pilot_enforcement_enabled=pilot_flag_enabled,
+            pilot_scope_explicit=pilot_scope_explicit,
+            owner_scoped=owner_scoped,
+            owner_user_id=self._safe_context_label(owner_user_id),
+            route_family=route_key,
+            provider=self._safe_context_label(provider, lowercase=True),
+            model_tier=self._safe_context_label(model_tier, lowercase=True),
+            shadow_preflight=shadow,
+        )
+
     def reserve_quota(
         self,
         *,
@@ -631,6 +760,20 @@ class QuotaPolicyService:
         if lowercase:
             text = text.lower()
         return text[:64] if text else None
+
+    @classmethod
+    def _safe_context_label(cls, value: Optional[str], *, lowercase: bool = False) -> Optional[str]:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        lowered = text.lower().replace("-", "_")
+        if any(token in lowered for token in cls.SENSITIVE_CONTEXT_TOKENS):
+            return "redacted"
+        if lowercase:
+            text = text.lower()
+        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./:")
+        safe = "".join(char if char in allowed else "_" for char in text)
+        return safe[:96] if safe else None
 
     def _budget_exceeded(
         self,

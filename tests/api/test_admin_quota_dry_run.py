@@ -134,6 +134,14 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertTrue(payload["metadata"]["shadowPreflight"]["advisoryOnly"])
         self.assertFalse(payload["metadata"]["shadowPreflight"]["requestBlocked"])
         self.assertFalse(payload["metadata"]["shadowPreflight"]["liveEnforcement"])
+        pilot = payload["metadata"]["pilotReadiness"]
+        self.assertEqual(pilot["state"], "pilot_advisory_allow")
+        self.assertFalse(pilot["pilot"]["enforcementEnabled"])
+        self.assertTrue(pilot["pilot"]["scopeExplicit"])
+        self.assertFalse(pilot["requestBlocked"])
+        self.assertFalse(pilot["liveEnforcement"])
+        self.assertFalse(pilot["invoiceReconciliation"]["enforcementWired"])
+        self.assertTrue(pilot["safety"]["noExternalCalls"])
 
     def test_dry_run_budget_alert_states_are_diagnostic_only(self) -> None:
         self._as_admin()
@@ -175,6 +183,12 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
                 self.assertTrue(payload["metadata"]["shadowPreflight"]["advisoryOnly"])
                 self.assertFalse(payload["metadata"]["shadowPreflight"]["requestBlocked"])
                 self.assertFalse(payload["metadata"]["shadowPreflight"]["liveEnforcement"])
+                pilot = payload["metadata"]["pilotReadiness"]
+                self.assertEqual(pilot["shadowPreflight"]["state"], expected_shadow_state)
+                self.assertFalse(pilot["pilot"]["enforcementEnabled"])
+                self.assertFalse(pilot["requestBlocked"])
+                self.assertFalse(pilot["liveEnforcement"])
+                self.assertTrue(pilot["advisoryOnly"])
 
     def test_dry_run_shadow_preflight_pricing_unknown_fails_safe_advisory_only(self) -> None:
         self._as_admin()
@@ -200,6 +214,12 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertTrue(shadow["advisoryOnly"])
         self.assertFalse(shadow["requestBlocked"])
         self.assertFalse(shadow["liveEnforcement"])
+        pilot = payload["metadata"]["pilotReadiness"]
+        self.assertEqual(pilot["state"], "pilot_advisory_would_block")
+        self.assertEqual(pilot["reasonCode"], "pricing_policy_unknown")
+        self.assertTrue(pilot["wouldBlock"])
+        self.assertFalse(pilot["requestBlocked"])
+        self.assertFalse(pilot["liveEnforcement"])
 
     def test_dry_run_shadow_preflight_owner_isolation_metadata_is_advisory_only(self) -> None:
         self._as_admin()
@@ -234,6 +254,59 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertTrue(shadow["ownerIsolation"]["ownerScoped"])
         self.assertTrue(shadow["ownerIsolation"]["otherOwnersExcluded"])
         self.assertFalse(shadow["requestBlocked"])
+        pilot = payload["metadata"]["pilotReadiness"]
+        self.assertEqual(pilot["scope"]["ownerUserId"], "user-1")
+        self.assertTrue(pilot["pilot"]["scopeExplicit"])
+        self.assertFalse(pilot["requestBlocked"])
+
+    def test_dry_run_pilot_readiness_requires_owner_scope_for_enabled_pilot(self) -> None:
+        self._as_admin()
+        self.db.upsert_quota_policy(
+            policy_key="user-budget-alerts",
+            scope_type="user",
+            daily_budget_units=120,
+            metadata={"daily_soft_limit_units": 100},
+        )
+
+        response = self._post_dry_run(
+            {
+                "routeFamily": "analysis",
+                "estimatedUnits": 121,
+                "enforcementMode": "enabled",
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        pilot = payload["metadata"]["pilotReadiness"]
+        self.assertEqual(pilot["state"], "pilot_scope_not_ready")
+        self.assertEqual(pilot["reasonCode"], "pilot_owner_scope_required")
+        self.assertTrue(pilot["wouldBlock"])
+        self.assertTrue(pilot["advisoryOnly"])
+        self.assertFalse(pilot["requestBlocked"])
+        self.assertFalse(pilot["liveEnforcement"])
+        self.assertFalse(pilot["pilot"]["ownerScoped"])
+
+    def test_dry_run_pilot_readiness_sanitizes_scope_context(self) -> None:
+        self._as_admin()
+
+        response = self._post_dry_run(
+            {
+                "ownerUserId": "owner-token-must-not-leak",
+                "routeFamily": "analysis",
+                "provider": "openai?api_key=must-not-leak",
+                "modelTier": "model-with-secret",
+                "estimatedUnits": 10,
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        text = self._json_text(response.json()).lower()
+        self.assertNotIn("must-not-leak", text)
+        pilot = response.json()["metadata"]["pilotReadiness"]
+        self.assertEqual(pilot["scope"]["ownerUserId"], "redacted")
+        self.assertEqual(pilot["scope"]["provider"], "redacted")
+        self.assertEqual(pilot["scope"]["modelTier"], "redacted")
 
     def test_dry_run_would_block_global_kill_switch(self) -> None:
         self._as_admin()

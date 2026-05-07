@@ -536,6 +536,11 @@ class LlmCostLedgerServiceTestCase(unittest.TestCase):
         self.assertTrue(result.advisory_only)
         self.assertFalse(result.live_invoice_ingestion)
         self.assertFalse(result.live_enforcement)
+        payload = result.to_dict()
+        self.assertTrue(payload["advisoryOnly"])
+        self.assertFalse(payload["liveInvoiceIngestion"])
+        self.assertFalse(payload["liveEnforcement"])
+        self.assertFalse(payload["enforcementWired"])
 
     def test_invoice_reconciliation_preflight_allows_small_tolerance_delta(self) -> None:
         self._seed_policy()

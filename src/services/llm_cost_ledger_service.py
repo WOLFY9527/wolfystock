@@ -87,6 +87,7 @@ class InvoiceReconciliationPreflightResult:
             "advisoryOnly": self.advisory_only,
             "liveInvoiceIngestion": self.live_invoice_ingestion,
             "liveEnforcement": self.live_enforcement,
+            "enforcementWired": False,
         }
 
 

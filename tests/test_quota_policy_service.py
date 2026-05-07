@@ -287,6 +287,90 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertTrue(user_one.to_dict()["ownerIsolation"]["otherOwnersExcluded"])
         self.assertTrue(user_two.to_dict()["ownerIsolation"]["ownerScoped"])
 
+    def test_pilot_readiness_preflight_defaults_to_advisory_disabled_enforcement(self) -> None:
+        self._seed_budget_alert_policy()
+
+        preflight = self.service.classify_pilot_readiness_preflight(
+            owner_user_id="user-1",
+            route_family="analysis",
+            provider="openai",
+            model_tier="openai/gpt-4o-mini",
+            estimated_units=121,
+        )
+
+        payload = preflight.to_dict()
+        self.assertEqual(preflight.state, "pilot_advisory_would_block")
+        self.assertTrue(preflight.would_block)
+        self.assertTrue(preflight.advisory_only)
+        self.assertFalse(preflight.request_blocked)
+        self.assertFalse(preflight.live_enforcement)
+        self.assertFalse(payload["pilot"]["enforcementEnabled"])
+        self.assertEqual(payload["scope"]["ownerUserId"], "user-1")
+        self.assertEqual(payload["scope"]["provider"], "openai")
+        self.assertEqual(payload["scope"]["modelTier"], "openai/gpt-4o-mini")
+        self.assertEqual(payload["shadowPreflight"]["state"], "would_block_hard_limit")
+        self.assertFalse(payload["invoiceReconciliation"]["enforcementWired"])
+        self.assertTrue(payload["invoiceReconciliation"]["advisoryOnly"])
+        self.assertTrue(payload["safety"]["noExternalCalls"])
+
+    def test_pilot_readiness_requires_explicit_owner_scope_before_enforcement(self) -> None:
+        self._seed_budget_alert_policy()
+
+        preflight = self.service.classify_pilot_readiness_preflight(
+            owner_user_id=None,
+            route_family="analysis",
+            provider="openai",
+            model_tier="openai/gpt-4o-mini",
+            estimated_units=121,
+            pilot_enforcement_enabled=True,
+        )
+
+        payload = preflight.to_dict()
+        self.assertEqual(preflight.state, "pilot_scope_not_ready")
+        self.assertTrue(preflight.would_block)
+        self.assertTrue(preflight.advisory_only)
+        self.assertFalse(preflight.request_blocked)
+        self.assertFalse(preflight.live_enforcement)
+        self.assertFalse(payload["pilot"]["scopeExplicit"])
+        self.assertFalse(payload["pilot"]["ownerScoped"])
+        self.assertEqual(payload["reasonCode"], "pilot_owner_scope_required")
+
+    def test_pilot_readiness_flag_can_report_request_block_without_global_default(self) -> None:
+        self._seed_budget_alert_policy()
+
+        preflight = self.service.classify_pilot_readiness_preflight(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=121,
+            pilot_enforcement_enabled=True,
+            pilot_route_families=("analysis",),
+        )
+
+        self.assertEqual(preflight.state, "pilot_would_enforce_block")
+        self.assertTrue(preflight.would_block)
+        self.assertFalse(preflight.advisory_only)
+        self.assertTrue(preflight.request_blocked)
+        self.assertTrue(preflight.live_enforcement)
+
+        disabled_default = QuotaPolicyService(db=self.db)
+        self.assertFalse(disabled_default.enforcement_enabled)
+
+    def test_pilot_readiness_sanitizes_scope_context(self) -> None:
+        preflight = self.service.classify_pilot_readiness_preflight(
+            owner_user_id="owner-token-should-redact",
+            route_family="analysis",
+            provider="openai?api_key=must-not-leak",
+            model_tier="model-with-secret",
+            estimated_units=10,
+        )
+
+        payload_text = str(preflight.to_dict()).lower()
+        self.assertNotIn("must-not-leak", payload_text)
+        self.assertNotIn("api_key", payload_text)
+        self.assertNotIn("token-should-redact", payload_text)
+        self.assertEqual(preflight.to_dict()["scope"]["provider"], "redacted")
+        self.assertEqual(preflight.to_dict()["scope"]["modelTier"], "redacted")
+
     def test_token_cap_exceeded(self) -> None:
         self.db.upsert_quota_policy(
             policy_key="route-token-cap",

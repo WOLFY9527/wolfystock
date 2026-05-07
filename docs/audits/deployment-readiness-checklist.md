@@ -140,6 +140,9 @@ Status:
 - [x] Admin quota dry-run endpoint exists.
 - [x] Quota reservation/reconciliation helpers exist for synthetic or explicit
   call sites.
+- [x] Quota enforcement pilot-readiness preflight exists as advisory-only
+  reporting with explicit owner scope, sanitized provider/model context, and
+  invoice reconciliation marked non-enforcement-wired.
 
 Remaining blockers:
 
@@ -148,7 +151,7 @@ Remaining blockers:
   change user-visible LLM behavior.
 - [ ] Some legacy/system usage can still write null-owner rows for backward
   compatibility.
-- [ ] Budget burn-down UI, policy editing, enforcement pilot, and
+- [ ] Budget burn-down UI, policy editing, live enforcement pilot, and
   retention/aggregation policy remain future work.
 - [ ] Provider quota buckets are not yet live enforcement.
 

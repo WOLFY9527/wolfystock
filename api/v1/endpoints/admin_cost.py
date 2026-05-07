@@ -153,6 +153,22 @@ def run_quota_dry_run(
         estimated_units=request.estimated_units,
         pricing_status=request.pricing_status,
     )
+    pilot_readiness = service.classify_pilot_readiness_preflight(
+        owner_user_id=request.owner_user_id,
+        route_family=route_family,
+        provider=request.provider,
+        model_tier=request.model_tier,
+        token_estimate=request.token_estimate,
+        estimated_units=request.estimated_units,
+        pricing_status=request.pricing_status,
+        pilot_enforcement_enabled=request.enforcement_mode == "enabled",
+        pilot_route_families=(route_family,),
+    )
+    budget_alert_payload = budget_alert.to_dict()
+    shadow_preflight_payload = shadow_preflight.to_dict()
+    safe_owner_user_id = service._safe_context_label(request.owner_user_id)
+    budget_alert_payload["ownerUserId"] = safe_owner_user_id
+    shadow_preflight_payload["ownerUserId"] = safe_owner_user_id
 
     return QuotaDryRunResponse(
         allowed=bool(decision.allowed),
@@ -168,8 +184,9 @@ def run_quota_dry_run(
             "diagnosticOnly": True,
             "liveEnforcement": False,
             "noExternalCalls": True,
-            "budgetAlert": budget_alert.to_dict(),
-            "shadowPreflight": shadow_preflight.to_dict(),
+            "budgetAlert": budget_alert_payload,
+            "shadowPreflight": shadow_preflight_payload,
+            "pilotReadiness": pilot_readiness.to_dict(),
             "dataSources": ["quota_policy_definitions", "quota_usage_windows", "quota_reservations"],
             "redaction": [
                 "prompt_content",
