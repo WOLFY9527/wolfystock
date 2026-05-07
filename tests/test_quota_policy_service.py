@@ -116,6 +116,105 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
             estimates[0],
         )
 
+    def _seed_budget_alert_policy(self) -> None:
+        self.db.upsert_quota_policy(
+            policy_key="user-budget-alerts",
+            scope_type="user",
+            daily_budget_units=120,
+            metadata={"daily_soft_limit_units": 100},
+        )
+
+    def test_budget_alert_dry_run_under_budget(self) -> None:
+        self._seed_budget_alert_policy()
+
+        alert = self.service.classify_budget_alert(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=40,
+        )
+
+        self.assertEqual(alert.state, "under_budget")
+        self.assertEqual(alert.severity, "info")
+        self.assertFalse(alert.would_block)
+        self.assertEqual(alert.projected_units, 40)
+
+    def test_budget_alert_dry_run_near_soft_limit(self) -> None:
+        self._seed_budget_alert_policy()
+
+        alert = self.service.classify_budget_alert(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=80,
+        )
+
+        self.assertEqual(alert.state, "near_soft_limit")
+        self.assertEqual(alert.reason_code, "budget_near_soft_limit")
+        self.assertFalse(alert.would_block)
+
+    def test_budget_alert_dry_run_over_soft_limit(self) -> None:
+        self._seed_budget_alert_policy()
+
+        alert = self.service.classify_budget_alert(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=100,
+        )
+
+        self.assertEqual(alert.state, "over_soft_limit")
+        self.assertEqual(alert.reason_code, "budget_soft_limit_exceeded")
+        self.assertFalse(alert.would_block)
+
+    def test_budget_alert_dry_run_over_hard_limit(self) -> None:
+        self._seed_budget_alert_policy()
+
+        alert = self.service.classify_budget_alert(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=121,
+        )
+
+        self.assertEqual(alert.state, "over_hard_limit")
+        self.assertEqual(alert.reason_code, "budget_hard_limit_exceeded")
+        self.assertFalse(alert.would_block)
+
+    def test_budget_alert_unknown_pricing_policy_fails_safe_as_warning(self) -> None:
+        alert = self.service.classify_budget_alert(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=25,
+            pricing_status="pricing_unknown",
+        )
+
+        self.assertEqual(alert.state, "pricing_unknown_warning")
+        self.assertEqual(alert.reason_code, "pricing_policy_unknown")
+        self.assertEqual(alert.severity, "warning")
+        self.assertFalse(alert.would_block)
+
+    def test_budget_alert_owner_scoping_ignores_other_users_usage(self) -> None:
+        used_by_other = self.service.reserve_quota(
+            owner_user_id="user-2",
+            route_family="analysis",
+            estimated_units=95,
+        )
+        self.assertTrue(used_by_other.allowed)
+        self._seed_budget_alert_policy()
+
+        user_one = self.service.classify_budget_alert(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=10,
+        )
+        user_two = self.service.classify_budget_alert(
+            owner_user_id="user-2",
+            route_family="analysis",
+            estimated_units=10,
+        )
+
+        self.assertEqual(user_one.used_units, 0)
+        self.assertEqual(user_one.state, "under_budget")
+        self.assertEqual(user_two.used_units, 95)
+        self.assertEqual(user_two.state, "over_soft_limit")
+
     def test_token_cap_exceeded(self) -> None:
         self.db.upsert_quota_policy(
             policy_key="route-token-cap",

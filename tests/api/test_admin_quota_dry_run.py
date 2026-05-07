@@ -127,6 +127,41 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertEqual(payload["enforcementMode"], "dry_run")
         self.assertFalse(payload["metadata"]["liveEnforcement"])
         self.assertTrue(payload["metadata"]["noExternalCalls"])
+        self.assertEqual(payload["metadata"]["budgetAlert"]["state"], "under_budget")
+        self.assertFalse(payload["metadata"]["budgetAlert"]["liveEnforcement"])
+
+    def test_dry_run_budget_alert_states_are_diagnostic_only(self) -> None:
+        self._as_admin()
+        self.db.upsert_quota_policy(
+            policy_key="user-budget-alerts",
+            scope_type="user",
+            daily_budget_units=120,
+            metadata={"daily_soft_limit_units": 100},
+        )
+
+        cases = (
+            (40, "under_budget", True),
+            (80, "near_soft_limit", True),
+            (100, "over_soft_limit", True),
+            (121, "over_hard_limit", False),
+        )
+        for estimated_units, expected_state, expected_allowed in cases:
+            with self.subTest(expected_state=expected_state):
+                response = self._post_dry_run(
+                    {
+                        "ownerUserId": "user-1",
+                        "routeFamily": "analysis",
+                        "estimatedUnits": estimated_units,
+                    }
+                )
+
+                self.assertEqual(response.status_code, 200)
+                payload = response.json()
+                self.assertEqual(payload["allowed"], expected_allowed)
+                self.assertEqual(payload["wouldBlock"], not expected_allowed)
+                self.assertEqual(payload["metadata"]["budgetAlert"]["state"], expected_state)
+                self.assertFalse(payload["metadata"]["budgetAlert"]["wouldBlock"])
+                self.assertFalse(payload["metadata"]["budgetAlert"]["liveEnforcement"])
 
     def test_dry_run_would_block_global_kill_switch(self) -> None:
         self._as_admin()

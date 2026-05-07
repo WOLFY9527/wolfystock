@@ -135,6 +135,15 @@ def run_quota_dry_run(
     else:
         decision = service.release_reservation(reservation_id=request.reservation_id)
 
+    budget_alert = service.classify_budget_alert(
+        owner_user_id=request.owner_user_id,
+        route_family=route_family,
+        provider=request.provider,
+        model_tier=request.model_tier,
+        token_estimate=request.token_estimate,
+        estimated_units=request.estimated_units,
+    )
+
     return QuotaDryRunResponse(
         allowed=bool(decision.allowed),
         wouldBlock=not bool(decision.allowed),
@@ -149,6 +158,7 @@ def run_quota_dry_run(
             "diagnosticOnly": True,
             "liveEnforcement": False,
             "noExternalCalls": True,
+            "budgetAlert": budget_alert.to_dict(),
             "dataSources": ["quota_policy_definitions", "quota_usage_windows", "quota_reservations"],
             "redaction": [
                 "prompt_content",

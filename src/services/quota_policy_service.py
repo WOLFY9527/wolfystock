@@ -25,6 +25,43 @@ class QuotaDecision:
     estimated_units: int = 0
 
 
+@dataclass(frozen=True)
+class BudgetAlertDryRun:
+    """Diagnostic budget alert classification for future UI/API warnings."""
+
+    state: str
+    severity: str
+    reason_code: Optional[str]
+    would_block: bool
+    owner_user_id: Optional[str]
+    route_family: str
+    window_type: str
+    used_units: int
+    estimated_units: int
+    projected_units: int
+    soft_limit_units: Optional[int]
+    hard_limit_units: Optional[int]
+    pricing_status: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "state": self.state,
+            "severity": self.severity,
+            "reasonCode": self.reason_code,
+            "wouldBlock": self.would_block,
+            "ownerUserId": self.owner_user_id,
+            "routeFamily": self.route_family,
+            "windowType": self.window_type,
+            "usedUnits": self.used_units,
+            "estimatedUnits": self.estimated_units,
+            "projectedUnits": self.projected_units,
+            "softLimitUnits": self.soft_limit_units,
+            "hardLimitUnits": self.hard_limit_units,
+            "pricingStatus": self.pricing_status,
+            "liveEnforcement": False,
+        }
+
+
 class QuotaPolicyService:
     """Budget/quota policy checks that are not wired into live providers yet."""
 
@@ -144,6 +181,95 @@ class QuotaPolicyService:
                     return self._reject("route_cap_exceeded", estimated_units=units)
 
         return QuotaDecision(allowed=True, status="allowed", estimated_units=units)
+
+    def classify_budget_alert(
+        self,
+        *,
+        owner_user_id: Optional[str],
+        route_family: str,
+        provider: Optional[str] = None,
+        model_tier: Optional[str] = None,
+        token_estimate: Optional[int] = None,
+        estimated_units: Optional[int] = None,
+        pricing_status: str = "ok",
+        now: Optional[datetime] = None,
+    ) -> BudgetAlertDryRun:
+        """Classify budget state for dry-run diagnostics without enforcing it."""
+        route_key = self.classify_route_family(route_family)
+        units = max(
+            1,
+            int(estimated_units)
+            if estimated_units is not None
+            else self.estimate_budget_units(route_family=route_key, token_estimate=token_estimate),
+        )
+        pricing_key = str(pricing_status or "pricing_unknown").strip().lower() or "pricing_unknown"
+        if pricing_key != "ok":
+            return BudgetAlertDryRun(
+                state="pricing_unknown_warning",
+                severity="warning",
+                reason_code="pricing_policy_unknown",
+                would_block=False,
+                owner_user_id=self._normalize_optional(owner_user_id),
+                route_family=route_key,
+                window_type="daily",
+                used_units=0,
+                estimated_units=units,
+                projected_units=units,
+                soft_limit_units=None,
+                hard_limit_units=None,
+                pricing_status=pricing_key,
+            )
+
+        current_time = now or datetime.now()
+        provider_key = self._normalize_optional(provider, lowercase=True)
+        model_key = self._normalize_optional(model_tier, lowercase=True)
+        policies = list(self._matching_policies(route_key, provider_key, model_key))
+        hard_limit = self._minimum_cap(policies, "daily_budget_units")
+        soft_limit = self._minimum_soft_limit(policies)
+        if soft_limit is None and hard_limit is not None:
+            soft_limit = max(1, int(hard_limit * 0.8))
+
+        daily_start, _daily_end = self._window_bounds("daily", current_time)
+        with self.db.session_scope() as session:
+            used_units = self._used_budget_units(
+                session=session,
+                owner_user_id=owner_user_id,
+                window_type="daily",
+                window_start=daily_start,
+            )
+
+        projected = used_units + units
+        state = "under_budget"
+        severity = "info"
+        reason_code = None
+        if hard_limit is not None and projected > hard_limit:
+            state = "over_hard_limit"
+            severity = "warning"
+            reason_code = "budget_hard_limit_exceeded"
+        elif soft_limit is not None and projected >= soft_limit:
+            state = "over_soft_limit"
+            severity = "warning"
+            reason_code = "budget_soft_limit_exceeded"
+        elif soft_limit is not None and projected >= max(1, int(soft_limit * 0.8)):
+            state = "near_soft_limit"
+            severity = "warning"
+            reason_code = "budget_near_soft_limit"
+
+        return BudgetAlertDryRun(
+            state=state,
+            severity=severity,
+            reason_code=reason_code,
+            would_block=False,
+            owner_user_id=self._normalize_optional(owner_user_id),
+            route_family=route_key,
+            window_type="daily",
+            used_units=used_units,
+            estimated_units=units,
+            projected_units=projected,
+            soft_limit_units=soft_limit,
+            hard_limit_units=hard_limit,
+            pricing_status=pricing_key,
+        )
 
     def reserve_quota(
         self,
@@ -377,6 +503,19 @@ class QuotaPolicyService:
         return min(values) if values else None
 
     @staticmethod
+    def _minimum_soft_limit(policies: Iterable[Dict[str, Any]]) -> Optional[int]:
+        values = []
+        for policy in policies:
+            metadata = policy.get("metadata") or {}
+            if not isinstance(metadata, dict):
+                continue
+            for key in ("daily_soft_limit_units", "soft_limit_units", "budget_soft_limit_units"):
+                if metadata.get(key) is not None:
+                    values.append(max(0, int(metadata[key])))
+                    break
+        return min(values) if values else None
+
+    @staticmethod
     def _window_bounds(window_type: str, now: datetime) -> Tuple[datetime, datetime]:
         if window_type == "monthly":
             start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -418,6 +557,26 @@ class QuotaPolicyService:
             )
         ).one()
         return int(used[0] or 0) + int(used[1] or 0) + estimate_units > int(budget_units)
+
+    def _used_budget_units(
+        self,
+        *,
+        session: Any,
+        owner_user_id: Optional[str],
+        window_type: str,
+        window_start: datetime,
+    ) -> int:
+        used = session.execute(
+            select(
+                func.coalesce(func.sum(QuotaUsageWindow.reserved_units), 0),
+                func.coalesce(func.sum(QuotaUsageWindow.consumed_units), 0),
+            ).where(
+                QuotaUsageWindow.owner_user_id == self._normalize_optional(owner_user_id),
+                QuotaUsageWindow.window_type == window_type,
+                QuotaUsageWindow.window_start == window_start,
+            )
+        ).one()
+        return int(used[0] or 0) + int(used[1] or 0)
 
     def _request_count(
         self,
