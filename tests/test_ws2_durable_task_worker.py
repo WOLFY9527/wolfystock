@@ -156,6 +156,29 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
             )
         )
 
+    def test_two_workers_cannot_own_same_active_lease_concurrently(self) -> None:
+        self._create_task("task-active-lease")
+        claimed_at = datetime(2026, 1, 1, 12, 0, 0)
+        first_claim = self.db.claim_next_durable_task_state(
+            worker_id="worker-a",
+            task_type=SYNTHETIC_TASK_TYPE,
+            lease_seconds=60,
+            now=claimed_at,
+        )
+        second_claim = self.db.claim_next_durable_task_state(
+            worker_id="worker-b",
+            task_type=SYNTHETIC_TASK_TYPE,
+            lease_seconds=60,
+            now=claimed_at + timedelta(seconds=30),
+        )
+        state = self.db.get_durable_task_state(task_id="task-active-lease", owner_user_id="user-a")
+
+        self.assertIsNotNone(first_claim)
+        self.assertIsNone(second_claim)
+        self.assertEqual(state["status"], "leased")
+        self.assertEqual(state["lease_owner"], "worker-a")
+        self.assertEqual(state["attempt_count"], 1)
+
     def test_expired_lease_can_be_reclaimed_by_another_worker(self) -> None:
         self._create_task("task-expired-lease")
         first_claim = self.db.claim_next_durable_task_state(
@@ -190,6 +213,49 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
         self.assertEqual(second_claim["lease_owner"], "worker-b")
         self.assertEqual(second_claim["attempt_count"], 2)
         self.assertIsNone(stale_complete)
+
+    def test_terminal_completion_and_failure_are_idempotent_for_repeated_attempts(self) -> None:
+        self._create_task("task-repeat-complete")
+        worker = DurableTaskWorkerPrototype(db=self.db, worker_id="worker-a")
+        self.assertEqual(worker.run_once().status, "completed")
+
+        repeated_complete = self.db.complete_claimed_durable_task_state(
+            task_id="task-repeat-complete",
+            worker_id="worker-a",
+        )
+        stale_failure = self.db.fail_claimed_durable_task_state(
+            task_id="task-repeat-complete",
+            worker_id="worker-a",
+            error_code="late_failure",
+            error_summary="Late failure should not overwrite completion",
+            retryable=False,
+        )
+        completed_state = self.db.get_durable_task_state(task_id="task-repeat-complete", owner_user_id="user-a")
+
+        self._create_task("task-repeat-failure", failure_mode="non_retryable")
+        self.assertEqual(worker.run_once().status, "failed")
+        repeated_failure = self.db.fail_claimed_durable_task_state(
+            task_id="task-repeat-failure",
+            worker_id="worker-a",
+            error_code="late_failure",
+            error_summary="Late failure should not overwrite terminal failure",
+            retryable=False,
+        )
+        stale_complete = self.db.complete_claimed_durable_task_state(
+            task_id="task-repeat-failure",
+            worker_id="worker-a",
+        )
+        failed_state = self.db.get_durable_task_state(task_id="task-repeat-failure", owner_user_id="user-a")
+
+        self.assertIsNone(repeated_complete)
+        self.assertIsNone(stale_failure)
+        self.assertEqual(completed_state["status"], "completed")
+        self.assertEqual(completed_state["progress"], 100)
+        self.assertEqual(completed_state["error_code"], None)
+        self.assertIsNone(repeated_failure)
+        self.assertIsNone(stale_complete)
+        self.assertEqual(failed_state["status"], "failed")
+        self.assertEqual(failed_state["error_code"], "non_retryable_synthetic_error")
 
     def test_graceful_shutdown_stops_between_stages_without_terminal_state(self) -> None:
         self._create_task("task-shutdown")

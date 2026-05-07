@@ -3359,22 +3359,58 @@ class DatabaseManager:
 
     @staticmethod
     def _sanitize_task_metadata(value: Any) -> Dict[str, Any]:
-        """Sanitize durable task metadata and drop secret-like keys entirely."""
+        """Sanitize durable task metadata and drop secret-like/internal payload keys."""
+        blocked_key_fragments = (
+            "auth",
+            "cookie",
+            "exception",
+            "payload",
+            "prompt",
+            "raw",
+            "request",
+            "response",
+            "session",
+            "stack",
+            "trace",
+            "traceback",
+            "url",
+            "webhook",
+        )
+
         def scrub(obj: Any) -> Any:
             if isinstance(obj, dict):
                 cleaned: Dict[str, Any] = {}
                 for key, item in obj.items():
                     key_text = str(key)
-                    if is_sensitive_key(key_text):
+                    key_lower = key_text.lower()
+                    if is_sensitive_key(key_text) or any(fragment in key_lower for fragment in blocked_key_fragments):
                         continue
-                    cleaned[key_text[:80]] = scrub(item)
+                    scrubbed = scrub(item)
+                    if scrubbed is not None:
+                        cleaned[key_text[:80]] = scrubbed
                 return cleaned
             if isinstance(obj, list):
-                return [scrub(item) for item in obj[:50]]
+                values = [scrub(item) for item in obj[:50]]
+                return [item for item in values if item is not None]
             if isinstance(obj, tuple):
-                return [scrub(item) for item in obj[:50]]
+                values = [scrub(item) for item in obj[:50]]
+                return [item for item in values if item is not None]
             if isinstance(obj, str):
-                return sanitize_message(obj)[:500]
+                text = obj.strip()
+                lowered = text.lower()
+                if (
+                    "http://" in lowered
+                    or "https://" in lowered
+                    or "traceback (most recent call last)" in lowered
+                    or "api_key" in lowered
+                    or "token=" in lowered
+                    or "cookie=" in lowered
+                    or "session=" in lowered
+                    or "authorization:" in lowered
+                    or "bearer " in lowered
+                ):
+                    return None
+                return sanitize_message(text)[:500]
             return obj
 
         sanitized = sanitize_metadata(scrub(value or {}))

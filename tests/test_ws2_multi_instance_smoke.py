@@ -125,6 +125,37 @@ class Ws2MultiInstanceSmokeTestCase(unittest.TestCase):
         self.assertNotIn("owner-a", serialized)
         self.assertNotIn("alice", serialized)
 
+    def test_two_simulated_workers_cannot_share_active_lease(self) -> None:
+        self._api_create_synthetic_task("ws2-smoke-active-lease", "owner-a")
+        claimed_at = datetime(2026, 1, 1, 12, 0, 0)
+        worker_a_db = self._open_instance_db()
+        first_claim = worker_a_db.claim_next_durable_task_state(
+            worker_id="worker-a",
+            task_type=SYNTHETIC_TASK_TYPE,
+            lease_seconds=60,
+            now=claimed_at,
+        )
+        worker_b_db = self._open_instance_db()
+        second_claim = worker_b_db.claim_next_durable_task_state(
+            worker_id="worker-b",
+            task_type=SYNTHETIC_TASK_TYPE,
+            lease_seconds=60,
+            now=claimed_at + timedelta(seconds=30),
+        )
+
+        visible = self._status_from_fresh_api_instance("ws2-smoke-active-lease", "owner-a")
+        durable = DatabaseManager.get_instance().get_durable_task_state(
+            task_id="ws2-smoke-active-lease",
+            owner_user_id="owner-a",
+        )
+
+        self.assertIsNotNone(first_claim)
+        self.assertIsNone(second_claim)
+        self.assertEqual(visible.status, "processing")
+        self.assertEqual(durable["status"], "leased")
+        self.assertEqual(durable["lease_owner"], "worker-a")
+        self.assertEqual(durable["attempt_count"], 1)
+
     def test_stale_worker_lease_is_visible_and_reclaimable_once_expired(self) -> None:
         self._api_create_synthetic_task("ws2-smoke-stale-lease", "owner-a")
         worker_a_db = self._open_instance_db()
@@ -248,11 +279,25 @@ class Ws2MultiInstanceSmokeTestCase(unittest.TestCase):
         )
 
         poll = self._poll_from_fresh_api_instance("ws2-smoke-handoff", "owner-a")
+        replay_after_first = self._poll_from_fresh_api_instance(
+            "ws2-smoke-handoff",
+            "owner-a",
+            after_sequence=1,
+        )
+        status = self._status_from_fresh_api_instance("ws2-smoke-handoff", "owner-a")
+
         self.assertIsNotNone(recovered_complete)
+        self.assertEqual(status.status, "completed")
+        self.assertEqual(status.progress, 100)
         self.assertEqual(poll.task.status, "completed")
+        self.assertTrue(poll.terminal)
         self.assertEqual([event.sequence for event in poll.events], [1, 2, 3])
         self.assertEqual(poll.events[-1].metadata["result_ref"], "fixture:ws2-replayed")
         self.assertEqual(poll.latest_sequence, 3)
+        self.assertEqual(replay_after_first.task.status, "completed")
+        self.assertTrue(replay_after_first.terminal)
+        self.assertEqual([event.sequence for event in replay_after_first.events], [2, 3])
+        self.assertEqual(replay_after_first.latest_sequence, 3)
 
     def test_owner_isolation_stays_intact_after_reclaim(self) -> None:
         self._api_create_synthetic_task("ws2-smoke-owner-lock", "owner-a")

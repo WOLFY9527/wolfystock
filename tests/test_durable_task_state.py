@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from fastapi import HTTPException
 
@@ -282,6 +283,72 @@ class DurableTaskStateTestCase(unittest.TestCase):
         self.assertNotIn("Traceback", serialized)
         self.assertEqual(event["metadata"]["nested"]["safe"], "ok")
 
+    def test_polling_payload_omits_raw_provider_payloads_and_secrets(self) -> None:
+        self.db.create_durable_task_state(
+            task_id="task-progress-no-provider-leak",
+            owner_user_id="user-a",
+            task_type="analysis",
+            status="queued",
+            metadata={
+                "stock_code": "AAPL",
+                "selection_source": "manual",
+                "raw_provider_payload": {"quote": 123, "authorization": "Bearer not-a-real-token"},
+                "provider_response": {"url": "https://provider.example/quote?api_key=not-a-real-key"},
+                "nested": {"session_id": "raw-session-id", "safe": "ok"},
+            },
+        )
+        claim = self.db.claim_next_durable_task_state(worker_id="worker-a", task_type="analysis")
+        self.assertIsNotNone(claim)
+        completed = self.db.complete_claimed_durable_task_state(
+            task_id="task-progress-no-provider-leak",
+            worker_id="worker-a",
+            metadata={
+                "result_ref": "fixture:ws2-safe-result",
+                "raw_result_payload": {"token": "not-a-real-token"},
+                "api_key": "not-a-real-key",
+            },
+        )
+        event = self.db.append_durable_task_progress_event(
+            task_id="task-progress-no-provider-leak",
+            owner_user_id="user-a",
+            event_type="completed",
+            progress=100,
+            message="Completed with safe result ref",
+            metadata={
+                "result_ref": "fixture:ws2-safe-result",
+                "raw_provider_payload": {"token": "not-a-real-token"},
+            },
+        )
+
+        response = poll_analysis_task_progress(
+            "task-progress-no-provider-leak",
+            current_user=SimpleNamespace(user_id="user-a"),
+        )
+        serialized = json.dumps(
+            {
+                "completed": completed,
+                "event": event,
+                "poll": response.model_dump(),
+            },
+            ensure_ascii=False,
+        )
+
+        self.assertEqual(completed["metadata"]["result_ref"], "fixture:ws2-safe-result")
+        self.assertEqual(event["metadata"]["result_ref"], "fixture:ws2-safe-result")
+        self.assertIn("fixture:ws2-safe-result", serialized)
+        for forbidden in (
+            "raw_provider_payload",
+            "provider_response",
+            "raw_result_payload",
+            "not-a-real-token",
+            "not-a-real-key",
+            "raw-session-id",
+            "https://provider.example",
+            "api_key",
+            "session_id",
+        ):
+            self.assertNotIn(forbidden, serialized)
+
     def test_polling_endpoint_returns_task_state_and_events(self) -> None:
         self.db.create_durable_task_state(
             task_id="task-progress-poll",
@@ -331,7 +398,8 @@ class DurableTaskStateTestCase(unittest.TestCase):
         AnalysisTaskQueue._instance = None
         try:
             queue = AnalysisTaskQueue(max_workers=1)
-            status = queue.get_runtime_status()
+            with patch.dict("os.environ", {"WEB_CONCURRENCY": "2"}, clear=False):
+                status = queue.get_runtime_status()
             event = _format_sse_event("task_updated", {"task_id": "task-1", "owner_id": "user-a"})
         finally:
             queue = AnalysisTaskQueue._instance
@@ -343,6 +411,9 @@ class DurableTaskStateTestCase(unittest.TestCase):
 
         self.assertEqual(status["mode"], "process_local")
         self.assertTrue(status["single_process_required"])
+        self.assertFalse(status["topology_ok"])
+        self.assertIn("process-local", status["warning"])
+        self.assertIn("single process", status["warning"])
         self.assertTrue(hasattr(AnalysisTaskQueue, "subscribe"))
         self.assertIn("event: task_updated", event)
 
