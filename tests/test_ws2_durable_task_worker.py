@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException
 
-from api.v1.endpoints.analysis import get_analysis_status
+from api.v1.endpoints.analysis import get_analysis_status, poll_analysis_task_progress
 from src.services.durable_task_worker import (
     SYNTHETIC_TASK_TYPE,
     DurableTaskWorkerPrototype,
@@ -180,10 +180,16 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
             task_type=SYNTHETIC_TASK_TYPE,
             now=expired_time,
         )
+        stale_complete = self.db.complete_claimed_durable_task_state(
+            task_id="task-expired-lease",
+            worker_id="worker-a",
+            now=expired_time,
+        )
 
         self.assertIsNotNone(second_claim)
         self.assertEqual(second_claim["lease_owner"], "worker-b")
         self.assertEqual(second_claim["attempt_count"], 2)
+        self.assertIsNone(stale_complete)
 
     def test_graceful_shutdown_stops_between_stages_without_terminal_state(self) -> None:
         self._create_task("task-shutdown")
@@ -227,6 +233,31 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
         with self.assertRaises(HTTPException) as ctx:
             get_analysis_status("task-owner-status", current_user=SimpleNamespace(user_id="user-b"))
         self.assertEqual(ctx.exception.status_code, 404)
+
+    def test_failed_worker_task_remains_pollable_with_sanitized_payload(self) -> None:
+        self._create_task(
+            "task-failed-pollable",
+            failure_mode="non_retryable",
+            api_key="not-a-real-key",
+        )
+        worker = DurableTaskWorkerPrototype(db=self.db, worker_id="worker-a")
+
+        result = worker.run_once()
+        response = poll_analysis_task_progress(
+            "task-failed-pollable",
+            current_user=SimpleNamespace(user_id="user-a"),
+        )
+        serialized = json.dumps(response.model_dump(), ensure_ascii=False)
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(response.task.status, "failed")
+        self.assertEqual(response.task.progress, 100)
+        self.assertTrue(response.terminal)
+        self.assertEqual(response.events[-1].event_type, "failed")
+        self.assertEqual(response.events[-1].metadata["error_code"], "non_retryable_synthetic_error")
+        self.assertNotIn("Traceback", serialized)
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("not-a-real-key", serialized)
 
     def test_dependency_manifests_do_not_add_external_worker_stack(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]

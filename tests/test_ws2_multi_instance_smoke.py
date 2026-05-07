@@ -180,6 +180,111 @@ class Ws2MultiInstanceSmokeTestCase(unittest.TestCase):
         self.assertEqual(final_status.progress, 100)
         self.assertTrue(final_poll.terminal)
 
+    def test_progress_replay_survives_worker_handoff(self) -> None:
+        self._api_create_synthetic_task("ws2-smoke-handoff", "owner-a")
+        worker_a_db = self._open_instance_db()
+        first_claim = worker_a_db.claim_next_durable_task_state(
+            worker_id="worker-a",
+            task_type=SYNTHETIC_TASK_TYPE,
+            lease_seconds=1,
+        )
+        self.assertIsNotNone(first_claim)
+        worker_a_db.heartbeat_durable_task_state(
+            task_id="ws2-smoke-handoff",
+            worker_id="worker-a",
+            lease_seconds=1,
+            progress=22,
+            current_step="Worker A progress",
+            now=datetime.fromisoformat(first_claim["started_at"]),
+        )
+        worker_a_db.append_durable_task_progress_event(
+            task_id="ws2-smoke-handoff",
+            owner_user_id="owner-a",
+            event_type="progress",
+            stage="worker-a",
+            progress=22,
+            message="Worker A progress",
+        )
+
+        expired_time = datetime.fromisoformat(first_claim["lease_expires_at"]) + timedelta(seconds=1)
+        worker_b_db = self._open_instance_db()
+        second_claim = worker_b_db.claim_next_durable_task_state(
+            worker_id="worker-b",
+            task_type=SYNTHETIC_TASK_TYPE,
+            now=expired_time,
+        )
+        self.assertIsNotNone(second_claim)
+        worker_b_db.append_durable_task_progress_event(
+            task_id="ws2-smoke-handoff",
+            owner_user_id="owner-a",
+            event_type="progress",
+            stage="worker-b",
+            progress=61,
+            message="Worker B resumed",
+        )
+        worker_b_db.heartbeat_durable_task_state(
+            task_id="ws2-smoke-handoff",
+            worker_id="worker-b",
+            lease_seconds=1,
+            progress=61,
+            current_step="Worker B resumed",
+            now=expired_time,
+        )
+        recovered_complete = worker_b_db.complete_claimed_durable_task_state(
+            task_id="ws2-smoke-handoff",
+            worker_id="worker-b",
+            current_step="Recovered by worker B",
+            metadata={"result_ref": "fixture:ws2-replayed"},
+            now=expired_time,
+        )
+        worker_b_db.append_durable_task_progress_event(
+            task_id="ws2-smoke-handoff",
+            owner_user_id="owner-a",
+            event_type="completed",
+            stage="worker-b-complete",
+            progress=100,
+            message="Worker B completed",
+            metadata={"result_ref": "fixture:ws2-replayed"},
+        )
+
+        poll = self._poll_from_fresh_api_instance("ws2-smoke-handoff", "owner-a")
+        self.assertIsNotNone(recovered_complete)
+        self.assertEqual(poll.task.status, "completed")
+        self.assertEqual([event.sequence for event in poll.events], [1, 2, 3])
+        self.assertEqual(poll.events[-1].metadata["result_ref"], "fixture:ws2-replayed")
+        self.assertEqual(poll.latest_sequence, 3)
+
+    def test_owner_isolation_stays_intact_after_reclaim(self) -> None:
+        self._api_create_synthetic_task("ws2-smoke-owner-lock", "owner-a")
+        worker_a_db = self._open_instance_db()
+        first_claim = worker_a_db.claim_next_durable_task_state(
+            worker_id="worker-a",
+            task_type=SYNTHETIC_TASK_TYPE,
+            lease_seconds=1,
+        )
+        self.assertIsNotNone(first_claim)
+        expired_time = datetime.fromisoformat(first_claim["lease_expires_at"]) + timedelta(seconds=1)
+        worker_b_db = self._open_instance_db()
+        second_claim = worker_b_db.claim_next_durable_task_state(
+            worker_id="worker-b",
+            task_type=SYNTHETIC_TASK_TYPE,
+            now=expired_time,
+        )
+        worker_b_db.complete_claimed_durable_task_state(
+            task_id="ws2-smoke-owner-lock",
+            worker_id="worker-b",
+            now=expired_time,
+        )
+
+        with self.assertRaises(HTTPException) as status_ctx:
+            self._status_from_fresh_api_instance("ws2-smoke-owner-lock", "owner-b")
+        with self.assertRaises(HTTPException) as poll_ctx:
+            self._poll_from_fresh_api_instance("ws2-smoke-owner-lock", "owner-b")
+
+        self.assertIsNotNone(second_claim)
+        self.assertEqual(status_ctx.exception.status_code, 404)
+        self.assertEqual(poll_ctx.exception.status_code, 404)
+
 
 if __name__ == "__main__":
     unittest.main()
