@@ -65,6 +65,30 @@ def test_release_secret_scan_allows_env_example_placeholders(tmp_path):
     assert "No high-confidence secret patterns" in result.stdout
 
 
+def test_release_secret_scan_allows_frontend_e2e_state_placeholders(tmp_path):
+    repo = _init_repo(tmp_path)
+    fixture = repo / "apps" / "dsa-web" / "e2e" / "fixtures" / "adminAuth.ts"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        "\n".join(
+            [
+                "export const adminAuthFixture = {",
+                "  credential_state: 'missing_credentials',",
+                "  credentials_present: false,",
+                "  password_state: 'set',",
+                "};",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = _scan(repo)
+
+    assert result.returncode == 0
+    assert "No high-confidence secret patterns" in result.stdout
+
+
 def test_release_secret_scan_flags_staged_password_assignment(tmp_path):
     repo = _init_repo(tmp_path)
     password_value = "correct-" + "horse"
@@ -78,6 +102,38 @@ def test_release_secret_scan_flags_staged_password_assignment(tmp_path):
     assert "non-empty password assignment" in result.stdout
     assert password_value not in result.stdout
     assert password_value not in result.stderr
+
+
+def test_release_secret_scan_flags_frontend_e2e_password_assignment(tmp_path):
+    repo = _init_repo(tmp_path)
+    password_value = "correct-" + "horse"
+    fixture = repo / "apps" / "dsa-web" / "e2e" / "fixtures" / "adminAuth.ts"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(f"export const admin_password = '{password_value}';\n", encoding="utf-8")
+
+    result = _scan(repo)
+
+    assert result.returncode == 1
+    assert "apps/dsa-web/e2e/fixtures/adminAuth.ts:1" in result.stdout
+    assert "non-empty password assignment" in result.stdout
+    assert password_value not in result.stdout
+    assert password_value not in result.stderr
+
+
+def test_release_secret_scan_flags_frontend_e2e_api_key_assignment(tmp_path):
+    repo = _init_repo(tmp_path)
+    key_value = "sk-" + ("B" * 40)
+    fixture = repo / "apps" / "dsa-web" / "e2e" / "fixtures" / "adminAuth.ts"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(f"export const openaiApiKey = '{key_value}';\n", encoding="utf-8")
+
+    result = _scan(repo)
+
+    assert result.returncode == 1
+    assert "apps/dsa-web/e2e/fixtures/adminAuth.ts:1" in result.stdout
+    assert "OpenAI-style API key" in result.stdout
+    assert key_value not in result.stdout
+    assert key_value not in result.stderr
 
 
 def test_release_secret_scan_flags_committed_branch_bearer_token(tmp_path):

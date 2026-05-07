@@ -156,6 +156,17 @@ is_provider_key_name() {
   [[ "${key}" =~ (OPENAI|ANTHROPIC|GEMINI|GOOGLE|TUSHARE|ALPACA|TRADIER|POLYGON|FMP|FINNHUB|DISCORD|TELEGRAM|SLACK|FEISHU|LARK|WECHAT|PUSHOVER|PUSHPLUS|IBKR|FUTU|LITELLM) ]]
 }
 
+is_secret_state_indicator_key() {
+  local key
+  key="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+
+  [[ "${key}" =~ (^|[._-])(password|passwd|credential|credentials|token|secret|session)[._-](state|status)$ ]] && return 0
+  [[ "${key}" =~ (^|[._-])(password|passwd|credential|credentials|token|secret|session)[._-]present$ ]] && return 0
+  [[ "${key}" =~ (^|[._-])has[._-](password|passwd|credential|credentials|token|secret|session)$ ]] && return 0
+
+  return 1
+}
+
 record_finding() {
   local source_label="$1"
   local file_path="$2"
@@ -212,6 +223,10 @@ scan_line() {
     local value="${BASH_REMATCH[4]}"
     local lower_key
     lower_key="$(printf '%s' "${key}" | tr '[:upper:]' '[:lower:]')"
+
+    if is_secret_state_indicator_key "${key}"; then
+      return 0
+    fi
 
     if ! is_scannable_assignment_value "${file_path}" "${value}"; then
       return 0
