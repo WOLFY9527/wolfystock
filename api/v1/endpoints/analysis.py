@@ -255,6 +255,9 @@ def preview_analysis(
             fallback_fundamental_payload=None,
         )
         report.details = None
+        report.decision_trace = None
+        report.report_quality = None
+        report.meta.model_used = None
 
         preview_response = AnalysisPreviewResponse(
             query_id=resolved_query_id,

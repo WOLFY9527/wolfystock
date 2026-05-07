@@ -415,6 +415,61 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(analysis_result["full_reasoning"], "等待回踩确认后再加仓。")
         self.assertEqual(payload["details"]["raw_ai_response"], {"provider": "llm", "content": "raw ai response"})
 
+    def test_build_report_payload_redacts_sensitive_raw_ai_response_fields(self) -> None:
+        service = AnalysisService()
+        result = SimpleNamespace(
+            code="TSLA",
+            name="Tesla",
+            query_id="q-redaction",
+            current_price=171.22,
+            change_pct=2.41,
+            model_used="openai/gpt-4.1-mini",
+            analysis_summary="等待回踩确认。",
+            operation_advice="持有",
+            trend_prediction="震荡偏强",
+            sentiment_score=64,
+            news_summary="news",
+            technical_analysis="tech",
+            fundamental_analysis="fundamental",
+            risk_warning="risk",
+            report_language="zh",
+            dashboard={"battle_plan": {}, "decision_context": {}, "structured_analysis": {}},
+            raw_response={
+                "provider": "openai",
+                "raw_provider_payload": {
+                    "api_key": "sk-test-public",
+                    "cookie": "guest-cookie",
+                    "trace_id": "trace-123",
+                },
+                "raw_prompt": "hidden system prompt",
+                "debug_schema": {"stack_trace": "hidden"},
+                "hidden_reasoning": "covert reasoning",
+                "content": "visible content",
+            },
+            runtime_execution={"steps": []},
+            notification_result={"status": "ok"},
+            get_sniper_points=lambda: {},
+        )
+
+        payload = service._build_report_payload(
+            result,
+            query_id="q-redaction",
+            report_type="detailed",
+        )
+
+        raw_ai_response = payload["details"]["raw_ai_response"]
+        self.assertEqual(raw_ai_response["provider"], "openai")
+        self.assertEqual(raw_ai_response["content"], "visible content")
+        self.assertEqual(raw_ai_response["raw_provider_payload"], "[redacted]")
+        self.assertEqual(raw_ai_response["raw_prompt"], "[redacted]")
+        self.assertEqual(raw_ai_response["debug_schema"], "[redacted]")
+        self.assertEqual(raw_ai_response["hidden_reasoning"], "[redacted]")
+        serialized = json.dumps(raw_ai_response, ensure_ascii=False)
+        self.assertNotIn("sk-test-public", serialized)
+        self.assertNotIn("guest-cookie", serialized)
+        self.assertNotIn("trace-123", serialized)
+        self.assertNotIn("hidden system prompt", serialized)
+
     def test_build_report_payload_includes_decision_trace_metadata(self) -> None:
         service = AnalysisService()
         result = SimpleNamespace(

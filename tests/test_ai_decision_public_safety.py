@@ -35,6 +35,7 @@ FORBIDDEN_DIRECTIVE_TERMS = (
     "guaranteed",
     "must buy",
     "must sell",
+    "best contract",
     "ai recommends you buy",
     "稳赚",
     "必买",
@@ -56,8 +57,14 @@ FORBIDDEN_RAW_OUTPUT_TERMS = (
     "password",
     "stack_trace",
     "traceback",
+    "trace_id",
+    "traceparent",
+    "request_id",
+    "session_id",
     "debug_schema",
     "attempt_trace",
+    "hidden_reasoning",
+    "internal_reasoning",
 )
 
 
@@ -306,6 +313,9 @@ def test_analysis_runtime_files_do_not_import_broker_order_or_portfolio_mutation
         "portfolio_service",
         "portfolio_repository",
         "PortfolioService",
+        "litellm.",
+        "_call_litellm(",
+        "GeminiAnalyzer(",
     )
 
     for path in analysis_runtime_files:
@@ -391,8 +401,19 @@ class PublicPreviewSafetyTestCase(unittest.TestCase):
                             "raw_provider_payload": {"api_key": "public-safety-fixture"},
                             "debug_schema": {"stack_trace": "hidden"},
                             "attempt_trace": [{"token": "public-safety-fixture"}],
+                            "trace_id": "trace-public-safety-fixture",
+                            "hidden_reasoning": "hidden chain should not appear",
                         },
                         "standard_report": {"internal": "hidden"},
+                    },
+                    "decision_trace": {
+                        "llm": {
+                            "provider": "openai",
+                            "model": "openai/gpt-4o-mini",
+                            "prompt_exposed": False,
+                        },
+                        "trace_id": "trace-public-safety-fixture",
+                        "hidden_reasoning": "hidden chain should not appear",
                     },
                     "dataQualityReport": {
                         "dataQualityTier": "analysis_grade",
@@ -421,6 +442,8 @@ class PublicPreviewSafetyTestCase(unittest.TestCase):
 
         payload = response.json()
         self.assertEqual(payload["preview_scope"], "guest")
+        self.assertIsNone(payload["report"]["meta"]["model_used"])
+        self.assertIsNone(payload["report"]["decision_trace"])
         self.assertIsNone(payload["report"]["details"])
         self.assertEqual(payload["report"]["data_quality_report"]["confidenceCap"], 75)
         _assert_no_forbidden_directives(payload["report"])

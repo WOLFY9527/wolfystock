@@ -22,6 +22,7 @@ from src.report_language import (
     localize_trend_prediction,
     normalize_report_language,
 )
+from src.utils.security import sanitize_message, sanitize_metadata
 from src.utils.time_utils import to_beijing_iso8601
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,63 @@ def _extract_data_quality_report(result: Any) -> Optional[Dict[str, Any]]:
         if isinstance(structured, dict) and isinstance(structured.get("data_quality_report"), dict):
             return structured["data_quality_report"]
     return None
+
+
+def _redact_public_artifact(value: Any) -> Any:
+    """Redact raw prompt/provider/debug content before public export."""
+    sensitive_key_markers = (
+        "raw_prompt",
+        "raw_provider_payload",
+        "raw_model_response",
+        "raw_response",
+        "provider_payload",
+        "debug_schema",
+        "stack_trace",
+        "traceback",
+        "trace_id",
+        "traceid",
+        "request_id",
+        "session_id",
+        "hidden_reasoning",
+        "internal_reasoning",
+        "chain_of_thought",
+    )
+    sensitive_value_markers = (
+        "api_key",
+        "apikey",
+        "token",
+        "cookie",
+        "session",
+        "password",
+        "secret",
+        "dsn",
+        "raw prompt",
+        "hidden reasoning",
+        "internal reasoning",
+        "stack trace",
+        "traceback",
+    )
+
+    if isinstance(value, dict):
+        redacted: Dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            lowered_key = key_text.lower()
+            if any(marker in lowered_key for marker in sensitive_key_markers):
+                redacted[key_text] = "[redacted]"
+                continue
+            redacted[key_text] = _redact_public_artifact(item)
+        return sanitize_metadata(redacted)
+    if isinstance(value, list):
+        return [_redact_public_artifact(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_public_artifact(item) for item in value)
+    if isinstance(value, str):
+        lowered = value.lower()
+        if any(marker in lowered for marker in sensitive_value_markers):
+            return "[redacted]"
+        return sanitize_message(value)
+    return value
 
 
 class AnalysisService:
@@ -273,7 +331,7 @@ class AnalysisService:
                 "risk_warning": result.risk_warning,
                 "standard_report": standard_report,
                 "analysis_result": analysis_result,
-                "raw_ai_response": getattr(result, "raw_response", None),
+                "raw_ai_response": _redact_public_artifact(getattr(result, "raw_response", None)),
             },
             "decision_trace": decision_trace,
         }
