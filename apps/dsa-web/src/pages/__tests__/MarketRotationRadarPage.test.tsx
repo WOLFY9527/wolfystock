@@ -248,4 +248,80 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.getByTestId('rotation-theme-card-ai_applications')).toHaveTextContent('备用');
     expect(screen.getByTestId('rotation-theme-card-ai_applications')).not.toHaveTextContent('实时');
   });
+
+  it('renders compact proxy quality badges with translated missing reasons', async () => {
+    const fixture = radarFixture();
+    fixture.themes[0] = {
+      ...fixture.themes[0],
+      proxyQuality: {
+        ...fixture.themes[0].proxyQuality,
+        label: 'ETF 代理部分可用',
+        coveragePercent: 50,
+        availableProxyCount: 2,
+        totalProxyCount: 4,
+        freshness: 'stale',
+        hasMissingRequiredProxy: true,
+        hasStaleProxy: true,
+        missingReasons: {
+          IWM: 'proxy_stale',
+          IGV: 'proxy_quote_missing',
+        },
+        explanation: 'ETF 代理部分可用：ETF 代理覆盖 2/4，缺口 IWM/IGV。',
+      },
+      benchmarkProxies: {
+        ...fixture.themes[0].benchmarkProxies,
+        IWM: {
+          ...fixture.themes[0].benchmarkProxies?.IWM,
+          symbol: 'IWM',
+          freshness: 'stale',
+          isStale: true,
+          quality: {
+            available: false,
+            freshness: 'stale',
+            missingReason: 'proxy_stale',
+            qualityLabel: '代理过期',
+            coverageContribution: 0,
+          },
+        },
+        IGV: {
+          ...fixture.themes[0].benchmarkProxies?.IGV,
+          symbol: 'IGV',
+          freshness: 'fallback',
+          isFallback: true,
+          quality: {
+            available: false,
+            freshness: 'fallback',
+            missingReason: 'proxy_quote_missing',
+            qualityLabel: '代理缺口',
+            coverageContribution: 0,
+          },
+        },
+      },
+    };
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(fixture);
+
+    render(<MarketRotationRadarPage />);
+
+    const quality = await screen.findByTestId('rotation-proxy-quality-summary-ai_applications');
+    expect(quality).toHaveTextContent('覆盖 2/4');
+    expect(quality).toHaveTextContent('50.0%');
+    expect(quality).toHaveTextContent('过期');
+    expect(quality).toHaveTextContent('代理缺口');
+
+    const themeCard = screen.getByTestId('rotation-theme-card-ai_applications');
+    expect(within(themeCard).getByTestId('rotation-proxy-row-IWM')).toHaveTextContent('代理行情过期');
+    expect(within(themeCard).getByTestId('rotation-proxy-row-IGV')).toHaveTextContent('代理行情待补齐');
+    expect(themeCard.textContent).not.toMatch(/proxy_quote_missing|proxy_stale/);
+  });
+
+  it('labels watchlist candidates as observation evidence instead of trading instructions', async () => {
+    render(<MarketRotationRadarPage />);
+
+    const candidate = await screen.findByTestId('rotation-alert-candidate-APP');
+    expect(candidate).toHaveTextContent('观察队列');
+    expect(candidate).toHaveTextContent('非交易指令');
+    expect(candidate).toHaveTextContent('交付关闭');
+    expect(candidate).toHaveTextContent('只读证据');
+    expect(candidate.textContent).not.toMatch(/买入|卖出|下单|立即交易|有条件可交易/);
+  });
 });

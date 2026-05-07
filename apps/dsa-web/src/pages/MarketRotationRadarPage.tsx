@@ -65,6 +65,18 @@ function proxyMissingReasonLabel(reason?: string | null): string {
   return reason ? labels[reason] || '代理证据待复核' : '代理可用';
 }
 
+function proxyQualityState(theme: MarketRotationTheme): string {
+  if (theme.proxyQuality?.hasMissingRequiredProxy) {
+    return '代理缺口';
+  }
+  if (theme.proxyQuality?.hasStaleProxy) {
+    return '代理过期';
+  }
+  const total = theme.proxyQuality?.totalProxyCount ?? Object.keys(theme.benchmarkProxies || {}).length;
+  const available = theme.proxyQuality?.availableProxyCount ?? total;
+  return available < total ? '部分可用' : '代理完整';
+}
+
 function compactConfidence(value?: number | null): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return '0%';
@@ -94,6 +106,20 @@ const ThemeMetric: React.FC<{ label: string; value: string; tone?: string }> = (
     <p className="truncate text-[10px] font-semibold text-white/38">{label}</p>
     <p className={cn('mt-1 truncate font-mono text-sm font-semibold tabular-nums', tone)}>{value}</p>
   </div>
+);
+
+const EvidenceBadge: React.FC<{ children: React.ReactNode; tone?: 'neutral' | 'info' | 'warn' | 'ok' }> = ({ children, tone = 'neutral' }) => (
+  <span
+    className={cn(
+      'inline-flex min-h-5 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-none',
+      tone === 'info' && 'border-cyan-300/20 bg-cyan-300/10 text-cyan-100',
+      tone === 'warn' && 'border-amber-300/24 bg-amber-300/10 text-amber-100',
+      tone === 'ok' && 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100',
+      tone === 'neutral' && 'border-white/8 bg-white/[0.03] text-white/48',
+    )}
+  >
+    {children}
+  </span>
 );
 
 const WindowChip: React.FC<{ window: MarketRotationTimeWindow }> = ({ window }) => (
@@ -245,11 +271,21 @@ const ThemeCard: React.FC<{
 
       {theme.benchmarkProxies ? (
         <div className="mt-4">
-          <div className="flex min-w-0 items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">ETF 代理质量</p>
-            <span className="shrink-0 rounded-full border border-white/8 bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold text-white/45">
-              覆盖 {theme.proxyQuality?.availableProxyCount ?? 0}/{theme.proxyQuality?.totalProxyCount ?? Object.keys(theme.benchmarkProxies).length}
-            </span>
+            <div
+              data-testid={`rotation-proxy-quality-summary-${theme.id}`}
+              className="flex min-w-0 flex-wrap items-center gap-1.5"
+            >
+              <EvidenceBadge tone={theme.proxyQuality?.hasMissingRequiredProxy || theme.proxyQuality?.hasStaleProxy ? 'warn' : 'ok'}>
+                {proxyQualityState(theme)}
+              </EvidenceBadge>
+              <EvidenceBadge>
+                覆盖 {theme.proxyQuality?.availableProxyCount ?? 0}/{theme.proxyQuality?.totalProxyCount ?? Object.keys(theme.benchmarkProxies).length}
+              </EvidenceBadge>
+              <EvidenceBadge>{percent(theme.proxyQuality?.coveragePercent)}</EvidenceBadge>
+              <DataFreshnessBadge freshness={theme.proxyQuality?.freshness || theme.freshness} className="px-1.5 text-[9px]" />
+            </div>
           </div>
           {theme.proxyQuality?.explanation ? (
             <p className="mt-2 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 text-[11px] leading-5 text-white/48">
@@ -258,16 +294,23 @@ const ThemeCard: React.FC<{
           ) : null}
           <div className="mt-2 grid gap-2">
             {Object.values(theme.benchmarkProxies).map((proxy) => (
-              <div key={proxy.symbol} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
+              <div
+                key={proxy.symbol}
+                data-testid={`rotation-proxy-row-${proxy.symbol}`}
+                className="grid min-w-0 grid-cols-1 gap-2 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              >
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold text-white/82">{proxy.symbol}</span>
                   <span className="block truncate text-[11px] text-white/38">
                     {proxy.role === 'sector_proxy' ? '行业代理' : '市场代理'} · {proxy.quality?.qualityLabel || proxyMissingReasonLabel(proxy.quality?.missingReason)}
                   </span>
                 </span>
-                <span className="shrink-0 text-right text-[11px] text-white/50">
-                  <span className="block font-mono text-sm text-cyan-100">{signedPercent(proxy.relativeStrength)}</span>
-                  <span className="block">{proxyMissingReasonLabel(proxy.quality?.missingReason)}</span>
+                <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/50 sm:justify-end sm:text-right">
+                  <span className="font-mono text-sm text-cyan-100">{signedPercent(proxy.relativeStrength)}</span>
+                  <DataFreshnessBadge freshness={proxy.quality?.freshness || proxy.freshness} className="px-1.5 text-[9px]" />
+                  <EvidenceBadge tone={proxy.quality?.available === false ? 'warn' : 'ok'}>
+                    {proxyMissingReasonLabel(proxy.quality?.missingReason)}
+                  </EvidenceBadge>
                 </span>
               </div>
             ))}
@@ -338,7 +381,11 @@ const ThemeDetailPanel: React.FC<{ theme?: MarketRotationTheme }> = ({ theme }) 
         <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">关注候选</p>
         <div className="mt-2 grid gap-2">
           {alertCandidates.length ? alertCandidates.map((candidate) => (
-            <div key={`${candidate.symbol || 'candidate'}-${candidate.signalLabel || 'signal'}`} className="rounded-xl border border-cyan-200/10 bg-cyan-200/[0.035] px-3 py-2">
+            <div
+              key={`${candidate.symbol || 'candidate'}-${candidate.signalLabel || 'signal'}`}
+              data-testid={`rotation-alert-candidate-${candidate.symbol || 'unknown'}`}
+              className="rounded-xl border border-cyan-200/10 bg-cyan-200/[0.035] px-3 py-2"
+            >
               <div className="flex min-w-0 items-center justify-between gap-3">
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold text-white/82">{candidate.symbol || '--'}</span>
@@ -346,12 +393,17 @@ const ThemeDetailPanel: React.FC<{ theme?: MarketRotationTheme }> = ({ theme }) 
                 </span>
                 <span className="shrink-0 text-right text-[11px] text-white/48">
                   <span className="block font-mono text-sm text-cyan-100">{compactConfidence(candidate.confidence)}</span>
-                  <span className="block">{candidate.deliveryEnabled ? '交付待确认' : '只读证据'}</span>
+                  <span className="block">{candidate.deliveryEnabled ? '交付待确认' : '交付关闭'}</span>
                 </span>
               </div>
-              <p className="mt-2 rounded-lg border border-white/[0.04] bg-black/20 px-2 py-1 text-[10px] font-semibold text-cyan-50/55">
-                观察信号 / 非买卖建议
-              </p>
+              <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                <EvidenceBadge tone="info">观察队列</EvidenceBadge>
+                <EvidenceBadge>非交易指令</EvidenceBadge>
+                {candidate.readOnly ? <EvidenceBadge tone="ok">只读证据</EvidenceBadge> : null}
+                <EvidenceBadge tone={candidate.deliveryEnabled ? 'warn' : 'neutral'}>
+                  {candidate.deliveryEnabled ? '交付待确认' : '交付关闭'}
+                </EvidenceBadge>
+              </div>
               {candidate.reasons?.length ? (
                 <p className="mt-2 truncate text-[11px] text-white/45">{candidate.reasons[0]}</p>
               ) : null}
