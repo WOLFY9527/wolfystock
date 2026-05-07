@@ -18,8 +18,17 @@ from sqlalchemy import select
 
 from src.config import Config
 from src.repositories.portfolio_repo import PortfolioBusyError, PortfolioRepository
+from src.services.portfolio_risk_service import PortfolioRiskService
 from src.services.portfolio_service import PortfolioConflictError, PortfolioOversellError, PortfolioService
-from src.storage import DatabaseManager, PortfolioDailySnapshot, PortfolioPosition, PortfolioPositionLot, PortfolioTrade
+from src.storage import (
+    DatabaseManager,
+    PortfolioCashLedger,
+    PortfolioCorporateAction,
+    PortfolioDailySnapshot,
+    PortfolioPosition,
+    PortfolioPositionLot,
+    PortfolioTrade,
+)
 
 
 class PortfolioServiceTestCase(unittest.TestCase):
@@ -73,6 +82,23 @@ class PortfolioServiceTestCase(unittest.TestCase):
             ]
         )
         self.db.save_daily_data(df, code=symbol, data_source="unit-test")
+
+    def _ledger_counts(self) -> dict[str, int]:
+        with self.db.get_session() as session:
+            return {
+                "trades": session.query(PortfolioTrade).count(),
+                "cash": session.query(PortfolioCashLedger).count(),
+                "corporate_actions": session.query(PortfolioCorporateAction).count(),
+            }
+
+    def _create_app_user(self, user_id: str, username: str) -> None:
+        self.db.create_or_update_app_user(
+            user_id=user_id,
+            username=username,
+            role="user",
+            display_name=username.title(),
+            is_active=True,
+        )
 
     def test_phase_f_compare_value_helper_normalizes_created_at_timezone_only_drift(self) -> None:
         normalized = self.service._normalize_phase_f_compare_value(
@@ -499,6 +525,166 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(snapshot["analytics"]["exposure"]["by_symbol"][0]["symbol"], "AAPL")
         self.assertEqual(snapshot["analytics"]["risk"]["holding_count"], 1)
         self.assertIn("single_position_gt_30", snapshot["analytics"]["risk"]["warnings"])
+
+    def test_ledger_cash_movement_and_pnl_after_buy_sell_fixture(self) -> None:
+        account = self.service.create_account(name="Ledger", broker="Demo", market="us", base_currency="USD")
+        aid = account["id"]
+
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 2, 1),
+            direction="in",
+            amount=10000,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 2, 2),
+            side="buy",
+            quantity=30,
+            price=100,
+            fee=3,
+            tax=2,
+            market="us",
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 2, 3),
+            side="sell",
+            quantity=10,
+            price=120,
+            fee=1,
+            tax=2,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("AAPL", date(2026, 2, 4), 130.0)
+
+        snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 2, 4), cost_method="fifo")
+        account_snapshot = snapshot["accounts"][0]
+        position = account_snapshot["positions"][0]
+
+        self.assertAlmostEqual(account_snapshot["total_cash"], 8192.0, places=6)
+        self.assertAlmostEqual(account_snapshot["realized_pnl"], 195.333333, places=6)
+        self.assertAlmostEqual(account_snapshot["unrealized_pnl"], 596.666667, places=6)
+        self.assertAlmostEqual(account_snapshot["fee_total"], 4.0, places=6)
+        self.assertAlmostEqual(account_snapshot["tax_total"], 4.0, places=6)
+        self.assertAlmostEqual(position["quantity"], 20.0, places=6)
+        self.assertAlmostEqual(position["cost_basis_native"], 2003.33333333, places=6)
+        self.assertAlmostEqual(position["market_value_native"], 2600.0, places=6)
+        self.assertEqual(account_snapshot["realized_pnl_by_symbol"][0]["symbol"], "AAPL")
+
+    def test_corporate_actions_and_ledger_views_are_owner_scoped(self) -> None:
+        self._create_app_user("alice-ledger", "alice-ledger")
+        self._create_app_user("bob-ledger", "bob-ledger")
+        alice = PortfolioService(owner_id="alice-ledger")
+        bob = PortfolioService(owner_id="bob-ledger")
+        alice_account = alice.create_account(name="Alice", broker="Demo", market="us", base_currency="USD")["id"]
+        bob_account = bob.create_account(name="Bob", broker="Demo", market="us", base_currency="USD")["id"]
+
+        for service, account_id, trade_uid in (
+            (alice, alice_account, "alice-owner-trade"),
+            (bob, bob_account, "bob-owner-trade"),
+        ):
+            service.record_cash_ledger(
+                account_id=account_id,
+                event_date=date(2026, 3, 1),
+                direction="in",
+                amount=1000,
+                currency="USD",
+            )
+            service.record_trade(
+                account_id=account_id,
+                symbol="AAPL",
+                trade_date=date(2026, 3, 2),
+                side="buy",
+                quantity=10,
+                price=50,
+                fee=0,
+                tax=0,
+                market="us",
+                currency="USD",
+                trade_uid=trade_uid,
+            )
+        bob.record_corporate_action(
+            account_id=bob_account,
+            symbol="AAPL",
+            effective_date=date(2026, 3, 3),
+            action_type="cash_dividend",
+            market="us",
+            currency="USD",
+            cash_dividend_per_share=1.0,
+        )
+        self._save_close("AAPL", date(2026, 3, 4), 55.0)
+
+        alice_actions = alice.list_corporate_action_events(page_size=100)
+        alice_trades = alice.list_trade_events(page_size=100)
+        alice_cash = alice.list_cash_ledger_events(page_size=100)
+        alice_snapshot = alice.get_portfolio_snapshot(as_of=date(2026, 3, 4), cost_method="fifo")
+        bob_snapshot = bob.get_portfolio_snapshot(as_of=date(2026, 3, 4), cost_method="fifo")
+
+        self.assertEqual(alice_actions["total"], 0)
+        self.assertEqual([item["trade_uid"] for item in alice_trades["items"]], ["alice-owner-trade"])
+        self.assertEqual([item["account_id"] for item in alice_cash["items"]], [alice_account])
+        self.assertEqual(alice_snapshot["account_count"], 1)
+        self.assertEqual(alice_snapshot["accounts"][0]["account_id"], alice_account)
+        self.assertAlmostEqual(alice_snapshot["accounts"][0]["total_cash"], 500.0, places=6)
+        self.assertAlmostEqual(bob_snapshot["accounts"][0]["total_cash"], 510.0, places=6)
+
+        with self.assertRaises(ValueError):
+            alice.list_corporate_action_events(account_id=bob_account)
+        with self.assertRaises(ValueError):
+            alice.get_portfolio_snapshot(account_id=bob_account, as_of=date(2026, 3, 4))
+
+    def test_snapshot_and_risk_reads_do_not_mutate_ledger_state(self) -> None:
+        account = self.service.create_account(name="Read Only", broker="Demo", market="us", base_currency="USD")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 4, 1),
+            direction="in",
+            amount=5000,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 4, 2),
+            side="buy",
+            quantity=20,
+            price=100,
+            fee=2,
+            tax=0,
+            market="us",
+            currency="USD",
+        )
+        self.service.record_corporate_action(
+            account_id=aid,
+            symbol="AAPL",
+            effective_date=date(2026, 4, 3),
+            action_type="cash_dividend",
+            market="us",
+            currency="USD",
+            cash_dividend_per_share=0.5,
+        )
+        self._save_close("AAPL", date(2026, 4, 4), 105.0)
+        before = self._ledger_counts()
+
+        self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 4, 4), cost_method="fifo")
+        PortfolioRiskService(portfolio_service=self.service).get_risk_report(
+            account_id=aid,
+            as_of=date(2026, 4, 4),
+            cost_method="fifo",
+        )
+        self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 4, 4), cost_method="fifo")
+
+        self.assertEqual(self._ledger_counts(), before)
+        self.assertEqual(self.service.list_trade_events(account_id=aid)["total"], 1)
+        self.assertEqual(self.service.list_cash_ledger_events(account_id=aid)["total"], 1)
+        self.assertEqual(self.service.list_corporate_action_events(account_id=aid)["total"], 1)
 
     def test_corporate_actions_dividend_and_split(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
