@@ -19,6 +19,7 @@ def _init_repo(tmp_path: Path) -> Path:
     shutil.copy2(SCRIPT_SOURCE, repo / "scripts" / "release_gate_summary.sh")
     (repo / "scripts" / "release_secret_scan.sh").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
     (repo / "scripts" / "production_config_readiness.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    (repo / "scripts" / "launch_acceptance_evidence.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
     (repo / "scripts" / "staging_ingress_smoke.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
     (repo / "scripts" / "ci_gate_fast.sh").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
 
@@ -47,9 +48,11 @@ def test_release_gate_summary_prints_required_fields_on_clean_repo(tmp_path):
     assert "Worktree dirty: no" in result.stdout
     assert "scripts/release_secret_scan.sh: present" in result.stdout
     assert "scripts/production_config_readiness.py: present" in result.stdout
+    assert "scripts/launch_acceptance_evidence.py: present" in result.stdout
     assert "scripts/staging_ingress_smoke.py: present" in result.stdout
     assert "scripts/ci_gate_fast.sh: present" in result.stdout
     assert "python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>" in result.stdout
+    assert "python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>" in result.stdout
     assert "./scripts/release_secret_scan.sh" in result.stdout
     assert "python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>" in result.stdout
     assert "./scripts/ci_gate_fast.sh" in result.stdout
@@ -90,6 +93,26 @@ def test_release_gate_summary_go_no_go_json_keeps_launch_blocked(tmp_path):
         "production_config_contract_acceptance_pending",
     } <= blocker_ids
     assert all(item["status"] == "blocking" for item in summary["hardBlockers"])
+    assert summary["operatorEvidencePack"] == {
+        "finalStatus": "NO-GO",
+        "releaseApproved": False,
+        "requiredCategoryIds": [
+            "mfa_pilot_acceptance",
+            "rbac_fallback_disable_switch",
+            "provider_credential_staging_dry_run",
+            "provider_circuit_controlled_enforcement",
+            "quota_pilot_acceptance",
+            "real_isolated_postgresql_restore_pitr",
+            "staging_ingress_smoke",
+            "public_api_frontend_no_secret_safety",
+            "final_clean_full_ci_gate",
+        ],
+        "schemaVersion": "wolfystock_launch_acceptance_evidence_summary_v1",
+    }
+    assert (
+        "python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>"
+        in summary["requiredFinalCommands"]
+    )
     assert "launch-ready" not in result.stdout
 
 

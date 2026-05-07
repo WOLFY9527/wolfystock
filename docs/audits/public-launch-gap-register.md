@@ -15,6 +15,7 @@ behavior was changed.
 - `docs/audits/ws2-multi-instance-smoke-test-design.md`
 - `docs/audits/security-admin-mfa-backend-foundation.md`
 - `docs/audits/public-launch-readiness-master.md`
+- `docs/audits/launch-acceptance-evidence-pack.md`
 - `docs/audits/public-launch-blocker-burndown.md`
 - `docs/audits/data-quality-user-disclosure-policy.md`
 - Supplemental current audit context:
@@ -32,6 +33,22 @@ durability, multi-instance runtime proof, live quota/provider enforcement, and
 financial-domain owner isolation. Existing foundations are useful, but several
 surfaces remain observational, scaffolded, fixture-only, or single-process by
 default.
+
+## Operator Evidence Pack
+
+`scripts/launch_acceptance_evidence.py` now validates a sanitized launch
+acceptance evidence JSON contract for release review. It covers the operator
+evidence required for MFA pilot acceptance, RBAC fallback disable switch,
+provider credential staging dry-run, provider circuit controlled enforcement,
+quota pilot acceptance, real isolated PostgreSQL restore/PITR, staging ingress
+smoke, public API/frontend no-secret public safety, and final clean full
+`ci_gate`.
+
+The pack is evidence-only. It does not call external services, read production
+secrets, read production data paths, or change runtime behavior. Missing or
+unsafe evidence keeps the summary at **NO-GO**. Even when all categories are
+accepted, the checker returns `GO-REVIEW-REQUIRED` with `releaseApproved=false`;
+manual release approval is still required.
 
 ## Gap Register
 

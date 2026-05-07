@@ -6,6 +6,7 @@ Branch checked: `main`
 Owner domain: Release readiness
 Related docs: `docs/audits/public-launch-gap-register.md`,
 `docs/audits/deployment-readiness-checklist.md`,
+`docs/audits/launch-acceptance-evidence-pack.md`,
 `docs/audits/final-pre-push-audit.md`,
 `docs/audits/known-test-warnings-register.md`
 
@@ -23,6 +24,13 @@ blocking gates below are closed or explicitly accepted as production exceptions.
 Existing foundations are useful, but several launch-critical surfaces remain
 scaffolded, observational, fixture-only, single-process-limited, or missing
 staging evidence.
+
+The operator evidence pack now defines the sanitized acceptance schema for the
+remaining launch blockers through
+`python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>`.
+It never approves launch by itself; `releaseApproved` remains false and the
+public launch verdict stays **NO-GO** unless every hard blocker has accepted
+operator evidence.
 
 ## Master readiness view
 
@@ -57,6 +65,12 @@ Public launch may move to **GO** only when all of the following are true:
   trusted proxy, and secret handling through
   `python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>`
   without printing raw `.env` or secret values.
+- Sanitized operator acceptance evidence is attached through
+  `python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>`
+  for MFA pilot acceptance, RBAC fallback disable switch, provider credential
+  staging dry-run, provider circuit controlled enforcement, quota pilot, real
+  isolated PostgreSQL restore/PITR, staging ingress smoke, public API/frontend
+  no-secret public safety, and final clean full `ci_gate`.
 - MFA enforcement prerequisites are complete, or public admin access is blocked
   behind a documented compensating control.
 - Backup/restore drill passes in an isolated environment.
@@ -89,6 +103,8 @@ registered warnings.
 
 - Use `public-launch-gap-register.md` as the detailed blocker register.
 - Use `deployment-readiness-checklist.md` as the release-candidate checklist.
+- Use `launch-acceptance-evidence-pack.md` as the operator-supplied evidence
+  schema and review checklist.
 - Use this file as the concise executive master view.
 - Use `known-test-warnings-register.md` for expected warnings and cleanup
   ownership.

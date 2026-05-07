@@ -190,6 +190,22 @@ summary = {
             ],
         },
     ],
+    "operatorEvidencePack": {
+        "schemaVersion": "wolfystock_launch_acceptance_evidence_summary_v1",
+        "requiredCategoryIds": [
+            "mfa_pilot_acceptance",
+            "rbac_fallback_disable_switch",
+            "provider_credential_staging_dry_run",
+            "provider_circuit_controlled_enforcement",
+            "quota_pilot_acceptance",
+            "real_isolated_postgresql_restore_pitr",
+            "staging_ingress_smoke",
+            "public_api_frontend_no_secret_safety",
+            "final_clean_full_ci_gate",
+        ],
+        "finalStatus": "NO-GO",
+        "releaseApproved": False,
+    },
     "hardBlockers": [
         {
             "id": "global_mfa_enforcement_not_accepted",
@@ -229,6 +245,7 @@ summary = {
     ],
     "requiredFinalCommands": [
         "python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>",
+        "python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>",
         "./scripts/release_secret_scan.sh",
         "python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>",
         "./scripts/ci_gate_fast.sh",
@@ -274,12 +291,14 @@ fi
 print_step "helper scripts"
 echo "scripts/release_secret_scan.sh: $(script_status "scripts/release_secret_scan.sh")"
 echo "scripts/production_config_readiness.py: $(script_status "scripts/production_config_readiness.py")"
+echo "scripts/launch_acceptance_evidence.py: $(script_status "scripts/launch_acceptance_evidence.py")"
 echo "scripts/staging_ingress_smoke.py: $(script_status "scripts/staging_ingress_smoke.py")"
 echo "scripts/ci_gate_fast.sh: $(script_status "scripts/ci_gate_fast.sh")"
 
 print_step "final required commands"
 cat <<'COMMANDS'
 python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>
+python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>
 ./scripts/release_secret_scan.sh
 python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>
 # Live ingress calls require WOLFYSTOCK_STAGING_INGRESS_SMOKE=1.

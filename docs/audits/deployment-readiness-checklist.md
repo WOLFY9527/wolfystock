@@ -5,6 +5,8 @@ Branch checked: `main`
 Mode: deployment readiness preflight update. No runtime API behavior, schema,
 frontend app code, providers, Options, Data Pipeline, cost/quota, auth behavior,
 production deployment config, migrations, or production data paths were changed.
+The launch acceptance evidence pack added in this pass is schema/checklist
+only and does not approve launch.
 
 ## 1. Executive summary
 
@@ -328,10 +330,18 @@ The following must all be true before public multi-user deployment:
 - [x] Machine-checkable public launch evidence aggregation exists through
   `scripts/release_gate_summary.sh --go-no-go-json`; it reports foundation
   evidence and hard blockers while keeping the final status **NO-GO**.
+- [x] Operator evidence-pack schema/checker exists through
+  `python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>`;
+  it validates MFA, RBAC fallback, provider credential dry-run, provider circuit
+  controlled enforcement, quota, real restore/PITR, staging ingress, public
+  no-secret safety, and final clean gate categories without approving launch.
 - [x] Production config/secret contract preflight exists through
   `python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>`;
   it consumes only synthetic or operator-sanitized flag names and secret
   presence states, emits stable JSON, and never prints secret values.
+- [ ] Sanitized operator evidence pack is accepted for every hard blocker; the
+  checker may move from **NO-GO** to `GO-REVIEW-REQUIRED`, but
+  `releaseApproved` remains false until manual approval.
 - [ ] Staging smoke passes through HTTPS reverse proxy on synthetic users/data.
 - [ ] WS2 multi-instance smoke passes or deployment is explicitly constrained to
   single API process with documented SSE/task limitations.

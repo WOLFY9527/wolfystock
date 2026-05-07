@@ -325,6 +325,10 @@ secret-like value is present, the checker rejects the artifact without printing
 the sensitive value. Public launch remains **NO-GO** until a real isolated
 restore/PITR artifact is supplied and accepted.
 
+This same accepted artifact is required by the launch acceptance evidence pack
+under `real_isolated_postgresql_restore_pitr`; synthetic preflight output alone
+must not be used to mark that category accepted.
+
 ## 8. Rollback and Failure Plan
 
 If backup creation fails:

@@ -1,0 +1,186 @@
+{
+  "schemaVersion": "wolfystock_launch_acceptance_evidence_input_v1",
+  "mode": "synthetic_all_accepted",
+  "categories": {
+    "mfa_pilot_acceptance": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "mfa-admin-pilot-synthetic-json",
+      "checks": {
+        "adminPilotPassed": true,
+        "recoveryPathTested": true,
+        "rollbackPlanRecorded": true,
+        "auditEvidenceSanitized": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "rbac_fallback_disable_switch": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "rbac-fallback-disable-switch-synthetic-json",
+      "checks": {
+        "disableSwitchExplicit": true,
+        "coarseFallbackDisabledOrExceptionAccepted": true,
+        "rollbackPlanRecorded": true,
+        "auditEvidenceSanitized": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "provider_credential_staging_dry_run": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "provider-credential-staging-dry-run-synthetic-json",
+      "checks": {
+        "stagingDryRunPassed": true,
+        "credentialPresenceOnly": true,
+        "noLiveCallsByChecker": true,
+        "entitlementMatrixAttached": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "provider_circuit_controlled_enforcement": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "provider-circuit-controlled-enforcement-synthetic-json",
+      "checks": {
+        "controlledEnforcementPilotPassed": true,
+        "boundedRouteRecorded": true,
+        "rollbackSwitchRecorded": true,
+        "degradedEvidenceSanitized": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "quota_pilot_acceptance": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "quota-pilot-acceptance-synthetic-json",
+      "checks": {
+        "pilotPassed": true,
+        "ownerScopeRecorded": true,
+        "rollbackSwitchRecorded": true,
+        "statusLabelsRecorded": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "real_isolated_postgresql_restore_pitr": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "real-isolated-postgresql-restore-pitr-synthetic-json",
+      "checks": {
+        "isolatedTargetUsed": true,
+        "restoreExecuted": true,
+        "pitrExecuted": true,
+        "postRestoreSmokePassed": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "staging_ingress_smoke": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "staging-ingress-smoke-synthetic-json",
+      "checks": {
+        "httpsIngressSmokePassed": true,
+        "backend8000NotPublic": true,
+        "syntheticUsersAndData": true,
+        "liveOptInRecorded": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "public_api_frontend_no_secret_safety": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "public-api-frontend-no-secret-safety-synthetic-json",
+      "checks": {
+        "publicApiNoSecret": true,
+        "frontendDomNoSecret": true,
+        "publicRoutesNoRawPayloads": true,
+        "releaseSecretScanPassed": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "final_clean_full_ci_gate": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "final-clean-full-ci-gate-synthetic-json",
+      "checks": {
+        "cleanWorktree": true,
+        "fullCiGatePassed": true,
+        "releaseSecretScanPassed": true,
+        "diffCheckPassed": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    }
+  }
+}

@@ -1,5 +1,17 @@
 ## 2026-05-07
 
+- 🧪 **Launch acceptance evidence pack** — Added
+  `scripts/launch_acceptance_evidence.py`, stable synthetic fixtures, focused
+  tests, and launch-doc references for the operator-supplied evidence required
+  before public launch can move from NO-GO toward manual GO review. The pack
+  covers MFA pilot acceptance, RBAC fallback disable switch, provider
+  credential staging dry-run, provider circuit controlled enforcement, quota
+  pilot acceptance, real isolated PostgreSQL restore/PITR, staging ingress
+  smoke, public API/frontend no-secret safety, and final clean full `ci_gate`.
+  It is local-only, does not call external services or read real secrets/data
+  paths, keeps `releaseApproved=false`, and preserves **NO-GO** unless every
+  hard blocker has accepted sanitized evidence.
+
 - 🧪 **Restore drill evidence artifact gate** — `scripts/backup_restore_drill_check.sh` now accepts an optional sanitized `--real-restore-evidence` JSON artifact that documents an externally executed isolated PostgreSQL restore/PITR drill without running restore commands itself. The validator checks `wolfystock_restore_drill_evidence_v1`, operator opt-in, isolated non-production target metadata, pass/fail post-restore checks, RPO/RTO observations, and redaction of DSNs/passwords/tokens/private keys/cookies while still reporting real restore execution as pending when no artifact is supplied. Launch docs now distinguish dry-run preflight evidence from the still-pending accepted real restore artifact, and the checker remains local-only with no production DB/network/restore action by default.
 
 - 🧪 **Production config readiness preflight** — Added `scripts/production_config_readiness.py`, a stable JSON release preflight for sanitized production configuration contracts. The helper covers required launch flag names, explicit MFA rollout mode, RBAC coarse-fallback disable evidence, provider credential presence states, quota mode, backup/PITR execution opt-in, and staging-ingress live opt-in without reading raw `.env` files, printing secret values, changing runtime defaults, or calling external services. `scripts/release_gate_summary.sh` now lists the command while preserving the public-launch **NO-GO** posture until a real sanitized production contract is accepted.
