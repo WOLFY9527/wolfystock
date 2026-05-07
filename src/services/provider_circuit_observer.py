@@ -198,6 +198,7 @@ class ProviderCircuitObserver:
         else:
             preflight_state = "degraded"
             state_candidate = self._DEGRADED_STATE_BY_BUCKET.get(bucket, "degraded_cache_only")
+        would_block_if_enforced = bucket != "success"
 
         return {
             "result_bucket": bucket,
@@ -205,6 +206,8 @@ class ProviderCircuitObserver:
             "state_candidate": state_candidate,
             "live_enforcement": False,
             "would_block_call": False,
+            "would_block_if_enforced": would_block_if_enforced,
+            "enforcement_block_reason_code": bucket if would_block_if_enforced else None,
             "would_change_provider_order": False,
             "would_change_fallback_behavior": False,
         }

@@ -296,7 +296,75 @@ def test_options_provider_preflight_missing_credentials_state_is_sanitized() -> 
     assert preflight["readinessState"] == "missing_credentials"
     assert preflight["reasonCode"] == "options_provider_credentials_missing"
     assert preflight["credentialsPresent"] is False
+    assert preflight["credentialContract"]["state"] == "missing"
+    assert preflight["credentialContract"]["requiredCredentialCount"] == 1
+    assert preflight["credentialContract"]["configuredCredentialCount"] == 0
     assert "credentials are not configured" in preflight["message"].lower()
+    _assert_preflight_safety_contract(preflight)
+
+
+def test_options_provider_preflight_malformed_credentials_fail_closed_without_live_calls() -> None:
+    with patch("requests.sessions.Session.request") as request_mock:
+        preflight = build_options_provider_live_readiness_preflight(
+            "tradier",
+            config=OptionsLiveProviderConfig(
+                live_providers_enabled=True,
+                enabled_provider_keys=frozenset({"tradier"}),
+                malformed_credential_provider_keys=frozenset({"tradier"}),
+            ),
+        )
+
+    assert preflight["readinessState"] == "malformed_credentials"
+    assert preflight["reasonCode"] == "options_provider_credentials_malformed"
+    assert preflight["credentialsPresent"] is False
+    assert preflight["credentialContract"]["state"] == "malformed"
+    assert preflight["credentialContract"]["invalidCredentialCount"] == 1
+    assert preflight["credentialContract"]["partialCredentialCount"] == 0
+    request_mock.assert_not_called()
+    text = _json_lower(preflight)
+    for blocked in ("api_key", "apikey", "token", "secret", "must-not-leak"):
+        assert blocked not in text
+    _assert_preflight_safety_contract(preflight)
+
+
+def test_options_provider_preflight_partial_credentials_fail_closed_without_live_calls() -> None:
+    with patch("requests.sessions.Session.request") as request_mock:
+        preflight = build_options_provider_live_readiness_preflight(
+            "tradier",
+            config=OptionsLiveProviderConfig(
+                live_providers_enabled=True,
+                enabled_provider_keys=frozenset({"tradier"}),
+                partial_credential_provider_keys=frozenset({"tradier"}),
+            ),
+        )
+
+    assert preflight["readinessState"] == "partial_credentials"
+    assert preflight["reasonCode"] == "options_provider_credentials_partial"
+    assert preflight["credentialsPresent"] is False
+    assert preflight["credentialContract"]["state"] == "partial"
+    assert preflight["credentialContract"]["configuredCredentialCount"] == 0
+    assert preflight["credentialContract"]["partialCredentialCount"] == 1
+    request_mock.assert_not_called()
+    _assert_preflight_safety_contract(preflight)
+
+
+def test_options_provider_preflight_env_malformed_credentials_are_classified_without_values() -> None:
+    config = OptionsLiveProviderConfig.from_env(
+        {
+            "OPTIONS_LIVE_PROVIDERS_ENABLED": "1",
+            "OPTIONS_LIVE_PROVIDER_KEYS": "tradier",
+            "TRADIER_API_TOKEN": "placeholder",
+        }
+    )
+
+    preflight = build_options_provider_live_readiness_preflight("tradier", config=config)
+
+    assert preflight["readinessState"] == "malformed_credentials"
+    assert preflight["reasonCode"] == "options_provider_credentials_malformed"
+    assert preflight["credentialContract"]["state"] == "malformed"
+    text = _json_lower(preflight)
+    for blocked in ("placeholder", "tradier_api_token", "api_token", "token", "secret"):
+        assert blocked not in text
     _assert_preflight_safety_contract(preflight)
 
 
@@ -338,6 +406,8 @@ def test_options_provider_preflight_live_credentials_present_still_blocks_live_c
     assert preflight["readinessState"] == "live_credentials_present_live_calls_disabled"
     assert preflight["reasonCode"] == "options_provider_live_calls_disabled"
     assert preflight["credentialsPresent"] is True
+    assert preflight["credentialContract"]["state"] == "present"
+    assert preflight["credentialContract"]["configuredCredentialCount"] == 1
     assert preflight["dryRunEnabled"] is False
     _assert_preflight_safety_contract(preflight)
 

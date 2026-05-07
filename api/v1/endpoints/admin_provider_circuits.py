@@ -162,7 +162,14 @@ def _probe_event_item(row: ProviderProbeEvent) -> ProviderProbeEventItem:
 
 def _credential_state(preflight: dict[str, Any]) -> str:
     readiness_state = str(preflight.get("readinessState") or "unknown")
-    if readiness_state in {"disabled", "missing_credentials", "live_credentials_present_live_calls_disabled", "dry_run_enabled"}:
+    if readiness_state in {
+        "disabled",
+        "missing_credentials",
+        "malformed_credentials",
+        "partial_credentials",
+        "live_credentials_present_live_calls_disabled",
+        "dry_run_enabled",
+    }:
         return readiness_state
     if preflight.get("credentialsPresent") is True:
         return "credentials_present"
@@ -195,6 +202,7 @@ def _sla_item_from_diagnostics(
         readinessState=str(preflight.get("readinessState") or "observed"),
         reasonCode=str(preflight.get("reasonCode") or "stored_provider_observations"),
         credentialState=_credential_state(preflight),
+        credentialContract=dict(preflight.get("credentialContract") or {}),
         liveProvidersEnabled=bool(preflight.get("liveProvidersEnabled") is True),
         providerEnabled=bool(preflight.get("providerEnabled") is True),
         credentialsPresent=bool(preflight.get("credentialsPresent") is True),
@@ -223,6 +231,8 @@ def _sla_item_from_diagnostics(
         circuitStateCandidate=str(circuit.get("state_candidate") or "closed"),
         liveEnforcement=False,
         wouldBlockCall=False,
+        wouldBlockIfEnforced=bool(circuit.get("would_block_if_enforced") is True),
+        enforcementBlockReasonCode=circuit.get("enforcement_block_reason_code"),
         wouldChangeProviderOrder=False,
         wouldChangeFallbackBehavior=False,
         noExternalCalls=True,

@@ -264,6 +264,8 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["recentErrors"][0]["countBucket"], "1")
         self.assertEqual(diagnostics["circuitPreflight"]["preflight_state"], "degraded")
         self.assertFalse(diagnostics["circuitPreflight"]["would_block_call"])
+        self.assertTrue(diagnostics["circuitPreflight"]["would_block_if_enforced"])
+        self.assertEqual(diagnostics["circuitPreflight"]["enforcement_block_reason_code"], "provider_429")
         self.assertFalse(diagnostics["circuitPreflight"]["would_change_provider_order"])
         self.assertFalse(diagnostics["circuitPreflight"]["would_change_fallback_behavior"])
         request_mock.assert_not_called()
@@ -293,6 +295,8 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["recentErrors"], [])
         self.assertEqual(diagnostics["circuitPreflight"]["preflight_state"], "healthy")
         self.assertFalse(diagnostics["circuitPreflight"]["would_block_call"])
+        self.assertFalse(diagnostics["circuitPreflight"]["would_block_if_enforced"])
+        self.assertIsNone(diagnostics["circuitPreflight"]["enforcement_block_reason_code"])
 
     def test_cooldown_observation_returns_open_candidate_preflight_without_state_change(self) -> None:
         result = self.observer.record_cooldown_observation(
@@ -307,6 +311,8 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
         self.assertEqual(result["preflight"]["preflight_state"], "open_candidate")
         self.assertEqual(result["preflight"]["state_candidate"], "open")
         self.assertFalse(result["preflight"]["live_enforcement"])
+        self.assertTrue(result["preflight"]["would_block_if_enforced"])
+        self.assertEqual(result["preflight"]["enforcement_block_reason_code"], "timeout")
         self.assertIsNone(result["state"])
 
 

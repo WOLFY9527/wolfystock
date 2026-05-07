@@ -436,6 +436,7 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertIn("credentialsPresent", fmp)
         self.assertIn("liveHttpCallsEnabled", fmp)
         self.assertIn("wouldBlockCall", fmp)
+        self.assertIn("wouldBlockIfEnforced", fmp)
         self.assertEqual(fmp["recentErrors"][0]["reasonBucket"], "timeout")
         self.assertEqual(fmp["recentErrors"][0]["countBucket"], "1")
         self.assertEqual(fmp["trendSummary"]["windowCountBucket"], "1")
@@ -446,6 +447,8 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertEqual(fmp["circuitAdvisoryState"], "open_candidate")
         self.assertFalse(fmp["liveEnforcement"])
         self.assertFalse(fmp["wouldBlockCall"])
+        self.assertTrue(fmp["wouldBlockIfEnforced"])
+        self.assertEqual(fmp["enforcementBlockReasonCode"], "timeout")
         self.assertFalse(fmp["wouldChangeProviderOrder"])
         self.assertFalse(fmp["wouldChangeFallbackBehavior"])
         text = self._json_text(payload).lower()
@@ -469,8 +472,12 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertEqual(item["readinessState"], "missing_credentials")
         self.assertEqual(item["credentialState"], "missing_credentials")
         self.assertFalse(item["credentialsPresent"])
+        self.assertEqual(item["credentialContract"]["state"], "missing")
+        self.assertEqual(item["credentialContract"]["requiredCredentialCount"], 1)
+        self.assertEqual(item["credentialContract"]["configuredCredentialCount"], 0)
         self.assertFalse(item["liveHttpCallsEnabled"])
         self.assertFalse(item["wouldBlockCall"])
+        self.assertFalse(item["wouldBlockIfEnforced"])
         self.assertEqual(item["recentErrors"], [])
         self.assertEqual(item["trendSummary"]["requestCountBucket"], "0")
         text = self._json_text(response.json()).lower()
@@ -482,7 +489,7 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         env = {
             "OPTIONS_LIVE_PROVIDERS_ENABLED": "1",
             "OPTIONS_LIVE_PROVIDER_KEYS": "tradier",
-            "TRADIER_API_TOKEN": "must-not-leak",
+            "TRADIER_API_TOKEN": "valid_synthetic_readiness_value_1234567890",
         }
 
         with patch.dict(os.environ, env, clear=True), patch("requests.sessions.Session.request") as request_mock:
@@ -497,13 +504,41 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertTrue(item["liveProvidersEnabled"])
         self.assertTrue(item["providerEnabled"])
         self.assertTrue(item["credentialsPresent"])
+        self.assertEqual(item["credentialContract"]["state"], "present")
+        self.assertEqual(item["credentialContract"]["configuredCredentialCount"], 1)
         self.assertFalse(item["dryRunEnabled"])
         self.assertFalse(item["liveHttpCallsEnabled"])
         self.assertFalse(item["brokerOrderPathEnabled"])
         self.assertFalse(item["portfolioMutationPathEnabled"])
         self.assertFalse(item["tradeableData"])
         text = self._json_text(response.json()).lower()
-        for blocked in ("must-not-leak", "tradier_api_token", "api_token", "token"):
+        for blocked in ("valid_synthetic_readiness_value", "tradier_api_token", "api_token", "token"):
+            self.assertNotIn(blocked, text)
+
+    def test_sla_readiness_endpoint_exposes_malformed_options_credentials_sanitized(self) -> None:
+        self._as_provider_read_admin()
+        env = {
+            "OPTIONS_LIVE_PROVIDERS_ENABLED": "1",
+            "OPTIONS_LIVE_PROVIDER_KEYS": "tradier",
+            "TRADIER_API_TOKEN": "placeholder",
+        }
+
+        with patch.dict(os.environ, env, clear=True), patch("requests.sessions.Session.request") as request_mock:
+            response = self.client.get("/api/v1/admin/providers/sla-readiness", params={"provider": "tradier"})
+
+        self.assertEqual(response.status_code, 200)
+        request_mock.assert_not_called()
+        item = response.json()["items"][0]
+        self.assertEqual(item["provider"], "tradier")
+        self.assertEqual(item["readinessState"], "malformed_credentials")
+        self.assertEqual(item["credentialState"], "malformed_credentials")
+        self.assertFalse(item["credentialsPresent"])
+        self.assertEqual(item["credentialContract"]["state"], "malformed")
+        self.assertEqual(item["credentialContract"]["invalidCredentialCount"], 1)
+        self.assertFalse(item["liveHttpCallsEnabled"])
+        self.assertFalse(item["wouldBlockCall"])
+        text = self._json_text(response.json()).lower()
+        for blocked in ("placeholder", "tradier_api_token", "api_token", "token", "secret"):
             self.assertNotIn(blocked, text)
 
 

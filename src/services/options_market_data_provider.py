@@ -128,19 +128,32 @@ class OptionsLiveProviderConfig:
     """Provider-selection policy for disabled live adapter stubs.
 
     This contract intentionally carries only booleans and provider keys. It does
-    not read, store, or expose credential values.
+    not store or expose credential values; env loading classifies only sanitized
+    presence/shape states.
     """
 
     live_providers_enabled: bool = False
     enabled_provider_keys: frozenset[str] = frozenset()
     credentialed_provider_keys: frozenset[str] = frozenset()
+    malformed_credential_provider_keys: frozenset[str] = frozenset()
+    partial_credential_provider_keys: frozenset[str] = frozenset()
     dry_run_provider_keys: frozenset[str] = frozenset()
 
     def is_provider_enabled(self, provider_name: str) -> bool:
         return provider_name in self.enabled_provider_keys
 
     def has_credentials(self, provider_name: str) -> bool:
-        return provider_name in self.credentialed_provider_keys
+        return self.credential_state(provider_name) == "present"
+
+    def credential_state(self, provider_name: str) -> str:
+        normalized = str(provider_name or "").strip().lower()
+        if normalized in self.malformed_credential_provider_keys:
+            return "malformed"
+        if normalized in self.partial_credential_provider_keys:
+            return "partial"
+        if normalized in self.credentialed_provider_keys:
+            return "present"
+        return "missing"
 
     def is_dry_run_enabled(self, provider_name: str) -> bool:
         return provider_name in self.dry_run_provider_keys
@@ -155,12 +168,19 @@ class OptionsLiveProviderConfig:
         if _env_bool(values, "OPTIONS_TRADIER_DRY_RUN_ENABLED"):
             dry_run_provider_keys.add("tradier")
         credentialed_provider_keys: set[str] = set()
-        if values.get("TRADIER_API_TOKEN") or values.get("TRADIER_SANDBOX_API_TOKEN"):
+        malformed_credential_provider_keys: set[str] = set()
+        tradier_credential_state = _credential_values_state(
+            (values.get("TRADIER_API_TOKEN"), values.get("TRADIER_SANDBOX_API_TOKEN"))
+        )
+        if tradier_credential_state == "present":
             credentialed_provider_keys.add("tradier")
+        elif tradier_credential_state == "malformed":
+            malformed_credential_provider_keys.add("tradier")
         return cls(
             live_providers_enabled=_env_bool(values, "OPTIONS_LIVE_PROVIDERS_ENABLED"),
             enabled_provider_keys=frozenset(enabled_provider_keys),
             credentialed_provider_keys=frozenset(credentialed_provider_keys),
+            malformed_credential_provider_keys=frozenset(malformed_credential_provider_keys),
             dry_run_provider_keys=frozenset(dry_run_provider_keys),
         )
 
@@ -174,6 +194,31 @@ def _env_bool(env: Mapping[str, str], name: str, default: bool = False) -> bool:
 
 def _provider_key_set(value: Optional[str]) -> set[str]:
     return {item.strip().lower() for item in str(value or "").split(",") if item.strip()}
+
+
+def _credential_values_state(values: tuple[Optional[str], ...]) -> str:
+    states = [_credential_value_state(value) for value in values]
+    if "present" in states:
+        return "present"
+    if "malformed" in states:
+        return "malformed"
+    return "missing"
+
+
+def _credential_value_state(value: Optional[str]) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "missing"
+    lowered = text.lower()
+    if lowered in {"placeholder", "changeme", "change_me", "example", "demo", "test", "none", "null", "todo"}:
+        return "malformed"
+    if any(marker in lowered for marker in ("placeholder", "must-not-leak", "redacted", "masked")):
+        return "malformed"
+    if len(text) < 16:
+        return "malformed"
+    if re.search(r"\s", text):
+        return "malformed"
+    return "present"
 
 
 @dataclass(frozen=True)
@@ -428,6 +473,19 @@ class _DisabledLiveOptionsProviderStub:
                 code="options_provider_not_enabled",
                 message="Options live provider adapter is not enabled.",
             )
+        credential_state = self.config.credential_state(self.provider_name)
+        if credential_state == "malformed":
+            raise OptionsProviderUnavailable(
+                self.provider_name,
+                code="options_provider_credentials_malformed",
+                message="Options live provider credential contract is malformed.",
+            )
+        if credential_state == "partial":
+            raise OptionsProviderUnavailable(
+                self.provider_name,
+                code="options_provider_credentials_partial",
+                message="Options live provider credential contract is partial.",
+            )
         if not self.config.has_credentials(self.provider_name):
             raise OptionsProviderUnavailable(
                 self.provider_name,
@@ -632,6 +690,7 @@ def build_options_provider_live_readiness_preflight(
         config=live_config,
         dry_run_response=dry_run_response,
     )
+    credential_contract = _provider_credential_contract(normalized, live_config)
     preflight: Dict[str, Any] = {
         "providerName": normalized,
         "readinessState": "disabled",
@@ -639,7 +698,8 @@ def build_options_provider_live_readiness_preflight(
         "message": "Options live provider adapter is disabled.",
         "liveProvidersEnabled": live_config.live_providers_enabled,
         "providerEnabled": live_config.is_provider_enabled(normalized),
-        "credentialsPresent": live_config.has_credentials(normalized),
+        "credentialsPresent": credential_contract["state"] == "present",
+        "credentialContract": credential_contract,
         "dryRunEnabled": live_config.is_dry_run_enabled(normalized),
         "payloadMappable": None,
         "liveHttpCallsEnabled": False,
@@ -669,7 +729,25 @@ def build_options_provider_live_readiness_preflight(
             }
         )
         return preflight
-    if not live_config.has_credentials(normalized):
+    if credential_contract["state"] == "malformed":
+        preflight.update(
+            {
+                "readinessState": "malformed_credentials",
+                "reasonCode": "options_provider_credentials_malformed",
+                "message": "Options live provider credential contract is malformed.",
+            }
+        )
+        return preflight
+    if credential_contract["state"] == "partial":
+        preflight.update(
+            {
+                "readinessState": "partial_credentials",
+                "reasonCode": "options_provider_credentials_partial",
+                "message": "Options live provider credential contract is partial.",
+            }
+        )
+        return preflight
+    if credential_contract["state"] != "present":
         preflight.update(
             {
                 "readinessState": "missing_credentials",
@@ -730,6 +808,30 @@ def build_options_provider_live_readiness_preflight(
         }
     )
     return preflight
+
+
+def _provider_credential_contract(provider_name: str, config: OptionsLiveProviderConfig) -> Dict[str, Any]:
+    """Return sanitized credential readiness counts only."""
+    state = config.credential_state(provider_name)
+    required_count = 1 if provider_name in LIVE_OPTIONS_PROVIDER_NAMES else 0
+    return {
+        "state": state,
+        "reasonCode": _credential_contract_reason_code(state),
+        "requiredCredentialCount": required_count,
+        "configuredCredentialCount": 1 if state == "present" else 0,
+        "invalidCredentialCount": 1 if state == "malformed" else 0,
+        "partialCredentialCount": 1 if state == "partial" else 0,
+    }
+
+
+def _credential_contract_reason_code(state: str) -> str:
+    if state == "present":
+        return "options_provider_credentials_present"
+    if state == "malformed":
+        return "options_provider_credentials_malformed"
+    if state == "partial":
+        return "options_provider_credentials_partial"
+    return "options_provider_credentials_missing"
 
 
 def _create_live_options_provider_stub(
