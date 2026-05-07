@@ -136,9 +136,12 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         report = build_security_launch_preflight()
 
         self.assertFalse(report.mfa_enforcement_enabled_by_default)
+        self.assertEqual(report.mfa_pilot_scope, "admin_only")
+        self.assertTrue(report.mfa_unsupported_scope_fails_closed)
         self.assertFalse(report.break_glass_enabled_by_default)
         self.assertTrue(report.coarse_admin_fallback_present)
         self.assertEqual(report.coarse_admin_fallback_status, "transitional")
+        self.assertTrue(report.coarse_admin_fallback_disable_preflight_ready)
         self.assertTrue(report.explicit_capability_grants_without_fallback)
         self.assertTrue(report.missing_capability_dependency_fail_closed)
         self.assertIn("coarse_admin_fallback_present", report.launch_blockers)

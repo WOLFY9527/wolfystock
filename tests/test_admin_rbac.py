@@ -6,6 +6,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from datetime import datetime, timedelta
+from unittest.mock import patch
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -153,6 +154,22 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
 
         self.assertTrue(admin.legacy_admin)
         self.assertIs(dependency(admin), admin)
+
+    def test_coarse_fallback_can_be_disabled_without_weakening_explicit_payloads(self) -> None:
+        from api.deps import require_admin_capability
+
+        legacy_admin = _current_user(role=ROLE_ADMIN, is_admin=True, legacy_admin=True)
+        explicit_admin = _current_user(role=ROLE_ADMIN, is_admin=True, admin_capabilities=("users:read",))
+        dependency = require_admin_capability("users:read")
+
+        with patch.dict("os.environ", {"WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED": "false"}, clear=False):
+            self.assertEqual(set(), expand_admin_capabilities(legacy_admin))
+            self.assertIs(dependency(explicit_admin), explicit_admin)
+            with self.assertRaises(HTTPException) as exc:
+                dependency(legacy_admin)
+
+        self.assertEqual(exc.exception.status_code, 403)
+        self.assertEqual(exc.exception.detail["error"], "admin_capability_required")
 
     def test_required_capability_dependency_rejects_non_admin(self) -> None:
         from api.deps import require_admin_capability

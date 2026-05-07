@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from src.multi_user import ROLE_ADMIN
@@ -80,6 +81,14 @@ def _is_legacy_admin(user: Any) -> bool:
     return bool(getattr(user, "is_admin", False)) or str(getattr(user, "role", "") or "") == ROLE_ADMIN
 
 
+def is_coarse_admin_fallback_enabled() -> bool:
+    """Return whether legacy admin role expansion is still allowed."""
+    raw = os.getenv("WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED")
+    if raw is None:
+        return True
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def expand_admin_capabilities(user: Any) -> set[str]:
     """Return effective admin capabilities without enforcing them on routes."""
     if user is None or not _is_legacy_admin(user):
@@ -92,6 +101,8 @@ def expand_admin_capabilities(user: Any) -> set[str]:
     capabilities = set(db.list_admin_capabilities_for_user(user_id)) if user_id else set()
     if capabilities:
         return capabilities
+    if not is_coarse_admin_fallback_enabled():
+        return set()
     return set(db.list_admin_role_capabilities(SUPER_ADMIN_ROLE))
 
 

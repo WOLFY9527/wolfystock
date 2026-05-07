@@ -421,6 +421,15 @@ def _is_mfa_login_enforcement_admin_only() -> bool:
     return _env_flag("WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ADMIN_ONLY", default=True)
 
 
+def _mfa_login_enforcement_policy_scope() -> str:
+    """Return the only supported MFA login enforcement rollout scope."""
+    raw = str(os.getenv("WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_SCOPE") or "admin_only").strip().lower()
+    normalized = raw.replace("-", "_")
+    if normalized in {"admin", "admins", "admin_only"}:
+        return "admin_only"
+    return "unsupported"
+
+
 def _is_mfa_login_break_glass_enabled() -> bool:
     """Disabled-by-default pilot switch for explicit admin MFA break-glass."""
     return _env_flag_enabled("WOLFYSTOCK_MFA_LOGIN_BREAK_GLASS_ENABLED")
@@ -560,7 +569,7 @@ def _verify_login_mfa_requirement(
         return None
 
     admin_only = _is_mfa_login_enforcement_admin_only()
-    policy_scope = "admin_only" if admin_only else "admin_only"
+    policy_scope = _mfa_login_enforcement_policy_scope()
     user_role = str(getattr(user_row, "role", "") or "")
     user_id = str(getattr(user_row, "id", "") or "")
     if user_role != ROLE_ADMIN:
@@ -569,11 +578,28 @@ def _verify_login_mfa_requirement(
             username=username,
             user_id=user_id,
             decision="not_eligible_admin_only",
-            policy_scope=policy_scope,
+            policy_scope="admin_only",
             user_role=user_role,
             eligible=False,
         )
         return None
+
+    if policy_scope != "admin_only" or not admin_only:
+        _audit_mfa_enforcement_decision(
+            request=request,
+            username=username,
+            user_id=user_id,
+            decision="unsupported_scope",
+            policy_scope="unsupported",
+            status="failed",
+            user_role=user_role,
+            eligible=user_role == ROLE_ADMIN,
+            mfa_enabled=bool(getattr(user_row, "mfa_enabled", False)),
+            totp_ref_present=bool(getattr(user_row, "mfa_secret_ref", None)),
+            enabled_at_present=bool(getattr(user_row, "mfa_enabled_at", None)),
+            recovery_set_ready=_has_active_mfa_recovery_codes(user_row),
+        )
+        return _mfa_required_error()
 
     secret_ref = getattr(user_row, "mfa_secret_ref", None)
     mfa_enabled = bool(getattr(user_row, "mfa_enabled", False))

@@ -425,6 +425,31 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
         self.assertIn("admin_only", audit_text)
         self.assertNotIn("userpass123", audit_text)
 
+    def test_mfa_login_enforcement_unsupported_scope_fails_closed(self) -> None:
+        self._enable_admin_mfa_and_recovery_codes()
+
+        with patch("api.v1.endpoints.auth.ExecutionLogService") as service_cls:
+            recorder = service_cls.return_value
+            with patch.dict(
+                os.environ,
+                {
+                    "WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true",
+                    "WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_SCOPE": "global",
+                },
+                clear=False,
+            ):
+                response = self.client.post(
+                    "/api/v1/auth/login",
+                    json={"username": "admin", "password": "adminpass123"},
+                )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "mfa_required")
+        audit_text = repr(recorder.record_admin_action.call_args_list)
+        self.assertIn("unsupported_scope", audit_text)
+        self.assertNotIn("global", audit_text)
+        self.assertNotIn("adminpass123", audit_text)
+
     def test_mfa_login_enforcement_enabled_accepts_verified_totp(self) -> None:
         self._enable_admin_mfa_and_recovery_codes()
 

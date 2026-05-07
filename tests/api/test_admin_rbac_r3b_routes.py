@@ -315,6 +315,18 @@ def test_legacy_admin_still_passes_r3b_compatibility(monkeypatch) -> None:
     assert response.status_code == 200
 
 
+def test_r3b_routes_fail_closed_when_coarse_fallback_disable_preflight_is_enabled(monkeypatch) -> None:
+    monkeypatch.setattr("api.v1.endpoints.admin_logs.AdminLogsRetentionService", FakeAdminLogsRetentionService)
+    monkeypatch.setenv("WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED", "false")
+    client = _client(_user(legacy_admin=True))
+
+    response = client.get("/api/v1/admin/logs/storage/summary")
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["error"] == "admin_capability_required"
+    _assert_sanitized_denial(response)
+
+
 def test_non_admin_is_denied_before_capability_detail_leaks(monkeypatch) -> None:
     monkeypatch.setattr("api.v1.endpoints.admin_logs.AdminLogsRetentionService", FakeAdminLogsRetentionService)
     client = _client(_user(is_admin=False, capabilities=("ops:logs:read",)))
