@@ -8,6 +8,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -15,6 +16,30 @@ import src.auth as auth
 from api.app import create_app
 from src.config import Config
 from src.storage import DatabaseManager
+
+
+EXPECTED_SECURITY_HEADERS = {
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "x-frame-options": "DENY",
+}
+
+FORBIDDEN_AUTH_LEAK_TERMS = (
+    "real-smoke-pass",
+    "wrong-real-smoke-pass",
+    "password_hash",
+    "passwordhash",
+    "dsa_session",
+    "session_id",
+    "sessionid",
+    "cookie",
+    "api_key",
+    "apikey",
+    "totp",
+    "recovery",
+    "secret",
+    ".env",
+)
 
 
 def _reset_auth_globals() -> None:
@@ -57,9 +82,23 @@ class AdminRealAuthSessionSmokeTestCase(unittest.TestCase):
         _reset_auth_globals()
         self.temp_dir.cleanup()
 
+    def _assert_security_headers(self, response) -> None:
+        headers = {key.lower(): value for key, value in response.headers.items()}
+        for name, value in EXPECTED_SECURITY_HEADERS.items():
+            self.assertEqual(headers.get(name), value)
+        self.assertIn("permissions-policy", headers)
+        self.assertIn("content-security-policy-report-only", headers)
+
+    def _assert_no_auth_leaks(self, response, *, extra_forbidden=()) -> None:
+        text = response.text.lower()
+        for forbidden in FORBIDDEN_AUTH_LEAK_TERMS + tuple(extra_forbidden):
+            self.assertNotIn(str(forbidden).lower(), text)
+
     def test_real_bootstrap_session_reaches_admin_route_and_logged_out_fails_closed(self) -> None:
         logged_out_admin = self.client.get("/api/v1/admin/users")
         self.assertEqual(logged_out_admin.status_code, 401)
+        self._assert_security_headers(logged_out_admin)
+        self._assert_no_auth_leaks(logged_out_admin)
 
         login = self.client.post(
             "/api/v1/auth/login",
@@ -67,9 +106,18 @@ class AdminRealAuthSessionSmokeTestCase(unittest.TestCase):
         )
         self.assertEqual(login.status_code, 200)
         self.assertIn("dsa_session", self.client.cookies)
+        self._assert_security_headers(login)
+        set_cookie = login.headers.get("set-cookie", "")
+        self.assertIn("dsa_session=", set_cookie)
+        self.assertIn("HttpOnly", set_cookie)
+        self.assertIn("SameSite=lax", set_cookie)
+        self.assertIn("Path=/", set_cookie)
+        self.assertIn("Max-Age=", set_cookie)
+        self.assertNotIn("Secure", set_cookie)
 
         status = self.client.get("/api/v1/auth/status")
         self.assertEqual(status.status_code, 200)
+        self._assert_security_headers(status)
         status_payload = status.json()
         self.assertTrue(status_payload["authEnabled"])
         self.assertTrue(status_payload["loggedIn"])
@@ -88,6 +136,7 @@ class AdminRealAuthSessionSmokeTestCase(unittest.TestCase):
 
         admin_users = self.client.get("/api/v1/admin/users")
         self.assertEqual(admin_users.status_code, 200)
+        self._assert_security_headers(admin_users)
         self.assertGreaterEqual(admin_users.json()["total"], 1)
 
         serialized = json.dumps(
@@ -111,13 +160,84 @@ class AdminRealAuthSessionSmokeTestCase(unittest.TestCase):
 
         logout = self.client.post("/api/v1/auth/logout")
         self.assertEqual(logout.status_code, 204)
+        self._assert_security_headers(logout)
+        logout_cookie = logout.headers.get("set-cookie", "")
+        self.assertIn("dsa_session=", logout_cookie)
+        self.assertIn("Max-Age=0", logout_cookie)
+        self.assertIn("HttpOnly", logout_cookie)
+        self.assertIn("SameSite=lax", logout_cookie)
 
         logged_out_status = self.client.get("/api/v1/auth/status")
         self.assertEqual(logged_out_status.status_code, 200)
+        self._assert_security_headers(logged_out_status)
         self.assertFalse(logged_out_status.json()["loggedIn"])
 
         logged_out_again = self.client.get("/api/v1/admin/users")
         self.assertEqual(logged_out_again.status_code, 401)
+        self._assert_security_headers(logged_out_again)
+        self._assert_no_auth_leaks(logged_out_again)
+
+    def test_real_failed_login_and_unauthenticated_admin_errors_are_sanitized_without_session_cookie(self) -> None:
+        bootstrap = self.client.post(
+            "/api/v1/auth/login",
+            json={"password": "real-smoke-pass", "passwordConfirm": "real-smoke-pass"},
+        )
+        self.assertEqual(bootstrap.status_code, 200)
+        self.client.post("/api/v1/auth/logout")
+
+        failed_login = self.client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "wrong-real-smoke-pass"},
+        )
+        self.assertEqual(failed_login.status_code, 401)
+        self.assertNotIn("set-cookie", {key.lower(): value for key, value in failed_login.headers.items()})
+        self._assert_security_headers(failed_login)
+        self._assert_no_auth_leaks(failed_login)
+
+        admin_response = self.client.get(
+            "/api/v1/admin/users",
+            headers={
+                "Authorization": "Bearer raw-admin-token",
+                "Cookie": "dsa_session=raw-session-id",
+            },
+        )
+        self.assertIn(admin_response.status_code, {401, 403})
+        self._assert_security_headers(admin_response)
+        self._assert_no_auth_leaks(
+            admin_response,
+            extra_forbidden=("raw-admin-token", "raw-session-id", "authorization", "bearer"),
+        )
+
+    def test_production_https_unauthenticated_admin_error_includes_hsts(self) -> None:
+        with patch.dict(os.environ, {"APP_ENV": "production", "TRUST_X_FORWARDED_FOR": "true"}, clear=False):
+            response = self.client.get(
+                "/api/v1/admin/users",
+                headers={"X-Forwarded-Proto": "https"},
+            )
+
+        self.assertEqual(response.status_code, 401)
+        self._assert_security_headers(response)
+        self.assertEqual(response.headers.get("strict-transport-security"), "max-age=31536000; includeSubDomains")
+        self._assert_no_auth_leaks(response)
+
+    def test_production_admin_csrf_denial_has_security_headers_and_no_session_leak(self) -> None:
+        login = self.client.post(
+            "/api/v1/auth/login",
+            json={"password": "real-smoke-pass", "passwordConfirm": "real-smoke-pass"},
+        )
+        self.assertEqual(login.status_code, 200)
+
+        with patch.dict(os.environ, {"APP_ENV": "production"}, clear=False):
+            response = self.client.post(
+                "/api/v1/admin/users/bootstrap-admin/disable",
+                json={"reason": "csrf launch evidence", "confirm": "DISABLE"},
+                headers={"Origin": "https://evil.example.test"},
+            )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"], "csrf_origin_forbidden")
+        self._assert_security_headers(response)
+        self._assert_no_auth_leaks(response)
 
 
 if __name__ == "__main__":

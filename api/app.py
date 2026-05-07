@@ -32,6 +32,7 @@ from sqlalchemy import text
 from api.v1 import api_v1_router
 from api.middlewares.auth import add_auth_middleware
 from api.middlewares.error_handler import add_error_handlers
+from api.security_headers import apply_security_headers
 from api.v1.schemas.common import HealthResponse
 from src.storage import get_db
 from src.auth import is_production_mode
@@ -42,41 +43,15 @@ from src.services.task_queue import get_task_queue
 logger = logging.getLogger(__name__)
 
 
-SECURITY_HEADERS: Dict[str, str] = {
-    "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-    "X-Frame-Options": "DENY",
-    "Permissions-Policy": (
-        "camera=(), microphone=(), geolocation=(), payment=(), usb=(), "
-        "fullscreen=(self), clipboard-read=(), clipboard-write=(self)"
-    ),
-    "Content-Security-Policy-Report-Only": (
-        "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
-    ),
-}
-HSTS_HEADER_VALUE = "max-age=31536000; includeSubDomains"
-
-
 def _iso_now() -> str:
     return datetime.now().isoformat()
-
-
-def _request_is_https(request: Request) -> bool:
-    if os.getenv("TRUST_X_FORWARDED_FOR", "false").lower() == "true":
-        return request.headers.get("X-Forwarded-Proto", "").lower() == "https"
-    return request.url.scheme == "https"
 
 
 def _add_security_headers(app: FastAPI) -> None:
     @app.middleware("http")
     async def security_headers_middleware(request: Request, call_next):
         response = await call_next(request)
-        for name, value in SECURITY_HEADERS.items():
-            if name not in response.headers:
-                response.headers[name] = value
-        if is_production_mode() and _request_is_https(request):
-            response.headers["Strict-Transport-Security"] = HSTS_HEADER_VALUE
-        return response
+        return apply_security_headers(response, request)
 
 
 def _build_health_payload(

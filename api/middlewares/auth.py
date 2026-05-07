@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.deps import resolve_current_user
+from api.security_headers import apply_security_headers
 from src.auth import COOKIE_NAME, is_auth_enabled, is_production_mode
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,17 @@ def _csrf_origin_allowed(request: Request) -> bool:
     return origin in _trusted_origins()
 
 
+def _error_response(request: Request, *, status_code: int, error: str, message: str) -> JSONResponse:
+    response = JSONResponse(
+        status_code=status_code,
+        content={
+            "error": error,
+            "message": message,
+        },
+    )
+    return apply_security_headers(response, request)
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     """Require valid session for /api/v1/* when auth is enabled."""
 
@@ -103,12 +115,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         if current_user is None:
-            return JSONResponse(
+            return _error_response(
+                request,
                 status_code=401,
-                content={
-                    "error": "unauthorized",
-                    "message": "Login required",
-                },
+                error="unauthorized",
+                message="Login required",
             )
 
         if (
@@ -116,12 +127,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
             and COOKIE_NAME in (getattr(request, "cookies", {}) or {})
             and not _csrf_origin_allowed(request)
         ):
-            return JSONResponse(
+            return _error_response(
+                request,
                 status_code=403,
-                content={
-                    "error": "csrf_origin_forbidden",
-                    "message": "Request origin is not allowed",
-                },
+                error="csrf_origin_forbidden",
+                message="Request origin is not allowed",
             )
 
         return await call_next(request)
