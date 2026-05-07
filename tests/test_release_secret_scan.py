@@ -63,6 +63,7 @@ def test_release_secret_scan_allows_env_example_placeholders(tmp_path):
 
     assert result.returncode == 0
     assert "No high-confidence secret patterns" in result.stdout
+    assert "secret-like credential assignment" not in result.stdout
 
 
 def test_release_secret_scan_allows_frontend_e2e_state_placeholders(tmp_path):
@@ -82,6 +83,18 @@ def test_release_secret_scan_allows_frontend_e2e_state_placeholders(tmp_path):
         ),
         encoding="utf-8",
     )
+
+    result = _scan(repo)
+
+    assert result.returncode == 0
+    assert "No high-confidence secret patterns" in result.stdout
+
+
+def test_release_secret_scan_allows_checked_in_admin_auth_fixture(tmp_path):
+    repo = _init_repo(tmp_path)
+    fixture = repo / "apps" / "dsa-web" / "e2e" / "fixtures" / "adminAuth.ts"
+    fixture.parent.mkdir(parents=True)
+    shutil.copy2(REPO_ROOT / "apps" / "dsa-web" / "e2e" / "fixtures" / "adminAuth.ts", fixture)
 
     result = _scan(repo)
 
