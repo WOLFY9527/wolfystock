@@ -86,6 +86,24 @@ FIXTURE_OPTIONS_PROVIDER_NAMES = frozenset(
 )
 LIVE_OPTIONS_PROVIDER_NAMES = {"tradier", "ibkr", "polygon"}
 ALLOWED_OPTIONS_PROVIDER_KEYS = frozenset(FIXTURE_OPTIONS_PROVIDER_NAMES | LIVE_OPTIONS_PROVIDER_NAMES)
+ALLOWED_STAGING_PROBE_ARTIFACT_KEYS = frozenset(
+    {"providerId", "status", "timestamp", "timeoutSeconds", "reasonCodes"}
+)
+_ACCEPTED_STAGING_PROBE_STATUSES = {"accepted", "passed", "success"}
+_NON_ACCEPTED_STAGING_PROBE_STATUSES = {"failed", "timeout", "error", "rejected"}
+_SENSITIVE_ARTIFACT_MARKERS = (
+    "api_key",
+    "apikey",
+    "api-token",
+    "api_token",
+    "authorization",
+    "bearer",
+    "database_url",
+    "dsn",
+    "password",
+    "secret",
+    "token",
+)
 
 
 class OptionsProviderError(ValueError):
@@ -689,6 +707,7 @@ def build_options_provider_live_readiness_preflight(
     provider_name: str,
     config: Optional[OptionsLiveProviderConfig] = None,
     dry_run_response: Optional[Mapping[str, Any]] = None,
+    staging_probe_artifact: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Classify live-provider readiness without enabling live calls.
 
@@ -708,6 +727,10 @@ def build_options_provider_live_readiness_preflight(
         dry_run_response=dry_run_response,
     )
     credential_contract = _provider_credential_contract(normalized, live_config)
+    staging_probe_artifact_status = _provider_staging_probe_artifact_status(
+        normalized,
+        staging_probe_artifact,
+    )
     preflight: Dict[str, Any] = {
         "providerName": normalized,
         "readinessState": "disabled",
@@ -720,7 +743,13 @@ def build_options_provider_live_readiness_preflight(
         "dryRunEnabled": live_config.is_dry_run_enabled(normalized),
         "payloadMappable": None,
         "liveHttpCallsEnabled": False,
-        "liveProbe": _provider_live_probe_contract(normalized, live_config, credential_contract),
+        "liveProbe": _provider_live_probe_contract(
+            normalized,
+            live_config,
+            credential_contract,
+            staging_probe_artifact_status,
+        ),
+        "stagingCredentialProbeArtifact": staging_probe_artifact_status,
         "brokerOrderPathEnabled": False,
         "portfolioMutationPathEnabled": False,
         "tradeableData": False,
@@ -733,6 +762,7 @@ def build_options_provider_live_readiness_preflight(
             "noPortfolioMutations": True,
             "tradeableDataBlocked": True,
             "rawPayloadReturned": False,
+            "stagingProbeArtifactAccepted": staging_probe_artifact_status["status"] == "accepted",
         },
     }
 
@@ -846,14 +876,17 @@ def _provider_live_probe_contract(
     provider_name: str,
     config: OptionsLiveProviderConfig,
     credential_contract: Dict[str, Any],
+    staging_probe_artifact_status: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Return an operator-controlled live-probe contract without executing it."""
     explicit_opt_in = provider_name in config.live_probe_provider_keys
+    artifact_accepted = staging_probe_artifact_status.get("status") == "accepted"
     enabled = bool(
         explicit_opt_in
         and config.live_providers_enabled
         and config.is_provider_enabled(provider_name)
         and credential_contract.get("state") == "present"
+        and artifact_accepted
     )
     reason_code = "options_provider_live_probe_disabled_by_default"
     if explicit_opt_in and not config.live_providers_enabled:
@@ -862,6 +895,10 @@ def _provider_live_probe_contract(
         reason_code = "options_provider_not_enabled"
     elif explicit_opt_in and credential_contract.get("state") != "present":
         reason_code = str(credential_contract.get("reasonCode") or "options_provider_credentials_missing")
+    elif explicit_opt_in and not artifact_accepted:
+        reason_code = str(
+            (staging_probe_artifact_status.get("reasonCodes") or ["options_provider_staging_probe_artifact_missing"])[0]
+        )
     elif enabled:
         reason_code = "options_provider_live_probe_operator_opt_in_ready"
     return {
@@ -877,6 +914,143 @@ def _provider_live_probe_contract(
         "providerPayloadValuesIncluded": False,
         "responseBodiesIncluded": False,
     }
+
+
+def _provider_staging_probe_artifact_status(
+    provider_name: str,
+    artifact: Optional[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Validate operator-supplied staging probe evidence without retaining raw payloads."""
+    base = {
+        "providerId": provider_name,
+        "status": "missing",
+        "timestamp": None,
+        "timeoutSeconds": None,
+        "reasonCodes": ["options_provider_staging_probe_artifact_missing"],
+    }
+    if artifact is None:
+        return base
+    if not isinstance(artifact, Mapping):
+        return {
+            **base,
+            "status": "malformed",
+            "reasonCodes": ["options_provider_staging_probe_artifact_malformed"],
+        }
+
+    if set(artifact.keys()) - ALLOWED_STAGING_PROBE_ARTIFACT_KEYS:
+        return {
+            **base,
+            "status": "rejected",
+            "reasonCodes": ["options_provider_staging_probe_artifact_unexpected_field"],
+        }
+    if _artifact_contains_sensitive_value(artifact):
+        return {
+            **base,
+            "status": "rejected",
+            "reasonCodes": ["options_provider_staging_probe_artifact_sensitive_value"],
+        }
+
+    artifact_provider = str(artifact.get("providerId") or "").strip().lower()
+    if artifact_provider != provider_name or artifact_provider not in LIVE_OPTIONS_PROVIDER_NAMES:
+        return {
+            **base,
+            "status": "rejected",
+            "reasonCodes": ["options_provider_staging_probe_artifact_provider_mismatch"],
+        }
+
+    status_text = str(artifact.get("status") or "").strip().lower()
+    if status_text in _ACCEPTED_STAGING_PROBE_STATUSES:
+        normalized_status = "accepted"
+    elif status_text in _NON_ACCEPTED_STAGING_PROBE_STATUSES:
+        normalized_status = status_text
+    else:
+        return {
+            **base,
+            "status": "malformed",
+            "reasonCodes": ["options_provider_staging_probe_artifact_status_invalid"],
+        }
+
+    timestamp = _safe_artifact_timestamp(artifact.get("timestamp"))
+    if timestamp is None:
+        return {
+            **base,
+            "status": "malformed",
+            "reasonCodes": ["options_provider_staging_probe_artifact_timestamp_invalid"],
+        }
+    timeout_seconds = _artifact_timeout_seconds(artifact.get("timeoutSeconds"))
+    if timeout_seconds is None:
+        return {
+            **base,
+            "status": "malformed",
+            "reasonCodes": ["options_provider_staging_probe_artifact_timeout_invalid"],
+        }
+    reason_codes = _artifact_reason_codes(artifact.get("reasonCodes"))
+    if reason_codes is None:
+        return {
+            **base,
+            "status": "malformed",
+            "reasonCodes": ["options_provider_staging_probe_artifact_reason_codes_invalid"],
+        }
+
+    return {
+        "providerId": artifact_provider,
+        "status": normalized_status,
+        "timestamp": timestamp,
+        "timeoutSeconds": timeout_seconds,
+        "reasonCodes": reason_codes,
+    }
+
+
+def _artifact_contains_sensitive_value(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return any(_artifact_contains_sensitive_value(item) for item in value.values())
+    if isinstance(value, (list, tuple, set)):
+        return any(_artifact_contains_sensitive_value(item) for item in value)
+    if not isinstance(value, str):
+        return False
+    text = value.strip().lower()
+    if not text:
+        return False
+    if any(marker in text for marker in _SENSITIVE_ARTIFACT_MARKERS):
+        return True
+    return "://" in text or "=" in text or "{" in text or "}" in text
+
+
+def _safe_artifact_timestamp(value: Any) -> Optional[str]:
+    text = str(value or "").strip()
+    if not text or len(text) > 40:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.isoformat()
+
+
+def _artifact_timeout_seconds(value: Any) -> Optional[float]:
+    try:
+        parsed = float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    if parsed < 0.25 or parsed > 5.0:
+        return None
+    return parsed
+
+
+def _artifact_reason_codes(value: Any) -> Optional[list[str]]:
+    if not isinstance(value, (list, tuple)):
+        return None
+    normalized: list[str] = []
+    for item in value:
+        code = str(item or "").strip().lower()
+        if not re.fullmatch(r"[a-z][a-z0-9_]{2,80}", code):
+            return None
+        if _artifact_contains_sensitive_value(code):
+            return None
+        normalized.append(code)
+    if not normalized or len(normalized) > 10:
+        return None
+    return normalized
 
 
 def _credential_contract_reason_code(state: str) -> str:

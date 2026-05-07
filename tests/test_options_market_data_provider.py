@@ -11,6 +11,7 @@ import pytest
 from src.services.options_lab_service import OptionsLabProviderUnavailable, OptionsLabService
 from src.services.options_market_data_provider import (
     ALLOWED_OPTIONS_PROVIDER_KEYS,
+    ALLOWED_STAGING_PROBE_ARTIFACT_KEYS,
     DelayedFixtureOptionsProvider,
     LIVE_OPTIONS_PROVIDER_NAMES,
     MalformedGreeksFixtureOptionsProvider,
@@ -279,6 +280,10 @@ def _assert_preflight_safety_contract(preflight: dict) -> None:
     assert preflight["providerSlaReadiness"]["errorState"] == "unknown"
     assert preflight["providerSlaReadiness"]["freshnessState"] == "unknown"
     assert preflight["providerSlaReadiness"]["recentErrors"] == []
+    assert set(preflight["stagingCredentialProbeArtifact"]) == ALLOWED_STAGING_PROBE_ARTIFACT_KEYS
+    text = _json_lower(preflight["stagingCredentialProbeArtifact"])
+    for blocked in ("api_key", "apikey", "token", "secret", "password", "authorization", "dsn"):
+        assert blocked not in text
 
 
 def test_options_provider_preflight_disabled_state_is_fail_closed() -> None:
@@ -449,11 +454,12 @@ def test_live_provider_preflight_operator_live_probe_ready_is_opt_in_and_non_exe
 
     assert preflight["readinessState"] == "live_credentials_present_live_calls_disabled"
     assert preflight["liveHttpCallsEnabled"] is False
-    assert preflight["liveProbe"]["enabled"] is True
+    assert preflight["liveProbe"]["enabled"] is False
     assert preflight["liveProbe"]["explicitOptIn"] is True
-    assert preflight["liveProbe"]["reasonCode"] == "options_provider_live_probe_operator_opt_in_ready"
+    assert preflight["liveProbe"]["reasonCode"] == "options_provider_staging_probe_artifact_missing"
     assert preflight["liveProbe"]["timeoutSeconds"] == 5.0
     assert preflight["liveProbe"]["networkCallExecuted"] is False
+    assert preflight["stagingCredentialProbeArtifact"]["status"] == "missing"
     request_mock.assert_not_called()
     _assert_preflight_safety_contract(preflight)
 
@@ -473,13 +479,199 @@ def test_options_provider_preflight_env_live_probe_opt_in_is_presence_only_and_s
         preflight = build_options_provider_live_readiness_preflight("tradier", config=config)
 
     assert preflight["credentialsPresent"] is True
-    assert preflight["liveProbe"]["enabled"] is True
+    assert preflight["liveProbe"]["enabled"] is False
     assert preflight["liveProbe"]["explicitOptIn"] is True
+    assert preflight["liveProbe"]["reasonCode"] == "options_provider_staging_probe_artifact_missing"
     assert preflight["liveProbe"]["timeoutSeconds"] == 0.25
+    assert preflight["stagingCredentialProbeArtifact"]["status"] == "missing"
     request_mock.assert_not_called()
     text = _json_lower(preflight)
     for blocked in ("valid_synthetic_readiness_value", "tradier_api_token", "api_token", "token"):
         assert blocked not in text
+    _assert_preflight_safety_contract(preflight)
+
+
+def test_staging_probe_artifact_accepts_sanitized_operator_evidence_and_enables_probe_contract_only() -> None:
+    artifact = {
+        "providerId": "TRADIER",
+        "status": "passed",
+        "timestamp": "2026-05-06T12:34:56Z",
+        "timeoutSeconds": 3,
+        "reasonCodes": [
+            "named_staging_provider_recorded",
+            "live_probe_opt_in_recorded",
+            "probe_result_sanitized",
+        ],
+    }
+
+    with patch("requests.sessions.Session.request") as request_mock:
+        preflight = build_options_provider_live_readiness_preflight(
+            "tradier",
+            config=OptionsLiveProviderConfig(
+                live_providers_enabled=True,
+                enabled_provider_keys=frozenset({"tradier"}),
+                credentialed_provider_keys=frozenset({"tradier"}),
+                live_probe_provider_keys=frozenset({"tradier"}),
+                live_probe_timeout_seconds=3,
+            ),
+            staging_probe_artifact=artifact,
+        )
+
+    artifact_status = preflight["stagingCredentialProbeArtifact"]
+    assert set(artifact_status) == ALLOWED_STAGING_PROBE_ARTIFACT_KEYS
+    assert artifact_status == {
+        "providerId": "tradier",
+        "status": "accepted",
+        "timestamp": "2026-05-06T12:34:56+00:00",
+        "timeoutSeconds": 3.0,
+        "reasonCodes": [
+            "named_staging_provider_recorded",
+            "live_probe_opt_in_recorded",
+            "probe_result_sanitized",
+        ],
+    }
+    assert preflight["checks"]["stagingProbeArtifactAccepted"] is True
+    assert preflight["liveProbe"]["enabled"] is True
+    assert preflight["liveProbe"]["reasonCode"] == "options_provider_live_probe_operator_opt_in_ready"
+    assert preflight["liveProbe"]["networkCallExecuted"] is False
+    assert preflight["liveHttpCallsEnabled"] is False
+    request_mock.assert_not_called()
+    _assert_preflight_safety_contract(preflight)
+
+
+@pytest.mark.parametrize(
+    "artifact",
+    [
+        {
+            "providerId": "tradier",
+            "status": "passed",
+            "timestamp": "2026-05-06T12:34:56Z",
+            "timeoutSeconds": 3,
+            "reasonCodes": ["probe_result_sanitized"],
+            "apiKey": "must-not-leak",
+        },
+        {
+            "providerId": "tradier",
+            "status": "passed",
+            "timestamp": "2026-05-06T12:34:56Z",
+            "timeoutSeconds": 3,
+            "reasonCodes": ["probe_result_sanitized"],
+            "env": "TRADIER_API_TOKEN=must-not-leak",
+        },
+        {
+            "providerId": "tradier",
+            "status": "passed",
+            "timestamp": "2026-05-06T12:34:56Z",
+            "timeoutSeconds": 3,
+            "reasonCodes": ["probe_result_sanitized"],
+            "dsn": "postgres://user:pass@db.internal/provider",
+        },
+        {
+            "providerId": "tradier",
+            "status": "passed",
+            "timestamp": "2026-05-06T12:34:56Z",
+            "timeoutSeconds": 3,
+            "reasonCodes": ["probe_result_sanitized"],
+            "providerPayload": {"authorization": "Bearer must-not-leak"},
+        },
+        {
+            "providerId": "tradier",
+            "status": "passed",
+            "timestamp": "2026-05-06T12:34:56Z",
+            "timeoutSeconds": 3,
+            "reasonCodes": ["token_probe_passed"],
+        },
+    ],
+)
+def test_staging_probe_artifact_rejects_secret_env_dsn_and_provider_payload_values(artifact: dict) -> None:
+    with patch("requests.sessions.Session.request") as request_mock:
+        preflight = build_options_provider_live_readiness_preflight(
+            "tradier",
+            config=OptionsLiveProviderConfig(
+                live_providers_enabled=True,
+                enabled_provider_keys=frozenset({"tradier"}),
+                credentialed_provider_keys=frozenset({"tradier"}),
+                live_probe_provider_keys=frozenset({"tradier"}),
+            ),
+            staging_probe_artifact=artifact,
+        )
+
+    artifact_status = preflight["stagingCredentialProbeArtifact"]
+    assert set(artifact_status) == ALLOWED_STAGING_PROBE_ARTIFACT_KEYS
+    assert artifact_status["status"] in {"rejected", "malformed"}
+    assert preflight["liveProbe"]["enabled"] is False
+    assert preflight["liveHttpCallsEnabled"] is False
+    request_mock.assert_not_called()
+    text = _json_lower(preflight)
+    for blocked in ("must-not-leak", "tradier_api_token", "api_key", "apikey", "token_probe", "postgres://", "bearer"):
+        assert blocked not in text
+    _assert_preflight_safety_contract(preflight)
+
+
+@pytest.mark.parametrize(
+    ("artifact", "expected_status", "expected_reason"),
+    [
+        (None, "missing", "options_provider_staging_probe_artifact_missing"),
+        ("not-a-mapping", "malformed", "options_provider_staging_probe_artifact_malformed"),
+        (
+            {
+                "providerId": "ibkr",
+                "status": "passed",
+                "timestamp": "2026-05-06T12:34:56Z",
+                "timeoutSeconds": 3,
+                "reasonCodes": ["probe_result_sanitized"],
+            },
+            "rejected",
+            "options_provider_staging_probe_artifact_provider_mismatch",
+        ),
+        (
+            {
+                "providerId": "tradier",
+                "status": "passed",
+                "timestamp": "not-a-date",
+                "timeoutSeconds": 3,
+                "reasonCodes": ["probe_result_sanitized"],
+            },
+            "malformed",
+            "options_provider_staging_probe_artifact_timestamp_invalid",
+        ),
+        (
+            {
+                "providerId": "tradier",
+                "status": "passed",
+                "timestamp": "2026-05-06T12:34:56Z",
+                "timeoutSeconds": 30,
+                "reasonCodes": ["probe_result_sanitized"],
+            },
+            "malformed",
+            "options_provider_staging_probe_artifact_timeout_invalid",
+        ),
+    ],
+)
+def test_staging_probe_artifact_missing_or_malformed_remains_non_accepted(
+    artifact: dict | str | None,
+    expected_status: str,
+    expected_reason: str,
+) -> None:
+    with patch("requests.sessions.Session.request") as request_mock:
+        preflight = build_options_provider_live_readiness_preflight(
+            "tradier",
+            config=OptionsLiveProviderConfig(
+                live_providers_enabled=True,
+                enabled_provider_keys=frozenset({"tradier"}),
+                credentialed_provider_keys=frozenset({"tradier"}),
+                live_probe_provider_keys=frozenset({"tradier"}),
+            ),
+            staging_probe_artifact=artifact,  # type: ignore[arg-type]
+        )
+
+    artifact_status = preflight["stagingCredentialProbeArtifact"]
+    assert artifact_status["status"] == expected_status
+    assert artifact_status["reasonCodes"] == [expected_reason]
+    assert preflight["checks"]["stagingProbeArtifactAccepted"] is False
+    assert preflight["liveProbe"]["enabled"] is False
+    assert preflight["liveProbe"]["reasonCode"] == expected_reason
+    request_mock.assert_not_called()
     _assert_preflight_safety_contract(preflight)
 
 
