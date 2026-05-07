@@ -14,6 +14,9 @@ review flow.
 - `release_gate_summary.sh`: prints a release gate summary and optional
   sanitized GO/NO-GO JSON. Informational only; does not approve a release or
   run the full gate.
+- `rollback_rehearsal_evidence.py`: validates sanitized rollback dry-run
+  rehearsal evidence offline. It does not approve launch, deploy, mutate git
+  history, or touch databases.
 - `ci_gate_fast.sh`: changed-file-focused local gate for quick iteration.
 - `ci_gate_profile.sh`: profiles gate runtime; not a substitute for
   `ci_gate.sh`.

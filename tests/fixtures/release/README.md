@@ -20,3 +20,5 @@ provider credentials, or production data.
   contract for `scripts/production_config_readiness.py`.
 - `production_config_readiness.missing.json`: synthetic missing-config contract
   for `scripts/production_config_readiness.py`.
+- `rollback_rehearsal_evidence.accepted.json`: synthetic rollback dry-run
+  rehearsal evidence for `scripts/rollback_rehearsal_evidence.py`.

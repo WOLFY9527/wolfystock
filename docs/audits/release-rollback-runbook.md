@@ -16,6 +16,12 @@ Rollback must be based on commit group, data impact, feature flags, active user
 impact, and schema/write behavior. Prefer `git revert` on shared branches. Do
 not rewrite shared history.
 
+Dry-run rollback rehearsal is evidence gathering only. It records the rollback
+target, candidate operator steps, approval gates, and post-action verification
+without running deployment commands, database actions, git history rewrites, or
+production restore steps. A real rollback starts only after an operator approves
+the specific action through the release process.
+
 ## 2. Rollback by Commit Group
 
 | Group | Roll back when | Preferred first response |
@@ -135,6 +141,9 @@ Minimum evidence:
 
 ```text
 Rollback target:
+Commit/tag:
+Operator timestamp:
+Gate status:
 Rollback method:
 Commit(s) reverted or flag/route disabled:
 Data writes introduced: yes/no
@@ -148,11 +157,37 @@ Remaining risk:
 Secrets printed in evidence: no
 ```
 
+Offline rehearsal evidence can be validated with:
+
+```bash
+python3 scripts/rollback_rehearsal_evidence.py --evidence <sanitized-rollback-rehearsal-evidence.json>
+```
+
+The helper accepts only sanitized JSON and returns `EVIDENCE-READY` for review
+attachment, not release approval or launch GO. The artifact must include:
+
+- commit and tag under review;
+- operator timestamp and safe operator label;
+- gate status that keeps launch approval manual;
+- rollback plan with dry-run rehearsal, operator approval, diff review, data
+  impact review, and verification-before-completion flags;
+- focused verification steps, release secret scan, and diff check;
+- explicit false values for external services, network calls, production secret
+  reads, production data reads, runtime behavior changes, deployment commands,
+  database actions, and git history changes.
+
+Evidence must not include token, password, API key, session, cookie, DSN,
+private-key, provider credential, credential-bearing URL, raw response, provider
+payload, or raw log body values. Use stable reason codes, labels, and redacted
+placeholders only.
+
 ## 6. Never Do
 
 Do not:
 
 - run `git reset` on a shared branch;
+- run force-push, deployment, migration rollback, production restore, or
+  database mutation commands from rehearsal evidence;
 - delete production DB tables, rows, indexes, backups, restore points, or WAL
   history as a rollback shortcut;
 - roll back schema blindly without understanding migrations, data writes,

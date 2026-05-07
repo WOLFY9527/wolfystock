@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "wolfystock_rollback_rehearsal_evidence_input_v1",
+  "mode": "synthetic_local",
+  "releaseReference": {
+    "branch": "main",
+    "commit": "9ed1a623",
+    "tag": "release-rehearsal-2026-05-07"
+  },
+  "operator": {
+    "actorLabel": "release-operator",
+    "timestamp": "2026-05-07T12:00:00Z"
+  },
+  "gateStatus": {
+    "ciGate": "not_run",
+    "launchDecision": "NO-GO",
+    "launchGo": false,
+    "releaseSecretScan": "passed",
+    "rollbackEvidence": "review_only"
+  },
+  "rollbackPlan": {
+    "rollbackGroup": "frontend-only",
+    "rollbackTarget": "route-withdrawal rehearsal for a staging release candidate",
+    "dryRunRehearsal": true,
+    "operatorApprovalRequired": true,
+    "diffReviewRequired": true,
+    "dataImpactReviewed": true,
+    "verificationRequiredBeforeCompletion": true,
+    "realExecutionApproved": false,
+    "destructiveActionDefault": false,
+    "gitHistoryRewriteAllowed": false,
+    "productionDatabaseActionDefault": false,
+    "deploymentCommandDefault": false,
+    "defaultCommands": [
+      "pwd",
+      "git branch --show-current",
+      "git status --short",
+      "git log --oneline -8",
+      "python3 scripts/rollback_rehearsal_evidence.py --evidence tests/fixtures/release/rollback_rehearsal_evidence.accepted.json"
+    ]
+  },
+  "verificationSteps": [
+    {
+      "type": "focused_tests",
+      "command": "python3 -m pytest tests/test_rollback_rehearsal_evidence.py -q",
+      "expectedResult": "rollback rehearsal helper tests pass"
+    },
+    {
+      "type": "secret_scan",
+      "command": "./scripts/release_secret_scan.sh",
+      "expectedResult": "release secret scan reports no high-confidence findings"
+    },
+    {
+      "type": "diff_check",
+      "command": "git diff --check",
+      "expectedResult": "no whitespace errors"
+    }
+  ],
+  "localGeneration": {
+    "externalServicesCalled": false,
+    "networkCallsEnabled": false,
+    "productionSecretsRead": false,
+    "productionDataPathsRead": false,
+    "runtimeBehaviorChanged": false,
+    "deploymentCommandsRun": false,
+    "databaseActionsRun": false,
+    "gitHistoryChanged": false,
+    "stableJsonOutput": true
+  }
+}
