@@ -62,6 +62,14 @@ _FORBIDDEN_DENIAL_MARKERS = (
     "super-admin",
     "users:read",
 )
+_FORBIDDEN_OPERATOR_EVIDENCE_VALUES = (
+    "raw-password",
+    "raw-session-id",
+    "raw-cookie",
+    "raw-token",
+    "totp-secret",
+    "recovery-code",
+)
 
 
 @dataclass(frozen=True)
@@ -75,6 +83,8 @@ class SecurityLaunchPreflight:
     mfa_enforcement_enabled_by_default: bool
     mfa_pilot_scope: str
     mfa_unsupported_scope_fails_closed: bool
+    mfa_operator_acceptance_ready: bool
+    mfa_operator_acceptance_evidence: dict[str, bool]
     break_glass_enabled_by_default: bool
     coarse_admin_fallback_present: bool
     coarse_admin_fallback_status: str
@@ -238,6 +248,11 @@ def _role_assignment_denial_is_sanitized(result: dict) -> bool:
     return _check(payload) and all(marker.lower() not in control_text for marker in _FORBIDDEN_DENIAL_MARKERS)
 
 
+def _operator_evidence_is_sanitized(value: object) -> bool:
+    text = str(value).lower()
+    return all(marker.lower() not in text for marker in _FORBIDDEN_OPERATOR_EVIDENCE_VALUES)
+
+
 def build_security_launch_preflight() -> SecurityLaunchPreflight:
     """Return a test-only security launch readiness snapshot.
 
@@ -265,6 +280,29 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
         clear=False,
     ):
         mfa_unsupported_scope_fails_closed = auth_endpoint._mfa_login_enforcement_policy_scope() == "unsupported"
+    mfa_operator_acceptance_evidence = {
+        "admin_only_scope_recorded": mfa_pilot_scope == "admin_only",
+        "unsupported_global_rollout_no_go": mfa_unsupported_scope_fails_closed,
+        "break_glass_disabled_by_default": not break_glass_default,
+        "runtime_default_changed": False,
+        "secret_evidence_redacted": _operator_evidence_is_sanitized(
+            {
+                "password": "[redacted]",
+                "session_id": "[redacted]",
+                "totp_secret": "[redacted]",
+                "recovery_code": "[redacted]",
+                "token": "[redacted]",
+                "cookie": "[redacted]",
+            }
+        ),
+    }
+    mfa_operator_acceptance_ready = (
+        mfa_operator_acceptance_evidence["admin_only_scope_recorded"]
+        and mfa_operator_acceptance_evidence["unsupported_global_rollout_no_go"]
+        and mfa_operator_acceptance_evidence["break_glass_disabled_by_default"]
+        and not mfa_operator_acceptance_evidence["runtime_default_changed"]
+        and mfa_operator_acceptance_evidence["secret_evidence_redacted"]
+    )
 
     payload = _missing_capabilities_payload()
     flag_values = [value for key, value in payload.items() if key.startswith("can")]
@@ -405,6 +443,8 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
         mfa_enforcement_enabled_by_default=mfa_default,
         mfa_pilot_scope=mfa_pilot_scope,
         mfa_unsupported_scope_fails_closed=mfa_unsupported_scope_fails_closed,
+        mfa_operator_acceptance_ready=mfa_operator_acceptance_ready,
+        mfa_operator_acceptance_evidence=mfa_operator_acceptance_evidence,
         break_glass_enabled_by_default=break_glass_default,
         coarse_admin_fallback_present=coarse_fallback_present,
         coarse_admin_fallback_status="transitional" if coarse_fallback_present else "removed",

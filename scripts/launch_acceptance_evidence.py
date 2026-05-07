@@ -40,6 +40,9 @@ SENSITIVE_KEY_MARKERS = (
     "secret",
     "cookie",
     "session",
+    "totp",
+    "mfa_code",
+    "recovery_code",
     "api_key",
     "apikey",
     "key_material",
@@ -84,26 +87,36 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
         id="mfa_pilot_acceptance",
         title="MFA pilot acceptance evidence",
         required_evidence=(
-            "accepted MFA pilot, recovery-path, rollback, and sanitized audit evidence"
+            "accepted admin-only MFA pilot, recovery-path, rollback, unsupported rollout NO-GO, "
+            "break-glass default-off, and sanitized audit evidence"
         ),
         required_checks=(
             "adminPilotPassed",
+            "adminOnlyScopeRecorded",
+            "unsupportedGlobalRolloutNoGo",
             "recoveryPathTested",
+            "breakGlassDisabledByDefault",
             "rollbackPlanRecorded",
             "auditEvidenceSanitized",
+            "secretEvidenceRedacted",
         ),
     ),
     CategorySpec(
         id="rbac_fallback_disable_switch",
         title="RBAC fallback disable switch evidence",
         required_evidence=(
-            "RBAC fallback disable switch or accepted production exception, rollback, and sanitized audit evidence"
+            "RBAC fallback disable switch or accepted production exception, complete route inventory, "
+            "fail-closed payload evidence, rollback, and sanitized audit evidence"
         ),
         required_checks=(
             "disableSwitchExplicit",
+            "routeInventoryComplete",
             "coarseFallbackDisabledOrExceptionAccepted",
+            "explicitCapabilityPayloadsPassWithoutFallback",
+            "legacyMissingCapabilityUsersFailClosed",
             "rollbackPlanRecorded",
             "auditEvidenceSanitized",
+            "runtimeDefaultUnchanged",
         ),
     ),
     CategorySpec(

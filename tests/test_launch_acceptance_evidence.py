@@ -80,6 +80,26 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
     assert evidence["summary"]["blocking"] == 0
     assert evidence["hardBlockers"] == []
     categories = {item["id"]: item for item in evidence["categories"]}
+    assert categories["mfa_pilot_acceptance"]["requiredChecks"] == [
+        "adminPilotPassed",
+        "adminOnlyScopeRecorded",
+        "unsupportedGlobalRolloutNoGo",
+        "recoveryPathTested",
+        "breakGlassDisabledByDefault",
+        "rollbackPlanRecorded",
+        "auditEvidenceSanitized",
+        "secretEvidenceRedacted",
+    ]
+    assert categories["rbac_fallback_disable_switch"]["requiredChecks"] == [
+        "disableSwitchExplicit",
+        "routeInventoryComplete",
+        "coarseFallbackDisabledOrExceptionAccepted",
+        "explicitCapabilityPayloadsPassWithoutFallback",
+        "legacyMissingCapabilityUsersFailClosed",
+        "rollbackPlanRecorded",
+        "auditEvidenceSanitized",
+        "runtimeDefaultUnchanged",
+    ]
     assert categories["provider_credential_staging_dry_run"]["requiredChecks"] == [
         "stagingDryRunPassed",
         "liveProbeOptInRecorded",
@@ -140,6 +160,30 @@ def test_launch_acceptance_evidence_rejects_secret_like_values_without_leaking(t
     assert secret not in combined_output
     evidence = _json(result)
     category = next(item for item in evidence["categories"] if item["id"] == "provider_credential_staging_dry_run")
+    assert category["status"] == "blocking"
+    assert category["reasonCodes"] == ["sensitive_value_present"]
+
+
+def test_launch_acceptance_evidence_rejects_mfa_secret_fields_without_leaking(tmp_path: Path) -> None:
+    recovery_code = "RECOVERY-CODE-1234"
+    payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    payload["categories"]["mfa_pilot_acceptance"]["operatorArtifact"] = {
+        "totp_secret": "totp-secret",
+        "mfa_recovery_code": recovery_code,
+        "session_id": "raw-session-id",
+    }
+    evidence_path = tmp_path / "unsafe-mfa-evidence.json"
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_checker("--evidence", str(evidence_path))
+
+    assert result.returncode == 1
+    combined_output = result.stdout + result.stderr
+    assert recovery_code not in combined_output
+    assert "totp-secret" not in combined_output
+    assert "raw-session-id" not in combined_output
+    evidence = _json(result)
+    category = next(item for item in evidence["categories"] if item["id"] == "mfa_pilot_acceptance")
     assert category["status"] == "blocking"
     assert category["reasonCodes"] == ["sensitive_value_present"]
 

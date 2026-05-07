@@ -9,9 +9,13 @@
       "evidenceRef": "mfa-admin-pilot-synthetic-json",
       "checks": {
         "adminPilotPassed": true,
+        "adminOnlyScopeRecorded": true,
+        "unsupportedGlobalRolloutNoGo": true,
         "recoveryPathTested": true,
+        "breakGlassDisabledByDefault": true,
         "rollbackPlanRecorded": true,
-        "auditEvidenceSanitized": true
+        "auditEvidenceSanitized": true,
+        "secretEvidenceRedacted": true
       },
       "sanitization": {
         "externalServicesCalledByChecker": false,
@@ -29,9 +33,13 @@
       "evidenceRef": "rbac-fallback-disable-switch-synthetic-json",
       "checks": {
         "disableSwitchExplicit": true,
+        "routeInventoryComplete": true,
         "coarseFallbackDisabledOrExceptionAccepted": true,
+        "explicitCapabilityPayloadsPassWithoutFallback": true,
+        "legacyMissingCapabilityUsersFailClosed": true,
         "rollbackPlanRecorded": true,
-        "auditEvidenceSanitized": true
+        "auditEvidenceSanitized": true,
+        "runtimeDefaultUnchanged": true
       },
       "sanitization": {
         "externalServicesCalledByChecker": false,

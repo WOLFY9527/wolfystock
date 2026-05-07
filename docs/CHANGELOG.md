@@ -1,5 +1,13 @@
 ## 2026-05-08
 
+- 🔐 **Auth launch operator-switch evidence** — Launch acceptance evidence now
+  requires MFA admin-only scope proof, unsupported/global rollout NO-GO,
+  break-glass default-off, route-inventory-gated RBAC fallback disable proof,
+  explicit-capability pass proof, legacy/missing-payload fail-closed proof, and
+  redaction of password, session, TOTP, recovery-code, token, and cookie
+  evidence. Defaults remain unchanged: global MFA is not enabled and RBAC
+  coarse fallback compatibility code remains present.
+
 - 🧪 **Provider staging live-probe evidence contract** — Options provider
   readiness preflight now exposes an explicit operator opt-in live-probe
   contract with bounded timeout, credential presence-only evidence, and

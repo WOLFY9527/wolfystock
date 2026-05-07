@@ -176,6 +176,8 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
                 "password": "raw-password",
                 "session_id": "raw-session-id",
                 "cookie": "raw-cookie",
+                "totp_code": "123456",
+                "mfa_recovery_code": "RECOVERY-CODE-1234",
                 "nested": {"api_token": "raw-token", "keep": "safe"},
             },
         )
@@ -185,7 +187,7 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
         self.assertEqual(result["auditPayload"]["reason"], "ticket-42")
         self.assertEqual(result["auditPayload"]["nested"]["keep"], "safe")
         rendered = str(result).lower()
-        for forbidden in ("raw-password", "raw-session-id", "raw-cookie", "raw-token"):
+        for forbidden in ("raw-password", "raw-session-id", "raw-cookie", "raw-token", "123456", "recovery-code-1234"):
             self.assertNotIn(forbidden, rendered)
 
     def test_role_assignment_preflight_preserves_explicit_payload_least_privilege(self) -> None:

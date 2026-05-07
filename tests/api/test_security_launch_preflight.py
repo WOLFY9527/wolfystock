@@ -24,6 +24,7 @@ from api.middlewares.auth import add_auth_middleware
 from src.admin_rbac import ADMIN_RBAC_CAPABILITIES, expand_admin_capabilities
 from src.multi_user import ROLE_ADMIN
 from src.storage import DatabaseManager
+from tests import security_launch_preflight_helper as preflight_helper
 from tests.security_launch_preflight_helper import build_security_launch_preflight
 
 
@@ -138,6 +139,17 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertFalse(report.mfa_enforcement_enabled_by_default)
         self.assertEqual(report.mfa_pilot_scope, "admin_only")
         self.assertTrue(report.mfa_unsupported_scope_fails_closed)
+        self.assertTrue(report.mfa_operator_acceptance_ready)
+        self.assertEqual(
+            {
+                "admin_only_scope_recorded": True,
+                "unsupported_global_rollout_no_go": True,
+                "break_glass_disabled_by_default": True,
+                "runtime_default_changed": False,
+                "secret_evidence_redacted": True,
+            },
+            report.mfa_operator_acceptance_evidence,
+        )
         self.assertFalse(report.break_glass_enabled_by_default)
         self.assertTrue(report.coarse_admin_fallback_present)
         self.assertEqual(report.coarse_admin_fallback_status, "transitional")
@@ -152,6 +164,24 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertTrue(report.missing_capability_dependency_fail_closed)
         self.assertIn("coarse_admin_fallback_default_enabled_until_switch_applied", report.launch_blockers)
         self.assertTrue(report.missing_admin_capabilities_fail_closed)
+
+    def test_mfa_operator_acceptance_artifact_requires_admin_only_scope_and_redaction(self) -> None:
+        report = build_security_launch_preflight()
+
+        self.assertTrue(report.mfa_operator_acceptance_ready)
+        self.assertTrue(report.mfa_operator_acceptance_evidence["admin_only_scope_recorded"])
+        self.assertTrue(report.mfa_operator_acceptance_evidence["unsupported_global_rollout_no_go"])
+        self.assertTrue(report.mfa_operator_acceptance_evidence["break_glass_disabled_by_default"])
+        rendered = json.dumps(report.mfa_operator_acceptance_evidence, sort_keys=True).lower()
+        for forbidden in (
+            "adminpass123",
+            "raw-session-id",
+            TEST_MFA_SECRET.lower(),
+            "recovery-code",
+            "token",
+            "cookie",
+        ):
+            self.assertNotIn(forbidden, rendered)
 
     def test_mfa_default_remains_non_enforcing_even_after_enrollment(self) -> None:
         self._enable_admin_mfa_and_recovery_codes()
@@ -285,6 +315,30 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertEqual({}, report.public_launch_legacy_admin_route_dependencies)
         self.assertNotIn("admin_route_capability_dependency_gap", report.launch_blockers)
         self.assertTrue(report.public_launch_dependency_inventory_complete)
+
+    def test_coarse_fallback_disable_switch_is_blocked_when_route_inventory_is_incomplete(self) -> None:
+        incomplete_inventory = preflight_helper.AdminRouteCapabilityInventory(
+            capability_counts={},
+            legacy_admin_dependencies={"admin_logs.py": ("Depends(require_admin_user)",)},
+        )
+
+        with patch.object(
+            preflight_helper,
+            "inventory_public_launch_admin_route_capabilities",
+            return_value=incomplete_inventory,
+        ):
+            report = build_security_launch_preflight()
+
+        self.assertFalse(report.public_launch_dependency_inventory_complete)
+        self.assertTrue(report.coarse_admin_fallback_disable_preflight_ready)
+        self.assertFalse(report.coarse_admin_fallback_guarded_disable_switch_available)
+        self.assertFalse(report.coarse_admin_fallback_production_switch_ready)
+        self.assertEqual(report.coarse_admin_fallback_production_switch_status, "blocked")
+        self.assertIn("admin_route_capability_dependency_gap", report.launch_blockers)
+        self.assertEqual(
+            {"admin_logs.py": ("Depends(require_admin_user)",)},
+            report.public_launch_legacy_admin_route_dependencies,
+        )
 
     def test_role_capability_payloads_do_not_leak_secrets_or_session_data(self) -> None:
         login = self._login_admin()

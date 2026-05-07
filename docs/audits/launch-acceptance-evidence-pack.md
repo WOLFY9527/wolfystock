@@ -43,8 +43,8 @@ incomplete evidence keeps the summary at **NO-GO**.
 
 | Category id | Required operator evidence |
 | --- | --- |
-| `mfa_pilot_acceptance` | Accepted admin MFA pilot, recovery-path, rollback, and sanitized audit evidence. |
-| `rbac_fallback_disable_switch` | RBAC fallback disable switch or accepted production exception, rollback, and sanitized audit evidence. |
+| `mfa_pilot_acceptance` | Accepted admin-only MFA pilot, recovery-path, rollback, unsupported/global rollout NO-GO, break-glass default-off, and sanitized audit evidence. |
+| `rbac_fallback_disable_switch` | RBAC fallback disable switch or accepted production exception, complete route inventory, explicit-payload pass proof, legacy/missing-payload fail-closed proof, rollback, and sanitized audit evidence. |
 | `provider_credential_staging_dry_run` | Provider credential staging dry-run, explicit opt-in live probe contract, credential presence-only contract, entitlement matrix, and no checker live calls. |
 | `provider_circuit_controlled_enforcement` | Controlled provider-circuit enforcement pilot, bounded route, rollback switch, and sanitized degraded-state evidence. This remains required even when current runtime support is not available. |
 | `quota_pilot_acceptance` | Quota enforcement pilot, owner scope, rollback switch, and user/admin status-label evidence. |
@@ -69,9 +69,13 @@ Input JSON uses:
       "evidenceRef": "mfa-admin-pilot-evidence-json",
       "checks": {
         "adminPilotPassed": true,
+        "adminOnlyScopeRecorded": true,
+        "unsupportedGlobalRolloutNoGo": true,
         "recoveryPathTested": true,
+        "breakGlassDisabledByDefault": true,
         "rollbackPlanRecorded": true,
-        "auditEvidenceSanitized": true
+        "auditEvidenceSanitized": true,
+        "secretEvidenceRedacted": true
       },
       "sanitization": {
         "externalServicesCalledByChecker": false,
