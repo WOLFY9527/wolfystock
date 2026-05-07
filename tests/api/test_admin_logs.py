@@ -490,6 +490,45 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(metadata["nested"][0]["refresh_token"], "***")
         self.assertEqual(metadata["safeLabel"], "visible")
 
+    def test_session_detail_redacts_cookie_session_dsn_and_provider_credential_markers(self) -> None:
+        self._record_event(
+            session_id="legacy-sensitive-metadata",
+            event_name="ExternalSourceTimeout",
+            level="WARNING",
+            category="data_source",
+            message=(
+                "provider failed cookie=RAWCOOKIE session_token=RAWSESSION "
+                "dsn=postgresql://reader:RAWPASSWORD@db.example/logs"
+            ),
+            status="failed",
+            detail={
+                "metadata": {
+                    "cookie": "RAWCOOKIE",
+                    "sessionToken": "RAWSESSION",
+                    "databaseDsn": "postgresql://reader:RAWPASSWORD@db.example/logs",
+                    "providerCredential": "RAWPROVIDERCREDENTIAL",
+                    "nested": {
+                        "connection_string": "postgresql://reader:RAWPASSWORD@db.example/logs",
+                        "safeLabel": "visible",
+                    },
+                },
+            },
+        )
+
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            payload = admin_logs.get_execution_log_session_detail("legacy-sensitive-metadata", _=_admin_user())
+
+        dumped = payload.model_dump()
+        for forbidden in ("RAWCOOKIE", "RAWSESSION", "RAWPASSWORD", "RAWPROVIDERCREDENTIAL"):
+            self.assertNotIn(forbidden, str(dumped))
+        metadata = dumped["events"][0]["detail"]["metadata"]
+        self.assertEqual(metadata["cookie"], "***")
+        self.assertEqual(metadata["sessionToken"], "***")
+        self.assertEqual(metadata["databaseDsn"], "***")
+        self.assertEqual(metadata["providerCredential"], "***")
+        self.assertEqual(metadata["nested"]["connection_string"], "***")
+        self.assertEqual(metadata["nested"]["safeLabel"], "visible")
+
     def test_root_filters_generic_business_execution_fields(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()
@@ -733,6 +772,11 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(tiers["admin_logs_minimum_protected"]["cleanup_mode"], "capacity_cleanup_floor")
         self.assertTrue(tiers["admin_logs_minimum_protected"]["preview_required"])
         self.assertTrue(tiers["admin_logs_storage_pressure"]["preview_required"])
+        for tier in tiers.values():
+            self.assertEqual(tier["domain"], "admin_logs")
+            self.assertTrue(tier["delete_requires_explicit_cleanup"])
+            self.assertNotIn("deleted_log_count", tier)
+            self.assertNotIn("vacuum", str(tier).lower())
 
     def test_storage_summary_uses_sqlite_database_file_size_when_available(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -834,6 +878,29 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.capacity_cleanup_plan["estimated_candidate_sessions"], 1)
         self.assertEqual(remaining.total_log_count, 1)
 
+    def test_storage_summary_capacity_plan_refuses_cleanup_when_storage_size_unavailable(self) -> None:
+        self._record_event(
+            session_id="old-error",
+            event_name="AnalysisFailed",
+            level="ERROR",
+            category="analysis",
+            message="old failure",
+            status="failed",
+            event_at=datetime.now() - timedelta(days=120),
+        )
+
+        with patch("src.services.admin_logs_service.get_db", return_value=self.db):
+            payload = admin_logs.get_log_storage_summary(_=_admin_user())
+
+        self.assertFalse(payload.storage_size_available)
+        self.assertFalse(payload.capacity_cleanup_recommended)
+        self.assertFalse(payload.auto_cleanup_performed)
+        self.assertIsNone(payload.postgres_vacuum_note)
+        self.assertEqual(payload.capacity_cleanup_plan["mode"], "capacity")
+        self.assertFalse(payload.capacity_cleanup_plan["cleanup_safe"])
+        self.assertEqual(payload.capacity_cleanup_plan["reason"], "storage_size_unavailable")
+        self.assertEqual(payload.capacity_cleanup_plan["estimated_candidate_sessions"], 1)
+
     def test_storage_summary_handles_empty_logs_table(self) -> None:
         with patch("src.services.admin_logs_service.get_db", return_value=self.db):
             payload = admin_logs.get_log_storage_summary(_=_admin_user())
@@ -869,6 +936,32 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.mode, "retention")
         self.assertEqual(payload.matched_log_count, 1)
         self.assertEqual(payload.deleted_log_count, 0)
+        self.assertEqual(remaining.total_log_count, 1)
+
+    def test_cleanup_defaults_to_preview_and_does_not_emit_vacuum_note(self) -> None:
+        self._record_event(
+            session_id="old-error",
+            event_name="AnalysisFailed",
+            level="ERROR",
+            category="analysis",
+            message="old failure",
+            status="failed",
+            event_at=datetime.now() - timedelta(days=120),
+        )
+
+        with patch("src.services.admin_logs_service.get_db", return_value=self.db):
+            payload = admin_logs.cleanup_admin_logs(
+                admin_logs.AdminLogCleanupRequest(use_retention=True),
+                _=_admin_user(),
+            )
+            remaining = admin_logs.get_log_storage_summary(_=_admin_user())
+
+        self.assertTrue(payload.dry_run)
+        self.assertEqual(payload.mode, "retention")
+        self.assertEqual(payload.matched_log_count, 1)
+        self.assertEqual(payload.deleted_log_count, 0)
+        self.assertEqual(payload.deleted_event_count, 0)
+        self.assertIsNone(payload.postgres_vacuum_note)
         self.assertEqual(remaining.total_log_count, 1)
 
     def test_cleanup_actual_run_deletes_only_logs_older_than_cutoff(self) -> None:
@@ -1010,15 +1103,28 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertNotIn("SECRET", str(kwargs))
 
     def test_capacity_cleanup_refuses_when_storage_size_unavailable(self) -> None:
-        with patch("src.services.admin_logs_service.get_db", return_value=self.db):
-            with self.assertRaises(Exception) as raised:
-                admin_logs.cleanup_admin_logs(
-                    admin_logs.AdminLogCleanupRequest(mode="capacity", dry_run=True),
-                    _=_admin_user(),
-                )
+        self._record_event(
+            session_id="old-error",
+            event_name="AnalysisFailed",
+            level="ERROR",
+            category="analysis",
+            message="old failure",
+            status="failed",
+            event_at=datetime.now() - timedelta(days=120),
+        )
 
-        self.assertEqual(getattr(raised.exception, "status_code", None), 400)
-        self.assertIn("storage size is unavailable", str(getattr(raised.exception, "detail", {})))
+        with patch("src.services.admin_logs_service.get_db", return_value=self.db):
+            for dry_run in (True, False):
+                with self.assertRaises(Exception) as raised:
+                    admin_logs.cleanup_admin_logs(
+                        admin_logs.AdminLogCleanupRequest(mode="capacity", dry_run=dry_run),
+                        _=_admin_user(),
+                    )
+                self.assertEqual(getattr(raised.exception, "status_code", None), 400)
+                self.assertIn("storage size is unavailable", str(getattr(raised.exception, "detail", {})))
+            remaining = admin_logs.get_log_storage_summary(_=_admin_user())
+
+        self.assertEqual(remaining.total_log_count, 1)
 
     def test_invalid_config_is_safely_adjusted(self) -> None:
         with (

@@ -7,19 +7,20 @@ import re
 from typing import Any
 
 _SENSITIVE_KEY_RE = re.compile(
-    r"(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?token|token|authorization|bearer|credential|private[-_]?key|secret|password)",
+    r"(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?(?:token|cookie)|cookie|token|authorization|bearer|credential|provider[-_]?credential|private[-_]?key|secret|password|dsn|database[-_]?url|connection[-_]?string)",
     re.IGNORECASE,
 )
 _QUERY_SECRET_RE = re.compile(
-    r"([?&](?:api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?token|token|authorization|secret|password|credential|private[-_]?key)=)[^&#\s]+",
+    r"([?&](?:api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?(?:token|cookie)|cookie|token|authorization|secret|password|credential|provider[-_]?credential|private[-_]?key|dsn|database[-_]?url|connection[-_]?string)=)[^&#\s]+",
     re.IGNORECASE,
 )
 _KV_SECRET_RE = re.compile(
-    r"\b(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?token|token|authorization|secret|password|credential|private[-_]?key)\b\s*[:=]\s*([^\s,;&]+)",
+    r"\b(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?(?:token|cookie)|cookie|token|authorization|secret|password|credential|provider[-_]?credential|private[-_]?key|dsn|database[-_]?url|connection[-_]?string)\b\s*[:=]\s*([^\s,;&]+)",
     re.IGNORECASE,
 )
 _AUTH_HEADER_RE = re.compile(r"\b(Authorization)\s*:\s*([^\r\n,;]+)", re.IGNORECASE)
 _BEARER_RE = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE)
+_URL_USERINFO_PASSWORD_RE = re.compile(r"([a-z][a-z0-9+.-]*://)([^:/@\s]+):([^@\s/]+)@", re.IGNORECASE)
 
 
 def is_sensitive_key(key: str) -> bool:
@@ -66,6 +67,7 @@ def sanitize_message(message: str) -> str:
     text = _AUTH_HEADER_RE.sub(r"\1: ***", text)
     text = _BEARER_RE.sub("Bearer ***", text)
     text = _KV_SECRET_RE.sub(r"\1=***", text)
+    text = _URL_USERINFO_PASSWORD_RE.sub(r"\1\2:***@", text)
     return text
 
 
