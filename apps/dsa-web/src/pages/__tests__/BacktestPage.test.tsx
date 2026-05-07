@@ -1143,7 +1143,7 @@ describe('BacktestPage', () => {
     expect(within(executableSpecSection).getByText('实际执行内容')).toBeInTheDocument();
     expect(within(executableSpecSection).getByText('每个交易日')).toBeInTheDocument();
     expect(within(executableSpecSection).getByText('100 股 / 次')).toBeInTheDocument();
-    expect(screen.getByTestId('pro-assumption-summary')).toBeInTheDocument();
+    expect(await screen.findByTestId('pro-assumption-summary')).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-display-board')).not.toBeInTheDocument();
     expect(screen.getAllByLabelText(/我已确认当前解析结果与执行假设/i)).toHaveLength(1);
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();

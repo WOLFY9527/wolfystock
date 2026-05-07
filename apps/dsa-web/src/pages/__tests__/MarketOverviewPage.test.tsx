@@ -2079,7 +2079,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getAllByText('BTC').length).toBeGreaterThan(0);
     expect(screen.getAllByText('ETH').length).toBeGreaterThan(0);
     expect(screen.getAllByText('BNB').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('76,837.04').length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('76,837.04')).length).toBeGreaterThan(0);
   });
 
   it('keeps other market cards visible when crypto initial API fails', async () => {

@@ -535,7 +535,7 @@ describe('AdminCostObservabilityPage', () => {
     expect(getModelPricingPolicies).toHaveBeenCalledTimes(1);
     expect(within(panel).getByText('模型价格策略')).toBeInTheDocument();
     expect(within(panel).getByText('价格由本地策略维护，需定期按供应商官网更新；估算值不等同于供应商账单。')).toBeInTheDocument();
-    expect(within(panel).getByText('激活 1')).toBeInTheDocument();
+    expect(await within(panel).findByText('激活 1')).toBeInTheDocument();
     expect(within(panel).getByText('openai / openai/gpt-4o-mini')).toBeInTheDocument();
     expect(within(panel).getByText('deepseek / deepseek/deepseek-chat')).toBeInTheDocument();
     expect(within(panel).getByText('USD 0.1000')).toBeInTheDocument();

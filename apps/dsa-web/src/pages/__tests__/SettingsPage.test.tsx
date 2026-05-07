@@ -1232,6 +1232,7 @@ describe('SettingsPage', () => {
       const panel = await screen.findByTestId('duckdb-quant-panel');
       expect(panel).toHaveTextContent('已启用');
       expect(panel).toHaveTextContent('写入需显式点击');
+      await waitFor(() => expect(panel).toHaveTextContent('44'));
       expect(panel).toHaveTextContent('44');
       expect(panel).toHaveTextContent('22');
       expect(panel).toHaveTextContent('标的 2');
@@ -3117,7 +3118,7 @@ describe('SettingsPage', () => {
         timeoutSeconds: 5,
       });
     });
-    expect(within(customCard).getByText('服务器暂时不可用，请稍后重试。')).toBeInTheDocument();
+    expect(await within(customCard).findByText('服务器暂时不可用，请稍后重试。')).toBeInTheDocument();
     expect(within(customCard).queryByText('demo-secret')).not.toBeInTheDocument();
     expect(within(customCard).queryByText('demo-token')).not.toBeInTheDocument();
   });
