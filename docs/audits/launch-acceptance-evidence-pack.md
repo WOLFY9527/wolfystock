@@ -47,7 +47,7 @@ incomplete evidence keeps the summary at **NO-GO**.
 | `rbac_fallback_disable_switch` | RBAC fallback disable switch or accepted production exception, complete route inventory, explicit-payload pass proof, legacy/missing-payload fail-closed proof, rollback, and sanitized audit evidence. |
 | `provider_credential_staging_dry_run` | Provider credential staging dry-run, explicit opt-in live probe contract, credential presence-only contract, entitlement matrix, and no checker live calls. |
 | `provider_circuit_controlled_enforcement` | Controlled provider-circuit enforcement pilot, bounded route, rollback switch, and sanitized degraded-state evidence. This remains required even when current runtime support is not available. |
-| `quota_pilot_acceptance` | Quota enforcement pilot, owner scope, rollback switch, and user/admin status-label evidence. |
+| `quota_pilot_acceptance` | Controlled quota pilot with explicit owner allowlist, out-of-scope advisory behavior, sanitized dry-run budget alert intent, advisory-only invoice reconciliation, outbound delivery disabled by default, no live LLM/provider/invoice calls, rollback switch, and user/admin status-label evidence. |
 | `real_isolated_postgresql_restore_pitr` | Real isolated PostgreSQL restore, PITR execution, isolated target, and post-restore smoke evidence. |
 | `staging_ingress_smoke` | HTTPS staging ingress smoke, backend port exposure proof, synthetic users/data, and live opt-in evidence. |
 | `public_api_frontend_no_secret_safety` | Public API, frontend DOM, route payload, and release secret-scan no-secret evidence. |

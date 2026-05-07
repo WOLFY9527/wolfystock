@@ -115,6 +115,20 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
         "rollbackSwitchRecorded",
         "degradedEvidenceSanitized",
     ]
+    assert categories["quota_pilot_acceptance"]["requiredChecks"] == [
+        "pilotPassed",
+        "explicitOwnerAllowlistRecorded",
+        "outOfScopeUsersAdvisoryOnly",
+        "pilotBlockEmitsSanitizedBudgetAlertIntent",
+        "budgetAlertEvidenceRedacted",
+        "invoiceReconciliationAdvisoryOnly",
+        "invoiceReconciliationNotEnforcementInput",
+        "realOutboundDeliveryDisabledByDefault",
+        "noLiveLlmProviderOrInvoiceCalls",
+        "globalEnforcementDisabledByDefault",
+        "rollbackSwitchRecorded",
+        "statusLabelsRecorded",
+    ]
     assert categories["supply_chain_dependency_build_artifact_safety"]["requiredChecks"] == [
         "dependencyManifestsInspected",
         "manifestsSanitized",
@@ -203,6 +217,31 @@ def test_launch_acceptance_evidence_requires_provider_live_probe_contract_checks
     category = next(item for item in evidence["categories"] if item["id"] == "provider_credential_staging_dry_run")
     assert category["status"] == "blocking"
     assert category["missingChecks"] == ["liveProbeOptInRecorded", "liveProbeTimeoutBounded"]
+    assert category["reasonCodes"] == ["missing_required_checks"]
+
+
+def test_launch_acceptance_evidence_requires_quota_pilot_alert_and_safety_checks(tmp_path: Path) -> None:
+    payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    checks = payload["categories"]["quota_pilot_acceptance"]["checks"]
+    checks.pop("explicitOwnerAllowlistRecorded", None)
+    checks.pop("pilotBlockEmitsSanitizedBudgetAlertIntent", None)
+    checks.pop("realOutboundDeliveryDisabledByDefault", None)
+    checks.pop("noLiveLlmProviderOrInvoiceCalls", None)
+    evidence_path = tmp_path / "missing-quota-pilot-alert-safety-checks.json"
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_checker("--evidence", str(evidence_path))
+
+    assert result.returncode == 1
+    evidence = _json(result)
+    category = next(item for item in evidence["categories"] if item["id"] == "quota_pilot_acceptance")
+    assert category["status"] == "blocking"
+    assert category["missingChecks"] == [
+        "explicitOwnerAllowlistRecorded",
+        "pilotBlockEmitsSanitizedBudgetAlertIntent",
+        "realOutboundDeliveryDisabledByDefault",
+        "noLiveLlmProviderOrInvoiceCalls",
+    ]
     assert category["reasonCodes"] == ["missing_required_checks"]
 
 

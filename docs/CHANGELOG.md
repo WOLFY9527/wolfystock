@@ -1,5 +1,13 @@
 ## 2026-05-08
 
+- 🧪 **Cost launch quota alert acceptance evidence** — Launch acceptance evidence
+  now requires controlled quota pilot proof with an explicit owner allowlist,
+  out-of-scope advisory behavior, sanitized budget-alert dry-run intent,
+  advisory-only invoice reconciliation, real outbound delivery disabled by
+  default, no live LLM/provider/invoice calls, and global quota enforcement
+  disabled by default. Runtime quota/provider/invoice integrations and real
+  notification delivery defaults remain unchanged.
+
 - 🔐 **Auth launch operator-switch evidence** — Launch acceptance evidence now
   requires MFA admin-only scope proof, unsupported/global rollout NO-GO,
   break-glass default-off, route-inventory-gated RBAC fallback disable proof,

@@ -440,6 +440,8 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertFalse(alert_intent["liveOutbound"])
         self.assertFalse(alert_intent["invoiceReconciliation"]["enforcementInput"])
         self.assertTrue(alert_intent["safety"]["noExternalCalls"])
+        self.assertFalse(alert_intent["safety"]["realOutboundNotification"])
+        self.assertFalse(alert_intent["safety"]["liveInvoiceIngestion"])
 
     def test_admin_dry_run_distinguishes_advisory_from_pilot_enforced_decisions(self) -> None:
         self._as_admin()
@@ -673,7 +675,7 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         for blocked in ("must-not-leak", "api_key", "cookie", "raw_prompt", "session_id", "stack_trace"):
             self.assertNotIn(blocked, text)
 
-    def test_endpoint_does_not_call_live_llm_or_provider_paths(self) -> None:
+    def test_endpoint_does_not_call_live_llm_provider_invoice_or_outbound_paths(self) -> None:
         self._as_admin()
 
         def forbidden(*_args, **_kwargs):
@@ -683,6 +685,9 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
             patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
             patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
             patch("src.services.scanner_ai_service.ScannerAiInterpretationService.interpret_shortlist", side_effect=forbidden),
+            patch("src.services.llm_cost_ledger_service.LlmCostLedgerService.preflight_invoice_reconciliation", side_effect=forbidden),
+            patch("src.services.notification_service.NotificationDeliveryClient.send_webhook", side_effect=forbidden),
+            patch("src.services.notification_service.SystemNotificationService.send", side_effect=forbidden),
             patch("src.services.quota_policy_service.DatabaseManager.get_instance", return_value=self.db),
         ):
             response = self.client.post(

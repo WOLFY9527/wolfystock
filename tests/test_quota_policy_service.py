@@ -482,13 +482,13 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self._seed_budget_alert_policy()
 
         preflight = self.service.classify_pilot_readiness_preflight(
-            owner_user_id="pilot-user",
+            owner_user_id="pilot-session-should-redact",
             route_family="analysis",
-            provider="openai?api_key=must-not-leak",
-            model_tier="model-with-secret",
+            provider="openai?api_key=must-not-leak&token=raw-token&password=raw-password",
+            model_tier="model-with-secret-cookie-session-provider-credential",
             estimated_units=121,
             pilot_enforcement_enabled=True,
-            pilot_owner_user_ids=("pilot-user",),
+            pilot_owner_user_ids=("pilot-session-should-redact",),
             pilot_route_families=("analysis",),
         )
         intent = self.service.build_budget_alert_notification_intent(preflight)
@@ -500,7 +500,7 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertTrue(intent["dryRun"])
         self.assertFalse(intent["outboundAttempted"])
         self.assertFalse(intent["liveOutbound"])
-        self.assertEqual(intent["scope"]["ownerUserId"], "pilot-user")
+        self.assertEqual(intent["scope"]["ownerUserId"], "redacted")
         self.assertEqual(intent["scope"]["provider"], "redacted")
         self.assertEqual(intent["scope"]["modelTier"], "redacted")
         self.assertEqual(intent["budgetContext"]["hardLimitUnits"], 120)
@@ -512,7 +512,13 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertTrue(intent["safety"]["noExternalCalls"])
         text = str(intent).lower()
         self.assertNotIn("must-not-leak", text)
+        self.assertNotIn("raw-token", text)
+        self.assertNotIn("raw-password", text)
         self.assertNotIn("api_key", text)
+        self.assertNotIn("password", text)
+        self.assertNotIn("session-should-redact", text)
+        self.assertNotIn("cookie", text)
+        self.assertNotIn("provider-credential", text)
         self.assertNotIn("model-with-secret", text)
 
     def test_advisory_only_budget_alert_notification_intent_is_suppressed(self) -> None:

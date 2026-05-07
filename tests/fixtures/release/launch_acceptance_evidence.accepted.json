@@ -99,7 +99,15 @@
       "evidenceRef": "quota-pilot-acceptance-synthetic-json",
       "checks": {
         "pilotPassed": true,
-        "ownerScopeRecorded": true,
+        "explicitOwnerAllowlistRecorded": true,
+        "outOfScopeUsersAdvisoryOnly": true,
+        "pilotBlockEmitsSanitizedBudgetAlertIntent": true,
+        "budgetAlertEvidenceRedacted": true,
+        "invoiceReconciliationAdvisoryOnly": true,
+        "invoiceReconciliationNotEnforcementInput": true,
+        "realOutboundDeliveryDisabledByDefault": true,
+        "noLiveLlmProviderOrInvoiceCalls": true,
+        "globalEnforcementDisabledByDefault": true,
         "rollbackSwitchRecorded": true,
         "statusLabelsRecorded": true
       },

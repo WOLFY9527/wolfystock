@@ -152,11 +152,22 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
         id="quota_pilot_acceptance",
         title="Quota pilot acceptance evidence",
         required_evidence=(
-            "quota enforcement pilot, owner scope, rollback switch, and user/admin status-label evidence"
+            "controlled quota pilot with explicit owner allowlist, out-of-scope advisory behavior, "
+            "sanitized dry-run budget alert intent, advisory-only invoice reconciliation, "
+            "outbound delivery disabled by default, no live LLM/provider/invoice calls, rollback switch, "
+            "and user/admin status-label evidence"
         ),
         required_checks=(
             "pilotPassed",
-            "ownerScopeRecorded",
+            "explicitOwnerAllowlistRecorded",
+            "outOfScopeUsersAdvisoryOnly",
+            "pilotBlockEmitsSanitizedBudgetAlertIntent",
+            "budgetAlertEvidenceRedacted",
+            "invoiceReconciliationAdvisoryOnly",
+            "invoiceReconciliationNotEnforcementInput",
+            "realOutboundDeliveryDisabledByDefault",
+            "noLiveLlmProviderOrInvoiceCalls",
+            "globalEnforcementDisabledByDefault",
             "rollbackSwitchRecorded",
             "statusLabelsRecorded",
         ),
