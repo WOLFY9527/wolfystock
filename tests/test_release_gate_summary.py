@@ -17,6 +17,7 @@ def _init_repo(tmp_path: Path) -> Path:
     (repo / "scripts").mkdir()
     shutil.copy2(SCRIPT_SOURCE, repo / "scripts" / "release_gate_summary.sh")
     (repo / "scripts" / "release_secret_scan.sh").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    (repo / "scripts" / "staging_ingress_smoke.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
     (repo / "scripts" / "ci_gate_fast.sh").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
 
     _run(["git", "init", "-b", "main"], repo, check=True)
@@ -43,8 +44,10 @@ def test_release_gate_summary_prints_required_fields_on_clean_repo(tmp_path):
     assert "Ahead/behind vs origin/main: ahead 0, behind 0" in result.stdout
     assert "Worktree dirty: no" in result.stdout
     assert "scripts/release_secret_scan.sh: present" in result.stdout
+    assert "scripts/staging_ingress_smoke.py: present" in result.stdout
     assert "scripts/ci_gate_fast.sh: present" in result.stdout
     assert "./scripts/release_secret_scan.sh" in result.stdout
+    assert "python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>" in result.stdout
     assert "./scripts/ci_gate_fast.sh" in result.stdout
     assert "./scripts/ci_gate.sh" in result.stdout
     assert "git diff --check origin/main..HEAD" in result.stdout

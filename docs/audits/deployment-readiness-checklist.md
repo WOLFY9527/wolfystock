@@ -2,9 +2,9 @@
 
 Date: 2026-05-07
 Branch checked: `main`
-Mode: docs-only readiness consolidation. No runtime code, tests, schema,
-frontend, providers, Options, Data Pipeline, cost/quota, or auth behavior was
-changed.
+Mode: deployment readiness preflight update. No runtime API behavior, schema,
+frontend app code, providers, Options, Data Pipeline, cost/quota, auth behavior,
+production deployment config, migrations, or production data paths were changed.
 
 ## 1. Executive summary
 
@@ -224,7 +224,18 @@ Remaining blockers:
 - [x] Admin log cleanup is preview-first, preserves the minimum retention floor,
   emits sanitized cleanup audit events, and keeps storage-size-unavailable
   fallback safe.
+- [x] Synthetic staging-ingress smoke preflight exists:
+  `python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>`.
+- [x] Ingress smoke is safe by default: without
+  `WOLFYSTOCK_STAGING_INGRESS_SMOKE=1` it emits dry-run JSON evidence and does
+  not open network sockets.
+- [x] Ingress smoke covers `/api/health`, `/api/health/ready`,
+  `/api/health/live`, unauthenticated `/api/v1/admin/users` fail-closed
+  behavior, sensitive/debug payload patterns, sanitized timeout/action output,
+  and attachable JSON evidence.
 - [ ] Isolated PostgreSQL backup/restore drill is still missing.
+- [ ] Real HTTPS staging ingress smoke evidence is still missing; the new
+  preflight must be run against a synthetic staging URL with explicit opt-in.
 - [ ] Encrypted backup, PITR targets, restore smoke, and rollback runbook must
   be documented and exercised before public onboarding.
 - [ ] Retention tiers are still missing for task progress, terminal task state,
@@ -306,6 +317,8 @@ The following must all be true before public multi-user deployment:
 
 - [ ] `./scripts/ci_gate.sh` is clean on the release candidate.
 - [ ] `git status --short` is clean before tagging/deploying.
+- [x] Dry-run/live opt-in ingress smoke preflight exists and is listed by
+  `scripts/release_gate_summary.sh`.
 - [ ] Staging smoke passes through HTTPS reverse proxy on synthetic users/data.
 - [ ] WS2 multi-instance smoke passes or deployment is explicitly constrained to
   single API process with documented SSE/task limitations.

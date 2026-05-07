@@ -96,11 +96,14 @@ fi
 
 print_step "helper scripts"
 echo "scripts/release_secret_scan.sh: $(script_status "scripts/release_secret_scan.sh")"
+echo "scripts/staging_ingress_smoke.py: $(script_status "scripts/staging_ingress_smoke.py")"
 echo "scripts/ci_gate_fast.sh: $(script_status "scripts/ci_gate_fast.sh")"
 
 print_step "final required commands"
 cat <<'COMMANDS'
 ./scripts/release_secret_scan.sh
+python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>
+# Live ingress calls require WOLFYSTOCK_STAGING_INGRESS_SMOKE=1.
 ./scripts/ci_gate_fast.sh
 ./scripts/ci_gate.sh
 git diff --check origin/main..HEAD
