@@ -541,29 +541,66 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
     def test_mfa_login_enforcement_enabled_accepts_recovery_code_once(self) -> None:
         recovery_code = self._enable_admin_mfa_and_recovery_codes()[0]
 
-        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true"}, clear=False):
-            accepted = self.client.post(
-                "/api/v1/auth/login",
-                json={
-                    "username": "admin",
-                    "password": "adminpass123",
-                    "mfaRecoveryCode": recovery_code,
-                },
-            )
-            replay = self.client.post(
-                "/api/v1/auth/login",
-                json={
-                    "username": "admin",
-                    "password": "adminpass123",
-                    "mfaRecoveryCode": recovery_code,
-                },
-            )
+        with patch("api.v1.endpoints.auth.ExecutionLogService") as service_cls:
+            recorder = service_cls.return_value
+            with patch.dict(os.environ, {"WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true"}, clear=False):
+                accepted = self.client.post(
+                    "/api/v1/auth/login",
+                    json={
+                        "username": "admin",
+                        "password": "adminpass123",
+                        "mfaRecoveryCode": recovery_code,
+                    },
+                )
+                replay = self.client.post(
+                    "/api/v1/auth/login",
+                    json={
+                        "username": "admin",
+                        "password": "adminpass123",
+                        "mfaRecoveryCode": recovery_code,
+                    },
+                )
 
         self.assertEqual(accepted.status_code, 200)
         self.assertTrue(accepted.json()["ok"])
+        self.assertIn("set-cookie", {key.lower(): value for key, value in accepted.headers.items()})
         self.assertEqual(replay.status_code, 401)
         self.assertEqual(replay.json()["error"], "mfa_required")
+        self.assertNotIn("set-cookie", {key.lower(): value for key, value in replay.headers.items()})
         self.assertNotIn(recovery_code, accepted.text + replay.text)
+        actions = [call.kwargs.get("action") for call in recorder.record_admin_action.call_args_list]
+        self.assertIn("security.mfa_recovery_code_login", actions)
+        self.assertIn("security.mfa_login_required", actions)
+        audit_text = repr(recorder.record_admin_action.call_args_list)
+        self.assertIn("recovery_code_success", audit_text)
+        self.assertIn("mfa_required", audit_text)
+        self.assertNotIn(recovery_code, audit_text)
+        self.assertNotIn(TEST_MFA_SECRET, audit_text)
+
+    def test_mfa_login_enforcement_invalid_recovery_code_fails_closed_and_is_sanitized(self) -> None:
+        self._enable_admin_mfa_and_recovery_codes()
+
+        with patch("api.v1.endpoints.auth.ExecutionLogService") as service_cls:
+            recorder = service_cls.return_value
+            with patch.dict(os.environ, {"WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true"}, clear=False):
+                response = self.client.post(
+                    "/api/v1/auth/login",
+                    json={
+                        "username": "admin",
+                        "password": "adminpass123",
+                        "mfaRecoveryCode": "BAD-CODE-0000",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "mfa_required")
+        self.assertNotIn("set-cookie", {key.lower(): value for key, value in response.headers.items()})
+        actions = [call.kwargs.get("action") for call in recorder.record_admin_action.call_args_list]
+        self.assertIn("security.mfa_login_required", actions)
+        audit_text = repr(recorder.record_admin_action.call_args_list)
+        self.assertIn("mfa_required", audit_text)
+        self.assertNotIn("BAD-CODE-0000", response.text + audit_text)
+        self.assertNotIn(TEST_MFA_SECRET, response.text + audit_text)
 
     def test_mfa_login_enforcement_fails_safely_for_missing_or_invalid_state(self) -> None:
         self._enable_admin_mfa_and_recovery_codes()
@@ -578,15 +615,21 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
             mfa_last_verified_at=None,
         )
 
-        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true"}, clear=False):
-            response = self.client.post(
-                "/api/v1/auth/login",
-                json={"username": "admin", "password": "adminpass123", "mfaCode": _totp_code(TEST_MFA_SECRET)},
-            )
+        with patch("api.v1.endpoints.auth.ExecutionLogService") as service_cls:
+            recorder = service_cls.return_value
+            with patch.dict(os.environ, {"WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true"}, clear=False):
+                response = self.client.post(
+                    "/api/v1/auth/login",
+                    json={"username": "admin", "password": "adminpass123", "mfaCode": _totp_code(TEST_MFA_SECRET)},
+                )
 
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["error"], "mfa_required")
+        self.assertNotIn("set-cookie", {key.lower(): value for key, value in response.headers.items()})
+        audit_text = repr(recorder.record_admin_action.call_args_list)
+        self.assertIn("mfa_state_incomplete", audit_text)
         self.assertNotIn(TEST_MFA_SECRET, response.text)
+        self.assertNotIn("adminpass123", response.text + audit_text)
 
     def test_mfa_break_glass_login_requires_explicit_flag_reason_and_audit(self) -> None:
         self._enable_admin_mfa_and_recovery_codes()

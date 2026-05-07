@@ -212,6 +212,33 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertNotIn("lost-device-ticket-42", audit_text)
         self.assertNotIn(TEST_MFA_SECRET, audit_text)
 
+    def test_break_glass_enabled_still_fails_closed_for_unsupported_scope(self) -> None:
+        self._enable_admin_mfa_and_recovery_codes()
+
+        with patch("api.v1.endpoints.auth.ExecutionLogService") as service_cls:
+            recorder = service_cls.return_value
+            with patch.dict(
+                os.environ,
+                {
+                    "WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true",
+                    "WOLFYSTOCK_MFA_LOGIN_BREAK_GLASS_ENABLED": "true",
+                    "WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_SCOPE": "global",
+                },
+                clear=False,
+            ):
+                response = self._login_admin(breakGlassReason="lost-device-ticket-42")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "mfa_required")
+        self.assertNotIn("set-cookie", {key.lower(): value for key, value in response.headers.items()})
+        actions = [call.kwargs.get("action") for call in recorder.record_admin_action.call_args_list]
+        self.assertIn("security.mfa_login_enforcement_decision", actions)
+        self.assertNotIn("security.mfa_break_glass_login", actions)
+        audit_text = repr(recorder.record_admin_action.call_args_list)
+        self.assertIn("unsupported_scope", audit_text)
+        self.assertNotIn("lost-device-ticket-42", audit_text)
+        self.assertNotIn(TEST_MFA_SECRET, audit_text)
+
     def test_missing_admin_capabilities_payload_fails_closed_without_leaks(self) -> None:
         report = build_security_launch_preflight()
         payload = report.missing_admin_capabilities_payload
