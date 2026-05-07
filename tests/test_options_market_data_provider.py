@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -266,6 +267,10 @@ def _assert_preflight_safety_contract(preflight: dict) -> None:
     assert preflight["tradeableData"] is False
     assert preflight["providerCapabilities"]["liveEnabled"] is False
     assert preflight["providerCapabilities"]["tradeableData"] is False
+    assert preflight["providerSlaReadiness"]["latencyState"] == "unknown"
+    assert preflight["providerSlaReadiness"]["errorState"] == "unknown"
+    assert preflight["providerSlaReadiness"]["freshnessState"] == "unknown"
+    assert preflight["providerSlaReadiness"]["recentErrors"] == []
 
 
 def test_options_provider_preflight_disabled_state_is_fail_closed() -> None:
@@ -296,15 +301,16 @@ def test_options_provider_preflight_missing_credentials_state_is_sanitized() -> 
 
 
 def test_options_provider_preflight_dry_run_enabled_never_marks_data_live_or_tradeable() -> None:
-    preflight = build_options_provider_live_readiness_preflight(
-        "tradier",
-        config=OptionsLiveProviderConfig(
-            live_providers_enabled=True,
-            enabled_provider_keys=frozenset({"tradier"}),
-            credentialed_provider_keys=frozenset({"tradier"}),
-            dry_run_provider_keys=frozenset({"tradier"}),
-        ),
-    )
+    with patch("requests.sessions.Session.request") as request_mock:
+        preflight = build_options_provider_live_readiness_preflight(
+            "tradier",
+            config=OptionsLiveProviderConfig(
+                live_providers_enabled=True,
+                enabled_provider_keys=frozenset({"tradier"}),
+                credentialed_provider_keys=frozenset({"tradier"}),
+                dry_run_provider_keys=frozenset({"tradier"}),
+            ),
+        )
 
     assert preflight["readinessState"] == "dry_run_enabled"
     assert preflight["reasonCode"] == "options_provider_dry_run_enabled"
@@ -313,6 +319,8 @@ def test_options_provider_preflight_dry_run_enabled_never_marks_data_live_or_tra
     assert preflight["providerCapabilities"]["sourceType"] == "delayed_dry_run"
     assert preflight["dryRunDataQuality"]["tradeable"] is False
     assert preflight["dryRunFreshness"] == "delayed_dry_run"
+    assert preflight["providerSlaReadiness"]["readOnly"] is True
+    request_mock.assert_not_called()
     _assert_preflight_safety_contract(preflight)
 
 
@@ -376,6 +384,23 @@ def test_options_provider_preflight_sanitizes_provider_error_text() -> None:
     for blocked in ("sk-live-token", "provider.example", "apikey=secret", "authorization: bearer", "rawproviderpayload"):
         assert blocked not in text
     _assert_preflight_safety_contract(preflight)
+
+
+def test_options_provider_preflight_keeps_non_tradeable_status_explicit_on_disabled_live_providers() -> None:
+    preflight = build_options_provider_live_readiness_preflight(
+        "tradier",
+        config=OptionsLiveProviderConfig(
+            live_providers_enabled=True,
+            enabled_provider_keys=frozenset({"tradier"}),
+            credentialed_provider_keys=frozenset({"tradier"}),
+        ),
+    )
+
+    assert preflight["providerSlaReadiness"]["readOnly"] is True
+    assert preflight["providerSlaReadiness"]["noExternalCalls"] is True
+    assert preflight["providerSlaReadiness"]["liveEnforcement"] is False
+    assert preflight["tradeableData"] is False
+    assert preflight["providerCapabilities"]["tradeableData"] is False
 
 
 def _json_lower(payload: dict) -> str:

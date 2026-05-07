@@ -647,6 +647,7 @@ def build_options_provider_live_readiness_preflight(
         "portfolioMutationPathEnabled": False,
         "tradeableData": False,
         "providerCapabilities": provider.capabilities.to_dict(),
+        "providerSlaReadiness": _empty_provider_sla_readiness(),
         "checks": {
             "disabledByDefault": not live_config.live_providers_enabled,
             "noLiveHttpCalls": True,
@@ -743,6 +744,22 @@ def _create_live_options_provider_stub(
     if provider_name == "polygon":
         return PolygonOptionsProviderStub(config=config)
     raise OptionsProviderUnavailable(provider_name)
+
+
+def _empty_provider_sla_readiness() -> Dict[str, Any]:
+    """Normalized SLA fields for read-only preflight responses with no probes."""
+    return {
+        "latencyBucketMs": None,
+        "latencyState": "unknown",
+        "errorRate": None,
+        "errorState": "unknown",
+        "freshnessSeconds": None,
+        "freshnessState": "unknown",
+        "recentErrors": [],
+        "readOnly": True,
+        "noExternalCalls": True,
+        "liveEnforcement": False,
+    }
 
 
 def _normalize_us_symbol(symbol: str) -> str:

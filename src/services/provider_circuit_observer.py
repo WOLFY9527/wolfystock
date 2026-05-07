@@ -11,7 +11,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
 
-from src.storage import DatabaseManager
+from sqlalchemy import desc, select
+
+from src.storage import DatabaseManager, ProviderCircuitEvent, ProviderQuotaWindow
 
 
 class ProviderCircuitObserver:
@@ -207,11 +209,161 @@ class ProviderCircuitObserver:
             "would_change_fallback_behavior": False,
         }
 
+    def build_sla_readiness_diagnostics(
+        self,
+        *,
+        provider: str,
+        provider_category: Optional[str] = None,
+        route_family: Optional[str] = None,
+        observed_since: Optional[datetime] = None,
+        now: Optional[datetime] = None,
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        """Summarize stored provider observations for launch planning only."""
+        safe_limit = max(1, min(int(limit or 50), 200))
+        reference_time = now or datetime.now()
+        since = observed_since or (reference_time - timedelta(hours=24))
+        normalized_provider = self.db._normalize_provider_label(provider)
+        normalized_category = self.db._normalize_provider_dimension(provider_category, 64)
+        normalized_route = self.db._normalize_provider_dimension(route_family, 64)
+
+        with self.db.get_session() as session:
+            window_query = select(ProviderQuotaWindow).where(
+                ProviderQuotaWindow.provider == normalized_provider,
+                ProviderQuotaWindow.window_end >= since,
+            )
+            event_query = select(ProviderCircuitEvent).where(
+                ProviderCircuitEvent.provider == normalized_provider,
+                ProviderCircuitEvent.created_at >= since,
+            )
+            if normalized_category:
+                window_query = window_query.where(ProviderQuotaWindow.provider_category == normalized_category)
+                event_query = event_query.where(ProviderCircuitEvent.provider_category == normalized_category)
+            if normalized_route:
+                window_query = window_query.where(ProviderQuotaWindow.route_family == normalized_route)
+                event_query = event_query.where(ProviderCircuitEvent.route_family == normalized_route)
+
+            windows = session.execute(window_query.order_by(desc(ProviderQuotaWindow.window_end)).limit(safe_limit)).scalars().all()
+            events = session.execute(event_query.order_by(desc(ProviderCircuitEvent.created_at)).limit(safe_limit)).scalars().all()
+
+            request_count = sum(int(row.request_count or 0) for row in windows)
+            failure_count = sum(int(row.failure_count or 0) for row in windows)
+            timeout_count = sum(int(row.timeout_count or 0) for row in windows)
+            provider_429_count = sum(int(row.provider_429_count or 0) for row in windows)
+            provider_403_count = sum(int(row.provider_403_count or 0) for row in windows)
+            latest_window_end = max((row.window_end for row in windows if row.window_end), default=None)
+            latest_event_at = max((row.created_at for row in events if row.created_at), default=None)
+            latest_observation_at = latest_event_at or latest_window_end
+            latest_latency_bucket = next(
+                (int(row.duration_bucket_ms) for row in events if row.duration_bucket_ms is not None),
+                None,
+            )
+            recent_errors = self._recent_error_summary(events)
+
+        error_rate = (failure_count / request_count) if request_count else None
+        freshness_seconds = (
+            max(0, int((reference_time - latest_observation_at).total_seconds()))
+            if latest_observation_at
+            else None
+        )
+        advisory_bucket = recent_errors[0]["reasonBucket"] if recent_errors else "success"
+        preflight = self.classify_preflight_state(result_bucket=advisory_bucket)
+
+        return {
+            "provider": normalized_provider,
+            "providerCategory": normalized_category,
+            "routeFamily": normalized_route,
+            "observedSince": since.isoformat(),
+            "readOnly": True,
+            "noExternalCalls": True,
+            "liveEnforcement": False,
+            "providerBehaviorChanged": False,
+            "marketCacheBehaviorChanged": False,
+            "sla": {
+                "latencyBucketMs": latest_latency_bucket,
+                "latencyState": self._latency_state(latest_latency_bucket),
+                "errorRate": round(error_rate, 4) if error_rate is not None else None,
+                "errorState": self._error_state(error_rate),
+                "freshnessSeconds": freshness_seconds,
+                "freshnessState": self._freshness_state(freshness_seconds),
+            },
+            "counters": {
+                "requestCount": request_count,
+                "failureCount": failure_count,
+                "timeoutCount": timeout_count,
+                "provider429Count": provider_429_count,
+                "provider403Count": provider_403_count,
+            },
+            "recentErrors": recent_errors,
+            "circuitPreflight": preflight,
+        }
+
     def _normalize_bucket(self, value: str) -> str:
         bucket = str(value or "").strip().lower()
         if bucket not in self.RESULT_BUCKETS:
             raise ValueError("unsupported provider circuit observation bucket")
         return bucket
+
+    def _recent_error_summary(self, events: list[ProviderCircuitEvent]) -> list[Dict[str, Any]]:
+        summary: Dict[str, Dict[str, Any]] = {}
+        for row in events:
+            bucket = str(row.reason_bucket or "").strip().lower()
+            if not bucket or bucket == "success" or bucket not in self.FAILURE_BUCKETS:
+                continue
+            item = summary.setdefault(bucket, {"reasonBucket": bucket, "count": 0, "latestAt": None})
+            item["count"] += 1
+            created_at = row.created_at.isoformat() if row.created_at else None
+            if created_at and (item["latestAt"] is None or created_at > item["latestAt"]):
+                item["latestAt"] = created_at
+        ordered = sorted(summary.values(), key=lambda item: (item["latestAt"] or "", item["count"]), reverse=True)
+        return [
+            {
+                "reasonBucket": item["reasonBucket"],
+                "countBucket": self._count_bucket(int(item["count"])),
+                "latestAt": item["latestAt"],
+            }
+            for item in ordered[:5]
+        ]
+
+    @staticmethod
+    def _count_bucket(count: int) -> str:
+        if count <= 1:
+            return "1"
+        if count <= 5:
+            return "2_5"
+        if count <= 20:
+            return "6_20"
+        return "gt_20"
+
+    @staticmethod
+    def _latency_state(latency_bucket_ms: Optional[int]) -> str:
+        if latency_bucket_ms is None:
+            return "unknown"
+        if latency_bucket_ms <= 1000:
+            return "normal"
+        if latency_bucket_ms <= 5000:
+            return "slow"
+        return "critical"
+
+    @staticmethod
+    def _error_state(error_rate: Optional[float]) -> str:
+        if error_rate is None:
+            return "unknown"
+        if error_rate == 0:
+            return "normal"
+        if error_rate <= 0.2:
+            return "elevated"
+        return "critical"
+
+    @staticmethod
+    def _freshness_state(freshness_seconds: Optional[int]) -> str:
+        if freshness_seconds is None:
+            return "unknown"
+        if freshness_seconds <= 3600:
+            return "fresh"
+        if freshness_seconds <= 86400:
+            return "stale"
+        return "expired"
 
     @staticmethod
     def _window_bounds(observed_at: datetime, window_type: str) -> Tuple[datetime, datetime]:

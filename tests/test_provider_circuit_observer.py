@@ -209,6 +209,84 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
         self.assertFalse(result["preflight"]["live_enforcement"])
         self.assertIsNone(result["state"])
 
+    def test_sla_readiness_diagnostics_summarize_recent_errors_without_secrets_or_enforcement(self) -> None:
+        with patch("requests.sessions.Session.request") as request_mock:
+            self.observer.record_observation(
+                provider="FMP",
+                provider_category="quote",
+                route_family="analysis",
+                result_bucket="timeout",
+                duration_ms=1200,
+                observed_at=datetime(2026, 5, 6, 15, 0, 0),
+                metadata={
+                    "safe_label": "fixture",
+                    "api_key": "must-not-leak",
+                    "url": "https://provider.example.test/raw?token=must-not-leak",
+                    "raw_payload": "must-not-leak",
+                },
+            )
+            self.observer.record_observation(
+                provider="fmp",
+                provider_category="quote",
+                route_family="analysis",
+                result_bucket="provider_429",
+                duration_ms=80,
+                observed_at=datetime(2026, 5, 6, 15, 5, 0),
+                metadata={"authorization": "Bearer must-not-leak"},
+            )
+            diagnostics = self.observer.build_sla_readiness_diagnostics(
+                provider="FMP",
+                provider_category="quote",
+                route_family="analysis",
+                now=datetime(2026, 5, 6, 15, 10, 0),
+            )
+
+        self.assertEqual(diagnostics["provider"], "fmp")
+        self.assertTrue(diagnostics["readOnly"])
+        self.assertTrue(diagnostics["noExternalCalls"])
+        self.assertFalse(diagnostics["liveEnforcement"])
+        self.assertFalse(diagnostics["providerBehaviorChanged"])
+        self.assertFalse(diagnostics["marketCacheBehaviorChanged"])
+        self.assertEqual(diagnostics["sla"]["latencyBucketMs"], 100)
+        self.assertEqual(diagnostics["sla"]["latencyState"], "normal")
+        self.assertEqual(diagnostics["sla"]["errorRate"], 1.0)
+        self.assertEqual(diagnostics["sla"]["errorState"], "critical")
+        self.assertEqual(diagnostics["sla"]["freshnessSeconds"], 300)
+        self.assertEqual(diagnostics["sla"]["freshnessState"], "fresh")
+        self.assertEqual(diagnostics["counters"]["requestCount"], 2)
+        self.assertEqual(diagnostics["counters"]["failureCount"], 2)
+        self.assertEqual(diagnostics["recentErrors"][0]["reasonBucket"], "provider_429")
+        self.assertEqual(diagnostics["recentErrors"][0]["countBucket"], "1")
+        self.assertEqual(diagnostics["circuitPreflight"]["preflight_state"], "degraded")
+        self.assertFalse(diagnostics["circuitPreflight"]["would_block_call"])
+        self.assertFalse(diagnostics["circuitPreflight"]["would_change_provider_order"])
+        self.assertFalse(diagnostics["circuitPreflight"]["would_change_fallback_behavior"])
+        request_mock.assert_not_called()
+        text = str(diagnostics).lower()
+        for blocked in (
+            "must-not-leak",
+            "api_key",
+            "token",
+            "authorization",
+            "raw_payload",
+            "https://provider.example",
+        ):
+            self.assertNotIn(blocked, text)
+
+    def test_sla_readiness_diagnostics_normalize_empty_observations(self) -> None:
+        diagnostics = self.observer.build_sla_readiness_diagnostics(
+            provider="tradier",
+            now=datetime(2026, 5, 6, 15, 10, 0),
+        )
+
+        self.assertEqual(diagnostics["provider"], "tradier")
+        self.assertEqual(diagnostics["sla"]["latencyState"], "unknown")
+        self.assertEqual(diagnostics["sla"]["errorState"], "unknown")
+        self.assertEqual(diagnostics["sla"]["freshnessState"], "unknown")
+        self.assertEqual(diagnostics["recentErrors"], [])
+        self.assertEqual(diagnostics["circuitPreflight"]["preflight_state"], "healthy")
+        self.assertFalse(diagnostics["circuitPreflight"]["would_block_call"])
+
     def test_cooldown_observation_returns_open_candidate_preflight_without_state_change(self) -> None:
         result = self.observer.record_cooldown_observation(
             provider="alpaca",
