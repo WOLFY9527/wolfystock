@@ -30,7 +30,12 @@ FORBIDDEN_DENIAL_MARKERS = (
 )
 
 
-def _user(*, is_admin: bool = True, capabilities: Iterable[str] = ()) -> CurrentUser:
+def _user(
+    *,
+    is_admin: bool = True,
+    capabilities: Iterable[str] = (),
+    legacy_admin: bool = False,
+) -> CurrentUser:
     return CurrentUser(
         user_id="admin-r3b",
         username="admin-r3b",
@@ -41,6 +46,7 @@ def _user(*, is_admin: bool = True, capabilities: Iterable[str] = ()) -> Current
         transitional=False,
         auth_enabled=True,
         session_id="raw-session-id",
+        legacy_admin=legacy_admin,
         admin_capabilities=tuple(capabilities),
     )
 
@@ -220,6 +226,29 @@ def test_system_config_read_write_and_provider_probe_capabilities() -> None:
     ).status_code == 200
 
 
+def test_migrated_admin_write_surfaces_fail_closed_without_capability_payload(monkeypatch) -> None:
+    monkeypatch.setattr("api.v1.endpoints.admin_logs.AdminLogsRetentionService", FakeAdminLogsRetentionService)
+    client = _client(_user())
+
+    denied_config = client.put(
+        "/api/v1/system/config",
+        json={"config_version": "v1", "items": [{"key": "STOCK_LIST", "value": "AAPL"}]},
+    )
+    assert denied_config.status_code == 403
+    assert denied_config.json()["detail"]["error"] == "admin_capability_required"
+    _assert_sanitized_denial(denied_config)
+
+    denied_probe = client.post("/api/v1/system/config/llm/test-channel", json={"name": "primary"})
+    assert denied_probe.status_code == 403
+    assert denied_probe.json()["detail"]["error"] == "admin_capability_required"
+    _assert_sanitized_denial(denied_probe)
+
+    denied_logs_cleanup = client.post("/api/v1/admin/logs/cleanup", json={"use_retention": True, "dry_run": True})
+    assert denied_logs_cleanup.status_code == 403
+    assert denied_logs_cleanup.json()["detail"]["error"] == "admin_capability_required"
+    _assert_sanitized_denial(denied_logs_cleanup)
+
+
 def test_provider_circuit_diagnostics_require_provider_read_capability() -> None:
     read_client = _client(_user(capabilities=("ops:providers:read",)))
     assert read_client.get("/api/v1/admin/providers/circuits").status_code == 200
@@ -278,7 +307,7 @@ def test_notification_reads_and_state_changes_use_notification_capabilities(monk
 
 def test_legacy_admin_still_passes_r3b_compatibility(monkeypatch) -> None:
     monkeypatch.setattr("api.v1.endpoints.admin_logs.AdminLogsRetentionService", FakeAdminLogsRetentionService)
-    client = _client(_user())
+    client = _client(_user(legacy_admin=True))
 
     response = client.get("/api/v1/admin/logs/storage/summary")
 

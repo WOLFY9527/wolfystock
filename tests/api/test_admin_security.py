@@ -50,6 +50,7 @@ def _admin_user(
         transitional=transitional,
         auth_enabled=auth_enabled,
         session_id=session_id,
+        legacy_admin=transitional,
     )
 
 

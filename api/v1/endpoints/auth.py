@@ -310,7 +310,7 @@ def _capability_flags(capabilities: list[str]) -> dict[str, bool]:
 
 def _current_user_capability_summary(current_user) -> tuple[list[str], dict[str, bool]]:
     capabilities = sorted(getattr(current_user, "admin_capabilities", ()) or ())
-    if not capabilities:
+    if not capabilities and bool(getattr(current_user, "legacy_admin", False)):
         capabilities = sorted(expand_admin_capabilities(current_user))
     return capabilities, _capability_flags(capabilities)
 

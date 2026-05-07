@@ -230,7 +230,9 @@ def _admin_capabilities_for_user(current_user: CurrentUser) -> set[str]:
     cached = set(getattr(current_user, "admin_capabilities", ()) or ())
     if cached:
         return cached
-    return expand_admin_capabilities(current_user)
+    if bool(getattr(current_user, "legacy_admin", False)):
+        return expand_admin_capabilities(current_user)
+    return set()
 
 
 def _raise_admin_capability_required() -> None:

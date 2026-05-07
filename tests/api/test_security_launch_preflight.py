@@ -138,6 +138,9 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertFalse(report.mfa_enforcement_enabled_by_default)
         self.assertFalse(report.break_glass_enabled_by_default)
         self.assertTrue(report.coarse_admin_fallback_present)
+        self.assertEqual(report.coarse_admin_fallback_status, "transitional")
+        self.assertTrue(report.explicit_capability_grants_without_fallback)
+        self.assertTrue(report.missing_capability_dependency_fail_closed)
         self.assertIn("coarse_admin_fallback_present", report.launch_blockers)
         self.assertTrue(report.missing_admin_capabilities_fail_closed)
 
@@ -218,6 +221,7 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
 
         self.assertEqual(set(ADMIN_RBAC_CAPABILITIES), capabilities)
         self.assertTrue(report.coarse_admin_fallback_present)
+        self.assertEqual(report.coarse_admin_fallback_status, "transitional")
         self.assertIn("coarse_admin_fallback_present", report.launch_blockers)
         self.assertIn("remove coarse admin fallback", report.rollback_safe_next_step)
 

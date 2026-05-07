@@ -77,9 +77,14 @@ class AdminRealAuthSessionSmokeTestCase(unittest.TestCase):
         self.assertEqual(current_user["username"], "admin")
         self.assertTrue(current_user["isAdmin"])
         self.assertTrue(current_user["isAuthenticated"])
+        self.assertIsInstance(current_user["adminCapabilities"], list)
+        self.assertGreater(len(current_user["adminCapabilities"]), 0)
         self.assertIn("users:read", current_user["adminCapabilities"])
         self.assertTrue(current_user["canReadUsers"])
         self.assertTrue(current_user["canReadSystemConfig"])
+        capability_text = json.dumps(current_user["adminCapabilities"], sort_keys=True).lower()
+        for forbidden in ("password", "session", "cookie", "token", "api_key", "apikey", "secret"):
+            self.assertNotIn(forbidden, capability_text)
 
         admin_users = self.client.get("/api/v1/admin/users")
         self.assertEqual(admin_users.status_code, 200)

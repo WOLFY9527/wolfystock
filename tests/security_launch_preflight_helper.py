@@ -6,7 +6,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from unittest.mock import patch
 
+from fastapi import HTTPException
+
 from api.deps import CurrentUser
+from api.deps import require_admin_capability
 from api.v1.endpoints import auth as auth_endpoint
 from src.admin_rbac import ADMIN_RBAC_CAPABILITIES, expand_admin_capabilities
 from src.multi_user import ROLE_ADMIN
@@ -17,6 +20,9 @@ class SecurityLaunchPreflight:
     mfa_enforcement_enabled_by_default: bool
     break_glass_enabled_by_default: bool
     coarse_admin_fallback_present: bool
+    coarse_admin_fallback_status: str
+    explicit_capability_grants_without_fallback: bool
+    missing_capability_dependency_fail_closed: bool
     missing_admin_capabilities_fail_closed: bool
     missing_admin_capabilities_payload: dict
     launch_blockers: tuple[str, ...]
@@ -28,6 +34,37 @@ def _legacy_admin_user() -> CurrentUser:
         user_id="launch-preflight-admin",
         username="launch-preflight-admin",
         display_name="Launch Preflight Admin",
+        role=ROLE_ADMIN,
+        is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        session_id="raw-session-id",
+        legacy_admin=True,
+    )
+
+
+def _explicit_capability_admin() -> CurrentUser:
+    return CurrentUser(
+        user_id="launch-preflight-explicit-admin",
+        username="launch-preflight-explicit-admin",
+        display_name="Launch Preflight Explicit Admin",
+        role=ROLE_ADMIN,
+        is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        session_id="raw-session-id",
+        legacy_admin=False,
+        admin_capabilities=("users:read",),
+    )
+
+
+def _missing_capability_admin() -> CurrentUser:
+    return CurrentUser(
+        user_id="launch-preflight-missing-capabilities-admin",
+        username="launch-preflight-missing-capabilities-admin",
+        display_name="Launch Preflight Missing Capabilities Admin",
         role=ROLE_ADMIN,
         is_admin=True,
         is_authenticated=True,
@@ -72,6 +109,14 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
     payload = _missing_capabilities_payload()
     flag_values = [value for key, value in payload.items() if key.startswith("can")]
     coarse_fallback_present = set(expand_admin_capabilities(_legacy_admin_user())) == set(ADMIN_RBAC_CAPABILITIES)
+    explicit_capability_grants_work = require_admin_capability("users:read")(_explicit_capability_admin()) is not None
+    try:
+        require_admin_capability("users:read")(_missing_capability_admin())
+        missing_capability_dependency_fail_closed = False
+    except HTTPException as exc:
+        missing_capability_dependency_fail_closed = (
+            exc.status_code == 403 and exc.detail.get("error") == "admin_capability_required"
+        )
     blockers = []
     if coarse_fallback_present:
         blockers.append("coarse_admin_fallback_present")
@@ -86,6 +131,9 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
         mfa_enforcement_enabled_by_default=mfa_default,
         break_glass_enabled_by_default=break_glass_default,
         coarse_admin_fallback_present=coarse_fallback_present,
+        coarse_admin_fallback_status="transitional" if coarse_fallback_present else "removed",
+        explicit_capability_grants_without_fallback=explicit_capability_grants_work,
+        missing_capability_dependency_fail_closed=missing_capability_dependency_fail_closed,
         missing_admin_capabilities_fail_closed=not payload.get("adminCapabilities") and all(
             value is False for value in flag_values
         ),

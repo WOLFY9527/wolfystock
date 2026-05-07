@@ -25,7 +25,13 @@ from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, ROLE_ADMIN, ROLE_USER
 from src.storage import AdminRole, AdminRoleCapability, AdminUserRole, DatabaseManager
 
 
-def _current_user(*, role: str, is_admin: bool) -> CurrentUser:
+def _current_user(
+    *,
+    role: str,
+    is_admin: bool,
+    admin_capabilities: tuple[str, ...] = (),
+    legacy_admin: bool = False,
+) -> CurrentUser:
     return CurrentUser(
         user_id="user-1",
         username="alice",
@@ -36,6 +42,8 @@ def _current_user(*, role: str, is_admin: bool) -> CurrentUser:
         transitional=False,
         auth_enabled=True,
         session_id="raw-session-id",
+        legacy_admin=legacy_admin,
+        admin_capabilities=admin_capabilities,
     )
 
 
@@ -101,12 +109,35 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
         self.assertEqual(exc.exception.status_code, 403)
         self.assertEqual(exc.exception.detail["error"], "admin_required")
 
-    def test_legacy_admin_passes_required_capability_dependency(self) -> None:
+    def test_explicit_capability_grant_passes_required_dependency_without_coarse_fallback(self) -> None:
+        from api.deps import require_admin_capability
+
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True, admin_capabilities=("users:read",))
+        dependency = require_admin_capability("users:read")
+
+        self.assertIs(dependency(admin), admin)
+
+    def test_missing_capability_cache_fails_closed_for_capability_dependency(self) -> None:
         from api.deps import require_admin_capability
 
         admin = _current_user(role=ROLE_ADMIN, is_admin=True)
         dependency = require_admin_capability("users:read")
 
+        with self.assertRaises(HTTPException) as exc:
+            dependency(admin)
+        self.assertEqual(exc.exception.status_code, 403)
+        self.assertEqual(exc.exception.detail["error"], "admin_capability_required")
+        detail_text = str(exc.exception.detail).lower()
+        self.assertNotIn("raw-session-id", detail_text)
+        self.assertNotIn("users:read", detail_text)
+
+    def test_transitional_legacy_admin_still_passes_required_capability_dependency(self) -> None:
+        from api.deps import require_admin_capability
+
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True, legacy_admin=True)
+        dependency = require_admin_capability("users:read")
+
+        self.assertTrue(admin.legacy_admin)
         self.assertIs(dependency(admin), admin)
 
     def test_required_capability_dependency_rejects_non_admin(self) -> None:
@@ -156,7 +187,7 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
     def test_any_capability_dependency_accepts_any_matching_capability(self) -> None:
         from api.deps import require_any_admin_capability
 
-        admin = _current_user(role=ROLE_ADMIN, is_admin=True)
+        admin = _current_user(role=ROLE_ADMIN, is_admin=True, admin_capabilities=("users:read",))
         dependency = require_any_admin_capability(["secrets:read", "users:read"])
 
         self.assertIs(dependency(admin), admin)
