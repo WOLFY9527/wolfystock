@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import unittest
+import warnings
 from unittest.mock import MagicMock, patch
 
 from fastapi import BackgroundTasks, HTTPException
@@ -984,6 +985,18 @@ class BacktestApiContractTestCase(unittest.TestCase):
     def test_get_rule_backtest_runs_serializes_history_authority_parity_contract(self) -> None:
         service = MagicMock()
         item = self._rule_run_payload(status="completed")
+        item["parsed_strategy"] = {
+            "version": "v1",
+            "timeframe": "daily",
+            "strategy_kind": "rule_conditions",
+            "strategy_spec": {
+                "version": "v1",
+                "strategy_type": "rule_conditions",
+                "strategy_family": "rule_conditions",
+                "timeframe": "daily",
+                "max_lookback": 1,
+            },
+        }
         item["result_authority"].update(
             {
                 "replay_payload_source": "omitted_without_detail_read",
@@ -1024,7 +1037,15 @@ class BacktestApiContractTestCase(unittest.TestCase):
             response = get_rule_backtest_runs(code="600519", page=1, limit=10, db_manager=MagicMock())
 
         self.assertIsInstance(response, RuleBacktestHistoryResponse)
-        payload = response.model_dump(by_alias=True)
+        with warnings.catch_warnings(record=True) as captured_warnings:
+            warnings.simplefilter("always")
+            payload = response.model_dump(by_alias=True)
+        serializer_warnings = [
+            warning
+            for warning in captured_warnings
+            if "PydanticSerializationUnexpectedValue" in str(warning.message)
+        ]
+        self.assertEqual(serializer_warnings, [])
         self.assertEqual(payload["total"], 1)
         self.assertEqual(len(payload["items"]), 1)
         self.assertEqual(payload["items"][0]["result_authority"]["summary_source"], "row.summary_json")
