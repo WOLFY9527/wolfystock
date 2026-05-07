@@ -68,9 +68,10 @@ Known warnings are tracked separately in
 Current warning verdict:
 
 - Blocking warnings: none in the current warning register.
-- Non-blocking warnings: websockets/lark_oapi deprecation, Pydantic serializer
-  warning, Eastmoney unverified HTTPS warning, and existing Vite chunk-size
-  warning.
+- Resolved warnings: Pydantic backtest serializer warning.
+- Isolated/non-blocking warnings: websockets/lark_oapi deprecation warning and
+  Eastmoney unverified HTTPS warning.
+- Still-open/non-blocking warnings: existing Vite chunk-size warning.
 
 These warnings do not change the launch verdict. The launch verdict remains
 **NO-GO** because of the readiness blockers above, not because of the currently
