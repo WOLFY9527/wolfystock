@@ -9,10 +9,10 @@ Related docs: `docs/audits/public-launch-gap-register.md`,
 `docs/audits/final-pre-push-audit.md`,
 `docs/audits/known-test-warnings-register.md`
 
-Mode: launch readiness summary. The current ingress update adds synthetic
-deployment-readiness script/tests/docs only; no runtime API behavior, production
-deployment config, frontend app code, provider configuration, migrations, or
-production data paths were changed.
+Mode: launch readiness summary. The current production-config update adds
+synthetic/sanitized release contract preflight script/tests/docs only; no
+runtime API behavior, production deployment config, frontend app code, provider
+configuration, migrations, or production data paths were changed.
 
 ## Executive verdict
 
@@ -54,7 +54,9 @@ Public launch may move to **GO** only when all of the following are true:
 - Public ingress exposes only 80/443 and does not expose backend `:8000`
   directly.
 - Production `.env` posture is reviewed for production mode, auth, CORS, CSRF,
-  trusted proxy, and secret handling without printing secret values.
+  trusted proxy, and secret handling through
+  `python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>`
+  without printing raw `.env` or secret values.
 - MFA enforcement prerequisites are complete, or public admin access is blocked
   behind a documented compensating control.
 - Backup/restore drill passes in an isolated environment.

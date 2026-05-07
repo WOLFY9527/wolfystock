@@ -323,6 +323,10 @@ The following must all be true before public multi-user deployment:
 - [x] Machine-checkable public launch evidence aggregation exists through
   `scripts/release_gate_summary.sh --go-no-go-json`; it reports foundation
   evidence and hard blockers while keeping the final status **NO-GO**.
+- [x] Production config/secret contract preflight exists through
+  `python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>`;
+  it consumes only synthetic or operator-sanitized flag names and secret
+  presence states, emits stable JSON, and never prints secret values.
 - [ ] Staging smoke passes through HTTPS reverse proxy on synthetic users/data.
 - [ ] WS2 multi-instance smoke passes or deployment is explicitly constrained to
   single API process with documented SSE/task limitations.
@@ -331,7 +335,8 @@ The following must all be true before public multi-user deployment:
   to a private/local backend port.
 - [ ] Production `.env` uses `APP_ENV=production`, `ADMIN_AUTH_ENABLED=true`,
   explicit CORS/CSRF origins, and trusted proxy settings only behind a trusted
-  proxy.
+  proxy; attach sanitized production config preflight JSON rather than raw
+  `.env` values.
 - [ ] Secrets audit confirms no real API keys, provider credentials, cookies,
   session ids, broker credentials, webhook URLs, password hashes, raw prompts,
   raw provider payloads, or stack traces are present in logs, admin diagnostics,

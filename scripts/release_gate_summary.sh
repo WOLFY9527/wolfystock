@@ -180,6 +180,15 @@ summary = {
                 "staging ingress dry-run/live opt-in preflight",
             ],
         },
+        {
+            "id": "production_config_secret_contract_preflight",
+            "status": "foundation_evidence_present",
+            "evidence": [
+                "sanitized production config contract preflight",
+                "required launch flag names and secret presence states",
+                "MFA/RBAC/quota/backup/ingress opt-in posture without secret values",
+            ],
+        },
     ],
     "hardBlockers": [
         {
@@ -212,8 +221,14 @@ summary = {
             "status": "blocking",
             "requiredEvidence": "clean worktree, clean full release gate, secret scan, and final diff check",
         },
+        {
+            "id": "production_config_contract_acceptance_pending",
+            "status": "blocking",
+            "requiredEvidence": "accepted production config readiness contract using sanitized names/presence states only",
+        },
     ],
     "requiredFinalCommands": [
+        "python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>",
         "./scripts/release_secret_scan.sh",
         "python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>",
         "./scripts/ci_gate_fast.sh",
@@ -258,11 +273,13 @@ fi
 
 print_step "helper scripts"
 echo "scripts/release_secret_scan.sh: $(script_status "scripts/release_secret_scan.sh")"
+echo "scripts/production_config_readiness.py: $(script_status "scripts/production_config_readiness.py")"
 echo "scripts/staging_ingress_smoke.py: $(script_status "scripts/staging_ingress_smoke.py")"
 echo "scripts/ci_gate_fast.sh: $(script_status "scripts/ci_gate_fast.sh")"
 
 print_step "final required commands"
 cat <<'COMMANDS'
+python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>
 ./scripts/release_secret_scan.sh
 python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>
 # Live ingress calls require WOLFYSTOCK_STAGING_INGRESS_SMOKE=1.

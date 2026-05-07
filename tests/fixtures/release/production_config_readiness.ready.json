@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "wolfystock_production_config_contract_input_v1",
+  "mode": "synthetic_ready",
+  "flags": {
+    "ADMIN_AUTH_ENABLED": "true",
+    "APP_ENV": "production",
+    "CORS_ALLOW_ALL": "false",
+    "CORS_ORIGINS": "configured",
+    "CSRF_TRUSTED_ORIGINS": "configured",
+    "TRUST_X_FORWARDED_FOR": "false",
+    "WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED": "false",
+    "WOLFYSTOCK_BACKUP_PITR_EXECUTION_ENABLED": "false",
+    "WOLFYSTOCK_MFA_LOGIN_BREAK_GLASS_ENABLED": "false",
+    "WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "false",
+    "WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_SCOPE": "admin_only",
+    "WOLFYSTOCK_QUOTA_ENFORCEMENT_MODE": "pilot",
+    "WOLFYSTOCK_STAGING_INGRESS_SMOKE": "false"
+  },
+  "secretPresence": {
+    "FMP_API_KEY": true,
+    "GEMINI_API_KEY": true
+  }
+}
