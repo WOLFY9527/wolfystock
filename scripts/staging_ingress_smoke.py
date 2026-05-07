@@ -27,6 +27,8 @@ BASE_URLS_ENV = "WOLFYSTOCK_STAGING_INGRESS_BASE_URLS"
 TIMEOUT_ENV = "WOLFYSTOCK_STAGING_INGRESS_TIMEOUT_SECONDS"
 DEFAULT_TIMEOUT_SECONDS = 5.0
 MAX_BODY_BYTES = 64_000
+OPERATOR_EVIDENCE_SCHEMA_VERSION = "wolfystock_staging_ingress_operator_evidence_v1"
+SAFE_PLACEHOLDERS = {"", "[redacted]", "redacted", "<redacted>", "***", "sanitized", "none"}
 
 SENSITIVE_BODY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("api_key", re.compile(r"(?i)[\"']?\bapi[_\s-]?key\b[\"']?\s*[:=]")),
@@ -49,6 +51,7 @@ SENSITIVE_BODY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
             r"debug_payload|provider_payload|raw_payload|stack trace|traceback"
         ),
     ),
+    ("credential_bearing_url", re.compile(r"(?i)\bhttps?://[^\s?#]+[?][^\s]+")),
 )
 
 
@@ -81,6 +84,8 @@ def _clean_base_url(raw_url: str) -> str:
     parsed = urllib.parse.urlsplit(raw_url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError("base URL must include http(s) scheme and host")
+    if parsed.username or parsed.password:
+        raise ValueError("base URL must not include credentials")
     path = parsed.path.rstrip("/")
     return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
 
@@ -105,6 +110,260 @@ def _find_sensitive_pattern(body: str) -> str | None:
         if pattern.search(body):
             return reason_code
     return None
+
+
+def _load_json_payload(path: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise SystemExit(f"[FAIL] Evidence file not found: {path}")
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"[FAIL] Evidence file is not valid JSON: {exc}")
+    if not isinstance(payload, dict):
+        raise SystemExit("[FAIL] Evidence file must contain a JSON object")
+    return payload
+
+
+def _safe_placeholder(value: Any) -> bool:
+    return str(value).strip().lower() in SAFE_PLACEHOLDERS
+
+
+def _safe_host_label(value: Any) -> bool:
+    label = str(value or "").strip()
+    if not label or any(marker in label for marker in ("://", "/", "?", "#", "@", ":")):
+        return False
+    if ".." in label:
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,252}", label))
+
+
+def _safe_reason_code(value: Any) -> bool:
+    return bool(re.fullmatch(r"[a-z0-9_.:-]+", str(value or "")))
+
+
+def _find_sensitive_value(value: Any, *, path: str = "") -> list[dict[str, str]]:
+    findings: list[dict[str, str]] = []
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            key_text = str(key)
+            nested_path = f"{path}.{key_text}" if path else key_text
+            normalized_key = key_text.lower().replace("-", "_")
+            if isinstance(nested, str) and any(marker in normalized_key for marker in ("token", "secret", "password", "cookie", "session", "dsn", "private_key", "response_body", "provider_payload", "raw_payload", "debug_trace", "stack_trace")):
+                if not _safe_placeholder(nested):
+                    findings.append({"path": nested_path, "reasonCode": "sensitive_key_contains_value"})
+                    continue
+            findings.extend(_find_sensitive_value(nested, path=nested_path))
+        return findings
+    if isinstance(value, list):
+        for index, nested in enumerate(value):
+            findings.extend(_find_sensitive_value(nested, path=f"{path}[{index}]"))
+        return findings
+    if isinstance(value, str):
+        if _safe_placeholder(value):
+            return findings
+        if re.search(r"(?i)\bhttps?://[^\s?#]+[?][^\s]+", value):
+            findings.append({"path": path or "$", "reasonCode": "credential_bearing_url"})
+            return findings
+        for reason_code, pattern in SENSITIVE_BODY_PATTERNS:
+            if pattern.search(value):
+                findings.append({"path": path or "$", "reasonCode": reason_code})
+                break
+    return findings
+
+
+def _operator_result_from_summary(payload: dict[str, Any], name: str) -> dict[str, Any]:
+    summary = payload.get("resultSummary") if isinstance(payload.get("resultSummary"), dict) else {}
+    result = summary.get(name) if isinstance(summary.get(name), dict) else {}
+    status = str(result.get("status") or "missing")
+    reason_code = str(result.get("reasonCode") or "missing")
+    status_code = result.get("statusCode")
+    evidence: dict[str, Any] = {
+        "status": status,
+        "reasonCode": reason_code,
+    }
+    if isinstance(status_code, int):
+        evidence["statusCode"] = status_code
+    return evidence
+
+
+def _operator_evidence_checks(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    findings = _find_sensitive_value(payload)
+    host_label = payload.get("baseUrlHostLabel")
+    timeout = payload.get("timeoutSeconds")
+    timestamp = payload.get("timestamp") or payload.get("generatedAt")
+    reason_codes = payload.get("reasonCodes") if isinstance(payload.get("reasonCodes"), list) else []
+    sanitization = payload.get("sanitization") if isinstance(payload.get("sanitization"), dict) else {}
+
+    ready = _operator_result_from_summary(payload, "health_ready")
+    alias = _operator_result_from_summary(payload, "health_alias")
+    live = _operator_result_from_summary(payload, "health_live")
+    admin = _operator_result_from_summary(payload, "admin_fail_closed")
+
+    checks = [
+        {
+            "id": "operator_evidence_contains_no_unsafe_values",
+            "status": "pass" if not findings else "fail",
+            "evidence": {
+                "unsafeFindingCount": len(findings),
+                "findings": findings[:20],
+            },
+        },
+        {
+            "id": "operator_evidence_has_host_label_only",
+            "status": "pass" if _safe_host_label(host_label) else "fail",
+            "evidence": {
+                "baseUrlHostLabel": host_label if _safe_host_label(host_label) else "<invalid>",
+                "valuesIncluded": False,
+            },
+        },
+        {
+            "id": "operator_evidence_records_real_smoke_opt_in",
+            "status": "pass" if payload.get("networkCallsEnabled") is True and payload.get("liveOptInRecorded") is True else "fail",
+            "evidence": {
+                "networkCallsEnabled": payload.get("networkCallsEnabled") is True,
+                "liveOptInRecorded": payload.get("liveOptInRecorded") is True,
+            },
+        },
+        {
+            "id": "operator_evidence_has_timestamp",
+            "status": "pass" if isinstance(timestamp, str) and timestamp.strip() else "fail",
+            "evidence": {
+                "timestamp": timestamp if isinstance(timestamp, str) and timestamp.strip() else "<missing>",
+            },
+        },
+        {
+            "id": "operator_evidence_has_bounded_timeout",
+            "status": "pass" if isinstance(timeout, (int, float)) and 0 < float(timeout) <= 30 else "fail",
+            "evidence": {
+                "timeoutSeconds": timeout,
+                "maxTimeoutSeconds": 30,
+            },
+        },
+        {
+            "id": "operator_evidence_has_required_result_summary",
+            "status": "pass"
+            if all(item.get("status") == "pass" for item in (ready, alias, live))
+            and ready.get("statusCode") == 200
+            and alias.get("statusCode") == 200
+            and live.get("statusCode") == 200
+            else "fail",
+            "evidence": {
+                "health_ready": ready,
+                "health_alias": alias,
+                "health_live": live,
+            },
+        },
+        {
+            "id": "operator_evidence_records_admin_fail_closed",
+            "status": "pass"
+            if admin.get("status") == "pass" and admin.get("statusCode") in {401, 403}
+            else "fail",
+            "evidence": {
+                "admin_fail_closed": admin,
+            },
+        },
+        {
+            "id": "operator_evidence_has_sanitized_reason_codes",
+            "status": "pass"
+            if reason_codes and all(_safe_reason_code(reason_code) for reason_code in reason_codes)
+            else "fail",
+            "evidence": {
+                "reasonCodes": [str(reason_code) for reason_code in reason_codes if _safe_reason_code(reason_code)],
+                "reasonCodeCount": len(reason_codes),
+            },
+        },
+        {
+            "id": "operator_evidence_declares_required_sanitization",
+            "status": "pass"
+            if isinstance(sanitization, dict)
+            and all(
+                sanitization.get(key) is False
+                for key in (
+                    "rawResponseBodiesIncluded",
+                    "tokensIncluded",
+                    "cookiesIncluded",
+                    "secretsIncluded",
+                    "dsnsIncluded",
+                    "apiKeysIncluded",
+                    "providerPayloadsIncluded",
+                    "debugTracesIncluded",
+                    "credentialBearingUrlsIncluded",
+                )
+            )
+            else "fail",
+            "evidence": {
+                "sanitization": {
+                    key: sanitization.get(key) is False
+                    for key in (
+                        "rawResponseBodiesIncluded",
+                        "tokensIncluded",
+                        "cookiesIncluded",
+                        "secretsIncluded",
+                        "dsnsIncluded",
+                        "apiKeysIncluded",
+                        "providerPayloadsIncluded",
+                        "debugTracesIncluded",
+                        "credentialBearingUrlsIncluded",
+                    )
+                },
+            },
+        },
+    ]
+
+    normalized = {
+        "schemaVersion": str(payload.get("schemaVersion") or OPERATOR_EVIDENCE_SCHEMA_VERSION),
+        "mode": str(payload.get("mode") or "operator_sanitized"),
+        "baseUrlHostLabel": host_label if _safe_host_label(host_label) else "<invalid>",
+        "networkCallsEnabled": payload.get("networkCallsEnabled") is True,
+        "liveOptInRecorded": payload.get("liveOptInRecorded") is True,
+        "timeoutSeconds": timeout,
+        "timestamp": timestamp if isinstance(timestamp, str) else "<missing>",
+        "reasonCodes": [str(reason_code) for reason_code in reason_codes if _safe_reason_code(reason_code)],
+        "sanitization": {
+            key: sanitization.get(key) is False
+            for key in (
+                "rawResponseBodiesIncluded",
+                "tokensIncluded",
+                "cookiesIncluded",
+                "secretsIncluded",
+                "dsnsIncluded",
+                "apiKeysIncluded",
+                "providerPayloadsIncluded",
+                "debugTracesIncluded",
+                "credentialBearingUrlsIncluded",
+            )
+        },
+        "resultSummary": {
+            "health_ready": ready,
+            "health_alias": alias,
+            "health_live": live,
+            "admin_fail_closed": admin,
+        },
+    }
+    return checks, normalized
+
+
+def _build_operator_evidence(payload: dict[str, Any]) -> dict[str, Any]:
+    started = time.monotonic()
+    checks, normalized = _operator_evidence_checks(payload)
+    failed = sum(1 for check in checks if check["status"] == "fail")
+    evidence: dict[str, Any] = {
+        "tool": "staging_ingress_smoke",
+        "generatedAt": _now_iso(),
+        "mode": "operator_evidence",
+        "networkCallsEnabled": False,
+        "checkerNetworkCallsEnabled": False,
+        "operatorEvidence": normalized,
+        "checks": checks,
+        "summary": {
+            "total": len(checks),
+            "passed": sum(1 for check in checks if check["status"] == "pass"),
+            "failed": failed,
+            "durationMs": int((time.monotonic() - started) * 1000),
+        },
+        "verdict": "pass" if failed == 0 else "fail",
+    }
+    return evidence
 
 
 def _fetch_json(url: str, timeout: float) -> tuple[int, str, dict[str, Any] | None]:
@@ -349,21 +608,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-url", action="append", default=[], help="Ingress-style base URL. Can be repeated.")
     parser.add_argument("--timeout", default=os.getenv(TIMEOUT_ENV), help="Per-request timeout in seconds.")
     parser.add_argument("--evidence-file", help="Optional path to write JSON evidence.")
+    parser.add_argument(
+        "--operator-evidence",
+        help="Optional sanitized operator evidence JSON to validate offline without network calls.",
+    )
     args = parser.parse_args(argv)
 
-    timeout = _parse_timeout(args.timeout)
-    base_urls = _split_base_urls(args.base_url, os.getenv(BASE_URLS_ENV))
-    if not base_urls:
-        base_urls = ["https://staging.example.invalid"]
-    try:
-        for base_url in base_urls:
-            _clean_base_url(base_url)
-    except ValueError as exc:
-        print(f"[FAIL] Invalid base URL: {exc}", file=sys.stderr)
-        return 2
+    if args.operator_evidence:
+        if args.base_url:
+            print("[FAIL] --operator-evidence is exclusive with --base-url", file=sys.stderr)
+            return 2
+        payload = _load_json_payload(args.operator_evidence)
+        evidence = _build_operator_evidence(payload)
+    else:
+        timeout = _parse_timeout(args.timeout)
+        base_urls = _split_base_urls(args.base_url, os.getenv(BASE_URLS_ENV))
+        if not base_urls:
+            base_urls = ["https://staging.example.invalid"]
+        try:
+            for base_url in base_urls:
+                _clean_base_url(base_url)
+        except ValueError as exc:
+            print(f"[FAIL] Invalid base URL: {exc}", file=sys.stderr)
+            return 2
 
-    live = os.getenv(OPT_IN_ENV) == "1"
-    evidence = _build_evidence(base_urls, timeout, live)
+        live = os.getenv(OPT_IN_ENV) == "1"
+        evidence = _build_evidence(base_urls, timeout, live)
     output = json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True)
     if args.evidence_file:
         evidence_path = Path(args.evidence_file)

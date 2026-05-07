@@ -45,7 +45,8 @@ review flow.
 ## Staging ingress smoke
 
 - `staging_ingress_smoke.py`: safe-by-default staging ingress preflight; only
-  performs live HTTP checks when explicitly opted in.
+  performs live HTTP checks when explicitly opted in. It also accepts sanitized
+  operator evidence JSON for offline validation.
 
 ## Incident response evidence
 
