@@ -63,6 +63,29 @@ EXPECTED_TRACE_EXPORT_FIELD_LABELS = [
     "fallback",
 ]
 
+SENSITIVE_EXPORT_KEY_TERMS = (
+    "api_key",
+    "apikey",
+    "cookie",
+    "credential",
+    "password",
+    "provider_payload",
+    "payload_json",
+    "raw_payload",
+    "raw_provider",
+    "secret",
+    "session",
+    "token",
+)
+
+RAW_PROVIDER_SENTINELS = (
+    "RAW_PROVIDER_PAYLOAD_SHOULD_NOT_LEAK",
+    "SECRET_VALUE_SHOULD_NOT_LEAK",
+    "TOKEN_VALUE_SHOULD_NOT_LEAK",
+    "SESSION_VALUE_SHOULD_NOT_LEAK",
+    "PASSWORD_VALUE_SHOULD_NOT_LEAK",
+)
+
 
 def _reset_auth_globals() -> None:
     auth._auth_enabled = None
@@ -159,16 +182,60 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         os.environ.pop("DATABASE_PATH", None)
         self.temp_dir.cleanup()
 
-    def _run_completed_backtest(self) -> tuple[RuleBacktestService, dict]:
+    def _run_completed_backtest(
+        self,
+        *,
+        fee_bps: float = 0.0,
+        slippage_bps: float = 0.0,
+    ) -> tuple[RuleBacktestService, dict]:
         service = RuleBacktestService(self.db, owner_id=BOOTSTRAP_ADMIN_USER_ID)
         with patch.object(service, "_get_llm_adapter", return_value=None):
             response = service.parse_and_run(
                 code="600519",
                 strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
                 lookback_bars=20,
+                fee_bps=fee_bps,
+                slippage_bps=slippage_bps,
                 confirmed=True,
             )
         return service, response
+
+    def _run_insufficient_history_backtest(self) -> tuple[RuleBacktestService, dict]:
+        service = RuleBacktestService(self.db, owner_id=BOOTSTRAP_ADMIN_USER_ID)
+        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(
+            service,
+            "_get_llm_adapter",
+            return_value=None,
+        ):
+            response = service.run_backtest(
+                code="NODATA",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                start_date="2024-01-01",
+                end_date="2024-01-31",
+                lookback_bars=20,
+                fee_bps=1.5,
+                slippage_bps=2.5,
+                confirmed=True,
+            )
+        return service, response
+
+    def _assert_export_payload_is_sanitized(self, payload: object) -> None:
+        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        for sentinel in RAW_PROVIDER_SENTINELS:
+            self.assertNotIn(sentinel, serialized)
+
+        def walk(value: object) -> None:
+            if isinstance(value, dict):
+                for key, nested in value.items():
+                    normalized_key = str(key).lower()
+                    for forbidden in SENSITIVE_EXPORT_KEY_TERMS:
+                        self.assertNotIn(forbidden, normalized_key)
+                    walk(nested)
+            elif isinstance(value, list):
+                for nested in value:
+                    walk(nested)
+
+        walk(payload)
 
     def _fetch_support_bundle_surface(self, run_id: int) -> dict:
         export_index_response = self.client.get(f"/api/v1/backtest/rule/runs/{run_id}/export-index")
@@ -498,3 +565,74 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             payloads["manifest"]["result_authority"]["domains"]["execution_trace"]["source"],
             "unavailable",
         )
+
+    def test_support_bundle_e2e_report_export_safety_smoke(self) -> None:
+        service, response = self._run_completed_backtest(fee_bps=1.5, slippage_bps=2.5)
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+
+        summary = json.loads(run_row.summary_json)
+        summary.update(
+            {
+                "raw_provider_payload": "RAW_PROVIDER_PAYLOAD_SHOULD_NOT_LEAK",
+                "provider_payload": {"token": "TOKEN_VALUE_SHOULD_NOT_LEAK"},
+                "payload_json": {"session": "SESSION_VALUE_SHOULD_NOT_LEAK"},
+                "secret": "SECRET_VALUE_SHOULD_NOT_LEAK",
+                "password": "PASSWORD_VALUE_SHOULD_NOT_LEAK",
+            }
+        )
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        payloads = self._assert_support_bundle_surface(
+            run_id=int(response["id"]),
+            trace_available=True,
+        )
+
+        self._assert_export_payload_is_sanitized(payloads["export_index"])
+        self._assert_export_payload_is_sanitized(payloads["manifest"])
+        self._assert_export_payload_is_sanitized(payloads["reproducibility"])
+        self._assert_export_payload_is_sanitized(payloads["trace_json"])
+        self._assert_export_payload_is_sanitized(payloads["trace_csv_rows"])
+
+        trace_execution_model = payloads["trace_json"]["execution_model"]
+        self.assertEqual(trace_execution_model["signal_evaluation_timing"], "bar_close")
+        self.assertEqual(trace_execution_model["entry_timing"], "next_bar_open")
+        self.assertEqual(trace_execution_model["entry_fill_price_basis"], "open")
+        self.assertEqual(trace_execution_model["fee_bps_per_side"], 1.5)
+        self.assertEqual(trace_execution_model["slippage_bps_per_side"], 2.5)
+
+        trace_assumptions = payloads["trace_json"]["execution_assumptions"]
+        self.assertEqual(trace_assumptions["entry_fill_timing"], "next_bar_open")
+        self.assertEqual(trace_assumptions["fee_model"]["commission_bps"], 1.5)
+        self.assertEqual(trace_assumptions["slippage_model"]["slippage_bps"], 2.5)
+
+    def test_support_bundle_e2e_insufficient_history_export_surface_is_sanitized(self) -> None:
+        _, response = self._run_insufficient_history_backtest()
+
+        payloads = self._fetch_support_bundle_surface(int(response["id"]))
+        export_index = payloads["export_index"]
+        trace_json_response = self.client.get(export_index["exports"][2]["endpoint_path"])
+        trace_csv_response = self.client.get(export_index["exports"][3]["endpoint_path"])
+
+        self.assertEqual(payloads["manifest"]["run"]["no_result_reason"], "insufficient_history")
+        self.assertEqual(payloads["manifest"]["run"]["trade_count"], 0)
+        self.assertEqual(payloads["manifest"]["artifact_counts"]["execution_trace_rows_count"], 0)
+        self.assertEqual(trace_json_response.status_code, 409)
+        self.assertEqual(trace_csv_response.status_code, 409)
+        self.assertEqual(self._error_code(trace_json_response), "export_unavailable")
+        self.assertEqual(self._error_code(trace_csv_response), "export_unavailable")
+        self.assertFalse(export_index["exports"][2]["available"])
+        self.assertFalse(export_index["exports"][3]["available"])
+        self.assertEqual(
+            export_index["exports"][2]["availability_reason"],
+            "execution_trace_rows_missing",
+        )
+        self.assertEqual(
+            export_index["exports"][3]["availability_reason"],
+            "execution_trace_rows_missing",
+        )
+        self._assert_export_payload_is_sanitized(payloads["export_index"])
+        self._assert_export_payload_is_sanitized(payloads["manifest"])
+        self._assert_export_payload_is_sanitized(payloads["reproducibility"])
+        self._assert_export_payload_is_sanitized(trace_json_response.json())
+        self._assert_export_payload_is_sanitized(trace_csv_response.json())
