@@ -478,6 +478,85 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertFalse(invoice["enforcementWired"])
         self.assertFalse(invoice["liveInvoiceIngestion"])
 
+    def test_pilot_enforced_budget_alert_notification_intent_is_sanitized_dry_run_only(self) -> None:
+        self._seed_budget_alert_policy()
+
+        preflight = self.service.classify_pilot_readiness_preflight(
+            owner_user_id="pilot-user",
+            route_family="analysis",
+            provider="openai?api_key=must-not-leak",
+            model_tier="model-with-secret",
+            estimated_units=121,
+            pilot_enforcement_enabled=True,
+            pilot_owner_user_ids=("pilot-user",),
+            pilot_route_families=("analysis",),
+        )
+        intent = self.service.build_budget_alert_notification_intent(preflight)
+
+        self.assertEqual(intent["state"], "dry_run_intent")
+        self.assertTrue(intent["alertDeliveryIntent"])
+        self.assertEqual(intent["eventType"], "cost.quota_budget_alert")
+        self.assertEqual(intent["deliveryStatus"], "dry_run_disabled")
+        self.assertTrue(intent["dryRun"])
+        self.assertFalse(intent["outboundAttempted"])
+        self.assertFalse(intent["liveOutbound"])
+        self.assertEqual(intent["scope"]["ownerUserId"], "pilot-user")
+        self.assertEqual(intent["scope"]["provider"], "redacted")
+        self.assertEqual(intent["scope"]["modelTier"], "redacted")
+        self.assertEqual(intent["budgetContext"]["hardLimitUnits"], 120)
+        self.assertEqual(intent["budgetContext"]["projectedUnits"], 121)
+        self.assertEqual(intent["budgetContext"]["budgetState"], "over_hard_limit")
+        self.assertTrue(intent["invoiceReconciliation"]["advisoryOnly"])
+        self.assertFalse(intent["invoiceReconciliation"]["enforcementInput"])
+        self.assertFalse(intent["invoiceReconciliation"]["liveInvoiceIngestion"])
+        self.assertTrue(intent["safety"]["noExternalCalls"])
+        text = str(intent).lower()
+        self.assertNotIn("must-not-leak", text)
+        self.assertNotIn("api_key", text)
+        self.assertNotIn("model-with-secret", text)
+
+    def test_advisory_only_budget_alert_notification_intent_is_suppressed(self) -> None:
+        self._seed_budget_alert_policy()
+
+        preflight = self.service.classify_pilot_readiness_preflight(
+            owner_user_id="other-user",
+            route_family="analysis",
+            estimated_units=121,
+            pilot_enforcement_enabled=True,
+            pilot_owner_user_ids=("pilot-user",),
+            pilot_route_families=("analysis",),
+        )
+        intent = self.service.build_budget_alert_notification_intent(preflight)
+
+        self.assertEqual(preflight.state, "pilot_owner_out_of_scope")
+        self.assertEqual(intent["state"], "suppressed_advisory_only")
+        self.assertFalse(intent["alertDeliveryIntent"])
+        self.assertEqual(intent["deliveryStatus"], "suppressed_advisory_only")
+        self.assertTrue(intent["dryRun"])
+        self.assertFalse(intent["outboundAttempted"])
+        self.assertFalse(intent["liveOutbound"])
+        self.assertTrue(intent["invoiceReconciliation"]["advisoryOnly"])
+        self.assertFalse(intent["invoiceReconciliation"]["enforcementInput"])
+
+    def test_budget_alert_notification_intent_does_not_enable_default_quota_enforcement(self) -> None:
+        self._seed_budget_alert_policy()
+        disabled_default = QuotaPolicyService(db=self.db)
+
+        preflight = disabled_default.classify_pilot_readiness_preflight(
+            owner_user_id="pilot-user",
+            route_family="analysis",
+            estimated_units=121,
+            pilot_enforcement_enabled=True,
+            pilot_owner_user_ids=("pilot-user",),
+            pilot_route_families=("analysis",),
+        )
+        intent = disabled_default.build_budget_alert_notification_intent(preflight)
+
+        self.assertFalse(disabled_default.enforcement_enabled)
+        self.assertEqual(intent["deliveryStatus"], "dry_run_disabled")
+        self.assertFalse(intent["runtimeWiringChanged"])
+        self.assertFalse(intent["liveOutbound"])
+
     def test_pilot_readiness_sanitizes_scope_context(self) -> None:
         preflight = self.service.classify_pilot_readiness_preflight(
             owner_user_id="owner-token-should-redact",

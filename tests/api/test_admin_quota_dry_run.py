@@ -351,6 +351,13 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertFalse(pilot["requestBlocked"])
         self.assertFalse(pilot["liveEnforcement"])
         self.assertEqual(payload["metadata"]["quotaDecisionMode"], "advisory")
+        alert_intent = payload["metadata"]["budgetAlertNotification"]
+        self.assertEqual(alert_intent["state"], "suppressed_advisory_only")
+        self.assertFalse(alert_intent["alertDeliveryIntent"])
+        self.assertEqual(alert_intent["deliveryStatus"], "suppressed_advisory_only")
+        self.assertTrue(alert_intent["dryRun"])
+        self.assertFalse(alert_intent["outboundAttempted"])
+        self.assertFalse(alert_intent["liveOutbound"])
 
     def test_enabled_pilot_out_of_scope_reserve_does_not_write_quota_state(self) -> None:
         self._as_admin()
@@ -419,6 +426,20 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertEqual(payload["metadata"]["quotaDecisionMode"], "pilot_enforced")
         self.assertFalse(payload["metadata"]["invoiceReconciliation"]["enforcementWired"])
         self.assertFalse(payload["metadata"]["invoiceReconciliation"]["enforcementInput"])
+        alert_intent = payload["metadata"]["budgetAlertNotification"]
+        self.assertEqual(alert_intent["state"], "dry_run_intent")
+        self.assertTrue(alert_intent["alertDeliveryIntent"])
+        self.assertEqual(alert_intent["eventType"], "cost.quota_budget_alert")
+        self.assertEqual(alert_intent["deliveryStatus"], "dry_run_disabled")
+        self.assertEqual(alert_intent["scope"]["ownerUserId"], "pilot-user")
+        self.assertEqual(alert_intent["scope"]["provider"], "openai")
+        self.assertEqual(alert_intent["scope"]["modelTier"], "openai/gpt-4o-mini")
+        self.assertEqual(alert_intent["budgetContext"]["projectedUnits"], 121)
+        self.assertTrue(alert_intent["dryRun"])
+        self.assertFalse(alert_intent["outboundAttempted"])
+        self.assertFalse(alert_intent["liveOutbound"])
+        self.assertFalse(alert_intent["invoiceReconciliation"]["enforcementInput"])
+        self.assertTrue(alert_intent["safety"]["noExternalCalls"])
 
     def test_admin_dry_run_distinguishes_advisory_from_pilot_enforced_decisions(self) -> None:
         self._as_admin()

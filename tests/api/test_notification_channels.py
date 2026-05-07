@@ -262,8 +262,10 @@ class NotificationChannelsTestCase(unittest.TestCase):
                 "password": "raw-password",
                 "api_key": "raw-api-key",
                 "session_cookie": "raw-cookie",
+                "sessionToken": "raw-session-token",
+                "cookie_header": "raw-cookie-header",
                 "broker_credentials": {"account": "acct-1", "password": "broker-password"},
-                "provider_credentials": {"apiKey": "provider-api-key"},
+                "provider_credentials": {"apiKey": "provider-api-key", "provider_password": "provider-password"},
                 "webhook_url": "https://hooks.example.test/services/raw/path",
                 "trade_order": {"symbol": "AAPL", "side": "BUY"},
                 "portfolio_mutation": {"action": "rebalance"},
@@ -280,13 +282,18 @@ class NotificationChannelsTestCase(unittest.TestCase):
             self.assertNotIn("raw-password", payload_text)
             self.assertNotIn("raw-api-key", payload_text)
             self.assertNotIn("raw-cookie", payload_text)
+            self.assertNotIn("raw-session-token", payload_text)
+            self.assertNotIn("raw-cookie-header", payload_text)
             self.assertNotIn("broker-password", payload_text)
             self.assertNotIn("provider-api-key", payload_text)
+            self.assertNotIn("provider-password", payload_text)
             self.assertNotIn("/services/raw/path", payload_text)
             self.assertEqual(payload["token"], "********")
             self.assertEqual(payload["password"], "********")
             self.assertEqual(payload["api_key"], "********")
             self.assertEqual(payload["session_cookie"], "********")
+            self.assertEqual(payload["sessionToken"], "********")
+            self.assertEqual(payload["cookie_header"], "********")
             self.assertEqual(payload["webhook_url"], "https://hooks.example.test/***")
             self.assertEqual(payload["trade_order"]["symbol"], "AAPL")
             self.assertEqual(payload["portfolio_mutation"]["action"], "rebalance")
@@ -493,9 +500,10 @@ class NotificationChannelsTestCase(unittest.TestCase):
             delivery_client=FakeDeliveryClient(
                 fail=True,
                 failure_message=(
-                    "Traceback (most recent call last): provider failed "
+                    "Traceback (most recent call last): provider raw response failed "
                     "token=raw-token password=raw-password api_key=raw-api-key "
-                    "cookie=raw-cookie https://hooks.example.test/services/raw/path"
+                    "session=raw-session cookie=raw-cookie "
+                    "https://hooks.example.test/services/raw/path"
                 ),
             ),
         )
@@ -524,7 +532,9 @@ class NotificationChannelsTestCase(unittest.TestCase):
         self.assertNotIn("raw-token", combined)
         self.assertNotIn("raw-password", combined)
         self.assertNotIn("raw-api-key", combined)
+        self.assertNotIn("raw-session", combined)
         self.assertNotIn("raw-cookie", combined)
+        self.assertNotIn("provider raw response", combined)
         self.assertNotIn("/services/raw/path", combined)
 
     def test_ssl_delivery_failure_is_classified_and_localized_by_request_language(self) -> None:

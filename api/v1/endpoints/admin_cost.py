@@ -137,6 +137,7 @@ def run_quota_dry_run(
     budget_alert_payload = budget_alert.to_dict()
     shadow_preflight_payload = shadow_preflight.to_dict()
     pilot_readiness_payload = pilot_readiness.to_dict()
+    budget_alert_notification_payload = service.build_budget_alert_notification_intent(pilot_readiness)
     safe_owner_user_id = service._safe_context_label(request.owner_user_id)
     budget_alert_payload["ownerUserId"] = safe_owner_user_id
     shadow_preflight_payload["ownerUserId"] = safe_owner_user_id
@@ -211,6 +212,7 @@ def run_quota_dry_run(
             "noExternalCalls": True,
             "quotaDecisionMode": quota_decision_mode,
             "budgetAlert": budget_alert_payload,
+            "budgetAlertNotification": budget_alert_notification_payload,
             "shadowPreflight": shadow_preflight_payload,
             "pilotReadiness": pilot_readiness_payload,
             "invoiceReconciliation": pilot_readiness_payload["invoiceReconciliation"],

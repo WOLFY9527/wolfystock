@@ -516,6 +516,57 @@ class QuotaPolicyService:
             shadow_preflight=shadow,
         )
 
+    def build_budget_alert_notification_intent(
+        self,
+        pilot_readiness: QuotaPilotReadinessPreflight,
+    ) -> Dict[str, Any]:
+        """Build sanitized dry-run notification evidence without delivery side effects."""
+        pilot_payload = pilot_readiness.to_dict()
+        budget_alert = pilot_readiness.shadow_preflight.budget_alert
+        should_emit_alert = bool(pilot_readiness.request_blocked)
+        state = "dry_run_intent" if should_emit_alert else "suppressed_advisory_only"
+        delivery_status = "dry_run_disabled" if should_emit_alert else "suppressed_advisory_only"
+
+        return {
+            "state": state,
+            "eventType": "cost.quota_budget_alert",
+            "severity": "warning" if should_emit_alert else "info",
+            "reasonCode": pilot_readiness.reason_code,
+            "alertDeliveryIntent": should_emit_alert,
+            "deliveryStatus": delivery_status,
+            "dryRun": True,
+            "outboundAttempted": False,
+            "liveOutbound": False,
+            "runtimeWiringChanged": False,
+            "scope": {
+                "ownerUserId": pilot_payload["scope"]["ownerUserId"],
+                "routeFamily": pilot_payload["scope"]["routeFamily"],
+                "provider": pilot_payload["scope"]["provider"],
+                "modelTier": pilot_payload["scope"]["modelTier"],
+            },
+            "budgetContext": {
+                "budgetState": budget_alert.state,
+                "pricingStatus": budget_alert.pricing_status,
+                "usedUnits": budget_alert.used_units,
+                "estimatedUnits": budget_alert.estimated_units,
+                "projectedUnits": budget_alert.projected_units,
+                "softLimitUnits": budget_alert.soft_limit_units,
+                "hardLimitUnits": budget_alert.hard_limit_units,
+                "wouldBlock": pilot_readiness.would_block,
+                "requestBlocked": pilot_readiness.request_blocked,
+            },
+            "invoiceReconciliation": pilot_payload["invoiceReconciliation"],
+            "safety": {
+                "diagnosticOnly": True,
+                "noExternalCalls": True,
+                "liveLlmCalls": False,
+                "liveProviderCalls": False,
+                "liveInvoiceIngestion": False,
+                "realOutboundNotification": False,
+                "runtimeWiringChanged": False,
+            },
+        }
+
     def reserve_quota(
         self,
         *,
