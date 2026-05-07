@@ -189,6 +189,16 @@ summary = {
                 "MFA/RBAC/quota/backup/ingress opt-in posture without secret values",
             ],
         },
+        {
+            "id": "supply_chain_dependency_build_artifact_safety",
+            "status": "foundation_evidence_present",
+            "evidence": [
+                "dependency manifest inspection must stay sanitized and offline",
+                "build/test artifact evidence must exclude env, token, key, cookie, session, DSN, private-key, and provider credential patterns",
+                "frontend build warnings remain visible and non-blocking",
+                "dependency versions and lockfiles must not be rewritten by evidence capture",
+            ],
+        },
     ],
     "operatorEvidencePack": {
         "schemaVersion": "wolfystock_launch_acceptance_evidence_summary_v1",
@@ -201,6 +211,7 @@ summary = {
             "real_isolated_postgresql_restore_pitr",
             "staging_ingress_smoke",
             "public_api_frontend_no_secret_safety",
+            "supply_chain_dependency_build_artifact_safety",
             "final_clean_full_ci_gate",
         ],
         "finalStatus": "NO-GO",

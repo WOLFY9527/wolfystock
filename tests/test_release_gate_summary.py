@@ -81,6 +81,7 @@ def test_release_gate_summary_go_no_go_json_keeps_launch_blocked(tmp_path):
         "scanner_portfolio_backtest_options_no_advice_public_safety",
         "secret_scan_admin_harness_staging_ingress",
         "production_config_secret_contract_preflight",
+        "supply_chain_dependency_build_artifact_safety",
     } <= evidence_ids
     blocker_ids = {item["id"] for item in summary["hardBlockers"]}
     assert {
@@ -105,6 +106,7 @@ def test_release_gate_summary_go_no_go_json_keeps_launch_blocked(tmp_path):
             "real_isolated_postgresql_restore_pitr",
             "staging_ingress_smoke",
             "public_api_frontend_no_secret_safety",
+            "supply_chain_dependency_build_artifact_safety",
             "final_clean_full_ci_gate",
         ],
         "schemaVersion": "wolfystock_launch_acceptance_evidence_summary_v1",

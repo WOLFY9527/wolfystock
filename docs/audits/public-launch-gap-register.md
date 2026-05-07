@@ -41,8 +41,8 @@ acceptance evidence JSON contract for release review. It covers the operator
 evidence required for MFA pilot acceptance, RBAC fallback disable switch,
 provider credential staging dry-run, provider circuit controlled enforcement,
 quota pilot acceptance, real isolated PostgreSQL restore/PITR, staging ingress
-smoke, public API/frontend no-secret public safety, and final clean full
-`ci_gate`.
+smoke, public API/frontend no-secret public safety, supply-chain
+dependency/build artifact safety, and final clean full `ci_gate`.
 
 The pack is evidence-only. It does not call external services, read production
 secrets, read production data paths, or change runtime behavior. Missing or

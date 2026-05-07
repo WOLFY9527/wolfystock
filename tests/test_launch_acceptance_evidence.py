@@ -45,7 +45,7 @@ def test_launch_acceptance_evidence_missing_categories_remain_no_go() -> None:
         "runtimeDefaultsChanged": False,
     }
     assert evidence["summary"]["accepted"] == 0
-    assert evidence["summary"]["blocking"] == 9
+    assert evidence["summary"]["blocking"] == 10
     blocker_ids = {item["id"] for item in evidence["hardBlockers"]}
     assert {
         "mfa_pilot_acceptance",
@@ -56,6 +56,7 @@ def test_launch_acceptance_evidence_missing_categories_remain_no_go() -> None:
         "real_isolated_postgresql_restore_pitr",
         "staging_ingress_smoke",
         "public_api_frontend_no_secret_safety",
+        "supply_chain_dependency_build_artifact_safety",
         "final_clean_full_ci_gate",
     } == blocker_ids
 
@@ -75,7 +76,7 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
     assert evidence["finalStatus"] == "GO-REVIEW-REQUIRED"
     assert evidence["releaseApproved"] is False
     assert evidence["statusReason"] == "All hard blockers have accepted sanitized evidence; release approval remains manual."
-    assert evidence["summary"]["accepted"] == 9
+    assert evidence["summary"]["accepted"] == 10
     assert evidence["summary"]["blocking"] == 0
     assert evidence["hardBlockers"] == []
     categories = {item["id"]: item for item in evidence["categories"]}
@@ -85,6 +86,14 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
         "boundedRouteRecorded",
         "rollbackSwitchRecorded",
         "degradedEvidenceSanitized",
+    ]
+    assert categories["supply_chain_dependency_build_artifact_safety"]["requiredChecks"] == [
+        "dependencyManifestsInspected",
+        "manifestsSanitized",
+        "buildArtifactsSanitized",
+        "frontendBuildWarningsVisible",
+        "noDependencyOrLockfileChanges",
+        "missingEvidenceNoGoVerified",
     ]
 
 
@@ -125,3 +134,42 @@ def test_launch_acceptance_evidence_rejects_secret_like_values_without_leaking(t
     category = next(item for item in evidence["categories"] if item["id"] == "provider_credential_staging_dry_run")
     assert category["status"] == "blocking"
     assert category["reasonCodes"] == ["sensitive_value_present"]
+
+
+def test_launch_acceptance_evidence_rejects_build_artifact_secret_patterns_without_leaking(tmp_path: Path) -> None:
+    secret = "postgresql://launch_user:secret-pass@example.test:5432/wolfy"
+    payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    payload["categories"]["supply_chain_dependency_build_artifact_safety"]["artifactEvidence"] = {
+        "file": "dist/assets/app.js",
+        "dsn": secret,
+    }
+    evidence_path = tmp_path / "unsafe-artifact-evidence.json"
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_checker("--evidence", str(evidence_path))
+
+    assert result.returncode == 1
+    combined_output = result.stdout + result.stderr
+    assert secret not in combined_output
+    evidence = _json(result)
+    category = next(item for item in evidence["categories"] if item["id"] == "supply_chain_dependency_build_artifact_safety")
+    assert category["status"] == "blocking"
+    assert category["reasonCodes"] == ["sensitive_value_present"]
+
+
+def test_launch_acceptance_evidence_requires_supply_chain_manifest_and_artifact_checks(tmp_path: Path) -> None:
+    payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    checks = payload["categories"]["supply_chain_dependency_build_artifact_safety"]["checks"]
+    checks.pop("dependencyManifestsInspected")
+    checks.pop("buildArtifactsSanitized")
+    evidence_path = tmp_path / "missing-supply-chain-checks.json"
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_checker("--evidence", str(evidence_path))
+
+    assert result.returncode == 1
+    evidence = _json(result)
+    category = next(item for item in evidence["categories"] if item["id"] == "supply_chain_dependency_build_artifact_safety")
+    assert category["status"] == "blocking"
+    assert category["missingChecks"] == ["dependencyManifestsInspected", "buildArtifactsSanitized"]
+    assert category["reasonCodes"] == ["missing_required_checks"]

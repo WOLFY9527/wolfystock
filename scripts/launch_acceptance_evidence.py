@@ -31,13 +31,18 @@ REDACTED_VALUES = {
     "none",
 }
 SENSITIVE_KEY_MARKERS = (
+    ".env",
     "dsn",
+    "env_file",
+    "envfile",
     "password",
     "token",
     "secret",
     "cookie",
+    "session",
     "api_key",
     "apikey",
+    "key_material",
     "private_key",
     "webhook_url",
     "credential",
@@ -177,6 +182,22 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
             "frontendDomNoSecret",
             "publicRoutesNoRawPayloads",
             "releaseSecretScanPassed",
+        ),
+    ),
+    CategorySpec(
+        id="supply_chain_dependency_build_artifact_safety",
+        title="Dependency and build artifact safety evidence",
+        required_evidence=(
+            "sanitized dependency-manifest inspection, build/test artifact scan, visible frontend build warnings, "
+            "no dependency or lockfile changes, and NO-GO behavior for missing required evidence"
+        ),
+        required_checks=(
+            "dependencyManifestsInspected",
+            "manifestsSanitized",
+            "buildArtifactsSanitized",
+            "frontendBuildWarningsVisible",
+            "noDependencyOrLockfileChanges",
+            "missingEvidenceNoGoVerified",
         ),
     ),
     CategorySpec(

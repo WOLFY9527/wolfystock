@@ -162,6 +162,28 @@
         "productionDataPathsIncluded": false
       }
     },
+    "supply_chain_dependency_build_artifact_safety": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "supply-chain-dependency-build-artifact-synthetic-json",
+      "checks": {
+        "dependencyManifestsInspected": true,
+        "manifestsSanitized": true,
+        "buildArtifactsSanitized": true,
+        "frontendBuildWarningsVisible": true,
+        "noDependencyOrLockfileChanges": true,
+        "missingEvidenceNoGoVerified": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
     "final_clean_full_ci_gate": {
       "status": "accepted",
       "acceptedBy": "release-operator",
