@@ -662,6 +662,65 @@ function ruleBacktestRunsPayload() {
   };
 }
 
+function backtestRunsPayload() {
+  return {
+    total: 0,
+    page: 1,
+    limit: 10,
+    items: [],
+  };
+}
+
+function backtestResultsPayload() {
+  return {
+    total: 0,
+    page: 1,
+    limit: 20,
+    items: [],
+  };
+}
+
+function backtestPerformancePayload() {
+  return {
+    scope: 'overall',
+    code: null,
+    eval_window_days: 10,
+    evaluation_window_trading_bars: 10,
+    engine_version: 'playwright_fixture',
+    computed_at: timestamp,
+    total_evaluations: 0,
+    completed_count: 0,
+    insufficient_count: 0,
+    long_count: 0,
+    cash_count: 0,
+    win_count: 0,
+    loss_count: 0,
+    neutral_count: 0,
+    direction_accuracy_pct: null,
+    win_rate_pct: null,
+    neutral_rate_pct: null,
+    avg_stock_return_pct: null,
+    avg_simulated_return_pct: null,
+    stop_loss_trigger_rate: null,
+    take_profit_trigger_rate: null,
+    ambiguous_rate: null,
+    avg_days_to_first_hit: null,
+    advice_breakdown: {},
+    diagnostics: {
+      no_external_calls: true,
+      fixture_backed: true,
+    },
+    evaluation_mode: 'historical_analysis_evaluation',
+    requested_mode: 'mocked_playwright',
+    resolved_source: 'playwright_fixture',
+    fallback_used: false,
+    execution_assumptions: {
+      module_type: 'historical_analysis_evaluation',
+      smoke_fixture: true,
+    },
+  };
+}
+
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
   await route.fulfill({
     status,
@@ -856,6 +915,18 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
 
     if (method === 'GET' && path === '/api/v1/backtest/rule/runs') {
       return fulfillJson(route, ruleBacktestRunsPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/backtest/performance') {
+      return fulfillJson(route, backtestPerformancePayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/backtest/results') {
+      return fulfillJson(route, backtestResultsPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/backtest/runs') {
+      return fulfillJson(route, backtestRunsPayload());
     }
 
     if (method === 'GET' && path === '/api/v1/history') {
