@@ -18,8 +18,12 @@ envelope metadata, `test-only:` and legacy plaintext TOTP references remain
 read-compatible, and `placeholder-sha256:` remains migration-incomplete and
 non-verifiable. A disabled-by-default login enforcement pilot contract now
 exists behind `WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED=false`; it requires
-TOTP or consumes one valid recovery code only when explicitly enabled. The
-separate break-glass pilot remains disabled by default behind
+TOTP or consumes one valid recovery code only when explicitly enabled. The pilot
+scope is explicitly admin-only by default through
+`WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ADMIN_ONLY=true`; non-admin accounts remain
+outside the pilot, and eligible admin accounts fail closed when enabled MFA
+state is incomplete, including missing active recovery-code state. The separate
+break-glass pilot remains disabled by default behind
 `WOLFYSTOCK_MFA_LOGIN_BREAK_GLASS_ENABLED=false` and requires an explicit,
 sanitized audit trail. Global login MFA enforcement remains disabled.
 

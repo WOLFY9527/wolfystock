@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import os
 import secrets
+import json
 from datetime import timedelta
 from urllib.parse import urlparse
 
@@ -403,9 +404,21 @@ def _env_flag_enabled(name: str) -> bool:
     return str(os.getenv(name) or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_flag(name: str, *, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _is_mfa_login_enforcement_enabled() -> bool:
     """Disabled-by-default pilot switch for MFA enforcement at login."""
     return _env_flag_enabled("WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED")
+
+
+def _is_mfa_login_enforcement_admin_only() -> bool:
+    """Keep the disabled pilot scoped to admin accounts unless explicitly changed later."""
+    return _env_flag("WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ADMIN_ONLY", default=True)
 
 
 def _is_mfa_login_break_glass_enabled() -> bool:
@@ -466,6 +479,76 @@ def _audit_mfa_login_event(
         logger.warning("Failed to record MFA auth security event: %s", exc)
 
 
+def _audit_mfa_enforcement_decision(
+    *,
+    request: Request,
+    username: str,
+    user_id: str | None,
+    decision: str,
+    policy_scope: str,
+    status: str = "completed",
+    user_role: str | None = None,
+    eligible: bool = False,
+    mfa_enabled: bool = False,
+    totp_ref_present: bool = False,
+    enabled_at_present: bool = False,
+    recovery_set_ready: bool = False,
+) -> None:
+    safe_detail = sanitize_metadata(
+        {
+            "decision": decision,
+            "policy_scope": policy_scope,
+            "eligible": bool(eligible),
+            "account_hash": safe_identifier_hash(username, prefix="acct"),
+            "user_hash": safe_identifier_hash(user_id, prefix="user") if user_id else None,
+            "ip_hash": safe_identifier_hash(get_client_ip(request), prefix="ip"),
+            "user_agent_hash": safe_identifier_hash(request.headers.get("User-Agent"), prefix="ua"),
+            "user_role": str(user_role or ""),
+            "role_is_admin": str(user_role or "") == ROLE_ADMIN,
+            "mfa_enabled": bool(mfa_enabled),
+            "totp_ref_present": bool(totp_ref_present),
+            "enabled_at_present": bool(enabled_at_present),
+            "recovery_set_ready": bool(recovery_set_ready),
+        }
+    )
+    try:
+        ExecutionLogService().record_admin_action(
+            action="security.mfa_login_enforcement_decision",
+            message=f"Security MFA login enforcement decision: {decision}",
+            actor={"actor_type": "anonymous", "role": "anonymous"},
+            subsystem="security",
+            destructive=False,
+            detail=safe_detail,
+            overall_status=status,
+            result={"event": "security.mfa_login_enforcement_decision", "metadata": safe_detail},
+        )
+    except Exception as exc:
+        logger.warning("Failed to record MFA enforcement decision: %s", exc)
+
+
+def _has_active_mfa_recovery_codes(user_row) -> bool:
+    raw = getattr(user_row, "mfa_recovery_codes_hash", None)
+    if not raw:
+        return False
+    try:
+        parsed = json.loads(str(raw))
+    except Exception:
+        return False
+    if not isinstance(parsed, dict) or parsed.get("version") != 1:
+        return False
+    sets = parsed.get("sets")
+    if not isinstance(sets, list):
+        return False
+    for recovery_set in reversed(sets):
+        if not isinstance(recovery_set, dict) or recovery_set.get("replaced_at"):
+            continue
+        codes = recovery_set.get("codes")
+        if not isinstance(codes, list):
+            return False
+        return any(isinstance(entry, dict) and not entry.get("used_at") for entry in codes)
+    return False
+
+
 def _verify_login_mfa_requirement(
     *,
     request: Request,
@@ -475,18 +558,77 @@ def _verify_login_mfa_requirement(
 ) -> JSONResponse | None:
     if not _is_mfa_login_enforcement_enabled():
         return None
-    if str(getattr(user_row, "role", "")) != ROLE_ADMIN:
+
+    admin_only = _is_mfa_login_enforcement_admin_only()
+    policy_scope = "admin_only" if admin_only else "admin_only"
+    user_role = str(getattr(user_row, "role", "") or "")
+    user_id = str(getattr(user_row, "id", "") or "")
+    if user_role != ROLE_ADMIN:
+        _audit_mfa_enforcement_decision(
+            request=request,
+            username=username,
+            user_id=user_id,
+            decision="not_eligible_admin_only",
+            policy_scope=policy_scope,
+            user_role=user_role,
+            eligible=False,
+        )
         return None
 
-    user_id = str(getattr(user_row, "id", "") or "")
     secret_ref = getattr(user_row, "mfa_secret_ref", None)
     mfa_enabled = bool(getattr(user_row, "mfa_enabled", False))
+    enabled_at_present = bool(getattr(user_row, "mfa_enabled_at", None))
+    recovery_set_ready = _has_active_mfa_recovery_codes(user_row)
+    state_complete = bool(mfa_enabled and secret_ref and enabled_at_present and recovery_set_ready)
+    if not state_complete:
+        _audit_mfa_enforcement_decision(
+            request=request,
+            username=username,
+            user_id=user_id,
+            decision="mfa_state_incomplete",
+            policy_scope=policy_scope,
+            status="failed",
+            user_role=user_role,
+            eligible=True,
+            mfa_enabled=mfa_enabled,
+            totp_ref_present=bool(secret_ref),
+            enabled_at_present=enabled_at_present,
+            recovery_set_ready=recovery_set_ready,
+        )
+        return _mfa_required_error()
+
     if mfa_enabled and secret_ref and verify_totp_code(secret_ref=secret_ref, code=body.mfa_code):
+        _audit_mfa_enforcement_decision(
+            request=request,
+            username=username,
+            user_id=user_id,
+            decision="totp_success",
+            policy_scope=policy_scope,
+            user_role=user_role,
+            eligible=True,
+            mfa_enabled=mfa_enabled,
+            totp_ref_present=True,
+            enabled_at_present=enabled_at_present,
+            recovery_set_ready=recovery_set_ready,
+        )
         return None
 
     if mfa_enabled and body.mfa_recovery_code:
         result = verify_recovery_code(user_id=user_id, code=body.mfa_recovery_code, repo=AuthRepository())
         if result.verified:
+            _audit_mfa_enforcement_decision(
+                request=request,
+                username=username,
+                user_id=user_id,
+                decision="recovery_code_success",
+                policy_scope=policy_scope,
+                user_role=user_role,
+                eligible=True,
+                mfa_enabled=mfa_enabled,
+                totp_ref_present=True,
+                enabled_at_present=enabled_at_present,
+                recovery_set_ready=recovery_set_ready,
+            )
             _audit_mfa_login_event(
                 request=request,
                 action="security.mfa_recovery_code_login",
@@ -499,6 +641,19 @@ def _verify_login_mfa_requirement(
 
     reason = str(body.break_glass_reason or "").strip()
     if reason and _is_mfa_login_break_glass_enabled():
+        _audit_mfa_enforcement_decision(
+            request=request,
+            username=username,
+            user_id=user_id,
+            decision="break_glass_success",
+            policy_scope=policy_scope,
+            user_role=user_role,
+            eligible=True,
+            mfa_enabled=mfa_enabled,
+            totp_ref_present=True,
+            enabled_at_present=enabled_at_present,
+            recovery_set_ready=recovery_set_ready,
+        )
         _audit_mfa_login_event(
             request=request,
             action="security.mfa_break_glass_login",
@@ -510,6 +665,20 @@ def _verify_login_mfa_requirement(
         )
         return None
 
+    _audit_mfa_enforcement_decision(
+        request=request,
+        username=username,
+        user_id=user_id,
+        decision="mfa_required",
+        policy_scope=policy_scope,
+        status="failed",
+        user_role=user_role,
+        eligible=True,
+        mfa_enabled=mfa_enabled,
+        totp_ref_present=bool(secret_ref),
+        enabled_at_present=enabled_at_present,
+        recovery_set_ready=recovery_set_ready,
+    )
     _audit_mfa_login_event(
         request=request,
         action="security.mfa_login_required",
