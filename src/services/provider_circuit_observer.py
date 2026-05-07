@@ -294,6 +294,15 @@ class ProviderCircuitObserver:
                 "provider429Count": provider_429_count,
                 "provider403Count": provider_403_count,
             },
+            "trendSummary": {
+                "windowCountBucket": self._count_bucket(len(windows)),
+                "requestCountBucket": self._count_bucket(request_count),
+                "failureCountBucket": self._count_bucket(failure_count),
+                "timeoutCountBucket": self._count_bucket(timeout_count),
+                "provider429CountBucket": self._count_bucket(provider_429_count),
+                "provider403CountBucket": self._count_bucket(provider_403_count),
+                "latestObservationAt": latest_observation_at.isoformat() if latest_observation_at else None,
+            },
             "recentErrors": recent_errors,
             "circuitPreflight": preflight,
         }
@@ -327,6 +336,8 @@ class ProviderCircuitObserver:
 
     @staticmethod
     def _count_bucket(count: int) -> str:
+        if count <= 0:
+            return "0"
         if count <= 1:
             return "1"
         if count <= 5:

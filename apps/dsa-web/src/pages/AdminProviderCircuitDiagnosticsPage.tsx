@@ -339,6 +339,12 @@ const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ it
               <p>Ordering / fallback <span className="block truncate font-mono text-white/68">{boolLabel(item.wouldChangeProviderOrder)} / {boolLabel(item.wouldChangeFallbackBehavior)}</span></p>
               <p>Would block <span className="block truncate font-mono text-white/68">{boolLabel(item.wouldBlockCall)}</span></p>
             </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px] text-white/44 md:grid-cols-4">
+              <p>Trend requests <span className="block truncate font-mono text-white/68">{safeText(item.trendSummary?.requestCountBucket, '0')}</span></p>
+              <p>Trend failures <span className="block truncate font-mono text-white/68">{safeText(item.trendSummary?.failureCountBucket, '0')}</span></p>
+              <p>Trend 429 / 403 <span className="block truncate font-mono text-white/68">{safeText(item.trendSummary?.provider429CountBucket, '0')} / {safeText(item.trendSummary?.provider403CountBucket, '0')}</span></p>
+              <p>Latest observation <span className="block truncate font-mono text-white/68">{safeDate(item.trendSummary?.latestObservationAt)}</span></p>
+            </div>
             <details className="mt-3 rounded-2xl border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px] text-white/48">
               <summary className="cursor-pointer select-none text-white/60">最近错误 buckets</summary>
               <div className="mt-2 space-y-1">

@@ -89,6 +89,16 @@ export interface ProviderRecentErrorBucketItem {
   latestAt?: string | null;
 }
 
+export interface ProviderSlaTrendSummaryItem {
+  windowCountBucket: string;
+  requestCountBucket: string;
+  failureCountBucket: string;
+  timeoutCountBucket: string;
+  provider429CountBucket: string;
+  provider403CountBucket: string;
+  latestObservationAt?: string | null;
+}
+
 export interface ProviderSlaReadinessItem {
   provider: string;
   providerCategory?: string | null;
@@ -111,6 +121,7 @@ export interface ProviderSlaReadinessItem {
   freshnessSeconds?: number | null;
   freshnessState: string;
   recentErrors: ProviderRecentErrorBucketItem[];
+  trendSummary?: ProviderSlaTrendSummaryItem;
   circuitAdvisoryState: string;
   circuitStateCandidate: string;
   liveEnforcement: boolean;

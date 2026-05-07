@@ -135,6 +135,15 @@ const response = {
         recentErrors: [
           { reasonBucket: 'timeout', countBucket: '1', latestAt: '2026-05-06T09:07:00+08:00' },
         ],
+        trendSummary: {
+          windowCountBucket: '1',
+          requestCountBucket: '6_20',
+          failureCountBucket: '2_5',
+          timeoutCountBucket: '1',
+          provider429CountBucket: '2_5',
+          provider403CountBucket: '0',
+          latestObservationAt: '2026-05-06T09:07:00+08:00',
+        },
         circuitAdvisoryState: 'open_candidate',
         circuitStateCandidate: 'open',
         liveEnforcement: false,
@@ -167,6 +176,8 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.getByText('探测事件')).toBeInTheDocument();
     expect(screen.getByText('Provider SLA / 凭证就绪')).toBeInTheDocument();
     expect(screen.getByText('已配置')).toBeInTheDocument();
+    expect(screen.getByText('Trend requests')).toBeInTheDocument();
+    expect(screen.getByText('6_20')).toBeInTheDocument();
     expect(screen.getByText('最近错误 buckets')).toBeInTheDocument();
     expect(screen.getByText('不触发外部调用')).toBeInTheDocument();
     expect(screen.getByText('不执行熔断 enforcement')).toBeInTheDocument();

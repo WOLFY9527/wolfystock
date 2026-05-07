@@ -209,6 +209,15 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertEqual(response.json()["detail"]["error"], "admin_capability_required")
         self.assertNotIn("ops:providers:read", response.text)
 
+    def test_sla_readiness_requires_provider_read_capability(self) -> None:
+        self._as_admin_without_provider_read()
+
+        response = self.client.get("/api/v1/admin/providers/sla-readiness")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"]["error"], "admin_capability_required")
+        self.assertNotIn("ops:providers:read", response.text)
+
     def test_limit_is_bounded(self) -> None:
         self._as_provider_read_admin()
         for index in range(230):
@@ -423,7 +432,16 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertEqual(fmp["latencyBucketMs"], 1500)
         self.assertEqual(fmp["latencyState"], "slow")
         self.assertIn(fmp["freshnessState"], {"fresh", "stale", "expired"})
+        self.assertIn("freshnessSeconds", fmp)
+        self.assertIn("credentialsPresent", fmp)
+        self.assertIn("liveHttpCallsEnabled", fmp)
+        self.assertIn("wouldBlockCall", fmp)
         self.assertEqual(fmp["recentErrors"][0]["reasonBucket"], "timeout")
+        self.assertEqual(fmp["recentErrors"][0]["countBucket"], "1")
+        self.assertEqual(fmp["trendSummary"]["windowCountBucket"], "1")
+        self.assertEqual(fmp["trendSummary"]["requestCountBucket"], "1")
+        self.assertEqual(fmp["trendSummary"]["failureCountBucket"], "1")
+        self.assertEqual(fmp["trendSummary"]["latestObservationAt"], "2026-05-06T10:15:00")
         self.assertEqual(fmp["credentialState"], "unknown")
         self.assertEqual(fmp["circuitAdvisoryState"], "open_candidate")
         self.assertFalse(fmp["liveEnforcement"])
@@ -432,6 +450,31 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertFalse(fmp["wouldChangeFallbackBehavior"])
         text = self._json_text(payload).lower()
         for blocked in ("must-not-leak", "api_key", "raw_response", "https://provider.example", "token"):
+            self.assertNotIn(blocked, text)
+
+    def test_sla_readiness_endpoint_exposes_missing_options_credentials_sanitized(self) -> None:
+        self._as_provider_read_admin()
+        env = {
+            "OPTIONS_LIVE_PROVIDERS_ENABLED": "1",
+            "OPTIONS_LIVE_PROVIDER_KEYS": "tradier",
+        }
+
+        with patch.dict(os.environ, env, clear=True), patch("requests.sessions.Session.request") as request_mock:
+            response = self.client.get("/api/v1/admin/providers/sla-readiness", params={"provider": "tradier"})
+
+        self.assertEqual(response.status_code, 200)
+        request_mock.assert_not_called()
+        item = response.json()["items"][0]
+        self.assertEqual(item["provider"], "tradier")
+        self.assertEqual(item["readinessState"], "missing_credentials")
+        self.assertEqual(item["credentialState"], "missing_credentials")
+        self.assertFalse(item["credentialsPresent"])
+        self.assertFalse(item["liveHttpCallsEnabled"])
+        self.assertFalse(item["wouldBlockCall"])
+        self.assertEqual(item["recentErrors"], [])
+        self.assertEqual(item["trendSummary"]["requestCountBucket"], "0")
+        text = self._json_text(response.json()).lower()
+        for blocked in ("tradier_api_token", "api_token", "token", "secret", "password"):
             self.assertNotIn(blocked, text)
 
     def test_sla_readiness_endpoint_exposes_options_credential_states_as_booleans_only(self) -> None:

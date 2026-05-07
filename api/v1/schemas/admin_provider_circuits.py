@@ -81,6 +81,16 @@ class ProviderRecentErrorBucketItem(_AdminProviderCircuitModel):
     latest_at: Optional[str] = Field(default=None, alias="latestAt")
 
 
+class ProviderSlaTrendSummaryItem(_AdminProviderCircuitModel):
+    window_count_bucket: str = Field(default="0", alias="windowCountBucket")
+    request_count_bucket: str = Field(default="0", alias="requestCountBucket")
+    failure_count_bucket: str = Field(default="0", alias="failureCountBucket")
+    timeout_count_bucket: str = Field(default="0", alias="timeoutCountBucket")
+    provider_429_count_bucket: str = Field(default="0", alias="provider429CountBucket")
+    provider_403_count_bucket: str = Field(default="0", alias="provider403CountBucket")
+    latest_observation_at: Optional[str] = Field(default=None, alias="latestObservationAt")
+
+
 class ProviderSlaReadinessItem(_AdminProviderCircuitModel):
     provider: str
     provider_category: Optional[str] = Field(default=None, alias="providerCategory")
@@ -104,6 +114,7 @@ class ProviderSlaReadinessItem(_AdminProviderCircuitModel):
     freshness_seconds: Optional[int] = Field(default=None, alias="freshnessSeconds")
     freshness_state: str = Field(default="unknown", alias="freshnessState")
     recent_errors: List[ProviderRecentErrorBucketItem] = Field(default_factory=list, alias="recentErrors")
+    trend_summary: ProviderSlaTrendSummaryItem = Field(default_factory=ProviderSlaTrendSummaryItem, alias="trendSummary")
     circuit_advisory_state: str = Field(default="healthy", alias="circuitAdvisoryState")
     circuit_state_candidate: str = Field(default="closed", alias="circuitStateCandidate")
     live_enforcement: bool = Field(default=False, alias="liveEnforcement")

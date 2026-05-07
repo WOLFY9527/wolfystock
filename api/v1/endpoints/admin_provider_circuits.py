@@ -23,6 +23,7 @@ from api.v1.schemas.admin_provider_circuits import (
     ProviderRecentErrorBucketItem,
     ProviderSlaReadinessItem,
     ProviderSlaReadinessResponse,
+    ProviderSlaTrendSummaryItem,
 )
 from src.services.options_market_data_provider import (
     LIVE_OPTIONS_PROVIDER_NAMES,
@@ -176,6 +177,7 @@ def _sla_item_from_diagnostics(
     preflight = preflight or {}
     sla = dict(diagnostics.get("sla") or {})
     circuit = dict(diagnostics.get("circuitPreflight") or {})
+    trend = dict(diagnostics.get("trendSummary") or {})
     recent_errors = [
         ProviderRecentErrorBucketItem(
             reasonBucket=str(item.get("reasonBucket") or "unknown"),
@@ -208,6 +210,15 @@ def _sla_item_from_diagnostics(
         freshnessSeconds=sla.get("freshnessSeconds"),
         freshnessState=str(sla.get("freshnessState") or "unknown"),
         recentErrors=recent_errors,
+        trendSummary=ProviderSlaTrendSummaryItem(
+            windowCountBucket=str(trend.get("windowCountBucket") or "0"),
+            requestCountBucket=str(trend.get("requestCountBucket") or "0"),
+            failureCountBucket=str(trend.get("failureCountBucket") or "0"),
+            timeoutCountBucket=str(trend.get("timeoutCountBucket") or "0"),
+            provider429CountBucket=str(trend.get("provider429CountBucket") or "0"),
+            provider403CountBucket=str(trend.get("provider403CountBucket") or "0"),
+            latestObservationAt=trend.get("latestObservationAt"),
+        ),
         circuitAdvisoryState=str(circuit.get("preflight_state") or "healthy"),
         circuitStateCandidate=str(circuit.get("state_candidate") or "closed"),
         liveEnforcement=False,

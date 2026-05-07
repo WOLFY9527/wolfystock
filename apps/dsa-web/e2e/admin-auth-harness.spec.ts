@@ -48,6 +48,8 @@ async function expectProviderSlaReadinessSmoke(page: Parameters<typeof expectNoH
   await expect(slaPanel.getByText('否 · dry-run 是')).toBeVisible();
   await expect(slaPanel.getByText('Live calls')).toBeVisible();
   await expect(slaPanel.getByText('Would block')).toBeVisible();
+  await expect(slaPanel.getByText('Trend requests')).toBeVisible();
+  await expect(slaPanel.getByText('6_20')).toBeVisible();
   await expect(slaPanel.getByText('最近错误 buckets')).toBeVisible();
   await expect(slaPanel.locator('details[open]')).toHaveCount(0);
 
