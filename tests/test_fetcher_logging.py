@@ -11,6 +11,7 @@ import requests
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from data_provider.base import BaseFetcher, DataFetchError, DataFetcherManager
+import data_provider.efinance_fetcher as efinance_fetcher
 from data_provider.efinance_fetcher import EfinanceFetcher
 
 
@@ -86,20 +87,27 @@ class TestFetcherLogging(unittest.TestCase):
         fetcher = EfinanceFetcher()
         fake_efinance = types.SimpleNamespace(
             stock=types.SimpleNamespace(
-                get_quote_history=lambda **kwargs: (_ for _ in ()).throw(
-                    requests.exceptions.ConnectionError("Remote end closed connection without response")
-                )
+                get_quote_history=object()
             )
         )
+
+        def raise_remote_disconnect(_func, *args, **kwargs):
+            raise requests.exceptions.ConnectionError("Remote end closed connection without response")
 
         with patch.dict(sys.modules, {"efinance": fake_efinance}):
             with patch.object(fetcher, "_set_random_user_agent", return_value=None), patch.object(
                 fetcher, "_enforce_rate_limit", return_value=None
-            ):
+            ), patch.object(
+                efinance_fetcher,
+                "_ef_call_with_timeout",
+                side_effect=raise_remote_disconnect,
+            ) as call_with_timeout, patch("requests.sessions.Session.request") as request_transport:
                 with self.assertLogs(level="INFO") as captured:
                     with self.assertRaises(DataFetchError):
                         fetcher.get_daily_data("601006", start_date="2026-01-07", end_date="2026-03-08")
 
+        call_with_timeout.assert_called_once()
+        request_transport.assert_not_called()
         log_text = "\n".join(captured.output)
         self.assertIn("Eastmoney 历史K线接口失败:", log_text)
         self.assertIn("endpoint=push2his.eastmoney.com/api/qt/stock/kline/get", log_text)
