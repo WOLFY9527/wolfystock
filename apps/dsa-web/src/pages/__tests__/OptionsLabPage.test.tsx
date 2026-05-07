@@ -755,8 +755,18 @@ describe('OptionsLabPage', () => {
       '立即交易',
       '保证收益',
       'guaranteed',
+      'guaranteed profit',
       'best contract',
       'AI recommends you buy',
+      'must buy',
+      'must sell',
+      'buy now',
+      'sell now',
+      'you should buy',
+      'you should sell',
+      'raw schema',
+      'debug schema',
+      'provider.example',
     ].forEach((text) => {
       expect(domText.toLowerCase()).not.toContain(text.toLowerCase());
     });

@@ -221,9 +221,15 @@ def test_endpoint_response_excludes_raw_provider_and_recommendation_language() -
             "必买",
             "稳赚",
             "guaranteed",
+            "guaranteed profit",
             "best contract",
             "ai recommends you buy",
+            "must buy",
+            "must sell",
             "buy now",
+            "sell now",
+            "you should buy",
+            "you should sell",
         ]
         for value in blocked:
             assert value not in text
@@ -450,9 +456,15 @@ def test_strategy_compare_endpoint_does_not_call_external_or_mutating_paths() ->
             "必买",
             "稳赚",
             "guaranteed",
+            "guaranteed profit",
             "best contract",
             "ai recommends you buy",
+            "must buy",
+            "must sell",
             "buy now",
+            "sell now",
+            "you should buy",
+            "you should sell",
             "trade ticket",
         ]
         for value in blocked:
@@ -535,10 +547,53 @@ def test_decision_endpoint_excludes_raw_payloads_and_live_provider_paths() -> No
             "稳赚",
             "保证收益",
             "guaranteed",
+            "guaranteed profit",
             "best contract",
             "ai recommends you buy",
+            "must buy",
+            "must sell",
+            "buy now",
+            "sell now",
+            "you should buy",
+            "you should sell",
             "trade ticket",
         ]:
+            assert value not in text
+    finally:
+        client.close()
+
+
+def test_decision_endpoint_live_provider_unavailable_fails_closed_without_secret_leakage() -> None:
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("forbidden runtime path was called")
+
+    client = _client()
+    try:
+        with (
+            patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
+            patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
+            patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
+            patch("src.services.portfolio_service.PortfolioService.add_lot", side_effect=forbidden, create=True),
+        ):
+            response = client.post(
+                "/api/v1/options/decision/evaluate",
+                json={
+                    "symbol": "TEM",
+                    "marketDataProvider": "tradier",
+                    "strategy": "bull_call_spread",
+                    "expiration": "2026-06-19",
+                    "targetPrice": 65,
+                    "targetDate": "2026-06-19",
+                    "riskBudget": 600,
+                },
+            )
+
+        assert response.status_code == 400
+        payload = response.json()
+        assert payload["detail"]["error"] == "options_provider_disabled"
+        text = _json_text(payload).lower()
+        assert "live confidence" not in text
+        for value in ("api_key", "apikey", "token", "secret", "requesturl", "traceback", "stack trace"):
             assert value not in text
     finally:
         client.close()

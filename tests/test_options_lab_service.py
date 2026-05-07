@@ -23,9 +23,15 @@ FORBIDDEN_TERMS = [
     "必买",
     "稳赚",
     "guaranteed",
+    "guaranteed profit",
     "best contract",
     "AI recommends you buy",
+    "must buy",
+    "must sell",
     "buy now",
+    "sell now",
+    "you should buy",
+    "you should sell",
 ]
 
 
@@ -347,6 +353,9 @@ def test_strategy_compare_returns_long_options_and_debit_spreads() -> None:
         "bear_put_spread",
     ]
     assert all(strategy.no_advice_disclosure for strategy in response.strategies)
+    assert all(strategy.max_loss is not None for strategy in response.strategies)
+    assert all(strategy.breakeven is not None for strategy in response.strategies)
+    assert all(strategy.liquidity_warnings or strategy.iv_theta_notes or strategy.limitations for strategy in response.strategies)
     assert response.metadata.strategy_engine == "defined_risk_strategy_compare_v1"
 
 
@@ -722,6 +731,42 @@ def test_decision_delayed_non_live_data_cannot_emit_tradeable_label(tmp_path: Pa
     assert response.data_quality.data_quality_tier == "delayed_usable"
     assert response.decision_label != "有条件可交易"
     assert response.trade_quality_score <= 75
+
+
+def test_decision_stale_live_shaped_data_is_degraded_not_full_confidence(tmp_path: Path) -> None:
+    fixture = json.loads(Path("tests/fixtures/options/tem_chain.json").read_text(encoding="utf-8"))
+    fixture["source"] = "live_options_provider"
+    fixture["providerQuality"] = "live_provider_stale"
+    fixture["providerCapabilities"] = {
+        "providerName": "review_fixture",
+        "sourceType": "live",
+        "fixtureOnly": False,
+        "liveEnabled": True,
+        "delayed": False,
+        "tradeableData": True,
+    }
+    fixture["underlying"]["source"] = "live_options_provider"
+    fixture["underlying"]["freshness"] = "stale"
+    path = tmp_path / "tem_stale_live_shaped.json"
+    path.write_text(json.dumps(fixture), encoding="utf-8")
+
+    response = OptionsLabService(fixture_path=path).evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "bull_call_spread",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskBudget": 600,
+        }
+    )
+
+    assert response.data_quality.source_type == "delayed"
+    assert response.data_quality.data_quality_tier == "delayed_usable"
+    assert response.freshness.freshness == "stale"
+    assert response.decision_label != "有条件可交易"
+    assert response.trade_quality_score <= 75
+    assert all(item.decision_label != "有条件可交易" for item in response.ranked_alternatives)
 
 
 def test_decision_delayed_fixture_provider_selection_cannot_emit_tradeable_label() -> None:

@@ -715,6 +715,8 @@ class OptionsLabService:
             return "synthetic"
         if "fallback" in source_text:
             return "fallback"
+        if "stale" in source_text or "cached" in source_text:
+            return "delayed"
         if "delayed" in source_text:
             return "delayed"
         if "fixture" in source_text or "mock" in source_text:
