@@ -14,7 +14,15 @@ from fastapi import HTTPException
 from api.deps import CurrentUser
 from api.deps import require_admin_capability
 from api.v1.endpoints import auth as auth_endpoint
-from src.admin_rbac import ADMIN_RBAC_CAPABILITIES, expand_admin_capabilities, is_coarse_admin_fallback_enabled
+from src.admin_rbac import (
+    ADMIN_RBAC_CAPABILITIES,
+    ADMIN_RBAC_ROLE_CAPABILITIES,
+    ADMIN_ROLE_ASSIGNMENT_REQUIRED_CAPABILITY,
+    SUPPORT_ADMIN_ROLE,
+    build_admin_role_assignment_preflight,
+    expand_admin_capabilities,
+    is_coarse_admin_fallback_enabled,
+)
 from src.multi_user import ROLE_ADMIN
 
 PUBLIC_LAUNCH_ADMIN_RBAC_ENDPOINT_FILES = (
@@ -82,6 +90,15 @@ class SecurityLaunchPreflight:
     missing_admin_capabilities_payload: dict
     public_launch_dependency_inventory_complete: bool
     public_launch_legacy_admin_route_dependencies: dict[str, tuple[str, ...]]
+    role_management_runtime_api_present: bool
+    role_management_ui_api_pending: bool
+    role_assignment_requires_explicit_capability: bool
+    role_assignment_invalid_inputs_fail_closed: bool
+    role_assignment_self_escalation_blocked: bool
+    role_assignment_audit_payload_sanitized: bool
+    role_assignment_least_privilege_preserved: bool
+    role_assignment_missing_payload_fail_closed: bool
+    role_assignment_runtime_behavior_changed: bool
     launch_blockers: tuple[str, ...]
     rollback_safe_next_step: str
 
@@ -131,6 +148,22 @@ def _missing_capability_admin() -> CurrentUser:
     )
 
 
+def _role_assignment_actor(*, capabilities: tuple[str, ...] = (), legacy_admin: bool = False) -> CurrentUser:
+    return CurrentUser(
+        user_id="launch-role-actor",
+        username="launch-role-actor",
+        display_name="Launch Role Actor",
+        role=ROLE_ADMIN,
+        is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        session_id="raw-session-id",
+        legacy_admin=legacy_admin,
+        admin_capabilities=capabilities,
+    )
+
+
 def _missing_capabilities_payload() -> dict:
     return auth_endpoint._current_user_response(
         id="launch-preflight-admin",
@@ -169,6 +202,40 @@ def inventory_public_launch_admin_route_capabilities() -> AdminRouteCapabilityIn
         capability_counts=capability_counts,
         legacy_admin_dependencies=legacy_admin_dependencies,
     )
+
+
+def _role_management_runtime_api_present() -> bool:
+    endpoint_dir = Path(__file__).resolve().parents[1] / "api" / "v1" / "endpoints"
+    route_text = "\n".join(path.read_text(encoding="utf-8") for path in endpoint_dir.glob("admin*.py"))
+    forbidden_markers = (
+        "assign_admin_role",
+        "assign_role",
+        "admin_user_roles",
+        "role-capabilities",
+        "role_assignments",
+    )
+    return any(marker in route_text for marker in forbidden_markers)
+
+
+def _role_assignment_denial_is_sanitized(result: dict) -> bool:
+    payload = result.get("auditPayload", {})
+
+    def _check(value) -> bool:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                key_text = str(key).lower()
+                if any(marker in key_text for marker in ("password", "token", "session", "cookie", "secret", "api_key", "apikey", "authorization")):
+                    if item != "[redacted]":
+                        return False
+                elif not _check(item):
+                    return False
+            return True
+        if isinstance(value, list):
+            return all(_check(item) for item in value)
+        return True
+
+    control_text = str({key: value for key, value in result.items() if key != "auditPayload"}).lower()
+    return _check(payload) and all(marker.lower() not in control_text for marker in _FORBIDDEN_DENIAL_MARKERS)
 
 
 def build_security_launch_preflight() -> SecurityLaunchPreflight:
@@ -277,6 +344,62 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
         blockers.append("mfa_break_glass_enabled_by_default")
     production_switch_ready = guarded_disable_switch_available
     production_switch_status = "guarded_disable_available" if production_switch_ready else "blocked"
+    role_api_present = _role_management_runtime_api_present()
+    role_assignment_legacy_denied = build_admin_role_assignment_preflight(
+        actor=_role_assignment_actor(legacy_admin=True),
+        target_user_id="target-admin",
+        role_key=SUPPORT_ADMIN_ROLE,
+        capabilities=ADMIN_RBAC_ROLE_CAPABILITIES[SUPPORT_ADMIN_ROLE],
+    )
+    role_assignment_explicit_allowed = build_admin_role_assignment_preflight(
+        actor=_role_assignment_actor(capabilities=(ADMIN_ROLE_ASSIGNMENT_REQUIRED_CAPABILITY,)),
+        target_user_id="target-admin",
+        role_key=SUPPORT_ADMIN_ROLE,
+        capabilities=ADMIN_RBAC_ROLE_CAPABILITIES[SUPPORT_ADMIN_ROLE],
+    )
+    role_assignment_unknown_role = build_admin_role_assignment_preflight(
+        actor=_role_assignment_actor(capabilities=(ADMIN_ROLE_ASSIGNMENT_REQUIRED_CAPABILITY,)),
+        target_user_id="target-admin",
+        role_key="owner-admin",
+        capabilities=("users:read",),
+    )
+    role_assignment_bad_capability = build_admin_role_assignment_preflight(
+        actor=_role_assignment_actor(capabilities=(ADMIN_ROLE_ASSIGNMENT_REQUIRED_CAPABILITY,)),
+        target_user_id="target-admin",
+        role_key=SUPPORT_ADMIN_ROLE,
+        capabilities=("users:read", "secrets:read"),
+    )
+    role_assignment_self = build_admin_role_assignment_preflight(
+        actor=_role_assignment_actor(capabilities=(ADMIN_ROLE_ASSIGNMENT_REQUIRED_CAPABILITY,)),
+        target_user_id="launch-role-actor",
+        role_key=SUPPORT_ADMIN_ROLE,
+        capabilities=ADMIN_RBAC_ROLE_CAPABILITIES[SUPPORT_ADMIN_ROLE],
+    )
+    role_assignment_least_privilege = build_admin_role_assignment_preflight(
+        actor=_role_assignment_actor(capabilities=("users:read",)),
+        target_user_id="target-admin",
+        role_key=SUPPORT_ADMIN_ROLE,
+        capabilities=ADMIN_RBAC_ROLE_CAPABILITIES[SUPPORT_ADMIN_ROLE],
+    )
+    role_assignment_missing_payload = build_admin_role_assignment_preflight(
+        actor=_role_assignment_actor(),
+        target_user_id="target-admin",
+        role_key=SUPPORT_ADMIN_ROLE,
+        capabilities=ADMIN_RBAC_ROLE_CAPABILITIES[SUPPORT_ADMIN_ROLE],
+    )
+    role_assignment_audit_payload = build_admin_role_assignment_preflight(
+        actor=_role_assignment_actor(capabilities=(ADMIN_ROLE_ASSIGNMENT_REQUIRED_CAPABILITY,)),
+        target_user_id="target-admin",
+        role_key=SUPPORT_ADMIN_ROLE,
+        capabilities=ADMIN_RBAC_ROLE_CAPABILITIES[SUPPORT_ADMIN_ROLE],
+        audit_payload={
+            "reason": "launch-readiness-ticket",
+            "password": "raw-password",
+            "session_id": "raw-session-id",
+            "cookie": "raw-cookie",
+            "api_token": "raw-token",
+        },
+    )
 
     return SecurityLaunchPreflight(
         mfa_enforcement_enabled_by_default=mfa_default,
@@ -299,6 +422,33 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
         missing_admin_capabilities_payload=payload,
         public_launch_dependency_inventory_complete=public_launch_dependency_inventory_complete,
         public_launch_legacy_admin_route_dependencies=inventory.legacy_admin_dependencies,
+        role_management_runtime_api_present=role_api_present,
+        role_management_ui_api_pending=not role_api_present,
+        role_assignment_requires_explicit_capability=(
+            not role_assignment_legacy_denied["allowed"]
+            and role_assignment_legacy_denied["error"] == "admin_capability_required"
+            and role_assignment_explicit_allowed["allowed"]
+        ),
+        role_assignment_invalid_inputs_fail_closed=(
+            not role_assignment_unknown_role["allowed"]
+            and role_assignment_unknown_role["error"] == "unknown_admin_role"
+            and not role_assignment_bad_capability["allowed"]
+            and role_assignment_bad_capability["error"] == "invalid_admin_capability"
+        ),
+        role_assignment_self_escalation_blocked=(
+            not role_assignment_self["allowed"] and role_assignment_self["error"] == "self_assignment_blocked"
+        ),
+        role_assignment_audit_payload_sanitized=_role_assignment_denial_is_sanitized(role_assignment_audit_payload),
+        role_assignment_least_privilege_preserved=(
+            not role_assignment_least_privilege["allowed"]
+            and role_assignment_least_privilege["error"] == "admin_capability_required"
+        ),
+        role_assignment_missing_payload_fail_closed=(
+            not role_assignment_missing_payload["allowed"]
+            and role_assignment_missing_payload["error"] == "admin_capability_required"
+            and _role_assignment_denial_is_sanitized(role_assignment_missing_payload)
+        ),
+        role_assignment_runtime_behavior_changed=False,
         launch_blockers=tuple(blockers),
         rollback_safe_next_step="Set WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED=false only for the guarded "
         "production-disable path; do not delete the compatibility code until explicit role assignments, telemetry, "

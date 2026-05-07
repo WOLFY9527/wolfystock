@@ -16,9 +16,12 @@ import src.auth as auth
 from api.deps import CurrentUser, require_admin_user
 from src.admin_rbac import (
     ADMIN_RBAC_CAPABILITIES,
+    ADMIN_RBAC_ROLE_CAPABILITIES,
     ADMIN_RBAC_ROLES,
+    ADMIN_ROLE_ASSIGNMENT_REQUIRED_CAPABILITY,
     SUPER_ADMIN_ROLE,
     SUPPORT_ADMIN_ROLE,
+    build_admin_role_assignment_preflight,
     expand_admin_capabilities,
     has_admin_capability,
 )
@@ -103,6 +106,101 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
         user = _current_user(role=ROLE_ADMIN, is_admin=True)
 
         self.assertFalse(has_admin_capability(user, "secrets:read"))
+
+    def test_role_assignment_preflight_requires_explicit_capability_not_coarse_fallback(self) -> None:
+        legacy_admin = _current_user(role=ROLE_ADMIN, is_admin=True, legacy_admin=True)
+        explicit_admin = _current_user(
+            role=ROLE_ADMIN,
+            is_admin=True,
+            admin_capabilities=(ADMIN_ROLE_ASSIGNMENT_REQUIRED_CAPABILITY,),
+        )
+
+        denied = build_admin_role_assignment_preflight(
+            actor=legacy_admin,
+            target_user_id="target-admin",
+            role_key=SUPPORT_ADMIN_ROLE,
+            capabilities=ADMIN_RBAC_ROLE_CAPABILITIES[SUPPORT_ADMIN_ROLE],
+        )
+        allowed = build_admin_role_assignment_preflight(
+            actor=explicit_admin,
+            target_user_id="target-admin",
+            role_key=SUPPORT_ADMIN_ROLE,
+            capabilities=ADMIN_RBAC_ROLE_CAPABILITIES[SUPPORT_ADMIN_ROLE],
+        )
+
+        self.assertFalse(denied["allowed"])
+        self.assertEqual(denied["error"], "admin_capability_required")
+        self.assertTrue(denied["coarseFallbackIgnored"])
+        self.assertTrue(allowed["allowed"])
+
+    def test_role_assignment_preflight_fails_closed_for_unknown_roles_and_capabilities(self) -> None:
+        admin = _current_user(
+            role=ROLE_ADMIN,
+            is_admin=True,
+            admin_capabilities=(ADMIN_ROLE_ASSIGNMENT_REQUIRED_CAPABILITY,),
+        )
+
+        unknown_role = build_admin_role_assignment_preflight(
+            actor=admin,
+            target_user_id="target-admin",
+            role_key="owner-admin",
+            capabilities=("users:read",),
+        )
+        invalid_capability = build_admin_role_assignment_preflight(
+            actor=admin,
+            target_user_id="target-admin",
+            role_key=SUPPORT_ADMIN_ROLE,
+            capabilities=("users:read", "secrets:read"),
+        )
+
+        self.assertFalse(unknown_role["allowed"])
+        self.assertEqual(unknown_role["error"], "unknown_admin_role")
+        self.assertFalse(invalid_capability["allowed"])
+        self.assertEqual(invalid_capability["error"], "invalid_admin_capability")
+        self.assertNotIn("secrets:read", str(invalid_capability))
+
+    def test_role_assignment_preflight_blocks_self_escalation_and_sanitizes_audit_payload(self) -> None:
+        admin = _current_user(
+            role=ROLE_ADMIN,
+            is_admin=True,
+            admin_capabilities=(ADMIN_ROLE_ASSIGNMENT_REQUIRED_CAPABILITY,),
+        )
+
+        result = build_admin_role_assignment_preflight(
+            actor=admin,
+            target_user_id="user-1",
+            role_key=SUPER_ADMIN_ROLE,
+            capabilities=("users:security:write",),
+            audit_payload={
+                "reason": "ticket-42",
+                "password": "raw-password",
+                "session_id": "raw-session-id",
+                "cookie": "raw-cookie",
+                "nested": {"api_token": "raw-token", "keep": "safe"},
+            },
+        )
+
+        self.assertFalse(result["allowed"])
+        self.assertEqual(result["error"], "self_assignment_blocked")
+        self.assertEqual(result["auditPayload"]["reason"], "ticket-42")
+        self.assertEqual(result["auditPayload"]["nested"]["keep"], "safe")
+        rendered = str(result).lower()
+        for forbidden in ("raw-password", "raw-session-id", "raw-cookie", "raw-token"):
+            self.assertNotIn(forbidden, rendered)
+
+    def test_role_assignment_preflight_preserves_explicit_payload_least_privilege(self) -> None:
+        read_only_admin = _current_user(role=ROLE_ADMIN, is_admin=True, admin_capabilities=("users:read",))
+
+        result = build_admin_role_assignment_preflight(
+            actor=read_only_admin,
+            target_user_id="target-admin",
+            role_key=SUPPORT_ADMIN_ROLE,
+            capabilities=ADMIN_RBAC_ROLE_CAPABILITIES[SUPPORT_ADMIN_ROLE],
+        )
+
+        self.assertFalse(result["allowed"])
+        self.assertEqual(result["error"], "admin_capability_required")
+        self.assertNotIn("users:security:write", str(result))
 
     def test_require_admin_user_behavior_is_unchanged(self) -> None:
         admin = _current_user(role=ROLE_ADMIN, is_admin=True)

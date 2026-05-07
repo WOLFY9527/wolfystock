@@ -42,6 +42,7 @@ ADMIN_RBAC_CAPABILITIES = (
     "quant:admin:read",
     "quant:admin:write",
 )
+ADMIN_ROLE_ASSIGNMENT_REQUIRED_CAPABILITY = "users:security:write"
 
 ADMIN_RBAC_ROLE_CAPABILITIES: dict[str, tuple[str, ...]] = {
     SUPER_ADMIN_ROLE: ADMIN_RBAC_CAPABILITIES,
@@ -75,6 +76,85 @@ ADMIN_RBAC_ROLE_CAPABILITIES: dict[str, tuple[str, ...]] = {
         "quant:admin:write",
     ),
 }
+
+_SENSITIVE_AUDIT_KEY_MARKERS = (
+    "password",
+    "token",
+    "session",
+    "cookie",
+    "secret",
+    "api_key",
+    "apikey",
+    "authorization",
+)
+
+
+def _sanitize_assignment_audit_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        sanitized = {}
+        for key, item in value.items():
+            key_text = str(key)
+            if any(marker in key_text.lower() for marker in _SENSITIVE_AUDIT_KEY_MARKERS):
+                sanitized[key_text] = "[redacted]"
+            else:
+                sanitized[key_text] = _sanitize_assignment_audit_payload(item)
+        return sanitized
+    if isinstance(value, (list, tuple)):
+        return [_sanitize_assignment_audit_payload(item) for item in value]
+    return value
+
+
+def _explicit_admin_capabilities(user: Any) -> set[str]:
+    return {str(capability).strip() for capability in getattr(user, "admin_capabilities", ()) or () if str(capability).strip()}
+
+
+def build_admin_role_assignment_preflight(
+    *,
+    actor: Any,
+    target_user_id: str,
+    role_key: str,
+    capabilities: tuple[str, ...] | list[str],
+    audit_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return a fail-closed readiness decision for future role assignment.
+
+    This helper is intentionally non-mutating: it does not assign roles,
+    create endpoints, change seeded defaults, or expand coarse legacy admin
+    permissions for assignment decisions.
+    """
+    actor_id = str(getattr(actor, "user_id", "") or getattr(actor, "id", "") or "").strip()
+    normalized_target = str(target_user_id or "").strip()
+    normalized_role = str(role_key or "").strip()
+    normalized_capabilities = tuple(str(capability or "").strip() for capability in capabilities or ())
+    explicit_capabilities = _explicit_admin_capabilities(actor)
+    known_capabilities = set(ADMIN_RBAC_CAPABILITIES)
+    sanitized_payload = _sanitize_assignment_audit_payload(audit_payload or {})
+    base = {
+        "allowed": False,
+        "error": None,
+        "targetUserId": normalized_target,
+        "roleKey": normalized_role if normalized_role in ADMIN_RBAC_ROLES else None,
+        "capabilityCount": len(set(normalized_capabilities)),
+        "coarseFallbackIgnored": bool(getattr(actor, "legacy_admin", False))
+        and ADMIN_ROLE_ASSIGNMENT_REQUIRED_CAPABILITY not in explicit_capabilities,
+        "auditPayload": sanitized_payload,
+    }
+
+    if ADMIN_ROLE_ASSIGNMENT_REQUIRED_CAPABILITY not in explicit_capabilities:
+        return {**base, "error": "admin_capability_required"}
+    if not normalized_role or normalized_role not in ADMIN_RBAC_ROLES:
+        return {**base, "error": "unknown_admin_role"}
+    if not normalized_capabilities or any(capability not in known_capabilities for capability in normalized_capabilities):
+        return {**base, "error": "invalid_admin_capability"}
+    if actor_id and normalized_target and actor_id == normalized_target:
+        return {**base, "error": "self_assignment_blocked"}
+    return {
+        **base,
+        "allowed": True,
+        "error": None,
+        "roleKey": normalized_role,
+        "coarseFallbackIgnored": False,
+    }
 
 
 def _is_legacy_admin(user: Any) -> bool:

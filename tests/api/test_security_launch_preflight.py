@@ -309,6 +309,19 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, text)
 
+    def test_admin_role_management_assignment_preflight_is_launch_ready_but_runtime_pending(self) -> None:
+        report = build_security_launch_preflight()
+
+        self.assertFalse(report.role_management_runtime_api_present)
+        self.assertTrue(report.role_management_ui_api_pending)
+        self.assertTrue(report.role_assignment_requires_explicit_capability)
+        self.assertTrue(report.role_assignment_invalid_inputs_fail_closed)
+        self.assertTrue(report.role_assignment_self_escalation_blocked)
+        self.assertTrue(report.role_assignment_audit_payload_sanitized)
+        self.assertTrue(report.role_assignment_least_privilege_preserved)
+        self.assertTrue(report.role_assignment_missing_payload_fail_closed)
+        self.assertFalse(report.role_assignment_runtime_behavior_changed)
+
 
 if __name__ == "__main__":
     unittest.main()
