@@ -1,6 +1,22 @@
+import warnings
+
 import pytest
 
-from bot.platforms.feishu_stream import FeishuReplyClient
+
+# lark-oapi may emit third-party websockets deprecation warnings during import.
+# Keep the suppression local to this test module so production warning behavior is unchanged.
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        category=DeprecationWarning,
+        message=r"^websockets\.InvalidStatusCode is deprecated$",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=DeprecationWarning,
+        message=r"^websockets\.legacy.*deprecated.*$",
+    )
+    from bot.platforms.feishu_stream import FeishuReplyClient
 
 
 class DummyFeishuReplyClient(FeishuReplyClient):
@@ -81,4 +97,3 @@ def test_send_to_chat_chunked_uses_chat_id(monkeypatch):
         assert call["receive_id_type"] == "chat_id"
         assert call["at_user"] is False
         assert call["user_id"] is None
-
