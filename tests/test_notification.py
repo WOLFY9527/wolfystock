@@ -84,8 +84,15 @@ class TestNotificationServiceSendToMethods(unittest.TestCase):
         service = NotificationService()
 
         self.assertFalse(service.is_available())
-        result = service.send("test content")
+        with mock.patch("requests.post", side_effect=AssertionError("network call attempted")) as mock_post, \
+                mock.patch("smtplib.SMTP_SSL", side_effect=AssertionError("smtp call attempted")) as mock_smtp_ssl, \
+                mock.patch("smtplib.SMTP", side_effect=AssertionError("smtp call attempted")) as mock_smtp:
+            result = service.send("test content")
+
         self.assertFalse(result)
+        mock_post.assert_not_called()
+        mock_smtp_ssl.assert_not_called()
+        mock_smtp.assert_not_called()
 
     @mock.patch("src.notification.get_config")
     @mock.patch("requests.post")

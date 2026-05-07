@@ -11,13 +11,20 @@ from unittest.mock import patch
 
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 
 from api.deps import CurrentUser, get_current_user
 from api.v1 import api_v1_router
 from api.v1.endpoints import admin_logs, admin_notifications
 from src.services.notification_service import NotificationDeliveryClient, NotificationService
 from src.services.quota_policy_service import QuotaPolicyService
-from src.storage import DatabaseManager
+from src.storage import (
+    DatabaseManager,
+    NotificationChannel as NotificationChannelRow,
+    PortfolioAccount,
+    PortfolioCashLedger,
+    PortfolioTrade,
+)
 
 
 def _admin_user() -> CurrentUser:
@@ -148,7 +155,7 @@ class NotificationChannelsTestCase(unittest.TestCase):
             severity_min="warning",
             event_types=["admin_logs.storage"],
             config={
-                "webhook_url": "https://hooks.example.test/services/SECRET/PATH",
+                "webhook_url": "https://user:pass@hooks.example.test/services/SECRET/PATH",
                 "token": "super-secret-token",
             },
         )
@@ -157,6 +164,7 @@ class NotificationChannelsTestCase(unittest.TestCase):
 
         self.assertEqual(payload[0]["id"], channel["id"])
         self.assertNotIn("super-secret-token", str(payload))
+        self.assertNotIn("user:pass", str(payload))
         self.assertNotIn("/services/SECRET/PATH", str(payload))
         self.assertEqual(payload[0]["config"]["token"], "********")
         self.assertEqual(payload[0]["config"]["webhook_url"], "https://hooks.example.test/***")
@@ -213,6 +221,49 @@ class NotificationChannelsTestCase(unittest.TestCase):
                 event_types=["admin_logs.storage"],
                 config={},
             )
+
+    def test_default_rehearsal_path_makes_no_external_network_call(self) -> None:
+        with patch("urllib.request.urlopen", side_effect=AssertionError("network call attempted")) as mock_urlopen:
+            event = self.service.emit_event(
+                event_type="notifications.staging_rehearsal",
+                severity="warning",
+                title="Notification rehearsal",
+                message="Default staging rehearsal should stay local",
+                payload={"dry_run": True},
+                fingerprint="notifications:default-no-network",
+            )
+
+        self.assertEqual(event["delivery_status"], "no_channels")
+        self.assertEqual(self.delivery.webhook_calls, [])
+        mock_urlopen.assert_not_called()
+
+    def test_missing_channel_config_fails_closed_with_sanitized_reason_code(self) -> None:
+        now = datetime.utcnow()
+        with self.db.session_scope() as session:
+            row = NotificationChannelRow(
+                name="broken webhook",
+                type="webhook",
+                enabled=True,
+                severity_min="warning",
+                event_types_json="[]",
+                config_json="{}",
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(row)
+            session.flush()
+            channel_id = row.id
+
+        result = self.service.test_channel(channel_id, dry_run=True)
+        combined = f"{result} {self.service.list_channels()}"
+
+        self.assertFalse(result["success"])
+        self.assertTrue(result["dry_run"])
+        self.assertEqual(result["error_code"], "webhook_delivery_failed")
+        self.assertEqual(result["error"], "Webhook delivery failed")
+        self.assertEqual(result["target_summary"], "webhook:unconfigured")
+        self.assertNotIn("webhook_url must be", combined)
+        self.assertNotIn("Traceback", combined)
 
     def test_quota_budget_alert_dry_run_intent_has_no_default_outbound_delivery(self) -> None:
         self.db.upsert_quota_policy(
@@ -506,6 +557,35 @@ class NotificationChannelsTestCase(unittest.TestCase):
         self.assertIsNotNone(listed["last_tested_at"])
         self.assertIsNone(listed["last_sent_at"])
 
+    def test_dry_run_channel_intent_redacts_delivery_credentials(self) -> None:
+        channel = self.service.create_channel(
+            name="ops webhook",
+            type="webhook",
+            enabled=True,
+            severity_min="warning",
+            event_types=[],
+            config={
+                "webhook_url": "https://user:pass@hooks.example.test/services/raw/path",
+                "token": "route-token",
+                "api_key": "provider-api-key",
+                "session_cookie": "raw-cookie",
+                "provider_credentials": {"password": "provider-password"},
+            },
+        )
+
+        result = self.service.test_channel(channel["id"], dry_run=True)
+        combined = f"{result} {self.service.list_channels()}"
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["target_summary"], "webhook:configured")
+        self.assertEqual(self.delivery.webhook_calls, [])
+        self.assertNotIn("user:pass", combined)
+        self.assertNotIn("/services/raw/path", combined)
+        self.assertNotIn("route-token", combined)
+        self.assertNotIn("provider-api-key", combined)
+        self.assertNotIn("raw-cookie", combined)
+        self.assertNotIn("provider-password", combined)
+
     def test_delivery_failure_is_recorded_not_raised(self) -> None:
         failing = NotificationService(db=self.db, delivery_client=FakeDeliveryClient(fail=True))
         failing.create_channel(
@@ -573,6 +653,43 @@ class NotificationChannelsTestCase(unittest.TestCase):
         self.assertNotIn("raw-cookie", combined)
         self.assertNotIn("provider raw response", combined)
         self.assertNotIn("/services/raw/path", combined)
+
+    def test_notification_routing_does_not_mutate_broker_order_or_portfolio_state(self) -> None:
+        self.service.create_channel(
+            name="Ops inbox",
+            type="in_app",
+            enabled=True,
+            severity_min="info",
+            event_types=["notifications.staging_rehearsal"],
+            config={},
+        )
+
+        def _portfolio_counts() -> dict[str, int]:
+            with self.db.get_session() as session:
+                return {
+                    "accounts": session.execute(select(func.count(PortfolioAccount.id))).scalar_one(),
+                    "trades": session.execute(select(func.count(PortfolioTrade.id))).scalar_one(),
+                    "cash": session.execute(select(func.count(PortfolioCashLedger.id))).scalar_one(),
+                }
+
+        before = _portfolio_counts()
+        event = self.service.emit_event(
+            event_type="notifications.staging_rehearsal",
+            severity="warning",
+            title="Notification delivery rehearsal",
+            message="Payload contains order-shaped metadata only",
+            payload={
+                "broker_order": {"symbol": "AAPL", "side": "BUY", "quantity": 10},
+                "portfolio_mutation": {"action": "rebalance", "account_id": 99},
+                "dry_run": True,
+            },
+            fingerprint="notifications:no-broker-portfolio-mutation",
+        )
+        after = _portfolio_counts()
+
+        self.assertEqual(event["delivery_status"], "delivered")
+        self.assertEqual(before, after)
+        self.assertEqual(self.delivery.webhook_calls, [])
 
     def test_ssl_delivery_failure_is_classified_and_localized_by_request_language(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

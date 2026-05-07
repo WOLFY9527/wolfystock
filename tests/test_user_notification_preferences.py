@@ -196,6 +196,28 @@ class UserNotificationPreferencesTestCase(unittest.TestCase):
         admin_pipeline = StockAnalysisPipeline(owner_id=BOOTSTRAP_ADMIN_USER_ID)
         self.assertIn(NotificationChannel.DISCORD, admin_pipeline.notifier.get_available_channels())
 
+    def test_disabled_user_preferences_suppress_delivery_intent_even_when_system_channels_exist(self) -> None:
+        self.db.upsert_user_notification_preferences(
+            self.user_id,
+            email="alice@example.com",
+            enabled=False,
+            channel="email",
+            discord_webhook="https://discord.com/api/webhooks/123/token",
+            discord_enabled=False,
+        )
+
+        user_notifier = NotificationService(channel_allowlist=[])
+        self.assertEqual(user_notifier.get_available_channels(), [])
+        self.assertFalse(user_notifier.is_available())
+
+        user_pipeline = StockAnalysisPipeline(owner_id=self.user_id)
+        self.assertEqual(user_pipeline.notifier.get_available_channels(), [])
+        self.assertFalse(user_pipeline.notifier.is_available())
+
+        system_notifier = NotificationService()
+        self.assertIn(NotificationChannel.EMAIL, system_notifier.get_available_channels())
+        self.assertIn(NotificationChannel.DISCORD, system_notifier.get_available_channels())
+
 
 if __name__ == "__main__":
     unittest.main()

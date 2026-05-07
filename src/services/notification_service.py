@@ -165,7 +165,10 @@ def _mask_webhook_url(value: Any) -> str:
     url = str(value or "").strip()
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme in {"http", "https"} and parsed.netloc:
-        return f"{parsed.scheme}://{parsed.netloc}/***"
+        host = parsed.hostname or ""
+        if parsed.port is not None:
+            host = f"{host}:{parsed.port}"
+        return f"{parsed.scheme}://{host}/***" if host else MASKED_VALUE
     return MASKED_VALUE if url else ""
 
 

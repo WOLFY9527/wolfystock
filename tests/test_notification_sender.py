@@ -49,6 +49,40 @@ def _response(status_code: int, json_body: Optional[dict] = None):
     return resp
 
 
+class TestNotificationSenderDefaultRehearsal(unittest.TestCase):
+    """Staging rehearsal evidence for default no-outbound sender posture."""
+
+    def test_default_config_disables_all_real_senders_without_network_calls(self):
+        cfg = _config()
+
+        with mock.patch("requests.post", side_effect=AssertionError("network call attempted")) as mock_post, \
+                mock.patch("smtplib.SMTP_SSL", side_effect=AssertionError("smtp call attempted")) as mock_smtp_ssl, \
+                mock.patch("smtplib.SMTP", side_effect=AssertionError("smtp call attempted")) as mock_smtp:
+            checks = [
+                DiscordSender(cfg).send_to_discord("hello"),
+                WechatSender(cfg).send_to_wechat("hello"),
+                WechatSender(cfg)._send_wechat_image(b"PNG_BYTES"),
+                FeishuSender(cfg).send_to_feishu("hello"),
+                TelegramSender(cfg).send_to_telegram("hello"),
+                TelegramSender(cfg)._send_telegram_photo(b"PNG_BYTES"),
+                EmailSender(cfg).send_to_email("hello"),
+                EmailSender(cfg)._send_email_with_inline_image(b"PNG_BYTES"),
+                PushoverSender(cfg).send_to_pushover("hello"),
+                PushplusSender(cfg).send_to_pushplus("hello"),
+                Serverchan3Sender(cfg).send_to_serverchan3("hello"),
+                CustomWebhookSender(cfg).send_to_custom("hello"),
+                CustomWebhookSender(cfg)._send_custom_webhook_image(b"PNG_BYTES"),
+                SlackSender(cfg).send_to_slack("hello"),
+                SlackSender(cfg)._send_slack_image(b"PNG_BYTES"),
+                AstrbotSender(cfg).send_to_astrbot("hello"),
+            ]
+
+        self.assertTrue(all(result is False for result in checks))
+        mock_post.assert_not_called()
+        mock_smtp_ssl.assert_not_called()
+        mock_smtp.assert_not_called()
+
+
 class TestDiscordSender(unittest.TestCase):
     """Unit tests for DiscordSender."""
 
