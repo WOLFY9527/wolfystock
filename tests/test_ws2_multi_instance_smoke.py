@@ -156,6 +156,61 @@ class Ws2MultiInstanceSmokeTestCase(unittest.TestCase):
         self.assertEqual(durable["lease_owner"], "worker-a")
         self.assertEqual(durable["attempt_count"], 1)
 
+    def test_two_simulated_workers_complete_distinct_tasks_without_state_corruption(self) -> None:
+        self._api_create_synthetic_task("ws2-smoke-worker-a-task", "owner-a")
+        self._api_create_synthetic_task("ws2-smoke-worker-b-task", "owner-b")
+        claimed_at = datetime(2026, 1, 1, 12, 0, 0)
+        worker_a_db = self._open_instance_db()
+        first_claim = worker_a_db.claim_next_durable_task_state(
+            worker_id="worker-a",
+            task_type=SYNTHETIC_TASK_TYPE,
+            lease_seconds=60,
+            now=claimed_at,
+        )
+
+        worker_b_db = self._open_instance_db()
+        second_claim = worker_b_db.claim_next_durable_task_state(
+            worker_id="worker-b",
+            task_type=SYNTHETIC_TASK_TYPE,
+            lease_seconds=60,
+            now=claimed_at,
+        )
+        worker_b_complete = worker_b_db.complete_claimed_durable_task_state(
+            task_id="ws2-smoke-worker-b-task",
+            worker_id="worker-b",
+            metadata={"result_ref": "fixture:worker-b"},
+            now=claimed_at,
+        )
+        worker_a_complete_db = self._open_instance_db()
+        worker_a_complete = worker_a_complete_db.complete_claimed_durable_task_state(
+            task_id="ws2-smoke-worker-a-task",
+            worker_id="worker-a",
+            metadata={"result_ref": "fixture:worker-a"},
+            now=claimed_at,
+        )
+
+        owner_a_status = self._status_from_fresh_api_instance("ws2-smoke-worker-a-task", "owner-a")
+        owner_b_status = self._status_from_fresh_api_instance("ws2-smoke-worker-b-task", "owner-b")
+        owner_a_state = DatabaseManager.get_instance().get_durable_task_state(
+            task_id="ws2-smoke-worker-a-task",
+            owner_user_id="owner-a",
+        )
+        owner_b_state = DatabaseManager.get_instance().get_durable_task_state(
+            task_id="ws2-smoke-worker-b-task",
+            owner_user_id="owner-b",
+        )
+
+        self.assertEqual(first_claim["task_id"], "ws2-smoke-worker-a-task")
+        self.assertEqual(second_claim["task_id"], "ws2-smoke-worker-b-task")
+        self.assertIsNotNone(worker_a_complete)
+        self.assertIsNotNone(worker_b_complete)
+        self.assertEqual(owner_a_status.status, "completed")
+        self.assertEqual(owner_b_status.status, "completed")
+        self.assertEqual(owner_a_state["metadata"]["result_ref"], "fixture:worker-a")
+        self.assertEqual(owner_b_state["metadata"]["result_ref"], "fixture:worker-b")
+        self.assertIsNone(owner_a_state["lease_owner"])
+        self.assertIsNone(owner_b_state["lease_owner"])
+
     def test_stale_worker_lease_is_visible_and_reclaimable_once_expired(self) -> None:
         self._api_create_synthetic_task("ws2-smoke-stale-lease", "owner-a")
         worker_a_db = self._open_instance_db()

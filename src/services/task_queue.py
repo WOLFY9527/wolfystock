@@ -68,6 +68,24 @@ def _read_worker_count_hints() -> Tuple[Dict[str, int], int]:
     return hints, configured_worker_count
 
 
+def _build_streaming_topology_status() -> Dict[str, Any]:
+    """Describe SSE delivery limits without inspecting runtime payloads."""
+    return {
+        "sse_scope": "process_local",
+        "sse_multi_instance_broadcast_safe": False,
+        "safe_cross_instance_fallback": "durable_task_polling",
+        "polling_cross_instance_safe": True,
+        "external_service_required_by_default": False,
+        "accepted_distributed_streaming_evidence": False,
+        "limitation": (
+            "SSE subscriptions are process-local and are not multi-instance broadcast-safe."
+        ),
+        "fallback_guidance": (
+            "Use owner-scoped durable task polling for cross-instance status and progress replay."
+        ),
+    }
+
+
 def _build_configured_execution_summary(owner_id: Optional[str] = None) -> Dict[str, Any]:
     """Build best-known in-progress execution state from current config."""
     from src.config import get_config
@@ -449,10 +467,13 @@ class AnalysisTaskQueue:
         """Describe deployment assumptions for readiness checks and operator docs."""
         worker_hints, configured_worker_count = _read_worker_count_hints()
         topology_ok = configured_worker_count <= 1
+        streaming_topology = _build_streaming_topology_status()
+        launch_status = "limited_single_process" if topology_ok else "blocked_process_local_sse"
         warning = None
         if not topology_ok:
             warning = (
                 "Analysis task queue and SSE state are process-local. "
+                "SSE is not multi-instance broadcast-safe; use durable task polling for cross-instance progress replay. "
                 "Deploy the API as a single process or provide sticky routing with isolated task ownership."
             )
 
@@ -460,9 +481,11 @@ class AnalysisTaskQueue:
             return {
                 "mode": "process_local",
                 "single_process_required": True,
+                "launch_status": launch_status,
                 "configured_worker_count": configured_worker_count,
                 "worker_hints": worker_hints,
                 "topology_ok": topology_ok,
+                "streaming_topology": streaming_topology,
                 "shutdown": self._shutdown,
                 "accepting_new_tasks": not self._shutdown,
                 "max_workers": self._max_workers,
