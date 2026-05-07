@@ -276,6 +276,45 @@ function providerProbeEventsPayload() {
   };
 }
 
+function providerSlaReadinessPayload() {
+  return {
+    generated_at: timestamp,
+    items: [
+      {
+        provider: 'mock-provider',
+        provider_category: 'llm',
+        route_family: 'analysis',
+        readiness_state: 'dry_run_enabled',
+        reason_code: 'mocked_e2e_readiness',
+        credential_state: 'missing_credentials',
+        live_providers_enabled: false,
+        provider_enabled: true,
+        credentials_present: false,
+        dry_run_enabled: true,
+        live_http_calls_enabled: false,
+        broker_order_path_enabled: false,
+        portfolio_mutation_path_enabled: false,
+        tradeable_data: false,
+        latency_bucket_ms: 120,
+        latency_state: 'normal',
+        error_rate: 0,
+        error_state: 'normal',
+        freshness_seconds: 60,
+        freshness_state: 'fresh',
+        recent_errors: [],
+        circuit_advisory_state: 'observe',
+        circuit_state_candidate: 'closed',
+        live_enforcement: false,
+        would_block_call: false,
+        would_change_provider_order: false,
+        would_change_fallback_behavior: false,
+        no_external_calls: true,
+      },
+    ],
+    metadata: providerCircuitMetadata(),
+  };
+}
+
 function adminUsersPayload() {
   return {
     items: [{
@@ -402,6 +441,9 @@ export async function installAdminAuthHarness(
     }
     if (method === 'GET' && path === '/api/v1/admin/providers/probe-events') {
       return fulfillJson(route, providerProbeEventsPayload());
+    }
+    if (method === 'GET' && path === '/api/v1/admin/providers/sla-readiness') {
+      return fulfillJson(route, providerSlaReadinessPayload());
     }
     if (method === 'GET' && path === '/api/v1/admin/users') {
       return fulfillJson(route, adminUsersPayload());
