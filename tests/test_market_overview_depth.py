@@ -89,6 +89,8 @@ def test_market_refresh_failure_serves_stale_snapshot_with_provider_health() -> 
     assert served_payload["items"][0]["symbol"] == warm_payload["items"][0]["symbol"]
     assert served_payload["isStale"] is True
     assert served_payload["providerHealth"]["status"] == "stale"
+    assert served_payload["providerHealth"]["isStale"] is True
+    assert served_payload["providerHealth"]["status"] != "live"
     assert served_payload["providerHealth"]["errorSummary"] == "数据源暂不可用"
     assert "provider_down" not in str(served_payload)
     assert "raw stack trace" not in str(served_payload)
@@ -144,7 +146,10 @@ def test_partial_provider_health_is_preserved_for_mixed_cn_indices() -> None:
         payload = service.get_cn_indices()
 
     assert payload["source"] == "mixed"
+    assert payload["fallbackUsed"] is True
     assert payload["providerHealth"]["status"] == "partial"
+    assert payload["providerHealth"]["status"] != "live"
+    assert payload["providerHealth"]["isFallback"] is False
     assert any(item["source"] == "sina" and item["isFallback"] is False for item in payload["items"])
     assert any(item["isFallback"] is True for item in payload["items"])
 

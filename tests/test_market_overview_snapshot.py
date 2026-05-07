@@ -83,6 +83,8 @@ def test_failed_fetch_returns_previous_snapshot_as_stale() -> None:
     assert payload["isStale"] is True
     assert payload["isFromSnapshot"] is True
     assert payload["freshness"] == "stale"
+    assert payload["items"][0]["freshness"] == "stale"
+    assert payload["items"][0]["isStale"] is True
     assert payload["lastSuccessfulAt"] == "2026-05-04T09:30:00+08:00"
     assert "indices request timed out" in payload["refreshError"]
     assert len(payload["refreshError"]) <= 180

@@ -62,6 +62,36 @@ def test_required_data_missing_caps_insufficient_to_40():
     assert "required_data_missing" in report["reasonCodes"]
 
 
+def test_stale_required_quote_lowers_confidence_and_discloses_freshness():
+    context = _quality_context(
+        realtime={
+            "price": 101.0,
+            "pre_close": 100.0,
+            "open_price": 100.5,
+            "high": 102.0,
+            "low": 99.5,
+            "source": "fixture_quote",
+            "market_timestamp": "2026-04-29T16:00:00-04:00",
+        },
+        market_timestamp="2026-04-29T16:00:00-04:00",
+        market_session_date="2026-04-29",
+        session_type="last_completed_session",
+    )
+
+    report = build_data_quality_report(
+        context=context,
+        data_quality={"missing_fields": [], "sentiment_status": "ok"},
+        diagnostics={"news_status": "ok"},
+    ).to_api_dict()
+
+    assert report["requiredAvailable"] is True
+    assert report["dataQualityTier"] == "analysis_grade"
+    assert report["confidenceCap"] <= 75
+    assert report["staleSources"] == ["quote"]
+    assert report["freshness"]["sessionType"] == "last_completed_session"
+    assert "stale_required_source" in report["reasonCodes"]
+
+
 def test_missing_fundamentals_caps_but_does_not_fail_when_required_exists():
     report = build_data_quality_report(
         context=_quality_context(),

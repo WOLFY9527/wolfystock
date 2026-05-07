@@ -9,7 +9,11 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
-from src.services.market_overview_service import MarketOverviewService
+from src.services.market_overview_service import (
+    MarketOverviewService,
+    classify_market_payload_reliability,
+    get_freshness_status,
+)
 
 
 CN_TZ = timezone(timedelta(hours=8))
@@ -99,6 +103,44 @@ class MarketFreshnessCacheTestCase(unittest.TestCase):
         self.assertTrue(payload["isFallback"])
         self.assertNotEqual(payload["freshness"], "live")
         self.assertEqual(payload["items"][0]["freshness"], "fallback")
+
+    def test_fallback_mock_and_delayed_states_are_not_disclosed_as_live(self) -> None:
+        now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ)
+
+        fallback = get_freshness_status(now.isoformat(timespec="seconds"), "crypto", "fallback", True, now=now)
+        synthetic = get_freshness_status(now.isoformat(timespec="seconds"), "crypto", "mock", False, now=now)
+        delayed = get_freshness_status(
+            (now - timedelta(minutes=12)).isoformat(timespec="seconds"),
+            "futures",
+            "yahoo",
+            False,
+            now=now,
+        )
+
+        self.assertEqual(fallback["freshness"], "fallback")
+        self.assertTrue(fallback["isFallback"])
+        self.assertEqual(synthetic["freshness"], "mock")
+        self.assertTrue(synthetic["isFallback"])
+        self.assertEqual(delayed["freshness"], "delayed")
+        self.assertFalse(delayed["isFallback"])
+        self.assertNotIn("live", {fallback["freshness"], synthetic["freshness"], delayed["freshness"]})
+
+    def test_synthetic_and_delayed_inputs_do_not_get_full_live_confidence(self) -> None:
+        synthetic = classify_market_payload_reliability(
+            {"symbol": "BTC", "value": 75800, "source": "mock", "freshness": "mock"},
+            category="crypto",
+        )
+        delayed = classify_market_payload_reliability(
+            {"symbol": "ES", "value": 5238, "source": "yahoo", "freshness": "delayed"},
+            category="futures",
+        )
+
+        self.assertEqual(synthetic["kind"], "fallback")
+        self.assertFalse(synthetic["isReliable"])
+        self.assertEqual(synthetic["confidenceWeight"], 0.0)
+        self.assertEqual(delayed["kind"], "real")
+        self.assertTrue(delayed["isReliable"])
+        self.assertLess(delayed["confidenceWeight"], 1.0)
 
     def test_overview_indices_slow_cold_fetch_returns_fallback_quickly(self) -> None:
         service = MarketOverviewService()
