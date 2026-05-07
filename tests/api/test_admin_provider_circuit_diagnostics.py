@@ -162,12 +162,34 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertTrue(payload["metadata"]["readOnly"])
         self.assertTrue(payload["metadata"]["noExternalCalls"])
         self.assertFalse(payload["metadata"]["liveEnforcement"])
+        self.assertFalse(payload["metadata"]["providerBehaviorChanged"])
+        self.assertFalse(payload["metadata"]["marketCacheBehaviorChanged"])
         fmp = next(item for item in payload["items"] if item["provider"] == "fmp")
         self.assertEqual(fmp["providerCategory"], "quote")
         self.assertEqual(fmp["routeFamily"], "analysis")
         self.assertEqual(fmp["state"], "open")
         self.assertEqual(fmp["reasonBucket"], "timeout")
         self.assertEqual(fmp["operatorActionRef"], "SAFE-AUDIT-1")
+
+    def test_all_provider_diagnostics_surfaces_remain_read_only_and_non_enforcing(self) -> None:
+        self._as_provider_read_admin()
+        self._seed_circuit_fixture()
+
+        responses = (
+            self.client.get("/api/v1/admin/providers/circuits"),
+            self.client.get("/api/v1/admin/providers/circuits/events"),
+            self.client.get("/api/v1/admin/providers/quota-windows"),
+            self.client.get("/api/v1/admin/providers/probe-events"),
+        )
+
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+            metadata = response.json()["metadata"]
+            self.assertTrue(metadata["readOnly"])
+            self.assertTrue(metadata["noExternalCalls"])
+            self.assertFalse(metadata["liveEnforcement"])
+            self.assertFalse(metadata["providerBehaviorChanged"])
+            self.assertFalse(metadata["marketCacheBehaviorChanged"])
 
     def test_non_admin_denied(self) -> None:
         self._as_user()

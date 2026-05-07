@@ -163,6 +163,67 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
         self.assertEqual(result["quota_window"]["window_start"], "2026-05-06T14:17:00")
         self.assertEqual(result["quota_window"]["window_end"], "2026-05-06T14:18:00")
 
+    def test_preflight_state_classifies_success_as_healthy_without_enforcement(self) -> None:
+        result = self.observer.classify_preflight_state(result_bucket="success")
+
+        self.assertEqual(result["preflight_state"], "healthy")
+        self.assertEqual(result["state_candidate"], "closed")
+        self.assertFalse(result["live_enforcement"])
+        self.assertFalse(result["would_block_call"])
+        self.assertFalse(result["would_change_provider_order"])
+        self.assertFalse(result["would_change_fallback_behavior"])
+
+    def test_preflight_state_classifies_quota_and_auth_buckets_as_degraded_candidates(self) -> None:
+        quota_result = self.observer.classify_preflight_state(result_bucket="provider_429")
+        auth_result = self.observer.classify_preflight_state(result_bucket="auth_or_key_invalid")
+
+        self.assertEqual(quota_result["preflight_state"], "degraded")
+        self.assertEqual(quota_result["state_candidate"], "provider_quota_depleted")
+        self.assertEqual(auth_result["preflight_state"], "degraded")
+        self.assertEqual(auth_result["state_candidate"], "disabled_by_operator")
+        self.assertFalse(quota_result["live_enforcement"])
+        self.assertFalse(auth_result["live_enforcement"])
+
+    def test_preflight_state_classifies_timeout_and_5xx_buckets_as_open_candidates(self) -> None:
+        timeout_result = self.observer.classify_preflight_state(result_bucket="timeout")
+        error_result = self.observer.classify_preflight_state(result_bucket="provider_5xx")
+
+        self.assertEqual(timeout_result["preflight_state"], "open_candidate")
+        self.assertEqual(timeout_result["state_candidate"], "open")
+        self.assertEqual(error_result["preflight_state"], "open_candidate")
+        self.assertEqual(error_result["state_candidate"], "open")
+        self.assertFalse(timeout_result["would_block_call"])
+        self.assertFalse(error_result["would_change_provider_order"])
+
+    def test_record_observation_returns_matching_preflight_state_without_durable_transition(self) -> None:
+        result = self.observer.record_observation(
+            provider="fmp",
+            provider_category="quote",
+            route_family="analysis",
+            result_bucket="provider_429",
+            observed_at=datetime(2026, 5, 6, 15, 0, 0),
+        )
+
+        self.assertEqual(result["preflight"]["preflight_state"], "degraded")
+        self.assertEqual(result["preflight"]["state_candidate"], "provider_quota_depleted")
+        self.assertFalse(result["preflight"]["live_enforcement"])
+        self.assertIsNone(result["state"])
+
+    def test_cooldown_observation_returns_open_candidate_preflight_without_state_change(self) -> None:
+        result = self.observer.record_cooldown_observation(
+            provider="alpaca",
+            provider_category="quote",
+            route_family="analysis",
+            reason_bucket="timeout",
+            cooldown_until=datetime(2026, 5, 6, 16, 0, 0),
+            observed_at=datetime(2026, 5, 6, 15, 30, 0),
+        )
+
+        self.assertEqual(result["preflight"]["preflight_state"], "open_candidate")
+        self.assertEqual(result["preflight"]["state_candidate"], "open")
+        self.assertFalse(result["preflight"]["live_enforcement"])
+        self.assertIsNone(result["state"])
+
 
 if __name__ == "__main__":
     unittest.main()

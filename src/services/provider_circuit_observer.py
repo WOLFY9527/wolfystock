@@ -32,6 +32,20 @@ class ProviderCircuitObserver:
     }
     FAILURE_BUCKETS = RESULT_BUCKETS - {"success"}
     REJECTED_BUCKETS = {"quota_policy_block", "operator_disabled"}
+    _OPEN_CANDIDATE_BUCKETS = {
+        "timeout",
+        "provider_5xx",
+        "network_error",
+        "malformed_payload",
+        "insufficient_payload",
+    }
+    _DEGRADED_STATE_BY_BUCKET = {
+        "provider_429": "provider_quota_depleted",
+        "quota_policy_block": "provider_quota_depleted",
+        "provider_403": "disabled_by_operator",
+        "auth_or_key_invalid": "disabled_by_operator",
+        "operator_disabled": "disabled_by_operator",
+    }
 
     def __init__(self, *, db: Optional[DatabaseManager] = None) -> None:
         self.db = db or DatabaseManager.get_instance()
@@ -121,6 +135,7 @@ class ProviderCircuitObserver:
             "quota_window": quota_window,
             "event": event,
             "probe_event": probe_event,
+            "preflight": self.classify_preflight_state(result_bucket=bucket),
             "state": None,
         }
 
@@ -165,7 +180,31 @@ class ProviderCircuitObserver:
             "quota_window": None,
             "event": event,
             "probe_event": None,
+            "preflight": self.classify_preflight_state(result_bucket=bucket),
             "state": None,
+        }
+
+    def classify_preflight_state(self, *, result_bucket: str) -> Dict[str, Any]:
+        """Classify a dry-run observation for future enforcement planning only."""
+        bucket = self._normalize_bucket(result_bucket)
+        if bucket == "success":
+            preflight_state = "healthy"
+            state_candidate = "closed"
+        elif bucket in self._OPEN_CANDIDATE_BUCKETS:
+            preflight_state = "open_candidate"
+            state_candidate = "open"
+        else:
+            preflight_state = "degraded"
+            state_candidate = self._DEGRADED_STATE_BY_BUCKET.get(bucket, "degraded_cache_only")
+
+        return {
+            "result_bucket": bucket,
+            "preflight_state": preflight_state,
+            "state_candidate": state_candidate,
+            "live_enforcement": False,
+            "would_block_call": False,
+            "would_change_provider_order": False,
+            "would_change_fallback_behavior": False,
         }
 
     def _normalize_bucket(self, value: str) -> str:
