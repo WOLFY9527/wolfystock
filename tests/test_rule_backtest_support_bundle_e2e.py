@@ -68,6 +68,7 @@ SENSITIVE_EXPORT_KEY_TERMS = (
     "apikey",
     "cookie",
     "credential",
+    "order_payload",
     "password",
     "provider_payload",
     "payload_json",
@@ -79,11 +80,33 @@ SENSITIVE_EXPORT_KEY_TERMS = (
 )
 
 RAW_PROVIDER_SENTINELS = (
+    "BROKER_CREDENTIAL_SHOULD_NOT_LEAK",
+    "ORDER_PAYLOAD_SHOULD_NOT_LEAK",
+    "PLACE_ORDER_SHOULD_NOT_LEAK",
+    "PROVIDER_CREDENTIAL_SHOULD_NOT_LEAK",
     "RAW_PROVIDER_PAYLOAD_SHOULD_NOT_LEAK",
     "SECRET_VALUE_SHOULD_NOT_LEAK",
     "TOKEN_VALUE_SHOULD_NOT_LEAK",
     "SESSION_VALUE_SHOULD_NOT_LEAK",
     "PASSWORD_VALUE_SHOULD_NOT_LEAK",
+)
+
+FORBIDDEN_EXPORT_TEXT_MARKERS = (
+    "broker_credentials",
+    "brokerorderpayload",
+    "execute_order",
+    "guaranteed",
+    "must buy",
+    "must sell",
+    "order_payload",
+    "place_order",
+    "provider_credentials",
+    "submit_order",
+    "buy now",
+    "sell now",
+    "稳赚",
+    "必买",
+    "下单",
 )
 
 
@@ -223,6 +246,9 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
         for sentinel in RAW_PROVIDER_SENTINELS:
             self.assertNotIn(sentinel, serialized)
+        normalized = serialized.lower()
+        for marker in FORBIDDEN_EXPORT_TEXT_MARKERS:
+            self.assertNotIn(marker.lower(), normalized)
 
         def walk(value: object) -> None:
             if isinstance(value, dict):
@@ -577,6 +603,11 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 "raw_provider_payload": "RAW_PROVIDER_PAYLOAD_SHOULD_NOT_LEAK",
                 "provider_payload": {"token": "TOKEN_VALUE_SHOULD_NOT_LEAK"},
                 "payload_json": {"session": "SESSION_VALUE_SHOULD_NOT_LEAK"},
+                "broker_credentials": {"api_key": "BROKER_CREDENTIAL_SHOULD_NOT_LEAK"},
+                "provider_credentials": {"api_key": "PROVIDER_CREDENTIAL_SHOULD_NOT_LEAK"},
+                "brokerOrderPayload": {"endpoint": "/api/v1/broker/orders"},
+                "order_payload": "ORDER_PAYLOAD_SHOULD_NOT_LEAK",
+                "place_order": "PLACE_ORDER_SHOULD_NOT_LEAK",
                 "secret": "SECRET_VALUE_SHOULD_NOT_LEAK",
                 "password": "PASSWORD_VALUE_SHOULD_NOT_LEAK",
             }

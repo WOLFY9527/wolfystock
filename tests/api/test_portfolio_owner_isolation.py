@@ -335,6 +335,11 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
             self._assert_public_export_safe_text(text)
 
         rejected_exports = [
+            self.alice_client.put(
+                f"/api/v1/portfolio/accounts/{bob_account}",
+                json={"name": "stolen account"},
+            ),
+            self.alice_client.delete(f"/api/v1/portfolio/accounts/{bob_account}"),
             self.alice_client.get("/api/v1/portfolio/trades", params={"account_id": bob_account, "page_size": 100}),
             self.alice_client.get("/api/v1/portfolio/cash-ledger", params={"account_id": bob_account, "page_size": 100}),
             self.alice_client.get("/api/v1/portfolio/corporate-actions", params={"account_id": bob_account, "page_size": 100}),

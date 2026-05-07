@@ -149,6 +149,33 @@ def test_launch_exposed_analysis_scanner_options_backtest_apis_do_not_import_ord
                 assert call_name not in FORBIDDEN_CALL_NAMES, f"{call_name!r} called by {path}"
 
 
+def test_portfolio_backtest_runtime_files_do_not_import_order_execution_modules() -> None:
+    repo_root = _repo_root()
+    runtime_files = (
+        repo_root / "api/v1/endpoints/backtest.py",
+        repo_root / "api/v1/endpoints/portfolio.py",
+        repo_root / "src/repositories/backtest_repo.py",
+        repo_root / "src/repositories/portfolio_repo.py",
+        repo_root / "src/repositories/rule_backtest_repo.py",
+        repo_root / "src/services/backtest_service.py",
+        repo_root / "src/services/portfolio_service.py",
+        repo_root / "src/services/rule_backtest_service.py",
+    )
+
+    for path in runtime_files:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        imports = _import_targets(tree)
+        for imported in imports:
+            normalized = imported.lower()
+            for fragment in FORBIDDEN_IMPORT_MODULE_FRAGMENTS:
+                assert fragment not in normalized, f"{imported!r} imported by {path}"
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                call_name = _call_name(node)
+                assert call_name not in FORBIDDEN_CALL_NAMES, f"{call_name!r} called by {path}"
+
+
 def test_admin_provider_broker_placeholder_remains_disabled_read_only_and_non_executable() -> None:
     source = (_repo_root() / "api/v1/endpoints/admin_provider_circuits.py").read_text(encoding="utf-8")
 

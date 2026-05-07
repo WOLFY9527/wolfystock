@@ -1726,6 +1726,10 @@ class RuleBacktestTestCase(unittest.TestCase):
             manifest["artifact_counts"]["execution_trace_rows_count"],
             len((run.get("execution_trace") or {}).get("rows") or []),
         )
+        for payload in (manifest, reproducibility, export_index):
+            self._assert_public_backtest_text_is_analytical(
+                json.dumps(payload, ensure_ascii=False, sort_keys=True)
+            )
 
         expected_trace_available = bool((run.get("execution_trace") or {}).get("rows") or [])
         expected_trace_reason = (
@@ -1824,6 +1828,10 @@ class RuleBacktestTestCase(unittest.TestCase):
                 trace_json["benchmark_summary"].get("requested_mode"),
                 manifest["run"]["benchmark_mode"],
             )
+            self._assert_public_backtest_text_is_analytical(
+                json.dumps(trace_json, ensure_ascii=False, sort_keys=True)
+            )
+            self._assert_public_backtest_text_is_analytical(trace_csv_text)
         else:
             with self.assertRaisesRegex(ValueError, "has no audit rows to export"):
                 service.get_execution_trace_export_json(run_id)
