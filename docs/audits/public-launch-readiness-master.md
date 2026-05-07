@@ -1,7 +1,7 @@
 # Public Launch Readiness Master
 
 Status: Current
-Date: 2026-05-07
+Date: 2026-05-08
 Branch checked: `main`
 Owner domain: Release readiness
 Related docs: `docs/audits/public-launch-gap-register.md`,
@@ -11,10 +11,10 @@ Related docs: `docs/audits/public-launch-gap-register.md`,
 `docs/audits/archive/final-pre-push-audit.md`,
 `docs/audits/known-test-warnings-register.md`
 
-Mode: launch readiness summary. The current production-config update adds
-synthetic/sanitized release contract preflight script/tests/docs only; no
-runtime API behavior, production deployment config, frontend app code, provider
-configuration, migrations, or production data paths were changed.
+Mode: launch readiness summary. The current docs hygiene pass updates launch
+navigation/status wording only; no runtime API behavior, production deployment
+config, frontend app code, provider configuration, migrations, market-rotation
+source/tests, or production data paths were changed.
 
 ## Executive verdict
 
@@ -25,6 +25,10 @@ blocking gates below are closed or explicitly accepted as production exceptions.
 Existing foundations are useful, but several launch-critical surfaces remain
 scaffolded, observational, fixture-only, single-process-limited, or missing
 staging evidence.
+
+Market Rotation Radar is a current read-only product capability, not a launch
+blocker and not launch approval evidence. It does not change provider
+entitlement, freshness, quota, security, owner-isolation, or deployment gates.
 
 The operator evidence pack now defines the sanitized acceptance schema for the
 remaining launch blockers through

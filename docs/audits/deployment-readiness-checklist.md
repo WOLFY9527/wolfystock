@@ -1,12 +1,12 @@
 # Public Multi-user Deployment Readiness Checklist
 
-Date: 2026-05-07
+Date: 2026-05-08
 Branch checked: `main`
 Mode: deployment readiness preflight update. No runtime API behavior, schema,
-frontend app code, providers, Options, Data Pipeline, cost/quota, auth behavior,
-production deployment config, migrations, or production data paths were changed.
-The launch acceptance evidence pack added in this pass is schema/checklist
-only and does not approve launch.
+frontend app code, providers, market-rotation source/tests, Options, Data
+Pipeline, cost/quota, auth behavior, production deployment config, migrations,
+or production data paths were changed. The launch acceptance evidence pack is
+schema/checklist only and does not approve launch.
 
 ## 1. Executive summary
 
@@ -21,6 +21,9 @@ quota enforcement pilot-readiness preflight, provider circuit
 storage/diagnostics/dry-run observation, DB index Batch A, local backup/restore
 dry-run preflight, secret-scan/admin harness coverage, and fixture-backed
 Options/Data Pipeline improvements.
+
+Market Rotation Radar is also present as a read-only product capability. It is
+not a deployment blocker and does not close any launch gate by itself.
 
 The system is still not ready for broad public multi-user exposure because the
 remaining blockers are operational and safety-critical:

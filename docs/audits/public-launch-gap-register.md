@@ -1,10 +1,10 @@
 # Public Launch Gap Register
 
-Date: 2026-05-07
+Date: 2026-05-08
 Branch checked: `main`
 Mode: docs-only public-launch consolidation. No runtime code, tests, schema,
-frontend, provider config, Options, auth, Data Pipeline, cost/quota, or DB
-behavior was changed.
+frontend, provider config, market-rotation source/tests, Options, auth, Data
+Pipeline, cost/quota, or DB behavior was changed.
 
 ## Source Documents
 
@@ -57,6 +57,13 @@ secrets, read production data paths, or change runtime behavior. Missing or
 unsafe evidence keeps the summary at **NO-GO**. Even when all categories are
 accepted, the checker returns `GO-REVIEW-REQUIRED` with `releaseApproved=false`;
 manual release approval is still required.
+
+## Non-blocking Product Capabilities
+
+Market Rotation Radar is tracked as a read-only product capability, not as a
+launch blocker. Its API/UI surface and no-advice/fallback-stale labeling are
+product evidence, but they do not satisfy provider entitlement, freshness,
+quota, security, owner-isolation, or deployment acceptance requirements.
 
 ## Gap Register
 

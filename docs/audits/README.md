@@ -1,6 +1,6 @@
 # Audit Index
 
-Date: 2026-05-07
+Date: 2026-05-08
 Branch checked: `main`
 Mode: docs-only audit navigation cleanup. No source code, tests, scripts,
 frontend files, production configs, or market-rotation files are changed by
@@ -15,7 +15,11 @@ the current launch decision. The canonical launch verdict lives in
 `docs/audits/public-launch-readiness-master.md` and the detailed blocker
 register lives in `docs/audits/public-launch-gap-register.md`.
 
-## Canonical launch control documents
+## Canonical current docs
+
+Use this file as the audit navigation entry point. For current launch posture,
+use the launch-control docs below; do not infer launch status from archived
+notes, fixture examples, or a single product-capability changelog entry.
 
 - `docs/audits/public-launch-readiness-master.md`: executive launch verdict and
   cross-domain readiness summary.
@@ -26,13 +30,23 @@ register lives in `docs/audits/public-launch-gap-register.md`.
 - `docs/audits/public-launch-blocker-burndown.md`: short-form blocker tracker
   for active launch gaps only.
 - `docs/audits/launch-acceptance-evidence-pack.md`: sanitized operator
-  acceptance evidence contract for launch review.
+  acceptance evidence contract and review matrix for launch review. It is not
+  accepted operator evidence by itself.
 - `docs/audits/incident-response-audit-evidence-pack.md`: sanitized incident
-  response and auditability evidence contract for launch review.
+  response and auditability evidence contract for launch review. It is not
+  accepted operator evidence by itself.
 - `docs/audits/release-rollback-runbook.md`: rollback instructions for a
   reviewed release candidate.
 - `docs/audits/known-test-warnings-register.md`: accepted warning inventory
   that must not be confused with launch acceptance.
+
+## Current product capability notes
+
+- Market Rotation Radar is now a read-only product capability with
+  `/api/v1/market/rotation-radar` and `/zh/market/rotation-radar` coverage. It
+  is not a launch blocker, not operator launch evidence, and not a substitute
+  for provider entitlement/freshness acceptance. Current launch status remains
+  governed by the launch-control docs above.
 
 ## Evidence packs and operational runbooks
 
