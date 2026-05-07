@@ -311,6 +311,256 @@ const mockCryptoStreamPayload = marketSnapshot('CryptoCard', [
   { symbol: 'ETH', label: 'Ethereum', value: 3410, changePercent: 0.9 },
 ]);
 
+function historyListPayload() {
+  return {
+    total: 3,
+    page: 1,
+    limit: 20,
+    items: [
+      { id: 3, queryId: 'q3', stockCode: 'ORCL', stockName: 'Oracle', companyName: 'Oracle', createdAt: '2026-04-27T08:00:00Z', generatedAt: '2026-04-27T08:03:00Z', isTest: false },
+      { id: 2, queryId: 'q2', stockCode: 'TSLA', stockName: 'Tesla', companyName: 'Tesla', createdAt: '2026-04-27T07:00:00Z', generatedAt: '2026-04-27T07:05:00Z', isTest: false },
+      { id: 1, queryId: 'q1', stockCode: 'NVDA', stockName: 'NVIDIA', companyName: 'NVIDIA', createdAt: '2026-04-27T06:00:00Z', generatedAt: '2026-04-27T06:04:00Z', isTest: false },
+    ],
+  };
+}
+
+function historyDetailPayload() {
+  return {
+    meta: {
+      id: 3,
+      queryId: 'q3',
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      companyName: 'Oracle',
+      reportType: 'detailed',
+      createdAt: '2026-04-27T08:00:00Z',
+      reportGeneratedAt: '2026-04-27T08:03:00Z',
+      currentPrice: 130.2,
+      changePct: -0.4,
+      modelUsed: 'fixture-model',
+      isTest: true,
+    },
+    summary: {
+      analysisSummary: 'Oracle is holding its post-earnings platform.',
+      operationAdvice: 'Wait for a controlled pullback before adding.',
+      trendPrediction: 'Constructive for the next 72 hours.',
+      sentimentScore: 78,
+      sentimentLabel: 'Bullish',
+    },
+    strategy: {
+      idealBuy: '121.80 - 124.60',
+      stopLoss: '117.40',
+      takeProfit: '133.50',
+    },
+    details: {
+      dataQualityReport: {
+        dataQualityTier: 'analysis_grade',
+        dataQualityScore: 68,
+        requiredAvailable: true,
+        importantMissing: ['fundamentals.eps'],
+        optionalMissing: ['optional_enrichment_pending'],
+        staleSources: [],
+        providerTimeouts: ['gnews:news'],
+        providerCooldowns: ['fmp:fundamentals'],
+        confidenceCap: 70,
+        reasonCodes: ['important_data_missing', 'optional_enrichment_missing'],
+        freshness: { marketSessionDate: '2026-05-05' },
+        enrichmentStatus: 'pending',
+        enrichmentSources: ['news', 'sentiment', 'detailed_fundamentals'],
+        completedSources: ['sentiment'],
+        pendingSources: ['news'],
+        failedSources: [],
+        skippedSources: ['detailed_fundamentals'],
+        enrichmentReasons: { news: ['optional_news_timeout'] },
+        enrichmentUpdatedAt: '2026-05-06T01:01:00Z',
+        enrichmentAsOf: '2026-05-06T01:00:00Z',
+      },
+      standardReport: {
+        summaryPanel: {
+          stock: 'Oracle',
+          ticker: 'ORCL',
+          oneSentence: 'Cloud backlog keeps the medium-term floor intact.',
+        },
+        decisionContext: {
+          shortTermView: 'Post-earnings strength still holds the upper rail',
+        },
+        decisionPanel: {
+          idealEntry: '121.80 - 124.60',
+          target: '133.50',
+          stopLoss: '117.40',
+          buildStrategy: 'Start light, then add only after the pullback stays orderly.',
+        },
+        reasonLayer: {
+          coreReasons: ['Institutional sponsorship remains intact after earnings.'],
+        },
+        technicalFields: [
+          { label: 'MACD', value: 'Second expansion above zero' },
+          { label: 'Moving Averages', value: 'MA20 lifting MA60' },
+        ],
+        fundamentalFields: [
+          { label: 'Revenue Growth', value: '+9.4%' },
+          { label: 'Free Cash Flow', value: '$12.1B' },
+        ],
+      },
+    },
+    dataQualityReport: {
+      dataQualityTier: 'analysis_grade',
+      dataQualityScore: 68,
+      requiredAvailable: true,
+      importantMissing: ['fundamentals.eps'],
+      optionalMissing: ['optional_enrichment_pending'],
+      staleSources: [],
+      providerTimeouts: ['gnews:news'],
+      providerCooldowns: ['fmp:fundamentals'],
+      confidenceCap: 70,
+      reasonCodes: ['important_data_missing', 'optional_enrichment_missing'],
+      freshness: { marketSessionDate: '2026-05-05' },
+      enrichmentStatus: 'pending',
+      enrichmentSources: ['news', 'sentiment', 'detailed_fundamentals'],
+      completedSources: ['sentiment'],
+      pendingSources: ['news'],
+      failedSources: [],
+      skippedSources: ['detailed_fundamentals'],
+      enrichmentReasons: { news: ['optional_news_timeout'] },
+      enrichmentUpdatedAt: '2026-05-06T01:01:00Z',
+      enrichmentAsOf: '2026-05-06T01:00:00Z',
+    },
+    decisionTrace: {
+      engineVersion: 'analysis_decision_trace_v1',
+      mode: 'rule_scoring_with_llm_explanation',
+      endpoint: '/api/v1/analysis/analyze',
+      taskId: 'q3',
+      symbol: 'ORCL',
+      market: 'US',
+      decisionFields: {
+        action: { value: 'hold', source: 'rule', confidence: 0.78, notes: 'stabilized score path' },
+        score: { value: 78, source: 'rule', scale: '0-100' },
+        confidence: { value: '高', source: 'llm' },
+        entry: { value: '121.80 - 124.60', source: 'llm' },
+        target: { value: '133.50', source: 'llm' },
+        stop: { value: '117.40', source: 'llm' },
+      },
+      dataSources: [
+        { name: 'quote', status: 'used', provider: 'Yahoo Finance' },
+        { name: 'fundamental', status: 'fallback', provider: 'FMP' },
+        { name: 'news', status: 'missing', provider: null },
+      ],
+      signals: [
+        { name: 'MA alignment', value: 'bullish', impact: 'positive', source: 'technical_rule' },
+      ],
+      llm: {
+        used: true,
+        provider: 'openai',
+        model: 'openai/gpt-4.1-mini',
+        template: 'decision_dashboard_v2',
+        structuredOutput: true,
+        schemaValidated: true,
+        promptExposed: false,
+      },
+      conflicts: [
+        {
+          type: 'action_plan_mismatch',
+          severity: 'warning',
+          message: 'Action says sell but plan includes entry/accumulation.',
+        },
+      ],
+      limitations: ['fundamental data partial'],
+    },
+  };
+}
+
+function historyNewsPayload() {
+  return { total: 0, items: [] };
+}
+
+function historyMarkdownPayload() {
+  return { content: '# ORCL\n\nFixture report.' };
+}
+
+function analysisTaskProgressPayload() {
+  return {
+    taskId: 'task-1',
+    stockCode: 'ORCL',
+    stockName: 'Oracle',
+    status: 'processing',
+    progress: 18,
+    message: 'Running AI analysis',
+    modules: [],
+  };
+}
+
+function marketUsBreadthPayload() {
+  return {
+    panelName: 'UsBreadthCard',
+    lastRefreshAt: timestamp,
+    status: 'success',
+    source: 'yahoo',
+    sourceLabel: 'Yahoo Finance',
+    updatedAt: timestamp,
+    asOf: timestamp,
+    freshness: 'delayed',
+    isFallback: false,
+    isStale: false,
+    items: [
+      {
+        symbol: 'SECTORS_UP',
+        label: 'Sectors Up',
+        value: 8,
+        unit: 'pts',
+        changePct: 0,
+        riskDirection: 'decreasing',
+        trend: [7.5, 7.8, 8],
+        source: 'yahoo',
+        sourceLabel: 'Yahoo Finance',
+        sourceType: 'market_snapshot',
+        updatedAt: timestamp,
+        asOf: timestamp,
+        freshness: 'delayed',
+        isFallback: false,
+        isStale: false,
+      },
+      {
+        symbol: 'STRONGEST_SECTOR',
+        label: 'Strongest XLK',
+        value: 1.8,
+        unit: 'pts',
+        changePct: 1.8,
+        riskDirection: 'decreasing',
+        trend: [1.6, 1.7, 1.8],
+        source: 'yahoo',
+        sourceLabel: 'Yahoo Finance',
+        sourceType: 'market_snapshot',
+        updatedAt: timestamp,
+        asOf: timestamp,
+        freshness: 'delayed',
+        isFallback: false,
+        isStale: false,
+      },
+    ],
+  };
+}
+
+function analysisTasksPayload() {
+  return {
+    total: 1,
+    pending: 0,
+    processing: 1,
+    tasks: [
+      {
+        taskId: 'task-1',
+        stockCode: 'ORCL',
+        stockName: 'Oracle',
+        status: 'processing',
+        progress: 18,
+        message: 'Running AI analysis',
+        reportType: 'detailed',
+        createdAt: '2026-05-06T09:00:00Z',
+        progressModules: [],
+      },
+    ],
+  };
+}
+
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
   await route.fulfill({
     status,
@@ -467,6 +717,30 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
       }, 202);
     }
 
+    if (method === 'GET' && path === '/api/v1/history') {
+      return fulfillJson(route, historyListPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/history/3') {
+      return fulfillJson(route, historyDetailPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/history/3/news') {
+      return fulfillJson(route, historyNewsPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/history/3/markdown') {
+      return fulfillJson(route, historyMarkdownPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/analysis/tasks') {
+      return fulfillJson(route, analysisTasksPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/analysis/tasks/task-1/progress') {
+      return fulfillJson(route, analysisTaskProgressPayload());
+    }
+
     if (method === 'GET' && path === '/api/v1/market-overview/indices') {
       return fulfillJson(route, panel('IndexTrendsCard', 'SPX', 'S&P 500', 5302, 1.2));
     }
@@ -616,6 +890,10 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
           },
         ],
       });
+    }
+
+    if (method === 'GET' && path === '/api/v1/market/us-breadth') {
+      return fulfillJson(route, marketUsBreadthPayload());
     }
 
     if (method === 'GET' && path === '/api/v1/market/futures') {

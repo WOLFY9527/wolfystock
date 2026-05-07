@@ -1,0 +1,282 @@
+import { expect, type Page, type Route } from '@playwright/test';
+
+type ApiRequestLog = {
+  calls: string[];
+  count: (method: string, path: string) => number;
+  wasFetched: (method: string, path: string) => boolean;
+};
+
+type PortfolioSmokeHarness = {
+  requests: ApiRequestLog;
+};
+
+const timestamp = '2026-05-06T09:45:00-04:00';
+
+async function fulfillJson(route: Route, payload: unknown, status = 200) {
+  await route.fulfill({
+    status,
+    contentType: 'application/json',
+    body: JSON.stringify(payload),
+  });
+}
+
+function createRequestLog(calls: string[]): ApiRequestLog {
+  return {
+    calls,
+    count: (method: string, path: string) => calls.filter((entry) => entry === `${method} ${path}`).length,
+    wasFetched: (method: string, path: string) => calls.includes(`${method} ${path}`),
+  };
+}
+
+function currentUser() {
+  return {
+    id: 'user-1',
+    username: 'wolfy-user',
+    displayName: 'Wolfy User',
+    role: 'user',
+    isAdmin: false,
+    isAuthenticated: true,
+    transitional: false,
+    authEnabled: true,
+  };
+}
+
+function accountsPayload() {
+  return {
+    accounts: [
+      {
+        id: 1,
+        owner_id: 'user-1',
+        name: 'Main',
+        broker: 'IBKR',
+        market: 'us',
+        base_currency: 'USD',
+        is_active: true,
+        created_at: timestamp,
+        updated_at: timestamp,
+      },
+    ],
+  };
+}
+
+function brokersPayload() {
+  return {
+    brokers: [
+      { broker: 'huatai', aliases: [], display_name: '华泰', file_extensions: ['csv'] },
+      { broker: 'ibkr', aliases: ['interactivebrokers'], display_name: 'Interactive Brokers', file_extensions: ['xml'] },
+    ],
+  };
+}
+
+function brokerConnectionsPayload() {
+  return {
+    connections: [
+      {
+        id: 9,
+        owner_id: 'user-1',
+        portfolio_account_id: 1,
+        portfolio_account_name: 'Main',
+        connection_name: 'Primary IBKR',
+        broker_type: 'ibkr',
+        broker_account_ref: 'U1234567',
+        import_mode: 'file',
+        status: 'active',
+        sync_metadata: {
+          ibkr_api: {
+            api_base_url: 'https://localhost:5000/v1/api',
+            verify_ssl: false,
+            broker_account_ref: 'U1234567',
+          },
+          last_sync_at: null,
+        },
+      },
+    ],
+  };
+}
+
+function snapshotPayload() {
+  return {
+    as_of: '2026-04-15',
+    cost_method: 'fifo',
+    currency: 'USD',
+    account_count: 1,
+    realized_pnl: 0,
+    unrealized_pnl: 100,
+    fee_total: 0,
+    tax_total: 0,
+    fx_stale: false,
+    total_cash: 5000,
+    total_market_value: 1600,
+    total_equity: 6600,
+    accounts: [
+      {
+        account_id: 1,
+        account_name: 'Main',
+        owner_id: 'user-1',
+        broker: 'IBKR',
+        market: 'us',
+        base_currency: 'USD',
+        as_of: '2026-04-15',
+        cost_method: 'fifo',
+        total_cash: 5000,
+        total_market_value: 1600,
+        total_equity: 6600,
+        realized_pnl: 0,
+        unrealized_pnl: 100,
+        fee_total: 0,
+        tax_total: 0,
+        fx_stale: false,
+        positions: [
+          {
+            symbol: 'AAPL',
+            market: 'us',
+            currency: 'USD',
+            quantity: 10,
+            avg_cost: 150,
+            total_cost: 1500,
+            last_price: 160,
+            market_value_base: 1600,
+            unrealized_pnl_base: 100,
+            valuation_currency: 'USD',
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function riskPayload() {
+  return {
+    as_of: '2026-04-15',
+    account_id: null,
+    cost_method: 'fifo',
+    currency: 'USD',
+    thresholds: {},
+    concentration: {
+      total_market_value: 1600,
+      top_weight_pct: 100,
+      alert: false,
+      top_positions: [{ symbol: 'AAPL', market_value_base: 1600, weight_pct: 100, is_alert: false }],
+    },
+    sector_concentration: {
+      total_market_value: 0,
+      top_weight_pct: 0,
+      alert: false,
+      top_sectors: [],
+      coverage: {},
+      errors: [],
+    },
+    drawdown: {
+      series_points: 0,
+      max_drawdown_pct: 0,
+      current_drawdown_pct: 0,
+      alert: false,
+      fx_stale: false,
+    },
+    stop_loss: {
+      near_alert: false,
+      triggered_count: 0,
+      near_count: 0,
+      items: [],
+    },
+  };
+}
+
+function emptyListPayload() {
+  return { items: [], total: 0, page: 1, page_size: 20 };
+}
+
+export async function installPortfolioSmokeHarness(page: Page): Promise<PortfolioSmokeHarness> {
+  const calls: string[] = [];
+  const requests = createRequestLog(calls);
+
+  await page.route('**/api/v1/**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
+    const method = request.method();
+    calls.push(`${method} ${path}`);
+
+    if (method === 'GET' && path === '/api/v1/auth/status') {
+      return fulfillJson(route, {
+        authEnabled: true,
+        loggedIn: true,
+        passwordSet: true,
+        passwordChangeable: true,
+        setupState: 'enabled',
+        currentUser: currentUser(),
+      });
+    }
+
+    if (method === 'GET' && path === '/api/v1/auth/me') {
+      return fulfillJson(route, currentUser());
+    }
+
+    if (method === 'GET' && path === '/api/v1/agent/status') {
+      return fulfillJson(route, { enabled: false });
+    }
+
+    if (method === 'GET' && path === '/api/v1/portfolio/accounts') {
+      return fulfillJson(route, accountsPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/portfolio/imports/brokers') {
+      return fulfillJson(route, brokersPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/portfolio/broker-connections') {
+      return fulfillJson(route, brokerConnectionsPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/portfolio/snapshot') {
+      return fulfillJson(route, snapshotPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/portfolio/risk') {
+      return fulfillJson(route, riskPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/portfolio/trades') {
+      return fulfillJson(route, emptyListPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/portfolio/cash-ledger') {
+      return fulfillJson(route, emptyListPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/portfolio/corporate-actions') {
+      return fulfillJson(route, emptyListPayload());
+    }
+
+    if (method === 'POST' && path === '/api/v1/portfolio/sync/ibkr') {
+      return fulfillJson(route, {
+        account_id: 1,
+        broker_connection_id: 9,
+        broker_account_ref: 'U1234567',
+        connection_name: 'Primary IBKR',
+        snapshot_date: '2026-04-15',
+        synced_at: '2026-04-15T10:00:00',
+        base_currency: 'USD',
+        total_cash: 5000,
+        total_market_value: 1600,
+        total_equity: 6600,
+        realized_pnl: 0,
+        unrealized_pnl: 100,
+        position_count: 1,
+        cash_balance_count: 1,
+        fx_stale: false,
+        snapshot_overlay_active: true,
+        used_existing_connection: true,
+        api_base_url: 'https://localhost:5000/v1/api',
+        verify_ssl: false,
+        warnings: [],
+      });
+    }
+
+    return fulfillJson(route, { error: `Unhandled portfolio smoke route: ${method} ${path}` }, 500);
+  });
+
+  return { requests };
+}
+
+export { expect };
