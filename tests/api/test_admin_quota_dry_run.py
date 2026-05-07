@@ -418,6 +418,71 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertEqual(pilot["scope"]["modelTier"], "openai/gpt-4o-mini")
         self.assertEqual(payload["metadata"]["quotaDecisionMode"], "pilot_enforced")
         self.assertFalse(payload["metadata"]["invoiceReconciliation"]["enforcementWired"])
+        self.assertFalse(payload["metadata"]["invoiceReconciliation"]["enforcementInput"])
+
+    def test_admin_dry_run_distinguishes_advisory_from_pilot_enforced_decisions(self) -> None:
+        self._as_admin()
+        self.db.upsert_quota_policy(
+            policy_key="user-budget-alerts",
+            scope_type="user",
+            daily_budget_units=120,
+            metadata={"daily_soft_limit_units": 100},
+        )
+
+        cases = (
+            (
+                "dry_run",
+                {
+                    "ownerUserId": "pilot-user",
+                    "routeFamily": "analysis",
+                    "estimatedUnits": 121,
+                    "pilotOwnerUserIds": ["pilot-user"],
+                },
+                "advisory",
+                False,
+                True,
+                "pilot_advisory_would_block",
+            ),
+            (
+                "enabled_out_of_scope",
+                {
+                    "ownerUserId": "other-user",
+                    "routeFamily": "analysis",
+                    "estimatedUnits": 121,
+                    "enforcementMode": "enabled",
+                    "pilotOwnerUserIds": ["pilot-user"],
+                },
+                "advisory",
+                True,
+                False,
+                "pilot_owner_out_of_scope",
+            ),
+            (
+                "enabled_in_scope",
+                {
+                    "ownerUserId": "pilot-user",
+                    "routeFamily": "analysis",
+                    "estimatedUnits": 121,
+                    "enforcementMode": "enabled",
+                    "pilotOwnerUserIds": ["pilot-user"],
+                },
+                "pilot_enforced",
+                False,
+                True,
+                "pilot_would_enforce_block",
+            ),
+        )
+        for name, request, decision_mode, allowed, would_block, pilot_state in cases:
+            with self.subTest(name=name):
+                response = self._post_dry_run(request)
+
+                self.assertEqual(response.status_code, 200)
+                payload = response.json()
+                self.assertEqual(payload["metadata"]["quotaDecisionMode"], decision_mode)
+                self.assertEqual(payload["allowed"], allowed)
+                self.assertEqual(payload["wouldBlock"], would_block)
+                self.assertEqual(payload["metadata"]["pilotReadiness"]["state"], pilot_state)
+                self.assertFalse(payload["metadata"]["invoiceReconciliation"]["enforcementInput"])
 
     def test_dry_run_pilot_readiness_sanitizes_scope_context(self) -> None:
         self._as_admin()

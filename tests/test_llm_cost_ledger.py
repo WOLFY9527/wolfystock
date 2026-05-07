@@ -538,6 +538,7 @@ class LlmCostLedgerServiceTestCase(unittest.TestCase):
         self.assertFalse(result.live_enforcement)
         payload = result.to_dict()
         self.assertTrue(payload["advisoryOnly"])
+        self.assertFalse(payload["enforcementInput"])
         self.assertFalse(payload["liveInvoiceIngestion"])
         self.assertFalse(payload["liveEnforcement"])
         self.assertFalse(payload["enforcementWired"])
@@ -598,6 +599,10 @@ class LlmCostLedgerServiceTestCase(unittest.TestCase):
         self.assertEqual([warning.code for warning in result.warnings], ["provider_over_billed", "ledger_under_counted"])
         self.assertEqual(result.matched_total_usd, Decimal("0.00075000"))
         self.assertEqual(result.delta_usd, Decimal("0.00100000"))
+        payload = result.to_dict()
+        self.assertTrue(payload["advisoryOnly"])
+        self.assertFalse(payload["enforcementInput"])
+        self.assertFalse(payload["liveEnforcement"])
 
     def test_invoice_reconciliation_preflight_warns_on_ledger_over_counted(self) -> None:
         self._seed_policy()

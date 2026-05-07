@@ -140,6 +140,7 @@ class QuotaPilotReadinessPreflight:
             "shadowPreflight": shadow_payload,
             "invoiceReconciliation": {
                 "advisoryOnly": True,
+                "enforcementInput": False,
                 "enforcementWired": False,
                 "liveInvoiceIngestion": False,
             },

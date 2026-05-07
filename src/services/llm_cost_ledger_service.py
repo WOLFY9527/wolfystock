@@ -85,6 +85,7 @@ class InvoiceReconciliationPreflightResult:
             "toleranceUsd": str(self.tolerance_usd),
             "warnings": [warning.__dict__ for warning in self.warnings],
             "advisoryOnly": self.advisory_only,
+            "enforcementInput": False,
             "liveInvoiceIngestion": self.live_invoice_ingestion,
             "liveEnforcement": self.live_enforcement,
             "enforcementWired": False,

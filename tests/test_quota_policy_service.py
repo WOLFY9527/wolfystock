@@ -398,6 +398,86 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         disabled_default = QuotaPolicyService(db=self.db)
         self.assertFalse(disabled_default.enforcement_enabled)
 
+    def test_pilot_acceptance_requires_enabled_mode_and_owner_allowlist(self) -> None:
+        self._seed_budget_alert_policy()
+
+        cases = (
+            (
+                "allowlist_without_enabled_mode",
+                False,
+                ("pilot-user",),
+                "pilot-user",
+                "pilot_advisory_would_block",
+                True,
+                False,
+                False,
+            ),
+            (
+                "enabled_without_allowlist",
+                True,
+                (),
+                "pilot-user",
+                "pilot_scope_not_ready",
+                True,
+                False,
+                False,
+            ),
+            (
+                "enabled_out_of_scope",
+                True,
+                ("pilot-user",),
+                "other-user",
+                "pilot_owner_out_of_scope",
+                True,
+                False,
+                False,
+            ),
+            (
+                "enabled_in_scope",
+                True,
+                ("pilot-user",),
+                "pilot-user",
+                "pilot_would_enforce_block",
+                False,
+                True,
+                True,
+            ),
+        )
+        for name, enabled, owners, owner, state, advisory_only, request_blocked, live_enforcement in cases:
+            with self.subTest(name=name):
+                preflight = self.service.classify_pilot_readiness_preflight(
+                    owner_user_id=owner,
+                    route_family="analysis",
+                    estimated_units=121,
+                    pilot_enforcement_enabled=enabled,
+                    pilot_owner_user_ids=owners,
+                    pilot_route_families=("analysis",),
+                )
+
+                self.assertEqual(preflight.state, state)
+                self.assertTrue(preflight.would_block)
+                self.assertEqual(preflight.advisory_only, advisory_only)
+                self.assertEqual(preflight.request_blocked, request_blocked)
+                self.assertEqual(preflight.live_enforcement, live_enforcement)
+
+    def test_pilot_readiness_marks_invoice_reconciliation_as_non_enforcement_input(self) -> None:
+        self._seed_budget_alert_policy()
+
+        preflight = self.service.classify_pilot_readiness_preflight(
+            owner_user_id="pilot-user",
+            route_family="analysis",
+            estimated_units=121,
+            pilot_enforcement_enabled=True,
+            pilot_owner_user_ids=("pilot-user",),
+            pilot_route_families=("analysis",),
+        )
+
+        invoice = preflight.to_dict()["invoiceReconciliation"]
+        self.assertTrue(invoice["advisoryOnly"])
+        self.assertFalse(invoice["enforcementInput"])
+        self.assertFalse(invoice["enforcementWired"])
+        self.assertFalse(invoice["liveInvoiceIngestion"])
+
     def test_pilot_readiness_sanitizes_scope_context(self) -> None:
         preflight = self.service.classify_pilot_readiness_preflight(
             owner_user_id="owner-token-should-redact",
