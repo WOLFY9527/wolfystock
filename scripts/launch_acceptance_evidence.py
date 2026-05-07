@@ -62,13 +62,30 @@ SENSITIVE_KEY_MARKERS = (
     "rawresponsebody",
     "response_body",
     "responsebody",
+    "debug payload",
+    "debug_payload",
+    "debugpayload",
+    "request body",
+    "request_body",
+    "requestbody",
+    "traceback",
+    "stack trace",
+    "stack_trace",
+    "stacktrace",
 )
 SENSITIVE_VALUE_PATTERNS = (
     re.compile(r"\bpostgres(?:ql)?://", re.IGNORECASE),
-    re.compile(r"\b(?:password|token|secret|api[\s_-]?key|cookie|session|dsn)\s*=", re.IGNORECASE),
-    re.compile(r"['\"](?:password|token|secret|api[\s_-]?key|cookie|session|dsn|response[_\s-]?body)['\"]\s*:", re.IGNORECASE),
+    re.compile(
+        r"\b(?:password|token|secret|api[\s_-]?key|cookie|session|dsn|debug[\s_-]?payload|request[\s_-]?body)\s*=",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"['\"](?:password|token|secret|api[\s_-]?key|cookie|session|dsn|response[_\s-]?body|debug[_\s-]?payload|request[_\s-]?body|traceback)['\"]\s*:",
+        re.IGNORECASE,
+    ),
     re.compile(r"\bbearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    re.compile(r"Traceback \(most recent call last\):", re.IGNORECASE),
     re.compile(r"\bsk-[A-Za-z0-9_-]{12,}"),
     re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}"),
     re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}"),
@@ -141,6 +158,21 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
             "credentialPresenceOnly",
             "noLiveCallsByChecker",
             "entitlementMatrixAttached",
+        ),
+    ),
+    CategorySpec(
+        id="provider_staging_probe_artifact",
+        title="Provider staging probe artifact evidence",
+        required_evidence=(
+            "sanitized provider staging probe artifact with credential redaction, entitlement/freshness labels, "
+            "operator capture metadata, and no checker live calls"
+        ),
+        required_checks=(
+            "stagingProbeArtifactAttached",
+            "credentialValuesRedacted",
+            "entitlementAndFreshnessLabelsRecorded",
+            "operatorCaptureMetadataRecorded",
+            "noLiveCallsByChecker",
         ),
     ),
     CategorySpec(
@@ -275,6 +307,144 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
             "localNoNetworkGeneration",
             "auditEvidenceSanitized",
             "secretEvidenceRedacted",
+        ),
+    ),
+    CategorySpec(
+        id="ws2_sse_topology_polling_fallback",
+        title="WS2/SSE topology limitation and polling fallback evidence",
+        required_evidence=(
+            "WS2 topology evidence proving process-local SSE limitation is documented, durable polling fallback works, "
+            "API A/B visibility is understood, owner isolation is preserved, and no runtime cutover occurred"
+        ),
+        required_checks=(
+            "processLocalSseLimitationRecorded",
+            "durablePollingFallbackVerified",
+            "apiABTopologyEvidenceAttached",
+            "ownerIsolationEvidenceRecorded",
+            "runtimeCutoverNotPerformed",
+        ),
+    ),
+    CategorySpec(
+        id="admin_log_retention_capacity_rehearsal",
+        title="Admin log retention/capacity rehearsal evidence",
+        required_evidence=(
+            "admin log retention/capacity rehearsal proving preview-first cleanup, minimum-retention guard, "
+            "storage-pressure handling, sanitized audit event, and unchanged cleanup defaults"
+        ),
+        required_checks=(
+            "retentionPolicyRecorded",
+            "previewFirstCleanupVerified",
+            "minimumRetentionGuardVerified",
+            "storagePressureRehearsalPassed",
+            "cleanupAuditSanitized",
+            "runtimeDefaultUnchanged",
+        ),
+    ),
+    CategorySpec(
+        id="portfolio_backtest_export_browser_proof",
+        title="Portfolio/backtest export and browser proof evidence",
+        required_evidence=(
+            "portfolio/backtest export and browser proof covering no-advice wording, export/readback integrity, "
+            "owner isolation, broker redaction, and no portfolio/backtest runtime mutation"
+        ),
+        required_checks=(
+            "exportEvidenceAttached",
+            "browserProofAttached",
+            "noAdviceAndOrderVerbsAbsent",
+            "ownerIsolationEvidenceRecorded",
+            "brokerCredentialEvidenceRedacted",
+            "runtimeMutationNotPerformed",
+        ),
+    ),
+    CategorySpec(
+        id="notifications_delivery_rehearsal",
+        title="Notifications delivery rehearsal evidence",
+        required_evidence=(
+            "notification delivery rehearsal with dry-run or synthetic delivery evidence, route/channel mapping, "
+            "failure-path audit, secret redaction, and real outbound disabled unless explicitly accepted"
+        ),
+        required_checks=(
+            "deliveryRehearsalPassed",
+            "routeChannelMappingRecorded",
+            "failurePathAudited",
+            "notificationSecretsRedacted",
+            "realOutboundDisabledOrAccepted",
+        ),
+    ),
+    CategorySpec(
+        id="user_data_privacy_export_deletion_rehearsal",
+        title="User data privacy/export/deletion rehearsal evidence",
+        required_evidence=(
+            "user data privacy rehearsal covering sanitized export projection, deletion preview, owner isolation, "
+            "audit evidence, and no raw user/session/provider data exposure"
+        ),
+        required_checks=(
+            "privacyExportProjectionSanitized",
+            "deletionPreviewRehearsed",
+            "ownerIsolationEvidenceRecorded",
+            "privacyAuditEvidenceSanitized",
+            "rawUserDataNotExposed",
+        ),
+    ),
+    CategorySpec(
+        id="market_data_freshness_fallback_evidence",
+        title="Market data freshness/fallback evidence",
+        required_evidence=(
+            "market data freshness/fallback evidence with provider/as-of labels, stale/fallback disclosure, "
+            "confidence cap behavior, no raw provider payloads, and runtime fallback defaults unchanged"
+        ),
+        required_checks=(
+            "providerAndAsOfLabelsRecorded",
+            "staleFallbackDisclosureVerified",
+            "confidenceCapBehaviorVerified",
+            "rawProviderPayloadsRedacted",
+            "runtimeDefaultUnchanged",
+        ),
+    ),
+    CategorySpec(
+        id="ai_report_guest_preview_safety",
+        title="AI report/guest-preview safety evidence",
+        required_evidence=(
+            "AI report and guest-preview safety evidence covering preview-only mode, no raw prompt/LLM response exposure, "
+            "no auto-analysis side effects, guest isolation, and safe no-advice labels"
+        ),
+        required_checks=(
+            "guestPreviewSafetyVerified",
+            "rawPromptAndLlmResponsesRedacted",
+            "noAutoAnalysisSideEffects",
+            "guestIsolationEvidenceRecorded",
+            "noAdviceLabelsVerified",
+        ),
+    ),
+    CategorySpec(
+        id="options_derivatives_safety",
+        title="Options derivatives safety evidence",
+        required_evidence=(
+            "Options derivatives safety evidence proving read-only/no-order posture, no broker or portfolio mutation, "
+            "fixture/delayed/fallback caps, no guaranteed-return wording, and sanitized provider evidence"
+        ),
+        required_checks=(
+            "readOnlyNoOrderPostureVerified",
+            "brokerAndPortfolioMutationAbsent",
+            "fixtureDelayedFallbackCapsVerified",
+            "guaranteedReturnWordingAbsent",
+            "providerEvidenceSanitized",
+        ),
+    ),
+    CategorySpec(
+        id="api_abuse_request_safety",
+        title="API abuse/request-safety evidence",
+        required_evidence=(
+            "API abuse and request-safety evidence covering rate-limit/invalid-request handling, oversized payload safety, "
+            "sanitized denial/audit output, no traceback/debug/request-body leakage, and unchanged runtime defaults"
+        ),
+        required_checks=(
+            "abuseRehearsalPassed",
+            "invalidRequestHandlingVerified",
+            "oversizedPayloadSafetyVerified",
+            "denialAuditEvidenceSanitized",
+            "debugTracebackAndRequestBodiesRedacted",
+            "runtimeDefaultUnchanged",
         ),
     ),
     CategorySpec(

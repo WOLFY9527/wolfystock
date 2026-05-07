@@ -70,6 +70,27 @@
         "productionDataPathsIncluded": false
       }
     },
+    "provider_staging_probe_artifact": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "provider-staging-probe-artifact-synthetic-json",
+      "checks": {
+        "stagingProbeArtifactAttached": true,
+        "credentialValuesRedacted": true,
+        "entitlementAndFreshnessLabelsRecorded": true,
+        "operatorCaptureMetadataRecorded": true,
+        "noLiveCallsByChecker": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
     "provider_live_probe_opt_in_timeout": {
       "status": "accepted",
       "acceptedBy": "release-operator",
@@ -251,6 +272,198 @@
         "localNoNetworkGeneration": true,
         "auditEvidenceSanitized": true,
         "secretEvidenceRedacted": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "ws2_sse_topology_polling_fallback": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "ws2-sse-topology-polling-fallback-synthetic-json",
+      "checks": {
+        "processLocalSseLimitationRecorded": true,
+        "durablePollingFallbackVerified": true,
+        "apiABTopologyEvidenceAttached": true,
+        "ownerIsolationEvidenceRecorded": true,
+        "runtimeCutoverNotPerformed": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "admin_log_retention_capacity_rehearsal": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "admin-log-retention-capacity-rehearsal-synthetic-json",
+      "checks": {
+        "retentionPolicyRecorded": true,
+        "previewFirstCleanupVerified": true,
+        "minimumRetentionGuardVerified": true,
+        "storagePressureRehearsalPassed": true,
+        "cleanupAuditSanitized": true,
+        "runtimeDefaultUnchanged": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "portfolio_backtest_export_browser_proof": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "portfolio-backtest-export-browser-proof-synthetic-json",
+      "checks": {
+        "exportEvidenceAttached": true,
+        "browserProofAttached": true,
+        "noAdviceAndOrderVerbsAbsent": true,
+        "ownerIsolationEvidenceRecorded": true,
+        "brokerCredentialEvidenceRedacted": true,
+        "runtimeMutationNotPerformed": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "notifications_delivery_rehearsal": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "notifications-delivery-rehearsal-synthetic-json",
+      "checks": {
+        "deliveryRehearsalPassed": true,
+        "routeChannelMappingRecorded": true,
+        "failurePathAudited": true,
+        "notificationSecretsRedacted": true,
+        "realOutboundDisabledOrAccepted": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "user_data_privacy_export_deletion_rehearsal": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "user-data-privacy-export-deletion-rehearsal-synthetic-json",
+      "checks": {
+        "privacyExportProjectionSanitized": true,
+        "deletionPreviewRehearsed": true,
+        "ownerIsolationEvidenceRecorded": true,
+        "privacyAuditEvidenceSanitized": true,
+        "rawUserDataNotExposed": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "market_data_freshness_fallback_evidence": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "market-data-freshness-fallback-evidence-synthetic-json",
+      "checks": {
+        "providerAndAsOfLabelsRecorded": true,
+        "staleFallbackDisclosureVerified": true,
+        "confidenceCapBehaviorVerified": true,
+        "rawProviderPayloadsRedacted": true,
+        "runtimeDefaultUnchanged": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "ai_report_guest_preview_safety": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "ai-report-guest-preview-safety-synthetic-json",
+      "checks": {
+        "guestPreviewSafetyVerified": true,
+        "rawPromptAndLlmResponsesRedacted": true,
+        "noAutoAnalysisSideEffects": true,
+        "guestIsolationEvidenceRecorded": true,
+        "noAdviceLabelsVerified": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "options_derivatives_safety": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "options-derivatives-safety-synthetic-json",
+      "checks": {
+        "readOnlyNoOrderPostureVerified": true,
+        "brokerAndPortfolioMutationAbsent": true,
+        "fixtureDelayedFallbackCapsVerified": true,
+        "guaranteedReturnWordingAbsent": true,
+        "providerEvidenceSanitized": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "api_abuse_request_safety": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "api-abuse-request-safety-synthetic-json",
+      "checks": {
+        "abuseRehearsalPassed": true,
+        "invalidRequestHandlingVerified": true,
+        "oversizedPayloadSafetyVerified": true,
+        "denialAuditEvidenceSanitized": true,
+        "debugTracebackAndRequestBodiesRedacted": true,
+        "runtimeDefaultUnchanged": true
       },
       "sanitization": {
         "externalServicesCalledByChecker": false,

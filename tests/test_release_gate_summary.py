@@ -6,6 +6,31 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_SOURCE = REPO_ROOT / "scripts" / "release_gate_summary.sh"
+EXPECTED_OPERATOR_CATEGORY_IDS = [
+    "mfa_pilot_acceptance",
+    "rbac_fallback_disable_switch",
+    "provider_credential_staging_dry_run",
+    "provider_staging_probe_artifact",
+    "provider_live_probe_opt_in_timeout",
+    "provider_circuit_controlled_enforcement",
+    "quota_pilot_acceptance",
+    "budget_alert_dry_run_acceptance",
+    "real_isolated_postgresql_restore_pitr",
+    "staging_ingress_smoke",
+    "public_api_frontend_no_secret_safety",
+    "supply_chain_dependency_build_artifact_safety",
+    "incident_response_audit_evidence",
+    "ws2_sse_topology_polling_fallback",
+    "admin_log_retention_capacity_rehearsal",
+    "portfolio_backtest_export_browser_proof",
+    "notifications_delivery_rehearsal",
+    "user_data_privacy_export_deletion_rehearsal",
+    "market_data_freshness_fallback_evidence",
+    "ai_report_guest_preview_safety",
+    "options_derivatives_safety",
+    "api_abuse_request_safety",
+    "final_clean_full_ci_gate",
+]
 
 
 def _run(cmd, cwd: Path, **kwargs):
@@ -88,40 +113,12 @@ def test_release_gate_summary_go_no_go_json_keeps_launch_blocked(tmp_path):
         "incident_response_audit_evidence_pack",
     } <= evidence_ids
     blocker_ids = {item["id"] for item in summary["hardBlockers"]}
-    assert {
-        "mfa_pilot_acceptance",
-        "rbac_fallback_disable_switch",
-        "provider_credential_staging_dry_run",
-        "provider_live_probe_opt_in_timeout",
-        "provider_circuit_controlled_enforcement",
-        "quota_pilot_acceptance",
-        "budget_alert_dry_run_acceptance",
-        "real_isolated_postgresql_restore_pitr",
-        "staging_ingress_smoke",
-        "public_api_frontend_no_secret_safety",
-        "supply_chain_dependency_build_artifact_safety",
-        "incident_response_audit_evidence",
-        "final_clean_full_ci_gate",
-    } <= blocker_ids
+    assert set(EXPECTED_OPERATOR_CATEGORY_IDS) <= blocker_ids
     assert all(item["status"] == "blocking" for item in summary["hardBlockers"])
     assert summary["operatorEvidencePack"] == {
         "finalStatus": "NO-GO",
         "releaseApproved": False,
-        "requiredCategoryIds": [
-            "mfa_pilot_acceptance",
-            "rbac_fallback_disable_switch",
-            "provider_credential_staging_dry_run",
-            "provider_live_probe_opt_in_timeout",
-            "provider_circuit_controlled_enforcement",
-            "quota_pilot_acceptance",
-            "budget_alert_dry_run_acceptance",
-            "real_isolated_postgresql_restore_pitr",
-            "staging_ingress_smoke",
-            "public_api_frontend_no_secret_safety",
-            "supply_chain_dependency_build_artifact_safety",
-            "incident_response_audit_evidence",
-            "final_clean_full_ci_gate",
-        ],
+        "requiredCategoryIds": EXPECTED_OPERATOR_CATEGORY_IDS,
         "schemaVersion": "wolfystock_launch_acceptance_evidence_summary_v1",
     }
     assert (

@@ -1,8 +1,8 @@
 # Launch Acceptance Evidence Pack
 
-Date: 2026-05-07
+Date: 2026-05-08
 Branch checked: `main`
-Mode: launch acceptance evidence schema/checklist. No runtime API behavior,
+Mode: launch acceptance final matrix integration. No runtime API behavior,
 frontend code, provider runtime, auth/MFA/RBAC runtime, cost/quota runtime,
 scanner/market/options/portfolio/backtest/notification behavior, production
 configuration, production secrets, or production data paths are changed by this
@@ -46,6 +46,7 @@ incomplete evidence keeps the summary at **NO-GO**.
 | `mfa_pilot_acceptance` | Accepted admin-only MFA pilot, recovery-path, rollback, unsupported/global rollout NO-GO, break-glass default-off, and sanitized audit evidence. |
 | `rbac_fallback_disable_switch` | RBAC fallback disable switch or accepted production exception, complete route inventory, explicit-payload pass proof, legacy/missing-payload fail-closed proof, rollback, and sanitized audit evidence. |
 | `provider_credential_staging_dry_run` | Provider credential staging dry-run, credential presence-only contract, entitlement matrix, and no checker live calls. |
+| `provider_staging_probe_artifact` | Sanitized provider staging probe artifact with credential redaction, entitlement/freshness labels, operator capture metadata, and no checker live calls. |
 | `provider_live_probe_opt_in_timeout` | Explicit provider live-probe opt-in for a named staging provider, bounded timeout, sanitized result evidence, and proof this checker made no live calls. |
 | `provider_circuit_controlled_enforcement` | Controlled provider-circuit enforcement pilot, bounded route, rollback switch, and sanitized degraded-state evidence. This remains required even when current runtime support is not available. |
 | `quota_pilot_acceptance` | Controlled quota pilot with explicit owner allowlist, out-of-scope advisory behavior, advisory-only invoice reconciliation, global enforcement disabled by default, rollback switch, and user/admin status-label evidence. |
@@ -55,6 +56,15 @@ incomplete evidence keeps the summary at **NO-GO**.
 | `public_api_frontend_no_secret_safety` | Public API, frontend DOM, route payload, and release secret-scan no-secret evidence. |
 | `supply_chain_dependency_build_artifact_safety` | Sanitized dependency-manifest inspection, build/test artifact scan, visible frontend build warnings, no dependency or lockfile changes, and NO-GO behavior for missing required evidence. |
 | `incident_response_audit_evidence` | Sanitized incident-response evidence for admin-critical actions, preview-first cleanup, provider/notification/release failure paths, local no-network generation, and audit redaction. |
+| `ws2_sse_topology_polling_fallback` | WS2 topology evidence proving process-local SSE limitation, durable polling fallback, API A/B visibility, owner isolation, and no runtime cutover. |
+| `admin_log_retention_capacity_rehearsal` | Admin log retention/capacity rehearsal proving preview-first cleanup, minimum-retention guard, storage-pressure handling, sanitized audit event, and unchanged cleanup defaults. |
+| `portfolio_backtest_export_browser_proof` | Portfolio/backtest export and browser proof covering no-advice wording, export/readback integrity, owner isolation, broker redaction, and no runtime mutation. |
+| `notifications_delivery_rehearsal` | Notification delivery rehearsal with dry-run or synthetic delivery evidence, route/channel mapping, failure-path audit, secret redaction, and real outbound disabled unless explicitly accepted. |
+| `user_data_privacy_export_deletion_rehearsal` | User data privacy rehearsal covering sanitized export projection, deletion preview, owner isolation, audit evidence, and no raw user/session/provider data exposure. |
+| `market_data_freshness_fallback_evidence` | Market data freshness/fallback evidence with provider/as-of labels, stale/fallback disclosure, confidence cap behavior, no raw provider payloads, and unchanged fallback defaults. |
+| `ai_report_guest_preview_safety` | AI report and guest-preview safety evidence covering preview-only mode, no raw prompt/LLM response exposure, no auto-analysis side effects, guest isolation, and safe no-advice labels. |
+| `options_derivatives_safety` | Options derivatives safety evidence proving read-only/no-order posture, no broker or portfolio mutation, fixture/delayed/fallback caps, no guaranteed-return wording, and sanitized provider evidence. |
+| `api_abuse_request_safety` | API abuse and request-safety evidence covering rate-limit/invalid-request handling, oversized payload safety, sanitized denial/audit output, no traceback/debug/request-body leakage, and unchanged runtime defaults. |
 | `final_clean_full_ci_gate` | Clean worktree, full `ci_gate`, release secret scan, and final diff check evidence. |
 
 ## 3. Input Contract
@@ -116,8 +126,8 @@ The checker never:
   frontend/browser checks;
 - changes runtime defaults or deployment configuration;
 - prints secret values, DSNs, tokens, cookies, provider payloads, response
-  bodies, API keys, session/cookie values, provider credentials, or raw
-  production paths.
+  bodies, API keys, session/cookie values, provider credentials, debug
+  payloads, tracebacks, request bodies, or raw production paths.
 
 Operator evidence must be summarized before it is attached. The checker rejects
 secret-like strings and sensitive fields without echoing the sensitive value.
@@ -128,7 +138,7 @@ Release review should attach:
 
 - `scripts/release_gate_summary.sh --go-no-go-json` output.
 - `scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>` output.
-- `scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>` output.
+- `scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>` output for every final matrix category, including the domain-local rehearsal tracks now split into explicit blockers.
 - `scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>` output for incident/audit sanitization evidence.
 - `scripts/backup_restore_drill_check.sh` output for synthetic preflight and,
   when available, accepted sanitized real restore/PITR evidence.

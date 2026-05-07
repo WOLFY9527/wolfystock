@@ -39,6 +39,13 @@ It never approves launch by itself; `releaseApproved` remains false and the
 public launch verdict stays **NO-GO** unless every hard blocker has accepted
 operator evidence.
 
+The final matrix now tracks the current domain-local rehearsal evidence as
+explicit release categories instead of bundling it into broad foundation notes.
+This includes WS2/SSE topology limitations, admin log retention/capacity,
+portfolio/backtest browser and export proof, notification delivery, user data
+privacy/export/deletion, market freshness/fallback, AI guest-preview safety,
+Options derivatives safety, and API abuse/request-safety evidence.
+
 ## Master readiness view
 
 | Area | Current posture | Launch status | Blocking requirement |
@@ -75,11 +82,17 @@ Public launch may move to **GO** only when all of the following are true:
 - Sanitized operator acceptance evidence is attached through
   `python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>`
   for MFA pilot acceptance, RBAC fallback disable switch, provider credential
-  staging dry-run, provider live probe opt-in and bounded timeout, provider
-  circuit controlled enforcement, quota pilot, budget-alert dry-run, real
-  isolated PostgreSQL restore/PITR, staging ingress smoke, public API/frontend
-  no-secret public safety, supply-chain/build artifact safety,
-  incident-response/audit evidence, and final clean full `ci_gate`.
+  staging dry-run, provider staging probe artifact, provider live probe opt-in
+  and bounded timeout, provider circuit controlled enforcement, quota pilot,
+  budget-alert dry-run, real isolated PostgreSQL restore/PITR, staging ingress
+  smoke, public API/frontend no-secret public safety, supply-chain/build
+  artifact safety, incident-response/audit evidence, WS2/SSE topology
+  limitation with polling fallback, admin log retention/capacity rehearsal,
+  portfolio/backtest export and browser proof, notification delivery
+  rehearsal, user data privacy/export/deletion rehearsal, market data
+  freshness/fallback evidence, AI report/guest-preview safety, Options
+  derivatives safety, API abuse/request-safety evidence, and final clean full
+  `ci_gate`.
 - Sanitized incident-response evidence is attached through
   `python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>`
   for admin-critical audit events, preview-first cleanup, provider/notification

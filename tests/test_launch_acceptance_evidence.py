@@ -9,6 +9,31 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "launch_acceptance_evidence.py"
 ACCEPTED_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "release" / "launch_acceptance_evidence.accepted.json"
 MISSING_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "release" / "launch_acceptance_evidence.missing.json"
+EXPECTED_CATEGORY_IDS = {
+    "mfa_pilot_acceptance",
+    "rbac_fallback_disable_switch",
+    "provider_credential_staging_dry_run",
+    "provider_staging_probe_artifact",
+    "provider_live_probe_opt_in_timeout",
+    "provider_circuit_controlled_enforcement",
+    "quota_pilot_acceptance",
+    "budget_alert_dry_run_acceptance",
+    "real_isolated_postgresql_restore_pitr",
+    "staging_ingress_smoke",
+    "public_api_frontend_no_secret_safety",
+    "supply_chain_dependency_build_artifact_safety",
+    "incident_response_audit_evidence",
+    "ws2_sse_topology_polling_fallback",
+    "admin_log_retention_capacity_rehearsal",
+    "portfolio_backtest_export_browser_proof",
+    "notifications_delivery_rehearsal",
+    "user_data_privacy_export_deletion_rehearsal",
+    "market_data_freshness_fallback_evidence",
+    "ai_report_guest_preview_safety",
+    "options_derivatives_safety",
+    "api_abuse_request_safety",
+    "final_clean_full_ci_gate",
+}
 
 
 def _run_checker(*args: str) -> subprocess.CompletedProcess[str]:
@@ -45,23 +70,9 @@ def test_launch_acceptance_evidence_missing_categories_remain_no_go() -> None:
         "runtimeDefaultsChanged": False,
     }
     assert evidence["summary"]["accepted"] == 0
-    assert evidence["summary"]["blocking"] == 13
+    assert evidence["summary"]["blocking"] == 23
     blocker_ids = {item["id"] for item in evidence["hardBlockers"]}
-    assert {
-        "mfa_pilot_acceptance",
-        "rbac_fallback_disable_switch",
-        "provider_credential_staging_dry_run",
-        "provider_live_probe_opt_in_timeout",
-        "provider_circuit_controlled_enforcement",
-        "quota_pilot_acceptance",
-        "budget_alert_dry_run_acceptance",
-        "real_isolated_postgresql_restore_pitr",
-        "staging_ingress_smoke",
-        "public_api_frontend_no_secret_safety",
-        "supply_chain_dependency_build_artifact_safety",
-        "incident_response_audit_evidence",
-        "final_clean_full_ci_gate",
-    } == blocker_ids
+    assert EXPECTED_CATEGORY_IDS == blocker_ids
 
 
 def test_launch_acceptance_evidence_allow_no_go_returns_zero_for_review_attachment() -> None:
@@ -79,10 +90,11 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
     assert evidence["finalStatus"] == "GO-REVIEW-REQUIRED"
     assert evidence["releaseApproved"] is False
     assert evidence["statusReason"] == "All hard blockers have accepted sanitized evidence; release approval remains manual."
-    assert evidence["summary"]["accepted"] == 13
+    assert evidence["summary"]["accepted"] == 23
     assert evidence["summary"]["blocking"] == 0
     assert evidence["hardBlockers"] == []
     categories = {item["id"]: item for item in evidence["categories"]}
+    assert EXPECTED_CATEGORY_IDS == set(categories)
     assert categories["mfa_pilot_acceptance"]["requiredChecks"] == [
         "adminPilotPassed",
         "adminOnlyScopeRecorded",
@@ -108,6 +120,13 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
         "credentialPresenceOnly",
         "noLiveCallsByChecker",
         "entitlementMatrixAttached",
+    ]
+    assert categories["provider_staging_probe_artifact"]["requiredChecks"] == [
+        "stagingProbeArtifactAttached",
+        "credentialValuesRedacted",
+        "entitlementAndFreshnessLabelsRecorded",
+        "operatorCaptureMetadataRecorded",
+        "noLiveCallsByChecker",
     ]
     assert categories["provider_live_probe_opt_in_timeout"]["requiredChecks"] == [
         "namedStagingProviderRecorded",
@@ -156,6 +175,72 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
         "localNoNetworkGeneration",
         "auditEvidenceSanitized",
         "secretEvidenceRedacted",
+    ]
+    assert categories["ws2_sse_topology_polling_fallback"]["requiredChecks"] == [
+        "processLocalSseLimitationRecorded",
+        "durablePollingFallbackVerified",
+        "apiABTopologyEvidenceAttached",
+        "ownerIsolationEvidenceRecorded",
+        "runtimeCutoverNotPerformed",
+    ]
+    assert categories["admin_log_retention_capacity_rehearsal"]["requiredChecks"] == [
+        "retentionPolicyRecorded",
+        "previewFirstCleanupVerified",
+        "minimumRetentionGuardVerified",
+        "storagePressureRehearsalPassed",
+        "cleanupAuditSanitized",
+        "runtimeDefaultUnchanged",
+    ]
+    assert categories["portfolio_backtest_export_browser_proof"]["requiredChecks"] == [
+        "exportEvidenceAttached",
+        "browserProofAttached",
+        "noAdviceAndOrderVerbsAbsent",
+        "ownerIsolationEvidenceRecorded",
+        "brokerCredentialEvidenceRedacted",
+        "runtimeMutationNotPerformed",
+    ]
+    assert categories["notifications_delivery_rehearsal"]["requiredChecks"] == [
+        "deliveryRehearsalPassed",
+        "routeChannelMappingRecorded",
+        "failurePathAudited",
+        "notificationSecretsRedacted",
+        "realOutboundDisabledOrAccepted",
+    ]
+    assert categories["user_data_privacy_export_deletion_rehearsal"]["requiredChecks"] == [
+        "privacyExportProjectionSanitized",
+        "deletionPreviewRehearsed",
+        "ownerIsolationEvidenceRecorded",
+        "privacyAuditEvidenceSanitized",
+        "rawUserDataNotExposed",
+    ]
+    assert categories["market_data_freshness_fallback_evidence"]["requiredChecks"] == [
+        "providerAndAsOfLabelsRecorded",
+        "staleFallbackDisclosureVerified",
+        "confidenceCapBehaviorVerified",
+        "rawProviderPayloadsRedacted",
+        "runtimeDefaultUnchanged",
+    ]
+    assert categories["ai_report_guest_preview_safety"]["requiredChecks"] == [
+        "guestPreviewSafetyVerified",
+        "rawPromptAndLlmResponsesRedacted",
+        "noAutoAnalysisSideEffects",
+        "guestIsolationEvidenceRecorded",
+        "noAdviceLabelsVerified",
+    ]
+    assert categories["options_derivatives_safety"]["requiredChecks"] == [
+        "readOnlyNoOrderPostureVerified",
+        "brokerAndPortfolioMutationAbsent",
+        "fixtureDelayedFallbackCapsVerified",
+        "guaranteedReturnWordingAbsent",
+        "providerEvidenceSanitized",
+    ]
+    assert categories["api_abuse_request_safety"]["requiredChecks"] == [
+        "abuseRehearsalPassed",
+        "invalidRequestHandlingVerified",
+        "oversizedPayloadSafetyVerified",
+        "denialAuditEvidenceSanitized",
+        "debugTracebackAndRequestBodiesRedacted",
+        "runtimeDefaultUnchanged",
     ]
 
 
@@ -242,6 +327,30 @@ def test_launch_acceptance_evidence_rejects_public_matrix_secret_aliases_without
     assert "credential-value" not in combined_output
     evidence = _json(result)
     category = next(item for item in evidence["categories"] if item["id"] == "incident_response_audit_evidence")
+    assert category["status"] == "blocking"
+    assert category["reasonCodes"] == ["sensitive_value_present"]
+
+
+def test_launch_acceptance_evidence_rejects_traceback_debug_markers_without_leaking(tmp_path: Path) -> None:
+    request_body = "debug_payload=raw-body request_body=raw-request"
+    traceback_marker = "Traceback (most recent call last):"
+    payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    payload["categories"]["api_abuse_request_safety"]["operatorArtifact"] = {
+        "traceback": traceback_marker,
+        "debugPayload": request_body,
+    }
+    evidence_path = tmp_path / "unsafe-traceback-evidence.json"
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_checker("--evidence", str(evidence_path))
+
+    assert result.returncode == 1
+    combined_output = result.stdout + result.stderr
+    assert traceback_marker not in combined_output
+    assert "raw-body" not in combined_output
+    assert "raw-request" not in combined_output
+    evidence = _json(result)
+    category = next(item for item in evidence["categories"] if item["id"] == "api_abuse_request_safety")
     assert category["status"] == "blocking"
     assert category["reasonCodes"] == ["sensitive_value_present"]
 
