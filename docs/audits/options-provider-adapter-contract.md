@@ -36,7 +36,7 @@ The only enabled providers are fixture adapters:
 - `delayed_fixture`: real-shaped delayed fixture, not tradeable under current policy.
 - `malformed_fixture`: missing IV/Greeks fixture for degradation tests.
 
-## Disabled Live Provider Stubs
+## Disabled Live Provider Stubs and Tradier Dry Run
 
 Disabled-by-default live adapter stubs now exist for `tradier`, `ibkr`, and `polygon`. They implement the same provider interface shape and expose capability metadata, but they do not load credentials, call network APIs, return raw provider payloads, place orders, mutate portfolio state, or participate in global market-provider fallback.
 
@@ -45,8 +45,22 @@ Fixture providers remain the default selection contract. Live provider names are
 - `options_provider_disabled`: live provider stubs are globally disabled by default.
 - `options_provider_not_enabled`: live stubs are globally allowed in a future config path, but the selected provider is not explicitly enabled.
 - `options_provider_credentials_missing`: the selected provider is enabled in a future config path, but credential presence has not been confirmed.
+- `options_provider_dry_run_not_enabled`: the selected live provider is enabled and credential presence is confirmed, but dry-run mapping is not explicitly enabled.
+- `options_provider_payload_unmappable`: a dry-run provider-shaped payload could not be mapped into the normalized contract without exposing raw provider details.
 
 The stub config contract carries only provider keys and booleans. It must not print, serialize, or expose API keys, tokens, secrets, account identifiers, request URLs, raw environment values, or raw provider responses.
+
+Tradier now has a dry-run-only mapping foundation behind `OptionsLiveProviderConfig`. It can map a fixture-like Tradier options-chain shape into the provider-neutral contract for expirations, underlying quote, bid/ask, volume, open interest, IV, and Greeks. Even when explicitly enabled for dry-run, the adapter marks `liveEnabled=false`, `tradeableData=false`, `freshness=delayed_dry_run`, and `dataQuality.tradeable=false`.
+
+Optional `.env.example` knobs document the disabled contract:
+
+- `OPTIONS_LIVE_PROVIDERS_ENABLED=false`
+- `OPTIONS_LIVE_PROVIDER_KEYS=tradier`
+- `OPTIONS_TRADIER_ENABLED=false`
+- `OPTIONS_TRADIER_DRY_RUN_ENABLED=false`
+- `TRADIER_API_TOKEN=`
+
+These knobs are a dry-run foundation only. They do not authorize a live Tradier request path, broker/order execution, portfolio mutation, scanner/backtest provider fallback changes, or Options Decision Engine scoring-threshold changes.
 
 ## Future Live Adapter Requirements
 

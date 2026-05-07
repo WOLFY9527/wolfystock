@@ -15,6 +15,7 @@ from src.services.options_market_data_provider import (
     OptionsLiveProviderConfig,
     OptionsProviderUnavailable,
     SyntheticFixtureOptionsProvider,
+    TradierOptionsProviderStub,
     create_options_market_data_provider,
 )
 
@@ -180,3 +181,78 @@ def test_provider_factory_rejects_unknown_provider_without_fallback() -> None:
         create_options_market_data_provider("unknown_options_provider")
 
     assert "disabled or not implemented" in str(exc_info.value)
+
+
+def test_tradier_dry_run_maps_provider_shaped_chain_without_live_or_tradeable_flags() -> None:
+    provider = TradierOptionsProviderStub(
+        config=OptionsLiveProviderConfig(
+            live_providers_enabled=True,
+            enabled_provider_keys=frozenset({"tradier"}),
+            credentialed_provider_keys=frozenset({"tradier"}),
+            dry_run_provider_keys=frozenset({"tradier"}),
+        )
+    )
+
+    quote = provider.get_underlying_quote("TEM")
+    chain = provider.get_chain("TEM", expiration="2026-06-19")
+    expirations = provider.get_expirations("TEM")
+
+    assert provider.capabilities.live_enabled is False
+    assert provider.capabilities.tradeable_data is False
+    assert provider.capabilities.delayed is True
+    assert quote["source"] == "tradier_dry_run_fixture"
+    assert quote["freshness"] == "delayed_dry_run"
+    assert chain["providerName"] == "tradier"
+    assert chain["source"] == "tradier_dry_run_fixture"
+    assert chain["providerCapabilities"]["liveEnabled"] is False
+    assert chain["providerCapabilities"]["tradeableData"] is False
+    assert chain["dataQuality"]["tradeable"] is False
+    assert [item["date"] for item in expirations] == ["2026-06-19", "2026-08-21"]
+    assert {contract["side"] for contract in chain["contracts"]} == {"call", "put"}
+    assert all(contract["expiration"] == "2026-06-19" for contract in chain["contracts"])
+    assert chain["contracts"][0]["impliedVolatility"] == 0.62
+    assert chain["contracts"][0]["greeks"]["delta"] == 0.61
+    assert all(contract["dataQuality"]["tradeable"] is False for contract in chain["contracts"])
+    assert all(contract["freshness"] == "delayed_dry_run" for contract in chain["contracts"])
+
+
+def test_tradier_dry_run_sanitizes_provider_mapping_errors() -> None:
+    provider = TradierOptionsProviderStub(
+        config=OptionsLiveProviderConfig(
+            live_providers_enabled=True,
+            enabled_provider_keys=frozenset({"tradier"}),
+            credentialed_provider_keys=frozenset({"tradier"}),
+            dry_run_provider_keys=frozenset({"tradier"}),
+        ),
+        dry_run_response={
+            "underlying": {"symbol": "TEM", "last": 52.4},
+            "options": {"option": [{"symbol": "Bearer real-token-leak", "option_type": "call"}]},
+        },
+    )
+
+    with pytest.raises(OptionsProviderUnavailable) as exc_info:
+        provider.get_chain("TEM")
+
+    assert exc_info.value.code == "options_provider_payload_unmappable"
+    text = str(exc_info.value).lower()
+    for blocked in ("real-token-leak", "bearer", "api_key", "apikey", "token", "secret", "request"):
+        assert blocked not in text
+
+
+def test_tradier_provider_exposes_no_broker_order_or_portfolio_mutation_path() -> None:
+    provider = TradierOptionsProviderStub(
+        config=OptionsLiveProviderConfig(
+            live_providers_enabled=True,
+            enabled_provider_keys=frozenset({"tradier"}),
+            credentialed_provider_keys=frozenset({"tradier"}),
+            dry_run_provider_keys=frozenset({"tradier"}),
+        )
+    )
+
+    exposed_names = {name.lower() for name in dir(provider)}
+
+    assert "place_order" not in exposed_names
+    assert "submit_order" not in exposed_names
+    assert "create_order" not in exposed_names
+    assert "mutate_portfolio" not in exposed_names
+    assert "sync_broker" not in exposed_names

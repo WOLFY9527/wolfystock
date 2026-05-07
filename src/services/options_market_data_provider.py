@@ -10,14 +10,67 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
 from dataclasses import asdict, dataclass
+from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, List, Mapping, Optional, Protocol
 
 
 DEFAULT_OPTIONS_FIXTURE_PATH = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "options" / "tem_chain.json"
 DEFAULT_OPTIONS_PROVIDER_NAME = "synthetic_fixture"
+TRADIER_OPTIONS_DRY_RUN_SOURCE = "tradier_dry_run_fixture"
+TRADIER_OPTIONS_DRY_RUN_FRESHNESS = "delayed_dry_run"
+TRADIER_OPTIONS_DRY_RUN_AS_OF = "2026-05-06T13:45:00Z"
+DEFAULT_TRADIER_OPTIONS_DRY_RUN_RESPONSE: Dict[str, Any] = {
+    "underlying": {
+        "symbol": "TEM",
+        "last": 52.4,
+        "change_percentage": 1.15,
+        "trade_date": TRADIER_OPTIONS_DRY_RUN_AS_OF,
+    },
+    "options": {
+        "option": [
+            {
+                "symbol": "TEM260619C00050000",
+                "option_type": "call",
+                "expiration_date": "2026-06-19",
+                "strike": 50.0,
+                "bid": 4.8,
+                "ask": 5.2,
+                "last": 5.0,
+                "volume": 320,
+                "open_interest": 1480,
+                "greeks": {"mid_iv": 0.62, "delta": 0.61, "gamma": 0.044, "theta": -0.072, "vega": 0.118, "rho": 0.031},
+            },
+            {
+                "symbol": "TEM260619P00050000",
+                "option_type": "put",
+                "expiration_date": "2026-06-19",
+                "strike": 50.0,
+                "bid": 2.35,
+                "ask": 2.65,
+                "last": 2.5,
+                "volume": 155,
+                "open_interest": 710,
+                "greeks": {"mid_iv": 0.64, "delta": -0.39, "gamma": 0.047, "theta": -0.061, "vega": 0.116, "rho": -0.019},
+            },
+            {
+                "symbol": "TEM260821C00060000",
+                "option_type": "call",
+                "expiration_date": "2026-08-21",
+                "strike": 60.0,
+                "bid": 4.7,
+                "ask": 5.1,
+                "last": 4.9,
+                "volume": 188,
+                "open_interest": 1040,
+                "greeks": {"mid_iv": 0.58, "delta": 0.39, "gamma": 0.028, "theta": -0.042, "vega": 0.185, "rho": 0.049},
+            },
+        ]
+    },
+}
 FIXTURE_OPTIONS_PROVIDER_NAMES = frozenset(
     {
         "synthetic_fixture",
@@ -79,12 +132,46 @@ class OptionsLiveProviderConfig:
     live_providers_enabled: bool = False
     enabled_provider_keys: frozenset[str] = frozenset()
     credentialed_provider_keys: frozenset[str] = frozenset()
+    dry_run_provider_keys: frozenset[str] = frozenset()
 
     def is_provider_enabled(self, provider_name: str) -> bool:
         return provider_name in self.enabled_provider_keys
 
     def has_credentials(self, provider_name: str) -> bool:
         return provider_name in self.credentialed_provider_keys
+
+    def is_dry_run_enabled(self, provider_name: str) -> bool:
+        return provider_name in self.dry_run_provider_keys
+
+    @classmethod
+    def from_env(cls, env: Optional[Mapping[str, str]] = None) -> "OptionsLiveProviderConfig":
+        values = env or os.environ
+        enabled_provider_keys = _provider_key_set(values.get("OPTIONS_LIVE_PROVIDER_KEYS"))
+        dry_run_provider_keys = _provider_key_set(values.get("OPTIONS_DRY_RUN_PROVIDER_KEYS"))
+        if _env_bool(values, "OPTIONS_TRADIER_ENABLED"):
+            enabled_provider_keys.add("tradier")
+        if _env_bool(values, "OPTIONS_TRADIER_DRY_RUN_ENABLED"):
+            dry_run_provider_keys.add("tradier")
+        credentialed_provider_keys: set[str] = set()
+        if values.get("TRADIER_API_TOKEN") or values.get("TRADIER_SANDBOX_API_TOKEN"):
+            credentialed_provider_keys.add("tradier")
+        return cls(
+            live_providers_enabled=_env_bool(values, "OPTIONS_LIVE_PROVIDERS_ENABLED"),
+            enabled_provider_keys=frozenset(enabled_provider_keys),
+            credentialed_provider_keys=frozenset(credentialed_provider_keys),
+            dry_run_provider_keys=frozenset(dry_run_provider_keys),
+        )
+
+
+def _env_bool(env: Mapping[str, str], name: str, default: bool = False) -> bool:
+    value = env.get(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on", "enabled"}
+
+
+def _provider_key_set(value: Optional[str]) -> set[str]:
+    return {item.strip().lower() for item in str(value or "").split(",") if item.strip()}
 
 
 @dataclass(frozen=True)
@@ -319,6 +406,14 @@ class _DisabledLiveOptionsProviderStub:
         self._raise_unavailable()
 
     def _raise_unavailable(self) -> None:
+        self._validate_live_provider_config()
+        raise OptionsProviderUnavailable(
+            self.provider_name,
+            code="options_provider_not_enabled",
+            message="Options live provider adapter has no network implementation.",
+        )
+
+    def _validate_live_provider_config(self) -> None:
         if not self.config.live_providers_enabled:
             raise OptionsProviderUnavailable(
                 self.provider_name,
@@ -337,18 +432,166 @@ class _DisabledLiveOptionsProviderStub:
                 code="options_provider_credentials_missing",
                 message="Options live provider credentials are not configured.",
             )
-        raise OptionsProviderUnavailable(
-            self.provider_name,
-            code="options_provider_not_enabled",
-            message="Options live provider adapter has no network implementation.",
-        )
 
 
 class TradierOptionsProviderStub(_DisabledLiveOptionsProviderStub):
     """Disabled Tradier Options Lab adapter stub."""
 
-    def __init__(self, config: Optional[OptionsLiveProviderConfig] = None) -> None:
+    def __init__(
+        self,
+        config: Optional[OptionsLiveProviderConfig] = None,
+        dry_run_response: Optional[Mapping[str, Any]] = None,
+    ) -> None:
         super().__init__("tradier", config=config)
+        self.dry_run_response = copy.deepcopy(dict(dry_run_response or DEFAULT_TRADIER_OPTIONS_DRY_RUN_RESPONSE))
+        if self.config.is_dry_run_enabled(self.provider_name):
+            self.capabilities = OptionsProviderCapabilityMetadata(
+                provider_name=self.provider_name,
+                source_type="delayed_dry_run",
+                fixture_only=False,
+                live_enabled=False,
+                delayed=True,
+                tradeable_data=False,
+                notes=("tradier_dry_run", "no_external_calls", "not_tradeable"),
+            )
+
+    def get_expirations(self, symbol: str) -> List[Dict[str, Any]]:
+        return copy.deepcopy(self._normalized_snapshot(symbol).get("expirations") or [])
+
+    def get_underlying_quote(self, symbol: str) -> Dict[str, Any]:
+        return copy.deepcopy(self._normalized_snapshot(symbol).get("underlying") or {})
+
+    def get_chain(self, symbol: str, expiration: Optional[str] = None) -> Dict[str, Any]:
+        snapshot = self._normalized_snapshot(symbol)
+        if expiration:
+            snapshot["contracts"] = [
+                contract for contract in snapshot.get("contracts") or [] if str(contract.get("expiration") or "") == expiration
+            ]
+        return snapshot
+
+    def _normalized_snapshot(self, symbol: str) -> Dict[str, Any]:
+        self._validate_live_provider_config()
+        if not self.config.is_dry_run_enabled(self.provider_name):
+            raise OptionsProviderUnavailable(
+                self.provider_name,
+                code="options_provider_dry_run_not_enabled",
+                message="Options live provider dry run is not enabled.",
+            )
+        try:
+            return self._map_tradier_dry_run_response(symbol, self.dry_run_response)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise OptionsProviderUnavailable(
+                self.provider_name,
+                code="options_provider_payload_unmappable",
+                message="Options provider payload could not be mapped safely.",
+            ) from exc
+
+    def _map_tradier_dry_run_response(self, symbol: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
+        normalized_symbol = _normalize_us_symbol(symbol)
+        if not _is_us_equity_symbol(normalized_symbol):
+            raise OptionsProviderUnsupportedSymbol(normalized_symbol)
+
+        underlying_payload = dict(payload.get("underlying") or {})
+        payload_symbol = _normalize_us_symbol(str(underlying_payload.get("symbol") or normalized_symbol))
+        if payload_symbol != normalized_symbol:
+            raise OptionsProviderUnsupportedSymbol(normalized_symbol)
+
+        raw_options = (payload.get("options") or {}).get("option") if isinstance(payload.get("options"), Mapping) else []
+        if isinstance(raw_options, Mapping):
+            option_rows = [dict(raw_options)]
+        else:
+            option_rows = [dict(item) for item in list(raw_options or [])]
+        if not option_rows:
+            raise ValueError("missing option rows")
+
+        chain_as_of = str(underlying_payload.get("trade_date") or payload.get("as_of") or TRADIER_OPTIONS_DRY_RUN_AS_OF)
+        expirations_by_date: Dict[str, Dict[str, Any]] = {}
+        contracts: List[Dict[str, Any]] = []
+        for item in option_rows:
+            expiration = str(item.get("expiration_date") or item.get("expiration") or "")
+            contract_symbol = str(item.get("symbol") or "")
+            side = str(item.get("option_type") or item.get("type") or "").lower()
+            strike = _float_or_none(item.get("strike"))
+            if not expiration or not contract_symbol or side not in {"call", "put"} or strike is None:
+                raise ValueError("missing required contract fields")
+
+            expirations_by_date.setdefault(
+                expiration,
+                {
+                    "date": expiration,
+                    "dte": _dte(expiration, chain_as_of),
+                    "type": "monthly",
+                    "chainAvailable": True,
+                    "asOf": chain_as_of,
+                    "source": TRADIER_OPTIONS_DRY_RUN_SOURCE,
+                    "freshness": TRADIER_OPTIONS_DRY_RUN_FRESHNESS,
+                    "warnings": ["tradier_dry_run_data_not_tradeable", "delayed_or_stale_data_possible"],
+                },
+            )
+            greeks_payload = dict(item.get("greeks") or {})
+            contracts.append(
+                {
+                    "contractSymbol": contract_symbol,
+                    "side": side,
+                    "expiration": expiration,
+                    "strike": strike,
+                    "bid": _float_or_none(item.get("bid")),
+                    "ask": _float_or_none(item.get("ask")),
+                    "last": _float_or_none(item.get("last")),
+                    "volume": _int_or_none(item.get("volume")),
+                    "openInterest": _int_or_none(item.get("open_interest") if "open_interest" in item else item.get("openInterest")),
+                    "impliedVolatility": _float_or_none(
+                        item.get("implied_volatility")
+                        if "implied_volatility" in item
+                        else greeks_payload.get("mid_iv", greeks_payload.get("smv_vol"))
+                    ),
+                    "greeks": {
+                        greek: _float_or_none(greeks_payload.get(greek))
+                        for greek in ("delta", "gamma", "theta", "vega", "rho")
+                        if greeks_payload.get(greek) is not None
+                    },
+                    "multiplier": _int_or_none(item.get("multiplier")) or 100,
+                    "source": TRADIER_OPTIONS_DRY_RUN_SOURCE,
+                    "freshness": TRADIER_OPTIONS_DRY_RUN_FRESHNESS,
+                    "providerQuality": "tradier_dry_run_not_tradeable",
+                    "dataQuality": {
+                        "tier": "delayed_usable",
+                        "tradeable": False,
+                        "hints": ["tradier_dry_run", "no_external_calls", "not_tradeable"],
+                    },
+                    "warnings": ["tradier_dry_run_data_not_tradeable", "delayed_or_stale_data_possible"],
+                }
+            )
+
+        return {
+            "symbol": normalized_symbol,
+            "market": "us",
+            "currency": "USD",
+            "underlying": {
+                "price": _float_or_none(underlying_payload.get("last") or underlying_payload.get("price")),
+                "changePct": _float_or_none(
+                    underlying_payload.get("change_percentage")
+                    if "change_percentage" in underlying_payload
+                    else underlying_payload.get("changePct")
+                ),
+                "asOf": chain_as_of,
+                "source": TRADIER_OPTIONS_DRY_RUN_SOURCE,
+                "freshness": TRADIER_OPTIONS_DRY_RUN_FRESHNESS,
+                "providerQuality": "tradier_dry_run_not_tradeable",
+            },
+            "chainAsOf": chain_as_of,
+            "source": TRADIER_OPTIONS_DRY_RUN_SOURCE,
+            "providerName": self.provider_name,
+            "providerQuality": "tradier_dry_run_not_tradeable",
+            "dataQuality": {
+                "tier": "delayed_usable",
+                "tradeable": False,
+                "hints": ["tradier_dry_run", "no_external_calls", "not_tradeable"],
+            },
+            "providerCapabilities": self.capabilities.to_dict(),
+            "expirations": [expirations_by_date[key] for key in sorted(expirations_by_date)],
+            "contracts": contracts,
+        }
 
 
 class IbkrOptionsProviderStub(_DisabledLiveOptionsProviderStub):
@@ -363,6 +606,32 @@ class PolygonOptionsProviderStub(_DisabledLiveOptionsProviderStub):
 
     def __init__(self, config: Optional[OptionsLiveProviderConfig] = None) -> None:
         super().__init__("polygon", config=config)
+
+
+def _normalize_us_symbol(symbol: str) -> str:
+    return re.sub(r"\s+", "", str(symbol or "")).upper()
+
+
+def _is_us_equity_symbol(symbol: str) -> bool:
+    return bool(re.fullmatch(r"[A-Z]{1,5}", symbol))
+
+
+def _float_or_none(value: Any) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    return float(value)
+
+
+def _int_or_none(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    return int(value)
+
+
+def _dte(expiration: str, as_of: str) -> int:
+    expiration_date = date.fromisoformat(expiration)
+    as_of_date = datetime.fromisoformat(as_of.replace("Z", "+00:00")).date()
+    return max((expiration_date - as_of_date).days, 0)
 
 
 def create_options_market_data_provider(
