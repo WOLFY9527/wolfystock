@@ -14,18 +14,22 @@ async function signIn(page: Page, redirectPath: string) {
 }
 
 test.describe('scanner and market overview smoke', () => {
-  test('scanner keeps controls visible and confines scrolling to the candidate pane', async ({ page }) => {
+  test('scanner keeps controls visible without horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await signIn(page, '/scanner');
 
     await expect(page.getByTestId('user-scanner-bento-page')).toBeVisible();
     await expect(page.getByTestId('scanner-sidebar')).toBeVisible();
+    await page.getByRole('button', { name: /展开 高级参数|expand advanced controls/i }).click();
     await page.getByRole('button', { name: /主题标的池|theme universe/i }).click();
     await expect(page.getByTestId('scanner-theme-control')).toBeVisible();
     await expect(page.getByTestId('scanner-theme-select')).toBeVisible();
     await expect(page.getByTestId('scanner-run-button')).toBeVisible();
-    await expect(page.getByRole('button', { name: /导出 csv|export csv/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /复制全部代码|copy all symbols/i })).toBeVisible();
+    await page.getByRole('button', { name: /更多扫描操作|more scanner actions/i }).click();
+    const moreActions = page.getByTestId('scanner-more-actions-panel');
+    await expect(moreActions).toBeVisible();
+    await expect(moreActions.getByRole('button', { name: /导出 csv|export csv/i })).toBeVisible();
+    await expect(moreActions.getByRole('button', { name: /复制全部代码|copy all symbols/i })).toBeVisible();
 
     await expect(page.getByTestId('scanner-result-card-NVDA')).toBeVisible();
     await expect(page.getByRole('button', { name: /^分析$|^analyze$/i }).first()).toBeVisible();
@@ -33,17 +37,10 @@ test.describe('scanner and market overview smoke', () => {
     await expect(page.getByRole('button', { name: /^导出$|^export$/i }).first()).toBeVisible();
 
     const candidateScrollRegion = page.getByTestId('scanner-candidate-scroll-region');
-    await expect.poll(async () => candidateScrollRegion.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
-    await candidateScrollRegion.evaluate((node) => {
-      node.scrollTop = 240;
-    });
-    await expect.poll(async () => candidateScrollRegion.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    await expect(candidateScrollRegion).toBeVisible();
+    await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
-    const viewport = page.viewportSize();
-    expect(viewport).not.toBeNull();
-    const sidebarBox = await page.getByTestId('scanner-sidebar').boundingBox();
-    expect(sidebarBox).not.toBeNull();
-    expect((sidebarBox?.y ?? 0) + (sidebarBox?.height ?? 0)).toBeLessThanOrEqual((viewport?.height ?? 0) - 8);
+    await expect(page.getByTestId('scanner-sidebar')).toBeVisible();
   });
 
   test('scanner copy and export actions are clickable without console errors', async ({ page }) => {

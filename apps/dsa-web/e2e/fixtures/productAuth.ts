@@ -212,7 +212,7 @@ function decision(symbol: string) {
     },
     optimizer: {
       preferred_strategy_key: 'bull_call_spread',
-      optimizer_label: '仅观察',
+      optimizer_label: '数据不足，禁止判断',
       alternatives: [
         {
           strategy_key: 'bull_call_spread',
@@ -225,12 +225,12 @@ function decision(symbol: string) {
           expected_move_alignment: 61,
           iv_readiness: 55,
           trade_quality_score: 48,
-          decision_label: '仅观察',
+          decision_label: '数据不足，禁止判断',
           primary_reasons: ['mocked_product_route_harness'],
           risk_warnings: ['provider_validation_required'],
         },
       ],
-      no_trade_reason: 'provider_validation_required',
+      no_trade_reason: 'data_quality_not_decision_grade',
     },
     ranked_alternatives: [],
     breakeven: {
@@ -245,9 +245,9 @@ function decision(symbol: string) {
       score: 58,
     },
     trade_quality_score: 48,
-    decision_label: '仅观察',
+    decision_label: '数据不足，禁止判断',
     primary_reasons: ['mocked_product_route_harness'],
-    risk_warnings: ['provider_validation_required'],
+    risk_warnings: ['provider_validation_required', 'synthetic_demo_only'],
     better_alternative: {
       strategy_type: 'bull_call_spread',
       reason: 'Defined-risk structure remains easier to bound in mocked verification.',
@@ -364,7 +364,9 @@ export async function expectRootNonEmpty(page: Page) {
 }
 
 export async function expectForbiddenTradingWordingAbsent(page: Page) {
-  await expect(page.locator('body')).not.toContainText(/买入按钮|下单|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy/i);
+  await expect(page.locator('body')).not.toContainText(
+    /买入按钮|下单|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy|must buy|must sell|buy now|sell now|you should buy|you should sell/i,
+  );
 }
 
 export const test = base.extend<ProductAuthFixtures>({

@@ -116,13 +116,13 @@ const scannerRunDetail = {
       configured_primary_provider: 'mock',
       quote_source_used: 'mock_quotes',
       snapshot_source_used: 'mock_snapshot',
-      history_source_used: 'mock_history',
+      history_source_used: 'fallback_history',
       providers_used: ['mock'],
-      fallback_occurred: false,
-      fallback_count: 0,
-      provider_failure_count: 0,
-      missing_data_symbol_count: 0,
-      provider_warnings: [],
+      fallback_occurred: true,
+      fallback_count: 1,
+      provider_failure_count: 1,
+      missing_data_symbol_count: 2,
+      provider_warnings: ['provider_unavailable_mocked_safety_state'],
     },
     universe_selection: {
       universe_type: 'default',
@@ -561,6 +561,107 @@ function analysisTasksPayload() {
   };
 }
 
+function agentSkillsPayload() {
+  return {
+    skills: [
+      { id: 'bull_trend', name: '趋势分析', description: '测试技能' },
+      { id: 'ma_cross', name: '均线金叉', description: '均线测试' },
+      { id: 'volume_breakout', name: '放量突破', description: '突破测试' },
+      { id: 'leader_strategy', name: '龙头策略', description: '龙头测试' },
+    ],
+    default_skill_id: 'bull_trend',
+  };
+}
+
+function agentModelsPayload() {
+  return {
+    models: [
+      { deployment_id: 'auto', model: 'deepseek-chat', provider: 'DeepSeek', source: 'env', is_primary: true },
+    ],
+  };
+}
+
+function agentProviderHealthPayload() {
+  return {
+    routingMode: 'AUTO',
+    currentProvider: 'DeepSeek',
+    currentModel: 'deepseek-chat',
+    providers: [
+      { id: 'deepseek', label: 'DeepSeek', status: 'available', model: 'deepseek-chat', selected: true },
+      { id: 'openai', label: 'OpenAI', status: 'not_configured' },
+      { id: 'gemini', label: 'Gemini', status: 'offline' },
+      { id: 'local', label: 'Local', status: 'unknown' },
+    ],
+  };
+}
+
+function agentStockEvidencePayload() {
+  return {
+    symbols: ['ORCL'],
+    items: [
+      {
+        symbol: 'ORCL',
+        market: 'US',
+        quote: {
+          status: 'stale',
+          price: 128.42,
+          change_pct: 0.97,
+          currency: 'USD',
+          provider: 'playwright_fixture_stale_quote',
+          updated_at: '2026-05-03T20:00:00Z',
+        },
+        technical: {
+          status: 'fallback',
+          trend: 'neutral',
+          ma20: 123.4,
+          rsi14: 58.2,
+          provider: 'fallback_technical_fixture',
+          updated_at: '2026-05-02',
+        },
+        fundamental: {
+          status: 'partial',
+          pe_ttm: 35.21,
+          pb: 11.13,
+          provider: 'analysis_history',
+          missing_fields: ['marketCap', 'revenueTtm'],
+          updated_at: '2026-05-02T12:00:00Z',
+        },
+        news: {
+          status: 'error',
+          provider: 'provider_unavailable',
+        },
+      },
+    ],
+    meta: { source: 'read_only_playwright_fixture', generated_at: timestamp },
+  };
+}
+
+function portfolioSnapshotPayload() {
+  return {
+    as_of: '2026-05-06',
+    accounts: [
+      {
+        account_id: 1,
+        account_name: 'Main',
+        positions: [
+          { symbol: 'AAPL', market: 'us', quantity: 3, last_price: 200, market_value_base: 600 },
+        ],
+      },
+    ],
+  };
+}
+
+function ruleBacktestRunsPayload() {
+  return {
+    total: 1,
+    page: 1,
+    limit: 1,
+    items: [
+      { id: 34, code: 'ORCL', status: 'completed', total_return_pct: 12.3, max_drawdown_pct: -4.2, completed_at: timestamp },
+    ],
+  };
+}
+
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
   await route.fulfill({
     status,
@@ -666,6 +767,34 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
       return fulfillJson(route, { enabled: false });
     }
 
+    if (method === 'GET' && path === '/api/v1/agent/skills') {
+      return fulfillJson(route, agentSkillsPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/agent/models') {
+      return fulfillJson(route, agentModelsPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/agent/provider-health') {
+      return fulfillJson(route, agentProviderHealthPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/agent/stock-evidence') {
+      return fulfillJson(route, agentStockEvidencePayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/agent/chat/sessions') {
+      return fulfillJson(route, {
+        sessions: [
+          { session_id: 'session-1', title: 'Fixture safety chat', message_count: 0, created_at: timestamp, last_active: timestamp },
+        ],
+      });
+    }
+
+    if (method === 'GET' && path === '/api/v1/agent/chat/sessions/session-1') {
+      return fulfillJson(route, { messages: [] });
+    }
+
     if (method === 'GET' && path === '/api/v1/scanner/themes') {
       return fulfillJson(route, scannerThemes);
     }
@@ -684,6 +813,10 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
 
     if (method === 'GET' && path === '/api/v1/scanner/runs/11') {
       return fulfillJson(route, scannerRunDetail);
+    }
+
+    if (method === 'GET' && path === '/api/v1/scanner/watchlists/recent') {
+      return fulfillJson(route, scannerRuns);
     }
 
     if (method === 'POST' && path === '/api/v1/scanner/run') {
@@ -715,6 +848,14 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
         status: 'accepted',
         message: 'Accepted',
       }, 202);
+    }
+
+    if (method === 'GET' && path === '/api/v1/portfolio/snapshot') {
+      return fulfillJson(route, portfolioSnapshotPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/backtest/rule/runs') {
+      return fulfillJson(route, ruleBacktestRunsPayload());
     }
 
     if (method === 'GET' && path === '/api/v1/history') {
