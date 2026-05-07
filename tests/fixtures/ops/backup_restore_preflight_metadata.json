@@ -1,0 +1,7 @@
+{
+  "backup_id": "synthetic-drill-example",
+  "created_at": "2026-05-07T00:00:00Z",
+  "artifact_path": "backup_restore_preflight_artifact.marker",
+  "schema_version": "backup_restore_preflight_v1",
+  "source_environment": "synthetic"
+}

@@ -219,6 +219,35 @@ Blockers:
 Rollback/follow-up:
 ```
 
+### 7.1 Production-like Preflight Before a Real Drill
+
+Before any staging or production-adjacent restore drill, run the local dry-run
+preflight with simulated metadata and a temp-only restore target:
+
+```bash
+scripts/backup_restore_drill_check.sh \
+  --metadata tests/fixtures/ops/backup_restore_preflight_metadata.json \
+  --restore-target /tmp/wolfystock-restore-drill/restored.sqlite \
+  --max-age-hours 99999
+```
+
+For launch evidence, operators should replace the fixture with freshly generated
+synthetic or sanitized metadata. The metadata must include:
+
+- `backup_id`
+- `created_at`
+- `artifact_path`
+- `schema_version=backup_restore_preflight_v1`
+- `source_environment` set to `synthetic`, `sanitized`, or `anonymized`
+
+The preflight is intentionally dry-run only. It verifies backup artifact
+presence, timestamp freshness, schema compatibility, and restore target
+isolation; it refuses missing or stale metadata and refuses non-temp restore
+targets. Passing this preflight does not prove that PostgreSQL backup,
+encryption, PITR, or restore infrastructure works. It only produces safe launch
+readiness evidence that the drill inputs and isolation plan are coherent before
+running a real isolated restore.
+
 ## 8. Rollback and Failure Plan
 
 If backup creation fails:

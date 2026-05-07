@@ -200,7 +200,10 @@ Status:
 Remaining blockers:
 
 - [ ] Index Batch B remains for broader owner/status/time/admin drilldown paths.
-- [ ] Backup/restore drill is missing.
+- [x] Local dry-run backup/restore drill preflight exists for simulated
+  metadata, artifact presence, timestamp sanity, schema compatibility, and
+  temp-only restore target isolation.
+- [ ] Isolated PostgreSQL backup/restore drill is still missing.
 - [ ] Encrypted backup, PITR targets, restore smoke, and rollback runbook must
   be documented and exercised before public onboarding.
 - [ ] Retention tiers are missing for task progress, terminal task state, LLM
@@ -293,6 +296,8 @@ The following must all be true before public multi-user deployment:
   readiness output, browser DOM, or docs.
 - [ ] MFA enforcement prerequisites are complete or public admin access is
   blocked behind a documented compensating control.
+- [ ] Backup/restore dry-run preflight passes with fresh synthetic or sanitized
+  metadata and a temp-only restore target.
 - [ ] Backup/restore drill passes in an isolated environment.
 - [ ] Rollback plan is written, including last-good commit/image, DB restore
   decision point, health checks, and owner-isolation smoke.
