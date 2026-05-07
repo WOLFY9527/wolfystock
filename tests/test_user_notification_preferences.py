@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -25,6 +26,21 @@ from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.notification import NotificationChannel, NotificationService
 from src.services.task_queue import _build_configured_execution_summary
 from src.storage import DatabaseManager
+
+FORBIDDEN_PRIVACY_EXPORT_MARKERS = (
+    "password_hash",
+    "session_id",
+    "cookie",
+    "api_key",
+    "apikey",
+    "token",
+    "secret",
+    "traceback",
+    "stack trace",
+    "recovery code",
+    "provider credential",
+    "broker credential",
+)
 
 
 def _reset_auth_globals() -> None:
@@ -96,6 +112,15 @@ class UserNotificationPreferencesTestCase(unittest.TestCase):
         self.assertIsNotNone(user_row)
         return str(user_row.id)
 
+    @staticmethod
+    def _json_text(response) -> str:
+        return json.dumps(response.json(), ensure_ascii=False)
+
+    def _assert_no_privacy_export_leaks(self, response) -> None:
+        text = self._json_text(response).lower()
+        for marker in FORBIDDEN_PRIVACY_EXPORT_MARKERS:
+            self.assertNotIn(marker.lower(), text)
+
     def test_notification_preferences_are_user_owned_and_exposed_via_current_user_api(self) -> None:
         initial_response = self.user_client.get("/api/v1/auth/preferences/notifications")
         self.assertEqual(initial_response.status_code, 200)
@@ -134,6 +159,29 @@ class UserNotificationPreferencesTestCase(unittest.TestCase):
         self.assertEqual(other_response.status_code, 200)
         self.assertFalse(other_response.json()["enabled"])
         self.assertIsNone(other_response.json()["email"])
+        self._assert_no_privacy_export_leaks(other_response)
+
+    def test_user_owned_notification_reads_fail_closed_after_user_disable_and_stay_sanitized(self) -> None:
+        self.db.create_or_update_app_user(
+            user_id=self.user_id,
+            username="alice",
+            display_name="Alice",
+            role="user",
+            password_hash=self.db.get_app_user(self.user_id).password_hash,
+            is_active=False,
+        )
+
+        response = self.user_client.get("/api/v1/auth/preferences/notifications")
+        status = self.user_client.get("/api/v1/auth/status")
+        me = self.user_client.get("/api/v1/auth/me")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(status.status_code, 200)
+        self.assertFalse(status.json()["loggedIn"])
+        self.assertEqual(me.status_code, 401)
+        self._assert_no_privacy_export_leaks(response)
+        self._assert_no_privacy_export_leaks(status)
+        self._assert_no_privacy_export_leaks(me)
 
     def test_notification_preferences_validation_and_runtime_scope_stay_separate_from_system_channels(self) -> None:
         invalid_response = self.user_client.put(

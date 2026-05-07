@@ -16,6 +16,29 @@ from api.deps import CurrentUser, get_current_user
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.storage import AppUser, AppUserSession, DatabaseManager
 
+FORBIDDEN_PRIVACY_EXPORT_MARKERS = (
+    "password_hash",
+    "pbkdf2:admin-secret-hash",
+    "pbkdf2:user-secret-hash",
+    "raw-active-session-token",
+    "raw-expired-session-token",
+    "raw-revoked-session-token",
+    "session_id",
+    "sessionid",
+    "cookie",
+    "api_key",
+    "apikey",
+    "api-key",
+    "totp-secret-ref",
+    "recovery-code-hash",
+    "provider credential",
+    "provider_credential",
+    "broker credential",
+    "dsn",
+    "traceback",
+    "stack trace",
+)
+
 
 def _admin_user() -> CurrentUser:
     return CurrentUser(
@@ -79,6 +102,8 @@ class AdminUsersApiTestCase(unittest.TestCase):
             display_name="Alice Analyst",
             role="user",
             password_hash="pbkdf2:user-secret-hash",
+            mfa_secret_ref="totp-secret-ref",
+            mfa_recovery_codes_hash="recovery-code-hash",
             is_active=True,
         )
         self.db.create_or_update_app_user(
@@ -131,6 +156,11 @@ class AdminUsersApiTestCase(unittest.TestCase):
     @staticmethod
     def _json_text(response) -> str:
         return json.dumps(response.json(), ensure_ascii=False)
+
+    def _assert_no_privacy_export_leaks(self, response) -> None:
+        text = self._json_text(response).lower()
+        for marker in FORBIDDEN_PRIVACY_EXPORT_MARKERS:
+            self.assertNotIn(marker.lower(), text)
 
     def _count(self, model) -> int:
         from sqlalchemy import func, select
@@ -190,11 +220,73 @@ class AdminUsersApiTestCase(unittest.TestCase):
         self.assertNotIn("raw-active-session-token", text)
         self.assertNotIn("pbkdf2:user-secret-hash", text)
         self.assertNotIn("password_hash", text)
+        self._assert_no_privacy_export_leaks(response)
 
         inactive = self.client.get("/api/v1/admin/users/user-2")
         self.assertEqual(inactive.status_code, 200)
         self.assertFalse(inactive.json()["user"]["isActive"])
         self.assertEqual(inactive.json()["user"]["passwordState"], "unset")
+
+    def test_user_directory_privacy_export_projection_is_read_only_and_sanitized(self) -> None:
+        self._as_admin()
+        before_users = self._count(AppUser)
+        before_sessions = self._count(AppUserSession)
+
+        list_response = self.client.get("/api/v1/admin/users", params={"limit": 50})
+        detail_response = self.client.get("/api/v1/admin/users/user-1", params={"include_sessions": "true"})
+        active_sessions = self.client.get(
+            "/api/v1/admin/users/user-1",
+            params={"session_status": "active"},
+        )
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(active_sessions.status_code, 200)
+        self.assertEqual(self._count(AppUser), before_users)
+        self.assertEqual(self._count(AppUserSession), before_sessions)
+
+        for response in (list_response, detail_response, active_sessions):
+            self._assert_no_privacy_export_leaks(response)
+
+        detail_payload = detail_response.json()
+        self.assertEqual(detail_payload["user"]["links"]["portfolio"], None)
+        self.assertEqual(detail_payload["user"]["links"]["analysis"], None)
+        self.assertEqual(detail_payload["user"]["links"]["scanner"], None)
+        self.assertEqual(detail_payload["user"]["links"]["backtest"], None)
+        self.assertEqual(detail_payload["dataLinks"]["portfolio"], None)
+        self.assertEqual(detail_payload["dataLinks"]["analysis"], None)
+        self.assertEqual(detail_payload["dataLinks"]["scanner"], None)
+        self.assertEqual(detail_payload["dataLinks"]["backtest"], None)
+
+        user_routes = [
+            route
+            for route in self.app.routes
+            if getattr(route, "path", "").startswith("/api/v1/admin/users")
+        ]
+        self.assertGreaterEqual(len(user_routes), 3)
+        for route in user_routes:
+            self.assertTrue(set(getattr(route, "methods", set())) <= {"GET"})
+
+    def test_cross_user_admin_detail_attempt_is_denied_with_sanitized_error(self) -> None:
+        self._as_user()
+
+        response = self.client.get("/api/v1/admin/users/user-2")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("user-2", self._json_text(response))
+        self._assert_no_privacy_export_leaks(response)
+
+    def test_destructive_user_delete_route_remains_unsupported_and_read_only(self) -> None:
+        self._as_admin()
+        before_users = self._count(AppUser)
+        before_sessions = self._count(AppUserSession)
+
+        response = self.client.delete("/api/v1/admin/users/user-1")
+
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(self._count(AppUser), before_users)
+        self.assertEqual(self._count(AppUserSession), before_sessions)
+        self._assert_no_privacy_export_leaks(response)
 
     def test_unknown_user_and_limit_validation(self) -> None:
         self._as_admin()
