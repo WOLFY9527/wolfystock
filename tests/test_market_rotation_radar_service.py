@@ -85,6 +85,12 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertGreaterEqual(theme["persistenceScore"], 0)
         self.assertTrue(theme["alertCandidates"])
         self.assertTrue(all(candidate["readOnly"] for candidate in theme["alertCandidates"]))
+        self.assertLessEqual(theme["proxyQuality"]["coveragePercent"], 75)
+        self.assertLessEqual(theme["confidence"], 0.58)
+        self.assertEqual(theme["benchmarkProxies"]["IGV"]["quality"]["missingReason"], "proxy_quote_missing")
+        self.assertIn("ETF 代理覆盖", theme["proxyQuality"]["explanation"])
+        self.assertIn("sortExplanation", theme["alertCandidates"][0])
+        self.assertIn("非买卖建议", theme["alertCandidates"][0]["sortExplanation"])
 
     def test_intraday_windows_are_aggregated_only_when_quote_fixture_provides_them(self) -> None:
         windows = {
@@ -115,7 +121,12 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(theme["timeWindows"]["1d"]["available"])
         self.assertEqual(theme["timeWindows"]["5m"]["observedMemberCount"], 3)
         self.assertEqual(theme["benchmarkProxies"]["IGV"]["role"], "sector_proxy")
+        self.assertEqual(theme["benchmarkProxies"]["IGV"]["quality"]["missingReason"], None)
+        self.assertEqual(theme["proxyQuality"]["coveragePercent"], 100)
+        self.assertEqual(theme["proxyQuality"]["availableProxyCount"], 4)
         self.assertIn("watchlistSignals", payload["summary"])
+        self.assertIn("watchlistSortingExplanation", payload["summary"])
+        self.assertIn("非买卖建议", payload["summary"]["watchlistSortingExplanation"])
         dumped = json.dumps(theme, ensure_ascii=False).lower()
         self.assertNotIn("raw_payload", dumped)
         self.assertNotIn("建议买入", dumped)
@@ -139,6 +150,8 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             self.assertIn("stale_or_incomplete_windows", theme["riskLabels"])
             self.assertTrue(all(not slot["available"] for slot in theme["timeWindows"].values()))
             self.assertTrue(theme["themeDetail"]["watchlistSafe"])
+            self.assertEqual(theme["proxyQuality"]["coveragePercent"], 0)
+            self.assertTrue(all(proxy["quality"]["missingReason"] for proxy in theme["benchmarkProxies"].values()))
 
     def test_stale_and_missing_data_penalizes_confidence_and_blocks_clean_rotation_claims(self) -> None:
         quotes = {
@@ -164,6 +177,38 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertNotEqual(infra["stage"], "confirmed_rotation")
         self.assertLessEqual(infra["rotationScore"], 69)
         self.assertFalse(infra["newslessRotation"])
+
+    def test_theme_detail_separates_sorted_leaders_and_laggards_as_observation_evidence(self) -> None:
+        windows = {
+            "5m": {"changePercent": 0.4, "relativeVolume": 1.2, "freshness": "live", "asOf": "2026-05-07T09:45:00+00:00"},
+            "15m": {"changePercent": 0.9, "relativeVolume": 1.4, "freshness": "live", "asOf": "2026-05-07T09:45:00+00:00"},
+            "60m": {"changePercent": 1.4, "relativeVolume": 1.6, "freshness": "live", "asOf": "2026-05-07T09:45:00+00:00"},
+        }
+        quotes = {
+            "QQQ": _quote("QQQ", 0.3, time_windows=windows),
+            "SPY": _quote("SPY", 0.2, time_windows=windows),
+            "IWM": _quote("IWM", -0.1, time_windows=windows),
+            "IGV": _quote("IGV", 0.4, time_windows=windows),
+            "APP": _quote("APP", 4.2, volume_ratio=1.9, time_windows=windows),
+            "PLTR": _quote("PLTR", 3.3, volume_ratio=1.6, time_windows=windows),
+            "CRM": _quote("CRM", 0.1, volume_ratio=0.9, time_windows=windows),
+            "SNOW": _quote("SNOW", -0.5, volume_ratio=0.8, time_windows=windows),
+        }
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        theme = next(item for item in payload["themes"] if item["id"] == "ai_applications")
+        detail = theme["themeDetail"]
+
+        self.assertEqual(detail["leaderSectionLabel"], "领先成员")
+        self.assertEqual(detail["laggardSectionLabel"], "落后/待验证成员")
+        self.assertIn("观察信号", detail["leaderExplanation"])
+        self.assertIn("不是买卖建议", detail["laggardExplanation"])
+        self.assertEqual([item["symbol"] for item in detail["leadershipMembers"][:2]], ["APP", "PLTR"])
+        self.assertEqual([item["symbol"] for item in detail["laggardMembers"][:2]], ["SNOW", "CRM"])
 
     def test_payload_uses_safe_no_advice_and_no_exact_fund_flow_wording(self) -> None:
         payload = MarketRotationRadarService().get_rotation_radar()

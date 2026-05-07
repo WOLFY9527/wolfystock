@@ -26,8 +26,9 @@ describe('marketRotationApi', () => {
         no_advice_disclosure: '仅用于观察资金轮动迹象，非买卖建议。',
         metadata: {
           no_external_calls: true,
-          schema_version: 'market_rotation_radar_phase3_v1',
+          schema_version: 'market_rotation_radar_phase4_v1',
           time_windows: ['5m', '15m', '60m', '1d'],
+          proxy_quality_required: true,
           alerts_are_read_only_evidence: true,
           notification_delivery_enabled: false,
         },
@@ -89,6 +90,7 @@ describe('marketRotationApi', () => {
                 read_only: true,
                 delivery_enabled: false,
                 reasons: ['AI 应用：确认轮动'],
+                sort_explanation: '按主题轮动强度、置信度、跨时窗持续证据、成员相对强弱和量能扩张排序；仅用于观察信号排队，非买卖建议。',
               },
             ],
             freshness: 'delayed',
@@ -96,8 +98,38 @@ describe('marketRotationApi', () => {
             is_stale: false,
             evidence: ['无明显新闻的同步异动'],
             relative_strength: { average_relative_strength_percent: 2.6 },
+            proxy_quality: {
+              label: 'ETF 代理完整',
+              coverage_percent: 100,
+              available_proxy_count: 4,
+              total_proxy_count: 4,
+              required_proxies: ['QQQ', 'SPY', 'IWM', 'IGV'],
+              freshness: 'delayed',
+              has_missing_required_proxy: false,
+              has_stale_proxy: false,
+              missing_reasons: {},
+              explanation: 'ETF 代理完整：ETF 代理覆盖 4/4，缺口 无。',
+            },
             benchmark_proxies: {
-              IGV: { symbol: 'IGV', role: 'sector_proxy', relative_strength: 2.2, freshness: 'delayed', is_fallback: false, is_stale: false },
+              IGV: {
+                symbol: 'IGV',
+                role: 'sector_proxy',
+                relative_strength: 2.2,
+                freshness: 'delayed',
+                is_fallback: false,
+                is_stale: false,
+                quality: {
+                  symbol: 'IGV',
+                  available: true,
+                  freshness: 'delayed',
+                  is_fallback: false,
+                  is_stale: false,
+                  has_required_windows: true,
+                  missing_reason: null,
+                  quality_label: '可用代理',
+                  coverage_contribution: 1,
+                },
+              },
             },
             time_windows: {
               '5m': { window: '5m', label: '5分钟', available: false, freshness: 'fallback', is_fallback: true, is_stale: false, reason: 'window_unavailable' },
@@ -122,13 +154,17 @@ describe('marketRotationApi', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/api/v1/market/rotation-radar');
     expect(payload.generatedAt).toBe('2026-05-07T09:50:00Z');
     expect(payload.metadata.noExternalCalls).toBe(true);
+    expect(payload.metadata.proxyQualityRequired).toBe(true);
     expect(payload.summary.strongestThemes[0].rotationScore).toBe(78);
     expect(payload.themes[0].englishName).toBe('AI Applications');
     expect(payload.themes[0].newslessRotation).toBe(true);
     expect(payload.themes[0].persistenceEvidence?.label).toBe('跨时窗延续');
     expect(payload.themes[0].alertCandidates?.[0].readOnly).toBe(true);
+    expect(payload.themes[0].alertCandidates?.[0].sortExplanation).toContain('非买卖建议');
     expect(payload.summary.watchlistSignals[0].label).toBe('关注候选');
     expect(payload.themes[0].timeWindows?.['1d'].available).toBe(true);
+    expect(payload.themes[0].proxyQuality?.coveragePercent).toBe(100);
+    expect(payload.themes[0].benchmarkProxies?.IGV.quality?.missingReason).toBeNull();
     expect(payload.themes[0].benchmarkProxies?.IGV.role).toBe('sector_proxy');
     expect(payload.themes[0].themeDetail?.watchlistSafe).toBe(true);
     expect(JSON.stringify(payload).toLowerCase()).not.toContain('raw_payload');

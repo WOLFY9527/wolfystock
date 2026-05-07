@@ -186,7 +186,7 @@ class MarketRotationRadarService:
             "summary": self._build_summary(themes),
             "themes": themes,
             "metadata": {
-                "schemaVersion": "market_rotation_radar_phase3_v1",
+                "schemaVersion": "market_rotation_radar_phase4_v1",
                 "noExternalCalls": True,
                 "alertsAreReadOnlyEvidence": True,
                 "notificationDeliveryEnabled": False,
@@ -199,6 +199,7 @@ class MarketRotationRadarService:
                 "confidenceRange": "0-1",
                 "timeWindows": list(TIME_WINDOW_KEYS),
                 "requiredPersistenceWindows": list(TIME_WINDOW_KEYS),
+                "proxyQualityRequired": True,
                 "benchmarkProxies": {
                     "market": list(MARKET_BENCHMARK_SYMBOLS),
                     "sector": list(SECTOR_BENCHMARK_SYMBOLS),
@@ -297,8 +298,10 @@ class MarketRotationRadarService:
         time_windows = self._aggregate_time_windows(observed)
         window_state = self._time_window_state(time_windows)
         persistence_evidence = self._persistence_evidence(time_windows)
+        proxy_quality = self._proxy_quality(theme, benchmarks)
         source_state = self._source_state(observations, benchmarks, theme.benchmark)
         source_state["timeWindowState"] = window_state
+        source_state["proxyQuality"] = proxy_quality
         score = self._score(
             average_relative_strength=average_relative_strength,
             average_relative_volume=average_relative_volume,
@@ -397,6 +400,7 @@ class MarketRotationRadarService:
                 "averageRelativeStrengthPercent": round(average_relative_strength, 3),
                 "vsBenchmarks": self._relative_vs_benchmarks(observed, benchmarks),
             },
+            "proxyQuality": proxy_quality,
             "benchmarkProxies": self._benchmark_proxies(theme, benchmarks, observed),
             "timeWindows": time_windows,
             "volume": {
@@ -487,6 +491,7 @@ class MarketRotationRadarService:
                 "averageRelativeStrengthPercent": None,
                 "vsBenchmarks": {symbol: None for symbol in BENCHMARK_SYMBOLS},
             },
+            "proxyQuality": self._proxy_quality(theme, benchmarks),
             "benchmarkProxies": self._benchmark_proxies(theme, benchmarks, []),
             "timeWindows": self._empty_time_windows(),
             "volume": {
@@ -948,6 +953,12 @@ class MarketRotationRadarService:
             confidence = min(confidence, 0.6)
         if window_state.get("staleOrFallbackWindows"):
             confidence = min(confidence, 0.68)
+        proxy_quality = source_state.get("proxyQuality", {})
+        proxy_coverage = float(proxy_quality.get("coveragePercent") or 0.0)
+        if proxy_coverage < 100:
+            confidence = min(confidence, 0.58 if proxy_coverage >= 75 else 0.5 if proxy_coverage >= 50 else 0.35)
+        if proxy_quality.get("hasStaleProxy"):
+            confidence = min(confidence, 0.5)
         return round(max(0.0, min(1.0, confidence)), 2)
 
     def _risk_labels(
@@ -967,6 +978,8 @@ class MarketRotationRadarService:
         if (
             source_state["isStale"]
             or source_state["fallbackUsed"]
+            or bool(source_state.get("proxyQuality", {}).get("hasMissingRequiredProxy"))
+            or bool(source_state.get("proxyQuality", {}).get("hasStaleProxy"))
             or int(window_state.get("availableWindowCount") or 0) < len(TIME_WINDOW_KEYS)
             or bool(window_state.get("staleOrFallbackWindows"))
         ):
@@ -1102,6 +1115,10 @@ class MarketRotationRadarService:
             "acceleratingThemes": accelerating,
             "fadingThemes": fading,
             "watchlistSignals": watchlist_signals[:5],
+            "watchlistSortingExplanation": (
+                "关注候选按主题轮动强度、置信度、跨时窗持续证据和成员相对强弱排序；"
+                "仅作为观察信号，非买卖建议。"
+            ),
             "safeWording": [
                 "资金轮动迹象",
                 "成交额扩张",
@@ -1138,6 +1155,7 @@ class MarketRotationRadarService:
         for symbol in (*MARKET_BENCHMARK_SYMBOLS, theme.sectorBenchmark):
             benchmark = benchmarks.get(symbol, {})
             change = benchmark.get("changePercent")
+            proxy_status = self._proxy_status(symbol, benchmark)
             proxies[symbol] = {
                 "symbol": symbol,
                 "role": "sector_proxy" if symbol == theme.sectorBenchmark else "market_proxy",
@@ -1149,8 +1167,92 @@ class MarketRotationRadarService:
                 "isStale": bool(benchmark.get("isStale")),
                 "sourceLabel": benchmark.get("sourceLabel"),
                 "asOf": benchmark.get("asOf"),
+                "quality": proxy_status,
             }
         return proxies
+
+    def _proxy_quality(
+        self,
+        theme: ThemeBasket,
+        benchmarks: Mapping[str, Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        proxy_symbols = list(dict.fromkeys((*MARKET_BENCHMARK_SYMBOLS, theme.sectorBenchmark)))
+        statuses = {
+            symbol: self._proxy_status(symbol, benchmarks.get(symbol, {}))
+            for symbol in proxy_symbols
+        }
+        available_count = sum(1 for status in statuses.values() if status["available"])
+        stale_count = sum(1 for status in statuses.values() if status["isStale"])
+        total_count = len(proxy_symbols)
+        coverage = self._percent(available_count, total_count)
+        missing_reasons = {
+            symbol: status["missingReason"]
+            for symbol, status in statuses.items()
+            if status["missingReason"]
+        }
+        if coverage >= 100 and stale_count == 0:
+            label = "ETF 代理完整"
+            freshness = self._freshest_proxy_label([status["freshness"] for status in statuses.values()])
+        elif coverage >= 75:
+            label = "ETF 代理部分缺口"
+            freshness = "stale" if stale_count else "delayed"
+        elif coverage > 0:
+            label = "ETF 代理覆盖不足"
+            freshness = "stale" if stale_count else "fallback"
+        else:
+            label = "ETF 代理待补齐"
+            freshness = "fallback"
+        return {
+            "label": label,
+            "coveragePercent": round(coverage, 1),
+            "availableProxyCount": available_count,
+            "totalProxyCount": total_count,
+            "requiredProxies": proxy_symbols,
+            "freshness": freshness,
+            "hasMissingRequiredProxy": available_count < total_count,
+            "hasStaleProxy": stale_count > 0,
+            "missingReasons": missing_reasons,
+            "explanation": (
+                f"{label}：ETF 代理覆盖 {available_count}/{total_count}，"
+                f"缺口 {', '.join(missing_reasons) if missing_reasons else '无'}。"
+            ),
+        }
+
+    def _proxy_status(self, symbol: str, benchmark: Mapping[str, Any]) -> Dict[str, Any]:
+        change = benchmark.get("changePercent")
+        is_fallback = bool(benchmark.get("isFallback", True))
+        is_stale = bool(benchmark.get("isStale"))
+        freshness = str(benchmark.get("freshness") or "fallback")
+        time_windows = benchmark.get("timeWindows")
+        has_window = False
+        if isinstance(time_windows, Mapping):
+            has_window = any(bool(slot.get("available")) for slot in time_windows.values() if isinstance(slot, Mapping))
+        available = change is not None and not is_fallback and not is_stale
+        missing_reason = None
+        if change is None or is_fallback:
+            missing_reason = "proxy_quote_missing"
+        elif is_stale:
+            missing_reason = "proxy_stale"
+        elif not has_window:
+            missing_reason = "proxy_windows_missing"
+        return {
+            "symbol": symbol,
+            "available": available,
+            "freshness": "fallback" if is_fallback else "stale" if is_stale else freshness,
+            "isFallback": is_fallback,
+            "isStale": is_stale,
+            "hasRequiredWindows": has_window,
+            "missingReason": missing_reason,
+            "qualityLabel": "可用代理" if available and not missing_reason else "代理待补齐" if missing_reason == "proxy_quote_missing" else "代理需复核",
+            "coverageContribution": 1 if available else 0,
+        }
+
+    @staticmethod
+    def _freshest_proxy_label(freshness_values: Sequence[str]) -> str:
+        for candidate in ("live", "mock", "delayed", "cached", "stale", "fallback"):
+            if candidate in freshness_values:
+                return candidate
+        return "fallback"
 
     def _alert_candidates(
         self,
@@ -1178,6 +1280,10 @@ class MarketRotationRadarService:
                 reasons.append(f"{leader.get('symbol')} 相对 {theme.benchmark} {float(leader['relativeStrengthVsBenchmark']):+.2f}%")
             if leader.get("volumeRatio") is not None:
                 reasons.append(f"量比 {float(leader['volumeRatio']):.2f}x")
+            sort_explanation = (
+                "按主题轮动强度、置信度、跨时窗持续证据、成员相对强弱和量能扩张排序；"
+                "仅用于观察信号排队，非买卖建议。"
+            )
             candidates.append({
                 "themeId": theme.id,
                 "themeName": theme.name,
@@ -1191,6 +1297,13 @@ class MarketRotationRadarService:
                 "persistenceLabel": persistence_evidence.get("label"),
                 "riskLabels": list(risk_labels),
                 "reasons": reasons,
+                "sortKey": {
+                    "confidence": confidence,
+                    "persistenceScore": persistence_evidence.get("score"),
+                    "relativeStrengthVsBenchmark": leader.get("relativeStrengthVsBenchmark"),
+                    "volumeRatio": leader.get("volumeRatio"),
+                },
+                "sortExplanation": sort_explanation,
                 "readOnly": True,
                 "deliveryEnabled": False,
                 "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
@@ -1216,6 +1329,15 @@ class MarketRotationRadarService:
         generated_at: str,
     ) -> Dict[str, Any]:
         leader_symbols = {str(item.get("symbol")) for item in leaders[:3]}
+        sorted_leaders = [
+            self._watchlist_member(item, "leader" if item.get("symbol") in leader_symbols else "participant")
+            for item in sorted(
+                observations,
+                key=lambda item: float(item.get("relativeStrengthVsBenchmark") or item.get("changePercent") or -999),
+                reverse=True,
+            )
+            if item.get("observed") and item.get("symbol") in leader_symbols
+        ]
         laggards = sorted(
             [item for item in observations if item.get("observed") and item.get("changePercent") is not None],
             key=lambda item: float(item.get("relativeStrengthVsBenchmark") or item.get("changePercent") or 0),
@@ -1224,11 +1346,11 @@ class MarketRotationRadarService:
             "watchlistLabel": "观察清单证据",
             "watchlistSafe": True,
             "safeActionLabel": "仅观察，不构成买卖建议",
-            "leadershipMembers": [
-                self._watchlist_member(item, "leader" if item.get("symbol") in leader_symbols else "participant")
-                for item in observations
-                if item.get("observed") and item.get("symbol") in leader_symbols
-            ],
+            "leaderSectionLabel": "领先成员",
+            "laggardSectionLabel": "落后/待验证成员",
+            "leaderExplanation": "领先成员按相对强弱和量能扩张排序，仅代表观察信号强弱。",
+            "laggardExplanation": "落后/待验证成员用于观察扩散不足或分歧，不是买卖建议。",
+            "leadershipMembers": sorted_leaders,
             "laggardMembers": [
                 self._watchlist_member(item, "laggard")
                 for item in laggards

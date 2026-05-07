@@ -90,9 +90,41 @@ export type MarketRotationAlertCandidate = {
   persistenceLabel?: string | null;
   riskLabels?: MarketRotationRiskLabel[];
   reasons?: string[];
+  sortKey?: {
+    confidence?: number;
+    persistenceScore?: number | null;
+    relativeStrengthVsBenchmark?: number | null;
+    volumeRatio?: number | null;
+  };
+  sortExplanation?: string;
   readOnly?: boolean;
   deliveryEnabled?: boolean;
   noAdviceDisclosure?: string;
+};
+
+export type MarketRotationProxyQuality = {
+  label?: string;
+  coveragePercent?: number;
+  availableProxyCount?: number;
+  totalProxyCount?: number;
+  requiredProxies?: string[];
+  freshness?: MarketDataFreshness;
+  hasMissingRequiredProxy?: boolean;
+  hasStaleProxy?: boolean;
+  missingReasons?: Record<string, string>;
+  explanation?: string;
+};
+
+export type MarketRotationProxyStatus = {
+  symbol?: string;
+  available?: boolean;
+  freshness?: MarketDataFreshness;
+  isFallback?: boolean;
+  isStale?: boolean;
+  hasRequiredWindows?: boolean;
+  missingReason?: string | null;
+  qualityLabel?: string;
+  coverageContribution?: number;
 };
 
 export type MarketRotationTheme = MarketRotationSummaryItem & {
@@ -137,7 +169,9 @@ export type MarketRotationTheme = MarketRotationSummaryItem & {
     isStale?: boolean;
     sourceLabel?: string | null;
     asOf?: string | null;
+    quality?: MarketRotationProxyStatus;
   }>;
+  proxyQuality?: MarketRotationProxyQuality;
   timeWindows?: Record<string, MarketRotationTimeWindow>;
   volume: {
     averageRelativeVolume?: number | null;
@@ -176,6 +210,10 @@ export type MarketRotationTheme = MarketRotationSummaryItem & {
     watchlistLabel?: string;
     watchlistSafe?: boolean;
     safeActionLabel?: string;
+    leaderSectionLabel?: string;
+    laggardSectionLabel?: string;
+    leaderExplanation?: string;
+    laggardExplanation?: string;
     leadershipMembers?: MarketRotationWatchlistMember[];
     laggardMembers?: MarketRotationWatchlistMember[];
     memberEvidence?: MarketRotationWatchlistMember[];
@@ -223,6 +261,7 @@ export type MarketRotationRadarResponse = {
     acceleratingThemes: MarketRotationSummaryItem[];
     fadingThemes: MarketRotationSummaryItem[];
     watchlistSignals: MarketRotationAlertCandidate[];
+    watchlistSortingExplanation?: string | null;
     safeWording: string[];
   };
   themes: MarketRotationTheme[];
@@ -290,6 +329,7 @@ export const marketRotationApi = {
         acceleratingThemes: normalized.summary?.acceleratingThemes || [],
         fadingThemes: normalized.summary?.fadingThemes || [],
         watchlistSignals: normalized.summary?.watchlistSignals || [],
+        watchlistSortingExplanation: normalized.summary?.watchlistSortingExplanation || null,
         safeWording: normalized.summary?.safeWording || [],
       },
       metadata: normalized.metadata || {},

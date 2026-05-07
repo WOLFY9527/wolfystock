@@ -22,8 +22,9 @@ const radarFixture = (): MarketRotationRadarResponse => ({
   noAdviceDisclosure: '仅用于观察资金轮动迹象，非买卖建议。',
   metadata: {
     noExternalCalls: true,
-    schemaVersion: 'market_rotation_radar_phase3_v1',
+    schemaVersion: 'market_rotation_radar_phase4_v1',
     timeWindows: ['5m', '15m', '60m', '1d'],
+    proxyQualityRequired: true,
     alertsAreReadOnlyEvidence: true,
     notificationDeliveryEnabled: false,
   },
@@ -44,8 +45,9 @@ const radarFixture = (): MarketRotationRadarResponse => ({
       { id: 'robotics', name: '机器人', rotationScore: 38, confidence: 0.31, stage: 'weak_or_no_signal', freshness: 'fallback', isFallback: true, riskLabels: ['stale_or_incomplete_windows'] },
     ],
     watchlistSignals: [
-      { themeId: 'ai_applications', themeName: 'AI 应用', symbol: 'APP', label: '关注候选', signal: 'confirmed_rotation', signalLabel: '确认轮动', confidence: 0.72, persistenceScore: 0.86, readOnly: true, deliveryEnabled: false, reasons: ['AI 应用：确认轮动'] },
+      { themeId: 'ai_applications', themeName: 'AI 应用', symbol: 'APP', label: '关注候选', signal: 'confirmed_rotation', signalLabel: '确认轮动', confidence: 0.72, persistenceScore: 0.86, readOnly: true, deliveryEnabled: false, reasons: ['AI 应用：确认轮动'], sortExplanation: '按主题轮动强度、置信度、跨时窗持续证据、成员相对强弱和量能扩张排序；仅用于观察信号排队，非买卖建议。' },
     ],
+    watchlistSortingExplanation: '关注候选按主题轮动强度、置信度、跨时窗持续证据和成员相对强弱排序；仅作为观察信号，非买卖建议。',
     safeWording: ['资金轮动迹象', '成交额扩张', '相对强势扩散', '板块同步性增强', '非买卖建议'],
   },
   themes: [
@@ -79,7 +81,7 @@ const radarFixture = (): MarketRotationRadarResponse => ({
         explanation: '跨时窗延续：可用 5m/15m/60m/1d，缺失 无，备用/过期 无。',
       },
       alertCandidates: [
-        { themeId: 'ai_applications', themeName: 'AI 应用', symbol: 'APP', label: '关注候选', signal: 'confirmed_rotation', signalLabel: '确认轮动', confidence: 0.72, persistenceScore: 0.86, persistenceLabel: '跨时窗延续', readOnly: true, deliveryEnabled: false, reasons: ['AI 应用：确认轮动'] },
+        { themeId: 'ai_applications', themeName: 'AI 应用', symbol: 'APP', label: '关注候选', signal: 'confirmed_rotation', signalLabel: '确认轮动', confidence: 0.72, persistenceScore: 0.86, persistenceLabel: '跨时窗延续', readOnly: true, deliveryEnabled: false, reasons: ['AI 应用：确认轮动'], sortExplanation: '按主题轮动强度、置信度、跨时窗持续证据、成员相对强弱和量能扩张排序；仅用于观察信号排队，非买卖建议。' },
       ],
       relativeStrength: {
         benchmark: 'QQQ',
@@ -88,11 +90,23 @@ const radarFixture = (): MarketRotationRadarResponse => ({
         averageRelativeStrengthPercent: 2.8,
         vsBenchmarks: { QQQ: 2.8, SPY: 3.2, IWM: 3.5 },
       },
+      proxyQuality: {
+        label: 'ETF 代理完整',
+        coveragePercent: 100,
+        availableProxyCount: 4,
+        totalProxyCount: 4,
+        requiredProxies: ['QQQ', 'SPY', 'IWM', 'IGV'],
+        freshness: 'delayed',
+        hasMissingRequiredProxy: false,
+        hasStaleProxy: false,
+        missingReasons: {},
+        explanation: 'ETF 代理完整：ETF 代理覆盖 4/4，缺口 无。',
+      },
       benchmarkProxies: {
-        QQQ: { symbol: 'QQQ', role: 'market_proxy', changePercent: 0.8, relativeStrength: 2.8, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture' },
-        SPY: { symbol: 'SPY', role: 'market_proxy', changePercent: 0.4, relativeStrength: 3.2, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture' },
-        IWM: { symbol: 'IWM', role: 'market_proxy', changePercent: 0.1, relativeStrength: 3.5, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture' },
-        IGV: { symbol: 'IGV', role: 'sector_proxy', changePercent: 0.6, relativeStrength: 3.0, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture' },
+        QQQ: { symbol: 'QQQ', role: 'market_proxy', changePercent: 0.8, relativeStrength: 2.8, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture', quality: { available: true, freshness: 'delayed', missingReason: null, qualityLabel: '可用代理', coverageContribution: 1 } },
+        SPY: { symbol: 'SPY', role: 'market_proxy', changePercent: 0.4, relativeStrength: 3.2, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture', quality: { available: true, freshness: 'delayed', missingReason: null, qualityLabel: '可用代理', coverageContribution: 1 } },
+        IWM: { symbol: 'IWM', role: 'market_proxy', changePercent: 0.1, relativeStrength: 3.5, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture', quality: { available: true, freshness: 'delayed', missingReason: null, qualityLabel: '可用代理', coverageContribution: 1 } },
+        IGV: { symbol: 'IGV', role: 'sector_proxy', changePercent: 0.6, relativeStrength: 3.0, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture', quality: { available: true, freshness: 'delayed', missingReason: null, qualityLabel: '可用代理', coverageContribution: 1 } },
       },
       timeWindows: {
         '5m': { window: '5m', label: '5分钟', available: true, changePercent: 0.8, relativeVolume: 1.3, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture' },
@@ -121,6 +135,10 @@ const radarFixture = (): MarketRotationRadarResponse => ({
         watchlistLabel: '观察清单证据',
         watchlistSafe: true,
         safeActionLabel: '仅观察，不构成买卖建议',
+        leaderSectionLabel: '领先成员',
+        laggardSectionLabel: '落后/待验证成员',
+        leaderExplanation: '领先成员按相对强弱和量能扩张排序，仅代表观察信号强弱。',
+        laggardExplanation: '落后/待验证成员用于观察扩散不足或分歧，不是买卖建议。',
         leadershipMembers: [
           { symbol: 'APP', name: 'APP', role: 'leader', roleLabel: '领先成员', changePercent: 5.1, relativeStrengthVsBenchmark: 4.3, freshness: 'delayed', freshnessLabel: '延迟', observed: true },
         ],
@@ -165,10 +183,15 @@ describe('MarketRotationRadarPage', () => {
     expect(page).toHaveTextContent('同步性');
     expect(page).toHaveTextContent('持续证据');
     expect(page).toHaveTextContent('主导股票');
+    expect(page).toHaveTextContent('领先成员');
+    expect(page).toHaveTextContent('落后/待验证成员');
     expect(page).toHaveTextContent('时窗证据');
-    expect(page).toHaveTextContent('代理基准');
+    expect(page).toHaveTextContent('ETF 代理质量');
+    expect(page).toHaveTextContent('覆盖 4/4');
+    expect(page).toHaveTextContent('观察信号 / 非买卖建议');
     expect(page).toHaveTextContent('关注候选');
     expect(page).toHaveTextContent('只读证据');
+    expect(page).toHaveTextContent('排序逻辑');
     expect(page).toHaveTextContent('观察清单证据');
     expect(page).toHaveTextContent('仅观察，不构成买卖建议');
     expect(page).toHaveTextContent('置信度 72%');

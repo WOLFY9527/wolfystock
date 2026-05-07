@@ -99,6 +99,7 @@ class RotationRadarThemeModel(BaseModel):
     persistenceEvidence: Dict[str, Any] = Field(default_factory=dict)
     alertCandidates: List[Dict[str, Any]] = Field(default_factory=list)
     relativeStrength: Dict[str, Any] = Field(default_factory=dict)
+    proxyQuality: Dict[str, Any] = Field(default_factory=dict)
     benchmarkProxies: Dict[str, Any] = Field(default_factory=dict)
     timeWindows: Dict[str, RotationRadarTimeWindowModel] = Field(default_factory=dict)
     volume: Dict[str, Any] = Field(default_factory=dict)
@@ -133,6 +134,7 @@ class RotationRadarSummaryModel(BaseModel):
     strongestThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
     acceleratingThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
     fadingThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
+    watchlistSortingExplanation: Optional[str] = None
     safeWording: List[str] = Field(default_factory=list)
     watchlistSignals: List[Dict[str, Any]] = Field(default_factory=list)
 

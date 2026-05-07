@@ -56,6 +56,15 @@ function ratio(value?: number | null): string {
   return `${value.toFixed(2)}x`;
 }
 
+function proxyMissingReasonLabel(reason?: string | null): string {
+  const labels: Record<string, string> = {
+    proxy_quote_missing: '代理行情待补齐',
+    proxy_stale: '代理行情过期',
+    proxy_windows_missing: '代理时窗待补齐',
+  };
+  return reason ? labels[reason] || '代理证据待复核' : '代理可用';
+}
+
 function compactConfidence(value?: number | null): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return '0%';
@@ -93,7 +102,7 @@ const WindowChip: React.FC<{ window: MarketRotationTimeWindow }> = ({ window }) 
     <p className={cn('mt-1 truncate text-[11px] font-semibold', window.available ? 'text-cyan-100' : 'text-white/35')}>
       {window.available ? signedPercent(window.changePercent, 1) : '数据待补齐'}
     </p>
-    <p className="mt-1 truncate text-[10px] text-white/35">{window.sourceLabel || window.freshness}</p>
+    <p className="mt-1 truncate text-[10px] text-white/35">{window.available ? window.freshness : '时窗待补齐'}</p>
   </div>
 );
 
@@ -236,17 +245,29 @@ const ThemeCard: React.FC<{
 
       {theme.benchmarkProxies ? (
         <div className="mt-4">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">代理基准</p>
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">ETF 代理质量</p>
+            <span className="shrink-0 rounded-full border border-white/8 bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold text-white/45">
+              覆盖 {theme.proxyQuality?.availableProxyCount ?? 0}/{theme.proxyQuality?.totalProxyCount ?? Object.keys(theme.benchmarkProxies).length}
+            </span>
+          </div>
+          {theme.proxyQuality?.explanation ? (
+            <p className="mt-2 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 text-[11px] leading-5 text-white/48">
+              {theme.proxyQuality.explanation}
+            </p>
+          ) : null}
           <div className="mt-2 grid gap-2">
             {Object.values(theme.benchmarkProxies).map((proxy) => (
               <div key={proxy.symbol} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold text-white/82">{proxy.symbol}</span>
-                  <span className="block truncate text-[11px] text-white/38">{proxy.role === 'sector_proxy' ? '行业代理' : '市场代理'} · {proxy.sourceLabel || '备用数据'}</span>
+                  <span className="block truncate text-[11px] text-white/38">
+                    {proxy.role === 'sector_proxy' ? '行业代理' : '市场代理'} · {proxy.quality?.qualityLabel || proxyMissingReasonLabel(proxy.quality?.missingReason)}
+                  </span>
                 </span>
                 <span className="shrink-0 text-right text-[11px] text-white/50">
                   <span className="block font-mono text-sm text-cyan-100">{signedPercent(proxy.relativeStrength)}</span>
-                  <span className="block">{proxy.freshness || 'fallback'}</span>
+                  <span className="block">{proxyMissingReasonLabel(proxy.quality?.missingReason)}</span>
                 </span>
               </div>
             ))}
@@ -328,8 +349,16 @@ const ThemeDetailPanel: React.FC<{ theme?: MarketRotationTheme }> = ({ theme }) 
                   <span className="block">{candidate.deliveryEnabled ? '交付待确认' : '只读证据'}</span>
                 </span>
               </div>
+              <p className="mt-2 rounded-lg border border-white/[0.04] bg-black/20 px-2 py-1 text-[10px] font-semibold text-cyan-50/55">
+                观察信号 / 非买卖建议
+              </p>
               {candidate.reasons?.length ? (
                 <p className="mt-2 truncate text-[11px] text-white/45">{candidate.reasons[0]}</p>
+              ) : null}
+              {candidate.sortExplanation ? (
+                <p className="mt-2 text-[11px] leading-5 text-white/45">
+                  <span className="font-semibold text-white/58">排序逻辑：</span>{candidate.sortExplanation}
+                </p>
               ) : null}
             </div>
           )) : (
@@ -341,7 +370,7 @@ const ThemeDetailPanel: React.FC<{ theme?: MarketRotationTheme }> = ({ theme }) 
       <div className="mt-5">
         <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">数据新鲜度</p>
         <p className="mt-2 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 text-[11px] leading-5 text-white/50">
-          {theme.sourceLabel || theme.source || '主题篮子计算'} · {theme.asOf || theme.updatedAt || '时间待补齐'}
+          主题篮子证据 · {theme.asOf || theme.updatedAt || '时间待补齐'}
         </p>
       </div>
 
@@ -351,13 +380,24 @@ const ThemeDetailPanel: React.FC<{ theme?: MarketRotationTheme }> = ({ theme }) 
           <p className="mt-2 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 text-[11px] leading-5 text-white/50">
             {theme.themeDetail.safeActionLabel || '仅观察，不构成买卖建议'}
           </p>
-          <div className="mt-3 grid gap-2">
-            {(theme.themeDetail.leadershipMembers || []).map((member) => (
-              <WatchlistMemberRow key={`${member.symbol || 'leader'}-${member.roleLabel || 'leader'}`} member={member} />
-            ))}
+          <div className="mt-3 grid gap-3">
+            <div className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">{theme.themeDetail.leaderSectionLabel || '领先成员'}</p>
+              {theme.themeDetail.leaderExplanation ? (
+                <p className="mt-1 text-[11px] leading-5 text-white/42">{theme.themeDetail.leaderExplanation}</p>
+              ) : null}
+              <div className="mt-2 grid gap-2">
+                {(theme.themeDetail.leadershipMembers || []).map((member) => (
+                  <WatchlistMemberRow key={`${member.symbol || 'leader'}-${member.roleLabel || 'leader'}`} member={member} />
+                ))}
+              </div>
+            </div>
             {(theme.themeDetail.laggardMembers || []).length ? (
               <div className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">落后成员</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">{theme.themeDetail.laggardSectionLabel || '落后/待验证成员'}</p>
+                {theme.themeDetail.laggardExplanation ? (
+                  <p className="mt-1 text-[11px] leading-5 text-white/42">{theme.themeDetail.laggardExplanation}</p>
+                ) : null}
                 <div className="mt-2 grid gap-2">
                   {(theme.themeDetail.laggardMembers || []).map((member) => (
                     <WatchlistMemberRow key={`${member.symbol || 'laggard'}-${member.roleLabel || 'laggard'}`} member={member} />
@@ -436,7 +476,7 @@ const MarketRotationRadarPage: React.FC = () => {
             <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-cyan-200/55">Market Rotation Radar</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-normal text-white md:text-3xl">资金轮动雷达</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-white/50">
-              观察主题级资金轮动迹象、成交额扩张、相对强势扩散与板块同步性增强。{payload?.noAdviceDisclosure || '非买卖建议。'}
+              观察信号 / 非买卖建议。主题级资金轮动迹象、成交额扩张、相对强势扩散与板块同步性增强仅用于观察。
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -484,7 +524,7 @@ const MarketRotationRadarPage: React.FC = () => {
               value={summaryTitle(payload.summary.strongestThemes, '等待真实行情')}
               accent="text-emerald-200"
             >
-              <span>最强主题按轮动强度和置信度排序。</span>
+              <span>最强主题按轮动强度、置信度与代理质量排序。</span>
             </SummaryCell>
             <SummaryCell
               title="扩张主题"
@@ -501,6 +541,11 @@ const MarketRotationRadarPage: React.FC = () => {
               <span>备用、过期、薄广度或低同步性会降低置信度。</span>
             </SummaryCell>
           </section>
+          {payload.summary.watchlistSortingExplanation ? (
+            <div className="mt-3 rounded-xl border border-cyan-200/10 bg-cyan-200/[0.035] px-4 py-3 text-[11px] leading-5 text-cyan-50/62">
+              <span className="font-semibold text-cyan-50/75">关注候选排序：</span>{payload.summary.watchlistSortingExplanation}
+            </div>
+          ) : null}
 
           <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-12 xl:items-start">
             <section className="min-w-0 space-y-3 xl:col-span-8" aria-label="今日轮动主题 Top list">
