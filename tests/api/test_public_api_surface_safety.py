@@ -16,6 +16,12 @@ from api.v1 import api_v1_router
 from api.v1.endpoints import options, scanner
 
 
+ABUSE_REHEARSAL_SECRET_BODY = "raw-abuse-body-token"
+ABUSE_REHEARSAL_COOKIE = "raw-abuse-session-cookie"
+ABUSE_REHEARSAL_BEARER = "raw-abuse-bearer-token"
+ABUSE_REHEARSAL_DSN = "postgres://raw-user:raw-password@db.example.test/wolfystock"
+ABUSE_REHEARSAL_DEBUG_PAYLOAD = "Traceback raw stack trace debug payload"
+
 FORBIDDEN_SECRET_MARKERS = (
     "raw-secret-token",
     "raw-password-value",
@@ -25,6 +31,10 @@ FORBIDDEN_SECRET_MARKERS = (
     "provider-credential-value",
     "broker-credential-value",
     "sk-public-safety-fixture",
+    ABUSE_REHEARSAL_SECRET_BODY,
+    ABUSE_REHEARSAL_COOKIE,
+    ABUSE_REHEARSAL_BEARER,
+    ABUSE_REHEARSAL_DSN,
 )
 FORBIDDEN_INTERNAL_MARKERS = (
     "raw_prompt",
@@ -36,6 +46,7 @@ FORBIDDEN_INTERNAL_MARKERS = (
     "debugschema",
     "traceback",
     "stack trace",
+    "debug payload",
     "internal exception",
 )
 FORBIDDEN_ADVICE_MARKERS = (
@@ -137,6 +148,112 @@ def test_unauthenticated_admin_routes_fail_closed_with_sanitized_errors() -> Non
     finally:
         client.close()
         _reset_auth_globals()
+
+
+def test_unauthenticated_admin_abuse_payloads_fail_closed_before_request_body_is_exposed() -> None:
+    _reset_auth_globals()
+    client = _auth_guarded_client()
+    oversized_body = {
+        "reason": "abuse rehearsal",
+        "confirm": "DISABLE",
+        "token": ABUSE_REHEARSAL_SECRET_BODY,
+        "databaseDsn": ABUSE_REHEARSAL_DSN,
+        "debug": ABUSE_REHEARSAL_DEBUG_PAYLOAD,
+        "padding": "x" * 128_000,
+    }
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+            responses = [
+                client.post(
+                    "/api/v1/admin/users/bootstrap-admin/disable",
+                    json=oversized_body,
+                    headers={
+                        "Authorization": f"Bearer {ABUSE_REHEARSAL_BEARER}",
+                        "Cookie": f"dsa_session={ABUSE_REHEARSAL_COOKIE}",
+                    },
+                ),
+                client.post(
+                    "/api/v1/admin/users/bootstrap-admin/disable",
+                    data=(
+                        '{"reason":"malformed",'
+                        f'"token":"{ABUSE_REHEARSAL_SECRET_BODY}",'
+                        f'"databaseDsn":"{ABUSE_REHEARSAL_DSN}"'
+                    ),
+                    headers={
+                        "content-type": "application/json",
+                        "Authorization": f"Bearer {ABUSE_REHEARSAL_BEARER}",
+                        "Cookie": f"dsa_session={ABUSE_REHEARSAL_COOKIE}",
+                    },
+                ),
+            ]
+
+        assert [response.status_code for response in responses] == [401, 401]
+        for response in responses:
+            assert response.json() == {"error": "unauthorized", "message": "Login required"}
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_auth_globals()
+
+
+def test_public_request_shape_errors_are_sanitized_for_malformed_json_and_unsupported_methods() -> None:
+    client = _options_client()
+    malformed_body = (
+        '{"symbol":"TEM",'
+        f'"token":"{ABUSE_REHEARSAL_SECRET_BODY}",'
+        f'"databaseDsn":"{ABUSE_REHEARSAL_DSN}",'
+        f'"debug":"{ABUSE_REHEARSAL_DEBUG_PAYLOAD}"'
+    )
+    try:
+        malformed = client.post(
+            "/api/v1/options/decision/evaluate",
+            data=malformed_body,
+            headers={"content-type": "application/json"},
+        )
+        unsupported = client.patch(
+            "/api/v1/options/underlyings/TEM/summary",
+            data=ABUSE_REHEARSAL_SECRET_BODY,
+            headers={
+                "content-type": "application/json",
+                "Authorization": f"Bearer {ABUSE_REHEARSAL_BEARER}",
+                "Cookie": f"dsa_session={ABUSE_REHEARSAL_COOKIE}",
+            },
+        )
+
+        assert malformed.status_code == 422
+        assert unsupported.status_code == 405
+        for response in (malformed, unsupported):
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+
+
+def test_api_abuse_rate_limit_readiness_is_explicitly_auth_only_until_global_limiter_exists() -> None:
+    app = FastAPI()
+    add_auth_middleware(app)
+    app.include_router(api_v1_router)
+
+    middleware_names = {middleware.cls.__name__ for middleware in app.user_middleware}
+    rate_limit_middleware_names = {
+        name
+        for name in middleware_names
+        if name != "AuthMiddleware" and ("rate" in name.lower() or "limit" in name.lower())
+    }
+    evidence = {
+        "authLoginRateLimitActive": callable(auth.check_rate_limit) and callable(auth.record_login_failure),
+        "globalApiRateLimitActive": bool(rate_limit_middleware_names),
+        "globalApiRateLimitBlocker": "global_api_rate_limit_pending",
+        "runtimeBehaviorChanged": False,
+    }
+
+    assert "AuthMiddleware" in middleware_names
+    assert evidence == {
+        "authLoginRateLimitActive": True,
+        "globalApiRateLimitActive": False,
+        "globalApiRateLimitBlocker": "global_api_rate_limit_pending",
+        "runtimeBehaviorChanged": False,
+    }
+    _assert_public_surface_safe(evidence)
 
 
 def test_options_launch_surface_matrix_is_fixture_backed_explicit_and_safe() -> None:
