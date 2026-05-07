@@ -6,6 +6,7 @@ import {
   test,
 } from './fixtures/adminAuth';
 import type { AdminCapability } from './fixtures/adminAuth';
+import type { Request } from '@playwright/test';
 
 const viewports = [
   { width: 1440, height: 1000 },
@@ -24,12 +25,56 @@ const providerCircuitApiPaths = [
   ['GET', '/api/v1/admin/providers/circuits/events'],
   ['GET', '/api/v1/admin/providers/quota-windows'],
   ['GET', '/api/v1/admin/providers/probe-events'],
+  ['GET', '/api/v1/admin/providers/sla-readiness'],
 ] as const;
 
 async function expectAdminRouteShellClean(page: Parameters<typeof expectNoHorizontalOverflow>[0]) {
   await expect(page).not.toHaveURL(/\/guest(?:$|[/?#])/);
   await expectNoHorizontalOverflow(page);
   await expectNoRawSecretLikeText(page);
+}
+
+async function expectProviderSlaReadinessSmoke(page: Parameters<typeof expectNoHorizontalOverflow>[0]) {
+  const slaPanel = page.getByRole('heading', { name: 'Provider SLA / 凭证就绪' }).locator('xpath=ancestor::section[1]');
+  await expect(slaPanel).toBeVisible();
+  await expect(slaPanel.getByText('只读 · 无 live call')).toBeVisible();
+  await expect(slaPanel.getByText('mock-provider · llm · analysis')).toBeVisible();
+  await expect(slaPanel.getByText('缺少凭证')).toBeVisible();
+  await expect(slaPanel.getByText('Latency')).toBeVisible();
+  await expect(slaPanel.getByText('正常 · 120 ms')).toBeVisible();
+  await expect(slaPanel.getByText('Freshness')).toBeVisible();
+  await expect(slaPanel.getByText('新鲜 · 60 s')).toBeVisible();
+  await expect(slaPanel.getByText('Credentials')).toBeVisible();
+  await expect(slaPanel.getByText('否 · dry-run 是')).toBeVisible();
+  await expect(slaPanel.getByText('Live calls')).toBeVisible();
+  await expect(slaPanel.getByText('Would block')).toBeVisible();
+  await expect(slaPanel.getByText('最近错误 buckets')).toBeVisible();
+  await expect(slaPanel.locator('details[open]')).toHaveCount(0);
+
+  const bodyText = await page.locator('body').innerText();
+  expect(bodyText).not.toMatch(/raw\s+(payload|response)|debug\s+(payload|response)|provider\s+payload|token|api[_\s-]?key|secret|password|bearer/i);
+}
+
+function installUnexpectedExternalRequestTracker(page: Parameters<typeof expectNoHorizontalOverflow>[0]) {
+  const unexpectedExternalRequests: string[] = [];
+  const onRequest = (request: Request) => {
+    const url = new URL(request.url());
+    const isHttp = url.protocol === 'http:' || url.protocol === 'https:';
+    const isLocal =
+      url.hostname === 'localhost' ||
+      url.hostname === '127.0.0.1' ||
+      url.hostname === '[::1]' ||
+      url.hostname === '::1';
+    const isStaticFontAsset = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
+    if (isHttp && !isLocal && !isStaticFontAsset) {
+      unexpectedExternalRequests.push(request.url());
+    }
+  };
+  page.on('request', onRequest);
+  return {
+    expectNone: () => expect(unexpectedExternalRequests).toEqual([]),
+    dispose: () => page.off('request', onRequest),
+  };
 }
 
 test.describe('mocked admin auth browser harness', () => {
@@ -61,6 +106,7 @@ test.describe('mocked admin auth browser harness', () => {
       await expect(page.getByRole('heading', { name: '最近熔断事件' })).toBeVisible();
       await expect(page.getByRole('heading', { name: '配额窗口' })).toBeVisible();
       await expect(page.getByRole('heading', { name: '探测事件' })).toBeVisible();
+      await expectProviderSlaReadinessSmoke(page);
       for (const [method, path] of providerCircuitApiPaths) {
         expect(harness.requests.count(method, path)).toBe(1);
       }
@@ -120,6 +166,7 @@ test.describe('mocked admin auth browser harness', () => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
 
+      const externalRequestTracker = installUnexpectedExternalRequestTracker(page);
       let harness = await openAdminRouteWithHarness(page, '/zh/admin/provider-circuits', {
         capabilities: ['ops:providers:read'],
       });
@@ -128,10 +175,13 @@ test.describe('mocked admin auth browser harness', () => {
       await expect(page.getByRole('heading', { name: '最近熔断事件' })).toBeVisible();
       await expect(page.getByRole('heading', { name: '配额窗口' })).toBeVisible();
       await expect(page.getByRole('heading', { name: '探测事件' })).toBeVisible();
+      await expectProviderSlaReadinessSmoke(page);
       for (const [method, path] of providerCircuitApiPaths) {
         expect(harness.requests.count(method, path)).toBe(1);
       }
+      externalRequestTracker.expectNone();
       await expectAdminRouteShellClean(page);
+      externalRequestTracker.dispose();
       await page.unrouteAll({ behavior: 'ignoreErrors' });
 
       harness = await openAdminRouteWithHarness(page, '/zh/admin/cost-observability', {
