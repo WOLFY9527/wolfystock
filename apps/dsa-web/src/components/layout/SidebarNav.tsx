@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   TestTubeDiagonal,
   UsersRound,
+  Waves,
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -44,7 +45,8 @@ type SidebarNavProps = {
 
 type NavItem = {
   key: string;
-  labelKey: string;
+  labelKey?: string;
+  label?: string;
   to: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: 'completion';
@@ -74,6 +76,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'chat', labelKey: 'nav.chat', to: '/chat', icon: MessageSquareText, badge: 'completion' },
   { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', icon: BriefcaseBusiness },
   { key: 'market-overview', labelKey: 'nav.marketOverview', to: '/market-overview', icon: Activity },
+  { key: 'rotation-radar', label: '轮动雷达', to: '/market/rotation-radar', icon: Waves },
   { key: 'watchlist', labelKey: 'nav.watchlist', to: '/watchlist', icon: ListChecks },
   { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', icon: TestTubeDiagonal },
   { key: 'options-lab', labelKey: 'nav.optionsLab', to: '/options-lab', icon: FlaskConical },
@@ -154,12 +157,13 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const userGovernancePath = routeLocale ? buildLocalizedPath('/admin/users', routeLocale) : '/admin/users';
   const costObservabilityPath = routeLocale ? buildLocalizedPath('/admin/cost-observability', routeLocale) : '/admin/cost-observability';
 
-  const navLinks = NAV_ITEMS.map(({ key, labelKey, to, icon: Icon, badge }) => {
-    const label = t(labelKey);
+  const navLinks = NAV_ITEMS.map(({ key, labelKey, label: fixedLabel, to, icon: Icon, badge }) => {
+    const label = fixedLabel ?? t(labelKey || key);
+    const linkTarget = routeLocale ? buildLocalizedPath(to, routeLocale) : to;
     return (
       <NavLink
         key={key}
-        to={to}
+        to={linkTarget}
         end={to === '/'}
         onClick={onNavigate}
         aria-label={label}

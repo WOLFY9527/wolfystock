@@ -103,10 +103,38 @@ appTest.describe('public launch route smoke', () => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
 
-      await page.goto('/zh/market/rotation-radar');
+      await installAuthenticatedAppSmokeSession(page);
+      await page.goto('/zh/market-overview');
       await page.waitForLoadState('domcontentloaded');
+      if (viewport.width >= 768) {
+        const primaryNav = page.getByRole('navigation', { name: '导航菜单' });
+        await appExpect(primaryNav.getByRole('link', { name: '市场总览' })).toHaveClass(/is-active/);
+        const rotationNavLink = primaryNav.getByRole('link', { name: '轮动雷达' });
+        await appExpect(rotationNavLink).toBeVisible();
+        await appExpect(rotationNavLink).toHaveAttribute('href', '/zh/market/rotation-radar');
+        await rotationNavLink.click();
+      } else {
+        await page.getByRole('button', { name: '打开导航菜单' }).click();
+        const drawerNav = page.getByRole('navigation', { name: '导航菜单' });
+        const rotationNavLink = drawerNav.getByRole('link', { name: '轮动雷达' });
+        await appExpect(rotationNavLink).toBeVisible();
+        await rotationNavLink.click();
+      }
+
+      await appExpect(page).toHaveURL(/\/zh\/market\/rotation-radar$/);
       await appExpect(page.getByTestId('market-rotation-radar-page')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByRole('heading', { name: '资金轮动雷达' })).toBeVisible();
+      if (viewport.width >= 768) {
+        const rotationNavLink = page.getByRole('navigation', { name: '导航菜单' }).getByRole('link', { name: '轮动雷达' });
+        await appExpect(rotationNavLink).toBeVisible();
+        await appExpect(rotationNavLink).toHaveAttribute('href', '/zh/market/rotation-radar');
+        await appExpect(rotationNavLink).toHaveClass(/is-active/);
+        await appExpect(page.getByRole('navigation', { name: '导航菜单' }).getByRole('link', { name: '市场总览' })).not.toHaveClass(/is-active/);
+      } else {
+        await appExpect(page.getByTestId('shell-mobile-active-route')).toHaveText('轮动雷达');
+        await page.getByRole('button', { name: '打开导航菜单' }).click();
+        await appExpect(page.getByRole('navigation', { name: '导航菜单' }).getByRole('link', { name: '轮动雷达' })).toBeVisible();
+      }
       await appExpect(page.getByTestId('rotation-radar-summary-band')).toBeVisible();
       await appExpect(page.getByTestId('rotation-theme-card-ai_applications')).toBeVisible();
       await assertPublicShell(page);

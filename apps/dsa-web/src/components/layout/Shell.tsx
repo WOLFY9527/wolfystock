@@ -49,6 +49,9 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string): 
   if (pathname.startsWith('/market-overview')) {
     return t('nav.marketOverview');
   }
+  if (pathname.startsWith('/market/rotation-radar')) {
+    return '轮动雷达';
+  }
   if (pathname.startsWith('/watchlist')) {
     return t('nav.watchlist');
   }

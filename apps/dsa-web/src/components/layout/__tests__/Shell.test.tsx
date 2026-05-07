@@ -154,8 +154,30 @@ describe('Shell', () => {
     expect(await within(primaryNav).findByRole('link', { name: translate('zh', 'nav.chat') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('link', { name: '轮动雷达' })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
+  });
+
+  it('highlights the localized rotation radar nav item independently from market overview', async () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/market/rotation-radar']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
+    const rotationLink = within(primaryNav).getByRole('link', { name: '轮动雷达' });
+    const overviewLink = within(primaryNav).getByRole('link', { name: translate('zh', 'nav.marketOverview') });
+
+    expect(rotationLink).toHaveAttribute('href', '/zh/market/rotation-radar');
+    expect(rotationLink).toHaveClass('is-active');
+    expect(overviewLink).toHaveAttribute('href', '/zh/market-overview');
+    expect(overviewLink).not.toHaveClass('is-active');
   });
 
   it('shows the guest navigation routes without member-only account controls', () => {
@@ -315,6 +337,7 @@ describe('Shell', () => {
     expect(await within(drawerNav).findByRole('link', { name: translate('zh', 'nav.chat') })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toBeInTheDocument();
+    expect(within(drawerNav).getByRole('link', { name: '轮动雷达' })).toBeInTheDocument();
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
     expect(within(drawerNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('zh', 'language.toggle') })).toBeInTheDocument();

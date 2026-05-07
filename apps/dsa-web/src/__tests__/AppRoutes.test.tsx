@@ -594,6 +594,7 @@ describe('AppContent route flows', () => {
     renderAt('/zh/market/rotation-radar');
 
     expect(await screen.findByText('market-rotation-radar-page')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '轮动雷达' })).toHaveAttribute('href', '/zh/market/rotation-radar');
   });
 
   it('renders the rule backtest compare workbench route for signed-in users', async () => {
