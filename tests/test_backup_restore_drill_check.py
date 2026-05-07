@@ -120,6 +120,20 @@ def _write_real_restore_evidence(repo: Path, *, overrides: dict | None = None) -
             "target_type": "isolated_postgresql",
             "target_label": "staging-restore-drill",
             "production_target": False,
+            "no_production_overwrite_asserted": True,
+        },
+        "backup_artifact": {
+            "backup_id": "synthetic-drill-001",
+            "artifact_identity": "sha256:6f1b73c8e5a77f32a6a0cf8450f2d40f",
+            "application_schema_version": "wolfystock_ops_readiness_v1",
+            "metadata_schema_version": "backup_restore_preflight_v1",
+        },
+        "pitr": {
+            "target_time": "2026-05-07T00:10:00Z",
+            "window_start": "2026-05-07T00:00:00Z",
+            "window_end": "2026-05-07T00:20:00Z",
+            "wal_archive_evidence": "archive-checksum:synthetic-wal-001",
+            "restore_point_label": "synthetic-pitr-readiness",
         },
         "execution": {
             "execution_opt_in": True,
@@ -215,6 +229,9 @@ def test_backup_restore_drill_check_accepts_real_restore_evidence_artifact(tmp_p
     assert result.returncode == 0
     assert "Real restore/PITR evidence: accepted" in result.stdout
     assert "Real restore execution: externally supplied evidence only; checker did not execute restore" in result.stdout
+    assert "Backup artifact identity: validated" in result.stdout
+    assert "PITR window evidence: validated" in result.stdout
+    assert "No production overwrite assertion: accepted" in result.stdout
     assert "Restore execution status: pass" in result.stdout
     assert "PITR execution status: pass" in result.stdout
     assert "Post-restore checks: 12 passed" in result.stdout
@@ -291,6 +308,127 @@ def test_backup_restore_drill_check_rejects_incomplete_real_restore_evidence(tmp
 
     assert result.returncode == 1
     assert "[FAIL] Real restore evidence PITR execution must be pass" in result.stderr
+
+
+def test_backup_restore_drill_check_rejects_real_evidence_without_backup_identity(tmp_path):
+    repo = _init_repo(tmp_path)
+    artifact_path = tmp_path / "backup-artifacts" / "synthetic-backup.dump"
+    artifact_path.parent.mkdir()
+    artifact_path.write_text("synthetic backup placeholder\n", encoding="utf-8")
+    metadata_path = _write_metadata(repo, artifact_path)
+    evidence_path = _write_real_restore_evidence(repo, overrides={"backup_artifact": {}})
+
+    result = _drill_check(
+        repo,
+        "--metadata",
+        str(metadata_path),
+        "--restore-target",
+        str(tmp_path / "scratch" / "restore.pg"),
+        "--real-restore-evidence",
+        str(evidence_path),
+    )
+
+    assert result.returncode == 1
+    assert "[FAIL] Real restore evidence backup_artifact missing fields" in result.stderr
+
+
+def test_backup_restore_drill_check_rejects_real_evidence_with_pitr_target_outside_window(tmp_path):
+    repo = _init_repo(tmp_path)
+    artifact_path = tmp_path / "backup-artifacts" / "synthetic-backup.dump"
+    artifact_path.parent.mkdir()
+    artifact_path.write_text("synthetic backup placeholder\n", encoding="utf-8")
+    metadata_path = _write_metadata(repo, artifact_path)
+    evidence_path = _write_real_restore_evidence(
+        repo,
+        overrides={
+            "pitr": {
+                "target_time": "2026-05-07T01:00:00Z",
+                "window_start": "2026-05-07T00:00:00Z",
+                "window_end": "2026-05-07T00:20:00Z",
+                "wal_archive_evidence": "archive-checksum:synthetic-wal-001",
+                "restore_point_label": "synthetic-pitr-readiness",
+            },
+        },
+    )
+
+    result = _drill_check(
+        repo,
+        "--metadata",
+        str(metadata_path),
+        "--restore-target",
+        str(tmp_path / "scratch" / "restore.pg"),
+        "--real-restore-evidence",
+        str(evidence_path),
+    )
+
+    assert result.returncode == 1
+    assert "[FAIL] Real restore evidence PITR target_time is outside the available restore window" in result.stderr
+
+
+def test_backup_restore_drill_check_rejects_real_evidence_without_no_overwrite_assertion(tmp_path):
+    repo = _init_repo(tmp_path)
+    artifact_path = tmp_path / "backup-artifacts" / "synthetic-backup.dump"
+    artifact_path.parent.mkdir()
+    artifact_path.write_text("synthetic backup placeholder\n", encoding="utf-8")
+    metadata_path = _write_metadata(repo, artifact_path)
+    evidence_path = _write_real_restore_evidence(
+        repo,
+        overrides={
+            "restore_target": {
+                "isolated": True,
+                "target_type": "isolated_postgresql",
+                "target_label": "staging-restore-drill",
+                "production_target": False,
+            },
+        },
+    )
+
+    result = _drill_check(
+        repo,
+        "--metadata",
+        str(metadata_path),
+        "--restore-target",
+        str(tmp_path / "scratch" / "restore.pg"),
+        "--real-restore-evidence",
+        str(evidence_path),
+    )
+
+    assert result.returncode == 1
+    assert "[FAIL] Real restore evidence must assert no production overwrite" in result.stderr
+
+
+def test_backup_restore_drill_check_rejects_real_evidence_with_unredacted_env_value(tmp_path):
+    repo = _init_repo(tmp_path)
+    artifact_path = tmp_path / "backup-artifacts" / "synthetic-backup.dump"
+    artifact_path.parent.mkdir()
+    artifact_path.write_text("synthetic backup placeholder\n", encoding="utf-8")
+    metadata_path = _write_metadata(repo, artifact_path)
+    env_value = "DATABASE_URL=postgresql://restore_user:super-secret-password@localhost:5432/test_restore"
+    evidence_path = _write_real_restore_evidence(
+        repo,
+        overrides={
+            "operator_notes": {
+                "env_value": env_value,
+            },
+        },
+    )
+
+    result = _drill_check(
+        repo,
+        "--metadata",
+        str(metadata_path),
+        "--restore-target",
+        str(tmp_path / "scratch" / "restore.pg"),
+        "--real-restore-evidence",
+        str(evidence_path),
+    )
+
+    combined_output = result.stdout + result.stderr
+    assert result.returncode == 1
+    assert "[FAIL] Real restore evidence contains unredacted sensitive value" in result.stderr
+    assert env_value not in combined_output
+    assert "super-secret-password" not in combined_output
+    assert "test_restore" not in combined_output
 
 
 def test_backup_restore_drill_check_rejects_unsafe_db_path(tmp_path):

@@ -300,6 +300,16 @@ Accepted real-drill evidence must use
 - `restore_target.isolated=true`,
   `restore_target.target_type=isolated_postgresql`, and
   `restore_target.production_target=false`.
+- `restore_target.no_production_overwrite_asserted=true`, making the operator
+  assertion explicit that the drill did not restore over production.
+- `backup_artifact.backup_id`, `backup_artifact.artifact_identity`,
+  `backup_artifact.metadata_schema_version=backup_restore_preflight_v1`, and
+  `backup_artifact.application_schema_version=wolfystock_ops_readiness_v1` so
+  the evidence binds the restore to a specific backup artifact and schema
+  contract.
+- `pitr.target_time`, `pitr.window_start`, `pitr.window_end`,
+  `pitr.wal_archive_evidence`, and `pitr.restore_point_label`, with the target
+  timestamp inside the reported restore window.
 - `execution.execution_opt_in=true`,
   `execution.restore_executed=true`, `execution.restore_status=pass`,
   `execution.pitr_executed=true`, `execution.pitr_status=pass`, and
@@ -318,12 +328,12 @@ Accepted real-drill evidence must use
 - `blockers=[]`.
 
 The artifact must not contain raw DSNs, passwords, tokens, API keys, cookies,
-private keys, webhook URLs, real env values, raw provider payloads, raw prompts,
-or production private data. Sensitive fields may only carry redacted sentinel
-values such as `[redacted]`. If any required check is pending/failing or any
-secret-like value is present, the checker rejects the artifact without printing
-the sensitive value. Public launch remains **NO-GO** until a real isolated
-restore/PITR artifact is supplied and accepted.
+private keys, webhook URLs, real env values or `KEY=value` env assignments, raw
+provider payloads, raw prompts, or production private data. Sensitive fields may
+only carry redacted sentinel values such as `[redacted]`. If any required check
+is pending/failing or any secret-like value is present, the checker rejects the
+artifact without printing the sensitive value. Public launch remains **NO-GO**
+until a real isolated restore/PITR artifact is supplied and accepted.
 
 This same accepted artifact is required by the launch acceptance evidence pack
 under `real_isolated_postgresql_restore_pitr`; synthetic preflight output alone

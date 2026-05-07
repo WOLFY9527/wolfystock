@@ -255,7 +255,7 @@ validate_real_restore_evidence() {
     return 0
   fi
 
-  python3 - "${REAL_RESTORE_EVIDENCE_PATH}" "${EXPECTED_REAL_EVIDENCE_SCHEMA_VERSION}" <<'PY'
+  python3 - "${REAL_RESTORE_EVIDENCE_PATH}" "${EXPECTED_REAL_EVIDENCE_SCHEMA_VERSION}" "${EXPECTED_SCHEMA_VERSION}" "${EXPECTED_APPLICATION_SCHEMA_VERSION}" <<'PY'
 import json
 import re
 import sys
@@ -265,6 +265,8 @@ from typing import Any
 
 evidence_path = Path(sys.argv[1])
 expected_schema = sys.argv[2]
+expected_metadata_schema = sys.argv[3]
+expected_application_schema = sys.argv[4]
 
 REDACTED_VALUES = {
     "",
@@ -285,10 +287,15 @@ SENSITIVE_KEY_MARKERS = (
     "api_key",
     "private_key",
     "webhook_url",
+    "env_value",
+    "env_var",
+    "raw_env",
+    "environment_variable",
 )
 SENSITIVE_VALUE_PATTERNS = (
     re.compile(r"\bpostgres(?:ql)?://", re.IGNORECASE),
     re.compile(r"\b(?:password|token|secret|api[_-]?key|cookie)\s*=", re.IGNORECASE),
+    re.compile(r"\b[A-Z][A-Z0-9_]{2,}\s*="),
     re.compile(r"\bbearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     re.compile(r"\bsk-[A-Za-z0-9_-]{12,}"),
@@ -324,6 +331,13 @@ def parse_timestamp(field_name: str, raw_value: Any) -> datetime:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def require_nonempty_string(mapping: dict[str, Any], field_name: str, label: str) -> str:
+    value = str(mapping.get(field_name) or "").strip()
+    if not value:
+        fail(f"Real restore evidence {label} {field_name} is required")
+    return value
 
 
 def ensure_redacted_sensitive_values(value: Any, key_path: str = "") -> None:
@@ -366,6 +380,8 @@ required_top_level = {
     "database_engine",
     "source_environment",
     "restore_target",
+    "backup_artifact",
+    "pitr",
     "execution",
     "rpo_minutes_observed",
     "rto_minutes_observed",
@@ -380,7 +396,9 @@ if missing_top_level:
 if str(payload.get("schema_version") or "") != expected_schema:
     fail(f"Real restore evidence schema must be {expected_schema}")
 
-parse_timestamp("captured_at", payload.get("captured_at"))
+captured_at = parse_timestamp("captured_at", payload.get("captured_at"))
+if captured_at > datetime.now(timezone.utc):
+    fail("Real restore evidence captured_at must not be in the future")
 
 if str(payload.get("database_engine") or "").strip().lower() != "postgresql":
     fail("Real restore evidence database_engine must be postgresql")
@@ -396,8 +414,55 @@ if restore_target.get("isolated") is not True:
     fail("Real restore evidence restore target must be isolated")
 if restore_target.get("production_target") is not False:
     fail("Real restore evidence must not target production")
+if restore_target.get("no_production_overwrite_asserted") is not True:
+    fail("Real restore evidence must assert no production overwrite")
 if str(restore_target.get("target_type") or "") != "isolated_postgresql":
     fail("Real restore evidence target_type must be isolated_postgresql")
+
+backup_artifact = payload.get("backup_artifact")
+if not isinstance(backup_artifact, dict):
+    fail("Real restore evidence backup_artifact must be an object")
+backup_required_fields = {
+    "backup_id",
+    "artifact_identity",
+    "application_schema_version",
+    "metadata_schema_version",
+}
+backup_missing_fields = sorted(field for field in backup_required_fields if not backup_artifact.get(field))
+if backup_missing_fields:
+    fail(f"Real restore evidence backup_artifact missing fields: {', '.join(backup_missing_fields)}")
+require_nonempty_string(backup_artifact, "backup_id", "backup_artifact")
+artifact_identity = require_nonempty_string(backup_artifact, "artifact_identity", "backup_artifact")
+if str(backup_artifact.get("metadata_schema_version") or "") != expected_metadata_schema:
+    fail("Real restore evidence backup_artifact metadata_schema_version does not match preflight schema")
+if str(backup_artifact.get("application_schema_version") or "") != expected_application_schema:
+    fail("Real restore evidence backup_artifact application_schema_version does not match application schema")
+if any(marker in artifact_identity.lower() for marker in ("password", "token", "secret", "dsn", "env=")):
+    fail("Real restore evidence contains unredacted sensitive value")
+
+pitr = payload.get("pitr")
+if not isinstance(pitr, dict):
+    fail("Real restore evidence pitr must be an object")
+pitr_required_fields = {
+    "target_time",
+    "window_start",
+    "window_end",
+    "wal_archive_evidence",
+    "restore_point_label",
+}
+pitr_missing_fields = sorted(field for field in pitr_required_fields if not pitr.get(field))
+if pitr_missing_fields:
+    fail(f"Real restore evidence PITR missing fields: {', '.join(pitr_missing_fields)}")
+pitr_target = parse_timestamp("PITR target_time", pitr.get("target_time"))
+pitr_window_start = parse_timestamp("PITR window_start", pitr.get("window_start"))
+pitr_window_end = parse_timestamp("PITR window_end", pitr.get("window_end"))
+if pitr_window_start > pitr_window_end:
+    fail("Real restore evidence PITR window_start must be before window_end")
+if not (pitr_window_start <= pitr_target <= pitr_window_end):
+    fail("Real restore evidence PITR target_time is outside the available restore window")
+wal_archive_evidence = require_nonempty_string(pitr, "wal_archive_evidence", "PITR")
+if any(marker in wal_archive_evidence.lower() for marker in ("password", "token", "secret", "dsn", "env=")):
+    fail("Real restore evidence contains unredacted sensitive value")
 
 execution = payload.get("execution")
 if not isinstance(execution, dict):
@@ -450,6 +515,10 @@ if blockers:
 
 print("Real restore/PITR evidence: accepted")
 print("Real restore execution: externally supplied evidence only; checker did not execute restore")
+print("Backup artifact identity: validated")
+print("PITR window evidence: validated")
+print("No production overwrite assertion: accepted")
+print(f"Evidence timestamp: accepted ({captured_at.isoformat().replace('+00:00', 'Z')})")
 print("Restore execution status: pass")
 print("PITR execution status: pass")
 print(f"Post-restore checks: {len(REQUIRED_CHECKS)} passed")
