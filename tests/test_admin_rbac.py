@@ -411,7 +411,7 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
                 "admin_logs.py": 6,
                 "admin_notifications.py": 7,
                 "admin_portfolio.py": 4,
-                "admin_provider_circuits.py": 4,
+                "admin_provider_circuits.py": 5,
                 "admin_security.py": 1,
                 "system_config.py": 9,
             },
