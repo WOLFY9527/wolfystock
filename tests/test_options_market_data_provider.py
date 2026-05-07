@@ -16,6 +16,7 @@ from src.services.options_market_data_provider import (
     OptionsProviderUnavailable,
     SyntheticFixtureOptionsProvider,
     TradierOptionsProviderStub,
+    build_options_provider_live_readiness_preflight,
     create_options_market_data_provider,
 )
 
@@ -256,3 +257,128 @@ def test_tradier_provider_exposes_no_broker_order_or_portfolio_mutation_path() -
     assert "create_order" not in exposed_names
     assert "mutate_portfolio" not in exposed_names
     assert "sync_broker" not in exposed_names
+
+
+def _assert_preflight_safety_contract(preflight: dict) -> None:
+    assert preflight["liveHttpCallsEnabled"] is False
+    assert preflight["brokerOrderPathEnabled"] is False
+    assert preflight["portfolioMutationPathEnabled"] is False
+    assert preflight["tradeableData"] is False
+    assert preflight["providerCapabilities"]["liveEnabled"] is False
+    assert preflight["providerCapabilities"]["tradeableData"] is False
+
+
+def test_options_provider_preflight_disabled_state_is_fail_closed() -> None:
+    preflight = build_options_provider_live_readiness_preflight("tradier")
+
+    assert preflight["providerName"] == "tradier"
+    assert preflight["readinessState"] == "disabled"
+    assert preflight["reasonCode"] == "options_provider_disabled"
+    assert preflight["checks"]["disabledByDefault"] is True
+    _assert_preflight_safety_contract(preflight)
+
+
+def test_options_provider_preflight_missing_credentials_state_is_sanitized() -> None:
+    preflight = build_options_provider_live_readiness_preflight(
+        "tradier",
+        config=OptionsLiveProviderConfig(
+            live_providers_enabled=True,
+            enabled_provider_keys=frozenset({"tradier"}),
+            credentialed_provider_keys=frozenset(),
+        ),
+    )
+
+    assert preflight["readinessState"] == "missing_credentials"
+    assert preflight["reasonCode"] == "options_provider_credentials_missing"
+    assert preflight["credentialsPresent"] is False
+    assert "credentials are not configured" in preflight["message"].lower()
+    _assert_preflight_safety_contract(preflight)
+
+
+def test_options_provider_preflight_dry_run_enabled_never_marks_data_live_or_tradeable() -> None:
+    preflight = build_options_provider_live_readiness_preflight(
+        "tradier",
+        config=OptionsLiveProviderConfig(
+            live_providers_enabled=True,
+            enabled_provider_keys=frozenset({"tradier"}),
+            credentialed_provider_keys=frozenset({"tradier"}),
+            dry_run_provider_keys=frozenset({"tradier"}),
+        ),
+    )
+
+    assert preflight["readinessState"] == "dry_run_enabled"
+    assert preflight["reasonCode"] == "options_provider_dry_run_enabled"
+    assert preflight["dryRunEnabled"] is True
+    assert preflight["payloadMappable"] is True
+    assert preflight["providerCapabilities"]["sourceType"] == "delayed_dry_run"
+    assert preflight["dryRunDataQuality"]["tradeable"] is False
+    assert preflight["dryRunFreshness"] == "delayed_dry_run"
+    _assert_preflight_safety_contract(preflight)
+
+
+def test_options_provider_preflight_live_credentials_present_still_blocks_live_calls() -> None:
+    preflight = build_options_provider_live_readiness_preflight(
+        "tradier",
+        config=OptionsLiveProviderConfig(
+            live_providers_enabled=True,
+            enabled_provider_keys=frozenset({"tradier"}),
+            credentialed_provider_keys=frozenset({"tradier"}),
+            dry_run_provider_keys=frozenset(),
+        ),
+    )
+
+    assert preflight["readinessState"] == "live_credentials_present_live_calls_disabled"
+    assert preflight["reasonCode"] == "options_provider_live_calls_disabled"
+    assert preflight["credentialsPresent"] is True
+    assert preflight["dryRunEnabled"] is False
+    _assert_preflight_safety_contract(preflight)
+
+
+def test_options_provider_preflight_malformed_payload_returns_sanitized_state() -> None:
+    preflight = build_options_provider_live_readiness_preflight(
+        "tradier",
+        config=OptionsLiveProviderConfig(
+            live_providers_enabled=True,
+            enabled_provider_keys=frozenset({"tradier"}),
+            credentialed_provider_keys=frozenset({"tradier"}),
+            dry_run_provider_keys=frozenset({"tradier"}),
+        ),
+        dry_run_response={
+            "underlying": {"symbol": "TEM", "last": 52.4},
+            "options": {"option": [{"symbol": "Bearer real-token-leak", "option_type": "call"}]},
+        },
+    )
+
+    assert preflight["readinessState"] == "malformed_provider_payload"
+    assert preflight["reasonCode"] == "options_provider_payload_unmappable"
+    assert preflight["payloadMappable"] is False
+    text = _json_lower(preflight)
+    for blocked in ("real-token-leak", "bearer", "api_key", "apikey", "token", "secret", "requesturl"):
+        assert blocked not in text
+    _assert_preflight_safety_contract(preflight)
+
+
+def test_options_provider_preflight_sanitizes_provider_error_text() -> None:
+    preflight = build_options_provider_live_readiness_preflight(
+        "ibkr",
+        config=OptionsLiveProviderConfig(
+            live_providers_enabled=True,
+            enabled_provider_keys=frozenset({"ibkr"}),
+            credentialed_provider_keys=frozenset({"ibkr"}),
+            dry_run_provider_keys=frozenset({"ibkr"}),
+        ),
+    )
+
+    assert preflight["readinessState"] == "sanitized_provider_error"
+    assert preflight["reasonCode"] == "options_provider_not_enabled"
+    assert preflight["message"] == "Options live provider adapter has no network implementation."
+    text = _json_lower(preflight)
+    for blocked in ("sk-live-token", "provider.example", "apikey=secret", "authorization: bearer", "rawproviderpayload"):
+        assert blocked not in text
+    _assert_preflight_safety_contract(preflight)
+
+
+def _json_lower(payload: dict) -> str:
+    import json
+
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True).lower()

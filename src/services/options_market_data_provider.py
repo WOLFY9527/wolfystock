@@ -17,6 +17,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Protocol
 
+from src.utils.security import sanitize_message
+
 
 DEFAULT_OPTIONS_FIXTURE_PATH = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "options" / "tem_chain.json"
 DEFAULT_OPTIONS_PROVIDER_NAME = "synthetic_fixture"
@@ -606,6 +608,141 @@ class PolygonOptionsProviderStub(_DisabledLiveOptionsProviderStub):
 
     def __init__(self, config: Optional[OptionsLiveProviderConfig] = None) -> None:
         super().__init__("polygon", config=config)
+
+
+def build_options_provider_live_readiness_preflight(
+    provider_name: str,
+    config: Optional[OptionsLiveProviderConfig] = None,
+    dry_run_response: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Classify live-provider readiness without enabling live calls.
+
+    This is a read-only preflight surface for tests and future operator
+    evidence. It does not load credentials, call provider APIs, place orders, or
+    mutate portfolio state.
+    """
+
+    normalized = (provider_name or "").strip().lower()
+    if normalized not in LIVE_OPTIONS_PROVIDER_NAMES:
+        raise OptionsProviderUnavailable(normalized or "unknown")
+
+    live_config = config or OptionsLiveProviderConfig()
+    provider = _create_live_options_provider_stub(
+        normalized,
+        config=live_config,
+        dry_run_response=dry_run_response,
+    )
+    preflight: Dict[str, Any] = {
+        "providerName": normalized,
+        "readinessState": "disabled",
+        "reasonCode": "options_provider_disabled",
+        "message": "Options live provider adapter is disabled.",
+        "liveProvidersEnabled": live_config.live_providers_enabled,
+        "providerEnabled": live_config.is_provider_enabled(normalized),
+        "credentialsPresent": live_config.has_credentials(normalized),
+        "dryRunEnabled": live_config.is_dry_run_enabled(normalized),
+        "payloadMappable": None,
+        "liveHttpCallsEnabled": False,
+        "brokerOrderPathEnabled": False,
+        "portfolioMutationPathEnabled": False,
+        "tradeableData": False,
+        "providerCapabilities": provider.capabilities.to_dict(),
+        "checks": {
+            "disabledByDefault": not live_config.live_providers_enabled,
+            "noLiveHttpCalls": True,
+            "noBrokerOrders": True,
+            "noPortfolioMutations": True,
+            "tradeableDataBlocked": True,
+            "rawPayloadReturned": False,
+        },
+    }
+
+    if not live_config.live_providers_enabled:
+        return preflight
+    if not live_config.is_provider_enabled(normalized):
+        preflight.update(
+            {
+                "readinessState": "disabled",
+                "reasonCode": "options_provider_not_enabled",
+                "message": "Options live provider adapter is not enabled.",
+            }
+        )
+        return preflight
+    if not live_config.has_credentials(normalized):
+        preflight.update(
+            {
+                "readinessState": "missing_credentials",
+                "reasonCode": "options_provider_credentials_missing",
+                "message": "Options live provider credentials are not configured.",
+            }
+        )
+        return preflight
+    if not live_config.is_dry_run_enabled(normalized):
+        preflight.update(
+            {
+                "readinessState": "live_credentials_present_live_calls_disabled",
+                "reasonCode": "options_provider_live_calls_disabled",
+                "message": "Options live provider credentials are present, but live calls remain disabled.",
+            }
+        )
+        return preflight
+
+    try:
+        snapshot = provider.get_chain("TEM")
+    except OptionsProviderUnavailable as exc:
+        preflight.update(
+            {
+                "readinessState": (
+                    "malformed_provider_payload"
+                    if exc.code == "options_provider_payload_unmappable"
+                    else "sanitized_provider_error"
+                ),
+                "reasonCode": exc.code,
+                "message": sanitize_message(str(exc)),
+                "payloadMappable": False,
+            }
+        )
+        return preflight
+    except OptionsProviderError as exc:
+        preflight.update(
+            {
+                "readinessState": "sanitized_provider_error",
+                "reasonCode": exc.code,
+                "message": sanitize_message(str(exc)),
+                "payloadMappable": False,
+            }
+        )
+        return preflight
+
+    data_quality = dict(snapshot.get("dataQuality") or {})
+    preflight.update(
+        {
+            "readinessState": "dry_run_enabled",
+            "reasonCode": "options_provider_dry_run_enabled",
+            "message": "Options provider dry-run mapping is available; live calls remain disabled.",
+            "payloadMappable": True,
+            "dryRunFreshness": snapshot.get("source") and snapshot.get("underlying", {}).get("freshness"),
+            "dryRunDataQuality": {
+                "tier": data_quality.get("tier"),
+                "tradeable": bool(data_quality.get("tradeable")) is True,
+            },
+        }
+    )
+    return preflight
+
+
+def _create_live_options_provider_stub(
+    provider_name: str,
+    config: OptionsLiveProviderConfig,
+    dry_run_response: Optional[Mapping[str, Any]] = None,
+) -> _DisabledLiveOptionsProviderStub:
+    if provider_name == "tradier":
+        return TradierOptionsProviderStub(config=config, dry_run_response=dry_run_response)
+    if provider_name == "ibkr":
+        return IbkrOptionsProviderStub(config=config)
+    if provider_name == "polygon":
+        return PolygonOptionsProviderStub(config=config)
+    raise OptionsProviderUnavailable(provider_name)
 
 
 def _normalize_us_symbol(symbol: str) -> str:
