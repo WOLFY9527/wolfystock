@@ -305,6 +305,7 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertFalse(preflight.request_blocked)
         self.assertFalse(preflight.live_enforcement)
         self.assertFalse(payload["pilot"]["enforcementEnabled"])
+        self.assertFalse(payload["pilot"]["scopeExplicit"])
         self.assertEqual(payload["scope"]["ownerUserId"], "user-1")
         self.assertEqual(payload["scope"]["provider"], "openai")
         self.assertEqual(payload["scope"]["modelTier"], "openai/gpt-4o-mini")
@@ -335,6 +336,47 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertFalse(payload["pilot"]["ownerScoped"])
         self.assertEqual(payload["reasonCode"], "pilot_owner_scope_required")
 
+    def test_pilot_readiness_requires_explicit_owner_allowlist_for_enabled_pilot(self) -> None:
+        self._seed_budget_alert_policy()
+
+        preflight = self.service.classify_pilot_readiness_preflight(
+            owner_user_id="user-1",
+            route_family="analysis",
+            provider="openai",
+            model_tier="openai/gpt-4o-mini",
+            estimated_units=121,
+            pilot_enforcement_enabled=True,
+        )
+
+        self.assertEqual(preflight.state, "pilot_scope_not_ready")
+        self.assertTrue(preflight.would_block)
+        self.assertTrue(preflight.advisory_only)
+        self.assertFalse(preflight.request_blocked)
+        self.assertFalse(preflight.live_enforcement)
+        payload = preflight.to_dict()
+        self.assertFalse(payload["pilot"]["scopeExplicit"])
+        self.assertTrue(payload["pilot"]["ownerScoped"])
+        self.assertEqual(payload["reasonCode"], "pilot_owner_scope_required")
+
+    def test_pilot_readiness_out_of_scope_owner_remains_advisory_only(self) -> None:
+        self._seed_budget_alert_policy()
+
+        preflight = self.service.classify_pilot_readiness_preflight(
+            owner_user_id="user-2",
+            route_family="analysis",
+            estimated_units=121,
+            pilot_enforcement_enabled=True,
+            pilot_owner_user_ids=("user-1",),
+            pilot_route_families=("analysis",),
+        )
+
+        self.assertEqual(preflight.state, "pilot_owner_out_of_scope")
+        self.assertTrue(preflight.would_block)
+        self.assertTrue(preflight.advisory_only)
+        self.assertFalse(preflight.request_blocked)
+        self.assertFalse(preflight.live_enforcement)
+        self.assertEqual(preflight.reason_code, "pilot_owner_out_of_scope")
+
     def test_pilot_readiness_flag_can_report_request_block_without_global_default(self) -> None:
         self._seed_budget_alert_policy()
 
@@ -343,6 +385,7 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
             route_family="analysis",
             estimated_units=121,
             pilot_enforcement_enabled=True,
+            pilot_owner_user_ids=("user-1",),
             pilot_route_families=("analysis",),
         )
 

@@ -131,6 +131,7 @@ class QuotaDryRunRequest(_AdminCostModel):
     actual_units: Optional[int] = Field(default=None, alias="actualUnits", ge=0)
     global_kill_switch: bool = Field(default=False, alias="globalKillSwitch")
     pricing_status: str = Field(default="ok", alias="pricingStatus")
+    pilot_owner_user_ids: List[str] = Field(default_factory=list, alias="pilotOwnerUserIds")
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 

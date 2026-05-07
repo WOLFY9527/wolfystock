@@ -22,7 +22,7 @@ from api.v1.schemas.admin_cost import (
 )
 from src.services.duplicate_cost_summary_service import DuplicateCostSummaryService
 from src.services.llm_cost_ledger_service import LlmCostLedgerService
-from src.services.quota_policy_service import QuotaPolicyService
+from src.services.quota_policy_service import QuotaDecision, QuotaPolicyService
 from src.storage import DatabaseManager, ModelPricingPolicy
 from src.utils.security import sanitize_message, sanitize_url
 
@@ -104,7 +104,55 @@ def run_quota_dry_run(
         global_kill_switch=bool(request.global_kill_switch),
     )
 
-    if request.operation == "estimate":
+    budget_alert = service.classify_budget_alert(
+        owner_user_id=request.owner_user_id,
+        route_family=route_family,
+        provider=request.provider,
+        model_tier=request.model_tier,
+        token_estimate=request.token_estimate,
+        estimated_units=request.estimated_units,
+        pricing_status=request.pricing_status,
+    )
+    shadow_preflight = service.classify_shadow_preflight(
+        owner_user_id=request.owner_user_id,
+        route_family=route_family,
+        provider=request.provider,
+        model_tier=request.model_tier,
+        token_estimate=request.token_estimate,
+        estimated_units=request.estimated_units,
+        pricing_status=request.pricing_status,
+    )
+    pilot_readiness = service.classify_pilot_readiness_preflight(
+        owner_user_id=request.owner_user_id,
+        route_family=route_family,
+        provider=request.provider,
+        model_tier=request.model_tier,
+        token_estimate=request.token_estimate,
+        estimated_units=request.estimated_units,
+        pricing_status=request.pricing_status,
+        pilot_enforcement_enabled=request.enforcement_mode == "enabled",
+        pilot_owner_user_ids=tuple(request.pilot_owner_user_ids or ()),
+        pilot_route_families=(route_family,),
+    )
+    budget_alert_payload = budget_alert.to_dict()
+    shadow_preflight_payload = shadow_preflight.to_dict()
+    pilot_readiness_payload = pilot_readiness.to_dict()
+    safe_owner_user_id = service._safe_context_label(request.owner_user_id)
+    budget_alert_payload["ownerUserId"] = safe_owner_user_id
+    shadow_preflight_payload["ownerUserId"] = safe_owner_user_id
+    quota_decision_mode = (
+        "pilot_enforced"
+        if request.enforcement_mode == "enabled" and pilot_readiness_payload["pilot"]["scopeExplicit"]
+        else "advisory"
+    )
+    if request.enforcement_mode == "enabled" and quota_decision_mode == "advisory":
+        decision = QuotaDecision(
+            allowed=True,
+            status="pilot_advisory",
+            reason_code=pilot_readiness.reason_code,
+            estimated_units=int(budget_alert.estimated_units or 0),
+        )
+    elif request.operation == "estimate":
         decision = service.evaluate_quota(
             owner_user_id=request.owner_user_id,
             route_family=route_family,
@@ -135,46 +183,23 @@ def run_quota_dry_run(
     else:
         decision = service.release_reservation(reservation_id=request.reservation_id)
 
-    budget_alert = service.classify_budget_alert(
-        owner_user_id=request.owner_user_id,
-        route_family=route_family,
-        provider=request.provider,
-        model_tier=request.model_tier,
-        token_estimate=request.token_estimate,
-        estimated_units=request.estimated_units,
-        pricing_status=request.pricing_status,
-    )
-    shadow_preflight = service.classify_shadow_preflight(
-        owner_user_id=request.owner_user_id,
-        route_family=route_family,
-        provider=request.provider,
-        model_tier=request.model_tier,
-        token_estimate=request.token_estimate,
-        estimated_units=request.estimated_units,
-        pricing_status=request.pricing_status,
-    )
-    pilot_readiness = service.classify_pilot_readiness_preflight(
-        owner_user_id=request.owner_user_id,
-        route_family=route_family,
-        provider=request.provider,
-        model_tier=request.model_tier,
-        token_estimate=request.token_estimate,
-        estimated_units=request.estimated_units,
-        pricing_status=request.pricing_status,
-        pilot_enforcement_enabled=request.enforcement_mode == "enabled",
-        pilot_route_families=(route_family,),
-    )
-    budget_alert_payload = budget_alert.to_dict()
-    shadow_preflight_payload = shadow_preflight.to_dict()
-    safe_owner_user_id = service._safe_context_label(request.owner_user_id)
-    budget_alert_payload["ownerUserId"] = safe_owner_user_id
-    shadow_preflight_payload["ownerUserId"] = safe_owner_user_id
-
+    response_allowed = bool(decision.allowed)
+    response_status = decision.status
+    response_reason_code = decision.reason_code
+    if request.enforcement_mode == "enabled":
+        if quota_decision_mode == "pilot_enforced":
+            response_allowed = not bool(pilot_readiness.request_blocked)
+            response_status = "pilot_enforced_block" if pilot_readiness.request_blocked else "pilot_enforced_allow"
+            response_reason_code = pilot_readiness.reason_code if pilot_readiness.request_blocked else None
+        else:
+            response_allowed = True
+            response_status = "pilot_advisory"
+            response_reason_code = pilot_readiness.reason_code
     return QuotaDryRunResponse(
-        allowed=bool(decision.allowed),
-        wouldBlock=not bool(decision.allowed),
-        status=decision.status,
-        reasonCode=decision.reason_code,
+        allowed=response_allowed,
+        wouldBlock=not response_allowed,
+        status=response_status,
+        reasonCode=response_reason_code,
         routeFamily=route_family,
         estimatedUnits=int(decision.estimated_units or 0),
         enforcementMode=request.enforcement_mode,
@@ -184,9 +209,11 @@ def run_quota_dry_run(
             "diagnosticOnly": True,
             "liveEnforcement": False,
             "noExternalCalls": True,
+            "quotaDecisionMode": quota_decision_mode,
             "budgetAlert": budget_alert_payload,
             "shadowPreflight": shadow_preflight_payload,
-            "pilotReadiness": pilot_readiness.to_dict(),
+            "pilotReadiness": pilot_readiness_payload,
+            "invoiceReconciliation": pilot_readiness_payload["invoiceReconciliation"],
             "dataSources": ["quota_policy_definitions", "quota_usage_windows", "quota_reservations"],
             "redaction": [
                 "prompt_content",

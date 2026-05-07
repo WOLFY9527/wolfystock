@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
-from src.storage import DatabaseManager
+from src.storage import DatabaseManager, QuotaReservation, QuotaUsageWindow
 
 
 def _admin_user() -> CurrentUser:
@@ -137,7 +137,7 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         pilot = payload["metadata"]["pilotReadiness"]
         self.assertEqual(pilot["state"], "pilot_advisory_allow")
         self.assertFalse(pilot["pilot"]["enforcementEnabled"])
-        self.assertTrue(pilot["pilot"]["scopeExplicit"])
+        self.assertFalse(pilot["pilot"]["scopeExplicit"])
         self.assertFalse(pilot["requestBlocked"])
         self.assertFalse(pilot["liveEnforcement"])
         self.assertFalse(pilot["invoiceReconciliation"]["enforcementWired"])
@@ -189,6 +189,7 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
                 self.assertFalse(pilot["requestBlocked"])
                 self.assertFalse(pilot["liveEnforcement"])
                 self.assertTrue(pilot["advisoryOnly"])
+                self.assertEqual(payload["metadata"]["quotaDecisionMode"], "advisory")
 
     def test_dry_run_shadow_preflight_pricing_unknown_fails_safe_advisory_only(self) -> None:
         self._as_admin()
@@ -256,7 +257,7 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertFalse(shadow["requestBlocked"])
         pilot = payload["metadata"]["pilotReadiness"]
         self.assertEqual(pilot["scope"]["ownerUserId"], "user-1")
-        self.assertTrue(pilot["pilot"]["scopeExplicit"])
+        self.assertFalse(pilot["pilot"]["scopeExplicit"])
         self.assertFalse(pilot["requestBlocked"])
 
     def test_dry_run_pilot_readiness_requires_owner_scope_for_enabled_pilot(self) -> None:
@@ -278,6 +279,9 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
+        self.assertTrue(payload["allowed"])
+        self.assertFalse(payload["wouldBlock"])
+        self.assertEqual(payload["status"], "pilot_advisory")
         pilot = payload["metadata"]["pilotReadiness"]
         self.assertEqual(pilot["state"], "pilot_scope_not_ready")
         self.assertEqual(pilot["reasonCode"], "pilot_owner_scope_required")
@@ -286,6 +290,134 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertFalse(pilot["requestBlocked"])
         self.assertFalse(pilot["liveEnforcement"])
         self.assertFalse(pilot["pilot"]["ownerScoped"])
+
+    def test_enabled_pilot_requires_explicit_owner_allowlist(self) -> None:
+        self._as_admin()
+        self.db.upsert_quota_policy(
+            policy_key="user-budget-alerts",
+            scope_type="user",
+            daily_budget_units=120,
+            metadata={"daily_soft_limit_units": 100},
+        )
+
+        response = self._post_dry_run(
+            {
+                "ownerUserId": "user-1",
+                "routeFamily": "analysis",
+                "estimatedUnits": 121,
+                "enforcementMode": "enabled",
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        pilot = payload["metadata"]["pilotReadiness"]
+        self.assertEqual(pilot["state"], "pilot_scope_not_ready")
+        self.assertTrue(pilot["wouldBlock"])
+        self.assertTrue(pilot["advisoryOnly"])
+        self.assertFalse(pilot["requestBlocked"])
+        self.assertFalse(pilot["liveEnforcement"])
+        self.assertEqual(payload["metadata"]["quotaDecisionMode"], "advisory")
+
+    def test_enabled_pilot_out_of_scope_owner_stays_advisory(self) -> None:
+        self._as_admin()
+        self.db.upsert_quota_policy(
+            policy_key="user-budget-alerts",
+            scope_type="user",
+            daily_budget_units=120,
+            metadata={"daily_soft_limit_units": 100},
+        )
+
+        response = self._post_dry_run(
+            {
+                "ownerUserId": "user-2",
+                "routeFamily": "analysis",
+                "estimatedUnits": 121,
+                "enforcementMode": "enabled",
+                "pilotOwnerUserIds": ["user-1"],
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["allowed"])
+        self.assertFalse(payload["wouldBlock"])
+        self.assertEqual(payload["status"], "pilot_advisory")
+        pilot = payload["metadata"]["pilotReadiness"]
+        self.assertEqual(pilot["state"], "pilot_owner_out_of_scope")
+        self.assertEqual(pilot["reasonCode"], "pilot_owner_out_of_scope")
+        self.assertTrue(pilot["wouldBlock"])
+        self.assertTrue(pilot["advisoryOnly"])
+        self.assertFalse(pilot["requestBlocked"])
+        self.assertFalse(pilot["liveEnforcement"])
+        self.assertEqual(payload["metadata"]["quotaDecisionMode"], "advisory")
+
+    def test_enabled_pilot_out_of_scope_reserve_does_not_write_quota_state(self) -> None:
+        self._as_admin()
+        self.db.upsert_quota_policy(
+            policy_key="user-budget-alerts",
+            scope_type="user",
+            daily_budget_units=120,
+            metadata={"daily_soft_limit_units": 100},
+        )
+
+        response = self._post_dry_run(
+            {
+                "ownerUserId": "user-2",
+                "routeFamily": "analysis",
+                "operation": "reserve",
+                "estimatedUnits": 121,
+                "enforcementMode": "enabled",
+                "pilotOwnerUserIds": ["user-1"],
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["allowed"])
+        self.assertEqual(payload["status"], "pilot_advisory")
+        self.assertIsNone(payload["reservationId"])
+        with self.db.session_scope() as session:
+            self.assertEqual(session.query(QuotaReservation).count(), 0)
+            self.assertEqual(session.query(QuotaUsageWindow).count(), 0)
+
+    def test_enabled_pilot_in_scope_owner_gets_enforceable_would_block_context(self) -> None:
+        self._as_admin()
+        self.db.upsert_quota_policy(
+            policy_key="user-budget-alerts",
+            scope_type="user",
+            daily_budget_units=120,
+            metadata={"daily_soft_limit_units": 100},
+        )
+
+        response = self._post_dry_run(
+            {
+                "ownerUserId": "pilot-user",
+                "routeFamily": "analysis",
+                "provider": "openai",
+                "modelTier": "openai/gpt-4o-mini",
+                "estimatedUnits": 121,
+                "enforcementMode": "enabled",
+                "pilotOwnerUserIds": ["pilot-user"],
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload["allowed"])
+        self.assertTrue(payload["wouldBlock"])
+        self.assertEqual(payload["status"], "pilot_enforced_block")
+        pilot = payload["metadata"]["pilotReadiness"]
+        self.assertEqual(pilot["state"], "pilot_would_enforce_block")
+        self.assertTrue(pilot["wouldBlock"])
+        self.assertFalse(pilot["advisoryOnly"])
+        self.assertTrue(pilot["requestBlocked"])
+        self.assertTrue(pilot["liveEnforcement"])
+        self.assertEqual(pilot["scope"]["ownerUserId"], "pilot-user")
+        self.assertEqual(pilot["scope"]["provider"], "openai")
+        self.assertEqual(pilot["scope"]["modelTier"], "openai/gpt-4o-mini")
+        self.assertEqual(payload["metadata"]["quotaDecisionMode"], "pilot_enforced")
+        self.assertFalse(payload["metadata"]["invoiceReconciliation"]["enforcementWired"])
 
     def test_dry_run_pilot_readiness_sanitizes_scope_context(self) -> None:
         self._as_admin()
