@@ -265,6 +265,11 @@ def test_tradier_provider_exposes_no_broker_order_or_portfolio_mutation_path() -
 
 def _assert_preflight_safety_contract(preflight: dict) -> None:
     assert preflight["liveHttpCallsEnabled"] is False
+    assert preflight["liveProbe"]["networkCallExecuted"] is False
+    assert preflight["liveProbe"]["noDefaultLiveHttpCalls"] is True
+    assert preflight["liveProbe"]["rawCredentialValuesIncluded"] is False
+    assert preflight["liveProbe"]["providerPayloadValuesIncluded"] is False
+    assert preflight["liveProbe"]["responseBodiesIncluded"] is False
     assert preflight["brokerOrderPathEnabled"] is False
     assert preflight["portfolioMutationPathEnabled"] is False
     assert preflight["tradeableData"] is False
@@ -283,6 +288,19 @@ def test_options_provider_preflight_disabled_state_is_fail_closed() -> None:
     assert preflight["readinessState"] == "disabled"
     assert preflight["reasonCode"] == "options_provider_disabled"
     assert preflight["checks"]["disabledByDefault"] is True
+    assert preflight["liveProbe"] == {
+        "enabled": False,
+        "explicitOptIn": False,
+        "reasonCode": "options_provider_live_probe_disabled_by_default",
+        "timeoutSeconds": 2.0,
+        "httpMethod": "HEAD_OR_GET",
+        "networkCallExecuted": False,
+        "noDefaultLiveHttpCalls": True,
+        "requiresCredentialPresenceOnly": True,
+        "rawCredentialValuesIncluded": False,
+        "providerPayloadValuesIncluded": False,
+        "responseBodiesIncluded": False,
+    }
     _assert_preflight_safety_contract(preflight)
 
 
@@ -380,10 +398,87 @@ def test_live_provider_preflight_present_credentials_are_sanitized_and_still_non
         "invalidCredentialCount": 0,
         "partialCredentialCount": 0,
     }
+    assert preflight["liveProbe"]["enabled"] is False
+    assert preflight["liveProbe"]["explicitOptIn"] is False
+    assert preflight["liveProbe"]["reasonCode"] == "options_provider_live_probe_disabled_by_default"
     assert preflight["payloadMappable"] is None
     request_mock.assert_not_called()
     text = _json_lower(preflight)
     for blocked in ("api_key", "apikey", "token", "secret", "password", "authorization"):
+        assert blocked not in text
+    _assert_preflight_safety_contract(preflight)
+
+
+def test_live_provider_preflight_operator_live_probe_opt_in_requires_credentials_without_calling_network() -> None:
+    with patch("requests.sessions.Session.request") as request_mock:
+        preflight = build_options_provider_live_readiness_preflight(
+            "tradier",
+            config=OptionsLiveProviderConfig(
+                live_providers_enabled=True,
+                enabled_provider_keys=frozenset({"tradier"}),
+                malformed_credential_provider_keys=frozenset({"tradier"}),
+                live_probe_provider_keys=frozenset({"tradier"}),
+                live_probe_timeout_seconds=4.5,
+            ),
+        )
+
+    assert preflight["readinessState"] == "malformed_credentials"
+    assert preflight["liveProbe"]["enabled"] is False
+    assert preflight["liveProbe"]["explicitOptIn"] is True
+    assert preflight["liveProbe"]["reasonCode"] == "options_provider_credentials_malformed"
+    assert preflight["liveProbe"]["timeoutSeconds"] == 4.5
+    request_mock.assert_not_called()
+    text = _json_lower(preflight)
+    for blocked in ("api_key", "apikey", "token", "secret", "password", "authorization"):
+        assert blocked not in text
+    _assert_preflight_safety_contract(preflight)
+
+
+def test_live_provider_preflight_operator_live_probe_ready_is_opt_in_and_non_executing() -> None:
+    with patch("requests.sessions.Session.request") as request_mock:
+        preflight = build_options_provider_live_readiness_preflight(
+            "tradier",
+            config=OptionsLiveProviderConfig(
+                live_providers_enabled=True,
+                enabled_provider_keys=frozenset({"tradier"}),
+                credentialed_provider_keys=frozenset({"tradier"}),
+                live_probe_provider_keys=frozenset({"tradier"}),
+                live_probe_timeout_seconds=30,
+            ),
+        )
+
+    assert preflight["readinessState"] == "live_credentials_present_live_calls_disabled"
+    assert preflight["liveHttpCallsEnabled"] is False
+    assert preflight["liveProbe"]["enabled"] is True
+    assert preflight["liveProbe"]["explicitOptIn"] is True
+    assert preflight["liveProbe"]["reasonCode"] == "options_provider_live_probe_operator_opt_in_ready"
+    assert preflight["liveProbe"]["timeoutSeconds"] == 5.0
+    assert preflight["liveProbe"]["networkCallExecuted"] is False
+    request_mock.assert_not_called()
+    _assert_preflight_safety_contract(preflight)
+
+
+def test_options_provider_preflight_env_live_probe_opt_in_is_presence_only_and_sanitized() -> None:
+    config = OptionsLiveProviderConfig.from_env(
+        {
+            "OPTIONS_LIVE_PROVIDERS_ENABLED": "1",
+            "OPTIONS_LIVE_PROVIDER_KEYS": "tradier",
+            "OPTIONS_LIVE_PROVIDER_PROBE_KEYS": "tradier",
+            "OPTIONS_LIVE_PROVIDER_PROBE_TIMEOUT_SECONDS": "0.01",
+            "TRADIER_API_TOKEN": "valid_synthetic_readiness_value_1234567890",
+        }
+    )
+
+    with patch("requests.sessions.Session.request") as request_mock:
+        preflight = build_options_provider_live_readiness_preflight("tradier", config=config)
+
+    assert preflight["credentialsPresent"] is True
+    assert preflight["liveProbe"]["enabled"] is True
+    assert preflight["liveProbe"]["explicitOptIn"] is True
+    assert preflight["liveProbe"]["timeoutSeconds"] == 0.25
+    request_mock.assert_not_called()
+    text = _json_lower(preflight)
+    for blocked in ("valid_synthetic_readiness_value", "tradier_api_token", "api_token", "token"):
         assert blocked not in text
     _assert_preflight_safety_contract(preflight)
 

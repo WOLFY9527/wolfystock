@@ -45,7 +45,7 @@ incomplete evidence keeps the summary at **NO-GO**.
 | --- | --- |
 | `mfa_pilot_acceptance` | Accepted admin MFA pilot, recovery-path, rollback, and sanitized audit evidence. |
 | `rbac_fallback_disable_switch` | RBAC fallback disable switch or accepted production exception, rollback, and sanitized audit evidence. |
-| `provider_credential_staging_dry_run` | Provider credential staging dry-run, credential presence-only contract, entitlement matrix, and no checker live calls. |
+| `provider_credential_staging_dry_run` | Provider credential staging dry-run, explicit opt-in live probe contract, credential presence-only contract, entitlement matrix, and no checker live calls. |
 | `provider_circuit_controlled_enforcement` | Controlled provider-circuit enforcement pilot, bounded route, rollback switch, and sanitized degraded-state evidence. This remains required even when current runtime support is not available. |
 | `quota_pilot_acceptance` | Quota enforcement pilot, owner scope, rollback switch, and user/admin status-label evidence. |
 | `real_isolated_postgresql_restore_pitr` | Real isolated PostgreSQL restore, PITR execution, isolated target, and post-restore smoke evidence. |
@@ -130,3 +130,22 @@ Release review should attach:
 
 Until all hard blockers are accepted, the final launch verdict remains
 **NO-GO**.
+
+## 6. Provider Staging Probe Evidence
+
+Provider credential staging may attach a sanitized live-probe readiness summary
+only when the operator explicitly opts in for a named staging provider. The
+summary must prove:
+
+- live probe opt-in was recorded for the provider and route under review;
+- timeout is bounded to the accepted probe window;
+- credential evidence is presence/count/state only;
+- no raw credential value, env value, DSN, provider URL, response body, or raw
+  provider payload is attached;
+- checker/runtime defaults still report `liveHttpCallsEnabled=false` and
+  `networkCallExecuted=false` unless the operator runs a separate controlled
+  staging probe outside this checker.
+
+Default diagnostics and evidence validation must remain no-network. A provider
+with missing, partial, or malformed credentials is fail-closed even when a probe
+opt-in label is present.

@@ -49,6 +49,8 @@
       "evidenceRef": "provider-credential-staging-dry-run-synthetic-json",
       "checks": {
         "stagingDryRunPassed": true,
+        "liveProbeOptInRecorded": true,
+        "liveProbeTimeoutBounded": true,
         "credentialPresenceOnly": true,
         "noLiveCallsByChecker": true,
         "entitlementMatrixAttached": true

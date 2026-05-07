@@ -138,6 +138,8 @@ class OptionsLiveProviderConfig:
     malformed_credential_provider_keys: frozenset[str] = frozenset()
     partial_credential_provider_keys: frozenset[str] = frozenset()
     dry_run_provider_keys: frozenset[str] = frozenset()
+    live_probe_provider_keys: frozenset[str] = frozenset()
+    live_probe_timeout_seconds: float = 2.0
 
     def is_provider_enabled(self, provider_name: str) -> bool:
         return provider_name in self.enabled_provider_keys
@@ -167,6 +169,9 @@ class OptionsLiveProviderConfig:
             enabled_provider_keys.add("tradier")
         if _env_bool(values, "OPTIONS_TRADIER_DRY_RUN_ENABLED"):
             dry_run_provider_keys.add("tradier")
+        live_probe_provider_keys = _provider_key_set(values.get("OPTIONS_LIVE_PROVIDER_PROBE_KEYS"))
+        if _env_bool(values, "OPTIONS_TRADIER_LIVE_PROBE_ENABLED"):
+            live_probe_provider_keys.add("tradier")
         credentialed_provider_keys: set[str] = set()
         malformed_credential_provider_keys: set[str] = set()
         tradier_credential_state = _credential_values_state(
@@ -182,6 +187,8 @@ class OptionsLiveProviderConfig:
             credentialed_provider_keys=frozenset(credentialed_provider_keys),
             malformed_credential_provider_keys=frozenset(malformed_credential_provider_keys),
             dry_run_provider_keys=frozenset(dry_run_provider_keys),
+            live_probe_provider_keys=frozenset(live_probe_provider_keys),
+            live_probe_timeout_seconds=_safe_probe_timeout_seconds(values.get("OPTIONS_LIVE_PROVIDER_PROBE_TIMEOUT_SECONDS")),
         )
 
 
@@ -219,6 +226,16 @@ def _credential_value_state(value: Optional[str]) -> str:
     if re.search(r"\s", text):
         return "malformed"
     return "present"
+
+
+def _safe_probe_timeout_seconds(value: Optional[str]) -> float:
+    if value is None:
+        return 2.0
+    try:
+        parsed = float(str(value).strip())
+    except (TypeError, ValueError):
+        return 2.0
+    return max(0.25, min(parsed, 5.0))
 
 
 @dataclass(frozen=True)
@@ -703,6 +720,7 @@ def build_options_provider_live_readiness_preflight(
         "dryRunEnabled": live_config.is_dry_run_enabled(normalized),
         "payloadMappable": None,
         "liveHttpCallsEnabled": False,
+        "liveProbe": _provider_live_probe_contract(normalized, live_config, credential_contract),
         "brokerOrderPathEnabled": False,
         "portfolioMutationPathEnabled": False,
         "tradeableData": False,
@@ -821,6 +839,43 @@ def _provider_credential_contract(provider_name: str, config: OptionsLiveProvide
         "configuredCredentialCount": 1 if state == "present" else 0,
         "invalidCredentialCount": 1 if state == "malformed" else 0,
         "partialCredentialCount": 1 if state == "partial" else 0,
+    }
+
+
+def _provider_live_probe_contract(
+    provider_name: str,
+    config: OptionsLiveProviderConfig,
+    credential_contract: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Return an operator-controlled live-probe contract without executing it."""
+    explicit_opt_in = provider_name in config.live_probe_provider_keys
+    enabled = bool(
+        explicit_opt_in
+        and config.live_providers_enabled
+        and config.is_provider_enabled(provider_name)
+        and credential_contract.get("state") == "present"
+    )
+    reason_code = "options_provider_live_probe_disabled_by_default"
+    if explicit_opt_in and not config.live_providers_enabled:
+        reason_code = "options_provider_disabled"
+    elif explicit_opt_in and not config.is_provider_enabled(provider_name):
+        reason_code = "options_provider_not_enabled"
+    elif explicit_opt_in and credential_contract.get("state") != "present":
+        reason_code = str(credential_contract.get("reasonCode") or "options_provider_credentials_missing")
+    elif enabled:
+        reason_code = "options_provider_live_probe_operator_opt_in_ready"
+    return {
+        "enabled": enabled,
+        "explicitOptIn": explicit_opt_in,
+        "reasonCode": reason_code,
+        "timeoutSeconds": _safe_probe_timeout_seconds(str(config.live_probe_timeout_seconds)),
+        "httpMethod": "HEAD_OR_GET",
+        "networkCallExecuted": False,
+        "noDefaultLiveHttpCalls": True,
+        "requiresCredentialPresenceOnly": True,
+        "rawCredentialValuesIncluded": False,
+        "providerPayloadValuesIncluded": False,
+        "responseBodiesIncluded": False,
     }
 
 

@@ -110,10 +110,13 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
         id="provider_credential_staging_dry_run",
         title="Provider credential staging dry-run evidence",
         required_evidence=(
-            "staging credential dry-run, presence-only credential contract, entitlement matrix, and no checker live calls"
+            "staging credential dry-run, explicit opt-in live probe contract, presence-only credential contract, "
+            "entitlement matrix, and no checker live calls"
         ),
         required_checks=(
             "stagingDryRunPassed",
+            "liveProbeOptInRecorded",
+            "liveProbeTimeoutBounded",
             "credentialPresenceOnly",
             "noLiveCallsByChecker",
             "entitlementMatrixAttached",

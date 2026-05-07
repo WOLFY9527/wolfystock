@@ -1,3 +1,12 @@
+## 2026-05-08
+
+- 🧪 **Provider staging live-probe evidence contract** — Options provider
+  readiness preflight now exposes an explicit operator opt-in live-probe
+  contract with bounded timeout, credential presence-only evidence, and
+  no-network default proof. Launch acceptance evidence now requires sanitized
+  provider staging probe opt-in and timeout checks while keeping real provider
+  calls disabled by default.
+
 ## 2026-05-07
 
 - 🧭 **Market rotation radar MVP** — Added a read-only

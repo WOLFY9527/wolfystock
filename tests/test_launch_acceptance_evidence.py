@@ -80,6 +80,14 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
     assert evidence["summary"]["blocking"] == 0
     assert evidence["hardBlockers"] == []
     categories = {item["id"]: item for item in evidence["categories"]}
+    assert categories["provider_credential_staging_dry_run"]["requiredChecks"] == [
+        "stagingDryRunPassed",
+        "liveProbeOptInRecorded",
+        "liveProbeTimeoutBounded",
+        "credentialPresenceOnly",
+        "noLiveCallsByChecker",
+        "entitlementMatrixAttached",
+    ]
     assert categories["provider_circuit_controlled_enforcement"]["status"] == "accepted"
     assert categories["provider_circuit_controlled_enforcement"]["requiredChecks"] == [
         "controlledEnforcementPilotPassed",
@@ -134,6 +142,24 @@ def test_launch_acceptance_evidence_rejects_secret_like_values_without_leaking(t
     category = next(item for item in evidence["categories"] if item["id"] == "provider_credential_staging_dry_run")
     assert category["status"] == "blocking"
     assert category["reasonCodes"] == ["sensitive_value_present"]
+
+
+def test_launch_acceptance_evidence_requires_provider_live_probe_contract_checks(tmp_path: Path) -> None:
+    payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    checks = payload["categories"]["provider_credential_staging_dry_run"]["checks"]
+    checks.pop("liveProbeOptInRecorded")
+    checks.pop("liveProbeTimeoutBounded")
+    evidence_path = tmp_path / "missing-provider-live-probe-contract.json"
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_checker("--evidence", str(evidence_path))
+
+    assert result.returncode == 1
+    evidence = _json(result)
+    category = next(item for item in evidence["categories"] if item["id"] == "provider_credential_staging_dry_run")
+    assert category["status"] == "blocking"
+    assert category["missingChecks"] == ["liveProbeOptInRecorded", "liveProbeTimeoutBounded"]
+    assert category["reasonCodes"] == ["missing_required_checks"]
 
 
 def test_launch_acceptance_evidence_rejects_build_artifact_secret_patterns_without_leaking(tmp_path: Path) -> None:
