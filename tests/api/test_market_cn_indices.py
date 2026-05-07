@@ -309,6 +309,18 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
                 "warning",
             ):
                 self.assertIn(field, payload)
+            self.assertEqual(payload["source"], "sina")
+            self.assertEqual(payload["sourceLabel"], "新浪财经")
+            self.assertEqual(payload["asOf"], updated_at)
+            self.assertEqual(payload["updatedAt"], updated_at)
+            self.assertIn(payload["freshness"], {"live", "cached", "delayed"})
+            first_item = payload["items"][0]
+            self.assertEqual(first_item["source"], "sina")
+            self.assertEqual(first_item["sourceLabel"], "新浪财经")
+            self.assertEqual(first_item["asOf"], updated_at)
+            self.assertEqual(first_item["updatedAt"], updated_at)
+            self.assertIn(first_item["freshness"], {"live", "cached", "delayed"})
+            self.assertFalse(first_item["isFallback"])
         finally:
             DatabaseManager.reset_instance()
             Config.reset_instance()

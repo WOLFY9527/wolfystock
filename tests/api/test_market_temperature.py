@@ -131,6 +131,29 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertEqual(payload["excludedInputCount"], 1)
         self.assertGreater(payload["confidence"], 0)
 
+    def test_missing_required_market_inputs_blocks_temperature_decision_output(self) -> None:
+        service = MarketOverviewService()
+        inputs = {
+            "indices": {"items": [{"symbol": "000001.SH", "value": 4107, "changePercent": 0.7, "source": "sina", "freshness": "live", "isFallback": False}]},
+            "crypto": {"items": [{"symbol": "BTC", "value": 87000, "changePercent": 1.4, "source": "binance", "freshness": "live", "isFallback": False}]},
+            "rates": {"items": [{"symbol": "US10Y", "source": "fallback", "freshness": "fallback", "isFallback": True}]},
+            "fx": {"items": []},
+            "futures": {"items": []},
+        }
+
+        with patch.object(service, "_build_market_temperature_inputs", return_value=inputs):
+            payload = service.get_market_temperature()
+
+        self.assertEqual(payload["reliableInputCount"], 2)
+        self.assertGreater(payload["fallbackInputCount"], 0)
+        self.assertFalse(payload["isReliable"])
+        self.assertTrue(payload["fallbackUsed"])
+        self.assertFalse(payload["isFallback"])
+        self.assertEqual(payload["source"], "mixed")
+        self.assertIn("真实数据不足", payload["warning"])
+        self.assertEqual(payload["scores"]["overall"]["label"], "数据不足")
+        self.assertNotIn(payload["scores"]["overall"]["label"], {"偏暖", "过热"})
+
     def test_temperature_excludes_fallback_only_inputs(self) -> None:
         service = MarketOverviewService()
         inputs = {

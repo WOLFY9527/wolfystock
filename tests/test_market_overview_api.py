@@ -15,6 +15,12 @@ class MarketOverviewApiTestCase(unittest.TestCase):
         service.get_indices.return_value = {
             "panel_name": "IndexTrendsCard",
             "last_refresh_at": "2026-04-29T10:00:00",
+            "source": "yfinance",
+            "sourceLabel": "Yahoo Finance",
+            "updatedAt": "2026-04-29T10:00:05",
+            "asOf": "2026-04-29T10:00:00",
+            "freshness": "delayed",
+            "isFallback": False,
             "status": "success",
             "items": [
                 {
@@ -24,6 +30,12 @@ class MarketOverviewApiTestCase(unittest.TestCase):
                     "change_pct": 0.42,
                     "risk_direction": "decreasing",
                     "trend": [5180.0, 5200.12],
+                    "source": "yfinance",
+                    "sourceLabel": "Yahoo Finance",
+                    "updatedAt": "2026-04-29T10:00:05",
+                    "asOf": "2026-04-29T10:00:00",
+                    "freshness": "delayed",
+                    "isFallback": False,
                 }
             ],
             "log_session_id": "log-1",
@@ -77,6 +89,16 @@ class MarketOverviewApiTestCase(unittest.TestCase):
             self.assertTrue(payload["last_refresh_at"])
             self.assertTrue(payload["items"])
             self.assertTrue(payload["log_session_id"])
+        self.assertEqual(indices["sourceLabel"], "Yahoo Finance")
+        self.assertEqual(indices["updatedAt"], "2026-04-29T10:00:05")
+        self.assertEqual(indices["asOf"], "2026-04-29T10:00:00")
+        self.assertEqual(indices["freshness"], "delayed")
+        self.assertFalse(indices["isFallback"])
+        self.assertEqual(indices["items"][0]["sourceLabel"], "Yahoo Finance")
+        self.assertEqual(indices["items"][0]["updatedAt"], "2026-04-29T10:00:05")
+        self.assertEqual(indices["items"][0]["asOf"], "2026-04-29T10:00:00")
+        self.assertEqual(indices["items"][0]["freshness"], "delayed")
+        self.assertFalse(indices["items"][0]["isFallback"])
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 import unittest
@@ -104,6 +105,104 @@ class MarketFreshnessCacheTestCase(unittest.TestCase):
         self.assertNotEqual(payload["freshness"], "live")
         self.assertEqual(payload["items"][0]["freshness"], "fallback")
 
+    def test_partial_source_failure_is_reported_as_partial_not_healthy(self) -> None:
+        service = MarketOverviewService()
+        now = datetime.now(CN_TZ).isoformat(timespec="seconds")
+        quotes = {
+            "000001.SH": {
+                "name": "上证指数",
+                "symbol": "000001.SH",
+                "value": 4107.51,
+                "change": 28.88,
+                "changePercent": 0.71,
+                "sparkline": [4078.63, 4107.51],
+                "asOf": now,
+            }
+        }
+
+        with patch.object(service, "_fetch_sina_cn_index_quotes", return_value=quotes):
+            payload = service.get_cn_indices()
+
+        self.assertEqual(payload["source"], "mixed")
+        self.assertFalse(payload["isFallback"])
+        self.assertTrue(payload["fallbackUsed"])
+        self.assertEqual(payload["providerHealth"]["status"], "partial")
+        self.assertNotIn(payload["providerHealth"]["status"], {"live", "cache"})
+        live_item = next(item for item in payload["items"] if item["symbol"] == "000001.SH")
+        fallback_item = next(item for item in payload["items"] if item["source"] == "fallback")
+        self.assertEqual(live_item["sourceLabel"], "新浪财经")
+        self.assertFalse(live_item["isFallback"])
+        self.assertEqual(fallback_item["freshness"], "fallback")
+        self.assertTrue(fallback_item["isFallback"])
+
+    def test_cached_stale_data_is_disclosed_without_live_overwrite(self) -> None:
+        service = MarketOverviewService()
+        stale_as_of = datetime(2026, 5, 3, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+        service._market_cache.set(
+            "cn_indices",
+            {
+                "source": "sina",
+                "sourceLabel": "新浪财经",
+                "updatedAt": stale_as_of,
+                "asOf": stale_as_of,
+                "items": [
+                    {
+                        "name": "上证指数",
+                        "symbol": "000001.SH",
+                        "value": 4100.0,
+                        "change": 1.0,
+                        "changePercent": 0.1,
+                        "sparkline": [4090.0, 4100.0],
+                        "source": "sina",
+                        "sourceLabel": "新浪财经",
+                        "asOf": stale_as_of,
+                    }
+                ],
+            },
+            ttl_seconds=1,
+        )
+        entry = service._market_cache.get("cn_indices")
+        entry.expires_at = entry.fetched_at - timedelta(seconds=1)
+        refresh_started = threading.Event()
+        release_refresh = threading.Event()
+        live_as_of = datetime.now(CN_TZ).isoformat(timespec="seconds")
+
+        def fetcher() -> dict:
+            refresh_started.set()
+            release_refresh.wait(2)
+            return {
+                "source": "sina",
+                "sourceLabel": "新浪财经",
+                "updatedAt": live_as_of,
+                "asOf": live_as_of,
+                "items": [
+                    {
+                        "name": "上证指数",
+                        "symbol": "000001.SH",
+                        "value": 4200.0,
+                        "change": 10.0,
+                        "changePercent": 0.5,
+                        "sparkline": [4190.0, 4200.0],
+                        "source": "sina",
+                        "sourceLabel": "新浪财经",
+                        "asOf": live_as_of,
+                    }
+                ],
+            }
+
+        with patch.object(service, "_fetch_cn_indices_snapshot", side_effect=fetcher):
+            stale_payload = service.get_cn_indices()
+            self.assertTrue(refresh_started.wait(1))
+
+        self.assertEqual(stale_payload["items"][0]["value"], 4100.0)
+        self.assertEqual(stale_payload["freshness"], "stale")
+        self.assertTrue(stale_payload["isStale"])
+        self.assertTrue(stale_payload["isRefreshing"])
+        self.assertEqual(stale_payload["providerHealth"]["status"], "refreshing")
+        self.assertNotEqual(stale_payload["freshness"], "live")
+        release_refresh.set()
+        self.assertTrue(service._market_cache.wait_for_refreshes(timeout=2))
+
     def test_fallback_mock_and_delayed_states_are_not_disclosed_as_live(self) -> None:
         now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ)
 
@@ -175,6 +274,22 @@ class MarketFreshnessCacheTestCase(unittest.TestCase):
         refreshed = service.get_indices()
         self.assertEqual(refreshed["items"][0]["value"], 5100)
         self.assertFalse(refreshed["isRefreshing"])
+
+    def test_market_api_error_details_are_sanitized(self) -> None:
+        service = MarketOverviewService()
+        sensitive_error = (
+            "provider exploded token=SECRET api_key=ABC Authorization: Bearer SECRET "
+            "Traceback raw_payload={'debugSchema': {'password': 'SECRET'}}"
+        )
+
+        with patch.object(service, "_fetch_cn_flows_snapshot", Mock(side_effect=RuntimeError(sensitive_error))):
+            payload = service.get_cn_flows()
+
+        dumped = json.dumps(payload, ensure_ascii=False)
+        self.assertEqual(payload["lastError"], "数据源刷新失败")
+        self.assertEqual(payload["providerHealth"]["errorSummary"], "数据源刷新失败")
+        for leaked in ("SECRET", "api_key", "Authorization", "Traceback", "raw_payload", "debugSchema", "password"):
+            self.assertNotIn(leaked, dumped)
 
 
 if __name__ == "__main__":
