@@ -45,18 +45,21 @@ def test_launch_acceptance_evidence_missing_categories_remain_no_go() -> None:
         "runtimeDefaultsChanged": False,
     }
     assert evidence["summary"]["accepted"] == 0
-    assert evidence["summary"]["blocking"] == 10
+    assert evidence["summary"]["blocking"] == 13
     blocker_ids = {item["id"] for item in evidence["hardBlockers"]}
     assert {
         "mfa_pilot_acceptance",
         "rbac_fallback_disable_switch",
         "provider_credential_staging_dry_run",
+        "provider_live_probe_opt_in_timeout",
         "provider_circuit_controlled_enforcement",
         "quota_pilot_acceptance",
+        "budget_alert_dry_run_acceptance",
         "real_isolated_postgresql_restore_pitr",
         "staging_ingress_smoke",
         "public_api_frontend_no_secret_safety",
         "supply_chain_dependency_build_artifact_safety",
+        "incident_response_audit_evidence",
         "final_clean_full_ci_gate",
     } == blocker_ids
 
@@ -76,7 +79,7 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
     assert evidence["finalStatus"] == "GO-REVIEW-REQUIRED"
     assert evidence["releaseApproved"] is False
     assert evidence["statusReason"] == "All hard blockers have accepted sanitized evidence; release approval remains manual."
-    assert evidence["summary"]["accepted"] == 10
+    assert evidence["summary"]["accepted"] == 13
     assert evidence["summary"]["blocking"] == 0
     assert evidence["hardBlockers"] == []
     categories = {item["id"]: item for item in evidence["categories"]}
@@ -102,11 +105,16 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
     ]
     assert categories["provider_credential_staging_dry_run"]["requiredChecks"] == [
         "stagingDryRunPassed",
-        "liveProbeOptInRecorded",
-        "liveProbeTimeoutBounded",
         "credentialPresenceOnly",
         "noLiveCallsByChecker",
         "entitlementMatrixAttached",
+    ]
+    assert categories["provider_live_probe_opt_in_timeout"]["requiredChecks"] == [
+        "namedStagingProviderRecorded",
+        "liveProbeOptInRecorded",
+        "liveProbeTimeoutBounded",
+        "probeResultSanitized",
+        "noLiveCallsByChecker",
     ]
     assert categories["provider_circuit_controlled_enforcement"]["status"] == "accepted"
     assert categories["provider_circuit_controlled_enforcement"]["requiredChecks"] == [
@@ -119,15 +127,18 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
         "pilotPassed",
         "explicitOwnerAllowlistRecorded",
         "outOfScopeUsersAdvisoryOnly",
-        "pilotBlockEmitsSanitizedBudgetAlertIntent",
-        "budgetAlertEvidenceRedacted",
         "invoiceReconciliationAdvisoryOnly",
         "invoiceReconciliationNotEnforcementInput",
-        "realOutboundDeliveryDisabledByDefault",
-        "noLiveLlmProviderOrInvoiceCalls",
         "globalEnforcementDisabledByDefault",
         "rollbackSwitchRecorded",
         "statusLabelsRecorded",
+    ]
+    assert categories["budget_alert_dry_run_acceptance"]["requiredChecks"] == [
+        "pilotBlockEmitsSanitizedBudgetAlertIntent",
+        "budgetAlertEvidenceRedacted",
+        "realOutboundDeliveryDisabledByDefault",
+        "noLiveLlmProviderOrInvoiceCalls",
+        "alertStatusLabelsRecorded",
     ]
     assert categories["supply_chain_dependency_build_artifact_safety"]["requiredChecks"] == [
         "dependencyManifestsInspected",
@@ -136,6 +147,15 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
         "frontendBuildWarningsVisible",
         "noDependencyOrLockfileChanges",
         "missingEvidenceNoGoVerified",
+    ]
+    assert categories["incident_response_audit_evidence"]["requiredChecks"] == [
+        "incidentPackAttached",
+        "adminCriticalActionsAudited",
+        "previewFirstCleanupEvidence",
+        "providerNotificationReleaseFailuresRecorded",
+        "localNoNetworkGeneration",
+        "auditEvidenceSanitized",
+        "secretEvidenceRedacted",
     ]
 
 
@@ -202,9 +222,33 @@ def test_launch_acceptance_evidence_rejects_mfa_secret_fields_without_leaking(tm
     assert category["reasonCodes"] == ["sensitive_value_present"]
 
 
+def test_launch_acceptance_evidence_rejects_public_matrix_secret_aliases_without_leaking(tmp_path: Path) -> None:
+    api_key = "api_key=launch-secret-123456"
+    payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    payload["categories"]["incident_response_audit_evidence"]["operatorArtifact"] = {
+        "API key": api_key,
+        "rawResponseBody": "{\"session\":\"raw-session-id\"}",
+        "provider credential": "credential-value",
+    }
+    evidence_path = tmp_path / "unsafe-public-matrix-evidence.json"
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_checker("--evidence", str(evidence_path))
+
+    assert result.returncode == 1
+    combined_output = result.stdout + result.stderr
+    assert api_key not in combined_output
+    assert "raw-session-id" not in combined_output
+    assert "credential-value" not in combined_output
+    evidence = _json(result)
+    category = next(item for item in evidence["categories"] if item["id"] == "incident_response_audit_evidence")
+    assert category["status"] == "blocking"
+    assert category["reasonCodes"] == ["sensitive_value_present"]
+
+
 def test_launch_acceptance_evidence_requires_provider_live_probe_contract_checks(tmp_path: Path) -> None:
     payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
-    checks = payload["categories"]["provider_credential_staging_dry_run"]["checks"]
+    checks = payload["categories"]["provider_live_probe_opt_in_timeout"]["checks"]
     checks.pop("liveProbeOptInRecorded")
     checks.pop("liveProbeTimeoutBounded")
     evidence_path = tmp_path / "missing-provider-live-probe-contract.json"
@@ -214,19 +258,16 @@ def test_launch_acceptance_evidence_requires_provider_live_probe_contract_checks
 
     assert result.returncode == 1
     evidence = _json(result)
-    category = next(item for item in evidence["categories"] if item["id"] == "provider_credential_staging_dry_run")
+    category = next(item for item in evidence["categories"] if item["id"] == "provider_live_probe_opt_in_timeout")
     assert category["status"] == "blocking"
     assert category["missingChecks"] == ["liveProbeOptInRecorded", "liveProbeTimeoutBounded"]
     assert category["reasonCodes"] == ["missing_required_checks"]
 
 
-def test_launch_acceptance_evidence_requires_quota_pilot_alert_and_safety_checks(tmp_path: Path) -> None:
+def test_launch_acceptance_evidence_requires_quota_pilot_checks(tmp_path: Path) -> None:
     payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
     checks = payload["categories"]["quota_pilot_acceptance"]["checks"]
     checks.pop("explicitOwnerAllowlistRecorded", None)
-    checks.pop("pilotBlockEmitsSanitizedBudgetAlertIntent", None)
-    checks.pop("realOutboundDeliveryDisabledByDefault", None)
-    checks.pop("noLiveLlmProviderOrInvoiceCalls", None)
     evidence_path = tmp_path / "missing-quota-pilot-alert-safety-checks.json"
     evidence_path.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -236,8 +277,26 @@ def test_launch_acceptance_evidence_requires_quota_pilot_alert_and_safety_checks
     evidence = _json(result)
     category = next(item for item in evidence["categories"] if item["id"] == "quota_pilot_acceptance")
     assert category["status"] == "blocking"
+    assert category["missingChecks"] == ["explicitOwnerAllowlistRecorded"]
+    assert category["reasonCodes"] == ["missing_required_checks"]
+
+
+def test_launch_acceptance_evidence_requires_budget_alert_dry_run_checks(tmp_path: Path) -> None:
+    payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    checks = payload["categories"]["budget_alert_dry_run_acceptance"]["checks"]
+    checks.pop("pilotBlockEmitsSanitizedBudgetAlertIntent", None)
+    checks.pop("realOutboundDeliveryDisabledByDefault", None)
+    checks.pop("noLiveLlmProviderOrInvoiceCalls", None)
+    evidence_path = tmp_path / "missing-budget-alert-dry-run-checks.json"
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_checker("--evidence", str(evidence_path))
+
+    assert result.returncode == 1
+    evidence = _json(result)
+    category = next(item for item in evidence["categories"] if item["id"] == "budget_alert_dry_run_acceptance")
+    assert category["status"] == "blocking"
     assert category["missingChecks"] == [
-        "explicitOwnerAllowlistRecorded",
         "pilotBlockEmitsSanitizedBudgetAlertIntent",
         "realOutboundDeliveryDisabledByDefault",
         "noLiveLlmProviderOrInvoiceCalls",

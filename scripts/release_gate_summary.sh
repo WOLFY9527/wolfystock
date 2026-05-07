@@ -199,6 +199,15 @@ summary = {
                 "dependency versions and lockfiles must not be rewritten by evidence capture",
             ],
         },
+        {
+            "id": "incident_response_audit_evidence_pack",
+            "status": "foundation_evidence_present",
+            "evidence": [
+                "incident-response evidence checker remains local-only and no-network",
+                "admin-critical action, cleanup, provider, notification, and release-failure evidence must be sanitized",
+                "incident/audit evidence must exclude tokens, passwords, API keys, cookies, sessions, DSNs, provider credentials, and raw response bodies",
+            ],
+        },
     ],
     "operatorEvidencePack": {
         "schemaVersion": "wolfystock_launch_acceptance_evidence_summary_v1",
@@ -206,12 +215,15 @@ summary = {
             "mfa_pilot_acceptance",
             "rbac_fallback_disable_switch",
             "provider_credential_staging_dry_run",
+            "provider_live_probe_opt_in_timeout",
             "provider_circuit_controlled_enforcement",
             "quota_pilot_acceptance",
+            "budget_alert_dry_run_acceptance",
             "real_isolated_postgresql_restore_pitr",
             "staging_ingress_smoke",
             "public_api_frontend_no_secret_safety",
             "supply_chain_dependency_build_artifact_safety",
+            "incident_response_audit_evidence",
             "final_clean_full_ci_gate",
         ],
         "finalStatus": "NO-GO",
@@ -219,44 +231,75 @@ summary = {
     },
     "hardBlockers": [
         {
-            "id": "global_mfa_enforcement_not_accepted",
+            "id": "mfa_pilot_acceptance",
             "status": "blocking",
-            "requiredEvidence": "accepted global or compensated MFA enforcement evidence",
+            "requiredEvidence": "accepted MFA admin pilot operator evidence with recovery, rollback, unsupported rollout NO-GO, and redaction proof",
         },
         {
-            "id": "rbac_coarse_fallback_actual_removal_pending",
+            "id": "rbac_fallback_disable_switch",
             "status": "blocking",
-            "requiredEvidence": "coarse fallback removed or explicit production exception accepted",
+            "requiredEvidence": "accepted RBAC fallback disable switch operator evidence with route inventory, fail-closed proof, and rollback",
         },
         {
-            "id": "live_quota_enforcement_not_global",
+            "id": "provider_credential_staging_dry_run",
             "status": "blocking",
-            "requiredEvidence": "live quota enforcement pilot and global rollout/exception evidence",
+            "requiredEvidence": "provider credential staging dry-run evidence using presence-only credential and entitlement summaries",
         },
         {
-            "id": "real_isolated_postgresql_restore_pitr_pending",
+            "id": "provider_live_probe_opt_in_timeout",
             "status": "blocking",
-            "requiredEvidence": "real isolated PostgreSQL restore/PITR execution and post-restore smoke",
+            "requiredEvidence": "provider live probe opt-in and bounded-timeout evidence for a named staging provider",
         },
         {
-            "id": "real_provider_credentials_live_calls_circuit_enforcement_pending",
+            "id": "provider_circuit_controlled_enforcement",
             "status": "blocking",
-            "requiredEvidence": "real provider credential/live-call acceptance plus circuit enforcement evidence",
+            "requiredEvidence": "provider circuit controlled enforcement evidence with bounded route, rollback switch, and sanitized degraded state",
         },
         {
-            "id": "final_clean_full_release_gate_required",
+            "id": "quota_pilot_acceptance",
             "status": "blocking",
-            "requiredEvidence": "clean worktree, clean full release gate, secret scan, and final diff check",
+            "requiredEvidence": "quota pilot acceptance evidence with owner allowlist, advisory out-of-scope behavior, and rollback",
         },
         {
-            "id": "production_config_contract_acceptance_pending",
+            "id": "budget_alert_dry_run_acceptance",
             "status": "blocking",
-            "requiredEvidence": "accepted production config readiness contract using sanitized names/presence states only",
+            "requiredEvidence": "budget alert dry-run acceptance evidence with outbound delivery disabled and no live LLM/provider/invoice calls",
+        },
+        {
+            "id": "real_isolated_postgresql_restore_pitr",
+            "status": "blocking",
+            "requiredEvidence": "real isolated PostgreSQL restore/PITR execution and post-restore smoke evidence",
+        },
+        {
+            "id": "staging_ingress_smoke",
+            "status": "blocking",
+            "requiredEvidence": "HTTPS staging ingress smoke evidence with synthetic users/data and no public backend :8000 exposure",
+        },
+        {
+            "id": "public_api_frontend_no_secret_safety",
+            "status": "blocking",
+            "requiredEvidence": "public API/frontend no-secret safety evidence for API payloads, DOM, public routes, and release scan",
+        },
+        {
+            "id": "supply_chain_dependency_build_artifact_safety",
+            "status": "blocking",
+            "requiredEvidence": "supply-chain and build artifact evidence with sanitized dependency/build scans and no lockfile rewrites",
+        },
+        {
+            "id": "incident_response_audit_evidence",
+            "status": "blocking",
+            "requiredEvidence": "incident response/audit evidence with sanitized admin-critical, cleanup, provider, notification, and release-failure paths",
+        },
+        {
+            "id": "final_clean_full_ci_gate",
+            "status": "blocking",
+            "requiredEvidence": "clean worktree, full ci_gate, release secret scan, and final diff check evidence",
         },
     ],
     "requiredFinalCommands": [
         "python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>",
         "python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>",
+        "python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>",
         "./scripts/release_secret_scan.sh",
         "python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>",
         "./scripts/ci_gate_fast.sh",
@@ -303,6 +346,7 @@ print_step "helper scripts"
 echo "scripts/release_secret_scan.sh: $(script_status "scripts/release_secret_scan.sh")"
 echo "scripts/production_config_readiness.py: $(script_status "scripts/production_config_readiness.py")"
 echo "scripts/launch_acceptance_evidence.py: $(script_status "scripts/launch_acceptance_evidence.py")"
+echo "scripts/incident_response_evidence.py: $(script_status "scripts/incident_response_evidence.py")"
 echo "scripts/staging_ingress_smoke.py: $(script_status "scripts/staging_ingress_smoke.py")"
 echo "scripts/ci_gate_fast.sh: $(script_status "scripts/ci_gate_fast.sh")"
 
@@ -310,6 +354,7 @@ print_step "final required commands"
 cat <<'COMMANDS'
 python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>
 python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>
+python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>
 ./scripts/release_secret_scan.sh
 python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>
 # Live ingress calls require WOLFYSTOCK_STAGING_INGRESS_SMOKE=1.

@@ -57,11 +57,30 @@
       "evidenceRef": "provider-credential-staging-dry-run-synthetic-json",
       "checks": {
         "stagingDryRunPassed": true,
-        "liveProbeOptInRecorded": true,
-        "liveProbeTimeoutBounded": true,
         "credentialPresenceOnly": true,
         "noLiveCallsByChecker": true,
         "entitlementMatrixAttached": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "provider_live_probe_opt_in_timeout": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "provider-live-probe-opt-in-timeout-synthetic-json",
+      "checks": {
+        "namedStagingProviderRecorded": true,
+        "liveProbeOptInRecorded": true,
+        "liveProbeTimeoutBounded": true,
+        "probeResultSanitized": true,
+        "noLiveCallsByChecker": true
       },
       "sanitization": {
         "externalServicesCalledByChecker": false,
@@ -101,15 +120,32 @@
         "pilotPassed": true,
         "explicitOwnerAllowlistRecorded": true,
         "outOfScopeUsersAdvisoryOnly": true,
-        "pilotBlockEmitsSanitizedBudgetAlertIntent": true,
-        "budgetAlertEvidenceRedacted": true,
         "invoiceReconciliationAdvisoryOnly": true,
         "invoiceReconciliationNotEnforcementInput": true,
-        "realOutboundDeliveryDisabledByDefault": true,
-        "noLiveLlmProviderOrInvoiceCalls": true,
         "globalEnforcementDisabledByDefault": true,
         "rollbackSwitchRecorded": true,
         "statusLabelsRecorded": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "budget_alert_dry_run_acceptance": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "budget-alert-dry-run-acceptance-synthetic-json",
+      "checks": {
+        "pilotBlockEmitsSanitizedBudgetAlertIntent": true,
+        "budgetAlertEvidenceRedacted": true,
+        "realOutboundDeliveryDisabledByDefault": true,
+        "noLiveLlmProviderOrInvoiceCalls": true,
+        "alertStatusLabelsRecorded": true
       },
       "sanitization": {
         "externalServicesCalledByChecker": false,
@@ -192,6 +228,29 @@
         "frontendBuildWarningsVisible": true,
         "noDependencyOrLockfileChanges": true,
         "missingEvidenceNoGoVerified": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "incident_response_audit_evidence": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-07T00:00:00Z",
+      "evidenceRef": "incident-response-audit-evidence-synthetic-json",
+      "checks": {
+        "incidentPackAttached": true,
+        "adminCriticalActionsAudited": true,
+        "previewFirstCleanupEvidence": true,
+        "providerNotificationReleaseFailuresRecorded": true,
+        "localNoNetworkGeneration": true,
+        "auditEvidenceSanitized": true,
+        "secretEvidenceRedacted": true
       },
       "sanitization": {
         "externalServicesCalledByChecker": false,

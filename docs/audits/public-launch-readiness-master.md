@@ -75,9 +75,11 @@ Public launch may move to **GO** only when all of the following are true:
 - Sanitized operator acceptance evidence is attached through
   `python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>`
   for MFA pilot acceptance, RBAC fallback disable switch, provider credential
-  staging dry-run, provider circuit controlled enforcement, quota pilot, real
+  staging dry-run, provider live probe opt-in and bounded timeout, provider
+  circuit controlled enforcement, quota pilot, budget-alert dry-run, real
   isolated PostgreSQL restore/PITR, staging ingress smoke, public API/frontend
-  no-secret public safety, and final clean full `ci_gate`.
+  no-secret public safety, supply-chain/build artifact safety,
+  incident-response/audit evidence, and final clean full `ci_gate`.
 - Sanitized incident-response evidence is attached through
   `python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>`
   for admin-critical audit events, preview-first cleanup, provider/notification

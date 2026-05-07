@@ -335,10 +335,12 @@ The following must all be true before public multi-user deployment:
   evidence and hard blockers while keeping the final status **NO-GO**.
 - [x] Operator evidence-pack schema/checker exists through
   `python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>`;
-  it validates MFA, RBAC fallback, provider credential dry-run, provider circuit
-  controlled enforcement, quota, real restore/PITR, staging ingress, public
-  no-secret safety, supply-chain dependency/build artifact safety, and final
-  clean gate categories without approving launch.
+  it validates MFA, RBAC fallback, provider credential dry-run, provider live
+  probe opt-in and bounded timeout, provider circuit controlled enforcement,
+  quota, budget-alert dry-run, real restore/PITR, staging ingress, public
+  no-secret safety, supply-chain dependency/build artifact safety,
+  incident-response/audit evidence, and final clean gate categories without
+  approving launch.
 - [x] Production config/secret contract preflight exists through
   `python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>`;
   it consumes only synthetic or operator-sanitized flag names and secret

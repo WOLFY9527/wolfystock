@@ -42,10 +42,12 @@ acceptance evidence JSON contract for release review. It covers the operator
 evidence required for admin-only MFA pilot acceptance, unsupported/global MFA
 rollout NO-GO, break-glass default-off, RBAC fallback disable switch with
 complete route inventory and fail-closed payload proof, provider credential
-staging dry-run, provider circuit controlled enforcement, quota pilot
+staging dry-run, provider live probe opt-in and bounded timeout, provider
+circuit controlled enforcement, quota pilot acceptance, budget-alert dry-run
 acceptance, real isolated PostgreSQL restore/PITR, staging ingress smoke,
 public API/frontend no-secret public safety, supply-chain dependency/build
-artifact safety, and final clean full `ci_gate`.
+artifact safety, incident-response/audit evidence, and final clean full
+`ci_gate`.
 
 `scripts/incident_response_evidence.py` adds a companion incident-response
 audit evidence contract for sanitized admin-critical actions, preview-first

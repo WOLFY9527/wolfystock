@@ -1,5 +1,15 @@
 ## 2026-05-08
 
+- 🧪 **Launch acceptance final operator matrix** — Launch acceptance evidence now
+  has one explicit hard-blocker category for MFA admin pilot, RBAC fallback
+  switch, provider credential dry-run, provider live probe opt-in/timeout,
+  provider circuit enforcement, quota pilot, budget-alert dry-run, real
+  PostgreSQL restore/PITR, staging ingress, public API/frontend no-secret
+  safety, supply-chain/build artifacts, incident-response/audit evidence, and
+  final clean `ci_gate`. Fully accepted synthetic evidence can reach
+  `GO-REVIEW-REQUIRED`, but `releaseApproved` remains `false`; missing or
+  unsafe evidence remains **NO-GO**.
+
 - 🧪 **Cost launch quota alert acceptance evidence** — Launch acceptance evidence
   now requires controlled quota pilot proof with an explicit owner allowlist,
   out-of-scope advisory behavior, sanitized budget-alert dry-run intent,

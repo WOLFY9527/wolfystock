@@ -32,6 +32,8 @@ REDACTED_VALUES = {
 }
 SENSITIVE_KEY_MARKERS = (
     ".env",
+    "api key",
+    "cookie id",
     "dsn",
     "env_file",
     "envfile",
@@ -45,17 +47,26 @@ SENSITIVE_KEY_MARKERS = (
     "recovery_code",
     "api_key",
     "apikey",
+    "provider credential",
     "key_material",
     "private_key",
+    "raw body",
     "webhook_url",
     "credential",
     "provider_payload",
+    "providerpayload",
     "raw_payload",
+    "rawpayload",
+    "raw response",
+    "raw response body",
+    "rawresponsebody",
     "response_body",
+    "responsebody",
 )
 SENSITIVE_VALUE_PATTERNS = (
     re.compile(r"\bpostgres(?:ql)?://", re.IGNORECASE),
-    re.compile(r"\b(?:password|token|secret|api[_-]?key|cookie)\s*=", re.IGNORECASE),
+    re.compile(r"\b(?:password|token|secret|api[\s_-]?key|cookie|session|dsn)\s*=", re.IGNORECASE),
+    re.compile(r"['\"](?:password|token|secret|api[\s_-]?key|cookie|session|dsn|response[_\s-]?body)['\"]\s*:", re.IGNORECASE),
     re.compile(r"\bbearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     re.compile(r"\bsk-[A-Za-z0-9_-]{12,}"),
@@ -123,16 +134,28 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
         id="provider_credential_staging_dry_run",
         title="Provider credential staging dry-run evidence",
         required_evidence=(
-            "staging credential dry-run, explicit opt-in live probe contract, presence-only credential contract, "
-            "entitlement matrix, and no checker live calls"
+            "staging credential dry-run, presence-only credential contract, entitlement matrix, and no checker live calls"
         ),
         required_checks=(
             "stagingDryRunPassed",
-            "liveProbeOptInRecorded",
-            "liveProbeTimeoutBounded",
             "credentialPresenceOnly",
             "noLiveCallsByChecker",
             "entitlementMatrixAttached",
+        ),
+    ),
+    CategorySpec(
+        id="provider_live_probe_opt_in_timeout",
+        title="Provider live probe opt-in and bounded-timeout evidence",
+        required_evidence=(
+            "explicit provider live-probe opt-in for a named staging provider, bounded timeout, sanitized result, "
+            "and proof the launch checker made no live calls"
+        ),
+        required_checks=(
+            "namedStagingProviderRecorded",
+            "liveProbeOptInRecorded",
+            "liveProbeTimeoutBounded",
+            "probeResultSanitized",
+            "noLiveCallsByChecker",
         ),
     ),
     CategorySpec(
@@ -153,23 +176,33 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
         title="Quota pilot acceptance evidence",
         required_evidence=(
             "controlled quota pilot with explicit owner allowlist, out-of-scope advisory behavior, "
-            "sanitized dry-run budget alert intent, advisory-only invoice reconciliation, "
-            "outbound delivery disabled by default, no live LLM/provider/invoice calls, rollback switch, "
+            "advisory-only invoice reconciliation, global enforcement disabled by default, rollback switch, "
             "and user/admin status-label evidence"
         ),
         required_checks=(
             "pilotPassed",
             "explicitOwnerAllowlistRecorded",
             "outOfScopeUsersAdvisoryOnly",
-            "pilotBlockEmitsSanitizedBudgetAlertIntent",
-            "budgetAlertEvidenceRedacted",
             "invoiceReconciliationAdvisoryOnly",
             "invoiceReconciliationNotEnforcementInput",
-            "realOutboundDeliveryDisabledByDefault",
-            "noLiveLlmProviderOrInvoiceCalls",
             "globalEnforcementDisabledByDefault",
             "rollbackSwitchRecorded",
             "statusLabelsRecorded",
+        ),
+    ),
+    CategorySpec(
+        id="budget_alert_dry_run_acceptance",
+        title="Budget alert dry-run acceptance evidence",
+        required_evidence=(
+            "sanitized dry-run budget alert intent, outbound delivery disabled by default, "
+            "no live LLM/provider/invoice calls, and user/admin alert-label evidence"
+        ),
+        required_checks=(
+            "pilotBlockEmitsSanitizedBudgetAlertIntent",
+            "budgetAlertEvidenceRedacted",
+            "realOutboundDeliveryDisabledByDefault",
+            "noLiveLlmProviderOrInvoiceCalls",
+            "alertStatusLabelsRecorded",
         ),
     ),
     CategorySpec(
@@ -225,6 +258,23 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
             "frontendBuildWarningsVisible",
             "noDependencyOrLockfileChanges",
             "missingEvidenceNoGoVerified",
+        ),
+    ),
+    CategorySpec(
+        id="incident_response_audit_evidence",
+        title="Incident response and audit evidence",
+        required_evidence=(
+            "sanitized incident-response evidence for admin-critical actions, preview-first cleanup, "
+            "provider/notification/release failure paths, local no-network generation, and audit redaction"
+        ),
+        required_checks=(
+            "incidentPackAttached",
+            "adminCriticalActionsAudited",
+            "previewFirstCleanupEvidence",
+            "providerNotificationReleaseFailuresRecorded",
+            "localNoNetworkGeneration",
+            "auditEvidenceSanitized",
+            "secretEvidenceRedacted",
         ),
     ),
     CategorySpec(
