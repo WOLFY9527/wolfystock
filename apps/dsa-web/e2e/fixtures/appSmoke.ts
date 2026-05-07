@@ -810,6 +810,198 @@ function ruleBacktestRunsPayload() {
   };
 }
 
+function ruleBacktestRunDetailPayload() {
+  const auditRows = [
+    {
+      date: '2026-04-01',
+      symbol_close: 100,
+      benchmark_close: 98,
+      signal_summary: 'fixture read-only signal',
+      target_position: 0,
+      executed_action: null,
+      fill_price: null,
+      shares_held: 0,
+      cash: 100000,
+      holdings_value: 0,
+      total_portfolio_value: 100000,
+      daily_pnl: 0,
+      daily_return_pct: 0,
+      cumulative_strategy_return_pct: 0,
+      cumulative_benchmark_return_pct: 0,
+      cumulative_buy_and_hold_return_pct: 0,
+      fees: 0,
+      slippage: 0,
+      notes: null,
+      unavailable_reason: null,
+    },
+    {
+      date: '2026-04-02',
+      symbol_close: 103,
+      benchmark_close: 99,
+      signal_summary: 'fixture analytical entry event',
+      target_position: 1,
+      executed_action: 'buy',
+      fill_price: 103,
+      shares_held: 900,
+      cash: 7300,
+      holdings_value: 92700,
+      total_portfolio_value: 100000,
+      daily_pnl: 0,
+      daily_return_pct: 0,
+      cumulative_strategy_return_pct: 0,
+      cumulative_benchmark_return_pct: 1.02,
+      cumulative_buy_and_hold_return_pct: 3,
+      fees: 0,
+      slippage: 0,
+      notes: 'analysis_only_fixture',
+      unavailable_reason: null,
+    },
+    {
+      date: '2026-04-03',
+      symbol_close: 112,
+      benchmark_close: 101,
+      signal_summary: 'fixture analytical exit event',
+      target_position: 0,
+      executed_action: 'sell',
+      fill_price: 112,
+      shares_held: 0,
+      cash: 108100,
+      holdings_value: 0,
+      total_portfolio_value: 108100,
+      daily_pnl: 8100,
+      daily_return_pct: 8.1,
+      cumulative_strategy_return_pct: 8.1,
+      cumulative_benchmark_return_pct: 3.06,
+      cumulative_buy_and_hold_return_pct: 12,
+      fees: 0,
+      slippage: 0,
+      notes: 'analysis_only_fixture',
+      unavailable_reason: null,
+    },
+  ];
+
+  return {
+    id: 34,
+    code: 'ORCL',
+    strategy_text: 'Fixture MA cross',
+    parsed_strategy: {
+      version: 'v1',
+      timeframe: 'daily',
+      source_text: 'Fixture MA cross',
+      normalized_text: 'SMA5 上穿 SMA20 作为分析入场，下穿作为分析离场。',
+      entry: { type: 'group', op: 'and', rules: [] },
+      exit: { type: 'group', op: 'or', rules: [] },
+      confidence: 0.96,
+      needs_confirmation: false,
+      ambiguities: [],
+      summary: { strategy: '均线交叉分析草案', entry: '分析入场条件', exit: '分析离场条件' },
+      max_lookback: 20,
+      strategy_kind: 'moving_average_crossover',
+      executable: true,
+      normalization_state: 'ready',
+      assumptions: [],
+      assumption_groups: [],
+      setup: { symbol: 'ORCL', start_date: '2026-04-01', end_date: '2026-04-03', initial_capital: 100000 },
+      strategy_spec: { strategy_type: 'moving_average_crossover', symbol: 'ORCL', timeframe: 'daily' },
+    },
+    strategy_hash: 'fixture-hash',
+    timeframe: 'daily',
+    start_date: '2026-04-01',
+    end_date: '2026-04-03',
+    period_start: '2026-04-01',
+    period_end: '2026-04-03',
+    lookback_bars: 20,
+    initial_capital: 100000,
+    fee_bps: 0,
+    slippage_bps: 0,
+    parsed_confidence: 0.96,
+    needs_confirmation: false,
+    warnings: [],
+    run_at: timestamp,
+    completed_at: timestamp,
+    status: 'completed',
+    status_message: 'Fixture analytical backtest completed.',
+    status_history: [{ status: 'completed', at: timestamp }],
+    no_result_reason: null,
+    no_result_message: null,
+    trade_count: 1,
+    win_count: 1,
+    loss_count: 0,
+    total_return_pct: 8.1,
+    annualized_return_pct: 12.4,
+    benchmark_mode: 'auto',
+    benchmark_code: 'QQQ',
+    benchmark_return_pct: 3.06,
+    excess_return_vs_benchmark_pct: 5.04,
+    buy_and_hold_return_pct: 12,
+    excess_return_vs_buy_and_hold_pct: -3.9,
+    win_rate_pct: 100,
+    avg_trade_return_pct: 8.1,
+    max_drawdown_pct: -1.2,
+    avg_holding_days: 2,
+    final_equity: 108100,
+    summary: {},
+    execution_assumptions: {
+      engine: 'deterministic_fixture',
+      signal_timing: 'bar_close',
+      fill_timing: 'next_bar_open',
+      no_broker_connection: true,
+      no_order_placement: true,
+    },
+    benchmark_curve: [],
+    benchmark_summary: { label: 'QQQ', method: 'benchmark_security', return_pct: 3.06 },
+    buy_and_hold_curve: [],
+    buy_and_hold_summary: { label: '当前标的买入并持有', method: 'same_symbol_buy_and_hold', return_pct: 12 },
+    audit_rows: auditRows,
+    execution_trace: {
+      source: 'fixtureStoredExecutionTrace',
+      rows: auditRows.map((row) => ({
+        date: row.date,
+        action: row.executed_action,
+        total_portfolio_value: row.total_portfolio_value,
+        cumulative_return: row.cumulative_strategy_return_pct,
+        notes: row.notes,
+      })),
+      fallback: { run_fallback: false, trace_rebuilt: false, note: 'analytical_fixture_only' },
+    },
+    daily_return_series: [],
+    exposure_curve: [],
+    equity_curve: auditRows.map((row) => ({
+      date: row.date,
+      total_portfolio_value: row.total_portfolio_value,
+      cumulative_return_pct: row.cumulative_strategy_return_pct,
+      exposure_pct: row.target_position ? 100 : 0,
+      executed_action: row.executed_action,
+    })),
+    trades: [
+      {
+        code: 'ORCL',
+        trade_index: 1,
+        entry_date: '2026-04-02',
+        exit_date: '2026-04-03',
+        entry_price: 103,
+        exit_price: 112,
+        quantity: 900,
+        gross_pnl: 8100,
+        net_pnl: 8100,
+        fees: 0,
+        slippage: 0,
+        return_pct: 8.1,
+        holding_days: 1,
+        entry_reason: 'fixture_signal_entry',
+        exit_reason: 'fixture_signal_exit',
+      },
+    ],
+    support_surface_canary: {
+      delivery_mode: 'download_only',
+      analytical_only: true,
+      forbidden_order_payload: 'mock-canary-place-order-payload',
+      forbidden_broker_credentials: 'mock-canary-broker-credentials',
+      forbidden_provider_payload: 'mock-canary-raw-provider-payload',
+    },
+  };
+}
+
 function backtestRunsPayload() {
   return {
     total: 0,
@@ -1063,6 +1255,27 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
 
     if (method === 'GET' && path === '/api/v1/backtest/rule/runs') {
       return fulfillJson(route, ruleBacktestRunsPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/backtest/rule/runs/34') {
+      return fulfillJson(route, ruleBacktestRunDetailPayload());
+    }
+
+    if (method === 'GET' && path === '/api/v1/backtest/rule/runs/34/status') {
+      return fulfillJson(route, {
+        run_id: 34,
+        status: 'completed',
+        status_message: 'Fixture analytical backtest completed.',
+        completed: true,
+      });
+    }
+
+    if (method === 'POST' && path === '/api/v1/backtest/rule/runs/34/cancel') {
+      return fulfillJson(route, {
+        run_id: 34,
+        status: 'completed',
+        cancelled: false,
+      });
     }
 
     if (method === 'GET' && path === '/api/v1/backtest/performance') {

@@ -12,6 +12,23 @@ type PortfolioSmokeHarness = {
 
 const timestamp = '2026-05-06T09:45:00-04:00';
 
+const visibleOwnerPortfolioSentinels = ['Launch Owner Main', 'AAPL'];
+const forbiddenPortfolioOwnerSentinels = [
+  'Bob Launch Main',
+  'MSFT-BOB-PRIVATE',
+  'mock-canary-bob-broker-account',
+  'mock-canary-bob-session-token',
+];
+const forbiddenPortfolioCredentialSentinels = [
+  'mock-canary-alice-api-key',
+  'mock-canary-alice-access-token',
+  'mock-canary-alice-session-token',
+  'mock-canary-broker-order-payload',
+  'mock-canary-place-order-payload',
+  'mock-canary-raw-provider-payload',
+  'mock-canary-sync-metadata',
+];
+
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
   await route.fulfill({
     status,
@@ -47,7 +64,7 @@ function accountsPayload() {
       {
         id: 1,
         owner_id: 'user-1',
-        name: 'Main',
+        name: 'Launch Owner Main',
         broker: 'IBKR',
         market: 'us',
         base_currency: 'USD',
@@ -56,6 +73,10 @@ function accountsPayload() {
         updated_at: timestamp,
       },
     ],
+    owner_scope_canary: {
+      forbidden_cross_owner_account: 'Bob Launch Main',
+      forbidden_cross_owner_symbol: 'MSFT-BOB-PRIVATE',
+    },
   };
 }
 
@@ -75,7 +96,7 @@ function brokerConnectionsPayload() {
         id: 9,
         owner_id: 'user-1',
         portfolio_account_id: 1,
-        portfolio_account_name: 'Main',
+        portfolio_account_name: 'Launch Owner Main',
         connection_name: 'Primary IBKR',
         broker_type: 'ibkr',
         broker_account_ref: 'U1234567',
@@ -87,8 +108,25 @@ function brokerConnectionsPayload() {
             verify_ssl: false,
             broker_account_ref: 'U1234567',
           },
+          api_key: 'mock-canary-alice-api-key',
+          access_token: 'mock-canary-alice-access-token',
+          session_token: 'mock-canary-alice-session-token',
+          brokerOrderPayload: 'mock-canary-broker-order-payload',
+          place_order: 'mock-canary-place-order-payload',
+          raw: {
+            provider_payload: 'mock-canary-raw-provider-payload',
+            sync_metadata_secret: 'mock-canary-sync-metadata',
+          },
           last_sync_at: null,
         },
+      },
+    ],
+    excluded_cross_owner_connections: [
+      {
+        owner_id: 'user-2',
+        portfolio_account_name: 'Bob Launch Main',
+        broker_account_ref: 'mock-canary-bob-broker-account',
+        sync_metadata: { session_token: 'mock-canary-bob-session-token' },
       },
     ],
   };
@@ -111,7 +149,7 @@ function snapshotPayload() {
     accounts: [
       {
         account_id: 1,
-        account_name: 'Main',
+        account_name: 'Launch Owner Main',
         owner_id: 'user-1',
         broker: 'IBKR',
         market: 'us',
@@ -142,6 +180,15 @@ function snapshotPayload() {
         ],
       },
     ],
+    owner_scope_canary: {
+      excluded_accounts: [
+        {
+          owner_id: 'user-2',
+          account_name: 'Bob Launch Main',
+          positions: [{ symbol: 'MSFT-BOB-PRIVATE' }],
+        },
+      ],
+    },
   };
 }
 
@@ -280,3 +327,8 @@ export async function installPortfolioSmokeHarness(page: Page): Promise<Portfoli
 }
 
 export { expect };
+export {
+  forbiddenPortfolioCredentialSentinels,
+  forbiddenPortfolioOwnerSentinels,
+  visibleOwnerPortfolioSentinels,
+};

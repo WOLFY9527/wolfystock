@@ -365,7 +365,7 @@ export async function expectRootNonEmpty(page: Page) {
 
 export async function expectForbiddenTradingWordingAbsent(page: Page) {
   await expect(page.locator('body')).not.toContainText(
-    /买入按钮|下单|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy|must buy|must sell|buy now|sell now|you should buy|you should sell/i,
+    /买入按钮|下单|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy|must buy|must sell|buy now|sell now|place order|you should buy|you should sell/i,
   );
 }
 

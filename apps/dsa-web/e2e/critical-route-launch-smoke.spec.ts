@@ -13,14 +13,20 @@ import {
   openAdminRouteWithHarness,
   test as adminTest,
 } from './fixtures/adminAuth';
-import { installPortfolioSmokeHarness } from './fixtures/portfolioSmoke';
+import {
+  forbiddenPortfolioCredentialSentinels,
+  forbiddenPortfolioOwnerSentinels,
+  installPortfolioSmokeHarness,
+  visibleOwnerPortfolioSentinels,
+} from './fixtures/portfolioSmoke';
 
 const viewports = [
   { width: 1440, height: 1000 },
   { width: 390, height: 844 },
 ];
 
-const rawLaunchArtifactPattern = /raw\s+(payload|response|trace)|debug\s+(payload|response|schema|panel)|provider\s+payload|stack\s+(trace|details)|traceback|bearer\s+[a-z0-9._-]+|api[_\s-]?key\s*[=:]|password\s*[=:]|session[_\s-]?id\s*[=:]|secret\s*[=:]|sk-[a-z0-9_-]{12,}|ghp_[a-z0-9_]{12,}|xox[baprs]-[a-z0-9-]{12,}/i;
+const rawLaunchArtifactPattern = /raw\s+(payload|response|trace)|debug\s+(payload|response|schema|panel)|provider\s+(payload|credential)|stack\s+(trace|details)|traceback|bearer\s+[a-z0-9._-]+|api[_\s-]?key\s*[=:]|password\s*[=:]|session[_\s-]?id\s*[=:]|cookie\s*[=:]|secret\s*[=:]|sk-[a-z0-9_-]{12,}|ghp_[a-z0-9_]{12,}|xox[baprs]-[a-z0-9-]{12,}/i;
+const brokerCredentialOrOrderPattern = /broker[_\s-]?credentials?|broker[_\s-]?order|order[_\s-]?payload|place[_\s-]?order|submit[_\s-]?order|execute[_\s-]?order|payload_json|sync_metadata_json|raw[_\s-]?provider[_\s-]?payload|provider[_\s-]?credential|api[_\s-]?key|access[_\s-]?token|refresh[_\s-]?token|session[_\s-]?token|cookie\s*[=:]|debug[_\s-]?schema|stack[_\s-]?trace/i;
 
 async function installAuthenticatedAppSmokeSession(page: Page) {
   await page.route('**/api/v1/auth/status', async (route) => {
@@ -53,6 +59,25 @@ async function expectNoRawLaunchArtifacts(page: Page) {
   expect(bodyText).not.toMatch(rawLaunchArtifactPattern);
 }
 
+async function expectNoBrokerCredentialOrOrderPayloads(page: Page) {
+  const bodyText = await page.locator('body').innerText();
+  expect(bodyText).not.toMatch(brokerCredentialOrOrderPattern);
+}
+
+async function expectVisibleTextPresent(page: Page, sentinels: string[]) {
+  const bodyText = await page.locator('body').innerText();
+  for (const sentinel of sentinels) {
+    expect(bodyText).toContain(sentinel);
+  }
+}
+
+async function expectVisibleTextAbsent(page: Page, sentinels: string[]) {
+  const bodyText = await page.locator('body').innerText();
+  for (const sentinel of sentinels) {
+    expect(bodyText).not.toContain(sentinel);
+  }
+}
+
 async function assertPublicShell(page: Page) {
   await expectRootNonEmpty(page);
   await expectNoHorizontalOverflow(page);
@@ -65,6 +90,7 @@ async function assertProductShell(page: Page) {
   await expectNoHorizontalOverflow(page);
   await expectForbiddenTradingWordingAbsent(page);
   await expectNoRawLaunchArtifacts(page);
+  await expectNoBrokerCredentialOrOrderPayloads(page);
 }
 
 async function assertAdminShell(page: Page) {
@@ -72,6 +98,7 @@ async function assertAdminShell(page: Page) {
   await expectNoHorizontalOverflow(page);
   await expectNoRawSecretLikeText(page);
   await expectNoRawLaunchArtifacts(page);
+  await expectNoBrokerCredentialOrOrderPayloads(page);
 }
 
 appTest.describe('public launch route smoke', () => {
@@ -161,6 +188,22 @@ appTest.describe('public launch route smoke', () => {
       await appExpect(page.getByTestId('backtest-subnav')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('backtest-v1-page')).toBeVisible({ timeout: 15_000 });
       await assertProductShell(page);
+
+      await page.setViewportSize(viewport);
+      await installAuthenticatedAppSmokeSession(page);
+      await page.goto('/backtest/results/34');
+      await page.waitForLoadState('domcontentloaded');
+      await appExpect(page.getByTestId('deterministic-backtest-result-page')).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByTestId('backtest-result-report')).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByRole('button', { name: '导出交易CSV' })).toBeVisible();
+      await appExpect(page.getByRole('button', { name: '导出账本CSV' })).toBeVisible();
+      await appExpect(page.getByTestId('backtest-report-advanced-details')).toBeVisible();
+      await expectVisibleTextAbsent(page, [
+        'mock-canary-place-order-payload',
+        'mock-canary-broker-credentials',
+        'mock-canary-raw-provider-payload',
+      ]);
+      await assertProductShell(page);
     }
   });
 });
@@ -196,11 +239,17 @@ productTest.describe('product launch route smoke', () => {
       await appExpect(page.getByTestId('portfolio-bento-page')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('portfolio-total-assets-card')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('portfolio-current-holdings-panel')).toBeVisible({ timeout: 15_000 });
+      await expectVisibleTextPresent(page, visibleOwnerPortfolioSentinels);
+      await expectVisibleTextAbsent(page, [
+        ...forbiddenPortfolioOwnerSentinels,
+        ...forbiddenPortfolioCredentialSentinels,
+      ]);
       await assertProductShell(page);
 
       expect(harness.requests.count('GET', '/api/v1/auth/status')).toBeGreaterThan(0);
       expect(harness.requests.count('GET', '/api/v1/portfolio/snapshot')).toBeGreaterThan(0);
       expect(harness.requests.count('GET', '/api/v1/portfolio/risk')).toBeGreaterThan(0);
+      expect(harness.requests.calls.filter((entry) => entry.startsWith('POST '))).toEqual([]);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
     }
   });
@@ -260,6 +309,38 @@ adminTest.describe('admin launch route smoke', () => {
       expect(harness.requests.count('GET', '/api/v1/system/config')).toBeGreaterThan(0);
       expect(harness.requests.count('GET', '/api/v1/quant/duckdb/health')).toBeGreaterThan(0);
       expect(harness.requests.count('GET', '/api/v1/quant/duckdb/coverage')).toBeGreaterThan(0);
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+    }
+  });
+
+  adminTest('admin user portfolio projection stays read-only and owner-safe on desktop and mobile', async ({ page }) => {
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      const harness = await openAdminRouteWithHarness(page, '/zh/admin/users/user-123?tab=portfolio');
+
+      await appExpect(page.getByRole('heading', { name: '组合只读总览' })).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByText('只读投影').first()).toBeVisible();
+      await expectVisibleTextPresent(page, ['Alice Launch Portfolio', 'AAPL']);
+      await expectVisibleTextAbsent(page, [
+        'Bob Admin Portfolio',
+        'MSFT-ADMIN-BOB-PRIVATE',
+        'mock-canary-bob-admin-broker-account',
+        'mock-canary-bob-admin-session-token',
+        'mock-canary-admin-broker-account',
+        'mock-canary-admin-api-key',
+        'mock-canary-admin-access-token',
+        'mock-canary-admin-broker-order-payload',
+        'mock-canary-admin-place-order-payload',
+        'mock-canary-admin-raw-provider-payload',
+        'mock-canary-admin-execute-order-payload',
+        'mock-canary-admin-broker-credentials',
+      ]);
+      await assertAdminShell(page);
+
+      expect(harness.requests.count('GET', '/api/v1/admin/users/user-123/portfolio-summary')).toBe(1);
+      expect(harness.requests.count('GET', '/api/v1/admin/users/user-123/holdings')).toBe(1);
+      expect(harness.requests.count('GET', '/api/v1/admin/users/user-123/portfolio-activity')).toBe(1);
+      expect(harness.requests.calls.filter((entry) => entry.startsWith('POST '))).toEqual([]);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
     }
   });

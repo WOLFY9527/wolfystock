@@ -371,6 +371,117 @@ function adminUserDetailPayload() {
   };
 }
 
+function adminPortfolioSummaryPayload() {
+  return {
+    user_id: 'user-123',
+    account_count: 1,
+    active_account_count: 1,
+    base_currencies: ['USD'],
+    accounts: [
+      {
+        id: 1,
+        name: 'Alice Launch Portfolio',
+        broker: 'IBKR',
+        market: 'us',
+        base_currency: 'USD',
+        is_active: true,
+        broker_account_handle: '***1234',
+        created_at: timestamp,
+        updated_at: timestamp,
+        broker_account_ref: 'mock-canary-admin-broker-account',
+        sync_metadata_json: {
+          api_key: 'mock-canary-admin-api-key',
+          access_token: 'mock-canary-admin-access-token',
+          brokerOrderPayload: 'mock-canary-admin-broker-order-payload',
+          place_order: 'mock-canary-admin-place-order-payload',
+          raw_provider_payload: 'mock-canary-admin-raw-provider-payload',
+        },
+      },
+    ],
+    total_cash: { amount: 12500, currency: 'USD' },
+    total_market_value: { amount: 32000, currency: 'USD' },
+    total_equity: { amount: 44500, currency: 'USD' },
+    realized_pnl: { amount: 420, currency: 'USD' },
+    unrealized_pnl: { amount: 1800, currency: 'USD' },
+    ledger_counts: { trades: 3, cash_events: 1, corporate_actions: 0 },
+    broker_sync_summary: {
+      connections: 1,
+      statuses: { success: 1 },
+      last_sync_at: timestamp,
+      fx_stale: false,
+    },
+    limitations: ['read_only_projection', 'credentials_omitted'],
+    excluded_cross_owner_canary: {
+      account_name: 'Bob Admin Portfolio',
+      symbol: 'MSFT-ADMIN-BOB-PRIVATE',
+      broker_account_ref: 'mock-canary-bob-admin-broker-account',
+      session_token: 'mock-canary-bob-admin-session-token',
+    },
+  };
+}
+
+function adminPortfolioHoldingsPayload() {
+  return {
+    items: [
+      {
+        account_id: 1,
+        account_name: 'Alice Launch Portfolio',
+        broker: 'IBKR',
+        broker_account_handle: '***1234',
+        symbol: 'AAPL',
+        market: 'us',
+        currency: 'USD',
+        quantity: 12,
+        avg_cost: 150,
+        last_price: 180,
+        market_value_base: 2160,
+        unrealized_pnl_base: 360,
+        valuation_currency: 'USD',
+        fx_status: 'current',
+        updated_at: timestamp,
+      },
+    ],
+    total: 1,
+    limit: 50,
+    offset: 0,
+    has_more: false,
+    limitations: ['read_only_projection'],
+    excluded_cross_owner_canary: [{ account_name: 'Bob Admin Portfolio', symbol: 'MSFT-ADMIN-BOB-PRIVATE' }],
+  };
+}
+
+function adminPortfolioActivityPayload() {
+  return {
+    items: [
+      {
+        id_hash: 'activity-hash-1',
+        type: 'trade',
+        account_id: 1,
+        account_name: 'Alice Launch Portfolio',
+        event_date: '2026-05-05',
+        symbol: 'AAPL',
+        market: 'us',
+        currency: 'USD',
+        side: 'buy',
+        quantity: 12,
+        price: 150,
+        amount: null,
+        created_at: timestamp,
+        payload_json: {
+          execute_order: 'mock-canary-admin-execute-order-payload',
+          broker_credentials: 'mock-canary-admin-broker-credentials',
+        },
+      },
+    ],
+    total: 1,
+    limit: 30,
+    offset: 0,
+    has_more: false,
+    summary: { trades: 3, cash_events: 1, corporate_actions: 0 },
+    limitations: ['read_only_projection'],
+  };
+}
+
 function systemConfigPayload() {
   const schema = (key: string, category: string, displayOrder: number) => ({
     key,
@@ -483,6 +594,15 @@ export async function installAdminAuthHarness(
     }
     if (method === 'GET' && path === '/api/v1/admin/users/user-123') {
       return fulfillJson(route, adminUserDetailPayload());
+    }
+    if (method === 'GET' && path === '/api/v1/admin/users/user-123/portfolio-summary') {
+      return fulfillJson(route, adminPortfolioSummaryPayload());
+    }
+    if (method === 'GET' && path === '/api/v1/admin/users/user-123/holdings') {
+      return fulfillJson(route, adminPortfolioHoldingsPayload());
+    }
+    if (method === 'GET' && path === '/api/v1/admin/users/user-123/portfolio-activity') {
+      return fulfillJson(route, adminPortfolioActivityPayload());
     }
     if (method === 'GET' && path === '/api/v1/system/config') {
       return fulfillJson(route, systemConfigPayload());
