@@ -1,5 +1,14 @@
 ## 2026-05-07
 
+- 🧭 **Market rotation radar MVP** — Added a read-only
+  `/api/v1/market/rotation-radar` contract and `/zh/market/rotation-radar`
+  frontend surface for theme-level rotation evidence across static AI,
+  semiconductor, cybersecurity, cloud, power, cooling, and robotics baskets.
+  The MVP scores relative strength, volume expansion, breadth,
+  synchronization, VWAP/persistence, freshness penalties, and leadership
+  concentration while clearly marking fallback/stale data, avoiding live
+  provider calls by default, and preserving no-advice wording.
+
 - 🧪 **Launch acceptance evidence pack** — Added
   `scripts/launch_acceptance_evidence.py`, stable synthetic fixtures, focused
   tests, and launch-doc references for the operator-supplied evidence required

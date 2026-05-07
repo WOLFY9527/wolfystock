@@ -11,8 +11,10 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from api.deps import CurrentUser, get_optional_current_user
+from api.v1.schemas.market_rotation import MarketRotationRadarResponse
 from src.services.crypto_realtime_service import get_crypto_realtime_service
 from src.services.market_overview_service import MarketOverviewService
+from src.services.market_rotation_radar_service import MarketRotationRadarService
 
 router = APIRouter()
 
@@ -103,6 +105,11 @@ def get_cn_flows(current_user: Optional[CurrentUser] = Depends(get_optional_curr
 @router.get("/sector-rotation", summary="Get sector and theme rotation snapshot")
 def get_sector_rotation(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
     return MarketOverviewService().get_sector_rotation(actor=_actor(current_user))
+
+
+@router.get("/rotation-radar", response_model=MarketRotationRadarResponse, summary="Get theme rotation radar")
+def get_rotation_radar(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return MarketRotationRadarService().get_rotation_radar()
 
 
 @router.get("/us-breadth", summary="Get US sector ETF breadth proxy snapshot")

@@ -306,6 +306,100 @@ function marketSnapshot(panelName: string, items: Array<{ symbol: string; label:
   };
 }
 
+function marketRotationRadarPayload() {
+  return {
+    endpoint: '/api/v1/market/rotation-radar',
+    generatedAt: timestamp,
+    source: 'computed',
+    sourceLabel: 'Mock feed',
+    freshness: 'mock',
+    isFallback: false,
+    isStale: false,
+    warning: null,
+    noAdviceDisclosure: '仅用于观察资金轮动迹象，非买卖建议。',
+    benchmarks: {
+      QQQ: { symbol: 'QQQ', changePercent: 0.8, freshness: 'mock', isFallback: false, isStale: false, source: 'mock', sourceLabel: 'Mock feed', asOf: timestamp },
+      SPY: { symbol: 'SPY', changePercent: 0.4, freshness: 'mock', isFallback: false, isStale: false, source: 'mock', sourceLabel: 'Mock feed', asOf: timestamp },
+      IWM: { symbol: 'IWM', changePercent: 0.1, freshness: 'mock', isFallback: false, isStale: false, source: 'mock', sourceLabel: 'Mock feed', asOf: timestamp },
+    },
+    summary: {
+      strongestThemes: [
+        { id: 'ai_applications', name: 'AI 应用', rotationScore: 78, confidence: 0.72, stage: 'confirmed_rotation', freshness: 'mock', isFallback: false, riskLabels: ['gap_fade_risk'] },
+        { id: 'ai_infrastructure', name: 'AI 基建', rotationScore: 71, confidence: 0.64, stage: 'early_rotation', freshness: 'mock', isFallback: false, riskLabels: [] },
+      ],
+      acceleratingThemes: [
+        { id: 'ai_applications', name: 'AI 应用', rotationScore: 78, confidence: 0.72, stage: 'confirmed_rotation', freshness: 'mock', isFallback: false, riskLabels: ['gap_fade_risk'] },
+      ],
+      fadingThemes: [
+        { id: 'robotics', name: '机器人', rotationScore: 35, confidence: 0.22, stage: 'weak_or_no_signal', freshness: 'fallback', isFallback: true, riskLabels: ['fallback_data'] },
+      ],
+      safeWording: ['资金轮动迹象', '成交额扩张', '相对强势扩散', '板块同步性增强', '非买卖建议'],
+    },
+    themes: [
+      {
+        id: 'ai_applications',
+        name: 'AI 应用',
+        englishName: 'AI Applications',
+        focus: '应用层软件、数据工作流与企业 AI 落地',
+        benchmark: 'QQQ',
+        membersConfigured: ['APP', 'PLTR', 'CRM'],
+        rotationScore: 78,
+        confidence: 0.72,
+        stage: 'confirmed_rotation',
+        riskLabels: ['gap_fade_risk'],
+        newslessRotation: true,
+        newslessRotationEvidence: '无明显新闻的同步异动：未配置新闻催化证据。',
+        relativeStrength: {
+          benchmark: 'QQQ',
+          benchmarkChangePercent: 0.8,
+          averageThemeChangePercent: 3.6,
+          averageRelativeStrengthPercent: 2.8,
+          vsBenchmarks: { QQQ: 2.8, SPY: 3.2, IWM: 3.5 },
+        },
+        volume: { averageRelativeVolume: 1.8, availableMemberCount: 3, label: '成交额扩张明显' },
+        breadth: {
+          observedMembers: 3,
+          configuredMembers: 3,
+          coveragePercent: 100,
+          percentUp: 100,
+          percentOutperformingBenchmark: 100,
+        },
+        synchronization: { sameDirectionPercent: 100, aboveVwapPercent: 100, persistencePercent: 100, label: '板块同步性增强' },
+        leadership: {
+          leadershipConcentrationPercent: 36,
+          broadParticipationPercent: 64,
+          topMembers: [
+            { symbol: 'APP', name: 'APP', changePercent: 5.1, relativeStrengthVsBenchmark: 4.3, volumeRatio: 2.2, freshness: 'mock', isFallback: false },
+            { symbol: 'PLTR', name: 'PLTR', changePercent: 4.6, relativeStrengthVsBenchmark: 3.8, volumeRatio: 2.0, freshness: 'mock', isFallback: false },
+          ],
+        },
+        freshness: 'mock',
+        isFallback: false,
+        isStale: false,
+        source: 'computed',
+        sourceLabel: 'Mock feed',
+        asOf: timestamp,
+        updatedAt: timestamp,
+        evidence: ['无明显新闻的同步异动', '成交额扩张迹象', '相对 QQQ 强弱 +2.80%'],
+        members: [],
+        noAdviceDisclosure: '仅用于观察资金轮动迹象，非买卖建议。',
+      },
+    ],
+    metadata: {
+      schemaVersion: 'market_rotation_radar_mvp_v1',
+      noExternalCalls: true,
+      basketSource: 'manual_static_baskets',
+      themeCount: 8,
+      liveThemeCount: 1,
+      fallbackThemeCount: 7,
+      staleThemeCount: 0,
+      scoreRange: '0-100',
+      confidenceRange: '0-1',
+      newslessRotationMeaning: '未配置新闻催化证据时，价格/量能/广度/同步性同时满足阈值的保守观察标记，不代表因果确认。',
+    },
+  };
+}
+
 const mockCryptoStreamPayload = marketSnapshot('CryptoCard', [
   { symbol: 'BTC', label: 'Bitcoin', value: 98400, changePercent: 1.3 },
   { symbol: 'ETH', label: 'Ethereum', value: 3410, changePercent: 0.9 },
@@ -1037,6 +1131,10 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
       return fulfillJson(route, marketSnapshot('SectorRotationCard', [
         { symbol: 'AI', label: 'AI Hardware', value: 72, changePercent: 1.4 },
       ]));
+    }
+
+    if (method === 'GET' && path === '/api/v1/market/rotation-radar') {
+      return fulfillJson(route, marketRotationRadarPayload());
     }
 
     if (method === 'GET' && path === '/api/v1/market/rates') {

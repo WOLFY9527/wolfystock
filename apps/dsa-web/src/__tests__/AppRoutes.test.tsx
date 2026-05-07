@@ -106,6 +106,10 @@ vi.mock('../pages/PortfolioPage', () => ({
   default: () => <div>portfolio-page</div>,
 }));
 
+vi.mock('../pages/MarketRotationRadarPage', () => ({
+  default: () => <div>market-rotation-radar-page</div>,
+}));
+
 vi.mock('../pages/BacktestPage', () => ({
   default: () => <div>backtest-page</div>,
 }));
@@ -582,6 +586,14 @@ describe('AppContent route flows', () => {
     renderAt('/scanner');
 
     expect(await screen.findByText('scanner-surface-page')).toBeInTheDocument();
+  });
+
+  it('renders the localized market rotation radar route', async () => {
+    languageState.value = 'zh';
+
+    renderAt('/zh/market/rotation-radar');
+
+    expect(await screen.findByText('market-rotation-radar-page')).toBeInTheDocument();
   });
 
   it('renders the rule backtest compare workbench route for signed-in users', async () => {

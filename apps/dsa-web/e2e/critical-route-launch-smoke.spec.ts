@@ -99,6 +99,20 @@ appTest.describe('public launch route smoke', () => {
     }
   });
 
+  appTest('market rotation radar stays clean on desktop and mobile', async ({ page }) => {
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+
+      await page.goto('/zh/market/rotation-radar');
+      await page.waitForLoadState('domcontentloaded');
+      await appExpect(page.getByTestId('market-rotation-radar-page')).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByRole('heading', { name: '资金轮动雷达' })).toBeVisible();
+      await appExpect(page.getByTestId('rotation-radar-summary-band')).toBeVisible();
+      await appExpect(page.getByTestId('rotation-theme-card-ai_applications')).toBeVisible();
+      await assertPublicShell(page);
+    }
+  });
+
   appTest('scanner and backtest launch routes stay clean on desktop and mobile', async ({ page }) => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
