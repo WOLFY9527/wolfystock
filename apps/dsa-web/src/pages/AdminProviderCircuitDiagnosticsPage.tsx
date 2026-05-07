@@ -8,6 +8,7 @@ import {
   type ProviderCircuitStateItem,
   type ProviderProbeEventItem,
   type ProviderQuotaWindowItem,
+  type ProviderSlaReadinessItem,
 } from '../api/adminProviderCircuits';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { ApiErrorAlert, Badge, GlassCard } from '../components/common';
@@ -68,6 +69,51 @@ function stateTone(state?: string | null): Tone {
   if (normalized === 'open' || normalized === 'disabled_by_operator' || normalized === 'provider_quota_depleted') return 'danger';
   if (normalized === 'degraded_cache_only') return 'warn';
   return 'neutral';
+}
+
+function readinessTone(state?: string | null): Tone {
+  const normalized = String(state || '').toLowerCase();
+  if (normalized === 'dry_run_enabled' || normalized === 'observed') return 'good';
+  if (normalized === 'missing_credentials' || normalized === 'live_credentials_present_live_calls_disabled') return 'warn';
+  if (normalized === 'disabled' || normalized === 'sanitized_provider_error' || normalized === 'malformed_provider_payload') return 'danger';
+  return 'neutral';
+}
+
+function freshnessLabel(value?: string | null): string {
+  const labels: Record<string, string> = {
+    fresh: '新鲜',
+    stale: '滞后',
+    expired: '过期',
+    unknown: '未知',
+  };
+  return labels[String(value || '').toLowerCase()] || safeText(value, '未知');
+}
+
+function latencyLabel(value?: string | null): string {
+  const labels: Record<string, string> = {
+    normal: '正常',
+    slow: '慢',
+    critical: '严重',
+    unknown: '未知',
+  };
+  return labels[String(value || '').toLowerCase()] || safeText(value, '未知');
+}
+
+function credentialLabel(value?: string | null): string {
+  const labels: Record<string, string> = {
+    disabled: '禁用',
+    missing_credentials: '缺少凭证',
+    live_credentials_present_live_calls_disabled: '有凭证 / live 关闭',
+    dry_run_enabled: 'Dry-run',
+    configured: '已配置',
+    credentials_present: '有凭证',
+    unknown: '未知',
+  };
+  return labels[String(value || '').toLowerCase()] || safeText(value, '未知');
+}
+
+function boolLabel(value?: boolean | null): string {
+  return value ? '是' : '否';
 }
 
 function toneClass(tone: Tone): string {
@@ -259,6 +305,59 @@ const ProbeEventsPanel: React.FC<{ items: ProviderProbeEventItem[] }> = ({ items
   </GlassCard>
 );
 
+const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ items }) => (
+  <GlassCard as="section" className="p-4 md:p-5">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">SLA readiness</p>
+        <h2 className="mt-1 text-base font-semibold text-white">Provider SLA / 凭证就绪</h2>
+      </div>
+      <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/58">只读 · 无 live call</Badge>
+    </div>
+    {items.length === 0 ? (
+      <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/50">暂无 SLA/readiness 诊断</p>
+    ) : (
+      <div className="mt-5 grid grid-cols-1 gap-3">
+        {items.map((item, index) => (
+          <article key={`${item.provider}-${item.providerCategory || 'all'}-${item.routeFamily || 'all'}-${index}`} className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-white">{safeText(item.provider)}</p>
+                <DimensionLine provider={item.provider} providerCategory={item.providerCategory} routeFamily={item.routeFamily} />
+              </div>
+              <span className={cn('shrink-0 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-semibold', toneClass(readinessTone(item.readinessState)))}>
+                {credentialLabel(item.credentialState)}
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
+              <p>Latency <span className="block truncate font-mono text-white/68">{latencyLabel(item.latencyState)} · {safeText(item.latencyBucketMs)} ms</span></p>
+              <p>Freshness <span className="block truncate font-mono text-white/68">{freshnessLabel(item.freshnessState)} · {safeText(item.freshnessSeconds)} s</span></p>
+              <p>Error state <span className="block truncate font-mono text-white/68">{safeText(item.errorState)} · {safeText(item.errorRate)}</span></p>
+              <p>Circuit advisory <span className="block truncate font-mono text-white/68">{safeText(item.circuitAdvisoryState)} / {stateLabel(item.circuitStateCandidate)}</span></p>
+              <p>Credentials <span className="block truncate font-mono text-white/68">{boolLabel(item.credentialsPresent)} · dry-run {boolLabel(item.dryRunEnabled)}</span></p>
+              <p>Live calls <span className="block truncate font-mono text-white/68">{boolLabel(item.liveHttpCallsEnabled)}</span></p>
+              <p>Ordering / fallback <span className="block truncate font-mono text-white/68">{boolLabel(item.wouldChangeProviderOrder)} / {boolLabel(item.wouldChangeFallbackBehavior)}</span></p>
+              <p>Would block <span className="block truncate font-mono text-white/68">{boolLabel(item.wouldBlockCall)}</span></p>
+            </div>
+            <details className="mt-3 rounded-2xl border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px] text-white/48">
+              <summary className="cursor-pointer select-none text-white/60">最近错误 buckets</summary>
+              <div className="mt-2 space-y-1">
+                {(item.recentErrors || []).length === 0 ? (
+                  <p>暂无错误 bucket</p>
+                ) : item.recentErrors.map((error) => (
+                  <p key={`${error.reasonBucket}-${error.latestAt || 'none'}`} className="font-mono">
+                    {bucketLabel(error.reasonBucket)} · {safeText(error.countBucket)} · {safeDate(error.latestAt)}
+                  </p>
+                ))}
+              </div>
+            </details>
+          </article>
+        ))}
+      </div>
+    )}
+  </GlassCard>
+);
+
 const BoundaryPanel: React.FC = () => (
   <GlassCard as="section" className="p-4 md:p-5">
     <div className="flex items-start gap-3">
@@ -324,6 +423,7 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
       events: data?.events.items.length || 0,
       quotaWindows: data?.quotaWindows.items.length || 0,
       probeEvents: data?.probeEvents.items.length || 0,
+      slaReadiness: data?.slaReadiness.items.length || 0,
     };
   }, [data]);
 
@@ -351,9 +451,10 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
           <ReadOnlyBadges data={data} />
         </div>
         {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <SummaryTile label="状态" value={summary.states || '--'} tone="info" />
           <SummaryTile label="打开/阻断" value={summary.open || 0} tone={summary.open ? 'danger' : 'good'} />
+          <SummaryTile label="SLA" value={summary.slaReadiness || '--'} tone="info" />
           <SummaryTile label="事件" value={summary.events || '--'} tone="info" />
           <SummaryTile label="配额窗口" value={summary.quotaWindows || '--'} tone="neutral" />
           <SummaryTile label="探测" value={summary.probeEvents || '--'} tone="neutral" />
@@ -361,6 +462,10 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
       </GlassCard>
 
       {isLoading && !data && !error ? <LoadingState /> : null}
+
+      <div className="mt-5 shrink-0">
+        <SlaReadinessPanel items={data?.slaReadiness.items || []} />
+      </div>
 
       <div className="mt-5 grid shrink-0 grid-cols-1 gap-5 xl:grid-cols-12">
         <div className="min-w-0 xl:col-span-8">

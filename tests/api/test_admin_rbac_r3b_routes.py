@@ -255,6 +255,7 @@ def test_provider_circuit_diagnostics_require_provider_read_capability() -> None
     assert read_client.get("/api/v1/admin/providers/circuits/events").status_code == 200
     assert read_client.get("/api/v1/admin/providers/quota-windows").status_code == 200
     assert read_client.get("/api/v1/admin/providers/probe-events").status_code == 200
+    assert read_client.get("/api/v1/admin/providers/sla-readiness").status_code == 200
 
     write_only_client = _client(_user(capabilities=("ops:providers:write",)))
     denied = write_only_client.get("/api/v1/admin/providers/circuits")

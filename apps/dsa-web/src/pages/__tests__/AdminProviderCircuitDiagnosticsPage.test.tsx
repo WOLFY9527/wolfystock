@@ -107,6 +107,44 @@ const response = {
       },
     ],
   },
+  slaReadiness: {
+    generatedAt: '2026-05-06T09:10:00+08:00',
+    metadata: { readOnly: true, noExternalCalls: true, liveEnforcement: false, providerBehaviorChanged: false, marketCacheBehaviorChanged: false, dataSources: [], redaction: [], limit: 50, filters: {} },
+    items: [
+      {
+        provider: 'tradier',
+        providerCategory: 'options',
+        routeFamily: 'options_lab',
+        readinessState: 'live_credentials_present_live_calls_disabled',
+        reasonCode: 'options_provider_live_calls_disabled',
+        credentialState: 'configured',
+        liveProvidersEnabled: true,
+        providerEnabled: true,
+        credentialsPresent: true,
+        dryRunEnabled: false,
+        liveHttpCallsEnabled: false,
+        brokerOrderPathEnabled: false,
+        portfolioMutationPathEnabled: false,
+        tradeableData: false,
+        latencyBucketMs: 1500,
+        latencyState: 'slow',
+        errorRate: 0.2,
+        errorState: 'elevated',
+        freshnessSeconds: 300,
+        freshnessState: 'fresh',
+        recentErrors: [
+          { reasonBucket: 'timeout', countBucket: '1', latestAt: '2026-05-06T09:07:00+08:00' },
+        ],
+        circuitAdvisoryState: 'open_candidate',
+        circuitStateCandidate: 'open',
+        liveEnforcement: false,
+        wouldBlockCall: false,
+        wouldChangeProviderOrder: false,
+        wouldChangeFallbackBehavior: false,
+        noExternalCalls: true,
+      },
+    ],
+  },
 };
 
 describe('AdminProviderCircuitDiagnosticsPage', () => {
@@ -127,6 +165,9 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.getByText('最近熔断事件')).toBeInTheDocument();
     expect(screen.getAllByText('配额窗口').length).toBeGreaterThan(0);
     expect(screen.getByText('探测事件')).toBeInTheDocument();
+    expect(screen.getByText('Provider SLA / 凭证就绪')).toBeInTheDocument();
+    expect(screen.getByText('已配置')).toBeInTheDocument();
+    expect(screen.getByText('最近错误 buckets')).toBeInTheDocument();
     expect(screen.getByText('不触发外部调用')).toBeInTheDocument();
     expect(screen.getByText('不执行熔断 enforcement')).toBeInTheDocument();
     expect(screen.queryByText('SECRET')).not.toBeInTheDocument();

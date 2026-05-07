@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,7 +20,16 @@ from api.v1.schemas.admin_provider_circuits import (
     ProviderProbeEventsResponse,
     ProviderQuotaWindowItem,
     ProviderQuotaWindowsResponse,
+    ProviderRecentErrorBucketItem,
+    ProviderSlaReadinessItem,
+    ProviderSlaReadinessResponse,
 )
+from src.services.options_market_data_provider import (
+    LIVE_OPTIONS_PROVIDER_NAMES,
+    OptionsLiveProviderConfig,
+    build_options_provider_live_readiness_preflight,
+)
+from src.services.provider_circuit_observer import ProviderCircuitObserver
 from src.storage import (
     DatabaseManager,
     ProviderCircuitEvent,
@@ -40,6 +49,8 @@ _REDACTION_NOTES = [
     "raw_provider_payloads_omitted",
     "urls_query_strings_credentials_sessions_and_stack_traces_omitted",
 ]
+_OPTIONS_PROVIDER_CATEGORY = "options"
+_OPTIONS_ROUTE_FAMILY = "options_lab"
 
 
 def _safe_limit(value: int | None) -> int:
@@ -146,6 +157,99 @@ def _probe_event_item(row: ProviderProbeEvent) -> ProviderProbeEventItem:
         durationBucketMs=row.duration_bucket_ms,
         createdAt=row.created_at.isoformat() if row.created_at else None,
     )
+
+
+def _credential_state(preflight: dict[str, Any]) -> str:
+    readiness_state = str(preflight.get("readinessState") or "unknown")
+    if readiness_state in {"disabled", "missing_credentials", "live_credentials_present_live_calls_disabled", "dry_run_enabled"}:
+        return readiness_state
+    if preflight.get("credentialsPresent") is True:
+        return "credentials_present"
+    return "unknown"
+
+
+def _sla_item_from_diagnostics(
+    diagnostics: dict[str, Any],
+    *,
+    preflight: dict[str, Any] | None = None,
+) -> ProviderSlaReadinessItem:
+    preflight = preflight or {}
+    sla = dict(diagnostics.get("sla") or {})
+    circuit = dict(diagnostics.get("circuitPreflight") or {})
+    recent_errors = [
+        ProviderRecentErrorBucketItem(
+            reasonBucket=str(item.get("reasonBucket") or "unknown"),
+            countBucket=str(item.get("countBucket") or "1"),
+            latestAt=item.get("latestAt"),
+        )
+        for item in diagnostics.get("recentErrors") or []
+        if isinstance(item, dict)
+    ]
+    return ProviderSlaReadinessItem(
+        provider=str(diagnostics.get("provider") or preflight.get("providerName") or "unknown"),
+        providerCategory=diagnostics.get("providerCategory") or _OPTIONS_PROVIDER_CATEGORY,
+        routeFamily=diagnostics.get("routeFamily") or _OPTIONS_ROUTE_FAMILY,
+        observedSince=str(diagnostics.get("observedSince") or ""),
+        readinessState=str(preflight.get("readinessState") or "observed"),
+        reasonCode=str(preflight.get("reasonCode") or "stored_provider_observations"),
+        credentialState=_credential_state(preflight),
+        liveProvidersEnabled=bool(preflight.get("liveProvidersEnabled") is True),
+        providerEnabled=bool(preflight.get("providerEnabled") is True),
+        credentialsPresent=bool(preflight.get("credentialsPresent") is True),
+        dryRunEnabled=bool(preflight.get("dryRunEnabled") is True),
+        liveHttpCallsEnabled=False,
+        brokerOrderPathEnabled=False,
+        portfolioMutationPathEnabled=False,
+        tradeableData=False,
+        latencyBucketMs=sla.get("latencyBucketMs"),
+        latencyState=str(sla.get("latencyState") or "unknown"),
+        errorRate=sla.get("errorRate"),
+        errorState=str(sla.get("errorState") or "unknown"),
+        freshnessSeconds=sla.get("freshnessSeconds"),
+        freshnessState=str(sla.get("freshnessState") or "unknown"),
+        recentErrors=recent_errors,
+        circuitAdvisoryState=str(circuit.get("preflight_state") or "healthy"),
+        circuitStateCandidate=str(circuit.get("state_candidate") or "closed"),
+        liveEnforcement=False,
+        wouldBlockCall=False,
+        wouldChangeProviderOrder=False,
+        wouldChangeFallbackBehavior=False,
+        noExternalCalls=True,
+        providerBehaviorChanged=False,
+        marketCacheBehaviorChanged=False,
+    )
+
+
+def _observed_provider_dimensions(
+    *,
+    provider: str | None,
+    route_family: str | None,
+    since_dt: datetime,
+    limit: int,
+) -> list[tuple[str, str | None, str | None]]:
+    query = select(ProviderQuotaWindow.provider, ProviderQuotaWindow.provider_category, ProviderQuotaWindow.route_family).where(
+        ProviderQuotaWindow.window_end >= since_dt
+    )
+    if provider:
+        query = query.where(ProviderQuotaWindow.provider == provider)
+    if route_family:
+        query = query.where(ProviderQuotaWindow.route_family == route_family)
+    event_query = select(ProviderCircuitEvent.provider, ProviderCircuitEvent.provider_category, ProviderCircuitEvent.route_family).where(
+        ProviderCircuitEvent.created_at >= since_dt
+    )
+    if provider:
+        event_query = event_query.where(ProviderCircuitEvent.provider == provider)
+    if route_family:
+        event_query = event_query.where(ProviderCircuitEvent.route_family == route_family)
+
+    db = DatabaseManager.get_instance()
+    seen: set[tuple[str, str | None, str | None]] = set()
+    with db.get_session() as session:
+        for row in session.execute(query.limit(limit)).all() + session.execute(event_query.limit(limit)).all():
+            provider_name = str(row[0] or "").strip()
+            if provider_name:
+                seen.add((provider_name, row[1], row[2]))
+    return sorted(seen)
 
 
 @router.get(
@@ -305,4 +409,71 @@ def get_provider_probe_events(
         generatedAt=datetime.now().isoformat(),
         items=[_probe_event_item(row) for row in rows],
         metadata=_metadata(table="provider_probe_events", limit=safe_limit, filters=filters),
+    )
+
+
+@router.get(
+    "/providers/sla-readiness",
+    response_model=ProviderSlaReadinessResponse,
+    summary="Get read-only provider SLA and readiness diagnostics",
+)
+def get_provider_sla_readiness(
+    provider: str | None = Query(default=None),
+    routeFamily: str | None = Query(default=None),
+    since: str | None = Query(default=None),
+    limit: int = Query(default=50),
+    _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
+) -> ProviderSlaReadinessResponse:
+    safe_provider = _safe_filter(provider)
+    safe_route = _safe_filter(routeFamily)
+    since_dt = _parse_since(since) or (datetime.now() - timedelta(hours=24))
+    safe_limit = _safe_limit(limit)
+    observer = ProviderCircuitObserver()
+    live_config = OptionsLiveProviderConfig.from_env()
+    items: list[ProviderSlaReadinessItem] = []
+
+    include_options = safe_route in (None, _OPTIONS_ROUTE_FAMILY)
+    option_providers = sorted(LIVE_OPTIONS_PROVIDER_NAMES)
+    if safe_provider:
+        option_providers = [name for name in option_providers if name == safe_provider]
+    if include_options:
+        for provider_name in option_providers:
+            preflight = build_options_provider_live_readiness_preflight(provider_name, config=live_config)
+            diagnostics = observer.build_sla_readiness_diagnostics(
+                provider=provider_name,
+                provider_category=_OPTIONS_PROVIDER_CATEGORY,
+                route_family=_OPTIONS_ROUTE_FAMILY,
+                observed_since=since_dt,
+                limit=safe_limit,
+            )
+            items.append(_sla_item_from_diagnostics(diagnostics, preflight=preflight))
+
+    for observed_provider, observed_category, observed_route in _observed_provider_dimensions(
+        provider=safe_provider,
+        route_family=safe_route,
+        since_dt=since_dt,
+        limit=safe_limit,
+    ):
+        if (observed_provider, observed_category, observed_route) in {
+            (item.provider, item.provider_category, item.route_family) for item in items
+        }:
+            continue
+        diagnostics = observer.build_sla_readiness_diagnostics(
+            provider=observed_provider,
+            provider_category=observed_category,
+            route_family=observed_route,
+            observed_since=since_dt,
+            limit=safe_limit,
+        )
+        items.append(_sla_item_from_diagnostics(diagnostics))
+
+    filters = {"provider": safe_provider, "routeFamily": safe_route, "since": since or since_dt.isoformat()}
+    return ProviderSlaReadinessResponse(
+        generatedAt=datetime.now().isoformat(),
+        items=items[:safe_limit],
+        metadata=_metadata(
+            table="provider_quota_windows,provider_circuit_events,options_live_provider_preflight",
+            limit=safe_limit,
+            filters=filters,
+        ),
     )

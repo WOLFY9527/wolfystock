@@ -180,6 +180,7 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
             self.client.get("/api/v1/admin/providers/circuits/events"),
             self.client.get("/api/v1/admin/providers/quota-windows"),
             self.client.get("/api/v1/admin/providers/probe-events"),
+            self.client.get("/api/v1/admin/providers/sla-readiness"),
         )
 
         for response in responses:
@@ -327,7 +328,7 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
             patch("src.services.scanner_ai_service.ScannerAiInterpretationService.interpret_shortlist", side_effect=forbidden),
             patch("requests.sessions.Session.request", side_effect=forbidden),
         ):
-            response = self.client.get("/api/v1/admin/providers/circuits")
+            response = self.client.get("/api/v1/admin/providers/sla-readiness")
 
         self.assertEqual(response.status_code, 200)
 
@@ -385,6 +386,82 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         ).lower()
         self.assertNotIn("must-not-leak", text)
         self.assertNotIn("https://provider.example", text)
+
+    def test_sla_readiness_endpoint_exposes_sanitized_readiness_without_live_calls(self) -> None:
+        self._as_provider_read_admin()
+        observer = ProviderCircuitObserver(db=self.db)
+        observer.record_observation(
+            provider="FMP",
+            provider_category="quote",
+            route_family="analysis",
+            result_bucket="timeout",
+            duration_ms=1200,
+            observed_at=datetime(2026, 5, 6, 10, 15, 0),
+            metadata={
+                "safe_label": "observer_fixture",
+                "url": "https://provider.example.test/raw?api_key=must-not-leak",
+                "raw_response": "must-not-leak",
+            },
+        )
+
+        with patch("requests.sessions.Session.request") as request_mock:
+            response = self.client.get(
+                "/api/v1/admin/providers/sla-readiness",
+                params={"provider": "fmp", "since": "2026-05-06T00:00:00"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        request_mock.assert_not_called()
+        payload = response.json()
+        self.assertTrue(payload["metadata"]["readOnly"])
+        self.assertTrue(payload["metadata"]["noExternalCalls"])
+        self.assertFalse(payload["metadata"]["liveEnforcement"])
+        fmp = payload["items"][0]
+        self.assertEqual(fmp["provider"], "fmp")
+        self.assertEqual(fmp["providerCategory"], "quote")
+        self.assertEqual(fmp["routeFamily"], "analysis")
+        self.assertEqual(fmp["latencyBucketMs"], 1500)
+        self.assertEqual(fmp["latencyState"], "slow")
+        self.assertIn(fmp["freshnessState"], {"fresh", "stale", "expired"})
+        self.assertEqual(fmp["recentErrors"][0]["reasonBucket"], "timeout")
+        self.assertEqual(fmp["credentialState"], "unknown")
+        self.assertEqual(fmp["circuitAdvisoryState"], "open_candidate")
+        self.assertFalse(fmp["liveEnforcement"])
+        self.assertFalse(fmp["wouldBlockCall"])
+        self.assertFalse(fmp["wouldChangeProviderOrder"])
+        self.assertFalse(fmp["wouldChangeFallbackBehavior"])
+        text = self._json_text(payload).lower()
+        for blocked in ("must-not-leak", "api_key", "raw_response", "https://provider.example", "token"):
+            self.assertNotIn(blocked, text)
+
+    def test_sla_readiness_endpoint_exposes_options_credential_states_as_booleans_only(self) -> None:
+        self._as_provider_read_admin()
+        env = {
+            "OPTIONS_LIVE_PROVIDERS_ENABLED": "1",
+            "OPTIONS_LIVE_PROVIDER_KEYS": "tradier",
+            "TRADIER_API_TOKEN": "must-not-leak",
+        }
+
+        with patch.dict(os.environ, env, clear=True), patch("requests.sessions.Session.request") as request_mock:
+            response = self.client.get("/api/v1/admin/providers/sla-readiness", params={"provider": "tradier"})
+
+        self.assertEqual(response.status_code, 200)
+        request_mock.assert_not_called()
+        item = response.json()["items"][0]
+        self.assertEqual(item["provider"], "tradier")
+        self.assertEqual(item["readinessState"], "live_credentials_present_live_calls_disabled")
+        self.assertEqual(item["credentialState"], "live_credentials_present_live_calls_disabled")
+        self.assertTrue(item["liveProvidersEnabled"])
+        self.assertTrue(item["providerEnabled"])
+        self.assertTrue(item["credentialsPresent"])
+        self.assertFalse(item["dryRunEnabled"])
+        self.assertFalse(item["liveHttpCallsEnabled"])
+        self.assertFalse(item["brokerOrderPathEnabled"])
+        self.assertFalse(item["portfolioMutationPathEnabled"])
+        self.assertFalse(item["tradeableData"])
+        text = self._json_text(response.json()).lower()
+        for blocked in ("must-not-leak", "tradier_api_token", "api_token", "token"):
+            self.assertNotIn(blocked, text)
 
 
 if __name__ == "__main__":

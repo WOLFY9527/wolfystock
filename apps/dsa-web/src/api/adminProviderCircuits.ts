@@ -83,6 +83,43 @@ export interface ProviderProbeEventItem {
   createdAt?: string | null;
 }
 
+export interface ProviderRecentErrorBucketItem {
+  reasonBucket: string;
+  countBucket: string;
+  latestAt?: string | null;
+}
+
+export interface ProviderSlaReadinessItem {
+  provider: string;
+  providerCategory?: string | null;
+  routeFamily?: string | null;
+  readinessState: string;
+  reasonCode: string;
+  credentialState: string;
+  liveProvidersEnabled: boolean;
+  providerEnabled: boolean;
+  credentialsPresent: boolean;
+  dryRunEnabled: boolean;
+  liveHttpCallsEnabled: boolean;
+  brokerOrderPathEnabled: boolean;
+  portfolioMutationPathEnabled: boolean;
+  tradeableData: boolean;
+  latencyBucketMs?: number | null;
+  latencyState: string;
+  errorRate?: number | null;
+  errorState: string;
+  freshnessSeconds?: number | null;
+  freshnessState: string;
+  recentErrors: ProviderRecentErrorBucketItem[];
+  circuitAdvisoryState: string;
+  circuitStateCandidate: string;
+  liveEnforcement: boolean;
+  wouldBlockCall: boolean;
+  wouldChangeProviderOrder: boolean;
+  wouldChangeFallbackBehavior: boolean;
+  noExternalCalls: boolean;
+}
+
 export interface ProviderCircuitResponse<T> {
   generatedAt: string;
   items: T[];
@@ -94,6 +131,7 @@ export interface ProviderCircuitDiagnosticsBundle {
   events: ProviderCircuitResponse<ProviderCircuitEventItem>;
   quotaWindows: ProviderCircuitResponse<ProviderQuotaWindowItem>;
   probeEvents: ProviderCircuitResponse<ProviderProbeEventItem>;
+  slaReadiness: ProviderCircuitResponse<ProviderSlaReadinessItem>;
 }
 
 function safeArray<T>(value: unknown): T[] {
@@ -173,13 +211,21 @@ export const adminProviderCircuitsApi = {
     return normalizeResponse<ProviderProbeEventItem>(response.data);
   },
 
+  async getSlaReadiness(params: ProviderCircuitDiagnosticsParams = {}): Promise<ProviderCircuitResponse<ProviderSlaReadinessItem>> {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/providers/sla-readiness', {
+      params: toSafeQuery(params),
+    });
+    return normalizeResponse<ProviderSlaReadinessItem>(response.data);
+  },
+
   async getDiagnostics(params: ProviderCircuitDiagnosticsParams = {}): Promise<ProviderCircuitDiagnosticsBundle> {
-    const [states, events, quotaWindows, probeEvents] = await Promise.all([
+    const [states, events, quotaWindows, probeEvents, slaReadiness] = await Promise.all([
       adminProviderCircuitsApi.getStates(params),
       adminProviderCircuitsApi.getEvents(params),
       adminProviderCircuitsApi.getQuotaWindows(params),
       adminProviderCircuitsApi.getProbeEvents(params),
+      adminProviderCircuitsApi.getSlaReadiness(params),
     ]);
-    return { states, events, quotaWindows, probeEvents };
+    return { states, events, quotaWindows, probeEvents, slaReadiness };
   },
 };

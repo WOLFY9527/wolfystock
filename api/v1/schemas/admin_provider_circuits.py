@@ -75,6 +75,46 @@ class ProviderProbeEventItem(_AdminProviderCircuitModel):
     created_at: Optional[str] = Field(default=None, alias="createdAt")
 
 
+class ProviderRecentErrorBucketItem(_AdminProviderCircuitModel):
+    reason_bucket: str = Field(alias="reasonBucket")
+    count_bucket: str = Field(alias="countBucket")
+    latest_at: Optional[str] = Field(default=None, alias="latestAt")
+
+
+class ProviderSlaReadinessItem(_AdminProviderCircuitModel):
+    provider: str
+    provider_category: Optional[str] = Field(default=None, alias="providerCategory")
+    route_family: Optional[str] = Field(default=None, alias="routeFamily")
+    observed_since: str = Field(alias="observedSince")
+    readiness_state: str = Field(alias="readinessState")
+    reason_code: str = Field(alias="reasonCode")
+    credential_state: str = Field(alias="credentialState")
+    live_providers_enabled: bool = Field(default=False, alias="liveProvidersEnabled")
+    provider_enabled: bool = Field(default=False, alias="providerEnabled")
+    credentials_present: bool = Field(default=False, alias="credentialsPresent")
+    dry_run_enabled: bool = Field(default=False, alias="dryRunEnabled")
+    live_http_calls_enabled: bool = Field(default=False, alias="liveHttpCallsEnabled")
+    broker_order_path_enabled: bool = Field(default=False, alias="brokerOrderPathEnabled")
+    portfolio_mutation_path_enabled: bool = Field(default=False, alias="portfolioMutationPathEnabled")
+    tradeable_data: bool = Field(default=False, alias="tradeableData")
+    latency_bucket_ms: Optional[int] = Field(default=None, alias="latencyBucketMs")
+    latency_state: str = Field(default="unknown", alias="latencyState")
+    error_rate: Optional[float] = Field(default=None, alias="errorRate")
+    error_state: str = Field(default="unknown", alias="errorState")
+    freshness_seconds: Optional[int] = Field(default=None, alias="freshnessSeconds")
+    freshness_state: str = Field(default="unknown", alias="freshnessState")
+    recent_errors: List[ProviderRecentErrorBucketItem] = Field(default_factory=list, alias="recentErrors")
+    circuit_advisory_state: str = Field(default="healthy", alias="circuitAdvisoryState")
+    circuit_state_candidate: str = Field(default="closed", alias="circuitStateCandidate")
+    live_enforcement: bool = Field(default=False, alias="liveEnforcement")
+    would_block_call: bool = Field(default=False, alias="wouldBlockCall")
+    would_change_provider_order: bool = Field(default=False, alias="wouldChangeProviderOrder")
+    would_change_fallback_behavior: bool = Field(default=False, alias="wouldChangeFallbackBehavior")
+    no_external_calls: bool = Field(default=True, alias="noExternalCalls")
+    provider_behavior_changed: bool = Field(default=False, alias="providerBehaviorChanged")
+    market_cache_behavior_changed: bool = Field(default=False, alias="marketCacheBehaviorChanged")
+
+
 class ProviderCircuitDiagnosticsMetadata(_AdminProviderCircuitModel):
     read_only: bool = Field(default=True, alias="readOnly")
     no_external_calls: bool = Field(default=True, alias="noExternalCalls")
@@ -108,4 +148,10 @@ class ProviderQuotaWindowsResponse(_AdminProviderCircuitModel):
 class ProviderProbeEventsResponse(_AdminProviderCircuitModel):
     generated_at: str = Field(alias="generatedAt")
     items: List[ProviderProbeEventItem] = Field(default_factory=list)
+    metadata: ProviderCircuitDiagnosticsMetadata
+
+
+class ProviderSlaReadinessResponse(_AdminProviderCircuitModel):
+    generated_at: str = Field(alias="generatedAt")
+    items: List[ProviderSlaReadinessItem] = Field(default_factory=list)
     metadata: ProviderCircuitDiagnosticsMetadata
