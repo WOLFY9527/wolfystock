@@ -36,6 +36,7 @@ def _admin_user() -> CurrentUser:
         is_authenticated=True,
         transitional=False,
         auth_enabled=True,
+        admin_capabilities=("cost:observability:read",),
     )
 
 
@@ -49,6 +50,20 @@ def _regular_user() -> CurrentUser:
         is_authenticated=True,
         transitional=False,
         auth_enabled=True,
+    )
+
+
+def _admin_without_cost_capability() -> CurrentUser:
+    return CurrentUser(
+        user_id=BOOTSTRAP_ADMIN_USER_ID,
+        username="admin",
+        display_name="Admin",
+        role="admin",
+        is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        admin_capabilities=("users:read",),
     )
 
 
@@ -78,6 +93,9 @@ class AdminCostSummaryApiTestCase(unittest.TestCase):
 
     def _as_user(self) -> None:
         self.app.dependency_overrides[get_current_user] = _regular_user
+
+    def _as_admin_without_cost_capability(self) -> None:
+        self.app.dependency_overrides[get_current_user] = _admin_without_cost_capability
 
     @staticmethod
     def _json_text(payload) -> str:
@@ -302,6 +320,11 @@ class AdminCostSummaryApiTestCase(unittest.TestCase):
         forbidden = self.client.get("/api/v1/admin/cost/llm-ledger-summary")
         self.assertEqual(forbidden.status_code, 403)
 
+        self._as_admin_without_cost_capability()
+        missing_capability = self.client.get("/api/v1/admin/cost/llm-ledger-summary")
+        self.assertEqual(missing_capability.status_code, 403)
+        self.assertEqual(missing_capability.json()["detail"]["error"], "admin_capability_required")
+
     def test_model_pricing_policies_returns_read_only_sanitized_rows(self) -> None:
         self._as_admin()
         self.db.upsert_model_pricing_policy(
@@ -367,6 +390,11 @@ class AdminCostSummaryApiTestCase(unittest.TestCase):
         self._as_user()
         forbidden = self.client.get("/api/v1/admin/cost/model-pricing-policies")
         self.assertEqual(forbidden.status_code, 403)
+
+        self._as_admin_without_cost_capability()
+        missing_capability = self.client.get("/api/v1/admin/cost/model-pricing-policies")
+        self.assertEqual(missing_capability.status_code, 403)
+        self.assertEqual(missing_capability.json()["detail"]["error"], "admin_capability_required")
 
 
 if __name__ == "__main__":

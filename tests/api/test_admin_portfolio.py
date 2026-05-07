@@ -34,7 +34,14 @@ from src.storage import (
 )
 
 
-def _admin_user(user_id: str = BOOTSTRAP_ADMIN_USER_ID) -> CurrentUser:
+def _admin_user(
+    user_id: str = BOOTSTRAP_ADMIN_USER_ID,
+    *,
+    admin_capabilities: tuple[str, ...] | None = None,
+) -> CurrentUser:
+    effective_capabilities = admin_capabilities
+    if effective_capabilities is None and user_id == BOOTSTRAP_ADMIN_USER_ID:
+        effective_capabilities = ("users:portfolio:read",)
     return CurrentUser(
         user_id=user_id,
         username="admin" if user_id == BOOTSTRAP_ADMIN_USER_ID else user_id,
@@ -45,6 +52,7 @@ def _admin_user(user_id: str = BOOTSTRAP_ADMIN_USER_ID) -> CurrentUser:
         transitional=False,
         auth_enabled=True,
         session_id="admin-session-raw",
+        admin_capabilities=tuple(effective_capabilities or ()),
     )
 
 
