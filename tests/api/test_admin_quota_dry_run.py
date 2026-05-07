@@ -358,6 +358,14 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertTrue(alert_intent["dryRun"])
         self.assertFalse(alert_intent["outboundAttempted"])
         self.assertFalse(alert_intent["liveOutbound"])
+        operator_review = payload["metadata"]["operatorReview"]
+        self.assertEqual(operator_review["quotaDecisionMode"], "advisory")
+        self.assertEqual(operator_review["quotaStatusLabel"], "pilot_advisory")
+        self.assertEqual(operator_review["pilotStatusLabel"], "pilot_owner_out_of_scope")
+        self.assertEqual(operator_review["budgetAlertDeliveryStatusLabel"], "suppressed_advisory_only")
+        self.assertEqual(operator_review["rollbackLabel"], "no_runtime_change_to_rollback")
+        self.assertFalse(operator_review["globalEnforcementChanged"])
+        self.assertFalse(operator_review["realOutboundNotification"])
 
     def test_enabled_pilot_out_of_scope_reserve_does_not_write_quota_state(self) -> None:
         self._as_admin()
@@ -442,6 +450,20 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertTrue(alert_intent["safety"]["noExternalCalls"])
         self.assertFalse(alert_intent["safety"]["realOutboundNotification"])
         self.assertFalse(alert_intent["safety"]["liveInvoiceIngestion"])
+        self.assertEqual(alert_intent["operatorReview"]["statusLabel"], "dry_run_intent")
+        self.assertEqual(alert_intent["operatorReview"]["deliveryStatusLabel"], "dry_run_disabled")
+        self.assertEqual(alert_intent["operatorReview"]["rollbackLabel"], "disable_pilot_mode_before_delivery_wiring")
+        operator_review = payload["metadata"]["operatorReview"]
+        self.assertEqual(operator_review["quotaDecisionMode"], "pilot_enforced")
+        self.assertEqual(operator_review["quotaStatusLabel"], "pilot_enforced_block")
+        self.assertEqual(operator_review["pilotStatusLabel"], "pilot_would_enforce_block")
+        self.assertEqual(operator_review["budgetAlertDeliveryStatusLabel"], "dry_run_disabled")
+        self.assertEqual(
+            operator_review["rollbackLabel"],
+            "remove_owner_from_pilot_allowlist_or_disable_pilot_mode",
+        )
+        self.assertFalse(operator_review["globalEnforcementChanged"])
+        self.assertFalse(operator_review["realOutboundNotification"])
 
     def test_admin_dry_run_distinguishes_advisory_from_pilot_enforced_decisions(self) -> None:
         self._as_admin()
@@ -506,6 +528,9 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
                 self.assertEqual(payload["wouldBlock"], would_block)
                 self.assertEqual(payload["metadata"]["pilotReadiness"]["state"], pilot_state)
                 self.assertFalse(payload["metadata"]["invoiceReconciliation"]["enforcementInput"])
+                self.assertEqual(payload["metadata"]["operatorReview"]["quotaDecisionMode"], decision_mode)
+                self.assertEqual(payload["metadata"]["operatorReview"]["pilotStatusLabel"], pilot_state)
+                self.assertFalse(payload["metadata"]["operatorReview"]["globalEnforcementChanged"])
 
     def test_dry_run_pilot_readiness_sanitizes_scope_context(self) -> None:
         self._as_admin()

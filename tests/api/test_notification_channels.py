@@ -16,6 +16,7 @@ from api.deps import CurrentUser, get_current_user
 from api.v1 import api_v1_router
 from api.v1.endpoints import admin_logs, admin_notifications
 from src.services.notification_service import NotificationDeliveryClient, NotificationService
+from src.services.quota_policy_service import QuotaPolicyService
 from src.storage import DatabaseManager
 
 
@@ -212,6 +213,42 @@ class NotificationChannelsTestCase(unittest.TestCase):
                 event_types=["admin_logs.storage"],
                 config={},
             )
+
+    def test_quota_budget_alert_dry_run_intent_has_no_default_outbound_delivery(self) -> None:
+        self.db.upsert_quota_policy(
+            policy_key="user-budget-alerts",
+            scope_type="user",
+            daily_budget_units=120,
+            metadata={"daily_soft_limit_units": 100},
+        )
+        quota_service = QuotaPolicyService(db=self.db)
+        preflight = quota_service.classify_pilot_readiness_preflight(
+            owner_user_id="pilot-user",
+            route_family="analysis",
+            estimated_units=121,
+            pilot_enforcement_enabled=True,
+            pilot_owner_user_ids=("pilot-user",),
+            pilot_route_families=("analysis",),
+        )
+        intent = quota_service.build_budget_alert_notification_intent(preflight)
+
+        event = self.service.emit_event(
+            event_type=intent["eventType"],
+            severity=intent["severity"],
+            title="Quota budget alert dry-run",
+            message="Quota pilot alert rehearsal",
+            payload=intent,
+            fingerprint="quota-budget-alert:dry-run",
+        )
+
+        self.assertEqual(intent["state"], "dry_run_intent")
+        self.assertTrue(intent["dryRun"])
+        self.assertFalse(intent["outboundAttempted"])
+        self.assertFalse(intent["liveOutbound"])
+        self.assertFalse(intent["safety"]["realOutboundNotification"])
+        self.assertEqual(intent["operatorReview"]["deliveryStatusLabel"], "dry_run_disabled")
+        self.assertEqual(event["delivery_status"], "no_channels")
+        self.assertEqual(self.delivery.webhook_calls, [])
 
     def test_log_info_debug_events_are_not_exposed_to_admin_notifications(self) -> None:
         self.service.create_channel(

@@ -459,6 +459,19 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
                 self.assertEqual(preflight.advisory_only, advisory_only)
                 self.assertEqual(preflight.request_blocked, request_blocked)
                 self.assertEqual(preflight.live_enforcement, live_enforcement)
+                operator_review = preflight.to_dict()["operatorReview"]
+                self.assertEqual(operator_review["statusLabel"], state)
+                self.assertEqual(operator_review["requiresExplicitOwnerAllowlist"], True)
+                self.assertFalse(operator_review["globalEnforcementChanged"])
+                if request_blocked:
+                    self.assertEqual(operator_review["decisionLabel"], "pilot_enforced_would_block")
+                    self.assertEqual(
+                        operator_review["rollbackLabel"],
+                        "remove_owner_from_pilot_allowlist_or_disable_pilot_mode",
+                    )
+                else:
+                    self.assertEqual(operator_review["decisionLabel"], "advisory_only")
+                    self.assertEqual(operator_review["rollbackLabel"], "no_runtime_change_to_rollback")
 
     def test_pilot_readiness_marks_invoice_reconciliation_as_non_enforcement_input(self) -> None:
         self._seed_budget_alert_policy()
@@ -510,6 +523,11 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertFalse(intent["invoiceReconciliation"]["enforcementInput"])
         self.assertFalse(intent["invoiceReconciliation"]["liveInvoiceIngestion"])
         self.assertTrue(intent["safety"]["noExternalCalls"])
+        self.assertEqual(intent["operatorReview"]["statusLabel"], "dry_run_intent")
+        self.assertEqual(intent["operatorReview"]["deliveryStatusLabel"], "dry_run_disabled")
+        self.assertEqual(intent["operatorReview"]["rollbackLabel"], "disable_pilot_mode_before_delivery_wiring")
+        self.assertFalse(intent["operatorReview"]["realOutboundNotification"])
+        self.assertFalse(intent["operatorReview"]["globalEnforcementChanged"])
         text = str(intent).lower()
         self.assertNotIn("must-not-leak", text)
         self.assertNotIn("raw-token", text)
@@ -543,6 +561,10 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertFalse(intent["liveOutbound"])
         self.assertTrue(intent["invoiceReconciliation"]["advisoryOnly"])
         self.assertFalse(intent["invoiceReconciliation"]["enforcementInput"])
+        self.assertEqual(intent["operatorReview"]["statusLabel"], "suppressed_advisory_only")
+        self.assertEqual(intent["operatorReview"]["deliveryStatusLabel"], "suppressed_advisory_only")
+        self.assertEqual(intent["operatorReview"]["rollbackLabel"], "no_runtime_change_to_rollback")
+        self.assertFalse(intent["operatorReview"]["realOutboundNotification"])
 
     def test_budget_alert_notification_intent_does_not_enable_default_quota_enforcement(self) -> None:
         self._seed_budget_alert_policy()

@@ -216,6 +216,15 @@ def run_quota_dry_run(
             "shadowPreflight": shadow_preflight_payload,
             "pilotReadiness": pilot_readiness_payload,
             "invoiceReconciliation": pilot_readiness_payload["invoiceReconciliation"],
+            "operatorReview": {
+                "quotaDecisionMode": quota_decision_mode,
+                "quotaStatusLabel": response_status,
+                "pilotStatusLabel": pilot_readiness_payload["operatorReview"]["statusLabel"],
+                "budgetAlertDeliveryStatusLabel": budget_alert_notification_payload["operatorReview"]["deliveryStatusLabel"],
+                "rollbackLabel": pilot_readiness_payload["operatorReview"]["rollbackLabel"],
+                "globalEnforcementChanged": False,
+                "realOutboundNotification": False,
+            },
             "dataSources": ["quota_policy_definitions", "quota_usage_windows", "quota_reservations"],
             "redaction": [
                 "prompt_content",

@@ -151,6 +151,17 @@ class QuotaPilotReadinessPreflight:
                 "liveLlmCalls": False,
                 "runtimeWiringChanged": False,
             },
+            "operatorReview": {
+                "statusLabel": self.state,
+                "decisionLabel": "pilot_enforced_would_block" if self.request_blocked else "advisory_only",
+                "rollbackLabel": (
+                    "remove_owner_from_pilot_allowlist_or_disable_pilot_mode"
+                    if self.request_blocked
+                    else "no_runtime_change_to_rollback"
+                ),
+                "requiresExplicitOwnerAllowlist": True,
+                "globalEnforcementChanged": False,
+            },
         }
 
 
@@ -564,6 +575,17 @@ class QuotaPolicyService:
                 "liveInvoiceIngestion": False,
                 "realOutboundNotification": False,
                 "runtimeWiringChanged": False,
+            },
+            "operatorReview": {
+                "statusLabel": state,
+                "deliveryStatusLabel": delivery_status,
+                "rollbackLabel": (
+                    "disable_pilot_mode_before_delivery_wiring"
+                    if should_emit_alert
+                    else "no_runtime_change_to_rollback"
+                ),
+                "realOutboundNotification": False,
+                "globalEnforcementChanged": False,
             },
         }
 
