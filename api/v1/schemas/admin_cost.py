@@ -130,6 +130,7 @@ class QuotaDryRunRequest(_AdminCostModel):
     reservation_id: Optional[str] = Field(default=None, alias="reservationId")
     actual_units: Optional[int] = Field(default=None, alias="actualUnits", ge=0)
     global_kill_switch: bool = Field(default=False, alias="globalKillSwitch")
+    pricing_status: str = Field(default="ok", alias="pricingStatus")
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 

@@ -129,6 +129,11 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertTrue(payload["metadata"]["noExternalCalls"])
         self.assertEqual(payload["metadata"]["budgetAlert"]["state"], "under_budget")
         self.assertFalse(payload["metadata"]["budgetAlert"]["liveEnforcement"])
+        self.assertEqual(payload["metadata"]["shadowPreflight"]["state"], "would_allow")
+        self.assertFalse(payload["metadata"]["shadowPreflight"]["wouldBlock"])
+        self.assertTrue(payload["metadata"]["shadowPreflight"]["advisoryOnly"])
+        self.assertFalse(payload["metadata"]["shadowPreflight"]["requestBlocked"])
+        self.assertFalse(payload["metadata"]["shadowPreflight"]["liveEnforcement"])
 
     def test_dry_run_budget_alert_states_are_diagnostic_only(self) -> None:
         self._as_admin()
@@ -140,13 +145,13 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         )
 
         cases = (
-            (40, "under_budget", True),
-            (80, "near_soft_limit", True),
-            (100, "over_soft_limit", True),
-            (121, "over_hard_limit", False),
+            (40, "under_budget", "would_allow", True),
+            (80, "near_soft_limit", "would_warn", True),
+            (100, "over_soft_limit", "would_block_soft_limit", True),
+            (121, "over_hard_limit", "would_block_hard_limit", False),
         )
-        for estimated_units, expected_state, expected_allowed in cases:
-            with self.subTest(expected_state=expected_state):
+        for estimated_units, expected_alert_state, expected_shadow_state, expected_allowed in cases:
+            with self.subTest(expected_shadow_state=expected_shadow_state):
                 response = self._post_dry_run(
                     {
                         "ownerUserId": "user-1",
@@ -159,9 +164,76 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
                 payload = response.json()
                 self.assertEqual(payload["allowed"], expected_allowed)
                 self.assertEqual(payload["wouldBlock"], not expected_allowed)
-                self.assertEqual(payload["metadata"]["budgetAlert"]["state"], expected_state)
+                self.assertEqual(payload["metadata"]["budgetAlert"]["state"], expected_alert_state)
                 self.assertFalse(payload["metadata"]["budgetAlert"]["wouldBlock"])
                 self.assertFalse(payload["metadata"]["budgetAlert"]["liveEnforcement"])
+                self.assertEqual(payload["metadata"]["shadowPreflight"]["state"], expected_shadow_state)
+                self.assertEqual(
+                    payload["metadata"]["shadowPreflight"]["wouldBlock"],
+                    expected_shadow_state.startswith("would_block"),
+                )
+                self.assertTrue(payload["metadata"]["shadowPreflight"]["advisoryOnly"])
+                self.assertFalse(payload["metadata"]["shadowPreflight"]["requestBlocked"])
+                self.assertFalse(payload["metadata"]["shadowPreflight"]["liveEnforcement"])
+
+    def test_dry_run_shadow_preflight_pricing_unknown_fails_safe_advisory_only(self) -> None:
+        self._as_admin()
+
+        response = self._post_dry_run(
+            {
+                "ownerUserId": "user-1",
+                "routeFamily": "analysis",
+                "estimatedUnits": 25,
+                "pricingStatus": "pricing_unknown",
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["allowed"])
+        self.assertFalse(payload["wouldBlock"])
+        self.assertEqual(payload["metadata"]["budgetAlert"]["state"], "pricing_unknown_warning")
+        shadow = payload["metadata"]["shadowPreflight"]
+        self.assertEqual(shadow["state"], "pricing_unknown_fail_safe")
+        self.assertEqual(shadow["reasonCode"], "pricing_policy_unknown")
+        self.assertTrue(shadow["wouldBlock"])
+        self.assertTrue(shadow["advisoryOnly"])
+        self.assertFalse(shadow["requestBlocked"])
+        self.assertFalse(shadow["liveEnforcement"])
+
+    def test_dry_run_shadow_preflight_owner_isolation_metadata_is_advisory_only(self) -> None:
+        self._as_admin()
+        self.db.upsert_quota_policy(
+            policy_key="user-budget-alerts",
+            scope_type="user",
+            daily_budget_units=120,
+            metadata={"daily_soft_limit_units": 100},
+        )
+        self._post_dry_run(
+            {
+                "ownerUserId": "user-2",
+                "routeFamily": "analysis",
+                "operation": "reserve",
+                "estimatedUnits": 95,
+            }
+        )
+
+        response = self._post_dry_run(
+            {
+                "ownerUserId": "user-1",
+                "routeFamily": "analysis",
+                "estimatedUnits": 10,
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        shadow = payload["metadata"]["shadowPreflight"]
+        self.assertEqual(shadow["state"], "would_allow")
+        self.assertEqual(shadow["usedUnits"], 0)
+        self.assertTrue(shadow["ownerIsolation"]["ownerScoped"])
+        self.assertTrue(shadow["ownerIsolation"]["otherOwnersExcluded"])
+        self.assertFalse(shadow["requestBlocked"])
 
     def test_dry_run_would_block_global_kill_switch(self) -> None:
         self._as_admin()

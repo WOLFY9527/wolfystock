@@ -12,7 +12,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.services.quota_policy_service import QuotaPolicyService
-from src.storage import DatabaseManager, QuotaReservation
+from src.storage import DatabaseManager, QuotaReservation, QuotaUsageWindow
 
 
 def _fresh_db() -> DatabaseManager:
@@ -214,6 +214,78 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertEqual(user_one.state, "under_budget")
         self.assertEqual(user_two.used_units, 95)
         self.assertEqual(user_two.state, "over_soft_limit")
+
+    def test_shadow_preflight_covers_allow_warn_soft_hard_and_pricing_unknown(self) -> None:
+        self._seed_budget_alert_policy()
+
+        cases = (
+            (40, "ok", "would_allow", False),
+            (80, "ok", "would_warn", False),
+            (100, "ok", "would_block_soft_limit", True),
+            (121, "ok", "would_block_hard_limit", True),
+            (40, "pricing_unknown", "pricing_unknown_fail_safe", True),
+        )
+        for estimated_units, pricing_status, expected_state, expected_block in cases:
+            with self.subTest(expected_state=expected_state):
+                preflight = self.service.classify_shadow_preflight(
+                    owner_user_id="user-1",
+                    route_family="analysis",
+                    estimated_units=estimated_units,
+                    pricing_status=pricing_status,
+                )
+
+                self.assertEqual(preflight.state, expected_state)
+                self.assertEqual(preflight.would_block, expected_block)
+                payload = preflight.to_dict()
+                self.assertTrue(payload["advisoryOnly"])
+                self.assertFalse(payload["requestBlocked"])
+                self.assertFalse(payload["liveEnforcement"])
+
+    def test_shadow_preflight_is_read_only_and_does_not_reserve_or_consume_quota(self) -> None:
+        self._seed_budget_alert_policy()
+        with self.db.session_scope() as session:
+            before_reservations = session.query(QuotaReservation).count()
+            before_windows = session.query(QuotaUsageWindow).count()
+
+        preflight = self.service.classify_shadow_preflight(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=121,
+        )
+
+        self.assertEqual(preflight.state, "would_block_hard_limit")
+        with self.db.session_scope() as session:
+            after_reservations = session.query(QuotaReservation).count()
+            after_windows = session.query(QuotaUsageWindow).count()
+        self.assertEqual(after_reservations, before_reservations)
+        self.assertEqual(after_windows, before_windows)
+
+    def test_shadow_preflight_owner_isolation_excludes_other_users_usage(self) -> None:
+        used_by_other = self.service.reserve_quota(
+            owner_user_id="user-2",
+            route_family="analysis",
+            estimated_units=95,
+        )
+        self.assertTrue(used_by_other.allowed)
+        self._seed_budget_alert_policy()
+
+        user_one = self.service.classify_shadow_preflight(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=10,
+        )
+        user_two = self.service.classify_shadow_preflight(
+            owner_user_id="user-2",
+            route_family="analysis",
+            estimated_units=10,
+        )
+
+        self.assertEqual(user_one.budget_alert.used_units, 0)
+        self.assertEqual(user_one.state, "would_allow")
+        self.assertEqual(user_two.budget_alert.used_units, 95)
+        self.assertEqual(user_two.state, "would_block_soft_limit")
+        self.assertTrue(user_one.to_dict()["ownerIsolation"]["otherOwnersExcluded"])
+        self.assertTrue(user_two.to_dict()["ownerIsolation"]["ownerScoped"])
 
     def test_token_cap_exceeded(self) -> None:
         self.db.upsert_quota_policy(

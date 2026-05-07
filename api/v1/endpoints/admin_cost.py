@@ -142,6 +142,16 @@ def run_quota_dry_run(
         model_tier=request.model_tier,
         token_estimate=request.token_estimate,
         estimated_units=request.estimated_units,
+        pricing_status=request.pricing_status,
+    )
+    shadow_preflight = service.classify_shadow_preflight(
+        owner_user_id=request.owner_user_id,
+        route_family=route_family,
+        provider=request.provider,
+        model_tier=request.model_tier,
+        token_estimate=request.token_estimate,
+        estimated_units=request.estimated_units,
+        pricing_status=request.pricing_status,
     )
 
     return QuotaDryRunResponse(
@@ -159,6 +169,7 @@ def run_quota_dry_run(
             "liveEnforcement": False,
             "noExternalCalls": True,
             "budgetAlert": budget_alert.to_dict(),
+            "shadowPreflight": shadow_preflight.to_dict(),
             "dataSources": ["quota_policy_definitions", "quota_usage_windows", "quota_reservations"],
             "redaction": [
                 "prompt_content",

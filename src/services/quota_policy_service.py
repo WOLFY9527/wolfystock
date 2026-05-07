@@ -62,6 +62,41 @@ class BudgetAlertDryRun:
         }
 
 
+@dataclass(frozen=True)
+class QuotaShadowPreflight:
+    """Advisory-only quota enforcement classification for launch preflight."""
+
+    state: str
+    reason_code: Optional[str]
+    would_block: bool
+    owner_user_id: Optional[str]
+    route_family: str
+    pricing_status: str
+    budget_alert: BudgetAlertDryRun
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "state": self.state,
+            "reasonCode": self.reason_code,
+            "wouldBlock": self.would_block,
+            "advisoryOnly": True,
+            "requestBlocked": False,
+            "liveEnforcement": False,
+            "ownerUserId": self.owner_user_id,
+            "routeFamily": self.route_family,
+            "pricingStatus": self.pricing_status,
+            "ownerIsolation": {
+                "ownerScoped": self.owner_user_id is not None,
+                "otherOwnersExcluded": True,
+            },
+            "usedUnits": self.budget_alert.used_units,
+            "estimatedUnits": self.budget_alert.estimated_units,
+            "projectedUnits": self.budget_alert.projected_units,
+            "softLimitUnits": self.budget_alert.soft_limit_units,
+            "hardLimitUnits": self.budget_alert.hard_limit_units,
+        }
+
+
 class QuotaPolicyService:
     """Budget/quota policy checks that are not wired into live providers yet."""
 
@@ -269,6 +304,69 @@ class QuotaPolicyService:
             soft_limit_units=soft_limit,
             hard_limit_units=hard_limit,
             pricing_status=pricing_key,
+        )
+
+    def classify_shadow_preflight(
+        self,
+        *,
+        owner_user_id: Optional[str],
+        route_family: str,
+        provider: Optional[str] = None,
+        model_tier: Optional[str] = None,
+        token_estimate: Optional[int] = None,
+        estimated_units: Optional[int] = None,
+        pricing_status: str = "ok",
+        now: Optional[datetime] = None,
+    ) -> QuotaShadowPreflight:
+        """Classify a future enforcement result without enforcing or reserving quota."""
+        budget_alert = self.classify_budget_alert(
+            owner_user_id=owner_user_id,
+            route_family=route_family,
+            provider=provider,
+            model_tier=model_tier,
+            token_estimate=token_estimate,
+            estimated_units=estimated_units,
+            pricing_status=pricing_status,
+            now=now,
+        )
+        pricing_key = budget_alert.pricing_status
+        decision = self.evaluate_quota(
+            owner_user_id=owner_user_id,
+            route_family=route_family,
+            provider=provider,
+            model_tier=model_tier,
+            token_estimate=token_estimate,
+            estimated_units=estimated_units,
+            now=now,
+        )
+
+        state = "would_allow"
+        reason_code = decision.reason_code
+        would_block = False
+        if pricing_key != "ok":
+            state = "pricing_unknown_fail_safe"
+            reason_code = "pricing_policy_unknown"
+            would_block = True
+        elif budget_alert.state == "over_hard_limit" or not decision.allowed:
+            state = "would_block_hard_limit"
+            reason_code = reason_code or budget_alert.reason_code
+            would_block = True
+        elif budget_alert.state == "over_soft_limit":
+            state = "would_block_soft_limit"
+            reason_code = budget_alert.reason_code
+            would_block = True
+        elif budget_alert.state == "near_soft_limit":
+            state = "would_warn"
+            reason_code = budget_alert.reason_code
+
+        return QuotaShadowPreflight(
+            state=state,
+            reason_code=reason_code,
+            would_block=would_block,
+            owner_user_id=self._normalize_optional(owner_user_id),
+            route_family=self.classify_route_family(route_family),
+            pricing_status=pricing_key,
+            budget_alert=budget_alert,
         )
 
     def reserve_quota(
