@@ -48,6 +48,12 @@ class ProviderCircuitObserver:
         "auth_or_key_invalid": "disabled_by_operator",
         "operator_disabled": "disabled_by_operator",
     }
+    _BLOCKING_STATES = {
+        "open",
+        "degraded_cache_only",
+        "disabled_by_operator",
+        "provider_quota_depleted",
+    }
 
     def __init__(self, *, db: Optional[DatabaseManager] = None) -> None:
         self.db = db or DatabaseManager.get_instance()
@@ -210,6 +216,65 @@ class ProviderCircuitObserver:
             "enforcement_block_reason_code": bucket if would_block_if_enforced else None,
             "would_change_provider_order": False,
             "would_change_fallback_behavior": False,
+        }
+
+    def build_controlled_enforcement_decision(
+        self,
+        *,
+        provider: str,
+        provider_category: Optional[str] = None,
+        route_family: Optional[str] = None,
+        controlled_enforcement_enabled: bool = False,
+        controlled_provider_categories: Optional[set[str] | tuple[str, ...] | list[str]] = None,
+        controlled_route_families: Optional[set[str] | tuple[str, ...] | list[str]] = None,
+        now: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        """Build a test/config-scoped circuit decision without wiring runtime enforcement."""
+        normalized_provider = self.db._normalize_provider_label(provider)
+        normalized_category = self.db._normalize_provider_dimension(provider_category, 64)
+        normalized_route = self.db._normalize_provider_dimension(route_family, 64)
+        state = self.db.get_provider_circuit_state(
+            provider=normalized_provider,
+            provider_category=normalized_category,
+            route_family=normalized_route,
+        )
+        state_name = str((state or {}).get("state") or "closed")
+        reason_bucket = (state or {}).get("reason_bucket")
+        would_block = state_name in self._BLOCKING_STATES and self._cooldown_allows_block(state, now=now)
+        scope_matched = self._controlled_scope_matches(
+            provider_category=normalized_category,
+            route_family=normalized_route,
+            controlled_provider_categories=controlled_provider_categories,
+            controlled_route_families=controlled_route_families,
+        )
+        explicit_enforcement = bool(controlled_enforcement_enabled and scope_matched)
+        would_block_call = bool(explicit_enforcement and would_block)
+        if not controlled_enforcement_enabled:
+            status = "disabled_by_default"
+        elif not scope_matched:
+            status = "scope_not_enabled"
+        elif would_block_call:
+            status = "blocked"
+        else:
+            status = "allowed"
+
+        return {
+            "provider": normalized_provider,
+            "provider_category": normalized_category,
+            "route_family": normalized_route,
+            "circuit_state": state_name,
+            "controlled_enforcement_enabled": bool(controlled_enforcement_enabled),
+            "controlled_scope_matched": scope_matched,
+            "controlled_enforcement_status": status,
+            "live_enforcement": would_block_call,
+            "would_block_call": would_block_call,
+            "would_block_if_enforced": would_block,
+            "enforcement_block_reason_code": reason_bucket if would_block else None,
+            "would_change_provider_order": False,
+            "would_change_fallback_behavior": False,
+            "no_external_calls": True,
+            "provider_behavior_changed": False,
+            "market_cache_behavior_changed": False,
         }
 
     def build_sla_readiness_diagnostics(
@@ -378,6 +443,31 @@ class ProviderCircuitObserver:
         if freshness_seconds <= 86400:
             return "stale"
         return "expired"
+
+    @staticmethod
+    def _controlled_scope_matches(
+        *,
+        provider_category: Optional[str],
+        route_family: Optional[str],
+        controlled_provider_categories: Optional[set[str] | tuple[str, ...] | list[str]],
+        controlled_route_families: Optional[set[str] | tuple[str, ...] | list[str]],
+    ) -> bool:
+        categories = {str(item or "").strip().lower() for item in controlled_provider_categories or [] if str(item or "").strip()}
+        routes = {str(item or "").strip().lower() for item in controlled_route_families or [] if str(item or "").strip()}
+        if not categories or not routes:
+            return False
+        return str(provider_category or "").lower() in categories and str(route_family or "").lower() in routes
+
+    @staticmethod
+    def _cooldown_allows_block(state: Optional[Dict[str, Any]], *, now: Optional[datetime]) -> bool:
+        cooldown_until = (state or {}).get("cooldown_until")
+        if not cooldown_until:
+            return True
+        try:
+            cooldown_dt = datetime.fromisoformat(str(cooldown_until).replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            return True
+        return cooldown_dt >= (now or datetime.now())
 
     @staticmethod
     def _window_bounds(observed_at: datetime, window_type: str) -> Tuple[datetime, datetime]:

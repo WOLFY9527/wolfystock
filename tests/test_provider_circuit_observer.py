@@ -315,6 +315,121 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
         self.assertEqual(result["preflight"]["enforcement_block_reason_code"], "timeout")
         self.assertIsNone(result["state"])
 
+    def test_controlled_enforcement_decision_is_disabled_by_default_for_blocked_state(self) -> None:
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="open",
+            reason_bucket="timeout",
+            cooldown_until=datetime(2026, 5, 6, 16, 0, 0),
+            now=datetime(2026, 5, 6, 15, 0, 0),
+        )
+
+        decision = self.observer.build_controlled_enforcement_decision(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            now=datetime(2026, 5, 6, 15, 30, 0),
+        )
+
+        self.assertEqual(decision["controlled_enforcement_status"], "disabled_by_default")
+        self.assertFalse(decision["controlled_enforcement_enabled"])
+        self.assertFalse(decision["controlled_scope_matched"])
+        self.assertFalse(decision["live_enforcement"])
+        self.assertFalse(decision["would_block_call"])
+        self.assertTrue(decision["would_block_if_enforced"])
+        self.assertEqual(decision["enforcement_block_reason_code"], "timeout")
+        self.assertFalse(decision["would_change_provider_order"])
+        self.assertFalse(decision["would_change_fallback_behavior"])
+        self.assertTrue(decision["no_external_calls"])
+
+    def test_controlled_enforcement_requires_explicit_matching_scope(self) -> None:
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="provider_quota_depleted",
+            reason_bucket="provider_429",
+            now=datetime(2026, 5, 6, 15, 0, 0),
+        )
+
+        decision = self.observer.build_controlled_enforcement_decision(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            controlled_enforcement_enabled=True,
+            controlled_provider_categories=("options",),
+            controlled_route_families=("analysis",),
+            now=datetime(2026, 5, 6, 15, 30, 0),
+        )
+
+        self.assertEqual(decision["controlled_enforcement_status"], "scope_not_enabled")
+        self.assertTrue(decision["controlled_enforcement_enabled"])
+        self.assertFalse(decision["controlled_scope_matched"])
+        self.assertFalse(decision["live_enforcement"])
+        self.assertFalse(decision["would_block_call"])
+        self.assertTrue(decision["would_block_if_enforced"])
+        self.assertEqual(decision["enforcement_block_reason_code"], "provider_429")
+
+    def test_controlled_enforcement_enabled_for_scoped_block_returns_enforceable_decision_only(self) -> None:
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="disabled_by_operator",
+            reason_bucket="auth_or_key_invalid",
+            now=datetime(2026, 5, 6, 15, 0, 0),
+        )
+
+        with patch("requests.sessions.Session.request") as request_mock:
+            decision = self.observer.build_controlled_enforcement_decision(
+                provider="tradier",
+                provider_category="options",
+                route_family="options_lab",
+                controlled_enforcement_enabled=True,
+                controlled_provider_categories=("options",),
+                controlled_route_families=("options_lab",),
+                now=datetime(2026, 5, 6, 15, 30, 0),
+            )
+
+        self.assertEqual(decision["controlled_enforcement_status"], "blocked")
+        self.assertTrue(decision["controlled_enforcement_enabled"])
+        self.assertTrue(decision["controlled_scope_matched"])
+        self.assertTrue(decision["live_enforcement"])
+        self.assertTrue(decision["would_block_call"])
+        self.assertTrue(decision["would_block_if_enforced"])
+        self.assertEqual(decision["enforcement_block_reason_code"], "auth_or_key_invalid")
+        self.assertFalse(decision["would_change_provider_order"])
+        self.assertFalse(decision["would_change_fallback_behavior"])
+        self.assertFalse(decision["provider_behavior_changed"])
+        self.assertFalse(decision["market_cache_behavior_changed"])
+        request_mock.assert_not_called()
+
+    def test_controlled_enforcement_decision_does_not_mutate_circuit_rows_when_disabled(self) -> None:
+        self.db.transition_provider_circuit_state(
+            provider="polygon",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="open",
+            reason_bucket="provider_5xx",
+            now=datetime(2026, 5, 6, 15, 0, 0),
+        )
+        with self.db.session_scope() as session:
+            state_count = session.query(ProviderCircuitEvent).count()
+
+        decision = self.observer.build_controlled_enforcement_decision(
+            provider="polygon",
+            provider_category="options",
+            route_family="options_lab",
+        )
+
+        self.assertEqual(decision["controlled_enforcement_status"], "disabled_by_default")
+        self.assertFalse(decision["would_block_call"])
+        self.assertTrue(decision["would_block_if_enforced"])
+        with self.db.session_scope() as session:
+            self.assertEqual(session.query(ProviderCircuitEvent).count(), state_count)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,6 +21,8 @@ from src.services.options_market_data_provider import (
     build_options_provider_live_readiness_preflight,
     create_options_market_data_provider,
 )
+from src.services.provider_circuit_observer import ProviderCircuitObserver
+from src.storage import DatabaseManager
 
 
 FIXTURE_PATH = Path("tests/fixtures/options/tem_chain.json")
@@ -517,6 +519,49 @@ def test_options_provider_preflight_malformed_payload_returns_sanitized_state() 
     for blocked in ("real-token-leak", "bearer", "api_key", "apikey", "token", "secret", "requesturl"):
         assert blocked not in text
     _assert_preflight_safety_contract(preflight)
+
+
+def test_controlled_circuit_block_evidence_does_not_make_live_provider_available() -> None:
+    DatabaseManager.reset_instance()
+    db = DatabaseManager(db_url="sqlite:///:memory:")
+    observer = ProviderCircuitObserver(db=db)
+    db.transition_provider_circuit_state(
+        provider="tradier",
+        provider_category="options",
+        route_family="options_lab",
+        to_state="open",
+        reason_bucket="timeout",
+    )
+    provider = create_options_market_data_provider(
+        "tradier",
+        live_provider_config=OptionsLiveProviderConfig(
+            live_providers_enabled=True,
+            enabled_provider_keys=frozenset({"tradier"}),
+            credentialed_provider_keys=frozenset({"tradier"}),
+        ),
+    )
+
+    try:
+        with patch("requests.sessions.Session.request") as request_mock:
+            decision = observer.build_controlled_enforcement_decision(
+                provider="tradier",
+                provider_category="options",
+                route_family="options_lab",
+                controlled_enforcement_enabled=True,
+                controlled_provider_categories=("options",),
+                controlled_route_families=("options_lab",),
+            )
+            with pytest.raises(OptionsProviderUnavailable) as exc_info:
+                provider.get_chain("TEM")
+
+        assert decision["controlled_enforcement_status"] == "blocked"
+        assert decision["would_block_call"] is True
+        assert decision["would_block_if_enforced"] is True
+        assert decision["enforcement_block_reason_code"] == "timeout"
+        assert exc_info.value.code == "options_provider_dry_run_not_enabled"
+        request_mock.assert_not_called()
+    finally:
+        DatabaseManager.reset_instance()
 
 
 def test_options_provider_preflight_sanitizes_provider_error_text() -> None:
