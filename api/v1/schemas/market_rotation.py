@@ -25,9 +25,27 @@ RotationRiskLabel = Literal[
 ]
 
 
+class RotationRadarTimeWindowModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    window: Literal["5m", "15m", "60m", "1d"]
+    label: str
+    available: bool = False
+    changePercent: Optional[float] = None
+    relativeVolume: Optional[float] = None
+    freshness: FreshnessLabel = "fallback"
+    isFallback: bool = False
+    isStale: bool = False
+    source: Optional[str] = None
+    sourceLabel: Optional[str] = None
+    asOf: Optional[str] = None
+    reason: Optional[str] = None
+
+
 class RotationRadarBenchmarkModel(BaseModel):
     symbol: str
     changePercent: Optional[float] = None
+    timeWindows: Dict[str, RotationRadarTimeWindowModel] = Field(default_factory=dict)
     freshness: FreshnessLabel = "fallback"
     isFallback: bool = False
     isStale: bool = False
@@ -46,8 +64,11 @@ class RotationRadarMemberModel(BaseModel):
     changePercent: Optional[float] = None
     relativeStrengthVsBenchmark: Optional[float] = None
     volumeRatio: Optional[float] = None
+    timeWindows: Dict[str, RotationRadarTimeWindowModel] = Field(default_factory=dict)
     priceAboveVwap: Optional[bool] = None
     persistenceScore: Optional[float] = None
+    leadershipLabel: Optional[str] = None
+    freshnessLabel: Optional[str] = None
     freshness: FreshnessLabel = "fallback"
     isFallback: bool = False
     isStale: bool = False
@@ -65,18 +86,24 @@ class RotationRadarThemeModel(BaseModel):
     englishName: str
     focus: str
     benchmark: str
+    sectorBenchmark: Optional[str] = None
     membersConfigured: List[str] = Field(default_factory=list)
     rotationScore: int = Field(ge=0, le=100)
     confidence: float = Field(ge=0, le=1)
     stage: RotationStage
+    stageExplanation: Optional[str] = None
     riskLabels: List[RotationRiskLabel] = Field(default_factory=list)
+    riskExplanations: List[str] = Field(default_factory=list)
     newslessRotation: bool = False
     newslessRotationEvidence: Optional[str] = None
     relativeStrength: Dict[str, Any] = Field(default_factory=dict)
+    benchmarkProxies: Dict[str, Any] = Field(default_factory=dict)
+    timeWindows: Dict[str, RotationRadarTimeWindowModel] = Field(default_factory=dict)
     volume: Dict[str, Any] = Field(default_factory=dict)
     breadth: Dict[str, Any] = Field(default_factory=dict)
     synchronization: Dict[str, Any] = Field(default_factory=dict)
     leadership: Dict[str, Any] = Field(default_factory=dict)
+    themeDetail: Dict[str, Any] = Field(default_factory=dict)
     freshness: FreshnessLabel = "fallback"
     isFallback: bool = False
     isStale: bool = False

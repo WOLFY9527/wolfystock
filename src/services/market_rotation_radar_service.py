@@ -17,7 +17,16 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 
 NO_ADVICE_DISCLOSURE = "仅用于观察资金轮动迹象，非买卖建议。"
 RADAR_ENDPOINT = "/api/v1/market/rotation-radar"
-BENCHMARK_SYMBOLS = ("QQQ", "SPY", "IWM")
+TIME_WINDOW_KEYS = ("5m", "15m", "60m", "1d")
+MARKET_BENCHMARK_SYMBOLS = ("QQQ", "SPY", "IWM")
+SECTOR_BENCHMARK_SYMBOLS = ("IGV", "SMH", "CIBR", "CLOU", "PAVE", "BOTZ")
+BENCHMARK_SYMBOLS = MARKET_BENCHMARK_SYMBOLS + SECTOR_BENCHMARK_SYMBOLS
+TIME_WINDOW_LABELS = {
+    "5m": "5分钟",
+    "15m": "15分钟",
+    "60m": "60分钟",
+    "1d": "日内/日线",
+}
 STAGE_LABELS = {
     "early_rotation",
     "confirmed_rotation",
@@ -33,6 +42,7 @@ class ThemeBasket:
     name: str
     englishName: str
     benchmark: str
+    sectorBenchmark: str
     members: Sequence[str]
     focus: str
 
@@ -43,6 +53,7 @@ THEME_BASKETS: Sequence[ThemeBasket] = (
         name="AI 应用",
         englishName="AI Applications",
         benchmark="QQQ",
+        sectorBenchmark="IGV",
         members=("APP", "PLTR", "CRM", "SNOW", "ADBE", "NOW", "DUOL", "MDB"),
         focus="应用层软件、数据工作流与企业 AI 落地",
     ),
@@ -51,6 +62,7 @@ THEME_BASKETS: Sequence[ThemeBasket] = (
         name="AI 基建",
         englishName="AI Infrastructure",
         benchmark="QQQ",
+        sectorBenchmark="SMH",
         members=("NVDA", "AVGO", "AMD", "ANET", "SMCI", "DELL", "VRT", "ARM"),
         focus="GPU、网络、服务器与 AI 数据中心硬件",
     ),
@@ -59,6 +71,7 @@ THEME_BASKETS: Sequence[ThemeBasket] = (
         name="半导体",
         englishName="Semiconductors",
         benchmark="QQQ",
+        sectorBenchmark="SMH",
         members=("NVDA", "AMD", "AVGO", "TSM", "ASML", "MRVL", "MU", "LRCX"),
         focus="芯片、设备、存储与先进制程链条",
     ),
@@ -67,6 +80,7 @@ THEME_BASKETS: Sequence[ThemeBasket] = (
         name="网络安全",
         englishName="Cybersecurity",
         benchmark="QQQ",
+        sectorBenchmark="CIBR",
         members=("CRWD", "PANW", "ZS", "NET", "FTNT", "S", "OKTA", "TENB"),
         focus="云安全、零信任、终端防护与边缘安全",
     ),
@@ -75,6 +89,7 @@ THEME_BASKETS: Sequence[ThemeBasket] = (
         name="云软件",
         englishName="Cloud Software",
         benchmark="QQQ",
+        sectorBenchmark="CLOU",
         members=("MSFT", "SNOW", "CRM", "NOW", "DDOG", "MDB", "TEAM", "WDAY"),
         focus="云基础软件、SaaS 工作流与数据平台",
     ),
@@ -83,6 +98,7 @@ THEME_BASKETS: Sequence[ThemeBasket] = (
         name="数据中心电力",
         englishName="Data Center Power",
         benchmark="SPY",
+        sectorBenchmark="PAVE",
         members=("VRT", "ETN", "PWR", "GEV", "CEG", "NRG", "SMR", "AEP"),
         focus="电力设备、并网、发电与能源基础设施",
     ),
@@ -91,6 +107,7 @@ THEME_BASKETS: Sequence[ThemeBasket] = (
         name="液冷",
         englishName="Liquid Cooling",
         benchmark="QQQ",
+        sectorBenchmark="SMH",
         members=("VRT", "MOD", "SMCI", "DELL", "HPE", "ANET", "NVDA", "ETN"),
         focus="高密度机柜、液冷方案与数据中心热管理",
     ),
@@ -99,6 +116,7 @@ THEME_BASKETS: Sequence[ThemeBasket] = (
         name="机器人",
         englishName="Robotics",
         benchmark="IWM",
+        sectorBenchmark="BOTZ",
         members=("ISRG", "TER", "SYM", "PATH", "ROK", "ABBNY", "IRBT", "ZBRA"),
         focus="工业自动化、手术机器人、仓储机器人与机器视觉",
     ),
@@ -168,7 +186,7 @@ class MarketRotationRadarService:
             "summary": self._build_summary(themes),
             "themes": themes,
             "metadata": {
-                "schemaVersion": "market_rotation_radar_mvp_v1",
+                "schemaVersion": "market_rotation_radar_phase2_v1",
                 "noExternalCalls": True,
                 "basketSource": "manual_static_baskets",
                 "themeCount": len(THEME_BASKETS),
@@ -177,6 +195,11 @@ class MarketRotationRadarService:
                 "staleThemeCount": stale_theme_count,
                 "scoreRange": "0-100",
                 "confidenceRange": "0-1",
+                "timeWindows": list(TIME_WINDOW_KEYS),
+                "benchmarkProxies": {
+                    "market": list(MARKET_BENCHMARK_SYMBOLS),
+                    "sector": list(SECTOR_BENCHMARK_SYMBOLS),
+                },
                 "newslessRotationMeaning": "未配置新闻催化证据时，价格/量能/广度/同步性同时满足阈值的保守观察标记，不代表因果确认。",
             },
         }
@@ -184,7 +207,12 @@ class MarketRotationRadarService:
     def _load_quotes(self) -> tuple[Dict[str, Dict[str, Any]], Optional[str]]:
         if self.quote_provider is None:
             return {}, "未配置实时 quote provider，返回降级主题篮子。"
-        symbols = sorted({symbol for theme in THEME_BASKETS for symbol in theme.members} | set(BENCHMARK_SYMBOLS))
+        symbols = sorted(
+            {symbol for theme in THEME_BASKETS for symbol in theme.members}
+            | {theme.benchmark for theme in THEME_BASKETS}
+            | {theme.sectorBenchmark for theme in THEME_BASKETS}
+            | set(MARKET_BENCHMARK_SYMBOLS)
+        )
         try:
             raw_quotes = self.quote_provider(symbols) or {}
         except Exception:
@@ -208,6 +236,7 @@ class MarketRotationRadarService:
                 benchmarks[symbol] = {
                     "symbol": symbol,
                     "changePercent": quote.get("changePercent"),
+                    "timeWindows": quote.get("timeWindows") or self._empty_time_windows(),
                     "freshness": quote.get("freshness"),
                     "isFallback": bool(quote.get("isFallback")),
                     "isStale": bool(quote.get("isStale")),
@@ -219,6 +248,7 @@ class MarketRotationRadarService:
                 benchmarks[symbol] = {
                     "symbol": symbol,
                     "changePercent": None,
+                    "timeWindows": self._empty_time_windows(),
                     "freshness": "fallback",
                     "isFallback": True,
                     "isStale": False,
@@ -261,7 +291,10 @@ class MarketRotationRadarService:
         above_vwap_pct = self._percent(sum(1 for value in vwap_values if value), len(vwap_values)) if vwap_values else 50.0
         persistence_pct = self._percent(sum(1 for value in persistence_values if value >= 0.6), len(persistence_values)) if persistence_values else 50.0
         concentration = self._leadership_concentration(changes)
+        time_windows = self._aggregate_time_windows(observed)
+        window_state = self._time_window_state(time_windows)
         source_state = self._source_state(observations, benchmarks, theme.benchmark)
+        source_state["timeWindowState"] = window_state
         score = self._score(
             average_relative_strength=average_relative_strength,
             average_relative_volume=average_relative_volume,
@@ -329,11 +362,14 @@ class MarketRotationRadarService:
             "englishName": theme.englishName,
             "focus": theme.focus,
             "benchmark": theme.benchmark,
+            "sectorBenchmark": theme.sectorBenchmark,
             "membersConfigured": list(theme.members),
             "rotationScore": score,
             "confidence": confidence,
             "stage": stage,
+            "stageExplanation": self._stage_explanation(stage, confidence, source_state.get("timeWindowState", {})),
             "riskLabels": risk_labels,
+            "riskExplanations": self._risk_explanations(risk_labels),
             "newslessRotation": newsless_rotation,
             "newslessRotationEvidence": (
                 "无明显新闻的同步异动：未配置新闻催化证据，当前仅由价格、量能、广度和同步性共同触发。"
@@ -346,6 +382,8 @@ class MarketRotationRadarService:
                 "averageRelativeStrengthPercent": round(average_relative_strength, 3),
                 "vsBenchmarks": self._relative_vs_benchmarks(observed, benchmarks),
             },
+            "benchmarkProxies": self._benchmark_proxies(theme, benchmarks, observed),
+            "timeWindows": time_windows,
             "volume": {
                 "averageRelativeVolume": round(average_relative_volume, 2),
                 "availableMemberCount": len(volume_ratios),
@@ -369,6 +407,12 @@ class MarketRotationRadarService:
                 "broadParticipationPercent": round((1 - concentration) * 100, 1),
                 "topMembers": leaders,
             },
+            "themeDetail": self._theme_detail(
+                theme=theme,
+                observations=observations,
+                leaders=leaders,
+                generated_at=generated_at,
+            ),
             "freshness": freshness,
             "isFallback": bool(source_state["fallbackUsed"] and coverage < 0.6),
             "isStale": bool(source_state["isStale"]),
@@ -407,11 +451,14 @@ class MarketRotationRadarService:
             "englishName": theme.englishName,
             "focus": theme.focus,
             "benchmark": theme.benchmark,
+            "sectorBenchmark": theme.sectorBenchmark,
             "membersConfigured": list(theme.members),
             "rotationScore": int(preset["score"]),
             "confidence": 0.12,
             "stage": "weak_or_no_signal",
+            "stageExplanation": "备用篮子缺少可用行情与时窗证据，仅能标记为弱信号。",
             "riskLabels": ["fallback_data", "thin_breadth"],
+            "riskExplanations": self._risk_explanations(["fallback_data", "thin_breadth"]),
             "newslessRotation": False,
             "newslessRotationEvidence": None,
             "relativeStrength": {
@@ -421,6 +468,8 @@ class MarketRotationRadarService:
                 "averageRelativeStrengthPercent": None,
                 "vsBenchmarks": {symbol: None for symbol in BENCHMARK_SYMBOLS},
             },
+            "benchmarkProxies": self._benchmark_proxies(theme, benchmarks, []),
+            "timeWindows": self._empty_time_windows(),
             "volume": {
                 "averageRelativeVolume": None,
                 "availableMemberCount": 0,
@@ -444,6 +493,12 @@ class MarketRotationRadarService:
                 "broadParticipationPercent": 0,
                 "topMembers": leaders,
             },
+            "themeDetail": self._theme_detail(
+                theme=theme,
+                observations=observations,
+                leaders=leaders,
+                generated_at=generated_at,
+            ),
             "freshness": "fallback",
             "isFallback": True,
             "isStale": False,
@@ -476,8 +531,11 @@ class MarketRotationRadarService:
                 "changePercent": None,
                 "relativeStrengthVsBenchmark": None,
                 "volumeRatio": None,
+                "timeWindows": self._empty_time_windows(),
                 "priceAboveVwap": None,
                 "persistenceScore": None,
+                "leadershipLabel": "未观察",
+                "freshnessLabel": "窗口数据待补齐",
                 "freshness": "fallback",
                 "isFallback": True,
                 "isStale": False,
@@ -498,8 +556,11 @@ class MarketRotationRadarService:
             "changePercent": round(change, 3) if change is not None else None,
             "relativeStrengthVsBenchmark": round(relative_strength, 3) if relative_strength is not None else None,
             "volumeRatio": round(quote["volumeRatio"], 3) if quote.get("volumeRatio") is not None else None,
+            "timeWindows": quote.get("timeWindows") or self._empty_time_windows(),
             "priceAboveVwap": bool(price >= vwap) if price is not None and vwap is not None else None,
             "persistenceScore": self._persistence_score(trend, change),
+            "leadershipLabel": self._member_role_label(change, relative_strength, quote.get("volumeRatio")),
+            "freshnessLabel": self._freshness_label(str(quote.get("freshness", "delayed")), bool(quote.get("isFallback")), bool(quote.get("isStale"))),
             "freshness": quote.get("freshness", "delayed"),
             "isFallback": bool(quote.get("isFallback")),
             "isStale": bool(quote.get("isStale")),
@@ -530,6 +591,20 @@ class MarketRotationRadarService:
         is_stale = bool(raw_quote.get("isStale") or freshness == "stale")
         trend = raw_quote.get("trend", raw_quote.get("sparkline"))
         trend_values = [value for value in (self._number(item) for item in trend or []) if value is not None] if isinstance(trend, list) else []
+        as_of = str(raw_quote.get("asOf") or raw_quote.get("as_of") or raw_quote.get("updatedAt") or self._now_iso())
+        source_label = str(raw_quote.get("sourceLabel") or raw_quote.get("source_label") or "主题篮子行情")
+        normalized_freshness = "fallback" if is_fallback else "stale" if is_stale else freshness
+        time_windows = self._normalize_time_windows(
+            raw_quote=raw_quote,
+            change=change,
+            volume_ratio=volume_ratio,
+            freshness=normalized_freshness,
+            is_fallback=is_fallback,
+            is_stale=is_stale,
+            source=source,
+            source_label=source_label,
+            as_of=as_of,
+        )
         return {
             "symbol": symbol,
             "name": str(raw_quote.get("name") or raw_quote.get("label") or symbol),
@@ -538,12 +613,13 @@ class MarketRotationRadarService:
             "volumeRatio": volume_ratio,
             "vwap": vwap,
             "trend": trend_values,
-            "freshness": "fallback" if is_fallback else "stale" if is_stale else freshness,
+            "timeWindows": time_windows,
+            "freshness": normalized_freshness,
             "isFallback": is_fallback,
             "isStale": is_stale,
             "source": source,
-            "sourceLabel": str(raw_quote.get("sourceLabel") or raw_quote.get("source_label") or "主题篮子行情"),
-            "asOf": str(raw_quote.get("asOf") or raw_quote.get("as_of") or raw_quote.get("updatedAt") or self._now_iso()),
+            "sourceLabel": source_label,
+            "asOf": as_of,
         }
 
     def _source_state(
@@ -569,6 +645,137 @@ class MarketRotationRadarService:
             "isStale": is_stale,
             "asOf": max(as_of_candidates) if as_of_candidates else None,
         }
+
+    def _normalize_time_windows(
+        self,
+        *,
+        raw_quote: Mapping[str, Any],
+        change: Optional[float],
+        volume_ratio: Optional[float],
+        freshness: str,
+        is_fallback: bool,
+        is_stale: bool,
+        source: str,
+        source_label: str,
+        as_of: str,
+    ) -> Dict[str, Dict[str, Any]]:
+        raw_windows = raw_quote.get("timeWindows") or raw_quote.get("time_windows") or raw_quote.get("windows")
+        raw_windows = raw_windows if isinstance(raw_windows, Mapping) else {}
+        windows: Dict[str, Dict[str, Any]] = {}
+        for window in TIME_WINDOW_KEYS:
+            raw_window = raw_windows.get(window)
+            if isinstance(raw_window, Mapping):
+                window_change = self._number(
+                    raw_window.get("changePercent", raw_window.get("change_pct", raw_window.get("pct_change")))
+                )
+                window_volume_ratio = self._number(
+                    raw_window.get("volumeRatio", raw_window.get("relativeVolume", raw_window.get("relative_volume")))
+                )
+                available = window_change is not None or window_volume_ratio is not None
+                window_freshness = str(raw_window.get("freshness") or freshness)
+                window_is_fallback = bool(raw_window.get("isFallback") or raw_window.get("fallbackUsed") or is_fallback)
+                window_is_stale = bool(raw_window.get("isStale") or is_stale or window_freshness == "stale")
+                windows[window] = {
+                    "window": window,
+                    "label": TIME_WINDOW_LABELS[window],
+                    "available": available,
+                    "changePercent": round(window_change, 3) if window_change is not None else None,
+                    "relativeVolume": round(window_volume_ratio, 3) if window_volume_ratio is not None else None,
+                    "freshness": "fallback" if window_is_fallback else "stale" if window_is_stale else window_freshness,
+                    "isFallback": window_is_fallback,
+                    "isStale": window_is_stale,
+                    "source": str(raw_window.get("source") or source),
+                    "sourceLabel": str(raw_window.get("sourceLabel") or raw_window.get("source_label") or source_label),
+                    "asOf": str(raw_window.get("asOf") or raw_window.get("as_of") or as_of),
+                    "reason": None if available else "window_unavailable",
+                }
+                continue
+            if window == "1d" and change is not None:
+                windows[window] = {
+                    "window": window,
+                    "label": TIME_WINDOW_LABELS[window],
+                    "available": True,
+                    "changePercent": round(change, 3),
+                    "relativeVolume": round(volume_ratio, 3) if volume_ratio is not None else None,
+                    "freshness": freshness,
+                    "isFallback": is_fallback,
+                    "isStale": is_stale,
+                    "source": source,
+                    "sourceLabel": source_label,
+                    "asOf": as_of,
+                    "reason": None,
+                }
+                continue
+            windows[window] = self._empty_time_window(window)
+        return windows
+
+    def _aggregate_time_windows(self, observed: Sequence[Mapping[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        windows: Dict[str, Dict[str, Any]] = {}
+        for window in TIME_WINDOW_KEYS:
+            slots = [
+                item.get("timeWindows", {}).get(window, {})
+                for item in observed
+                if isinstance(item.get("timeWindows"), Mapping)
+            ]
+            available_slots = [slot for slot in slots if slot.get("available")]
+            changes = [float(slot["changePercent"]) for slot in available_slots if slot.get("changePercent") is not None]
+            volumes = [float(slot["relativeVolume"]) for slot in available_slots if slot.get("relativeVolume") is not None]
+            is_stale = any(slot.get("isStale") for slot in available_slots)
+            is_fallback = not available_slots or any(slot.get("isFallback") for slot in available_slots)
+            windows[window] = {
+                "window": window,
+                "label": TIME_WINDOW_LABELS[window],
+                "available": bool(available_slots),
+                "observedMemberCount": len(available_slots),
+                "configuredMemberCount": len(observed),
+                "averageChangePercent": round(self._avg(changes), 3) if changes else None,
+                "averageRelativeVolume": round(self._avg(volumes), 3) if volumes else None,
+                "percentUp": round(self._percent(sum(1 for value in changes if value > 0), len(changes)), 1) if changes else None,
+                "freshness": "fallback" if is_fallback else "stale" if is_stale else self._freshest_window_label(available_slots),
+                "isFallback": is_fallback,
+                "isStale": is_stale,
+                "reason": None if available_slots else "window_unavailable",
+            }
+        return windows
+
+    def _time_window_state(self, time_windows: Mapping[str, Mapping[str, Any]]) -> Dict[str, Any]:
+        available = [window for window in TIME_WINDOW_KEYS if time_windows.get(window, {}).get("available")]
+        intraday_available = [window for window in ("5m", "15m", "60m") if window in available]
+        return {
+            "availableWindows": available,
+            "intradayAvailableCount": len(intraday_available),
+            "hasDailyWindow": "1d" in available,
+            "hasStaleWindow": any(time_windows.get(window, {}).get("isStale") for window in TIME_WINDOW_KEYS),
+            "hasFallbackWindow": any(time_windows.get(window, {}).get("isFallback") for window in TIME_WINDOW_KEYS),
+        }
+
+    def _empty_time_windows(self) -> Dict[str, Dict[str, Any]]:
+        return {window: self._empty_time_window(window) for window in TIME_WINDOW_KEYS}
+
+    @staticmethod
+    def _empty_time_window(window: str) -> Dict[str, Any]:
+        return {
+            "window": window,
+            "label": TIME_WINDOW_LABELS[window],
+            "available": False,
+            "changePercent": None,
+            "relativeVolume": None,
+            "freshness": "fallback",
+            "isFallback": True,
+            "isStale": False,
+            "source": "fallback",
+            "sourceLabel": "窗口数据待补齐",
+            "asOf": None,
+            "reason": "window_unavailable",
+        }
+
+    @staticmethod
+    def _freshest_window_label(slots: Sequence[Mapping[str, Any]]) -> str:
+        values = [str(slot.get("freshness")) for slot in slots if slot.get("freshness")]
+        for candidate in ("live", "mock", "delayed", "cached", "stale", "fallback"):
+            if candidate in values:
+                return candidate
+        return "fallback"
 
     def _score(
         self,
@@ -630,6 +837,15 @@ class MarketRotationRadarService:
             confidence = min(confidence, 0.5 if coverage >= 0.75 else 0.42)
         if source_state["isStale"]:
             confidence = min(confidence, 0.5)
+        window_state = source_state.get("timeWindowState", {})
+        if not window_state.get("hasDailyWindow"):
+            confidence = min(confidence, 0.55)
+        elif int(window_state.get("intradayAvailableCount") or 0) == 0:
+            confidence = min(confidence, 0.72)
+        if window_state.get("hasStaleWindow"):
+            confidence = min(confidence, 0.5)
+        if window_state.get("hasFallbackWindow") and int(window_state.get("intradayAvailableCount") or 0) < 2:
+            confidence = min(confidence, 0.68)
         return round(max(0.0, min(1.0, confidence)), 2)
 
     def _risk_labels(
@@ -680,6 +896,37 @@ class MarketRotationRadarService:
         if average_relative_volume < 0.9 or percent_up < 50:
             return "cooling"
         return "weak_or_no_signal"
+
+    @staticmethod
+    def _stage_explanation(stage: str, confidence: float, window_state: Mapping[str, Any]) -> str:
+        intraday_count = int(window_state.get("intradayAvailableCount") or 0)
+        has_daily = bool(window_state.get("hasDailyWindow"))
+        window_note = (
+            f"{intraday_count} 个分钟级时窗可用"
+            if intraday_count
+            else "分钟级时窗待补齐"
+        )
+        if not has_daily:
+            window_note = "日线与分钟级时窗均待补齐"
+        stage_notes = {
+            "confirmed_rotation": "价格、量能、广度和同步性同时满足阈值。",
+            "early_rotation": "已有相对强势或量能扩张，但仍需更多广度/时窗确认。",
+            "crowded_or_extended": "强度较高但存在集中或高开回落风险。",
+            "cooling": "量能或上涨广度转弱，轮动证据降温。",
+            "weak_or_no_signal": "可用证据不足或分歧较大。",
+        }
+        return f"{stage_notes.get(stage, '阶段待识别')} 置信度 {confidence:.0%}，{window_note}。"
+
+    @staticmethod
+    def _risk_explanations(risk_labels: Sequence[str]) -> List[str]:
+        explanations = {
+            "gap_fade_risk": "涨幅较大但 VWAP、量能或广度确认不足，需防止冲高回落。",
+            "thin_breadth": "可观察成员或跑赢成员偏少，主题扩散仍不充分。",
+            "single_name_driven": "正贡献集中在少数成员，主题广泛参与度不足。",
+            "stale_data": "部分行情或时窗过期，置信度已封顶。",
+            "fallback_data": "部分行情或时窗为备用/缺失状态，置信度已降权。",
+        }
+        return [explanations[label] for label in risk_labels if label in explanations]
 
     def _newsless_rotation(
         self,
@@ -766,6 +1013,138 @@ class MarketRotationRadarService:
             "riskLabels": list(theme["riskLabels"]),
         }
 
+    def _benchmark_proxies(
+        self,
+        theme: ThemeBasket,
+        benchmarks: Mapping[str, Dict[str, Any]],
+        observed: Sequence[Mapping[str, Any]],
+    ) -> Dict[str, Any]:
+        average_change = self._avg(
+            [float(item["changePercent"]) for item in observed if item.get("changePercent") is not None],
+            default=0.0,
+        ) if observed else None
+        proxies: Dict[str, Any] = {}
+        for symbol in (*MARKET_BENCHMARK_SYMBOLS, theme.sectorBenchmark):
+            benchmark = benchmarks.get(symbol, {})
+            change = benchmark.get("changePercent")
+            proxies[symbol] = {
+                "symbol": symbol,
+                "role": "sector_proxy" if symbol == theme.sectorBenchmark else "market_proxy",
+                "changePercent": change,
+                "relativeStrength": round(average_change - float(change), 3) if average_change is not None and change is not None else None,
+                "timeWindows": benchmark.get("timeWindows") or self._empty_time_windows(),
+                "freshness": benchmark.get("freshness", "fallback"),
+                "isFallback": bool(benchmark.get("isFallback", True)),
+                "isStale": bool(benchmark.get("isStale")),
+                "sourceLabel": benchmark.get("sourceLabel"),
+                "asOf": benchmark.get("asOf"),
+            }
+        return proxies
+
+    def _theme_detail(
+        self,
+        *,
+        theme: ThemeBasket,
+        observations: Sequence[Mapping[str, Any]],
+        leaders: Sequence[Mapping[str, Any]],
+        generated_at: str,
+    ) -> Dict[str, Any]:
+        leader_symbols = {str(item.get("symbol")) for item in leaders[:3]}
+        laggards = sorted(
+            [item for item in observations if item.get("observed") and item.get("changePercent") is not None],
+            key=lambda item: float(item.get("relativeStrengthVsBenchmark") or item.get("changePercent") or 0),
+        )[:3]
+        return {
+            "watchlistLabel": "观察清单证据",
+            "watchlistSafe": True,
+            "safeActionLabel": "仅观察，不构成买卖建议",
+            "leadershipMembers": [
+                self._watchlist_member(item, "leader" if item.get("symbol") in leader_symbols else "participant")
+                for item in observations
+                if item.get("observed") and item.get("symbol") in leader_symbols
+            ],
+            "laggardMembers": [
+                self._watchlist_member(item, "laggard")
+                for item in laggards
+            ],
+            "memberEvidence": [
+                self._watchlist_member(item, "missing" if not item.get("observed") else str(item.get("leadershipLabel") or "participant"))
+                for item in observations
+            ],
+            "freshnessLabel": self._freshness_label(
+                "fallback" if not any(item.get("observed") for item in observations) else str(observations[0].get("freshness") or "delayed"),
+                all(bool(item.get("isFallback")) for item in observations),
+                any(bool(item.get("isStale")) for item in observations),
+            ),
+            "asOf": max([str(item.get("asOf")) for item in observations if item.get("asOf")] or [generated_at]),
+            "disclosure": NO_ADVICE_DISCLOSURE,
+            "notes": [
+                f"{theme.name} 使用 {theme.benchmark}/{theme.sectorBenchmark} 作为相对强弱代理。",
+                "成员标签仅描述领先、落后、缺失或新鲜度，不输出买入/卖出动作。",
+            ],
+        }
+
+    def _watchlist_member(self, item: Mapping[str, Any], role: str) -> Dict[str, Any]:
+        return {
+            "symbol": item.get("symbol"),
+            "name": item.get("name") or item.get("symbol"),
+            "role": role,
+            "roleLabel": self._watchlist_role_label(role),
+            "changePercent": item.get("changePercent"),
+            "relativeStrengthVsBenchmark": item.get("relativeStrengthVsBenchmark"),
+            "volumeRatio": item.get("volumeRatio"),
+            "freshness": item.get("freshness", "fallback"),
+            "freshnessLabel": item.get("freshnessLabel") or self._freshness_label(
+                str(item.get("freshness") or "fallback"),
+                bool(item.get("isFallback")),
+                bool(item.get("isStale")),
+            ),
+            "observed": bool(item.get("observed")),
+            "notes": list(item.get("notes") or []),
+        }
+
+    @staticmethod
+    def _watchlist_role_label(role: str) -> str:
+        labels = {
+            "leader": "领先成员",
+            "laggard": "落后成员",
+            "participant": "参与成员",
+            "missing": "待补齐",
+            "未观察": "待补齐",
+            "领先成员": "领先成员",
+            "落后成员": "落后成员",
+            "参与成员": "参与成员",
+        }
+        return labels.get(role, "观察成员")
+
+    @staticmethod
+    def _member_role_label(
+        change: Optional[float],
+        relative_strength: Optional[float],
+        volume_ratio: Optional[float],
+    ) -> str:
+        if change is None:
+            return "待补齐"
+        if relative_strength is not None and relative_strength >= 1.0 and (volume_ratio or 0) >= 1.1:
+            return "领先成员"
+        if relative_strength is not None and relative_strength <= -1.0:
+            return "落后成员"
+        return "参与成员"
+
+    @staticmethod
+    def _freshness_label(freshness: str, is_fallback: bool, is_stale: bool) -> str:
+        if is_fallback or freshness == "fallback":
+            return "备用/缺失"
+        if is_stale or freshness == "stale":
+            return "过期"
+        if freshness == "live":
+            return "实时"
+        if freshness == "mock":
+            return "模拟"
+        if freshness == "cached":
+            return "缓存"
+        return "延迟"
+
     def _leaders(self, observed: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         sortable = [
             item for item in observed
@@ -779,6 +1158,8 @@ class MarketRotationRadarService:
                 "changePercent": item.get("changePercent"),
                 "relativeStrengthVsBenchmark": item.get("relativeStrengthVsBenchmark"),
                 "volumeRatio": item.get("volumeRatio"),
+                "roleLabel": item.get("leadershipLabel"),
+                "freshnessLabel": item.get("freshnessLabel"),
                 "freshness": item.get("freshness"),
                 "isFallback": bool(item.get("isFallback")),
             }

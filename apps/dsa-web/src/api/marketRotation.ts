@@ -19,12 +19,28 @@ export type MarketRotationRiskLabel =
 export type MarketRotationBenchmark = {
   symbol: string;
   changePercent?: number | null;
+  timeWindows?: Record<string, MarketRotationTimeWindow>;
   freshness: MarketDataFreshness;
   isFallback: boolean;
   isStale: boolean;
   source?: string | null;
   sourceLabel?: string | null;
   asOf?: string | null;
+};
+
+export type MarketRotationTimeWindow = {
+  window: '5m' | '15m' | '60m' | '1d';
+  label: string;
+  available: boolean;
+  changePercent?: number | null;
+  relativeVolume?: number | null;
+  freshness: MarketDataFreshness;
+  isFallback: boolean;
+  isStale: boolean;
+  source?: string | null;
+  sourceLabel?: string | null;
+  asOf?: string | null;
+  reason?: string | null;
 };
 
 export type MarketRotationMember = {
@@ -35,8 +51,11 @@ export type MarketRotationMember = {
   changePercent?: number | null;
   relativeStrengthVsBenchmark?: number | null;
   volumeRatio?: number | null;
+  timeWindows?: Record<string, MarketRotationTimeWindow>;
   priceAboveVwap?: boolean | null;
   persistenceScore?: number | null;
+  leadershipLabel?: string | null;
+  freshnessLabel?: string | null;
   freshness: MarketDataFreshness;
   isFallback: boolean;
   isStale: boolean;
@@ -52,18 +71,23 @@ export type MarketRotationSummaryItem = {
   rotationScore: number;
   confidence: number;
   stage: MarketRotationStage;
+  stageExplanation?: string | null;
   freshness: MarketDataFreshness;
   isFallback: boolean;
   riskLabels: MarketRotationRiskLabel[];
+  riskExplanations?: string[];
 };
 
 export type MarketRotationTheme = MarketRotationSummaryItem & {
   englishName: string;
   focus?: string;
   benchmark: string;
+  sectorBenchmark?: string | null;
   membersConfigured: string[];
   newslessRotation: boolean;
   newslessRotationEvidence?: string | null;
+  stageExplanation?: string | null;
+  riskExplanations?: string[];
   relativeStrength: {
     benchmark?: string;
     benchmarkChangePercent?: number | null;
@@ -71,6 +95,19 @@ export type MarketRotationTheme = MarketRotationSummaryItem & {
     averageRelativeStrengthPercent?: number | null;
     vsBenchmarks?: Record<string, number | null>;
   };
+  benchmarkProxies?: Record<string, {
+    symbol: string;
+    role?: 'market_proxy' | 'sector_proxy' | string;
+    changePercent?: number | null;
+    relativeStrength?: number | null;
+    timeWindows?: Record<string, MarketRotationTimeWindow>;
+    freshness?: MarketDataFreshness;
+    isFallback?: boolean;
+    isStale?: boolean;
+    sourceLabel?: string | null;
+    asOf?: string | null;
+  }>;
+  timeWindows?: Record<string, MarketRotationTimeWindow>;
   volume: {
     averageRelativeVolume?: number | null;
     availableMemberCount?: number;
@@ -98,9 +135,23 @@ export type MarketRotationTheme = MarketRotationSummaryItem & {
       changePercent?: number | null;
       relativeStrengthVsBenchmark?: number | null;
       volumeRatio?: number | null;
+      roleLabel?: string | null;
+      freshnessLabel?: string | null;
       freshness?: MarketDataFreshness;
       isFallback?: boolean;
     }>;
+  };
+  themeDetail?: {
+    watchlistLabel?: string;
+    watchlistSafe?: boolean;
+    safeActionLabel?: string;
+    leadershipMembers?: MarketRotationWatchlistMember[];
+    laggardMembers?: MarketRotationWatchlistMember[];
+    memberEvidence?: MarketRotationWatchlistMember[];
+    freshnessLabel?: string;
+    asOf?: string | null;
+    disclosure?: string;
+    notes?: string[];
   };
   source?: string;
   sourceLabel?: string | null;
@@ -109,6 +160,20 @@ export type MarketRotationTheme = MarketRotationSummaryItem & {
   evidence: string[];
   members: MarketRotationMember[];
   noAdviceDisclosure: string;
+};
+
+export type MarketRotationWatchlistMember = {
+  symbol?: string;
+  name?: string;
+  role?: string;
+  roleLabel?: string;
+  changePercent?: number | null;
+  relativeStrengthVsBenchmark?: number | null;
+  volumeRatio?: number | null;
+  freshness?: MarketDataFreshness;
+  freshnessLabel?: string;
+  observed?: boolean;
+  notes?: string[];
 };
 
 export type MarketRotationRadarResponse = {
@@ -132,14 +197,62 @@ export type MarketRotationRadarResponse = {
   metadata: Record<string, unknown>;
 };
 
+function normalizeTimeWindows(windows?: Record<string, MarketRotationTimeWindow> | null): Record<string, MarketRotationTimeWindow> {
+  if (!windows || typeof windows !== 'object') {
+    return {};
+  }
+  return Object.values(windows).reduce<Record<string, MarketRotationTimeWindow>>((acc, window) => {
+    if (window?.window) {
+      acc[window.window] = window;
+    }
+    return acc;
+  }, {});
+}
+
+function normalizeTheme(theme: MarketRotationTheme): MarketRotationTheme {
+  const benchmarkProxies = Object.entries(theme.benchmarkProxies || {}).reduce<NonNullable<MarketRotationTheme['benchmarkProxies']>>(
+    (acc, [symbol, proxy]) => {
+      const proxySymbol = proxy.symbol || symbol;
+      acc[proxySymbol] = {
+        ...proxy,
+        timeWindows: normalizeTimeWindows(proxy.timeWindows),
+      };
+      return acc;
+    },
+    {},
+  );
+  return {
+    ...theme,
+    timeWindows: normalizeTimeWindows(theme.timeWindows),
+    benchmarkProxies,
+    members: Array.isArray(theme.members)
+      ? theme.members.map((member) => ({ ...member, timeWindows: normalizeTimeWindows(member.timeWindows) }))
+      : [],
+  };
+}
+
+function normalizeBenchmark(benchmark: MarketRotationBenchmark): MarketRotationBenchmark {
+  return {
+    ...benchmark,
+    timeWindows: normalizeTimeWindows(benchmark.timeWindows),
+  };
+}
+
 export const marketRotationApi = {
   getRotationRadar: async (): Promise<MarketRotationRadarResponse> => {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/market/rotation-radar');
     const normalized = toCamelCase<MarketRotationRadarResponse>(response.data);
+    const benchmarks = Object.entries(normalized.benchmarks || {}).reduce<Record<string, MarketRotationBenchmark>>(
+      (acc, [symbol, benchmark]) => {
+        acc[symbol] = normalizeBenchmark(benchmark);
+        return acc;
+      },
+      {},
+    );
     return {
       ...normalized,
-      themes: Array.isArray(normalized.themes) ? normalized.themes : [],
-      benchmarks: normalized.benchmarks || {},
+      themes: Array.isArray(normalized.themes) ? normalized.themes.map(normalizeTheme) : [],
+      benchmarks,
       summary: {
         strongestThemes: normalized.summary?.strongestThemes || [],
         acceleratingThemes: normalized.summary?.acceleratingThemes || [],

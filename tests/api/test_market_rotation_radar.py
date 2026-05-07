@@ -39,11 +39,16 @@ def test_market_rotation_radar_response_is_safe_and_read_only() -> None:
         payload = response.json()
         assert payload["endpoint"] == "/api/v1/market/rotation-radar"
         assert payload["metadata"]["noExternalCalls"] is True
+        assert payload["metadata"]["schemaVersion"] == "market_rotation_radar_phase2_v1"
+        assert payload["metadata"]["timeWindows"] == ["5m", "15m", "60m", "1d"]
         assert payload["isFallback"] is True
         assert payload["freshness"] == "fallback"
         assert payload["themes"]
         assert all(theme["freshness"] != "live" for theme in payload["themes"])
         assert all(theme["confidence"] <= 0.25 for theme in payload["themes"])
+        assert all(set(theme["timeWindows"]) == {"5m", "15m", "60m", "1d"} for theme in payload["themes"])
+        assert all(theme["themeDetail"]["watchlistSafe"] is True for theme in payload["themes"])
+        assert all("benchmarkProxies" in theme for theme in payload["themes"])
 
         text = json.dumps(payload, ensure_ascii=False).lower()
         for marker in (

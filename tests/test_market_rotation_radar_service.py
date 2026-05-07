@@ -19,8 +19,9 @@ def _quote(
     freshness: str = "live",
     is_stale: bool = False,
     is_fallback: bool = False,
+    time_windows: dict | None = None,
 ) -> dict:
-    return {
+    payload = {
         "symbol": symbol,
         "name": symbol,
         "price": price,
@@ -35,6 +36,9 @@ def _quote(
         "sourceLabel": "Unit Fixture",
         "asOf": "2026-05-07T09:45:00+00:00",
     }
+    if time_windows is not None:
+        payload["timeWindows"] = time_windows
+    return payload
 
 
 class MarketRotationRadarServiceTestCase(unittest.TestCase):
@@ -67,8 +71,48 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertGreaterEqual(theme["volume"]["averageRelativeVolume"], 1.5)
         self.assertTrue(theme["newslessRotation"])
         self.assertIn("无明显新闻的同步异动", theme["evidence"])
+        self.assertTrue(theme["timeWindows"]["1d"]["available"])
+        self.assertFalse(theme["timeWindows"]["5m"]["available"])
+        self.assertLessEqual(theme["confidence"], 0.68)
+        self.assertIn("QQQ", theme["benchmarkProxies"])
+        self.assertIn("IGV", theme["benchmarkProxies"])
+        self.assertTrue(theme["themeDetail"]["watchlistSafe"])
+        self.assertIn("仅观察", theme["themeDetail"]["safeActionLabel"])
         self.assertNotIn("fallback_data", theme["riskLabels"])
         self.assertNotIn("stale_data", theme["riskLabels"])
+
+    def test_intraday_windows_are_aggregated_only_when_quote_fixture_provides_them(self) -> None:
+        windows = {
+            "5m": {"changePercent": 0.8, "relativeVolume": 1.3, "freshness": "live", "asOf": "2026-05-07T09:45:00+00:00"},
+            "15m": {"changePercent": 1.6, "relativeVolume": 1.5, "freshness": "live", "asOf": "2026-05-07T09:45:00+00:00"},
+            "60m": {"changePercent": 2.2, "relativeVolume": 1.7, "freshness": "live", "asOf": "2026-05-07T09:45:00+00:00"},
+        }
+        quotes = {
+            "QQQ": _quote("QQQ", 0.4, time_windows=windows),
+            "SPY": _quote("SPY", 0.2),
+            "IWM": _quote("IWM", 0.1),
+            "IGV": _quote("IGV", 0.6, time_windows=windows),
+            "APP": _quote("APP", 3.0, volume_ratio=1.8, time_windows=windows),
+            "PLTR": _quote("PLTR", 2.4, volume_ratio=1.5, time_windows=windows),
+            "CRM": _quote("CRM", 1.8, volume_ratio=1.3, time_windows=windows),
+        }
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        theme = next(item for item in payload["themes"] if item["id"] == "ai_applications")
+
+        self.assertTrue(theme["timeWindows"]["5m"]["available"])
+        self.assertTrue(theme["timeWindows"]["15m"]["available"])
+        self.assertTrue(theme["timeWindows"]["60m"]["available"])
+        self.assertTrue(theme["timeWindows"]["1d"]["available"])
+        self.assertEqual(theme["timeWindows"]["5m"]["observedMemberCount"], 3)
+        self.assertEqual(theme["benchmarkProxies"]["IGV"]["role"], "sector_proxy")
+        dumped = json.dumps(theme, ensure_ascii=False).lower()
+        self.assertNotIn("raw_payload", dumped)
+        self.assertNotIn("建议买入", dumped)
 
     def test_fallback_when_no_provider_never_marks_live_and_caps_confidence(self) -> None:
         service = MarketRotationRadarService(now_provider=lambda: datetime(2026, 5, 7, tzinfo=timezone.utc))
@@ -87,6 +131,8 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             self.assertLessEqual(theme["confidence"], 0.25)
             self.assertEqual(theme["stage"], "weak_or_no_signal")
             self.assertIn("fallback_data", theme["riskLabels"])
+            self.assertTrue(all(not slot["available"] for slot in theme["timeWindows"].values()))
+            self.assertTrue(theme["themeDetail"]["watchlistSafe"])
 
     def test_stale_and_missing_data_penalizes_confidence_and_blocks_clean_rotation_claims(self) -> None:
         quotes = {

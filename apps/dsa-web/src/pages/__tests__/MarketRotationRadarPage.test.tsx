@@ -22,12 +22,14 @@ const radarFixture = (): MarketRotationRadarResponse => ({
   noAdviceDisclosure: '仅用于观察资金轮动迹象，非买卖建议。',
   metadata: {
     noExternalCalls: true,
-    schemaVersion: 'market_rotation_radar_mvp_v1',
+    schemaVersion: 'market_rotation_radar_phase2_v1',
+    timeWindows: ['5m', '15m', '60m', '1d'],
   },
   benchmarks: {
-    QQQ: { symbol: 'QQQ', changePercent: 0.8, freshness: 'delayed', isFallback: false, isStale: false },
-    SPY: { symbol: 'SPY', changePercent: 0.4, freshness: 'delayed', isFallback: false, isStale: false },
-    IWM: { symbol: 'IWM', changePercent: 0.1, freshness: 'delayed', isFallback: false, isStale: false },
+    QQQ: { symbol: 'QQQ', changePercent: 0.8, timeWindows: {}, freshness: 'delayed', isFallback: false, isStale: false },
+    SPY: { symbol: 'SPY', changePercent: 0.4, timeWindows: {}, freshness: 'delayed', isFallback: false, isStale: false },
+    IWM: { symbol: 'IWM', changePercent: 0.1, timeWindows: {}, freshness: 'delayed', isFallback: false, isStale: false },
+    IGV: { symbol: 'IGV', changePercent: 0.6, timeWindows: {}, freshness: 'delayed', isFallback: false, isStale: false },
   },
   summary: {
     strongestThemes: [
@@ -48,11 +50,14 @@ const radarFixture = (): MarketRotationRadarResponse => ({
       englishName: 'AI Applications',
       focus: '应用层软件、数据工作流与企业 AI 落地',
       benchmark: 'QQQ',
+      sectorBenchmark: 'IGV',
       membersConfigured: ['APP', 'PLTR', 'CRM'],
       rotationScore: 78,
       confidence: 0.72,
       stage: 'confirmed_rotation',
+      stageExplanation: '价格、量能、广度和同步性同时满足阈值。置信度 72%，3 个分钟级时窗可用。',
       riskLabels: ['gap_fade_risk'],
+      riskExplanations: ['涨幅较大但 VWAP、量能或广度确认不足，需防止冲高回落。'],
       newslessRotation: true,
       newslessRotationEvidence: '无明显新闻的同步异动：未配置新闻催化证据。',
       relativeStrength: {
@@ -61,6 +66,18 @@ const radarFixture = (): MarketRotationRadarResponse => ({
         averageThemeChangePercent: 3.6,
         averageRelativeStrengthPercent: 2.8,
         vsBenchmarks: { QQQ: 2.8, SPY: 3.2, IWM: 3.5 },
+      },
+      benchmarkProxies: {
+        QQQ: { symbol: 'QQQ', role: 'market_proxy', changePercent: 0.8, relativeStrength: 2.8, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture' },
+        SPY: { symbol: 'SPY', role: 'market_proxy', changePercent: 0.4, relativeStrength: 3.2, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture' },
+        IWM: { symbol: 'IWM', role: 'market_proxy', changePercent: 0.1, relativeStrength: 3.5, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture' },
+        IGV: { symbol: 'IGV', role: 'sector_proxy', changePercent: 0.6, relativeStrength: 3.0, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture' },
+      },
+      timeWindows: {
+        '5m': { window: '5m', label: '5分钟', available: true, changePercent: 0.8, relativeVolume: 1.3, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture' },
+        '15m': { window: '15m', label: '15分钟', available: true, changePercent: 1.4, relativeVolume: 1.5, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture' },
+        '60m': { window: '60m', label: '60分钟', available: true, changePercent: 2.2, relativeVolume: 1.7, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture' },
+        '1d': { window: '1d', label: '日内/日线', available: true, changePercent: 3.6, relativeVolume: 1.8, freshness: 'delayed', isFallback: false, isStale: false, sourceLabel: 'Unit Fixture' },
       },
       volume: { averageRelativeVolume: 1.8, availableMemberCount: 3, label: '成交额扩张明显' },
       breadth: {
@@ -78,6 +95,21 @@ const radarFixture = (): MarketRotationRadarResponse => ({
           { symbol: 'APP', name: 'APP', changePercent: 5.1, relativeStrengthVsBenchmark: 4.3, volumeRatio: 2.2, freshness: 'delayed', isFallback: false },
           { symbol: 'PLTR', name: 'PLTR', changePercent: 4.6, relativeStrengthVsBenchmark: 3.8, volumeRatio: 2.0, freshness: 'delayed', isFallback: false },
         ],
+      },
+      themeDetail: {
+        watchlistLabel: '观察清单证据',
+        watchlistSafe: true,
+        safeActionLabel: '仅观察，不构成买卖建议',
+        leadershipMembers: [
+          { symbol: 'APP', name: 'APP', role: 'leader', roleLabel: '领先成员', changePercent: 5.1, relativeStrengthVsBenchmark: 4.3, freshness: 'delayed', freshnessLabel: '延迟', observed: true },
+        ],
+        laggardMembers: [
+          { symbol: 'CRM', name: 'CRM', role: 'laggard', roleLabel: '落后成员', changePercent: 2.8, relativeStrengthVsBenchmark: 2.0, freshness: 'delayed', freshnessLabel: '延迟', observed: true },
+        ],
+        memberEvidence: [],
+        freshnessLabel: '延迟',
+        asOf: '2026-05-07T09:45:00Z',
+        disclosure: '仅用于观察资金轮动迹象，非买卖建议。',
       },
       freshness: 'delayed',
       isFallback: false,
@@ -111,6 +143,11 @@ describe('MarketRotationRadarPage', () => {
     expect(page).toHaveTextContent('上涨广度');
     expect(page).toHaveTextContent('同步性');
     expect(page).toHaveTextContent('主导股票');
+    expect(page).toHaveTextContent('时窗证据');
+    expect(page).toHaveTextContent('代理基准');
+    expect(page).toHaveTextContent('观察清单证据');
+    expect(page).toHaveTextContent('仅观察，不构成买卖建议');
+    expect(page).toHaveTextContent('置信度 72%');
     expect(page).toHaveTextContent('风险标签');
     expect(page).toHaveTextContent('数据新鲜度');
     expect(page).toHaveTextContent('非买卖建议');

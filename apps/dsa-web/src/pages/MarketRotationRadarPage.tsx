@@ -4,7 +4,7 @@ import { AlertTriangle, Gauge, RefreshCcw, Signal, Waves } from 'lucide-react';
 import { ApiErrorAlert, GlassCard } from '../components/common';
 import { DataFreshnessBadge } from '../components/market-overview/marketOverviewPrimitives';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { marketRotationApi, type MarketRotationRadarResponse, type MarketRotationRiskLabel, type MarketRotationStage, type MarketRotationSummaryItem, type MarketRotationTheme } from '../api/marketRotation';
+import { marketRotationApi, type MarketRotationRadarResponse, type MarketRotationRiskLabel, type MarketRotationStage, type MarketRotationSummaryItem, type MarketRotationTheme, type MarketRotationTimeWindow } from '../api/marketRotation';
 import { cn } from '../utils/cn';
 
 const STAGE_LABELS: Record<MarketRotationStage, string> = {
@@ -88,6 +88,37 @@ const ThemeMetric: React.FC<{ label: string; value: string; tone?: string }> = (
   </div>
 );
 
+const WindowChip: React.FC<{ window: MarketRotationTimeWindow }> = ({ window }) => (
+  <div className="min-w-0 rounded-lg border border-white/[0.04] bg-black/20 px-3 py-2">
+    <p className="truncate text-[10px] font-semibold text-white/38">{window.label}</p>
+    <p className={cn('mt-1 truncate text-[11px] font-semibold', window.available ? 'text-cyan-100' : 'text-white/35')}>
+      {window.available ? signedPercent(window.changePercent, 1) : '数据待补齐'}
+    </p>
+    <p className="mt-1 truncate text-[10px] text-white/35">{window.sourceLabel || window.freshness}</p>
+  </div>
+);
+
+const WatchlistMemberRow: React.FC<{ member: {
+  symbol?: string;
+  name?: string;
+  roleLabel?: string;
+  freshnessLabel?: string;
+  changePercent?: number | null;
+  relativeStrengthVsBenchmark?: number | null;
+  observed?: boolean;
+}; }> = ({ member }) => (
+  <div className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
+    <span className="min-w-0">
+      <span className="block truncate text-sm font-semibold text-white/82">{member.symbol || '--'}</span>
+      <span className="block truncate text-[11px] text-white/38">{member.roleLabel || '观察成员'} · {member.freshnessLabel || '待补齐'}</span>
+    </span>
+    <span className="shrink-0 text-right text-[11px] text-white/50">
+      <span className="block font-mono text-sm text-cyan-100">{signedPercent(member.relativeStrengthVsBenchmark ?? member.changePercent)}</span>
+      <span className="block">{member.observed ? '已观察' : '待补齐'}</span>
+    </span>
+  </div>
+);
+
 const RiskChip: React.FC<{ risk: MarketRotationRiskLabel }> = ({ risk }) => (
   <span
     className="inline-flex items-center rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-0.5 text-[10px] font-semibold text-amber-100"
@@ -161,6 +192,60 @@ const ThemeCard: React.FC<{
           ))}
         </div>
       ) : null}
+
+      {theme.stageExplanation ? (
+        <p className="mt-3 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 text-[11px] leading-5 text-white/50">
+          {theme.stageExplanation}
+        </p>
+      ) : null}
+
+      {theme.riskExplanations?.length ? (
+        <div className="mt-2 grid gap-1 text-[11px] leading-5 text-white/44">
+          {theme.riskExplanations.slice(0, 2).map((item) => (
+            <p key={item} className="truncate">· {item}</p>
+          ))}
+        </div>
+      ) : null}
+
+      {theme.timeWindows ? (
+        <div className="mt-4">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">时窗证据</p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {(['5m', '15m', '60m', '1d'] as const).map((window) => (
+              <WindowChip key={window} window={theme.timeWindows?.[window] || {
+                window,
+                label: window,
+                available: false,
+                freshness: 'fallback',
+                isFallback: true,
+                isStale: false,
+                sourceLabel: '窗口数据待补齐',
+                reason: 'window_unavailable',
+              }} />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {theme.benchmarkProxies ? (
+        <div className="mt-4">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">代理基准</p>
+          <div className="mt-2 grid gap-2">
+            {Object.values(theme.benchmarkProxies).map((proxy) => (
+              <div key={proxy.symbol} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-white/82">{proxy.symbol}</span>
+                  <span className="block truncate text-[11px] text-white/38">{proxy.role === 'sector_proxy' ? '行业代理' : '市场代理'} · {proxy.sourceLabel || '备用数据'}</span>
+                </span>
+                <span className="shrink-0 text-right text-[11px] text-white/50">
+                  <span className="block font-mono text-sm text-cyan-100">{signedPercent(proxy.relativeStrength)}</span>
+                  <span className="block">{proxy.freshness || 'fallback'}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </article>
   );
 };
@@ -225,6 +310,30 @@ const ThemeDetailPanel: React.FC<{ theme?: MarketRotationTheme }> = ({ theme }) 
           {theme.sourceLabel || theme.source || '主题篮子计算'} · {theme.asOf || theme.updatedAt || '时间待补齐'}
         </p>
       </div>
+
+      {theme.themeDetail ? (
+        <div className="mt-5">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">{theme.themeDetail.watchlistLabel || '观察清单'}</p>
+          <p className="mt-2 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 text-[11px] leading-5 text-white/50">
+            {theme.themeDetail.safeActionLabel || '仅观察，不构成买卖建议'}
+          </p>
+          <div className="mt-3 grid gap-2">
+            {(theme.themeDetail.leadershipMembers || []).map((member) => (
+              <WatchlistMemberRow key={`${member.symbol || 'leader'}-${member.roleLabel || 'leader'}`} member={member} />
+            ))}
+            {(theme.themeDetail.laggardMembers || []).length ? (
+              <div className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">落后成员</p>
+                <div className="mt-2 grid gap-2">
+                  {(theme.themeDetail.laggardMembers || []).map((member) => (
+                    <WatchlistMemberRow key={`${member.symbol || 'laggard'}-${member.roleLabel || 'laggard'}`} member={member} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </GlassCard>
   );
 };
