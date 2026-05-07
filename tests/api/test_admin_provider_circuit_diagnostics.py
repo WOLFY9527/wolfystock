@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import admin_provider_circuits
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
+from src.services.options_market_data_provider import OptionsLiveProviderConfig
 from src.services.provider_circuit_observer import ProviderCircuitObserver
 from src.storage import DatabaseManager
 
@@ -539,6 +540,53 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertFalse(item["wouldBlockCall"])
         text = self._json_text(response.json()).lower()
         for blocked in ("placeholder", "tradier_api_token", "api_token", "token", "secret"):
+            self.assertNotIn(blocked, text)
+
+    def test_sla_readiness_endpoint_reports_partial_credentials_sanitized_and_would_block_without_live_calls(self) -> None:
+        self._as_provider_read_admin()
+        observer = ProviderCircuitObserver(db=self.db)
+        observer.record_observation(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            result_bucket="auth_or_key_invalid",
+            observed_at=datetime(2026, 5, 6, 10, 30, 0),
+        )
+        staged_config = OptionsLiveProviderConfig(
+            live_providers_enabled=True,
+            enabled_provider_keys=frozenset({"tradier"}),
+            partial_credential_provider_keys=frozenset({"tradier"}),
+        )
+
+        with patch.object(admin_provider_circuits.OptionsLiveProviderConfig, "from_env", return_value=staged_config), patch(
+            "requests.sessions.Session.request"
+        ) as request_mock:
+            response = self.client.get(
+                "/api/v1/admin/providers/sla-readiness",
+                params={"provider": "tradier", "since": "2026-05-06T00:00:00"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        request_mock.assert_not_called()
+        item = response.json()["items"][0]
+        self.assertEqual(item["provider"], "tradier")
+        self.assertEqual(item["readinessState"], "partial_credentials")
+        self.assertEqual(item["credentialState"], "partial_credentials")
+        self.assertFalse(item["credentialsPresent"])
+        self.assertEqual(item["credentialContract"]["state"], "partial")
+        self.assertEqual(item["credentialContract"]["reasonCode"], "options_provider_credentials_partial")
+        self.assertEqual(item["credentialContract"]["requiredCredentialCount"], 1)
+        self.assertEqual(item["credentialContract"]["configuredCredentialCount"], 0)
+        self.assertEqual(item["credentialContract"]["partialCredentialCount"], 1)
+        self.assertFalse(item["liveHttpCallsEnabled"])
+        self.assertFalse(item["wouldBlockCall"])
+        self.assertTrue(item["wouldBlockIfEnforced"])
+        self.assertEqual(item["enforcementBlockReasonCode"], "auth_or_key_invalid")
+        self.assertEqual(item["circuitAdvisoryState"], "degraded")
+        self.assertFalse(item["wouldChangeProviderOrder"])
+        self.assertFalse(item["wouldChangeFallbackBehavior"])
+        text = self._json_text(response.json()).lower()
+        for blocked in ("api_key", "api token", "token", "secret", "password", "placeholder"):
             self.assertNotIn(blocked, text)
 
 

@@ -12,6 +12,7 @@ from src.services.options_lab_service import OptionsLabProviderUnavailable, Opti
 from src.services.options_market_data_provider import (
     ALLOWED_OPTIONS_PROVIDER_KEYS,
     DelayedFixtureOptionsProvider,
+    LIVE_OPTIONS_PROVIDER_NAMES,
     MalformedGreeksFixtureOptionsProvider,
     OptionsLiveProviderConfig,
     OptionsProviderUnavailable,
@@ -300,6 +301,88 @@ def test_options_provider_preflight_missing_credentials_state_is_sanitized() -> 
     assert preflight["credentialContract"]["requiredCredentialCount"] == 1
     assert preflight["credentialContract"]["configuredCredentialCount"] == 0
     assert "credentials are not configured" in preflight["message"].lower()
+    _assert_preflight_safety_contract(preflight)
+
+
+@pytest.mark.parametrize("provider_name", sorted(LIVE_OPTIONS_PROVIDER_NAMES))
+@pytest.mark.parametrize(
+    ("credential_state", "expected_readiness", "expected_reason"),
+    [
+        ("missing", "missing_credentials", "options_provider_credentials_missing"),
+        ("malformed", "malformed_credentials", "options_provider_credentials_malformed"),
+        ("partial", "partial_credentials", "options_provider_credentials_partial"),
+    ],
+)
+def test_live_provider_preflight_credential_contract_fails_closed_for_staging_states(
+    provider_name: str,
+    credential_state: str,
+    expected_readiness: str,
+    expected_reason: str,
+) -> None:
+    credentialed = frozenset({provider_name}) if credential_state == "present" else frozenset()
+    malformed = frozenset({provider_name}) if credential_state == "malformed" else frozenset()
+    partial = frozenset({provider_name}) if credential_state == "partial" else frozenset()
+
+    with patch("requests.sessions.Session.request") as request_mock:
+        preflight = build_options_provider_live_readiness_preflight(
+            provider_name,
+            config=OptionsLiveProviderConfig(
+                live_providers_enabled=True,
+                enabled_provider_keys=frozenset({provider_name}),
+                credentialed_provider_keys=credentialed,
+                malformed_credential_provider_keys=malformed,
+                partial_credential_provider_keys=partial,
+            ),
+        )
+
+    assert preflight["providerName"] == provider_name
+    assert preflight["readinessState"] == expected_readiness
+    assert preflight["reasonCode"] == expected_reason
+    assert preflight["credentialsPresent"] is False
+    assert preflight["credentialContract"] == {
+        "state": credential_state,
+        "reasonCode": expected_reason,
+        "requiredCredentialCount": 1,
+        "configuredCredentialCount": 0,
+        "invalidCredentialCount": 1 if credential_state == "malformed" else 0,
+        "partialCredentialCount": 1 if credential_state == "partial" else 0,
+    }
+    request_mock.assert_not_called()
+    text = _json_lower(preflight)
+    for blocked in ("api_key", "apikey", "token", "secret", "password", "authorization"):
+        assert blocked not in text
+    _assert_preflight_safety_contract(preflight)
+
+
+@pytest.mark.parametrize("provider_name", sorted(LIVE_OPTIONS_PROVIDER_NAMES))
+def test_live_provider_preflight_present_credentials_are_sanitized_and_still_non_live(provider_name: str) -> None:
+    with patch("requests.sessions.Session.request") as request_mock:
+        preflight = build_options_provider_live_readiness_preflight(
+            provider_name,
+            config=OptionsLiveProviderConfig(
+                live_providers_enabled=True,
+                enabled_provider_keys=frozenset({provider_name}),
+                credentialed_provider_keys=frozenset({provider_name}),
+            ),
+        )
+
+    assert preflight["providerName"] == provider_name
+    assert preflight["readinessState"] == "live_credentials_present_live_calls_disabled"
+    assert preflight["reasonCode"] == "options_provider_live_calls_disabled"
+    assert preflight["credentialsPresent"] is True
+    assert preflight["credentialContract"] == {
+        "state": "present",
+        "reasonCode": "options_provider_credentials_present",
+        "requiredCredentialCount": 1,
+        "configuredCredentialCount": 1,
+        "invalidCredentialCount": 0,
+        "partialCredentialCount": 0,
+    }
+    assert preflight["payloadMappable"] is None
+    request_mock.assert_not_called()
+    text = _json_lower(preflight)
+    for blocked in ("api_key", "apikey", "token", "secret", "password", "authorization"):
+        assert blocked not in text
     _assert_preflight_safety_contract(preflight)
 
 
