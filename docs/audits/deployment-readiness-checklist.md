@@ -320,6 +320,9 @@ The following must all be true before public multi-user deployment:
 - [ ] `git status --short` is clean before tagging/deploying.
 - [x] Dry-run/live opt-in ingress smoke preflight exists and is listed by
   `scripts/release_gate_summary.sh`.
+- [x] Machine-checkable public launch evidence aggregation exists through
+  `scripts/release_gate_summary.sh --go-no-go-json`; it reports foundation
+  evidence and hard blockers while keeping the final status **NO-GO**.
 - [ ] Staging smoke passes through HTTPS reverse proxy on synthetic users/data.
 - [ ] WS2 multi-instance smoke passes or deployment is explicitly constrained to
   single API process with documented SSE/task limitations.

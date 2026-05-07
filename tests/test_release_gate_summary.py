@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+import json
 from pathlib import Path
 
 
@@ -52,6 +53,39 @@ def test_release_gate_summary_prints_required_fields_on_clean_repo(tmp_path):
     assert "./scripts/ci_gate.sh" in result.stdout
     assert "git diff --check origin/main..HEAD" in result.stdout
     assert "not a release approval tool" in result.stdout
+
+
+def test_release_gate_summary_go_no_go_json_keeps_launch_blocked(tmp_path):
+    repo = _init_repo(tmp_path)
+
+    result = _summary(repo, "--go-no-go-json")
+
+    assert result.returncode == 0
+    summary = json.loads(result.stdout)
+    assert summary["schemaVersion"] == "wolfystock_public_launch_go_no_go_v1"
+    assert summary["finalStatus"] == "NO-GO"
+    assert summary["releaseApproved"] is False
+    evidence_ids = {item["id"] for item in summary["completedFoundationEvidence"]}
+    assert {
+        "provider_sla_live_readiness_preflight",
+        "mfa_rbac_readiness_foundations",
+        "quota_pilot_readiness_foundation",
+        "backup_restore_dry_run_postgres_pitr_synthetic",
+        "data_quality_fallback_stale_disclosure",
+        "scanner_portfolio_backtest_options_no_advice_public_safety",
+        "secret_scan_admin_harness_staging_ingress",
+    } <= evidence_ids
+    blocker_ids = {item["id"] for item in summary["hardBlockers"]}
+    assert {
+        "global_mfa_enforcement_not_accepted",
+        "rbac_coarse_fallback_actual_removal_pending",
+        "live_quota_enforcement_not_global",
+        "real_isolated_postgresql_restore_pitr_pending",
+        "real_provider_credentials_live_calls_circuit_enforcement_pending",
+        "final_clean_full_release_gate_required",
+    } <= blocker_ids
+    assert all(item["status"] == "blocking" for item in summary["hardBlockers"])
+    assert "launch-ready" not in result.stdout
 
 
 def test_release_gate_summary_fails_on_dirty_repo_without_allow_dirty(tmp_path):
