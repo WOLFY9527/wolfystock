@@ -425,6 +425,45 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
         self.assertIn("admin_only", audit_text)
         self.assertNotIn("userpass123", audit_text)
 
+    def test_mfa_login_enforcement_admin_only_pilot_accepts_verified_admin_totp_and_issues_session(self) -> None:
+        self._enable_admin_mfa_and_recovery_codes()
+
+        with patch("api.v1.endpoints.auth.ExecutionLogService") as service_cls:
+            recorder = service_cls.return_value
+            with patch.dict(
+                os.environ,
+                {
+                    "WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true",
+                    "WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ADMIN_ONLY": "true",
+                },
+                clear=False,
+            ):
+                blocked = self.client.post(
+                    "/api/v1/auth/login",
+                    json={"username": "admin", "password": "adminpass123"},
+                )
+                accepted = self.client.post(
+                    "/api/v1/auth/login",
+                    json={
+                        "username": "admin",
+                        "password": "adminpass123",
+                        "mfaCode": _totp_code(TEST_MFA_SECRET),
+                    },
+                )
+
+        self.assertEqual(blocked.status_code, 401)
+        self.assertEqual(blocked.json()["error"], "mfa_required")
+        self.assertNotIn("set-cookie", {key.lower(): value for key, value in blocked.headers.items()})
+        self.assertEqual(accepted.status_code, 200)
+        self.assertTrue(accepted.json()["ok"])
+        self.assertIn("set-cookie", {key.lower(): value for key, value in accepted.headers.items()})
+        actions = [call.kwargs.get("action") for call in recorder.record_admin_action.call_args_list]
+        self.assertIn("security.mfa_login_enforcement_decision", actions)
+        audit_text = repr(recorder.record_admin_action.call_args_list)
+        self.assertIn("admin_only", audit_text)
+        self.assertIn("totp_success", audit_text)
+        self.assertNotIn(TEST_MFA_SECRET, blocked.text + accepted.text + audit_text)
+
     def test_mfa_login_enforcement_unsupported_scope_fails_closed(self) -> None:
         self._enable_admin_mfa_and_recovery_codes()
 
