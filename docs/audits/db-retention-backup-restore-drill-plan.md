@@ -7,7 +7,13 @@ Mode: docs-only planning artifact. No runtime code, schema, migrations, tests, l
 
 Current public multi-user deployment verdict for this slice: **NO-GO until retention tiers and restore drills are accepted and exercised**.
 
-The current database readiness posture has improved through DB Index Batch A, which covered the first production-critical auth/session and durable task/progress lookup paths. Batch B indexes, retention implementation, cleanup jobs, PostgreSQL backup automation, and restore drill evidence remain future work.
+The current database readiness posture has improved through DB Index Batch A,
+which covered the first production-critical auth/session and durable
+task/progress lookup paths, and through a local dry-run backup/restore
+preflight that validates simulated metadata, artifact presence, timestamp
+sanity, schema compatibility, and temp-only restore target isolation. Batch B
+indexes, retention implementation, cleanup jobs, PostgreSQL backup automation,
+and real restore drill evidence remain future work.
 
 This plan defines the retention tiers, backup policy, restore drill scope, validation checklist, rollback/failure handling, and future Codex prompts needed before public onboarding. It is intentionally planning-only and does not authorize cleanup, migration, DB access, schema changes, or runtime behavior changes.
 
@@ -15,7 +21,8 @@ Public deployment blockers covered by this document:
 
 - Retention tiers are not yet accepted for high-growth operational and user-owned tables.
 - Backup policy is not yet proven for encrypted PostgreSQL production data.
-- Restore drills have not yet produced local, staging, or PITR evidence.
+- Local dry-run restore preflight evidence exists, but real isolated
+  PostgreSQL, staging, and PITR restore drill evidence has not been produced.
 - Post-restore smoke checks are not yet standardized across auth, task polling, admin logs, cost observability, and portfolio/backtest artifacts.
 
 ## 2. Scope and Non-goals

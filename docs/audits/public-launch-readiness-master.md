@@ -10,7 +10,8 @@ Related docs: `docs/audits/public-launch-gap-register.md`,
 `docs/audits/known-test-warnings-register.md`
 
 Mode: docs-only readiness summary. No production code, tests, scripts, frontend
-app files, provider configuration, or changelog files were changed.
+app files, or provider configuration were changed. `docs/CHANGELOG.md` is
+updated only to record this consolidation.
 
 ## Executive verdict
 
@@ -26,12 +27,12 @@ staging evidence.
 
 | Area | Current posture | Launch status | Blocking requirement |
 | --- | --- | --- | --- |
-| Security, MFA, RBAC | Password KDF hardening and MFA/RBAC foundations exist, but login MFA enforcement is disabled, production TOTP secret storage is not accepted, recovery-code acceptance remains incomplete, and coarse admin compatibility fallback remains. | **NO-GO** | Production MFA storage and recovery-code acceptance, staged MFA enforcement pilot, R5 RBAC fallback inventory/observe/fail-closed plan, route/capability audit, and rollback evidence. |
-| Provider, Options, data quality | Provider diagnostics and Options/Data Pipeline foundations exist, but Options live providers remain disabled or fixture/synthetic, provider entitlement/freshness is not launch-accepted, and data-quality caps/disclosures must stay visible. | **NO-GO** | Provider-by-route entitlement matrix, real Options adapter/staged provider evidence before live decisioning, data freshness/as-of/fallback labels, and degraded-state dashboard evidence. |
+| Security, MFA, RBAC | Password KDF hardening, encrypted MFA secret foundation, disabled-by-default MFA pilot guards, and RBAC readiness coverage exist, but global login MFA enforcement remains disabled, production key/recovery operations are not launch-accepted, recovery-code acceptance remains incomplete, and coarse admin compatibility fallback remains. | **NO-GO** | Production MFA key/recovery acceptance, staged MFA enforcement pilot, R5 RBAC fallback inventory/observe/fail-closed plan, route/capability audit, and rollback evidence. |
+| Provider, Options, data quality | Provider SLA/readiness diagnostics and Options/Data Pipeline foundations exist, but Options live providers remain disabled or fixture/synthetic, provider entitlement/freshness is not launch-accepted, and data-quality caps/disclosures must stay visible. | **NO-GO** | Provider-by-route entitlement matrix, real Options adapter/staged provider evidence before live decisioning, data freshness/as-of/fallback labels, and degraded-state dashboard evidence. |
 | Portfolio and backtest safety | Recent safety tests exist, but public launch still requires broad owner-isolation, deterministic backtest, portfolio accounting, mutation guard, export isolation, and broker redaction evidence. | **NO-GO** | Owner A/B denial proof across list/detail/export/mutate/admin paths, accounting invariant tests, deterministic fixtures, broker credential redaction audit, and no-advice/order-verb scans. |
 | WS2 and multi-instance runtime | Durable task/progress foundations and worker prototype exist, but process-local SSE remains the default and no accepted staging multi-instance smoke proves API A/B plus worker behavior. | **NO-GO** | Executable WS2 smoke proving API A submit, worker lease, API B durable read, polling replay, owner isolation, retry/failure safety, and explicit SSE limitation handling. |
-| Cost, quota, provider circuit | Cost ledger, quota dry-run helpers, and provider circuit diagnostics exist, but live quota enforcement and provider circuit enforcement are not active route-boundary controls. | **NO-GO** | One low-risk live quota enforcement pilot and one provider circuit enforcement pilot behind rollback switches, with budget/status UI labels and staging degraded evidence. |
-| Deployment, backup, rollback | Deployment checklist exists, but launch still lacks accepted backup/restore drill, retention tiers, staging ingress proof, and final release-candidate gate. | **NO-GO** | Clean release-candidate gate, clean worktree, HTTPS reverse-proxy smoke, no public backend `:8000`, backup/restore drill, retention dry runs, rollback plan, and owner-isolation smoke. |
+| Cost, quota, provider circuit | Cost ledger, quota dry-run helpers, quota enforcement pilot-readiness preflight, and provider circuit diagnostics exist, but live quota enforcement and provider circuit enforcement are not active route-boundary controls. | **NO-GO** | One low-risk live quota enforcement pilot and one provider circuit enforcement pilot behind rollback switches, with budget/status UI labels and staging degraded evidence. |
+| Deployment, backup, rollback | Deployment checklist, local backup/restore dry-run preflight, release secret-scan, and admin harness coverage exist, but launch still lacks accepted isolated PostgreSQL restore/PITR drill, retention tiers, staging ingress proof, and final release-candidate gate. | **NO-GO** | Clean release-candidate gate, clean worktree, HTTPS reverse-proxy smoke, no public backend `:8000`, backup/restore drill, retention dry runs, rollback plan, and owner-isolation smoke. |
 | Final gate requirements | Docs-only checks can validate this document, but they do not prove runtime readiness. | **NO-GO** | Every item in `deployment-readiness-checklist.md` section 10 must be checked or explicitly accepted as a documented production exception. |
 
 ## GO criteria
@@ -54,6 +55,8 @@ Public launch may move to **GO** only when all of the following are true:
 - MFA enforcement prerequisites are complete, or public admin access is blocked
   behind a documented compensating control.
 - Backup/restore drill passes in an isolated environment.
+- Local backup/restore dry-run preflight passes with fresh synthetic or
+  sanitized metadata before the real drill.
 - Rollback plan names last-good commit/image, DB restore decision point, health
   checks, and owner-isolation smoke.
 - Retention dry-run reports exist for high-growth domains.

@@ -12,16 +12,20 @@ Current public multi-user deployment verdict: **NO-GO**.
 
 WolfyStock has several important foundations in place: stronger password KDF
 storage, recent admin reauth source plus a narrow pilot, admin MFA backend
-scaffold, capability-based RBAC helpers and migrated route families, durable
+scaffold with encrypted-secret and disabled-by-default enforcement pilot
+guards, capability-based RBAC helpers and migrated route families, durable
 task/progress state, synthetic worker prototype, cost ledger foundations,
-provider circuit storage/diagnostics/dry-run observation, DB index Batch A, and
-fixture-backed Options/Data Pipeline improvements.
+quota enforcement pilot-readiness preflight, provider circuit
+storage/diagnostics/dry-run observation, DB index Batch A, local backup/restore
+dry-run preflight, secret-scan/admin harness coverage, and fixture-backed
+Options/Data Pipeline improvements.
 
 The system is still not ready for broad public multi-user exposure because the
 remaining blockers are operational and safety-critical:
 
-- MFA cannot be enforced until production TOTP secret storage, recovery codes,
-  and a staged enforcement pilot exist.
+- MFA cannot be globally enforced until production key/recovery operations and
+  staged pilot evidence are accepted; the current enforcement path remains
+  disabled unless explicitly configured for a narrow admin pilot.
 - RBAC still carries coarse admin compatibility fallback and needs remaining
   route-family migration/governance before relying on least privilege.
 - WS2 still needs staging multi-instance smoke evidence; process-local SSE is
@@ -30,7 +34,8 @@ remaining blockers are operational and safety-critical:
   is not enabled.
 - Provider circuits are visible in storage/API diagnostics, but runtime provider
   fallback/order/enforcement behavior has not changed.
-- DB readiness still lacks backup/restore drills and full retention tiers for
+- DB readiness has a local dry-run backup/restore preflight, but still lacks an
+  isolated PostgreSQL restore/PITR drill and full retention tiers for
   high-growth domains.
 - Options Lab remains analysis-only with fixture/synthetic data; no real
   provider adapter or broker/order path exists.
@@ -49,25 +54,30 @@ Status:
 - [x] Recent admin reauth source exists.
 - [x] Recent reauth is wired to the narrow admin user-security write pilot.
 - [x] Admin MFA backend foundation exists.
-- [x] MFA login enforcement is explicitly disabled.
+- [x] Encrypted MFA secret storage foundation exists for non-test TOTP refs.
+- [x] Disabled-by-default admin MFA login enforcement pilot contract and guard
+  exist.
+- [x] MFA login enforcement remains explicitly disabled unless a narrow pilot
+  flag is configured.
+- [x] Release secret-scan and admin browser harness coverage have improved.
 
 Public deployment blockers:
 
-- [ ] Approve and implement production encrypted or external secret storage for
-  TOTP secrets.
-- [ ] Add recovery code generation, display-once handling, hashing, and
-  verification.
-- [ ] Define and test the MFA-required login/session contract.
-- [ ] Run an admin MFA enforcement pilot with rollback plan before requiring it
-  for public admin access.
+- [ ] Approve production key custody/rotation/recovery operations for encrypted
+  TOTP secret storage.
+- [ ] Accept recovery code generation, display-once handling, hashing,
+  verification, and break-glass policy end to end.
+- [ ] Define and test the global MFA-required login/session contract.
+- [ ] Run and accept an admin MFA enforcement pilot with rollback plan before
+  requiring it for public admin access.
 - [ ] Expand recent reauth coverage beyond the current pilot for other sensitive
   admin writes.
 - [ ] Define audit fail-closed policy for security-sensitive events.
 
 Go/no-go:
 
-- **NO-GO** for public multi-user deployment until MFA secret storage, recovery
-  codes, and enforcement pilot evidence are complete.
+- **NO-GO** for public multi-user deployment until MFA secret storage operations,
+  recovery-code acceptance, and enforcement pilot evidence are complete.
 
 ## 3. RBAC gates
 
@@ -169,6 +179,8 @@ Status:
   windows, and probe events.
 - [x] Provider circuit dry-run observer exists for synthetic bounded observation
   buckets.
+- [x] Provider SLA/readiness diagnostics are present as bounded admin/provider
+  evidence.
 - [x] Diagnostics responses omit raw provider payloads, URLs/query strings,
   credentials, cookies, raw session ids, exception text, stack traces, and
   internal storage details.
@@ -262,6 +274,8 @@ Status:
   `news`, `sentiment`, and `detailed_fundamentals`.
 - [x] Optional enrichment failures/timeouts remain non-blocking and use
   sanitized reason codes.
+- [x] Fallback/stale data-quality disclosure regressions exist and must remain
+  visible near decision-like labels.
 
 Remaining blockers:
 
@@ -297,6 +311,9 @@ The following must all be true before public multi-user deployment:
   session ids, broker credentials, webhook URLs, password hashes, raw prompts,
   raw provider payloads, or stack traces are present in logs, admin diagnostics,
   readiness output, browser DOM, or docs.
+- [ ] `./scripts/release_secret_scan.sh` is clean on the release candidate.
+- [ ] Admin harness/browser smoke evidence is current, with mocked harness
+  coverage clearly separated from real auth/session staging proof.
 - [ ] MFA enforcement prerequisites are complete or public admin access is
   blocked behind a documented compensating control.
 - [ ] Backup/restore dry-run preflight passes with fresh synthetic or sanitized
