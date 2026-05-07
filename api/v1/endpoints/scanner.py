@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional, Type, TypeVar
+from typing import Any, Callable, Optional, Type, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -36,6 +36,21 @@ from src.storage import DatabaseManager
 logger = logging.getLogger(__name__)
 router = APIRouter()
 ResponseT = TypeVar("ResponseT")
+
+
+def _public_theme_payload(theme: object) -> dict[str, Any]:
+    payload = theme.to_dict()
+    if payload.get("source") == "ai_generated":
+        label = str(payload.get("label_zh") or payload.get("label_en") or "").strip()
+        payload["description"] = "AI-generated custom scanner theme. Review selections before running scanner."
+        payload["aliases"] = [label] if label else []
+        payload["criteria_prompt"] = None
+        payload["ai_metadata"] = {
+            key: value
+            for key, value in dict(payload.get("ai_metadata") or {}).items()
+            if key in {"status", "method", "catalog_key", "message"}
+        }
+    return payload
 
 
 def _build_scanner_service(
@@ -164,7 +179,7 @@ def get_scanner_themes(
 ) -> ScannerThemesResponse:
     normalized_market = (market.strip().lower() if isinstance(market, str) else "") or None
     return ScannerThemesResponse(
-        items=[theme.to_dict() for theme in list_scanner_themes(market=normalized_market)]
+        items=[_public_theme_payload(theme) for theme in list_scanner_themes(market=normalized_market)]
     )
 
 
@@ -191,7 +206,7 @@ def create_scanner_theme(
             manual_symbols=request.manual_symbols,
         )
         return ScannerThemeGenerationResponse(
-            theme=theme.to_dict(),
+            theme=_public_theme_payload(theme),
             suggestions=[suggestion.to_dict() for suggestion in suggestions],
             message=(
                 f"Generated {len(suggestions)} symbols from AI theme criteria and federal/sector "
