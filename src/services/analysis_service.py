@@ -315,7 +315,22 @@ class AnalysisService:
         if not text:
             return None
         lowered = text.lower()
-        if "api_key" in lowered or "secret" in lowered or "bearer " in lowered or "sk-" in lowered:
+        sensitive_markers = (
+            "api_key",
+            "apikey",
+            "secret",
+            "bearer ",
+            "sk-",
+            "token",
+            "cookie",
+            "session",
+            "password",
+            "traceback",
+            "stack trace",
+            "raw_provider_payload",
+            "raw_prompt",
+        )
+        if any(marker in lowered for marker in sensitive_markers):
             return "[redacted]"
         return text[:160]
 
