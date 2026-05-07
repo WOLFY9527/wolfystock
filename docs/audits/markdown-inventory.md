@@ -1,6 +1,13 @@
 # Markdown Inventory
 
-Status: Current
+> Historical evidence note
+>
+> Superseded for current audit navigation by `docs/audits/README.md` and for
+> the current public launch verdict by
+> `docs/audits/public-launch-readiness-master.md`. This file remains useful as
+> a point-in-time classification snapshot only.
+
+Status: Historical note
 Owner domain: Documentation governance
 Related docs: `docs/audits/markdown-consolidation-plan.md`, `docs/audits/final-pre-push-audit.md`
 

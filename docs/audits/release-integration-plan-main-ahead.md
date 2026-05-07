@@ -1,5 +1,13 @@
 # Main Branch Release Integration Plan
 
+> Historical evidence note
+>
+> Superseded for current audit navigation by `docs/audits/README.md` and for
+> the current public launch verdict by
+> `docs/audits/public-launch-readiness-master.md`. This file captures a
+> point-in-time local-ahead integration plan and must not be treated as the
+> current ahead/behind state or launch decision.
+
 Date: 2026-05-07
 Branch checked: `main`
 Upstream comparison: local `main` is ahead of `origin/main` by 49 commits.

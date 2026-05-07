@@ -1,5 +1,12 @@
 # Final Pre-push Audit
 
+> Historical evidence note
+>
+> Superseded for current launch navigation by `docs/audits/README.md` and for
+> the current public launch verdict by
+> `docs/audits/public-launch-readiness-master.md`. This file is a point-in-time
+> pre-push audit and must not be treated as the current GO/NO-GO decision.
+
 Date: 2026-05-07
 Branch checked: `main`
 Mode: docs-only final audit, risk review, and markdown inventory. No production
