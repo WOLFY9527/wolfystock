@@ -139,6 +139,48 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertTrue(sessions[0]["readable_summary"]["destructive"])
         self.assertEqual(detail["events"][0]["detail"]["action"], "factory_reset_system")
 
+    def test_admin_security_cost_provider_and_quota_actions_sanitize_incident_evidence(self) -> None:
+        raw_secret = "raw-token-value-should-not-appear"
+        action_cases = (
+            ("admin_security", "mfa_break_glass_denied"),
+            ("admin_cost", "budget_alert_dry_run"),
+            ("admin_provider", "provider_circuit_probe_failed"),
+            ("admin_quota", "quota_reservation_would_block"),
+        )
+
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            session_ids = [
+                service.record_admin_action(
+                    action=action,
+                    message=f"{action} failed token={raw_secret}",
+                    actor={"user_id": "bootstrap-admin", "username": "admin", "role": "admin"},
+                    subsystem=subsystem,
+                    detail={
+                        "provider": "synthetic",
+                        "api_key": raw_secret,
+                        "response": f"Authorization: Bearer {raw_secret}",
+                    },
+                    request={"session_token": raw_secret, "mode": "dry_run"},
+                    result={"cookie": raw_secret, "outcome": "blocked"},
+                    overall_status="failed",
+                )
+                for subsystem, action in action_cases
+            ]
+            details = [service.get_session_detail(session_id) for session_id in session_ids]
+
+        rendered = str(details)
+        self.assertNotIn(raw_secret, rendered)
+        for detail, (subsystem, action) in zip(details, action_cases):
+            self.assertEqual(detail["readable_summary"]["session_kind"], "admin_action")
+            self.assertEqual(detail["readable_summary"]["subsystem"], subsystem)
+            self.assertEqual(detail["readable_summary"]["action_name"], action)
+            event = detail["events"][0]
+            self.assertEqual(event["detail"]["action"], action)
+            self.assertEqual(event["detail"]["api_key"], "***")
+            self.assertIn("token=***", event["message"])
+            self.assertEqual(event["detail"]["response"], "Authorization=***")
+
     def test_record_market_overview_fetch_persists_panel_audit_fields(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()

@@ -7,6 +7,7 @@ Owner domain: Release readiness
 Related docs: `docs/audits/public-launch-gap-register.md`,
 `docs/audits/deployment-readiness-checklist.md`,
 `docs/audits/launch-acceptance-evidence-pack.md`,
+`docs/audits/incident-response-audit-evidence-pack.md`,
 `docs/audits/final-pre-push-audit.md`,
 `docs/audits/known-test-warnings-register.md`
 
@@ -28,6 +29,8 @@ staging evidence.
 The operator evidence pack now defines the sanitized acceptance schema for the
 remaining launch blockers through
 `python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>`.
+The companion incident-response pack is
+`python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>`.
 It never approves launch by itself; `releaseApproved` remains false and the
 public launch verdict stays **NO-GO** unless every hard blocker has accepted
 operator evidence.
@@ -71,6 +74,10 @@ Public launch may move to **GO** only when all of the following are true:
   staging dry-run, provider circuit controlled enforcement, quota pilot, real
   isolated PostgreSQL restore/PITR, staging ingress smoke, public API/frontend
   no-secret public safety, and final clean full `ci_gate`.
+- Sanitized incident-response evidence is attached through
+  `python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>`
+  for admin-critical audit events, preview-first cleanup, provider/notification
+  failure paths, release-check failures, and local no-secret generation.
 - MFA enforcement prerequisites are complete, or public admin access is blocked
   behind a documented compensating control.
 - Backup/restore drill passes in an isolated environment.

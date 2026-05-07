@@ -120,6 +120,7 @@ Release review should attach:
 - `scripts/release_gate_summary.sh --go-no-go-json` output.
 - `scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>` output.
 - `scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>` output.
+- `scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>` output for incident/audit sanitization evidence.
 - `scripts/backup_restore_drill_check.sh` output for synthetic preflight and,
   when available, accepted sanitized real restore/PITR evidence.
 - `scripts/staging_ingress_smoke.py` dry-run or explicitly opted-in staging

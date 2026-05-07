@@ -16,6 +16,7 @@ behavior was changed.
 - `docs/audits/security-admin-mfa-backend-foundation.md`
 - `docs/audits/public-launch-readiness-master.md`
 - `docs/audits/launch-acceptance-evidence-pack.md`
+- `docs/audits/incident-response-audit-evidence-pack.md`
 - `docs/audits/public-launch-blocker-burndown.md`
 - `docs/audits/data-quality-user-disclosure-policy.md`
 - Supplemental current audit context:
@@ -43,6 +44,11 @@ provider credential staging dry-run, provider circuit controlled enforcement,
 quota pilot acceptance, real isolated PostgreSQL restore/PITR, staging ingress
 smoke, public API/frontend no-secret public safety, supply-chain
 dependency/build artifact safety, and final clean full `ci_gate`.
+
+`scripts/incident_response_evidence.py` adds a companion incident-response
+audit evidence contract for sanitized admin-critical actions, preview-first
+cleanup, provider/notification/release failure evidence, and local
+no-secret/no-network generation.
 
 The pack is evidence-only. It does not call external services, read production
 secrets, read production data paths, or change runtime behavior. Missing or

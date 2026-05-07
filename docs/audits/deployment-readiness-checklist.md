@@ -340,6 +340,11 @@ The following must all be true before public multi-user deployment:
   `python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>`;
   it consumes only synthetic or operator-sanitized flag names and secret
   presence states, emits stable JSON, and never prints secret values.
+- [x] Incident-response audit evidence pack exists through
+  `python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>`;
+  it validates sanitized admin-critical action evidence, preview-first cleanup,
+  provider/notification/release failure evidence, and local no-secret/no-network
+  generation without approving launch.
 - [ ] Sanitized operator evidence pack is accepted for every hard blocker; the
   checker may move from **NO-GO** to `GO-REVIEW-REQUIRED`, but
   `releaseApproved` remains false until manual approval.
