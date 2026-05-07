@@ -325,25 +325,49 @@ function providerSlaReadinessPayload() {
 }
 
 function adminUsersPayload() {
+  const user = {
+    id: 'user-123',
+    username: 'alice',
+    display_name: 'Alice',
+    role: 'user',
+    is_active: true,
+    created_at: timestamp,
+    updated_at: timestamp,
+    password_state: 'set',
+    last_seen_at: timestamp,
+    session_summary: { active_count: 1, expired_count: 0, revoked_count: 0, last_seen_at: timestamp, next_expires_at: timestamp },
+    risk_badges: [{ code: 'sessionless', label: 'No sessions', severity: 'info', source: 'session' }],
+    links: { self: '/api/v1/admin/users/user-123' },
+  };
+
   return {
-    items: [{
-      id: 'user-123',
-      username: 'alice',
-      display_name: 'Alice',
-      role: 'user',
-      is_active: true,
-      created_at: timestamp,
-      updated_at: timestamp,
-      password_state: 'set',
-      last_seen_at: timestamp,
-      session_summary: { active_count: 1, expired_count: 0, revoked_count: 0, last_seen_at: timestamp, next_expires_at: timestamp },
-      risk_badges: [{ code: 'sessionless', label: 'No sessions', severity: 'info', source: 'session' }],
-      links: { self: '/api/v1/admin/users/user-123' },
-    }],
+    items: [user],
     total: 1,
     limit: 50,
     offset: 0,
     has_more: false,
+  };
+}
+
+function adminUserDetailPayload() {
+  return {
+    user: adminUsersPayload().items[0],
+    sessions: [
+      {
+        session_handle: 'session-hash-01',
+        status: 'active',
+        created_at: timestamp,
+        last_seen_at: timestamp,
+        expires_at: timestamp,
+        revoked_at: null,
+      },
+    ],
+    data_links: {
+      self: '/api/v1/admin/users/user-123',
+      activity: '/api/v1/admin/users/user-123/activity',
+      portfolio: '/api/v1/admin/users/user-123/portfolio-summary',
+    },
+    limitations: ['mocked_browser_harness_no_raw_session_values'],
   };
 }
 
@@ -456,6 +480,9 @@ export async function installAdminAuthHarness(
     }
     if (method === 'GET' && path === '/api/v1/admin/users') {
       return fulfillJson(route, adminUsersPayload());
+    }
+    if (method === 'GET' && path === '/api/v1/admin/users/user-123') {
+      return fulfillJson(route, adminUserDetailPayload());
     }
     if (method === 'GET' && path === '/api/v1/system/config') {
       return fulfillJson(route, systemConfigPayload());

@@ -13,6 +13,9 @@ export type AdminCapability =
 
 export type MockAdminUserOptions = {
   capabilities?: AdminCapability[];
+  injectRawAuthCanaries?: boolean;
+  legacyAdmin?: boolean;
+  rbacFallbackDisabledRehearsal?: boolean;
   includeCapabilityFields?: boolean;
   id?: string;
   username?: string;
@@ -56,6 +59,7 @@ export function createMockAdminUser(options: MockAdminUserOptions = {}): Current
     isAuthenticated: true,
     transitional: false,
     authEnabled: true,
+    legacyAdmin: options.legacyAdmin,
   };
 
   if (options.includeCapabilityFields !== false) {
@@ -63,6 +67,21 @@ export function createMockAdminUser(options: MockAdminUserOptions = {}): Current
     for (const [capability, flag] of Object.entries(capabilityFlagMap) as Array<[AdminCapability, keyof CurrentUser]>) {
       user[flag] = capabilitySet.has(capability) as never;
     }
+  }
+
+  const userWithHarnessMetadata = user as CurrentUser & Record<string, unknown>;
+  if (options.rbacFallbackDisabledRehearsal) {
+    userWithHarnessMetadata.rbacFallbackRehearsal = {
+      coarseFallbackEnabled: false,
+      stagingOnly: true,
+    };
+  }
+  if (options.injectRawAuthCanaries) {
+    userWithHarnessMetadata.sessionId = 'raw-session-canary-should-not-render';
+    userWithHarnessMetadata.cookie = 'cookie_canary_should_not_render';
+    userWithHarnessMetadata.totpCode = '123456';
+    userWithHarnessMetadata.recoveryCodes = ['RECOVERY-CODE-CANARY-0001'];
+    userWithHarnessMetadata.rawRbacCapabilityDump = 'adminCapabilities: users:security:write ops:system_config:read';
   }
 
   return user;

@@ -28,10 +28,31 @@ const providerCircuitApiPaths = [
   ['GET', '/api/v1/admin/providers/sla-readiness'],
 ] as const;
 
+const systemApiPaths = [
+  ['GET', '/api/v1/system/config'],
+  ['GET', '/api/v1/quant/duckdb/health'],
+  ['GET', '/api/v1/quant/duckdb/coverage'],
+] as const;
+
+const adminSecurityActionApiPaths = [
+  ['POST', '/api/v1/admin/users/user-123/disable'],
+  ['POST', '/api/v1/admin/users/user-123/enable'],
+  ['POST', '/api/v1/admin/users/user-123/revoke-sessions'],
+] as const;
+
+const rawAuthRehearsalLeakPattern =
+  /raw-session-canary-should-not-render|cookie_canary_should_not_render|RECOVERY-CODE-CANARY-0001|rawRbacCapabilityDump|adminCapabilities:\s|coarseFallbackEnabled|stagingOnly/i;
+
+async function expectNoRawAuthRehearsalLeak(page: Parameters<typeof expectNoHorizontalOverflow>[0]) {
+  const bodyText = await page.locator('body').innerText();
+  expect(bodyText).not.toMatch(rawAuthRehearsalLeakPattern);
+}
+
 async function expectAdminRouteShellClean(page: Parameters<typeof expectNoHorizontalOverflow>[0]) {
   await expect(page).not.toHaveURL(/\/guest(?:$|[/?#])/);
   await expectNoHorizontalOverflow(page);
   await expectNoRawSecretLikeText(page);
+  await expectNoRawAuthRehearsalLeak(page);
 }
 
 async function expectProviderSlaReadinessSmoke(page: Parameters<typeof expectNoHorizontalOverflow>[0]) {
@@ -122,6 +143,19 @@ test.describe('mocked admin auth browser harness', () => {
       await expectAdminRouteShellClean(page);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
 
+      harness = await openAdminRouteWithHarness(page, '/zh/admin/users/user-123?tab=security');
+      await expect(page.getByRole('heading', { name: '安全控制 S1' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('security-action-disable')).toBeVisible();
+      await expect(page.getByTestId('security-action-revoke-sessions')).toBeVisible();
+      await expect(page.getByRole('button', { name: '禁用账户' })).toBeDisabled();
+      await expect(page.getByRole('button', { name: '撤销全部会话' })).toBeDisabled();
+      expect(harness.requests.count('GET', '/api/v1/admin/users/user-123')).toBeGreaterThan(0);
+      for (const [method, path] of adminSecurityActionApiPaths) {
+        expect(harness.requests.wasFetched(method, path)).toBe(false);
+      }
+      await expectAdminRouteShellClean(page);
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+
       harness = await openAdminRouteWithHarness(page, '/zh/settings/system');
       await expect(page.getByTestId('settings-bento-page')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('system-health-summary')).toBeVisible();
@@ -157,6 +191,30 @@ test.describe('mocked admin auth browser harness', () => {
       await expect(page.getByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByRole('heading', { name: 'Provider 熔断诊断' })).toHaveCount(0);
       for (const [method, path] of providerCircuitApiPaths) {
+        expect(harness.requests.wasFetched(method, path)).toBe(false);
+      }
+      await expectAdminRouteShellClean(page);
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+      harness = await openAdminRouteWithHarness(page, '/zh/settings/system', {
+        capabilities: ['cost:observability:read'],
+      });
+      await expect(page.getByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('settings-bento-page')).toHaveCount(0);
+      for (const [method, path] of systemApiPaths) {
+        expect(harness.requests.wasFetched(method, path)).toBe(false);
+      }
+      await expectAdminRouteShellClean(page);
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+      harness = await openAdminRouteWithHarness(page, '/zh/admin/users/user-123?tab=security', {
+        capabilities: ['cost:observability:read'],
+      });
+      await expect(page.getByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole('heading', { name: '安全控制 S1' })).toHaveCount(0);
+      await expect(page.getByTestId('security-action-disable')).toHaveCount(0);
+      expect(harness.requests.wasFetched('GET', '/api/v1/admin/users/user-123')).toBe(false);
+      for (const [method, path] of adminSecurityActionApiPaths) {
         expect(harness.requests.wasFetched(method, path)).toBe(false);
       }
       await expectAdminRouteShellClean(page);
@@ -198,6 +256,98 @@ test.describe('mocked admin auth browser harness', () => {
       }
       await expectAdminRouteShellClean(page);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+      harness = await openAdminRouteWithHarness(page, '/zh/settings/system', {
+        capabilities: ['ops:providers:read'],
+      });
+      await expect(page.getByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('settings-bento-page')).toHaveCount(0);
+      for (const [method, path] of systemApiPaths) {
+        expect(harness.requests.wasFetched(method, path)).toBe(false);
+      }
+      await expectAdminRouteShellClean(page);
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+      harness = await openAdminRouteWithHarness(page, '/zh/admin/users/user-123?tab=security', {
+        capabilities: ['ops:providers:read'],
+      });
+      await expect(page.getByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole('heading', { name: '安全控制 S1' })).toHaveCount(0);
+      await expect(page.getByTestId('security-action-disable')).toHaveCount(0);
+      expect(harness.requests.wasFetched('GET', '/api/v1/admin/users/user-123')).toBe(false);
+      for (const [method, path] of adminSecurityActionApiPaths) {
+        expect(harness.requests.wasFetched(method, path)).toBe(false);
+      }
+      await expectAdminRouteShellClean(page);
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+    }
+  });
+
+  test('renders user security denial for read-only user admins without calling security actions', async ({ page }) => {
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      const harness = await openAdminRouteWithHarness(page, '/zh/admin/users/user-123?tab=security', {
+        capabilities: ['users:read'],
+      });
+
+      await expect(page.getByRole('heading', { name: '不可执行安全操作' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText('当前账号缺少用户安全写入权限，前端不会渲染禁用、启用或撤销会话按钮。')).toBeVisible();
+      await expect(page.getByRole('button', { name: '禁用账户' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: '撤销全部会话' })).toHaveCount(0);
+      expect(harness.requests.count('GET', '/api/v1/admin/users/user-123')).toBeGreaterThan(0);
+      for (const [method, path] of adminSecurityActionApiPaths) {
+        expect(harness.requests.wasFetched(method, path)).toBe(false);
+      }
+      await expectAdminRouteShellClean(page);
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+    }
+  });
+
+  test('keeps fallback-disabled legacy admin rehearsal least-privilege and redacted', async ({ page }) => {
+    const deniedRoutes = [
+      {
+        path: '/zh/admin/cost-observability',
+        hidden: page.getByTestId('quota-dry-run-panel'),
+        blockedApis: costApiPaths,
+      },
+      {
+        path: '/zh/admin/provider-circuits',
+        hidden: page.getByRole('heading', { name: 'Provider 熔断诊断' }),
+        blockedApis: providerCircuitApiPaths,
+      },
+      {
+        path: '/zh/settings/system',
+        hidden: page.getByTestId('settings-bento-page'),
+        blockedApis: systemApiPaths,
+      },
+      {
+        path: '/zh/admin/users/user-123?tab=security',
+        hidden: page.getByRole('heading', { name: '安全控制 S1' }),
+        blockedApis: [
+          ['GET', '/api/v1/admin/users/user-123'],
+          ...adminSecurityActionApiPaths,
+        ] as const,
+      },
+    ];
+
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      for (const route of deniedRoutes) {
+        const harness = await openAdminRouteWithHarness(page, route.path, {
+          capabilities: [],
+          injectRawAuthCanaries: true,
+          legacyAdmin: true,
+          rbacFallbackDisabledRehearsal: true,
+        });
+
+        await expect(page.getByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeVisible({ timeout: 15_000 });
+        await expect(route.hidden).toHaveCount(0);
+        for (const [method, path] of route.blockedApis) {
+          expect(harness.requests.wasFetched(method, path)).toBe(false);
+        }
+        await expectAdminRouteShellClean(page);
+        await page.unrouteAll({ behavior: 'ignoreErrors' });
+      }
     }
   });
 
