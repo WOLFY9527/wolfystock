@@ -184,6 +184,7 @@ class AdminLogStorageSummaryModel(BaseModel):
     newest_event_at: Optional[str] = None
     retention_days: int = 90
     minimum_retention_days: int = 7
+    retention_tiers: Dict[str, Any] = Field(default_factory=dict)
     retention_cutoff: Optional[str] = None
     logs_older_than_retention_count: int = 0
     estimated_storage_bytes: Optional[int] = None

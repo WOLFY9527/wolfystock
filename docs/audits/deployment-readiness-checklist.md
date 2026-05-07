@@ -34,9 +34,9 @@ remaining blockers are operational and safety-critical:
   is not enabled.
 - Provider circuits are visible in storage/API diagnostics, but runtime provider
   fallback/order/enforcement behavior has not changed.
-- DB readiness has a local dry-run backup/restore preflight, but still lacks an
-  isolated PostgreSQL restore/PITR drill and full retention tiers for
-  high-growth domains.
+- DB readiness has a local dry-run backup/restore preflight and admin-log
+  retention/storage policy evidence, but still lacks an isolated PostgreSQL
+  restore/PITR drill and full retention tiers for non-log high-growth domains.
 - Options Lab remains analysis-only with fixture/synthetic data; no real
   provider adapter or broker/order path exists.
 - Data Pipeline R2 progressive enrichment is not a late async merge path yet.
@@ -218,20 +218,28 @@ Remaining blockers:
 - [x] Local dry-run backup/restore drill preflight exists for simulated
   metadata, artifact presence, timestamp sanity, schema compatibility, and
   temp-only restore target isolation.
+- [x] Admin log retention tiers are explicit and test-backed:
+  `admin_logs_standard`, `admin_logs_minimum_protected`, and
+  `admin_logs_storage_pressure`.
+- [x] Admin log cleanup is preview-first, preserves the minimum retention floor,
+  emits sanitized cleanup audit events, and keeps storage-size-unavailable
+  fallback safe.
 - [ ] Isolated PostgreSQL backup/restore drill is still missing.
 - [ ] Encrypted backup, PITR targets, restore smoke, and rollback runbook must
   be documented and exercised before public onboarding.
-- [ ] Retention tiers are missing for task progress, terminal task state, LLM
-  usage, scanner/backtest artifacts, provider counters, guest/cache metadata,
-  and future Options cache rows.
-- [ ] Retention cleanup must be preview-first and owner/domain-aware.
+- [ ] Retention tiers are still missing for task progress, terminal task state,
+  LLM usage, scanner/backtest artifacts, provider counters, guest/cache
+  metadata, and future Options cache rows.
+- [ ] Non-admin-log retention cleanup must be preview-first and
+  owner/domain-aware.
 - [ ] Public production should treat PostgreSQL as the durable multi-user
   baseline; SQLite remains local/dev/compatibility posture.
 
 Go/no-go:
 
 - **NO-GO** for broad public multi-user deployment until backup/restore drill,
-  retention tiers, and remaining index coverage are accepted.
+  broader high-growth retention tiers, and remaining index coverage are
+  accepted.
 
 ## 8. Options gates
 

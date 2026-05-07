@@ -234,6 +234,34 @@ class AdminLogsRetentionService:
             return None
         return round((float(numerator) / float(denominator)) * 100, 2)
 
+    @staticmethod
+    def _retention_tiers(policy: AdminLogRetentionPolicy) -> Dict[str, Any]:
+        return {
+            "admin_logs_standard": {
+                "domain": "admin_logs",
+                "retention_days": policy.retention_days,
+                "cleanup_mode": "preview_first_retention_cleanup",
+                "preview_required": True,
+                "delete_requires_explicit_cleanup": True,
+            },
+            "admin_logs_minimum_protected": {
+                "domain": "admin_logs",
+                "retention_days": policy.min_retention_days,
+                "cleanup_mode": "capacity_cleanup_floor",
+                "preview_required": True,
+                "delete_requires_explicit_cleanup": True,
+            },
+            "admin_logs_storage_pressure": {
+                "domain": "admin_logs",
+                "retention_days": policy.min_retention_days,
+                "cleanup_mode": "capacity_cleanup",
+                "preview_required": True,
+                "delete_requires_explicit_cleanup": True,
+                "soft_limit_bytes": policy.storage_soft_limit_bytes,
+                "hard_limit_bytes": policy.storage_hard_limit_bytes,
+            },
+        }
+
     def _capacity_candidates(
         self,
         *,
@@ -404,6 +432,7 @@ class AdminLogsRetentionService:
             "newest_event_at": self._iso(newest),
             "retention_days": policy.retention_days,
             "minimum_retention_days": policy.min_retention_days,
+            "retention_tiers": self._retention_tiers(policy),
             "retention_cutoff": self._iso(retention_cutoff),
             "logs_older_than_retention_count": older_than_retention,
             "estimated_storage_bytes": storage_bytes,
