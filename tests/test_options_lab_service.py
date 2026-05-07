@@ -22,6 +22,10 @@ FORBIDDEN_TERMS = [
     "provider.example",
     "必买",
     "稳赚",
+    "保证收益",
+    "下单",
+    "立即买入",
+    "立即卖出",
     "guaranteed",
     "guaranteed profit",
     "best contract",
@@ -30,6 +34,8 @@ FORBIDDEN_TERMS = [
     "must sell",
     "buy now",
     "sell now",
+    "trade-ready",
+    "trade ready",
     "you should buy",
     "you should sell",
 ]
@@ -355,6 +361,7 @@ def test_strategy_compare_returns_long_options_and_debit_spreads() -> None:
     assert all(strategy.no_advice_disclosure for strategy in response.strategies)
     assert all(strategy.max_loss is not None for strategy in response.strategies)
     assert all(strategy.breakeven is not None for strategy in response.strategies)
+    assert all(strategy.net_debit is not None for strategy in response.strategies)
     assert all(strategy.liquidity_warnings or strategy.iv_theta_notes or strategy.limitations for strategy in response.strategies)
     assert response.metadata.strategy_engine == "defined_risk_strategy_compare_v1"
 
@@ -767,6 +774,59 @@ def test_decision_stale_live_shaped_data_is_degraded_not_full_confidence(tmp_pat
     assert response.decision_label != "有条件可交易"
     assert response.trade_quality_score <= 75
     assert all(item.decision_label != "有条件可交易" for item in response.ranked_alternatives)
+
+
+@pytest.mark.parametrize(
+    ("source", "freshness", "expected_source_type", "expected_tier"),
+    [
+        ("cached_provider_snapshot", "cached", "delayed", "delayed_usable"),
+        ("fallback_provider_snapshot", "fallback", "fallback", "synthetic_demo_only"),
+        ("synthetic_options_lab_fixture", "synthetic_delayed", "synthetic", "synthetic_demo_only"),
+    ],
+)
+def test_decision_cached_fallback_and_synthetic_sources_remain_non_trade_ready(
+    tmp_path: Path,
+    source: str,
+    freshness: str,
+    expected_source_type: str,
+    expected_tier: str,
+) -> None:
+    fixture = json.loads(Path("tests/fixtures/options/tem_chain.json").read_text(encoding="utf-8"))
+    fixture["source"] = source
+    fixture["providerQuality"] = f"{expected_source_type}_not_tradeable"
+    fixture["underlying"]["source"] = source
+    fixture["underlying"]["freshness"] = freshness
+    for contract in fixture["contracts"]:
+        contract["source"] = source
+        contract["freshness"] = freshness
+        contract["dataQuality"] = {
+            "tier": expected_tier,
+            "tradeable": False,
+            "hints": [f"{expected_source_type}_not_decision_grade"],
+        }
+    path = tmp_path / f"tem_{expected_source_type}_source.json"
+    path.write_text(json.dumps(fixture), encoding="utf-8")
+
+    response = OptionsLabService(fixture_path=path).evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "bull_call_spread",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskBudget": 600,
+        }
+    )
+
+    assert response.data_quality.source_type == expected_source_type
+    assert response.data_quality.data_quality_tier == expected_tier
+    assert response.decision_label != "有条件可交易"
+    assert response.optimizer.optimizer_label != "有条件可交易"
+    assert response.metadata.live_provider_enabled is False
+    assert all(item.decision_label != "有条件可交易" for item in response.ranked_alternatives)
+    text = _json_text(response).lower()
+    for blocked in ["有条件可交易", "trade-ready", "trade ready", "best contract", "guaranteed", "must buy", "must sell"]:
+        assert blocked.lower() not in text
 
 
 def test_decision_delayed_fixture_provider_selection_cannot_emit_tradeable_label() -> None:

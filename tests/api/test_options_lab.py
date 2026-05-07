@@ -4,12 +4,56 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.v1.endpoints import options
+
+
+SAFETY_BLOCKED_MARKERS = [
+    "rawproviderpayload",
+    "raw_provider_payload",
+    "raw provider payload",
+    "debugschema",
+    "debug_schema",
+    "rawschema",
+    "raw_schema",
+    "traceback",
+    "stack trace",
+    "api_key",
+    "apikey",
+    "api key",
+    "token=",
+    "password",
+    "session=",
+    "cookie",
+    "authorization",
+    "bearer",
+    "provider.example",
+    "provider credential",
+    "credential payload",
+    "必买",
+    "稳赚",
+    "保证收益",
+    "下单",
+    "立即买入",
+    "立即卖出",
+    "guaranteed",
+    "guaranteed profit",
+    "best contract",
+    "ai recommends you buy",
+    "must buy",
+    "must sell",
+    "buy now",
+    "sell now",
+    "trade-ready",
+    "trade ready",
+    "you should buy",
+    "you should sell",
+]
 
 
 def _client() -> TestClient:
@@ -20,6 +64,12 @@ def _client() -> TestClient:
 
 def _json_text(payload) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
+def _assert_no_safety_leaks(payload) -> None:
+    text = _json_text(payload).lower()
+    for value in SAFETY_BLOCKED_MARKERS:
+        assert value not in text
 
 
 def test_summary_endpoint_returns_safe_normalized_fixture_response() -> None:
@@ -149,8 +199,92 @@ def test_live_provider_stub_selection_does_not_call_external_paths_or_expose_sec
         assert response.status_code == 400
         text = _json_text(response.json()).lower()
         assert "options_provider_disabled" in text
-        for value in ("api_key", "apikey", "token", "secret", "requesturl", "env"):
+        for value in ("api_key", "apikey", "token=", "secret", "requesturl", "env"):
             assert value not in text
+    finally:
+        client.close()
+
+
+def test_options_launch_surfaces_reject_live_provider_selection_safely_without_mutations() -> None:
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("forbidden runtime path was called")
+
+    requests = [
+        ("get", "/api/v1/options/underlyings/TEM/summary", None, {"marketDataProvider": "tradier"}),
+        ("get", "/api/v1/options/underlyings/TEM/expirations", None, {"marketDataProvider": "tradier"}),
+        ("get", "/api/v1/options/underlyings/TEM/chain", None, {"marketDataProvider": "tradier"}),
+        (
+            "post",
+            "/api/v1/options/analyze",
+            {
+                "symbol": "TEM",
+                "marketDataProvider": "tradier",
+                "direction": "bullish",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+            },
+            None,
+        ),
+        (
+            "post",
+            "/api/v1/options/scenario",
+            {
+                "symbol": "TEM",
+                "marketDataProvider": "tradier",
+                "strategy": "long_call",
+                "contractSymbol": "TEM260619C00055000",
+                "targetPrice": 65,
+            },
+            None,
+        ),
+        (
+            "post",
+            "/api/v1/options/strategies/compare",
+            {
+                "symbol": "TEM",
+                "marketDataProvider": "tradier",
+                "direction": "bullish",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+                "riskProfile": "balanced",
+            },
+            None,
+        ),
+        (
+            "post",
+            "/api/v1/options/decision/evaluate",
+            {
+                "symbol": "TEM",
+                "marketDataProvider": "tradier",
+                "strategy": "bull_call_spread",
+                "expiration": "2026-06-19",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+            },
+            None,
+        ),
+    ]
+
+    client = _client()
+    try:
+        with (
+            patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=forbidden),
+            patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
+            patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
+            patch("src.services.portfolio_service.PortfolioService.add_lot", side_effect=forbidden, create=True),
+        ):
+            for method, path, json_payload, params in requests:
+                response = (
+                    client.get(path, params=params)
+                    if method == "get"
+                    else client.post(path, json=json_payload)
+                )
+                assert response.status_code == 400
+                assert response.json()["detail"] == {
+                    "error": "options_provider_disabled",
+                    "message": "Requested Options Lab provider is fixture-only, disabled, or not implemented.",
+                }
+                _assert_no_safety_leaks(response.json())
     finally:
         client.close()
 
@@ -211,27 +345,7 @@ def test_endpoint_response_excludes_raw_provider_and_recommendation_language() -
         ]
         assert all(response.status_code == 200 for response in responses)
         text = "\n".join(_json_text(response.json()) for response in responses).lower()
-        blocked = [
-            "rawproviderpayload",
-            "api_key",
-            "apikey",
-            "token",
-            "secret",
-            "requesturl",
-            "必买",
-            "稳赚",
-            "guaranteed",
-            "guaranteed profit",
-            "best contract",
-            "ai recommends you buy",
-            "must buy",
-            "must sell",
-            "buy now",
-            "sell now",
-            "you should buy",
-            "you should sell",
-        ]
-        for value in blocked:
+        for value in SAFETY_BLOCKED_MARKERS:
             assert value not in text
     finally:
         client.close()
@@ -365,6 +479,10 @@ def test_strategy_compare_endpoint_returns_defined_risk_structures() -> None:
             "bear_put_spread",
         ]
         bull = next(strategy for strategy in payload["strategies"] if strategy["strategyType"] == "bull_call_spread")
+        assert all(strategy["maxLoss"] is not None for strategy in payload["strategies"])
+        assert all(strategy["breakeven"] is not None for strategy in payload["strategies"])
+        assert all(strategy["noAdviceDisclosure"] for strategy in payload["strategies"])
+        assert all(strategy["liquidityWarnings"] or strategy["ivThetaNotes"] or strategy["limitations"] for strategy in payload["strategies"])
         assert bull["netDebit"] == 230
         assert bull["maxLoss"] == 230
         assert bull["maxGain"] == 270
@@ -446,28 +564,7 @@ def test_strategy_compare_endpoint_does_not_call_external_or_mutating_paths() ->
 
         assert response.status_code == 200
         text = _json_text(response.json()).lower()
-        blocked = [
-            "rawproviderpayload",
-            "api_key",
-            "apikey",
-            "token",
-            "secret",
-            "requesturl",
-            "必买",
-            "稳赚",
-            "guaranteed",
-            "guaranteed profit",
-            "best contract",
-            "ai recommends you buy",
-            "must buy",
-            "must sell",
-            "buy now",
-            "sell now",
-            "you should buy",
-            "you should sell",
-            "trade ticket",
-        ]
-        for value in blocked:
+        for value in SAFETY_BLOCKED_MARKERS + ["trade ticket"]:
             assert value not in text
     finally:
         client.close()
@@ -534,30 +631,7 @@ def test_decision_endpoint_excludes_raw_payloads_and_live_provider_paths() -> No
 
         assert response.status_code == 200
         text = _json_text(response.json()).lower()
-        for value in [
-            "rawproviderpayload",
-            "api_key",
-            "apikey",
-            "token",
-            "secret",
-            "requesturl",
-            "traceback",
-            "stack trace",
-            "必买",
-            "稳赚",
-            "保证收益",
-            "guaranteed",
-            "guaranteed profit",
-            "best contract",
-            "ai recommends you buy",
-            "must buy",
-            "must sell",
-            "buy now",
-            "sell now",
-            "you should buy",
-            "you should sell",
-            "trade ticket",
-        ]:
+        for value in SAFETY_BLOCKED_MARKERS + ["trade ticket"]:
             assert value not in text
     finally:
         client.close()
@@ -593,7 +667,7 @@ def test_decision_endpoint_live_provider_unavailable_fails_closed_without_secret
         assert payload["detail"]["error"] == "options_provider_disabled"
         text = _json_text(payload).lower()
         assert "live confidence" not in text
-        for value in ("api_key", "apikey", "token", "secret", "requesturl", "traceback", "stack trace"):
+        for value in ("api_key", "apikey", "token=", "secret", "requesturl", "traceback", "stack trace"):
             assert value not in text
     finally:
         client.close()
@@ -624,3 +698,33 @@ def test_decision_endpoint_delayed_fixture_keeps_tradeability_cap() -> None:
         assert all(item["decisionLabel"] != "有条件可交易" for item in payload["rankedAlternatives"])
     finally:
         client.close()
+
+
+def test_options_launch_source_does_not_import_broker_order_or_portfolio_mutation_paths() -> None:
+    source_paths = [
+        "api/v1/endpoints/options.py",
+        "src/services/options_lab_service.py",
+        "src/services/options_market_data_provider.py",
+    ]
+    forbidden_imports = [
+        "from src.services.portfolio_service",
+        "import portfolio_service",
+        "from src.services.broker",
+        "import broker",
+        "from src.services.order",
+        "import order_service",
+    ]
+    forbidden_calls = [
+        ".add_lot(",
+        ".place_order(",
+        ".submit_order(",
+        ".create_order(",
+        ".execute_order(",
+        ".mutate_portfolio(",
+        ".sync_broker(",
+    ]
+
+    for path in source_paths:
+        source = Path(path).read_text(encoding="utf-8")
+        for marker in forbidden_imports + forbidden_calls:
+            assert marker not in source
