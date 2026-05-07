@@ -3,18 +3,17 @@ import { toCamelCase } from './utils';
 import type { MarketDataFreshness } from './marketOverview';
 
 export type MarketRotationStage =
-  | 'early_rotation'
+  | 'early_watch'
   | 'confirmed_rotation'
-  | 'crowded_or_extended'
-  | 'cooling'
+  | 'extended_watch'
+  | 'cooling_watch'
   | 'weak_or_no_signal';
 
 export type MarketRotationRiskLabel =
   | 'gap_fade_risk'
   | 'thin_breadth'
   | 'single_name_driven'
-  | 'stale_data'
-  | 'fallback_data';
+  | 'stale_or_incomplete_windows';
 
 export type MarketRotationBenchmark = {
   symbol: string;
@@ -78,6 +77,24 @@ export type MarketRotationSummaryItem = {
   riskExplanations?: string[];
 };
 
+export type MarketRotationAlertCandidate = {
+  themeId?: string;
+  themeName?: string;
+  symbol?: string;
+  name?: string;
+  label?: string;
+  signal?: MarketRotationStage;
+  signalLabel?: string;
+  confidence?: number;
+  persistenceScore?: number | null;
+  persistenceLabel?: string | null;
+  riskLabels?: MarketRotationRiskLabel[];
+  reasons?: string[];
+  readOnly?: boolean;
+  deliveryEnabled?: boolean;
+  noAdviceDisclosure?: string;
+};
+
 export type MarketRotationTheme = MarketRotationSummaryItem & {
   englishName: string;
   focus?: string;
@@ -86,6 +103,20 @@ export type MarketRotationTheme = MarketRotationSummaryItem & {
   membersConfigured: string[];
   newslessRotation: boolean;
   newslessRotationEvidence?: string | null;
+  persistenceScore?: number | null;
+  persistenceEvidence?: {
+    score?: number;
+    label?: string;
+    availableWindows?: string[];
+    missingWindows?: string[];
+    staleOrFallbackWindows?: string[];
+    positiveWindowCount?: number;
+    negativeWindowCount?: number;
+    sameDirectionWindowCount?: number;
+    requiredWindows?: string[];
+    explanation?: string;
+  };
+  alertCandidates?: MarketRotationAlertCandidate[];
   stageExplanation?: string | null;
   riskExplanations?: string[];
   relativeStrength: {
@@ -191,6 +222,7 @@ export type MarketRotationRadarResponse = {
     strongestThemes: MarketRotationSummaryItem[];
     acceleratingThemes: MarketRotationSummaryItem[];
     fadingThemes: MarketRotationSummaryItem[];
+    watchlistSignals: MarketRotationAlertCandidate[];
     safeWording: string[];
   };
   themes: MarketRotationTheme[];
@@ -257,6 +289,7 @@ export const marketRotationApi = {
         strongestThemes: normalized.summary?.strongestThemes || [],
         acceleratingThemes: normalized.summary?.acceleratingThemes || [],
         fadingThemes: normalized.summary?.fadingThemes || [],
+        watchlistSignals: normalized.summary?.watchlistSignals || [],
         safeWording: normalized.summary?.safeWording || [],
       },
       metadata: normalized.metadata || {},

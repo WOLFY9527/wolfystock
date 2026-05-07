@@ -8,10 +8,10 @@ import { marketRotationApi, type MarketRotationRadarResponse, type MarketRotatio
 import { cn } from '../utils/cn';
 
 const STAGE_LABELS: Record<MarketRotationStage, string> = {
-  early_rotation: '早期扩散',
+  early_watch: '早期观察',
   confirmed_rotation: '确认轮动',
-  crowded_or_extended: '拥挤/延展',
-  cooling: '降温',
+  extended_watch: '延展观察',
+  cooling_watch: '降温观察',
   weak_or_no_signal: '信号较弱',
 };
 
@@ -19,8 +19,7 @@ const RISK_LABELS: Record<MarketRotationRiskLabel, string> = {
   gap_fade_risk: '高开回落风险',
   thin_breadth: '广度偏薄',
   single_name_driven: '单一龙头驱动',
-  stale_data: '数据过期',
-  fallback_data: '备用数据',
+  stale_or_incomplete_windows: '时窗缺失/过期',
 };
 
 function scoreTone(score: number): string {
@@ -135,6 +134,7 @@ const ThemeCard: React.FC<{
 }> = ({ theme, selected, onSelect }) => {
   const relativeStrength = theme.relativeStrength?.averageRelativeStrengthPercent;
   const volumeRatio = theme.volume?.averageRelativeVolume;
+  const persistenceScore = theme.persistenceScore ?? theme.persistenceEvidence?.score;
   return (
     <article
       data-testid={`rotation-theme-card-${theme.id}`}
@@ -163,11 +163,12 @@ const ThemeCard: React.FC<{
         </span>
       </button>
 
-      <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 md:grid-cols-4">
+      <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 md:grid-cols-5">
         <ThemeMetric label="相对强弱" value={signedPercent(relativeStrength)} tone={Number(relativeStrength) >= 0 ? 'text-emerald-200' : 'text-rose-300'} />
         <ThemeMetric label="成交额扩张" value={ratio(volumeRatio)} tone={Number(volumeRatio) >= 1.1 ? 'text-cyan-200' : 'text-white/58'} />
         <ThemeMetric label="上涨广度" value={percent(theme.breadth?.percentUp)} />
         <ThemeMetric label="同步性" value={percent(theme.synchronization?.sameDirectionPercent)} />
+        <ThemeMetric label="持续证据" value={compactConfidence(persistenceScore)} tone={Number(persistenceScore) >= 0.65 ? 'text-emerald-200' : 'text-amber-200'} />
       </div>
 
       <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-white/45">
@@ -196,6 +197,12 @@ const ThemeCard: React.FC<{
       {theme.stageExplanation ? (
         <p className="mt-3 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 text-[11px] leading-5 text-white/50">
           {theme.stageExplanation}
+        </p>
+      ) : null}
+
+      {theme.persistenceEvidence?.explanation ? (
+        <p className="mt-2 rounded-xl border border-cyan-200/10 bg-cyan-200/[0.04] px-3 py-2 text-[11px] leading-5 text-cyan-50/60">
+          {theme.persistenceEvidence.explanation}
         </p>
       ) : null}
 
@@ -256,6 +263,7 @@ const ThemeDetailPanel: React.FC<{ theme?: MarketRotationTheme }> = ({ theme }) 
   }
   const vsBenchmarks = theme.relativeStrength?.vsBenchmarks || {};
   const leaders = theme.leadership?.topMembers || [];
+  const alertCandidates = theme.alertCandidates || [];
   return (
     <GlassCard as="aside" data-testid="rotation-theme-detail-panel" className="p-4 md:p-5">
       <div className="flex min-w-0 items-start justify-between gap-3">
@@ -301,6 +309,32 @@ const ThemeDetailPanel: React.FC<{ theme?: MarketRotationTheme }> = ({ theme }) 
           <ThemeMetric label="跑赢基准" value={percent(theme.breadth?.percentOutperformingBenchmark)} />
           <ThemeMetric label="VWAP 强度" value={percent(theme.synchronization?.aboveVwapPercent)} />
           <ThemeMetric label="龙头集中度" value={percent(theme.leadership?.leadershipConcentrationPercent)} />
+          <ThemeMetric label="持续证据" value={compactConfidence(theme.persistenceScore ?? theme.persistenceEvidence?.score)} />
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">关注候选</p>
+        <div className="mt-2 grid gap-2">
+          {alertCandidates.length ? alertCandidates.map((candidate) => (
+            <div key={`${candidate.symbol || 'candidate'}-${candidate.signalLabel || 'signal'}`} className="rounded-xl border border-cyan-200/10 bg-cyan-200/[0.035] px-3 py-2">
+              <div className="flex min-w-0 items-center justify-between gap-3">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-white/82">{candidate.symbol || '--'}</span>
+                  <span className="block truncate text-[11px] text-cyan-50/52">{candidate.label || '观察信号'} · {candidate.signalLabel || '观察信号'}</span>
+                </span>
+                <span className="shrink-0 text-right text-[11px] text-white/48">
+                  <span className="block font-mono text-sm text-cyan-100">{compactConfidence(candidate.confidence)}</span>
+                  <span className="block">{candidate.deliveryEnabled ? '交付待确认' : '只读证据'}</span>
+                </span>
+              </div>
+              {candidate.reasons?.length ? (
+                <p className="mt-2 truncate text-[11px] text-white/45">{candidate.reasons[0]}</p>
+              ) : null}
+            </div>
+          )) : (
+            <p className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 text-sm text-white/45">关注候选待可靠时窗补齐</p>
+          )}
         </div>
       </div>
 

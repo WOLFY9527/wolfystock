@@ -64,8 +64,8 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
 
         self.assertEqual(theme["id"], "ai_applications")
         self.assertGreaterEqual(theme["rotationScore"], 70)
-        self.assertGreaterEqual(theme["confidence"], 0.65)
-        self.assertIn(theme["stage"], {"early_rotation", "confirmed_rotation"})
+        self.assertGreaterEqual(theme["confidence"], 0.55)
+        self.assertIn(theme["stage"], {"early_watch", "confirmed_rotation"})
         self.assertGreaterEqual(theme["breadth"]["percentUp"], 80)
         self.assertGreaterEqual(theme["breadth"]["percentOutperformingBenchmark"], 80)
         self.assertGreaterEqual(theme["volume"]["averageRelativeVolume"], 1.5)
@@ -73,13 +73,18 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertIn("无明显新闻的同步异动", theme["evidence"])
         self.assertTrue(theme["timeWindows"]["1d"]["available"])
         self.assertFalse(theme["timeWindows"]["5m"]["available"])
-        self.assertLessEqual(theme["confidence"], 0.68)
+        self.assertLessEqual(theme["confidence"], 0.6)
         self.assertIn("QQQ", theme["benchmarkProxies"])
         self.assertIn("IGV", theme["benchmarkProxies"])
         self.assertTrue(theme["themeDetail"]["watchlistSafe"])
         self.assertIn("仅观察", theme["themeDetail"]["safeActionLabel"])
-        self.assertNotIn("fallback_data", theme["riskLabels"])
-        self.assertNotIn("stale_data", theme["riskLabels"])
+        self.assertIn("stale_or_incomplete_windows", theme["riskLabels"])
+        self.assertIn("persistenceScore", theme)
+        self.assertIn("persistenceEvidence", theme)
+        self.assertIn("alertCandidates", theme)
+        self.assertGreaterEqual(theme["persistenceScore"], 0)
+        self.assertTrue(theme["alertCandidates"])
+        self.assertTrue(all(candidate["readOnly"] for candidate in theme["alertCandidates"]))
 
     def test_intraday_windows_are_aggregated_only_when_quote_fixture_provides_them(self) -> None:
         windows = {
@@ -110,6 +115,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(theme["timeWindows"]["1d"]["available"])
         self.assertEqual(theme["timeWindows"]["5m"]["observedMemberCount"], 3)
         self.assertEqual(theme["benchmarkProxies"]["IGV"]["role"], "sector_proxy")
+        self.assertIn("watchlistSignals", payload["summary"])
         dumped = json.dumps(theme, ensure_ascii=False).lower()
         self.assertNotIn("raw_payload", dumped)
         self.assertNotIn("建议买入", dumped)
@@ -130,7 +136,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             self.assertNotEqual(theme["freshness"], "live")
             self.assertLessEqual(theme["confidence"], 0.25)
             self.assertEqual(theme["stage"], "weak_or_no_signal")
-            self.assertIn("fallback_data", theme["riskLabels"])
+            self.assertIn("stale_or_incomplete_windows", theme["riskLabels"])
             self.assertTrue(all(not slot["available"] for slot in theme["timeWindows"].values()))
             self.assertTrue(theme["themeDetail"]["watchlistSafe"])
 
@@ -151,7 +157,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         payload = service.get_rotation_radar()
         infra = next(theme for theme in payload["themes"] if theme["id"] == "ai_infrastructure")
 
-        self.assertIn("stale_data", infra["riskLabels"])
+        self.assertIn("stale_or_incomplete_windows", infra["riskLabels"])
         self.assertIn("thin_breadth", infra["riskLabels"])
         self.assertIn("single_name_driven", infra["riskLabels"])
         self.assertLess(infra["confidence"], 0.55)

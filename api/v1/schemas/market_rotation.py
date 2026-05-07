@@ -10,18 +10,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 FreshnessLabel = Literal["live", "delayed", "cached", "stale", "fallback", "mock", "error"]
 RotationStage = Literal[
-    "early_rotation",
+    "early_watch",
     "confirmed_rotation",
-    "crowded_or_extended",
-    "cooling",
+    "extended_watch",
+    "cooling_watch",
     "weak_or_no_signal",
 ]
 RotationRiskLabel = Literal[
     "gap_fade_risk",
     "thin_breadth",
     "single_name_driven",
-    "stale_data",
-    "fallback_data",
+    "stale_or_incomplete_windows",
 ]
 
 
@@ -96,6 +95,9 @@ class RotationRadarThemeModel(BaseModel):
     riskExplanations: List[str] = Field(default_factory=list)
     newslessRotation: bool = False
     newslessRotationEvidence: Optional[str] = None
+    persistenceScore: Optional[float] = None
+    persistenceEvidence: Dict[str, Any] = Field(default_factory=dict)
+    alertCandidates: List[Dict[str, Any]] = Field(default_factory=list)
     relativeStrength: Dict[str, Any] = Field(default_factory=dict)
     benchmarkProxies: Dict[str, Any] = Field(default_factory=dict)
     timeWindows: Dict[str, RotationRadarTimeWindowModel] = Field(default_factory=dict)
@@ -132,6 +134,7 @@ class RotationRadarSummaryModel(BaseModel):
     acceleratingThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
     fadingThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
     safeWording: List[str] = Field(default_factory=list)
+    watchlistSignals: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class MarketRotationRadarResponse(BaseModel):

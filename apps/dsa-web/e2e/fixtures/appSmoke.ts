@@ -326,13 +326,16 @@ function marketRotationRadarPayload() {
     summary: {
       strongestThemes: [
         { id: 'ai_applications', name: 'AI 应用', rotationScore: 78, confidence: 0.72, stage: 'confirmed_rotation', freshness: 'mock', isFallback: false, riskLabels: ['gap_fade_risk'] },
-        { id: 'ai_infrastructure', name: 'AI 基建', rotationScore: 71, confidence: 0.64, stage: 'early_rotation', freshness: 'mock', isFallback: false, riskLabels: [] },
+        { id: 'ai_infrastructure', name: 'AI 基建', rotationScore: 71, confidence: 0.64, stage: 'early_watch', freshness: 'mock', isFallback: false, riskLabels: [] },
       ],
       acceleratingThemes: [
         { id: 'ai_applications', name: 'AI 应用', rotationScore: 78, confidence: 0.72, stage: 'confirmed_rotation', freshness: 'mock', isFallback: false, riskLabels: ['gap_fade_risk'] },
       ],
       fadingThemes: [
-        { id: 'robotics', name: '机器人', rotationScore: 35, confidence: 0.22, stage: 'weak_or_no_signal', freshness: 'fallback', isFallback: true, riskLabels: ['fallback_data'] },
+        { id: 'robotics', name: '机器人', rotationScore: 35, confidence: 0.22, stage: 'weak_or_no_signal', freshness: 'fallback', isFallback: true, riskLabels: ['stale_or_incomplete_windows'] },
+      ],
+      watchlistSignals: [
+        { themeId: 'ai_applications', themeName: 'AI 应用', symbol: 'APP', label: '关注候选', signal: 'confirmed_rotation', signalLabel: '确认轮动', confidence: 0.72, persistenceScore: 0.86, readOnly: true, deliveryEnabled: false, reasons: ['AI 应用：确认轮动'] },
       ],
       safeWording: ['资金轮动迹象', '成交额扩张', '相对强势扩散', '板块同步性增强', '非买卖建议'],
     },
@@ -353,6 +356,22 @@ function marketRotationRadarPayload() {
         riskExplanations: ['涨幅较大但 VWAP、量能或广度确认不足，需防止冲高回落。'],
         newslessRotation: true,
         newslessRotationEvidence: '无明显新闻的同步异动：未配置新闻催化证据。',
+        persistenceScore: 0.86,
+        persistenceEvidence: {
+          score: 0.86,
+          label: '跨时窗延续',
+          availableWindows: ['5m', '15m', '60m', '1d'],
+          missingWindows: [],
+          staleOrFallbackWindows: [],
+          positiveWindowCount: 4,
+          negativeWindowCount: 0,
+          sameDirectionWindowCount: 4,
+          requiredWindows: ['5m', '15m', '60m', '1d'],
+          explanation: '跨时窗延续：可用 5m/15m/60m/1d，缺失 无，备用/过期 无。',
+        },
+        alertCandidates: [
+          { themeId: 'ai_applications', themeName: 'AI 应用', symbol: 'APP', label: '关注候选', signal: 'confirmed_rotation', signalLabel: '确认轮动', confidence: 0.72, persistenceScore: 0.86, persistenceLabel: '跨时窗延续', readOnly: true, deliveryEnabled: false, reasons: ['AI 应用：确认轮动'] },
+        ],
         relativeStrength: {
           benchmark: 'QQQ',
           benchmarkChangePercent: 0.8,
@@ -417,8 +436,10 @@ function marketRotationRadarPayload() {
       },
     ],
     metadata: {
-      schemaVersion: 'market_rotation_radar_phase2_v1',
+      schemaVersion: 'market_rotation_radar_phase3_v1',
       noExternalCalls: true,
+      alertsAreReadOnlyEvidence: true,
+      notificationDeliveryEnabled: false,
       timeWindows: ['5m', '15m', '60m', '1d'],
       basketSource: 'manual_static_baskets',
       themeCount: 8,
@@ -427,6 +448,7 @@ function marketRotationRadarPayload() {
       staleThemeCount: 0,
       scoreRange: '0-100',
       confidenceRange: '0-1',
+      requiredPersistenceWindows: ['5m', '15m', '60m', '1d'],
       newslessRotationMeaning: '未配置新闻催化证据时，价格/量能/广度/同步性同时满足阈值的保守观察标记，不代表因果确认。',
     },
   };

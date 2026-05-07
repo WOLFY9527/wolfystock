@@ -26,8 +26,10 @@ describe('marketRotationApi', () => {
         no_advice_disclosure: '仅用于观察资金轮动迹象，非买卖建议。',
         metadata: {
           no_external_calls: true,
-          schema_version: 'market_rotation_radar_phase2_v1',
+          schema_version: 'market_rotation_radar_phase3_v1',
           time_windows: ['5m', '15m', '60m', '1d'],
+          alerts_are_read_only_evidence: true,
+          notification_delivery_enabled: false,
         },
         benchmarks: {
           QQQ: {
@@ -47,6 +49,9 @@ describe('marketRotationApi', () => {
           ],
           accelerating_themes: [],
           fading_themes: [],
+          watchlist_signals: [
+            { theme_id: 'ai_applications', symbol: 'APP', label: '关注候选', signal: 'confirmed_rotation', signal_label: '确认轮动', read_only: true, delivery_enabled: false },
+          ],
           safe_wording: ['资金轮动迹象', '非买卖建议'],
         },
         themes: [
@@ -62,6 +67,30 @@ describe('marketRotationApi', () => {
             risk_labels: [],
             risk_explanations: [],
             newsless_rotation: true,
+            persistence_score: 0.78,
+            persistence_evidence: {
+              score: 0.78,
+              label: '跨时窗延续',
+              available_windows: ['5m', '15m', '60m', '1d'],
+              missing_windows: [],
+              stale_or_fallback_windows: [],
+              explanation: '跨时窗延续：可用 5m/15m/60m/1d，缺失 无，备用/过期 无。',
+            },
+            alert_candidates: [
+              {
+                theme_id: 'ai_applications',
+                theme_name: 'AI 应用',
+                symbol: 'APP',
+                label: '关注候选',
+                signal: 'confirmed_rotation',
+                signal_label: '确认轮动',
+                confidence: 0.72,
+                persistence_score: 0.78,
+                read_only: true,
+                delivery_enabled: false,
+                reasons: ['AI 应用：确认轮动'],
+              },
+            ],
             freshness: 'delayed',
             is_fallback: false,
             is_stale: false,
@@ -96,6 +125,9 @@ describe('marketRotationApi', () => {
     expect(payload.summary.strongestThemes[0].rotationScore).toBe(78);
     expect(payload.themes[0].englishName).toBe('AI Applications');
     expect(payload.themes[0].newslessRotation).toBe(true);
+    expect(payload.themes[0].persistenceEvidence?.label).toBe('跨时窗延续');
+    expect(payload.themes[0].alertCandidates?.[0].readOnly).toBe(true);
+    expect(payload.summary.watchlistSignals[0].label).toBe('关注候选');
     expect(payload.themes[0].timeWindows?.['1d'].available).toBe(true);
     expect(payload.themes[0].benchmarkProxies?.IGV.role).toBe('sector_proxy');
     expect(payload.themes[0].themeDetail?.watchlistSafe).toBe(true);

@@ -28,10 +28,10 @@ TIME_WINDOW_LABELS = {
     "1d": "日内/日线",
 }
 STAGE_LABELS = {
-    "early_rotation",
+    "early_watch",
     "confirmed_rotation",
-    "crowded_or_extended",
-    "cooling",
+    "extended_watch",
+    "cooling_watch",
     "weak_or_no_signal",
 }
 
@@ -186,8 +186,10 @@ class MarketRotationRadarService:
             "summary": self._build_summary(themes),
             "themes": themes,
             "metadata": {
-                "schemaVersion": "market_rotation_radar_phase2_v1",
+                "schemaVersion": "market_rotation_radar_phase3_v1",
                 "noExternalCalls": True,
+                "alertsAreReadOnlyEvidence": True,
+                "notificationDeliveryEnabled": False,
                 "basketSource": "manual_static_baskets",
                 "themeCount": len(THEME_BASKETS),
                 "liveThemeCount": live_theme_count,
@@ -196,6 +198,7 @@ class MarketRotationRadarService:
                 "scoreRange": "0-100",
                 "confidenceRange": "0-1",
                 "timeWindows": list(TIME_WINDOW_KEYS),
+                "requiredPersistenceWindows": list(TIME_WINDOW_KEYS),
                 "benchmarkProxies": {
                     "market": list(MARKET_BENCHMARK_SYMBOLS),
                     "sector": list(SECTOR_BENCHMARK_SYMBOLS),
@@ -293,6 +296,7 @@ class MarketRotationRadarService:
         concentration = self._leadership_concentration(changes)
         time_windows = self._aggregate_time_windows(observed)
         window_state = self._time_window_state(time_windows)
+        persistence_evidence = self._persistence_evidence(time_windows)
         source_state = self._source_state(observations, benchmarks, theme.benchmark)
         source_state["timeWindowState"] = window_state
         score = self._score(
@@ -375,6 +379,17 @@ class MarketRotationRadarService:
                 "无明显新闻的同步异动：未配置新闻催化证据，当前仅由价格、量能、广度和同步性共同触发。"
                 if newsless_rotation else None
             ),
+            "persistenceScore": persistence_evidence["score"],
+            "persistenceEvidence": persistence_evidence,
+            "alertCandidates": self._alert_candidates(
+                theme=theme,
+                leaders=leaders,
+                stage=stage,
+                confidence=confidence,
+                persistence_evidence=persistence_evidence,
+                risk_labels=risk_labels,
+                source_state=source_state,
+            ),
             "relativeStrength": {
                 "benchmark": theme.benchmark,
                 "benchmarkChangePercent": round(benchmark_change, 3) if benchmark_change is not None else None,
@@ -400,6 +415,7 @@ class MarketRotationRadarService:
                 "sameDirectionPercent": round(dominant_direction, 1),
                 "aboveVwapPercent": round(above_vwap_pct, 1),
                 "persistencePercent": round(persistence_pct, 1),
+                "persistenceScore": persistence_evidence["score"],
                 "label": self._synchronization_label(dominant_direction),
             },
             "leadership": {
@@ -457,10 +473,13 @@ class MarketRotationRadarService:
             "confidence": 0.12,
             "stage": "weak_or_no_signal",
             "stageExplanation": "备用篮子缺少可用行情与时窗证据，仅能标记为弱信号。",
-            "riskLabels": ["fallback_data", "thin_breadth"],
-            "riskExplanations": self._risk_explanations(["fallback_data", "thin_breadth"]),
+            "riskLabels": ["stale_or_incomplete_windows", "thin_breadth"],
+            "riskExplanations": self._risk_explanations(["stale_or_incomplete_windows", "thin_breadth"]),
             "newslessRotation": False,
             "newslessRotationEvidence": None,
+            "persistenceScore": 0.0,
+            "persistenceEvidence": self._fallback_persistence_evidence(),
+            "alertCandidates": [],
             "relativeStrength": {
                 "benchmark": theme.benchmark,
                 "benchmarkChangePercent": None,
@@ -486,6 +505,7 @@ class MarketRotationRadarService:
                 "sameDirectionPercent": 0,
                 "aboveVwapPercent": 0,
                 "persistencePercent": 0,
+                "persistenceScore": 0.0,
                 "label": "同步性证据不足",
             },
             "leadership": {
@@ -741,13 +761,91 @@ class MarketRotationRadarService:
     def _time_window_state(self, time_windows: Mapping[str, Mapping[str, Any]]) -> Dict[str, Any]:
         available = [window for window in TIME_WINDOW_KEYS if time_windows.get(window, {}).get("available")]
         intraday_available = [window for window in ("5m", "15m", "60m") if window in available]
+        stale_or_fallback = [
+            window for window in TIME_WINDOW_KEYS
+            if time_windows.get(window, {}).get("isStale") or time_windows.get(window, {}).get("isFallback")
+        ]
         return {
             "availableWindows": available,
+            "availableWindowCount": len(available),
+            "missingWindows": [window for window in TIME_WINDOW_KEYS if window not in available],
+            "staleOrFallbackWindows": stale_or_fallback,
             "intradayAvailableCount": len(intraday_available),
             "hasDailyWindow": "1d" in available,
             "hasStaleWindow": any(time_windows.get(window, {}).get("isStale") for window in TIME_WINDOW_KEYS),
             "hasFallbackWindow": any(time_windows.get(window, {}).get("isFallback") for window in TIME_WINDOW_KEYS),
         }
+
+    def _persistence_evidence(self, time_windows: Mapping[str, Mapping[str, Any]]) -> Dict[str, Any]:
+        available_windows = [
+            window for window in TIME_WINDOW_KEYS
+            if time_windows.get(window, {}).get("available")
+        ]
+        missing_windows = [window for window in TIME_WINDOW_KEYS if window not in available_windows]
+        stale_or_fallback_windows = [
+            window for window in TIME_WINDOW_KEYS
+            if time_windows.get(window, {}).get("isStale") or time_windows.get(window, {}).get("isFallback")
+        ]
+        changes = [
+            float(time_windows[window]["averageChangePercent"])
+            for window in available_windows
+            if time_windows.get(window, {}).get("averageChangePercent") is not None
+        ]
+        positive_count = sum(1 for value in changes if value > 0)
+        negative_count = sum(1 for value in changes if value < 0)
+        same_direction_count = max(positive_count, negative_count)
+        coverage_score = len(available_windows) / len(TIME_WINDOW_KEYS)
+        direction_score = same_direction_count / len(changes) if changes else 0.0
+        penalty = 0.2 if stale_or_fallback_windows else 0.0
+        score = round(max(0.0, min(1.0, coverage_score * 0.55 + direction_score * 0.45 - penalty)), 2)
+        if not available_windows:
+            label = "跨时窗证据待补齐"
+        elif score >= 0.78 and positive_count >= max(2, negative_count):
+            label = "跨时窗延续"
+        elif score >= 0.55:
+            label = "跨时窗待确认"
+        elif negative_count > positive_count and len(changes) >= 2:
+            label = "跨时窗降温"
+        else:
+            label = "跨时窗证据不足"
+        return {
+            "score": score,
+            "label": label,
+            "availableWindows": available_windows,
+            "missingWindows": missing_windows,
+            "staleOrFallbackWindows": stale_or_fallback_windows,
+            "positiveWindowCount": positive_count,
+            "negativeWindowCount": negative_count,
+            "sameDirectionWindowCount": same_direction_count,
+            "requiredWindows": list(TIME_WINDOW_KEYS),
+            "explanation": self._persistence_explanation(label, available_windows, missing_windows, stale_or_fallback_windows),
+        }
+
+    def _fallback_persistence_evidence(self) -> Dict[str, Any]:
+        return {
+            "score": 0.0,
+            "label": "跨时窗证据待补齐",
+            "availableWindows": [],
+            "missingWindows": list(TIME_WINDOW_KEYS),
+            "staleOrFallbackWindows": list(TIME_WINDOW_KEYS),
+            "positiveWindowCount": 0,
+            "negativeWindowCount": 0,
+            "sameDirectionWindowCount": 0,
+            "requiredWindows": list(TIME_WINDOW_KEYS),
+            "explanation": "5m/15m/60m/1d 时窗均缺失或为备用状态，不能确认延续。",
+        }
+
+    @staticmethod
+    def _persistence_explanation(
+        label: str,
+        available_windows: Sequence[str],
+        missing_windows: Sequence[str],
+        stale_or_fallback_windows: Sequence[str],
+    ) -> str:
+        available_text = "/".join(available_windows) if available_windows else "无"
+        missing_text = "/".join(missing_windows) if missing_windows else "无"
+        stale_text = "/".join(stale_or_fallback_windows) if stale_or_fallback_windows else "无"
+        return f"{label}：可用 {available_text}，缺失 {missing_text}，备用/过期 {stale_text}。"
 
     def _empty_time_windows(self) -> Dict[str, Dict[str, Any]]:
         return {window: self._empty_time_window(window) for window in TIME_WINDOW_KEYS}
@@ -841,10 +939,14 @@ class MarketRotationRadarService:
         if not window_state.get("hasDailyWindow"):
             confidence = min(confidence, 0.55)
         elif int(window_state.get("intradayAvailableCount") or 0) == 0:
-            confidence = min(confidence, 0.72)
+            confidence = min(confidence, 0.6)
         if window_state.get("hasStaleWindow"):
             confidence = min(confidence, 0.5)
+        if int(window_state.get("availableWindowCount") or 0) < len(TIME_WINDOW_KEYS):
+            confidence = min(confidence, 0.68)
         if window_state.get("hasFallbackWindow") and int(window_state.get("intradayAvailableCount") or 0) < 2:
+            confidence = min(confidence, 0.6)
+        if window_state.get("staleOrFallbackWindows"):
             confidence = min(confidence, 0.68)
         return round(max(0.0, min(1.0, confidence)), 2)
 
@@ -861,10 +963,14 @@ class MarketRotationRadarService:
         concentration: float,
     ) -> List[str]:
         labels: List[str] = []
-        if source_state["isStale"]:
-            labels.append("stale_data")
-        if source_state["fallbackUsed"]:
-            labels.append("fallback_data")
+        window_state = source_state.get("timeWindowState", {})
+        if (
+            source_state["isStale"]
+            or source_state["fallbackUsed"]
+            or int(window_state.get("availableWindowCount") or 0) < len(TIME_WINDOW_KEYS)
+            or bool(window_state.get("staleOrFallbackWindows"))
+        ):
+            labels.append("stale_or_incomplete_windows")
         if coverage < 0.65 or percent_up < 55 or percent_outperforming < 55:
             labels.append("thin_breadth")
         if concentration > 0.48:
@@ -887,14 +993,14 @@ class MarketRotationRadarService:
             return "weak_or_no_signal"
         if score >= 76 and confidence >= 0.65 and percent_up >= 65 and percent_outperforming >= 65:
             if "single_name_driven" in risk_labels or "gap_fade_risk" in risk_labels:
-                return "crowded_or_extended"
+                return "extended_watch"
             return "confirmed_rotation"
         if score >= 60 and confidence >= 0.45:
             if "single_name_driven" in risk_labels and percent_up < 65:
-                return "crowded_or_extended"
-            return "early_rotation"
+                return "extended_watch"
+            return "early_watch"
         if average_relative_volume < 0.9 or percent_up < 50:
-            return "cooling"
+            return "cooling_watch"
         return "weak_or_no_signal"
 
     @staticmethod
@@ -910,9 +1016,9 @@ class MarketRotationRadarService:
             window_note = "日线与分钟级时窗均待补齐"
         stage_notes = {
             "confirmed_rotation": "价格、量能、广度和同步性同时满足阈值。",
-            "early_rotation": "已有相对强势或量能扩张，但仍需更多广度/时窗确认。",
-            "crowded_or_extended": "强度较高但存在集中或高开回落风险。",
-            "cooling": "量能或上涨广度转弱，轮动证据降温。",
+            "early_watch": "已有相对强势或量能扩张，但仍需更多广度/时窗确认。",
+            "extended_watch": "强度较高但存在集中或高开回落风险。",
+            "cooling_watch": "量能或上涨广度转弱，轮动证据降温。",
             "weak_or_no_signal": "可用证据不足或分歧较大。",
         }
         return f"{stage_notes.get(stage, '阶段待识别')} 置信度 {confidence:.0%}，{window_note}。"
@@ -923,8 +1029,7 @@ class MarketRotationRadarService:
             "gap_fade_risk": "涨幅较大但 VWAP、量能或广度确认不足，需防止冲高回落。",
             "thin_breadth": "可观察成员或跑赢成员偏少，主题扩散仍不充分。",
             "single_name_driven": "正贡献集中在少数成员，主题广泛参与度不足。",
-            "stale_data": "部分行情或时窗过期，置信度已封顶。",
-            "fallback_data": "部分行情或时窗为备用/缺失状态，置信度已降权。",
+            "stale_or_incomplete_windows": "部分 5m/15m/60m/1d 时窗缺失、备用或过期，置信度已封顶。",
         }
         return [explanations[label] for label in risk_labels if label in explanations]
 
@@ -985,12 +1090,18 @@ class MarketRotationRadarService:
         fading = [
             self._summary_item(theme)
             for theme in reversed(themes)
-            if theme["stage"] in {"cooling", "weak_or_no_signal"}
+            if theme["stage"] in {"cooling_watch", "weak_or_no_signal"}
         ][:3]
+        watchlist_signals = []
+        for theme in themes[:3]:
+            candidates = theme.get("alertCandidates") or []
+            if candidates:
+                watchlist_signals.extend(candidates[:2])
         return {
             "strongestThemes": strongest,
             "acceleratingThemes": accelerating,
             "fadingThemes": fading,
+            "watchlistSignals": watchlist_signals[:5],
             "safeWording": [
                 "资金轮动迹象",
                 "成交额扩张",
@@ -1040,6 +1151,61 @@ class MarketRotationRadarService:
                 "asOf": benchmark.get("asOf"),
             }
         return proxies
+
+    def _alert_candidates(
+        self,
+        *,
+        theme: ThemeBasket,
+        leaders: Sequence[Mapping[str, Any]],
+        stage: str,
+        confidence: float,
+        persistence_evidence: Mapping[str, Any],
+        risk_labels: Sequence[str],
+        source_state: Mapping[str, Any],
+    ) -> List[Dict[str, Any]]:
+        if source_state["fallbackUsed"] or source_state["isStale"] or confidence < 0.45:
+            return []
+        if stage not in {"early_watch", "confirmed_rotation", "extended_watch", "cooling_watch"}:
+            return []
+        candidates: List[Dict[str, Any]] = []
+        for leader in leaders[:3]:
+            signal_label = self._alert_signal_label(stage)
+            reasons = [
+                f"{theme.name}：{signal_label}",
+                str(persistence_evidence.get("explanation") or "跨时窗证据待补齐。"),
+            ]
+            if leader.get("relativeStrengthVsBenchmark") is not None:
+                reasons.append(f"{leader.get('symbol')} 相对 {theme.benchmark} {float(leader['relativeStrengthVsBenchmark']):+.2f}%")
+            if leader.get("volumeRatio") is not None:
+                reasons.append(f"量比 {float(leader['volumeRatio']):.2f}x")
+            candidates.append({
+                "themeId": theme.id,
+                "themeName": theme.name,
+                "symbol": leader.get("symbol"),
+                "name": leader.get("name") or leader.get("symbol"),
+                "label": "关注候选",
+                "signal": stage,
+                "signalLabel": signal_label,
+                "confidence": confidence,
+                "persistenceScore": persistence_evidence.get("score"),
+                "persistenceLabel": persistence_evidence.get("label"),
+                "riskLabels": list(risk_labels),
+                "reasons": reasons,
+                "readOnly": True,
+                "deliveryEnabled": False,
+                "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
+            })
+        return candidates
+
+    @staticmethod
+    def _alert_signal_label(stage: str) -> str:
+        labels = {
+            "early_watch": "早期观察",
+            "confirmed_rotation": "确认轮动",
+            "extended_watch": "延展观察",
+            "cooling_watch": "降温观察",
+        }
+        return labels.get(stage, "观察信号")
 
     def _theme_detail(
         self,

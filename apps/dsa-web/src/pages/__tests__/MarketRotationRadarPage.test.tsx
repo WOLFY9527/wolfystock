@@ -22,8 +22,10 @@ const radarFixture = (): MarketRotationRadarResponse => ({
   noAdviceDisclosure: '仅用于观察资金轮动迹象，非买卖建议。',
   metadata: {
     noExternalCalls: true,
-    schemaVersion: 'market_rotation_radar_phase2_v1',
+    schemaVersion: 'market_rotation_radar_phase3_v1',
     timeWindows: ['5m', '15m', '60m', '1d'],
+    alertsAreReadOnlyEvidence: true,
+    notificationDeliveryEnabled: false,
   },
   benchmarks: {
     QQQ: { symbol: 'QQQ', changePercent: 0.8, timeWindows: {}, freshness: 'delayed', isFallback: false, isStale: false },
@@ -39,7 +41,10 @@ const radarFixture = (): MarketRotationRadarResponse => ({
       { id: 'ai_applications', name: 'AI 应用', rotationScore: 78, confidence: 0.72, stage: 'confirmed_rotation', freshness: 'delayed', isFallback: false, riskLabels: [] },
     ],
     fadingThemes: [
-      { id: 'robotics', name: '机器人', rotationScore: 38, confidence: 0.31, stage: 'weak_or_no_signal', freshness: 'fallback', isFallback: true, riskLabels: ['fallback_data'] },
+      { id: 'robotics', name: '机器人', rotationScore: 38, confidence: 0.31, stage: 'weak_or_no_signal', freshness: 'fallback', isFallback: true, riskLabels: ['stale_or_incomplete_windows'] },
+    ],
+    watchlistSignals: [
+      { themeId: 'ai_applications', themeName: 'AI 应用', symbol: 'APP', label: '关注候选', signal: 'confirmed_rotation', signalLabel: '确认轮动', confidence: 0.72, persistenceScore: 0.86, readOnly: true, deliveryEnabled: false, reasons: ['AI 应用：确认轮动'] },
     ],
     safeWording: ['资金轮动迹象', '成交额扩张', '相对强势扩散', '板块同步性增强', '非买卖建议'],
   },
@@ -60,6 +65,22 @@ const radarFixture = (): MarketRotationRadarResponse => ({
       riskExplanations: ['涨幅较大但 VWAP、量能或广度确认不足，需防止冲高回落。'],
       newslessRotation: true,
       newslessRotationEvidence: '无明显新闻的同步异动：未配置新闻催化证据。',
+      persistenceScore: 0.86,
+      persistenceEvidence: {
+        score: 0.86,
+        label: '跨时窗延续',
+        availableWindows: ['5m', '15m', '60m', '1d'],
+        missingWindows: [],
+        staleOrFallbackWindows: [],
+        positiveWindowCount: 4,
+        negativeWindowCount: 0,
+        sameDirectionWindowCount: 4,
+        requiredWindows: ['5m', '15m', '60m', '1d'],
+        explanation: '跨时窗延续：可用 5m/15m/60m/1d，缺失 无，备用/过期 无。',
+      },
+      alertCandidates: [
+        { themeId: 'ai_applications', themeName: 'AI 应用', symbol: 'APP', label: '关注候选', signal: 'confirmed_rotation', signalLabel: '确认轮动', confidence: 0.72, persistenceScore: 0.86, persistenceLabel: '跨时窗延续', readOnly: true, deliveryEnabled: false, reasons: ['AI 应用：确认轮动'] },
+      ],
       relativeStrength: {
         benchmark: 'QQQ',
         benchmarkChangePercent: 0.8,
@@ -142,9 +163,12 @@ describe('MarketRotationRadarPage', () => {
     expect(page).toHaveTextContent('成交额扩张');
     expect(page).toHaveTextContent('上涨广度');
     expect(page).toHaveTextContent('同步性');
+    expect(page).toHaveTextContent('持续证据');
     expect(page).toHaveTextContent('主导股票');
     expect(page).toHaveTextContent('时窗证据');
     expect(page).toHaveTextContent('代理基准');
+    expect(page).toHaveTextContent('关注候选');
+    expect(page).toHaveTextContent('只读证据');
     expect(page).toHaveTextContent('观察清单证据');
     expect(page).toHaveTextContent('仅观察，不构成买卖建议');
     expect(page).toHaveTextContent('置信度 72%');
@@ -186,7 +210,8 @@ describe('MarketRotationRadarPage', () => {
           stage: 'weak_or_no_signal',
           freshness: 'fallback',
           isFallback: true,
-          riskLabels: ['fallback_data', 'thin_breadth'],
+          riskLabels: ['stale_or_incomplete_windows', 'thin_breadth'],
+          alertCandidates: [],
           newslessRotation: false,
           evidence: ['静态主题篮子示例，未接入行情快照。'],
         },
@@ -197,7 +222,7 @@ describe('MarketRotationRadarPage', () => {
 
     await waitFor(() => expect(screen.getByTestId('rotation-radar-freshness')).toHaveTextContent('备用'));
     expect(screen.getByTestId('rotation-theme-card-ai_applications')).toHaveTextContent('信号较弱');
-    expect(screen.getByTestId('rotation-theme-card-ai_applications')).toHaveTextContent('备用数据');
+    expect(screen.getByTestId('rotation-theme-card-ai_applications')).toHaveTextContent('备用');
     expect(screen.getByTestId('rotation-theme-card-ai_applications')).not.toHaveTextContent('实时');
   });
 });
