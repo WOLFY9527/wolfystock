@@ -6,11 +6,11 @@ index
 Related docs: `docs/audits/public-launch-readiness-master.md`,
 `docs/audits/public-launch-gap-register.md`,
 `docs/audits/deployment-readiness-checklist.md`,
-`docs/audits/markdown-consolidation-plan.md`,
-`docs/audits/markdown-inventory.md`
+`docs/audits/archive/markdown-consolidation-plan.md`,
+`docs/audits/archive/markdown-inventory.md`
 
-Mode: docs-only navigation index. No audit files were moved, deleted,
-archived, merged, or rewritten.
+Mode: docs-only navigation index. No runtime DB, WS2, deployment, or restore
+behavior is changed by this index.
 
 ## Purpose
 
@@ -27,8 +27,8 @@ restore, deployment, or runtime cutover work.
   and worker deployment model.
 - `docs/audits/deployment-readiness-checklist.md`: release-candidate
   operational checklist and final go/no-go gate.
-- `docs/audits/release-integration-plan-main-ahead.md`: current main/ahead
-  integration plan until the release branch is cut.
+- `docs/audits/archive/release-integration-plan-main-ahead.md`: archived
+  point-in-time main/ahead integration plan for the earlier local-ahead train.
 - `docs/audits/release-rollback-runbook.md`: operational rollback runbook.
 - `docs/audits/ci-postgres-gate-triage-guide.md`: CI/PostgreSQL triage runbook.
 - `docs/audits/db-retention-backup-restore-drill-plan.md`: active backup,
@@ -50,7 +50,7 @@ restore, deployment, or runtime cutover work.
 
 ## Superseded docs
 
-- `docs/audits/db-index-migration-plan-auth-task-log.md`: Batch A appears
+- `docs/audits/archive/db-index-migration-plan-auth-task-log.md`: Batch A appears
   implemented; keep as historical plan unless Batch A detail is needed.
 
 ## Deferred docs

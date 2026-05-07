@@ -13,7 +13,7 @@ behavior was changed.
 - `docs/audits/admin-rbac-r5-coarse-fallback-removal-plan.md`
 - `docs/audits/cost-system-final-qa-matrix.md`
 - `docs/audits/ws2-multi-instance-smoke-test-design.md`
-- `docs/audits/security-admin-mfa-backend-foundation.md`
+- `docs/audits/archive/security-admin-mfa-backend-foundation.md`
 - `docs/audits/public-launch-readiness-master.md`
 - `docs/audits/launch-acceptance-evidence-pack.md`
 - `docs/audits/incident-response-audit-evidence-pack.md`

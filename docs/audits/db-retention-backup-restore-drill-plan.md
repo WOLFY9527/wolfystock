@@ -399,7 +399,7 @@ Task: Implement DB Index Batch B as additive indexes only.
 
 Repo: /Users/yehengli/daily_stock_analysis on main.
 
-Read first: docs/audits/db-index-migration-plan-auth-task-log.md and docs/audits/db-retention-backup-restore-drill-plan.md.
+Read first: docs/audits/archive/db-index-migration-plan-auth-task-log.md and docs/audits/db-retention-backup-restore-drill-plan.md.
 
 Scope: add the next owner/status/time/admin drilldown indexes for execution/admin logs, LLM usage/cost observability, scanner/backtest artifacts, and portfolio read projections where documented and query-plan justified.
 

@@ -5,8 +5,8 @@ Date: 2026-05-07
 Branch checked: `main`
 Owner domain: Release readiness
 Related docs: `docs/audits/public-launch-readiness-master.md`,
-`docs/audits/final-pre-push-audit.md`,
-`docs/audits/wolfystock-final-admin-security-options-qa.md`,
+`docs/audits/archive/final-pre-push-audit.md`,
+`docs/audits/archive/wolfystock-final-admin-security-options-qa.md`,
 `docs/qa/wolfystock-portfolio-populated-holdings-qa.md`,
 `docs/audits/wolfystock-echarts-chart-workspace-audit.md`
 

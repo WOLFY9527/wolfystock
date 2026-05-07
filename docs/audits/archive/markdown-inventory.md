@@ -9,7 +9,7 @@
 
 Status: Historical note
 Owner domain: Documentation governance
-Related docs: `docs/audits/markdown-consolidation-plan.md`, `docs/audits/final-pre-push-audit.md`
+Related docs: `docs/audits/archive/markdown-consolidation-plan.md`, `docs/audits/archive/final-pre-push-audit.md`
 
 Date: 2026-05-07
 Branch checked: `main`
@@ -19,7 +19,7 @@ Mode: docs-only inventory. No markdown files were deleted or moved.
 
 - Tracked scope reviewed after the concurrent consolidation commit: 70 tracked
   `docs/audits/*.md` files and 1 tracked `docs/codex/*.md` file.
-- New audit package files from this task: `docs/audits/final-pre-push-audit.md` and this file.
+- New audit package files from this task: `docs/audits/archive/final-pre-push-audit.md` and this file.
 
 ## Classification Key
 
@@ -40,7 +40,7 @@ Mode: docs-only inventory. No markdown files were deleted or moved.
 | `docs/audits/admin-data-schema-inventory.md` | Merge candidate | Useful schema reference; should feed admin data index. |
 | `docs/audits/admin-governance-cost-e2e-qa-runbook.md` | Keep standalone | Action-oriented release QA runbook. |
 | `docs/audits/admin-rbac-capability-model-design.md` | Stale/needs status header | Earlier RBAC design; later R3/R4 docs supersede parts while R5 remains active. |
-| `docs/audits/admin-rbac-final-qa-report.md` | Archive/superseded candidate | Historical QA evidence; keep until launch docs cite the accepted result. |
+| `docs/audits/archive/admin-rbac-final-qa-report.md` | Archive/superseded candidate | Historical QA evidence; keep until launch docs cite the accepted result. |
 | `docs/audits/admin-rbac-r5-coarse-fallback-removal-plan.md` | Keep standalone | Active future R5 plan and launch blocker input. |
 | `docs/audits/admin-role-governance-plan.md` | Keep standalone | Active governance plan for role/capability assignment. |
 | `docs/audits/admin-role-management-ui-design.md` | Merge candidate | Pair with role governance plan once implementation scope opens. |
@@ -54,7 +54,7 @@ Mode: docs-only inventory. No markdown files were deleted or moved.
 | `docs/audits/data-pipeline-r2-progressive-enrichment.md` | Archive/superseded candidate | Short implementation summary; absorb into data pipeline status docs later. |
 | `docs/audits/data-quality-user-disclosure-policy.md` | Keep standalone | Canonical data disclosure policy. |
 | `docs/audits/db-index-batch-b-execution-provider-cost-plan.md` | Stale/needs status header | Recent smoke coverage landed; status should distinguish smoke from real migration. |
-| `docs/audits/db-index-migration-plan-auth-task-log.md` | Archive/superseded candidate | Batch A appears implemented; keep as historical index plan until cited. |
+| `docs/audits/archive/db-index-migration-plan-auth-task-log.md` | Archive/superseded candidate | Batch A appears implemented; keep as historical index plan until cited. |
 | `docs/audits/db-production-readiness-index-retention-audit.md` | Merge candidate | Feed DB readiness index; still useful launch blocker evidence. |
 | `docs/audits/db-retention-backup-restore-drill-plan.md` | Keep standalone | Active backup/restore and retention blocker plan. |
 | `docs/audits/deployment-readiness-checklist.md` | Keep standalone | Operational go/no-go checklist for public multi-user readiness. |
@@ -65,7 +65,7 @@ Mode: docs-only inventory. No markdown files were deleted or moved.
 | `docs/audits/llm-instrumentation-validation-plan.md` | Merge candidate | Feed cost/LLM observability index. |
 | `docs/audits/llm-provider-duplicate-cost-metrics-design.md` | Merge candidate | Feed duplicate-cost/cost observability index. |
 | `docs/audits/llm-report-output-cache-design.md` | Merge candidate | Feed reuse/cache design index; preserve force-refresh and scope rules. |
-| `docs/audits/markdown-consolidation-plan.md` | Duplicate/possible conflict | Newly tracked consolidation plan; overlaps this inventory, so reconcile source-of-truth ownership later. |
+| `docs/audits/archive/markdown-consolidation-plan.md` | Duplicate/possible conflict | Newly tracked consolidation plan; overlaps this inventory, so reconcile source-of-truth ownership later. |
 | `docs/audits/market-data-provider-upgrade-decision-matrix.md` | Keep standalone | Active provider decision matrix. |
 | `docs/audits/options-lab-phase0-design.md` | Archive/superseded candidate | Historical Options design baseline; later R1/R2/provider docs supersede parts. |
 | `docs/audits/options-provider-adapter-contract.md` | Keep standalone | Active Options provider adapter contract; live provider remains disabled. |
@@ -74,10 +74,10 @@ Mode: docs-only inventory. No markdown files were deleted or moved.
 | `docs/audits/provider-fallback-budget-reporting-design.md` | Merge candidate | Fold into provider/MarketCache readiness index. |
 | `docs/audits/provider-marketcache-instrumentation-validation-plan.md` | Merge candidate | Fold into provider/MarketCache readiness index. |
 | `docs/audits/public-launch-gap-register.md` | Keep standalone | Current launch blocker register and public-readiness source of truth. |
-| `docs/audits/release-integration-plan-main-ahead.md` | Keep standalone | Current integration plan until the ahead train is pushed or branched. |
+| `docs/audits/archive/release-integration-plan-main-ahead.md` | Keep standalone | Current integration plan until the ahead train is pushed or branched. |
 | `docs/audits/release-rollback-runbook.md` | Keep standalone | Operational rollback runbook. |
 | `docs/audits/scanner-ai-interpretation-cache-design.md` | Merge candidate | Feed reuse/cache design index; scanner AI stays additive. |
-| `docs/audits/security-admin-mfa-backend-foundation.md` | Archive/superseded candidate | Backend scaffold summary; production storage plan is newer and active. |
+| `docs/audits/archive/security-admin-mfa-backend-foundation.md` | Archive/superseded candidate | Backend scaffold summary; production storage plan is newer and active. |
 | `docs/audits/security-mfa-secret-storage-hardening-plan.md` | Keep standalone | Active production MFA storage blocker plan. |
 | `docs/audits/security-password-kdf-upgrade-plan.md` | Stale/needs status header | Phase 3D appears implemented; MFA dependencies remain separate. |
 | `docs/audits/trading-no-advice-product-policy.md` | Keep standalone | Canonical trading/no-advice product policy. |
@@ -91,7 +91,7 @@ Mode: docs-only inventory. No markdown files were deleted or moved.
 | `docs/audits/wolfystock-css-ownership-inventory.md` | Keep standalone | Active CSS selector ownership reference. |
 | `docs/audits/wolfystock-css-selector-usage-verification.md` | Merge candidate | CSS deletion-trial evidence; preserve until indexed. |
 | `docs/audits/wolfystock-echarts-chart-workspace-audit.md` | Stale/needs status header | Older frontend audit; needs current-route status. |
-| `docs/audits/wolfystock-final-admin-security-options-qa.md` | Archive/superseded candidate | Historical QA evidence; cite from launch docs if accepted. |
+| `docs/audits/archive/wolfystock-final-admin-security-options-qa.md` | Archive/superseded candidate | Historical QA evidence; cite from launch docs if accepted. |
 | `docs/audits/wolfystock-frontend-design-conformance-audit.md` | Stale/needs status header | Older route/browser evidence; note auth/mock limits before reuse. |
 | `docs/audits/wolfystock-global-codebase-audit.md` | Stale/needs status header | Large global audit; split or status-mark before use. |
 | `docs/audits/wolfystock-phase0-bundle-design-inventory.md` | Archive/superseded candidate | Earlier inventory largely superseded by later bundle/DOM/CSS reports. |
@@ -111,5 +111,5 @@ Mode: docs-only inventory. No markdown files were deleted or moved.
 2. Add status headers before moving or archiving any large design docs.
 3. Create domain indexes before deletion or movement: admin data, RBAC/security, cost/quota, DB readiness, provider/MarketCache, reuse/cache, frontend visual, CSS/DOM.
 4. Leave CSS/DOM reports in place until a selector index captures final rendered status and route evidence.
-5. Reconcile `docs/audits/markdown-consolidation-plan.md` with this inventory
+5. Reconcile `docs/audits/archive/markdown-consolidation-plan.md` with this inventory
    before a future docs cleanup, because both classify the same markdown set.

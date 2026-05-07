@@ -8,7 +8,7 @@ Related docs: `docs/audits/public-launch-gap-register.md`,
 `docs/audits/deployment-readiness-checklist.md`,
 `docs/audits/launch-acceptance-evidence-pack.md`,
 `docs/audits/incident-response-audit-evidence-pack.md`,
-`docs/audits/final-pre-push-audit.md`,
+`docs/audits/archive/final-pre-push-audit.md`,
 `docs/audits/known-test-warnings-register.md`
 
 Mode: launch readiness summary. The current production-config update adds
@@ -116,6 +116,7 @@ registered warnings.
 - Use `known-test-warnings-register.md` for expected warnings and cleanup
   ownership.
 
-Do not delete, move, or consolidate older audit docs as part of this master
-view. Any consolidation should follow `markdown-consolidation-plan.md` in a
-separate approved task.
+Do not treat archived historical audit docs as current launch control. Any
+future consolidation should follow
+`docs/audits/archive/markdown-consolidation-plan.md` in a separate approved
+task.

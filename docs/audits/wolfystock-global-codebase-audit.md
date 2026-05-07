@@ -2,7 +2,7 @@
 
 Status: Partial
 Owner domain: Frontend and repo-wide audit
-Related docs: `docs/audits/wolfystock-frontend-design-conformance-audit.md`, `docs/audits/markdown-inventory.md`
+Related docs: `docs/audits/wolfystock-frontend-design-conformance-audit.md`, `docs/audits/archive/markdown-inventory.md`
 
 Date: 2026-05-05 Asia/Shanghai
 Repository: `/Users/yehengli/daily_stock_analysis`

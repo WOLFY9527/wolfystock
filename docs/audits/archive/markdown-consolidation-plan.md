@@ -9,7 +9,7 @@
 
 Status: Historical note
 Owner domain: Documentation governance
-Related docs: `docs/audits/markdown-inventory.md`, `docs/audits/final-pre-push-audit.md`
+Related docs: `docs/audits/archive/markdown-inventory.md`, `docs/audits/archive/final-pre-push-audit.md`
 
 Mode: docs-only consolidation plan. No audit files, runbooks, product code,
 tests, frontend code, `docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md`, or
@@ -32,7 +32,7 @@ Keep the final structure small and status-driven:
 - `docs/audits/public-launch-gap-register.md`: launch blocker register and
   public-readiness source of truth.
 - `docs/audits/deployment-readiness-checklist.md`: release-candidate checklist.
-- `docs/audits/release-integration-plan-main-ahead.md`: current main/ahead
+- `docs/audits/archive/release-integration-plan-main-ahead.md`: current main/ahead
   integration plan until the release branch is cut.
 - `docs/audits/release-rollback-runbook.md`: operational rollback runbook.
 - `docs/audits/admin-governance-cost-e2e-qa-runbook.md`: admin/cost release QA
@@ -54,7 +54,7 @@ active launch-readiness references:
 - `docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md`
 - `docs/audits/public-launch-gap-register.md`
 - `docs/audits/deployment-readiness-checklist.md`
-- `docs/audits/release-integration-plan-main-ahead.md`
+- `docs/audits/archive/release-integration-plan-main-ahead.md`
 - `docs/audits/release-rollback-runbook.md`
 - `docs/audits/admin-governance-cost-e2e-qa-runbook.md`
 - `docs/audits/provider-data-incident-runbook.md`

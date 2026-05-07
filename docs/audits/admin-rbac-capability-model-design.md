@@ -2,7 +2,7 @@
 
 Status: Partial
 Owner domain: Admin RBAC and security governance
-Related docs: `docs/audits/admin-rbac-r5-coarse-fallback-removal-plan.md`, `docs/audits/admin-rbac-final-qa-report.md`
+Related docs: `docs/audits/admin-rbac-r5-coarse-fallback-removal-plan.md`, `docs/audits/archive/admin-rbac-final-qa-report.md`
 
 Date: 2026-05-06
 Mode: docs-only authorization design. No runtime behavior changed.

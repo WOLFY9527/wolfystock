@@ -141,16 +141,18 @@ register lives in `docs/audits/public-launch-gap-register.md`.
 
 ## Historical and superseded notes
 
-- In-place historical notes that should not be treated as current launch
-  status: `final-pre-push-audit.md`, `markdown-inventory.md`,
-  `markdown-consolidation-plan.md`, `release-integration-plan-main-ahead.md`.
-- Older supporting evidence or superseded foundations that remain useful for
-  context: `admin-rbac-final-qa-report.md`,
+- Archived historical notes now live under `docs/audits/archive/`:
+  `final-pre-push-audit.md`, `markdown-inventory.md`,
+  `markdown-consolidation-plan.md`,
+  `release-integration-plan-main-ahead.md`.
+- Older supporting evidence and superseded foundations now live under
+  `docs/audits/archive/`: `admin-rbac-final-qa-report.md`,
   `security-admin-mfa-backend-foundation.md`,
   `wolfystock-final-admin-security-options-qa.md`,
   `db-index-migration-plan-auth-task-log.md`.
-- No files were moved into `docs/audits/archive/` in this cleanup. Existing
-  cross-references still resolve against the current in-place filenames.
+- Current launch-control and operator docs remain canonical at the top level of
+  `docs/audits/`. Historical links from active docs now point to the archived
+  locations.
 
 ## Reuse warning
 

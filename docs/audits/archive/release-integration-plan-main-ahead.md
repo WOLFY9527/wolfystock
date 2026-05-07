@@ -538,7 +538,7 @@ Do not change runtime code unless I explicitly approve a follow-up fix.
 
 Read first:
 - docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md
-- docs/audits/release-integration-plan-main-ahead.md
+- docs/audits/archive/release-integration-plan-main-ahead.md
 - docs/audits/deployment-readiness-checklist.md
 - docs/CHANGELOG.md
 

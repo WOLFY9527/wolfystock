@@ -139,7 +139,7 @@ Similar obvious recent-history issues:
 
 ## Markdown Inventory Summary
 
-Detailed inventory: `docs/audits/markdown-inventory.md`.
+Detailed inventory: `docs/audits/archive/markdown-inventory.md`.
 
 Recommendations:
 
@@ -163,7 +163,7 @@ Recommendations:
   public-launch/deployment/release-integration docs. Keep all three launch docs
   for now, but clarify source-of-truth ownership.
 
-Coordination note: `docs/audits/markdown-consolidation-plan.md` is now tracked
+Coordination note: `docs/audits/archive/markdown-consolidation-plan.md` is now tracked
 by concurrent commit `a71fb349` and overlaps this inventory. Reconcile the two
 docs in a future cleanup before moving or deleting audit markdown.
 
