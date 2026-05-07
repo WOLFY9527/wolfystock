@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, select
 
-from api.deps import CurrentUser, require_admin_capability, require_admin_user
+from api.deps import CurrentUser, require_admin_capability
 from api.v1.schemas.admin_cost import (
     DuplicateCostSummaryResponse,
     DuplicateCostSummaryWindow,
@@ -72,7 +72,7 @@ def get_duplicate_cost_summary(
     bucket: str = Query(default="hour", description="Aggregation bucket contract: hour or day"),
     area: str = Query(default="all", description="all, llm, provider, market-cache, or scanner-ai"),
     limit: int = Query(default=50, ge=1, le=200),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("cost:observability:read")),
 ) -> DuplicateCostSummaryResponse:
     try:
         return DuplicateCostSummaryService().build_summary(

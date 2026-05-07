@@ -28,7 +28,7 @@ PUBLIC_LAUNCH_ADMIN_RBAC_ENDPOINT_FILES = (
 )
 
 EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS: dict[str, dict[str, int]] = {
-    "admin_cost.py": {"cost:observability:read": 3},
+    "admin_cost.py": {"cost:observability:read": 4},
     "admin_logs.py": {"ops:logs:read": 5, "ops:logs:write": 1},
     "admin_notifications.py": {"ops:notifications:read": 2, "ops:notifications:write": 5},
     "admin_portfolio.py": {"users:portfolio:read": 4},

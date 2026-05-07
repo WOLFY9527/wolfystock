@@ -442,7 +442,7 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
 
         self.assertEqual(
             {
-                "admin_cost.py": 3,
+                "admin_cost.py": 4,
                 "admin_logs.py": 6,
                 "admin_notifications.py": 7,
                 "admin_portfolio.py": 4,
@@ -457,10 +457,7 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
         inventory = inventory_public_launch_admin_route_capabilities()
 
         self.assertEqual(EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS, inventory.capability_counts)
-        self.assertEqual(
-            {"admin_cost.py": ("Depends(require_admin_user)",)},
-            inventory.legacy_admin_dependencies,
-        )
+        self.assertEqual({}, inventory.legacy_admin_dependencies)
         for capability_counts in inventory.capability_counts.values():
             self.assertTrue(set(capability_counts).issubset(set(ADMIN_RBAC_CAPABILITIES)))
 

@@ -144,7 +144,7 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertTrue(report.coarse_admin_fallback_disable_preflight_ready)
         self.assertEqual(report.coarse_admin_fallback_production_switch_status, "blocked")
         self.assertFalse(report.coarse_admin_fallback_production_switch_ready)
-        self.assertIn("admin_route_capability_dependency_gap", report.launch_blockers)
+        self.assertNotIn("admin_route_capability_dependency_gap", report.launch_blockers)
         self.assertTrue(report.explicit_capability_grants_without_fallback)
         self.assertTrue(report.missing_capability_dependency_fail_closed)
         self.assertIn("coarse_admin_fallback_present", report.launch_blockers)
@@ -231,7 +231,7 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
         self.assertIn("coarse_admin_fallback_present", report.launch_blockers)
         self.assertIn("remove coarse admin fallback", report.rollback_safe_next_step)
 
-    def test_coarse_fallback_production_switch_status_reports_route_gap(self) -> None:
+    def test_coarse_fallback_production_switch_status_reports_no_route_gap(self) -> None:
         report = build_security_launch_preflight()
 
         self.assertEqual(report.coarse_admin_fallback_production_switch_status, "blocked")
@@ -244,16 +244,13 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
                 "legacy_admin_without_payload_denied_without_fallback": True,
                 "missing_payload_without_fallback_fail_closed": True,
                 "sanitized_denials_without_fallback": True,
-                "public_launch_dependency_inventory_complete": False,
+                "public_launch_dependency_inventory_complete": True,
                 "runtime_default_changed": False,
             },
             report.coarse_admin_fallback_switch_evidence,
         )
-        self.assertEqual(
-            {"admin_cost.py": ("Depends(require_admin_user)",)},
-            report.public_launch_legacy_admin_route_dependencies,
-        )
-        self.assertIn("admin_route_capability_dependency_gap", report.launch_blockers)
+        self.assertEqual({}, report.public_launch_legacy_admin_route_dependencies)
+        self.assertNotIn("admin_route_capability_dependency_gap", report.launch_blockers)
 
     def test_role_capability_payloads_do_not_leak_secrets_or_session_data(self) -> None:
         login = self._login_admin()

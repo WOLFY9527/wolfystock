@@ -176,13 +176,21 @@ class AdminCostSummaryApiTestCase(unittest.TestCase):
             candidate_hash="FACEBEEF1234",
         )
 
-    def test_admin_required(self) -> None:
+    def test_duplicate_summary_requires_cost_observability_capability(self) -> None:
         response = self.client.get("/api/v1/admin/cost/duplicate-summary")
         self.assertEqual(response.status_code, 401)
 
         self._as_user()
         forbidden = self.client.get("/api/v1/admin/cost/duplicate-summary")
         self.assertEqual(forbidden.status_code, 403)
+
+        self._as_admin_without_cost_capability()
+        missing_capability = self.client.get("/api/v1/admin/cost/duplicate-summary")
+        self.assertEqual(missing_capability.status_code, 403)
+        self.assertEqual(missing_capability.json()["detail"]["error"], "admin_capability_required")
+        denial_text = missing_capability.text.lower()
+        for forbidden_marker in ("cost:observability:read", "raw-session", "cookie", "token", "secret", ".env"):
+            self.assertNotIn(forbidden_marker, denial_text)
 
     def test_summary_returns_safe_sections_and_metadata(self) -> None:
         self._as_admin()
