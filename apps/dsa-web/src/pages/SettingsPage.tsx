@@ -62,7 +62,10 @@ type AdvancedNavigationContext = {
 };
 type DataRouteKey = 'market' | 'fundamentals' | 'news' | 'sentiment';
 type DataSourceCapability = DataRouteKey | 'local';
-type DataSourceCredentialSchema = 'none' | 'single_key' | 'key_secret';
+type DataSourceCredentialSchema =
+  | 'none'
+  | 'single_key'
+  | 'key_secret';
 type DataSourceValidationState = 'not_configured' | 'configured_pending' | 'validated' | 'failed' | 'builtin' | 'loading' | 'partial' | 'missing_key' | 'unsupported';
 type DataSourceKind = 'builtin' | 'custom';
 type CustomDataSourceValidation = {
@@ -233,8 +236,10 @@ const DATA_SOURCE_LIBRARY_ITEMS: Array<{
     requireCredential: true,
     credentialSchema: 'single_key',
     management: createSingleKeyDataSourceManagement({
-      credentialEnvKey: 'ALPHA_VANTAGE_API_KEY',
-      pluralCredentialEnvKey: 'ALPHA_VANTAGE_API_KEYS',
+      credentialEnvKey:
+        'ALPHA_VANTAGE_API_KEY',
+      pluralCredentialEnvKey:
+        'ALPHA_VANTAGE_API_KEYS',
     }),
   },
   {
@@ -246,7 +251,8 @@ const DATA_SOURCE_LIBRARY_ITEMS: Array<{
     credentialSchema: 'single_key',
     management: createSingleKeyDataSourceManagement({
       credentialEnvKey: 'FINNHUB_API_KEY',
-      pluralCredentialEnvKey: 'FINNHUB_API_KEYS',
+      pluralCredentialEnvKey:
+        'FINNHUB_API_KEYS',
     }),
   },
   {
@@ -328,8 +334,10 @@ const DATA_SOURCE_LIBRARY_ITEMS: Array<{
     credentialSchema: 'key_secret',
     management: {
       credentialSchema: 'key_secret',
-      credentialEnvKey: 'ALPACA_API_KEY_ID',
-      secretEnvKey: 'ALPACA_API_SECRET_KEY',
+      credentialEnvKey:
+        'ALPACA_API_KEY_ID',
+      secretEnvKey:
+        'ALPACA_API_SECRET_KEY',
       fields: [
         {
           name: 'credential',
@@ -364,8 +372,10 @@ const DATA_SOURCE_LIBRARY_ITEMS: Array<{
     credentialSchema: 'single_key',
     management: {
       credentialSchema: 'single_key',
-      credentialEnvKey: 'TWELVE_DATA_API_KEY',
-      pluralCredentialEnvKey: 'TWELVE_DATA_API_KEYS',
+      credentialEnvKey:
+        'TWELVE_DATA_API_KEY',
+      pluralCredentialEnvKey:
+        'TWELVE_DATA_API_KEYS',
       fields: [
         {
           name: 'credential',
