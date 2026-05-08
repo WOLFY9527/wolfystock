@@ -42,6 +42,9 @@ review flow.
 
 ## Operator evidence workflow
 
+- Operator-facing runbook pack:
+  `docs/audits/operator-evidence-real-runbook.md` and
+  `docs/audits/operator-evidence-redaction-checklist.md`.
 - `operator_evidence_template_pack.py`: generates sanitized JSON templates for
   operator evidence categories. Operators must replace placeholders with
   sanitized evidence before review; generated templates are not real evidence.

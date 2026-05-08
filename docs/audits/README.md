@@ -35,6 +35,12 @@ notes, fixture examples, or a single product-capability changelog entry.
 - `docs/audits/incident-response-audit-evidence-pack.md`: sanitized incident
   response and auditability evidence contract for launch review. It is not
   accepted operator evidence by itself.
+- `docs/audits/operator-evidence-real-runbook.md`: concise offline workflow
+  for collecting sanitized real operator evidence, validating it, creating a
+  manifest, rendering a review report, and handing it to manual reviewers.
+- `docs/audits/operator-evidence-redaction-checklist.md`: pre-handoff checklist
+  for removing secrets, sessions, raw payloads, DB material, logs, personal
+  identifiers, and unsafe approval wording from evidence packets.
 - `docs/audits/release-rollback-runbook.md`: rollback instructions for a
   reviewed release candidate.
 - `docs/audits/known-test-warnings-register.md`: accepted warning inventory
@@ -55,6 +61,8 @@ notes, fixture examples, or a single product-capability changelog entry.
   `docs/audits/cost-system-final-qa-matrix.md`: current supporting evidence for
   public-safety, security-hardening, and cost-system readiness.
 - `docs/audits/admin-governance-cost-e2e-qa-runbook.md`,
+  `docs/audits/operator-evidence-real-runbook.md`,
+  `docs/audits/operator-evidence-redaction-checklist.md`,
   `docs/audits/provider-data-incident-runbook.md`,
   `docs/audits/ci-gate-usage.md`,
   `docs/audits/ci-postgres-gate-triage-guide.md`: operator runbooks and gate
