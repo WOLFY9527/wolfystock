@@ -25,6 +25,7 @@ APPROVAL_FORBIDDEN_PHRASES = (
     "production-ready",
     "automatic-go",
     "automatic go",
+    "release-approved",
 )
 SENSITIVE_MARKERS = (
     "api_key",
@@ -65,7 +66,7 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _looks_sensitive(value: str) -> bool:
     lowered = value.lower()
-    return any(marker in lowered for marker in SENSITIVE_MARKERS)
+    return any(marker in lowered for marker in SENSITIVE_MARKERS + APPROVAL_FORBIDDEN_PHRASES)
 
 
 def _sanitize_text(value: Any, *, default: str = "unknown", max_length: int = 96) -> str:

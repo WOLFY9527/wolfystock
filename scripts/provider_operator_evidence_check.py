@@ -93,6 +93,9 @@ UNSAFE_VALUE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 FORBIDDEN_LAUNCH_APPROVAL_PATTERNS = (
     re.compile(r"\bgo\b", re.IGNORECASE),
     re.compile(r"\blaunch[-_\s]?approved\b", re.IGNORECASE),
+    re.compile(r"\bproduction[-_\s]?ready\b", re.IGNORECASE),
+    re.compile(r"\bautomatic[-_\s]?go\b", re.IGNORECASE),
+    re.compile(r"\brelease[-_\s]?approved\b", re.IGNORECASE),
 )
 
 

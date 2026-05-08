@@ -104,6 +104,8 @@ RAW_DEBUG_KEY_MARKERS = (
 LAUNCH_APPROVAL_TEXT_PATTERNS = (
     re.compile(r"\blaunch[-_\s]?approved\b", re.IGNORECASE),
     re.compile(r"\blaunch[-_\s]?go\b", re.IGNORECASE),
+    re.compile(r"\bproduction[-_\s]?ready\b", re.IGNORECASE),
+    re.compile(r"\bautomatic[-_\s]?go\b", re.IGNORECASE),
     re.compile(r"\brelease[-_\s]?approved\b", re.IGNORECASE),
     re.compile(r"\bgo\b", re.IGNORECASE),
 )

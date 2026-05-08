@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -34,6 +35,27 @@ ENTRY_FIELDS = {
     "redactionVersion",
 }
 TOP_LEVEL_FIELDS = {"schemaVersion", "generatedAt", "artifactDirectoryLabel", "entries"}
+SAFE_SUMMARY_TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+UNSAFE_SUMMARY_MARKERS = (
+    "../",
+    "..\\",
+    "api_key",
+    "apikey",
+    "authorization",
+    "bearer",
+    "cookie",
+    "debug_payload",
+    "password",
+    "private_key",
+    "raw",
+    "release-approved",
+    "secret",
+    "session",
+    "set-cookie",
+    "stack trace",
+    "token",
+    "traceback",
+)
 
 
 @dataclass(frozen=True)
@@ -145,9 +167,23 @@ def create_manifest(artifact_dir: Path) -> tuple[dict[str, Any], list[dict[str, 
     return manifest, findings
 
 
+def _safe_summary_token(value: Any, *, default: str, unsafe_default: str | None = None) -> str:
+    text = str(value or "").strip()
+    lowered = text.lower()
+    if not text:
+        return default
+    if (
+        not SAFE_SUMMARY_TOKEN_RE.fullmatch(text)
+        or any(marker in lowered for marker in UNSAFE_SUMMARY_MARKERS)
+        or Path(text).is_absolute()
+    ):
+        return unsafe_default or default
+    return text
+
+
 def _finding(category: Any, file_label: Any, reason_code: str) -> dict[str, str]:
-    safe_category = str(category or "manifest")
-    safe_label = str(file_label or "manifest.json")
+    safe_category = _safe_summary_token(category, default="manifest", unsafe_default="[redacted]")
+    safe_label = _safe_summary_token(file_label, default="manifest.json", unsafe_default="[redacted]")
     return {"category": safe_category, "fileLabel": safe_label, "reasonCode": reason_code}
 
 

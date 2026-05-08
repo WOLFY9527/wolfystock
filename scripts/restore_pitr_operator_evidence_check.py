@@ -90,6 +90,9 @@ DESTRUCTIVE_PRODUCTION_PATTERNS = (
 LAUNCH_GO_STRING_PATTERNS = (
     re.compile(r"\blaunch[-_ ]?approved\b", re.IGNORECASE),
     re.compile(r"\blaunch[-_ ]?go\b", re.IGNORECASE),
+    re.compile(r"\bproduction[-_ ]?ready\b", re.IGNORECASE),
+    re.compile(r"\bautomatic[-_ ]?go\b", re.IGNORECASE),
+    re.compile(r"\brelease[-_ ]?approved\b", re.IGNORECASE),
     re.compile(r"^\s*GO\s*$", re.IGNORECASE),
 )
 LAUNCH_GO_KEYS = {

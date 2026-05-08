@@ -60,7 +60,10 @@ REQUIRED_FIELDS = (
 
 URL_WITH_CREDENTIALS_PATTERN = re.compile(r"https?://[^/\s:@]+:[^@\s]+@[^/\s]+", re.IGNORECASE)
 URL_PATTERN = re.compile(r"https?://[^\s\"']+", re.IGNORECASE)
-GO_CLAIM_PATTERN = re.compile(r"\bgo\b|launch[-_\s]?approved|release[-_\s]?approved", re.IGNORECASE)
+GO_CLAIM_PATTERN = re.compile(
+    r"\bgo\b|launch[-_\s]?approved|production[-_\s]?ready|automatic[-_\s]?go|release[-_\s]?approved",
+    re.IGNORECASE,
+)
 RAW_PAYLOAD_PATTERN = re.compile(
     r"\b(?:raw[_\s-]?(?:request|response|payload|body)|request[_\s-]?body|response[_\s-]?body|"
     r"provider[_\s-]?payload|debug[_\s-]?payload|debug[_\s-]?trace|stack trace|traceback)\b",

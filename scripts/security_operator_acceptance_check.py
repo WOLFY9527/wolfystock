@@ -101,6 +101,11 @@ SENSITIVE_VALUE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("stack_trace", re.compile(r"(?i)\b(?:traceback \(most recent call last\)|stack trace|stacktrace)\b")),
     ("debug_payload", re.compile(r"(?i)\b(?:raw|debug|provider)[_\s-]+(?:payload|request|response|body)\b")),
 )
+LAUNCH_APPROVAL_PATTERN = re.compile(
+    r"\b(?:launch[-_\s]?approved|production[-_\s]?ready|automatic[-_\s]?go|"
+    r"release[-_\s]?approved)\b",
+    re.IGNORECASE,
+)
 
 
 def _now_iso() -> str:
@@ -201,7 +206,7 @@ def _find_launch_approval_claims(value: Any, *, path: str = "") -> list[dict[str
                 continue
             if compact_key in {"launchdecision", "launchstatus", "finalstatus", "releasedecision"}:
                 text = str(nested).strip().lower()
-                if text in {"go", "launch-approved", "launch_approved", "approved"}:
+                if text in {"go", "launch-approved", "launch_approved", "approved"} or LAUNCH_APPROVAL_PATTERN.search(text):
                     findings.append({"path": nested_path, "reasonCode": "launch_go_claim_not_allowed"})
                     continue
             findings.extend(_find_launch_approval_claims(nested, path=nested_path))
@@ -210,7 +215,7 @@ def _find_launch_approval_claims(value: Any, *, path: str = "") -> list[dict[str
         for index, nested in enumerate(value):
             findings.extend(_find_launch_approval_claims(nested, path=f"{path}[{index}]"))
         return findings
-    if isinstance(value, str) and value.strip().lower() == "launch-approved":
+    if isinstance(value, str) and LAUNCH_APPROVAL_PATTERN.search(value.strip()):
         findings.append({"path": path or "$", "reasonCode": "launch_approved_text_not_allowed"})
     return findings
 

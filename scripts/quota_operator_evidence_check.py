@@ -109,7 +109,8 @@ SECRET_VALUE_PATTERNS = (
     re.compile(r"\b(?:api[_-]?key|token|secret|password|cookie|session)\s*=", re.IGNORECASE),
 )
 GO_CLAIM_PATTERN = re.compile(
-    r"\bGO\b|launch[-\s]?approved|release[-\s]?approved|public launch approved",
+    r"\bGO\b|launch[-\s]?approved|production[-\s]?ready|automatic[-\s]?go|"
+    r"release[-\s]?approved|public launch approved",
     re.IGNORECASE,
 )
 MUTATION_VALUE_PATTERN = re.compile(

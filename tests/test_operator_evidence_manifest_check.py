@@ -174,7 +174,7 @@ def test_path_traversal_rejected(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert {
         "category": "provider",
-        "fileLabel": "../provider_operator_evidence.json",
+        "fileLabel": "[redacted]",
         "reasonCode": "path_traversal_rejected",
     } in payload["findings"]
 
