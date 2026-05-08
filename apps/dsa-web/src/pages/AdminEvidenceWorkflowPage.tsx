@@ -166,15 +166,26 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-200/70">ADMIN EVIDENCE REVIEW</p>
             <h1 className="mt-3 text-2xl font-semibold tracking-normal text-white md:text-3xl">证据工作流复核</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-white/58">
-              仅展示离线操作员证据从模板到复核报告的静态状态，不接收文件、不解析 artifact、不写入后端。
-            </p>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-white/58">离线证据复核总览，只读、脱敏、人工门禁。</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="info" className="border-cyan-300/20 bg-cyan-400/8 text-cyan-100">只读视图</Badge>
             <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">脱敏状态</Badge>
             <Badge variant="warning" className="border-amber-300/25 bg-amber-400/10 text-amber-100">人工门禁</Badge>
           </div>
+        </div>
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+          {[
+            ['页面用途', '复核脱敏证据路径', '模板、校验、归档、人工复核'],
+            ['当前状态', '等待人工复核', '缺证据时保持 NO-GO'],
+            ['下一步', '按本地 runbook 生成复核材料', '不上传、不写入、不进入发布环节'],
+          ].map(([label, value, note]) => (
+            <div key={label} className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">{label}</p>
+              <p className="mt-2 text-sm font-semibold text-white">{value}</p>
+              <p className="mt-1 text-xs leading-5 text-white/42">{note}</p>
+            </div>
+          ))}
         </div>
       </header>
 

@@ -267,8 +267,9 @@ const ReadOnlyBadges: React.FC<{ data?: AdminCostSummaryResponse | null }> = ({ 
 const SummaryTile: React.FC<{
   label: string;
   value: React.ReactNode;
+  note?: React.ReactNode;
   tone?: 'neutral' | 'info' | 'good' | 'warn';
-}> = ({ label, value, tone = 'neutral' }) => {
+}> = ({ label, value, note, tone = 'neutral' }) => {
   const toneClass = {
     neutral: 'text-white',
     info: 'text-cyan-200',
@@ -278,7 +279,8 @@ const SummaryTile: React.FC<{
   return (
     <div className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
       <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">{label}</p>
-      <p className={cn('mt-2 font-mono text-2xl font-semibold leading-none', toneClass)}>{value}</p>
+      <p className={cn('mt-2 text-lg font-semibold leading-tight', toneClass)}>{value}</p>
+      {note ? <p className="mt-1 text-xs leading-5 text-white/42">{note}</p> : null}
     </div>
   );
 };
@@ -1009,6 +1011,11 @@ const AdminCostObservabilityPage: React.FC = () => {
 
   const data = state.data;
   const emptyCounters = useMemo(() => data ? !hasCounters(data) : false, [data]);
+  const operatorState = data
+    ? `${compactNumber(data.summary.llmCalls)} 次 LLM / ${compactNumber(data.summary.providerCalls)} 次 Provider`
+    : state.loading
+    ? '读取中'
+    : '等待快照';
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar bg-[#050505] px-4 py-4 text-white md:px-6 md:py-6">
@@ -1018,17 +1025,14 @@ const AdminCostObservabilityPage: React.FC = () => {
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-100/55">Cost Observability</p>
               <h1 className="mt-2 text-2xl font-semibold text-white md:text-3xl">成本观测</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">
-                管理员只读查看 duplicate-cost、LLM、Provider、MarketCache 与 Scanner AI 计数器快照；不触发外部调用、刷新或运行任务。
-              </p>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">成本、配额与模型账本的只读运维视图。</p>
             </div>
             <ReadOnlyBadges data={data} />
           </div>
-          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <SummaryTile label="生成时间" value={formatDate(data?.generatedAt)} tone="info" />
-            <SummaryTile label="窗口" value={data?.window?.key || filters.window} />
-            <SummaryTile label="粒度" value={data?.window?.bucket || filters.bucket} />
-            <SummaryTile label="精确性" value={exactnessLabel(data?.metadata.exactness)} tone="warn" />
+          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <SummaryTile label="页面用途" value="评估成本与配额风险" note={`窗口 ${data?.window?.key || filters.window} · ${data?.window?.bucket || filters.bucket}`} tone="info" />
+            <SummaryTile label="当前状态" value={operatorState} note={`生成 ${formatDate(data?.generatedAt)} · ${exactnessLabel(data?.metadata.exactness)}`} tone={emptyCounters ? 'warn' : 'neutral'} />
+            <SummaryTile label="下一步" value="优先查看配额试运行与账本摘要" note="开发者响应形状默认折叠" tone="warn" />
           </div>
         </GlassCard>
 
@@ -1057,15 +1061,31 @@ const AdminCostObservabilityPage: React.FC = () => {
                       </Badge>
                     ) : null}
                   </div>
-                  <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-                    <SummaryTile label="重复候选" value={compactNumber(data.summary.estimatedDuplicateCandidates)} tone="warn" />
-                    <SummaryTile label="LLM 调用" value={compactNumber(data.summary.llmCalls)} tone="info" />
-                    <SummaryTile label="Provider 调用" value={compactNumber(data.summary.providerCalls)} />
-                    <SummaryTile label="Fallback" value={compactNumber(data.summary.fallbackAttempts)} tone="warn" />
-                    <SummaryTile label="Provider Hit" value={percent(data.summary.providerCacheHitRate)} tone="good" />
-                    <SummaryTile label="MarketCache Hit" value={percent(data.summary.marketCacheHitRate)} tone="good" />
-                    <SummaryTile label="Integrity Retry" value={compactNumber(data.summary.integrityRetries)} tone="warn" />
-                    <SummaryTile label="Scanner AI" value={`${compactNumber(data.summary.scannerAiCompleted)} / ${compactNumber(data.summary.scannerAiAttempts)}`} tone="info" />
+                  <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <SummaryTile
+                      label="成本压力"
+                      value={`${compactNumber(data.summary.estimatedDuplicateCandidates)} 重复候选`}
+                      note={`${compactNumber(data.summary.fallbackAttempts)} fallback · ${compactNumber(data.summary.integrityRetries)} integrity retry`}
+                      tone={data.summary.estimatedDuplicateCandidates || data.summary.fallbackAttempts || data.summary.integrityRetries ? 'warn' : 'good'}
+                    />
+                    <SummaryTile
+                      label="缓存效率"
+                      value={`${percent(data.summary.providerCacheHitRate)} Provider`}
+                      note={`${percent(data.summary.marketCacheHitRate)} MarketCache`}
+                      tone="good"
+                    />
+                    <SummaryTile
+                      label="模型账本"
+                      value={`${compactNumber(data.summary.llmCalls)} LLM 调用`}
+                      note={`${compactNumber(data.summary.llmUsageTokens)} tokens · ${compactNumber(data.summary.llmUsageCalls)} usage rows`}
+                      tone="info"
+                    />
+                    <SummaryTile
+                      label="Scanner AI"
+                      value={`${compactNumber(data.summary.scannerAiCompleted)} / ${compactNumber(data.summary.scannerAiAttempts)}`}
+                      note={`${compactNumber(data.summary.scannerAiSkipped)} skipped`}
+                      tone="info"
+                    />
                   </div>
                 </GlassCard>
                 <QuotaDryRunPanel />

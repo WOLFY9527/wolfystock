@@ -334,6 +334,14 @@ describe('AdminCostObservabilityPage', () => {
     render(<AdminCostObservabilityPage />);
 
     expect(await screen.findByRole('heading', { name: '成本观测' })).toBeInTheDocument();
+    expect(screen.getByText('页面用途')).toBeInTheDocument();
+    expect(screen.getByText('当前状态')).toBeInTheDocument();
+    expect(screen.getByText('下一步')).toBeInTheDocument();
+    expect(screen.getByText('评估成本与配额风险')).toBeInTheDocument();
+    expect(await screen.findByText('12 次 LLM / 18 次 Provider')).toBeInTheDocument();
+    expect(screen.getByText('优先查看配额试运行与账本摘要')).toBeInTheDocument();
+    expect(screen.getByText('成本压力')).toBeInTheDocument();
+    expect(screen.getByText('缓存效率')).toBeInTheDocument();
     expect(screen.getByText('只读')).toBeInTheDocument();
     expect(screen.getByText('外部调用关闭')).toBeInTheDocument();
     expect(screen.getAllByText('观测值非账单').length).toBeGreaterThan(0);

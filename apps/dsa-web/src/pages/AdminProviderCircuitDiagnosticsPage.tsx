@@ -126,10 +126,11 @@ function toneClass(tone: Tone): string {
   }[tone];
 }
 
-const SummaryTile: React.FC<{ label: string; value: string | number; tone?: Tone }> = ({ label, value, tone = 'neutral' }) => (
+const SummaryTile: React.FC<{ label: string; value: string | number; note?: string; tone?: Tone }> = ({ label, value, note, tone = 'neutral' }) => (
   <div className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
     <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">{label}</p>
-    <p className={cn('mt-2 font-mono text-2xl font-semibold leading-none', toneClass(tone))}>{value}</p>
+    <p className={cn('mt-2 text-lg font-semibold leading-tight', toneClass(tone))}>{value}</p>
+    {note ? <p className="mt-1 text-xs leading-5 text-white/42">{note}</p> : null}
   </div>
 );
 
@@ -423,9 +424,11 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
   const summary = useMemo(() => {
     const states = data?.states.items || [];
     const openCount = states.filter((item) => stateTone(item.state) === 'danger').length;
+    const warnCount = states.filter((item) => stateTone(item.state) === 'warn').length;
     return {
       states: states.length,
       open: openCount,
+      warn: warnCount,
       events: data?.events.items.length || 0,
       quotaWindows: data?.quotaWindows.items.length || 0,
       probeEvents: data?.probeEvents.items.length || 0,
@@ -457,13 +460,20 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
           <ReadOnlyBadges data={data} />
         </div>
         {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <SummaryTile label="状态" value={summary.states || '--'} tone="info" />
-          <SummaryTile label="打开/阻断" value={summary.open || 0} tone={summary.open ? 'danger' : 'good'} />
-          <SummaryTile label="SLA" value={summary.slaReadiness || '--'} tone="info" />
-          <SummaryTile label="事件" value={summary.events || '--'} tone="info" />
-          <SummaryTile label="配额窗口" value={summary.quotaWindows || '--'} tone="neutral" />
-          <SummaryTile label="探测" value={summary.probeEvents || '--'} tone="neutral" />
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <SummaryTile label="页面用途" value="定位 provider 熔断风险" note="SLA、熔断、配额与探测集中查看" tone="info" />
+          <SummaryTile
+            label="当前状态"
+            value={isLoading && !data ? '读取中' : `${summary.open} 个熔断需关注`}
+            note={`${summary.warn} 个降级观察 · ${summary.states || 0} 个状态快照`}
+            tone={summary.open ? 'danger' : summary.warn ? 'warn' : 'good'}
+          />
+          <SummaryTile label="下一步" value="优先查看 SLA 就绪与当前熔断" note="事件、配额、探测细节默认后置" tone="neutral" />
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <SummaryTile label="需关注" value={`${summary.open} 打开 / ${summary.warn} 降级`} tone={summary.open ? 'danger' : summary.warn ? 'warn' : 'good'} />
+          <SummaryTile label="就绪度" value={`${summary.slaReadiness || 0} 个 SLA`} note={`${summary.probeEvents || 0} 个探测事件`} tone="info" />
+          <SummaryTile label="诊断范围" value={`${summary.events || 0} 事件 / ${summary.quotaWindows || 0} 配额窗口`} tone="neutral" />
         </div>
       </GlassCard>
 

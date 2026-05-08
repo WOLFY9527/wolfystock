@@ -58,6 +58,18 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(within(page).getByText('缺少证据时保持 NO-GO')).toBeInTheDocument();
   });
 
+  it('surfaces purpose, current state, and next operator action in the hero', () => {
+    render(<AdminEvidenceWorkflowPage />);
+
+    const page = screen.getByTestId('admin-evidence-workflow-page');
+    expect(within(page).getByText('页面用途')).toBeInTheDocument();
+    expect(within(page).getByText('当前状态')).toBeInTheDocument();
+    expect(within(page).getByText('下一步')).toBeInTheDocument();
+    expect(within(page).getByText('复核脱敏证据路径')).toBeInTheDocument();
+    expect(within(page).getByText('等待人工复核')).toBeInTheDocument();
+    expect(within(page).getByText('按本地 runbook 生成复核材料')).toBeInTheDocument();
+  });
+
   it('renders the preflight and manual review sequence in order', () => {
     render(<AdminEvidenceWorkflowPage />);
 

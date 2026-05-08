@@ -450,6 +450,12 @@ describe('AdminLogsPage', () => {
     expect(screen.getByRole('tab', { name: '数据源' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '安全事件' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '原始日志' })).toBeInTheDocument();
+    expect(screen.getByText('页面用途')).toBeInTheDocument();
+    expect(screen.getByText('当前状态')).toBeInTheDocument();
+    expect(screen.getByText('下一步')).toBeInTheDocument();
+    expect(screen.getByText('定位失败与审计线索')).toBeInTheDocument();
+    expect(await screen.findByText('1 个失败 / 6 条记录')).toBeInTheDocument();
+    expect(screen.getByText('先处理失败和数据源降级')).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-filter-bar')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-health-summary')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('120,000 会话');

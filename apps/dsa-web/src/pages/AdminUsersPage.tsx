@@ -274,7 +274,12 @@ const SummaryTile: React.FC<{
   );
 };
 
-const PageHeader: React.FC<{ mode: PageMode; user?: AdminUserListItem | null }> = ({ mode, user }) => (
+const PageHeader: React.FC<{
+  mode: PageMode;
+  user?: AdminUserListItem | null;
+  currentState: string;
+  nextAction: string;
+}> = ({ mode, user, currentState, nextAction }) => (
   <GlassCard as="section" className="p-5 md:p-6">
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="min-w-0">
@@ -282,13 +287,26 @@ const PageHeader: React.FC<{ mode: PageMode; user?: AdminUserListItem | null }> 
         <h1 className="mt-2 text-2xl font-semibold text-white md:text-3xl">
           {mode === 'directory' ? '用户数据控制中心' : text(user?.displayName || user?.username, '用户详情')}
         </h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">
-          {mode === 'directory'
-            ? '只读查看用户目录、会话状态与风险提示；搜索与筛选不会展示凭证、令牌、Cookie 或原始会话值。'
-            : '只读查看安全账户摘要、脱敏会话和活动时间线；安全控制、组合、分析与执行类管理能力保留为后续阶段。'}
-        </p>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">账号、会话、组合投影与审计线索的管理员工作台。</p>
       </div>
       <ReadOnlyBadges />
+    </div>
+    <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">页面用途</p>
+        <p className="mt-2 text-sm font-semibold text-white">核对账号与会话风险</p>
+        <p className="mt-1 text-xs leading-5 text-white/42">用户目录、详情、组合只读投影</p>
+      </div>
+      <div className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">当前状态</p>
+        <p className="mt-2 text-sm font-semibold text-white">{currentState}</p>
+        <p className="mt-1 text-xs leading-5 text-white/42">敏感字段不进入界面</p>
+      </div>
+      <div className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">下一步</p>
+        <p className="mt-2 text-sm font-semibold text-white">{nextAction}</p>
+        <p className="mt-1 text-xs leading-5 text-white/42">安全操作需要显式权限与确认</p>
+      </div>
     </div>
   </GlassCard>
 );
@@ -1242,6 +1260,27 @@ const AdminUsersPage: React.FC = () => {
 
   const activeUser = detailState.data?.user || null;
   const directoryPath = language === 'en' ? '/en/admin/users' : '/zh/admin/users';
+  const directoryActiveSessions = (usersState.data?.items || []).reduce((sum, user) => sum + (user.sessionSummary?.activeCount || 0), 0);
+  const headerCurrentState = userId
+    ? activeUser
+      ? `${activeUser.isActive ? '活跃' : '停用'} · ${activeUser.sessionSummary.activeCount} 个活跃会话`
+      : detailState.loading
+      ? '读取用户详情'
+      : '等待用户详情'
+    : usersState.data
+    ? `${usersState.data.total} 个用户 / ${directoryActiveSessions} 个活跃会话`
+    : usersState.loading
+    ? '读取用户目录'
+    : '等待目录快照';
+  const headerNextAction = userId
+    ? activeDetailTab === 'security'
+      ? '核对审计原因与确认短语'
+      : activeDetailTab === 'portfolio'
+      ? '核对组合只读投影'
+      : mode === 'activity'
+      ? '筛选活动时间线'
+      : '查看活动、组合或安全页签'
+    : '打开用户详情或审计日志';
 
   const content = useMemo(() => {
     if (!userId) {
@@ -1315,7 +1354,7 @@ const AdminUsersPage: React.FC = () => {
             Read-only F1/F2
           </div>
         </div>
-        <PageHeader mode={mode} user={activeUser} />
+        <PageHeader mode={mode} user={activeUser} currentState={headerCurrentState} nextAction={headerNextAction} />
         {content}
         <GlassCard as="section" className="p-4">
           <div className="flex items-start gap-3">

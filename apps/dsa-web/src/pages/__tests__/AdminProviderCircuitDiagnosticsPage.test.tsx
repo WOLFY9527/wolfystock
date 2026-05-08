@@ -168,6 +168,14 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     render(<AdminProviderCircuitDiagnosticsPage />);
 
     expect(screen.getByText('Provider 熔断诊断')).toBeInTheDocument();
+    expect(await screen.findByText('页面用途')).toBeInTheDocument();
+    expect(screen.getByText('当前状态')).toBeInTheDocument();
+    expect(screen.getByText('下一步')).toBeInTheDocument();
+    expect(screen.getByText('定位 provider 熔断风险')).toBeInTheDocument();
+    expect(screen.getByText('1 个熔断需关注')).toBeInTheDocument();
+    expect(screen.getByText('优先查看 SLA 就绪与当前熔断')).toBeInTheDocument();
+    expect(screen.getByText('需关注')).toBeInTheDocument();
+    expect(screen.getByText('诊断范围')).toBeInTheDocument();
     expect((await screen.findAllByText('finnhub')).length).toBeGreaterThan(0);
     expect(screen.getByText('当前为诊断观测，不会改变 provider fallback 或 MarketCache 行为。')).toBeInTheDocument();
     expect(screen.getAllByText('Provider 429').length).toBeGreaterThan(0);

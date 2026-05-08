@@ -1212,6 +1212,13 @@ const AdminLogsPage: React.FC = () => {
   const softPercent = clampPercent(storageSummary?.usedPercentageOfSoftLimit);
   const hardPercent = clampPercent(storageSummary?.usedPercentageOfHardLimit);
   const canRunCapacityCleanup = Boolean(storageSummary?.storageSizeAvailable && storageSummary.status === 'critical');
+  const visibleRecordCount = activeTab === 'raw' ? filteredSessions.length : businessTotal;
+  const operatorCurrentState = locale === 'zh'
+    ? `${healthSummary.failedEvents} 个失败 / ${visibleRecordCount} 条记录`
+    : `${healthSummary.failedEvents} failed / ${visibleRecordCount} records`;
+  const operatorNextAction = healthSummary.failedEvents > 0
+    ? (locale === 'zh' ? '先处理失败和数据源降级' : 'Review failures and data-source degradations first')
+    : (locale === 'zh' ? '保持业务事件监控' : 'Keep monitoring business events');
 
   return (
     <section data-testid="admin-logs-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-x-hidden">
@@ -1221,7 +1228,26 @@ const AdminLogsPage: React.FC = () => {
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-emerald-200/70">{locale === 'zh' ? 'WolfyStock 运维追踪' : 'WolfyStock Ops Trace'}</p>
               <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{t('adminLogs.pageTitle')}</h1>
-              <p className="mt-1 max-w-4xl text-xs leading-5 text-secondary-text">{t('adminLogs.pageSubtitle')}</p>
+              <p className="mt-1 max-w-4xl text-xs leading-5 text-secondary-text">
+                {locale === 'zh' ? '业务事件优先，原始日志与调试细节留在高级标签。' : t('adminLogs.pageSubtitle')}
+              </p>
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="min-w-0 rounded-2xl border border-white/6 bg-black/20 px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '页面用途' : 'Purpose'}</p>
+                  <p className="mt-2 text-sm font-semibold text-foreground">{locale === 'zh' ? '定位失败与审计线索' : 'Find failures and audit trails'}</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-text">{locale === 'zh' ? '业务事件、状态、操作者、来源' : 'Business events, status, actor, source'}</p>
+                </div>
+                <div className="min-w-0 rounded-2xl border border-white/6 bg-black/20 px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '当前状态' : 'Current state'}</p>
+                  <p className="mt-2 text-sm font-semibold text-foreground">{operatorCurrentState}</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-text">{healthStatusLabel(healthSummary.status, locale)} · {healthSummary.warningEvents} {locale === 'zh' ? '个警告' : 'warnings'}</p>
+                </div>
+                <div className="min-w-0 rounded-2xl border border-white/6 bg-black/20 px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '下一步' : 'Next action'}</p>
+                  <p className="mt-2 text-sm font-semibold text-foreground">{operatorNextAction}</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-text">{locale === 'zh' ? '清理与原始日志保持二级入口' : 'Cleanup and raw logs stay secondary'}</p>
+                </div>
+              </div>
               <div role="tablist" aria-label={locale === 'zh' ? '日志视图' : 'Log views'} className="mt-4 flex max-w-full gap-2 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap sm:overflow-visible">
                 {(['business', 'analysis', 'scanner', 'backtest', 'data_source', 'security', 'raw'] as LogsTab[]).map((tab) => (
                   <button
@@ -1848,7 +1874,7 @@ const AdminLogsPage: React.FC = () => {
               </section>
             ) : null}
 
-            <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5" open>
+            <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
               <summary className="cursor-pointer text-sm font-semibold text-foreground">{locale === 'zh' ? 'LLM 调用链' : 'LLM call chain'}</summary>
               <div className="mt-4 space-y-3">
                 {aiCalls.length ? aiCalls.map((item, index) => (
@@ -1857,7 +1883,7 @@ const AdminLogsPage: React.FC = () => {
               </div>
             </details>
 
-            <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5" open>
+            <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
               <summary className="cursor-pointer text-sm font-semibold text-foreground">{locale === 'zh' ? '数据源调用' : 'Data source calls'}</summary>
               <div className="mt-4 space-y-3">
                 {dataSourceCalls.length ? dataSourceCalls.map((item, index) => (
@@ -1867,7 +1893,7 @@ const AdminLogsPage: React.FC = () => {
             </details>
 
             <section className="grid gap-4 xl:grid-cols-2">
-              <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5" open>
+              <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
                 <summary className="cursor-pointer text-sm font-semibold text-foreground">{locale === 'zh' ? '系统回退记录' : 'System fallback records'}</summary>
                 <div className="mt-4 space-y-2">
                   {systemFallbacks.length ? systemFallbacks.map((item, index) => (
@@ -1885,7 +1911,7 @@ const AdminLogsPage: React.FC = () => {
               </section>
             </section>
 
-            <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5" open>
+            <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
               <summary className="cursor-pointer text-sm font-semibold text-foreground">{t('adminLogs.operationTimelineTitle')}</summary>
               <div className="mt-4 space-y-2">
                 {timeline.length ? timeline.map((item, index) => {
