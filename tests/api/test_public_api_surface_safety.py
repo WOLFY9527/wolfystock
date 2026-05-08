@@ -108,6 +108,25 @@ def _limiter_probe_client() -> TestClient:
     return TestClient(app)
 
 
+def _limiter_infra_client() -> TestClient:
+    app = FastAPI()
+    add_auth_middleware(app)
+
+    @app.get("/api/health")
+    async def api_health():
+        return {"status": "ok"}
+
+    @app.get("/health")
+    async def root_health():
+        return {"status": "ok"}
+
+    @app.get("/api/v1/limiter-probe/fails")
+    async def limiter_probe_fails():
+        return JSONResponse(status_code=422, content={"error": "probe_validation_failed"})
+
+    return TestClient(app)
+
+
 def _reset_auth_globals() -> None:
     auth._auth_enabled = None
     auth._session_secret = None
@@ -324,6 +343,55 @@ def test_public_malformed_json_bursts_eventually_receive_sanitized_rate_limit(mo
         }
         assert responses[-1].headers["Retry-After"] == "300"
         for response in responses:
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
+def test_public_middleware_order_keeps_shape_errors_sanitized_until_limit(monkeypatch) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    malformed_body = (
+        '{"symbol":"TEM",'
+        f'"token":"{ABUSE_REHEARSAL_SECRET_BODY}",'
+        f'"databaseDsn":"{ABUSE_REHEARSAL_DSN}",'
+        f'"debug":"{ABUSE_REHEARSAL_DEBUG_PAYLOAD}"'
+    )
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
+            before_limit = client.post(
+                "/api/v1/options/decision/evaluate",
+                content=malformed_body,
+                headers={
+                    "content-type": "application/json",
+                    "Authorization": f"Bearer {ABUSE_REHEARSAL_BEARER}",
+                    "Cookie": f"dsa_session={ABUSE_REHEARSAL_COOKIE}",
+                    "X-Forwarded-For": "203.0.113.210",
+                },
+            )
+            after_limit = client.post(
+                "/api/v1/options/decision/evaluate",
+                content=malformed_body,
+                headers={
+                    "content-type": "application/json",
+                    "Authorization": f"Bearer {ABUSE_REHEARSAL_BEARER}",
+                    "Cookie": f"dsa_session={ABUSE_REHEARSAL_COOKIE}",
+                    "X-Forwarded-For": "203.0.113.210",
+                },
+            )
+
+        assert [before_limit.status_code, after_limit.status_code] == [422, 429]
+        assert after_limit.json() == {
+            "error": "rate_limited",
+            "message": "Too many public API errors; retry later.",
+        }
+        assert _limiter_snapshot()["limitedBucketCount"] == 1
+        for response in (before_limit, after_limit):
             _assert_public_surface_safe(response.json())
     finally:
         client.close()
@@ -810,6 +878,175 @@ def test_public_api_abuse_limiter_excludes_auth_routes(monkeypatch) -> None:
         assert _limiter_snapshot()["bucketCount"] == 0
         for response in responses:
             _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
+def test_public_api_abuse_limiter_excludes_auth_login_failures_from_buckets(monkeypatch) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+            responses = [
+                client.post(
+                    "/api/v1/auth/login",
+                    json={"username": "admin", "password": "wrong-password"},
+                    headers={"X-Forwarded-For": "203.0.113.211"},
+                )
+                for _ in range(3)
+            ]
+
+        assert all(response.status_code in {401, 429} for response in responses)
+        assert _limiter_snapshot()["bucketCount"] == 0
+        for response in responses:
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
+def test_public_api_abuse_limiter_excludes_options_docs_openapi_and_health(monkeypatch) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _limiter_infra_client()
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+            responses = [
+                client.options(
+                    "/api/v1/limiter-probe/fails",
+                    headers={"X-Forwarded-For": "203.0.113.212"},
+                ),
+                client.get("/docs", headers={"X-Forwarded-For": "203.0.113.212"}),
+                client.get("/openapi.json", headers={"X-Forwarded-For": "203.0.113.212"}),
+                client.get("/api/health", headers={"X-Forwarded-For": "203.0.113.212"}),
+                client.get("/health", headers={"X-Forwarded-For": "203.0.113.212"}),
+            ]
+
+        assert [response.status_code for response in responses] == [405, 200, 200, 200, 200]
+        assert _limiter_snapshot()["bucketCount"] == 0
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
+def test_valid_session_bypasses_hot_public_bucket_for_same_client(monkeypatch, tmp_path) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setattr(auth, "_get_data_dir", lambda: tmp_path)
+    monkeypatch.setenv("TRUST_X_FORWARDED_FOR", "true")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    raw_client_ip = "203.0.113.213"
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
+            public_failure = client.post(
+                "/api/v1/options/decision/evaluate",
+                content='{"symbol":"TEM"',
+                headers={"content-type": "application/json", "X-Forwarded-For": raw_client_ip},
+            )
+
+        assert public_failure.status_code == 422
+        assert _limiter_snapshot()["limitedBucketCount"] == 1
+
+        auth._auth_enabled = True
+        auth.set_initial_password("adminpass123")
+        client.cookies.set(auth.COOKIE_NAME, auth.create_session())
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+            authenticated = client.get(
+                "/api/v1/admin/users",
+                headers={"X-Forwarded-For": raw_client_ip},
+            )
+
+        assert authenticated.status_code == 200
+        assert _limiter_snapshot()["limitedBucketCount"] == 1
+        _assert_public_surface_safe(public_failure.json())
+        _assert_public_surface_safe(authenticated.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
+def test_public_api_abuse_limiter_429_exposes_no_request_or_client_details(monkeypatch, caplog) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("TRUST_X_FORWARDED_FOR", "true")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    raw_client_ip = "203.0.113.214"
+    raw_header = "raw-429-header-token"
+    try:
+        with caplog.at_level(logging.INFO), patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
+            first = client.post(
+                "/api/v1/options/decision/evaluate",
+                content=(
+                    '{"symbol":"TEM",'
+                    f'"token":"{ABUSE_REHEARSAL_SECRET_BODY}",'
+                    f'"databaseDsn":"{ABUSE_REHEARSAL_DSN}",'
+                    f'"debug":"{ABUSE_REHEARSAL_DEBUG_PAYLOAD}"'
+                ),
+                headers={
+                    "content-type": "application/json",
+                    "Authorization": f"Bearer {ABUSE_REHEARSAL_BEARER}",
+                    "Cookie": f"dsa_session={ABUSE_REHEARSAL_COOKIE}",
+                    "X-Forwarded-For": raw_client_ip,
+                    "X-Abuse-Rehearsal": raw_header,
+                },
+            )
+            limited = client.post(
+                "/api/v1/options/decision/evaluate",
+                content=ABUSE_REHEARSAL_SECRET_BODY,
+                headers={
+                    "content-type": "application/json",
+                    "Authorization": f"Bearer {ABUSE_REHEARSAL_BEARER}",
+                    "Cookie": f"dsa_session={ABUSE_REHEARSAL_COOKIE}",
+                    "X-Forwarded-For": raw_client_ip,
+                    "X-Abuse-Rehearsal": raw_header,
+                },
+            )
+
+        assert [first.status_code, limited.status_code] == [422, 429]
+        assert limited.json() == {
+            "error": "rate_limited",
+            "message": "Too many public API errors; retry later.",
+        }
+        assert "set-cookie" not in {key.lower() for key in limited.headers}
+        exposed_text = "\n".join(
+            [
+                caplog.text,
+                _json_text(limited.json()),
+                _json_text(dict(limited.headers)),
+                _json_text(_limiter_snapshot()),
+            ]
+        ).lower()
+        for marker in (
+            ABUSE_REHEARSAL_SECRET_BODY,
+            ABUSE_REHEARSAL_COOKIE,
+            ABUSE_REHEARSAL_BEARER,
+            ABUSE_REHEARSAL_DSN,
+            ABUSE_REHEARSAL_DEBUG_PAYLOAD,
+            raw_client_ip,
+            raw_header,
+            "authorization",
+            "cookie",
+            "x-forwarded-for",
+            "x-abuse-rehearsal",
+            "traceback",
+            "stack trace",
+        ):
+            assert marker.lower() not in exposed_text
+        _assert_public_surface_safe(limited.json())
     finally:
         client.close()
         _reset_public_limiter_state_if_available()
