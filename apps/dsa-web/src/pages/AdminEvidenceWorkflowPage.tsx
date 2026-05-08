@@ -1,5 +1,18 @@
 import type React from 'react';
-import { CheckCircle2, Code2, FileCheck2, Layers3, LockKeyhole, ShieldCheck, TriangleAlert } from 'lucide-react';
+import {
+  Archive,
+  BookOpenCheck,
+  CheckCircle2,
+  ClipboardCheck,
+  Code2,
+  FileCheck2,
+  Layers3,
+  LockKeyhole,
+  Route,
+  ShieldCheck,
+  TerminalSquare,
+  TriangleAlert,
+} from 'lucide-react';
 import { Badge, GlassCard } from '../components/common';
 import { cn } from '../utils/cn';
 
@@ -8,6 +21,12 @@ type CommandSnippet = {
   label: string;
   note: string;
   command: string;
+};
+type RunbookReference = {
+  label: string;
+  docLabel: string;
+  stage: string;
+  icon: React.ComponentType<{ className?: string }>;
 };
 
 const workflowSteps = [
@@ -42,6 +61,39 @@ const commandSnippets: CommandSnippet[] = [
     label: '报告渲染',
     note: '从脱敏 bundle 摘要渲染人工复核 Markdown。',
     command: 'python3 scripts/operator_evidence_workflow_run.py report --bundle-summary <review-output-dir>/bundle-summary.json --output <review-output-dir>/release-review-report.md',
+  },
+];
+
+const runbookReferences: RunbookReference[] = [
+  {
+    label: 'Dry-run 交接',
+    docLabel: 'docs/audits/operator-evidence-dry-run-handoff.md',
+    stage: '合成演练材料',
+    icon: Route,
+  },
+  {
+    label: '脱敏清单',
+    docLabel: 'docs/audits/operator-evidence-redaction-checklist.md',
+    stage: '交接前检查',
+    icon: ClipboardCheck,
+  },
+  {
+    label: 'Schema 参考',
+    docLabel: 'docs/audits/operator-evidence-schema-reference-guide.md',
+    stage: '本地字段说明',
+    icon: BookOpenCheck,
+  },
+  {
+    label: '归档包',
+    docLabel: 'docs/audits/operator-evidence-archive-pack-guide.md',
+    stage: '复核目录索引',
+    icon: Archive,
+  },
+  {
+    label: 'CLI 合约 / 预检',
+    docLabel: 'docs/audits/operator-evidence-workflow-runner-guide.md',
+    stage: '离线 runner',
+    icon: TerminalSquare,
   },
 ];
 
@@ -180,6 +232,49 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           </GlassCard>
         ))}
       </section>
+
+      <GlassCard
+        as="section"
+        data-testid="admin-evidence-runbook-references"
+        className="p-4 md:p-5"
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <BookOpenCheck className="mt-1 h-4 w-4 shrink-0 text-cyan-200" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">本地 Runbook</p>
+              <h2 className="mt-1 text-lg font-semibold text-white">操作员工作流参考</h2>
+            </div>
+          </div>
+          <Badge variant="default" className="w-fit border-white/10 bg-white/[0.04] text-white/62">
+            静态标签
+          </Badge>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {runbookReferences.map(({ label, docLabel, stage, icon: Icon }) => (
+            <article
+              key={docLabel}
+              className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3.5"
+              aria-label={`${label}：${docLabel}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">参考卡</p>
+                  <h3 className="mt-2 text-sm font-semibold leading-5 text-white/88">{label}</h3>
+                </div>
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cyan-300/15 bg-cyan-400/8 text-cyan-100">
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                </span>
+              </div>
+              <p className="mt-4 rounded-xl border border-white/[0.04] bg-white/[0.02] px-2.5 py-2 font-mono text-[11px] leading-5 text-cyan-100/78 break-all">
+                {docLabel}
+              </p>
+              <p className="mt-3 text-xs leading-5 text-white/44">{stage}</p>
+            </article>
+          ))}
+        </div>
+      </GlassCard>
 
       <GlassCard
         as="section"

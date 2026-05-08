@@ -25,6 +25,13 @@ const schemaReferenceGroups = [
   ['配置快照', 'config_snapshot_evidence.json', 'config_snapshot_evidence_check.py'],
   ['人工发布复核', 'manual_release_approval_review_record.json', 'manual_release_approval_evidence_check.py'],
 ];
+const runbookReferences = [
+  ['Dry-run 交接', 'docs/audits/operator-evidence-dry-run-handoff.md', '合成演练材料'],
+  ['脱敏清单', 'docs/audits/operator-evidence-redaction-checklist.md', '交接前检查'],
+  ['Schema 参考', 'docs/audits/operator-evidence-schema-reference-guide.md', '本地字段说明'],
+  ['归档包', 'docs/audits/operator-evidence-archive-pack-guide.md', '复核目录索引'],
+  ['CLI 合约 / 预检', 'docs/audits/operator-evidence-workflow-runner-guide.md', '离线 runner'],
+];
 
 test.describe('admin evidence workflow read-only regression', () => {
   test('renders the read-only evidence workflow for ops-log admins on desktop and mobile', async ({ page }) => {
@@ -96,6 +103,24 @@ test.describe('admin evidence workflow read-only regression', () => {
 
       const bodyText = await page.locator('body').innerText();
       expect(bodyText).not.toMatch(forbiddenApprovalPattern);
+
+      const runbookPanel = page.getByTestId('admin-evidence-runbook-references');
+      await expect(runbookPanel).toBeVisible();
+      await expect(runbookPanel.getByRole('heading', { name: '操作员工作流参考' })).toBeVisible();
+      await expect(runbookPanel.getByText('静态标签')).toBeVisible();
+      for (const [label, docLabel, stage] of runbookReferences) {
+        const card = runbookPanel.getByRole('article', { name: `${label}：${docLabel}` });
+        await expect(card).toBeVisible();
+        await expect(card.getByRole('heading', { name: label })).toBeVisible();
+        await expect(card.getByText(docLabel)).toBeVisible();
+        await expect(card.getByText(stage)).toBeVisible();
+        expect(docLabel).not.toMatch(/^\/|\/Users\/|file:|https?:/i);
+      }
+      await expect(runbookPanel.getByRole('button')).toHaveCount(0);
+      await expect(runbookPanel.getByRole('link')).toHaveCount(0);
+      await expect(runbookPanel.locator('input, textarea, select, form, [contenteditable="true"]')).toHaveCount(0);
+      expect(harness.requests.calls.filter((entry) => writeMethodPattern.test(entry))).toEqual([]);
+      await expectNoHorizontalOverflow(page);
 
       const schemaReference = page.getByTestId('admin-evidence-schema-reference');
       await expect(schemaReference).toBeVisible();

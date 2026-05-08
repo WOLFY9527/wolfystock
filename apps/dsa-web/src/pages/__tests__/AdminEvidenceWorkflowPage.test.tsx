@@ -23,6 +23,14 @@ const schemaReferenceGroups = [
   ['人工发布复核', 'manual_release_approval_review_record.json', 'manual_release_approval_evidence_check.py'],
 ];
 
+const runbookReferences = [
+  ['Dry-run 交接', 'docs/audits/operator-evidence-dry-run-handoff.md', '合成演练材料'],
+  ['脱敏清单', 'docs/audits/operator-evidence-redaction-checklist.md', '交接前检查'],
+  ['Schema 参考', 'docs/audits/operator-evidence-schema-reference-guide.md', '本地字段说明'],
+  ['归档包', 'docs/audits/operator-evidence-archive-pack-guide.md', '复核目录索引'],
+  ['CLI 合约 / 预检', 'docs/audits/operator-evidence-workflow-runner-guide.md', '离线 runner'],
+];
+
 describe('AdminEvidenceWorkflowPage', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -59,6 +67,37 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(screen.queryByLabelText(/upload|上传|file|文件/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('renders static local runbook reference cards for the operator workflow', () => {
+    render(<AdminEvidenceWorkflowPage />);
+
+    const runbookPanel = screen.getByTestId('admin-evidence-runbook-references');
+    expect(within(runbookPanel).getByRole('heading', { name: '操作员工作流参考' })).toBeInTheDocument();
+    expect(within(runbookPanel).getByText('静态标签')).toBeInTheDocument();
+
+    runbookReferences.forEach(([label, docLabel, stage]) => {
+      const card = within(runbookPanel).getByRole('article', { name: `${label}：${docLabel}` });
+      expect(within(card).getByText(label)).toBeInTheDocument();
+      expect(within(card).getByText(docLabel)).toBeInTheDocument();
+      expect(within(card).getByText(stage)).toBeInTheDocument();
+      expect(docLabel).not.toMatch(/^\/|\/Users\/|file:|https?:/i);
+    });
+  });
+
+  it('keeps runbook reference cards static and read-only', () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    render(<AdminEvidenceWorkflowPage />);
+
+    const runbookPanel = screen.getByTestId('admin-evidence-runbook-references');
+    expect(within(runbookPanel).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(runbookPanel).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(runbookPanel).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(runbookPanel.querySelector('input, textarea, select, form, [contenteditable="true"]')).not.toBeInTheDocument();
+    expect(runbookPanel.textContent || '').not.toMatch(/上传|写入|提交|保存|批准上线|批准发布|launch[- ]?approved|production[- ]?ready|automatic[- ]?go/i);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -163,10 +202,12 @@ describe('AdminEvidenceWorkflowPage', () => {
     const workflowGrid = screen.getByTestId('admin-evidence-workflow-grid');
     const statusGrid = screen.getByTestId('admin-evidence-status-grid');
     const commandGrid = screen.getByTestId('admin-evidence-command-snippets');
+    const runbookGrid = screen.getByTestId('admin-evidence-runbook-references').querySelector('.grid');
 
     expect(page).toHaveClass('overflow-y-auto', 'overflow-x-hidden', 'no-scrollbar', 'bg-[#050505]');
     expect(workflowGrid).toHaveClass('grid-cols-1', 'lg:grid-cols-7');
     expect(statusGrid).toHaveClass('grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-4');
     expect(commandGrid).toHaveClass('grid-cols-1', 'xl:grid-cols-3');
+    expect(runbookGrid).toHaveClass('grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-5');
   });
 });
