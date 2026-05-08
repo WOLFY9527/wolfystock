@@ -531,6 +531,28 @@ describe('AppContent route flows', () => {
     expect(screen.queryByText('admin-evidence-workflow-page')).not.toBeInTheDocument();
   });
 
+  it('does not unlock evidence workflow with adjacent system-config capability only', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: true,
+      isAdminAccount: true,
+      isAdminMode: true,
+      adminCapabilities: { ...noCapabilities, canReadSystemConfig: true },
+    });
+
+    renderAt('/zh/admin/evidence-workflow');
+
+    expect(await screen.findByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeInTheDocument();
+    expect(screen.queryByText('admin-evidence-workflow-page')).not.toBeInTheDocument();
+  });
+
   it('renders the localized cost observability route for admin accounts', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,

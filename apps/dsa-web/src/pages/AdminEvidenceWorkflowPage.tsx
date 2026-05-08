@@ -124,7 +124,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
         aria-label="静态复核状态"
       >
         {statusCards.map(({ label, value, tone, icon: Icon }) => (
-          <GlassCard key={value} as="article" className="p-4">
+          <GlassCard key={value} as="article" className="p-4" aria-label={`${label}：${value}`}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/34">{label}</p>
@@ -155,9 +155,15 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
               <article
                 key={snippet.label}
                 className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3.5"
+                aria-labelledby={`admin-evidence-command-${snippet.label}`}
               >
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/34">{snippet.label}</p>
-                <pre className="mt-3 overflow-x-auto no-scrollbar whitespace-pre-wrap break-all rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 font-mono text-[11px] leading-5 text-cyan-100/86">
+                <p id={`admin-evidence-command-${snippet.label}`} className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/34">{snippet.label}</p>
+                <pre
+                  tabIndex={0}
+                  role="group"
+                  aria-label={`可复制命令：${snippet.label}`}
+                  className="mt-3 max-w-full overflow-x-auto no-scrollbar whitespace-pre-wrap break-all rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 font-mono text-[11px] leading-5 text-cyan-100/86 outline-none transition-colors focus-visible:border-cyan-300/35 focus-visible:ring-2 focus-visible:ring-cyan-300/30"
+                >
                   <code>{snippet.command}</code>
                 </pre>
                 <p className="mt-3 text-xs leading-5 text-white/44">{snippet.note}</p>
@@ -185,7 +191,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
         data-testid="admin-evidence-raw-disclosure"
         className="rounded-[20px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden"
       >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-white/76">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
           <span>原始/Schema 字段</span>
           <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">
             默认折叠

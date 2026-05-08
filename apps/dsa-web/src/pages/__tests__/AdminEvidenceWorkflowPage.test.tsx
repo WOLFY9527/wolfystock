@@ -1,5 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import AdminEvidenceWorkflowPage from '../AdminEvidenceWorkflowPage';
 
 const workflowSteps = [
@@ -13,6 +13,10 @@ const workflowSteps = [
 ];
 
 describe('AdminEvidenceWorkflowPage', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('renders the offline evidence workflow sequence and static review states', () => {
     render(<AdminEvidenceWorkflowPage />);
 
@@ -29,13 +33,20 @@ describe('AdminEvidenceWorkflowPage', () => {
   });
 
   it('does not render upload, mutation, or launch approval actions', () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
     render(<AdminEvidenceWorkflowPage />);
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(document.querySelector('form')).not.toBeInTheDocument();
     expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
+    expect(document.querySelector('input, textarea, select')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/upload|上传|file|文件/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('renders static copy-safe offline command snippets without secrets or real paths', () => {
@@ -48,6 +59,37 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(commandText).toContain('python3 scripts/operator_evidence_workflow_run.py check --artifact-dir <sanitized-evidence-dir> --output-dir <review-output-dir>');
     expect(commandText).toContain('python3 scripts/operator_evidence_workflow_run.py report --bundle-summary <review-output-dir>/bundle-summary.json --output <review-output-dir>/release-review-report.md');
     expect(commandText).not.toMatch(/\/Users\/|\.env|token|secret|password|api[_-]?key|cookie|session/i);
+  });
+
+  it('keeps command snippets and raw details keyboard-focusable without adding write controls', () => {
+    render(<AdminEvidenceWorkflowPage />);
+
+    const commandSnippets = screen.getAllByRole('group', { name: /可复制命令/ });
+    expect(commandSnippets).toHaveLength(3);
+    commandSnippets.forEach((snippet) => {
+      expect(snippet).toHaveAttribute('tabIndex', '0');
+      snippet.focus();
+      expect(snippet).toHaveFocus();
+      expect(snippet).toHaveClass('focus-visible:ring-2');
+    });
+
+    const disclosure = screen.getByTestId('admin-evidence-raw-disclosure');
+    const summary = within(disclosure).getByText('原始/Schema 字段').closest('summary');
+    expect(summary).not.toBeNull();
+    summary?.focus();
+    expect(summary).toHaveFocus();
+    expect(summary).toHaveClass('focus-visible:ring-2');
+  });
+
+  it('keeps review status language constrained to manual and missing-evidence states', () => {
+    render(<AdminEvidenceWorkflowPage />);
+
+    const statusGrid = screen.getByTestId('admin-evidence-status-grid');
+    expect(within(statusGrid).getByRole('article', { name: '复核入口：GO-REVIEW-REQUIRED' })).toBeInTheDocument();
+    expect(within(statusGrid).getByRole('article', { name: '缺证据状态：NO-GO when evidence missing' })).toBeInTheDocument();
+    expect(within(statusGrid).getByRole('article', { name: '人工门禁：manual review required' })).toBeInTheDocument();
+    expect(within(statusGrid).getByRole('article', { name: '发布字段：releaseApproved=false' })).toBeInTheDocument();
+    expect(statusGrid.textContent || '').not.toMatch(/automatic[- ]?go|production[- ]?ready|launch[- ]?approved/i);
   });
 
   it('keeps launch approval wording out of the rendered review view', () => {
