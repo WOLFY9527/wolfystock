@@ -15,6 +15,16 @@ const expectedStaticCommands = [
   'python3 scripts/operator_evidence_workflow_run.py check --artifact-dir <sanitized-evidence-dir> --output-dir <review-output-dir>',
   'python3 scripts/operator_evidence_workflow_run.py report --bundle-summary <review-output-dir>/bundle-summary.json --output <review-output-dir>/release-review-report.md',
 ];
+const schemaReferenceGroups = [
+  ['数据源 Provider', 'provider_operator_evidence.json', 'provider_operator_evidence_check.py'],
+  ['恢复 / PITR', 'restore_pitr_operator_evidence.json', 'restore_pitr_operator_evidence_check.py'],
+  ['安全验收', 'security_operator_acceptance.json', 'security_operator_acceptance_check.py'],
+  ['配额预算', 'quota_budget_operator_evidence.json', 'quota_operator_evidence_check.py'],
+  ['预发入口', 'staging_ingress_operator_evidence.json', 'staging_ingress_operator_evidence_check.py'],
+  ['WS2 SSE 决策', 'ws2_sse_operator_decision_evidence.json', 'ws2_sse_operator_decision_check.py'],
+  ['配置快照', 'config_snapshot_evidence.json', 'config_snapshot_evidence_check.py'],
+  ['人工发布复核', 'manual_release_approval_review_record.json', 'manual_release_approval_evidence_check.py'],
+];
 
 test.describe('admin evidence workflow read-only regression', () => {
   test('renders the read-only evidence workflow for ops-log admins on desktop and mobile', async ({ page }) => {
@@ -29,8 +39,9 @@ test.describe('admin evidence workflow read-only regression', () => {
       await expect(page.getByRole('heading', { name: '证据工作流复核' })).toBeVisible();
       await expect(page.getByText('只读视图')).toBeVisible();
       await expect(page.getByText('页面不执行动作')).toBeVisible();
-      await expect(page.getByText('manual review required')).toBeVisible();
-      await expect(page.getByText('releaseApproved=false')).toBeVisible();
+      const statusGrid = page.getByTestId('admin-evidence-status-grid');
+      await expect(statusGrid.getByText('manual review required')).toBeVisible();
+      await expect(statusGrid.getByText('releaseApproved=false')).toBeVisible();
       await expectNoHorizontalOverflow(page);
       if (viewport.width >= 1024) {
         await expect(page.getByRole('link', { name: '证据复核' })).toHaveAttribute('href', /\/zh\/admin\/evidence-workflow$/);
@@ -85,6 +96,29 @@ test.describe('admin evidence workflow read-only regression', () => {
 
       const bodyText = await page.locator('body').innerText();
       expect(bodyText).not.toMatch(forbiddenApprovalPattern);
+
+      const schemaReference = page.getByTestId('admin-evidence-schema-reference');
+      await expect(schemaReference).toBeVisible();
+      await expect(schemaReference.getByRole('heading', { name: '离线证据 Schema 参考' })).toBeVisible();
+      await expect(schemaReference.getByText('人工复核必需')).toBeVisible();
+      for (const [label, artifact, validator] of schemaReferenceGroups) {
+        const group = schemaReference.getByRole('article', { name: `${label}：${artifact}` });
+        await expect(group).toBeVisible();
+        await expect(group.getByRole('heading', { name: label })).toBeVisible();
+        await expect(group.getByText(artifact)).toBeVisible();
+        await expect(group.getByText(validator)).toBeVisible();
+        await expect(group.getByText('manual review required')).toBeVisible();
+        await expect(group.getByText('releaseApproved=false')).toBeVisible();
+      }
+      await expect(schemaReference.getByRole('button')).toHaveCount(0);
+      await expect(schemaReference.getByRole('link')).toHaveCount(0);
+      await expect(schemaReference.locator('input, textarea, select, form, [contenteditable="true"]')).toHaveCount(0);
+      const schemaNotes = page.getByTestId('admin-evidence-schema-notes');
+      await expect(schemaNotes).toBeVisible();
+      await expect(schemaNotes).not.toHaveAttribute('open', '');
+      await expect(schemaNotes.getByText('字段细节与脱敏规则')).toBeVisible();
+      await expect(schemaNotes.getByText('字段清单、原始 schema、provider 载荷和 debug 细节不在页面默认展开')).toBeHidden();
+
       expect(harness.requests.calls.filter((entry) => writeMethodPattern.test(entry))).toEqual([]);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
     }

@@ -12,6 +12,17 @@ const workflowSteps = [
   '人工复核',
 ];
 
+const schemaReferenceGroups = [
+  ['数据源 Provider', 'provider_operator_evidence.json', 'provider_operator_evidence_check.py'],
+  ['恢复 / PITR', 'restore_pitr_operator_evidence.json', 'restore_pitr_operator_evidence_check.py'],
+  ['安全验收', 'security_operator_acceptance.json', 'security_operator_acceptance_check.py'],
+  ['配额预算', 'quota_budget_operator_evidence.json', 'quota_operator_evidence_check.py'],
+  ['预发入口', 'staging_ingress_operator_evidence.json', 'staging_ingress_operator_evidence_check.py'],
+  ['WS2 SSE 决策', 'ws2_sse_operator_decision_evidence.json', 'ws2_sse_operator_decision_check.py'],
+  ['配置快照', 'config_snapshot_evidence.json', 'config_snapshot_evidence_check.py'],
+  ['人工发布复核', 'manual_release_approval_review_record.json', 'manual_release_approval_evidence_check.py'],
+];
+
 describe('AdminEvidenceWorkflowPage', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -22,13 +33,14 @@ describe('AdminEvidenceWorkflowPage', () => {
 
     const page = screen.getByTestId('admin-evidence-workflow-page');
     const workflowGrid = screen.getByTestId('admin-evidence-workflow-grid');
+    const statusGrid = screen.getByTestId('admin-evidence-status-grid');
     workflowSteps.forEach((step) => {
       expect(within(workflowGrid).getByText(step)).toBeInTheDocument();
     });
-    expect(within(page).getByText('GO-REVIEW-REQUIRED')).toBeInTheDocument();
-    expect(within(page).getByText('NO-GO when evidence missing')).toBeInTheDocument();
-    expect(within(page).getByText('manual review required')).toBeInTheDocument();
-    expect(within(page).getByText('releaseApproved=false')).toBeInTheDocument();
+    expect(within(statusGrid).getByText('GO-REVIEW-REQUIRED')).toBeInTheDocument();
+    expect(within(statusGrid).getByText('NO-GO when evidence missing')).toBeInTheDocument();
+    expect(within(statusGrid).getByText('manual review required')).toBeInTheDocument();
+    expect(within(statusGrid).getByText('releaseApproved=false')).toBeInTheDocument();
     expect(within(page).getByText('缺少证据时保持 NO-GO')).toBeInTheDocument();
   });
 
@@ -47,6 +59,39 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(screen.queryByLabelText(/upload|上传|file|文件/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('renders a static schema reference panel for all offline evidence categories', () => {
+    render(<AdminEvidenceWorkflowPage />);
+
+    const referencePanel = screen.getByTestId('admin-evidence-schema-reference');
+    expect(within(referencePanel).getByRole('heading', { name: '离线证据 Schema 参考' })).toBeInTheDocument();
+    expect(within(referencePanel).getByText('人工复核必需')).toBeInTheDocument();
+    expect(within(referencePanel).getAllByText('manual review required')).toHaveLength(schemaReferenceGroups.length);
+    expect(within(referencePanel).getAllByText('releaseApproved=false')).toHaveLength(schemaReferenceGroups.length);
+
+    schemaReferenceGroups.forEach(([label, artifact, validator]) => {
+      const group = within(referencePanel).getByRole('article', { name: `${label}：${artifact}` });
+      expect(within(group).getByText(label)).toBeInTheDocument();
+      expect(within(group).getByText(artifact)).toBeInTheDocument();
+      expect(within(group).getByText(validator)).toBeInTheDocument();
+      expect(within(group).getByText('本地校验')).toBeInTheDocument();
+    });
+  });
+
+  it('keeps the schema reference panel static and read-only', () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    render(<AdminEvidenceWorkflowPage />);
+
+    const referencePanel = screen.getByTestId('admin-evidence-schema-reference');
+    expect(within(referencePanel).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(referencePanel).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(referencePanel).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(referencePanel.querySelector('input, textarea, select, form, [contenteditable="true"]')).not.toBeInTheDocument();
+    expect(referencePanel.textContent || '').not.toMatch(/上传|写入|提交|保存|批准上线|批准发布|launch[- ]?approved|production[- ]?ready|automatic[- ]?go/i);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

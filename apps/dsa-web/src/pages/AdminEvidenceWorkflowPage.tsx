@@ -45,6 +45,49 @@ const commandSnippets: CommandSnippet[] = [
   },
 ];
 
+const schemaReferenceGroups = [
+  {
+    label: '数据源 Provider',
+    artifact: 'provider_operator_evidence.json',
+    validator: 'provider_operator_evidence_check.py',
+  },
+  {
+    label: '恢复 / PITR',
+    artifact: 'restore_pitr_operator_evidence.json',
+    validator: 'restore_pitr_operator_evidence_check.py',
+  },
+  {
+    label: '安全验收',
+    artifact: 'security_operator_acceptance.json',
+    validator: 'security_operator_acceptance_check.py',
+  },
+  {
+    label: '配额预算',
+    artifact: 'quota_budget_operator_evidence.json',
+    validator: 'quota_operator_evidence_check.py',
+  },
+  {
+    label: '预发入口',
+    artifact: 'staging_ingress_operator_evidence.json',
+    validator: 'staging_ingress_operator_evidence_check.py',
+  },
+  {
+    label: 'WS2 SSE 决策',
+    artifact: 'ws2_sse_operator_decision_evidence.json',
+    validator: 'ws2_sse_operator_decision_check.py',
+  },
+  {
+    label: '配置快照',
+    artifact: 'config_snapshot_evidence.json',
+    validator: 'config_snapshot_evidence_check.py',
+  },
+  {
+    label: '人工发布复核',
+    artifact: 'manual_release_approval_review_record.json',
+    validator: 'manual_release_approval_evidence_check.py',
+  },
+];
+
 function toneClass(tone: Tone): string {
   return {
     info: 'border-cyan-300/20 bg-cyan-400/8 text-cyan-100',
@@ -137,6 +180,79 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           </GlassCard>
         ))}
       </section>
+
+      <GlassCard
+        as="section"
+        data-testid="admin-evidence-schema-reference"
+        className="p-4 md:p-5"
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <FileCheck2 className="mt-1 h-4 w-4 shrink-0 text-cyan-200" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">本地参考</p>
+              <h2 className="mt-1 text-lg font-semibold text-white">离线证据 Schema 参考</h2>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="warning" className="border-amber-300/25 bg-amber-400/10 text-amber-100">人工复核必需</Badge>
+            <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">只读字段</Badge>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {schemaReferenceGroups.map((group) => (
+            <article
+              key={group.artifact}
+              className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3.5"
+              aria-label={`${group.label}：${group.artifact}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">证据类别</p>
+                  <h3 className="mt-2 text-sm font-semibold leading-5 text-white/88">{group.label}</h3>
+                </div>
+                <span className="shrink-0 rounded-full border border-cyan-300/15 bg-cyan-400/8 px-2 py-1 text-[10px] font-medium text-cyan-100">
+                  本地校验
+                </span>
+              </div>
+              <dl className="mt-4 space-y-3 text-xs leading-5">
+                <div>
+                  <dt className="text-white/34">预期 artifact</dt>
+                  <dd className="mt-1 break-all font-mono text-white/74">{group.artifact}</dd>
+                </div>
+                <div>
+                  <dt className="text-white/34">validator / review stage</dt>
+                  <dd className="mt-1 break-all font-mono text-cyan-100/78">{group.validator}</dd>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-1 2xl:grid-cols-2">
+                  <span className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-2.5 py-2 font-mono text-[11px] text-amber-100/86">
+                    manual review required
+                  </span>
+                  <span className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-2.5 py-2 font-mono text-[11px] text-emerald-100/84">
+                    releaseApproved=false
+                  </span>
+                </div>
+              </dl>
+            </article>
+          ))}
+        </div>
+
+        <details
+          data-testid="admin-evidence-schema-notes"
+          className="mt-4 rounded-2xl border border-white/[0.04] bg-white/[0.02] px-3 py-2.5 [&>summary::-webkit-details-marker]:hidden"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/70 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
+            <span>字段细节与脱敏规则</span>
+            <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">
+              默认折叠
+            </span>
+          </summary>
+          <p className="mt-3 text-xs leading-6 text-white/48">
+            仅展示类别、文件名、校验脚本和复核姿态；字段清单、原始 schema、provider 载荷和 debug 细节不在页面默认展开。
+          </p>
+        </details>
+      </GlassCard>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
         <GlassCard as="section" className="p-4 md:p-5 xl:col-span-8">
