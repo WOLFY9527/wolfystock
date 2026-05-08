@@ -4,6 +4,8 @@ WolfyStock is an ultra-minimal deep-space quantitative trading terminal for adva
 
 This document is mandatory for every frontend change. Before editing any frontend file, read and follow this design system. Do not invent visual styles outside this system unless the change explicitly explains why.
 
+For page hierarchy, information-density budgets, and guided disclosure rules, also follow `docs/audits/frontend-information-density-and-guidance-standard.md`.
+
 ---
 
 ## 0. Product Identity

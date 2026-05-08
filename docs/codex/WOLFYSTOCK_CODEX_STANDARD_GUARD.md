@@ -134,6 +134,7 @@ For frontend/UI tasks, read:
 
 ```text
 CODEX_FRONTEND_DESIGN_CONSTITUTION.md
+docs/audits/frontend-information-density-and-guidance-standard.md
 ```
 
 For architecture-sensitive tasks, read the relevant audit/design docs before coding.
