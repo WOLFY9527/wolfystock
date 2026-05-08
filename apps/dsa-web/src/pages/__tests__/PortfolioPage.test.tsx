@@ -508,7 +508,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(await screen.findByText(translate('zh', 'portfolio.fxStale'))).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '手工记账台' })).toBeInTheDocument();
-    expect(screen.getByText('仅用于手工记账，不连接券商执行，也不发起外部委托。')).toBeInTheDocument();
+    expect(screen.getAllByText('仅用于手工记账，不连接券商执行，也不发起外部委托。').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '持仓流水' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /交易工作台|Trade Station/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '股票买卖' })).not.toBeInTheDocument();

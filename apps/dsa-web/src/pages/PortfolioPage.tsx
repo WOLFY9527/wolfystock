@@ -1973,6 +1973,9 @@ const PortfolioPage: React.FC = () => {
 	                {snapshotCurrency !== displayCurrency ? (
 	                  <div className="mt-2 font-mono text-xs text-white/35">≈ {formatMoney(totalEquity, snapshotCurrency)}</div>
 	                ) : null}
+	                <div data-testid="portfolio-ledger-disclosure" className="mt-2 max-w-2xl text-xs leading-5 text-white/45">
+	                  {manualLedgerDisclosure}
+	                </div>
                   </div>
                   <div className="flex min-w-0 flex-wrap gap-2">
                     <span className="rounded-full border border-white/5 bg-white/[0.025] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white/40">
