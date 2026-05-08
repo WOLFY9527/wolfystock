@@ -9,7 +9,7 @@ import type {
   MarketTemperatureResponse,
   MarketTemperatureScore,
 } from '../api/market';
-import { marketApi } from '../api/market';
+import { marketApi, normalizeMarketTemperatureResponse } from '../api/market';
 import { FundsFlowCard } from '../components/market-overview/FundsFlowCard';
 import { MarketSentimentCard } from '../components/market-overview/MarketSentimentCard';
 import { MarketOverviewCard } from '../components/market-overview/MarketOverviewCard';
@@ -390,23 +390,25 @@ function buildInitialPanelsFromLocalSnapshot(): { panels: PanelState; source: 'l
     return {
       source: 'empty',
       panels: {
-        temperature: FALLBACK_TEMPERATURE,
+        temperature: normalizeMarketTemperatureResponse(FALLBACK_TEMPERATURE),
         briefing: FALLBACK_BRIEFING,
         futures: FALLBACK_FUTURES,
         cnShortSentiment: FALLBACK_CN_SHORT_SENTIMENT,
       },
     };
   }
+  const panels = {
+    temperature: FALLBACK_TEMPERATURE,
+    briefing: FALLBACK_BRIEFING,
+    futures: FALLBACK_FUTURES,
+    cnShortSentiment: FALLBACK_CN_SHORT_SENTIMENT,
+    ...localSnapshot.payload,
+  } as PanelState;
+  panels.temperature = normalizeMarketTemperatureResponse(panels.temperature);
   return {
     source: 'local',
     savedAt: localSnapshot.savedAt,
-    panels: {
-      temperature: FALLBACK_TEMPERATURE,
-      briefing: FALLBACK_BRIEFING,
-      futures: FALLBACK_FUTURES,
-      cnShortSentiment: FALLBACK_CN_SHORT_SENTIMENT,
-      ...localSnapshot.payload,
-    } as PanelState,
+    panels,
   };
 }
 
@@ -1614,7 +1616,7 @@ function assignPanelValue(nextPanels: PanelState, panelKey: PanelKey, value: Pan
       nextPanels[panelKey] = value as MarketOverviewPanel;
       break;
     case 'temperature':
-      nextPanels.temperature = value as MarketTemperatureResponse;
+      nextPanels.temperature = normalizeMarketTemperatureResponse(value as MarketTemperatureResponse);
       break;
     case 'briefing':
       nextPanels.briefing = value as MarketBriefingResponse;

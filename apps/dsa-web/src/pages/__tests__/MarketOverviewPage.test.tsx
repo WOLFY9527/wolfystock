@@ -18,25 +18,29 @@ vi.mock('../../api/marketOverview', () => ({
   },
 }));
 
-vi.mock('../../api/market', () => ({
-  marketApi: {
-    getCrypto: vi.fn(),
-    getSentiment: vi.fn(),
-    getCnIndices: vi.fn(),
-    getCnBreadth: vi.fn(),
-    getCnFlows: vi.fn(),
-    getSectorRotation: vi.fn(),
-    getUsBreadth: vi.fn(),
-    getRates: vi.fn(),
-    getFxCommodities: vi.fn(),
-    getTemperature: vi.fn(),
-    getMarketBriefing: vi.fn(),
-    getFutures: vi.fn(),
-    getCnShortSentiment: vi.fn(),
-    cryptoStreamUrl: vi.fn(() => '/api/v1/market/crypto/stream'),
-    normalizeCryptoStreamPayload: vi.fn((payload) => payload),
-  },
-}));
+vi.mock('../../api/market', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/market')>();
+  return {
+    ...actual,
+    marketApi: {
+      getCrypto: vi.fn(),
+      getSentiment: vi.fn(),
+      getCnIndices: vi.fn(),
+      getCnBreadth: vi.fn(),
+      getCnFlows: vi.fn(),
+      getSectorRotation: vi.fn(),
+      getUsBreadth: vi.fn(),
+      getRates: vi.fn(),
+      getFxCommodities: vi.fn(),
+      getTemperature: vi.fn(),
+      getMarketBriefing: vi.fn(),
+      getFutures: vi.fn(),
+      getCnShortSentiment: vi.fn(),
+      cryptoStreamUrl: vi.fn(() => '/api/v1/market/crypto/stream'),
+      normalizeCryptoStreamPayload: vi.fn((payload) => payload),
+    },
+  };
+});
 
 const panel = (panelName: string, symbol: string, label = symbol) => ({
   panelName,
@@ -1387,6 +1391,33 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-briefing-warning')).toHaveTextContent('当前真实数据不足，暂不生成强市场判断');
     expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/数据不足/);
     expect(screen.getByTestId('market-command-safe-state')).toHaveTextContent(/当前不生成强判断/);
+  });
+
+  it('renders a degraded market temperature state when the temperature payload is partial', async () => {
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce({
+      source: 'computed',
+      sourceLabel: '系统计算',
+      updatedAt: '2026-04-29T10:00:00',
+      asOf: '2026-04-29T10:00:00',
+      freshness: 'cached',
+      isFallback: false,
+      confidence: 0.18,
+      reliableInputCount: 1,
+      fallbackInputCount: 3,
+      excludedInputCount: 2,
+      isReliable: false,
+      scores: {
+        liquidity: { value: 51, label: '中性', trend: 'stable', description: '流动性输入部分可用。' },
+      },
+    } as never);
+
+    render(<MarketOverviewPage />);
+
+    expect(await screen.findByTestId('market-overview-shell')).toBeInTheDocument();
+    expect(screen.getByTestId('market-temperature-unreliable-summary')).toHaveTextContent('真实输入不足，暂不生成综合判断');
+    expect(screen.getByTestId('market-overview-temperature-summary')).toHaveTextContent(/数据不足/);
+    expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/数据不足/);
+    expect(screen.queryByText(/raw|payload/i)).not.toBeInTheDocument();
   });
 
   it('shows limited real temperature inputs instead of collapsing them to zero', async () => {

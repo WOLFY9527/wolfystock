@@ -152,7 +152,7 @@ export const marketApi = {
   getFxCommodities: () => getPanel('/api/v1/market/fx-commodities', 'FxCommoditiesCard'),
   getTemperature: async (): Promise<MarketTemperatureResponse> => {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/market/temperature');
-    return toCamelCase<MarketTemperatureResponse>(response.data);
+    return normalizeMarketTemperatureResponse(toCamelCase<MarketTemperatureResponse>(response.data));
   },
   getMarketBriefing: async (): Promise<MarketBriefingResponse> => {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/market/market-briefing');
@@ -202,6 +202,66 @@ export type MarketTemperatureResponse = {
     liquidity: MarketTemperatureScore;
   };
 };
+
+const DEFAULT_MARKET_TEMPERATURE_SCORE: MarketTemperatureScore = {
+  value: 50,
+  label: '数据不足',
+  trend: 'stable',
+  description: '当前真实数据不足，市场温度仅供界面演示。',
+};
+
+function normalizeMarketTemperatureScore(score?: Partial<MarketTemperatureScore>): MarketTemperatureScore {
+  return {
+    ...DEFAULT_MARKET_TEMPERATURE_SCORE,
+    ...score,
+  };
+}
+
+export function normalizeMarketTemperatureResponse(
+  payload?: Partial<MarketTemperatureResponse> | null,
+): MarketTemperatureResponse {
+  const scores: Partial<MarketTemperatureResponse['scores']> = payload?.scores || {};
+  const hasCompleteScores = Boolean(
+    scores.overall
+    && scores.usRiskAppetite
+    && scores.cnMoneyEffect
+    && scores.macroPressure
+    && scores.liquidity,
+  );
+  const inferredReliable = payload?.confidence != null
+    ? payload.confidence >= 0.45 && (payload.reliableInputCount == null || payload.reliableInputCount >= 3)
+    : false;
+
+  return {
+    source: payload?.source || 'fallback',
+    sourceLabel: payload?.sourceLabel,
+    providerHealth: payload?.providerHealth,
+    updatedAt: payload?.updatedAt || new Date().toISOString(),
+    asOf: payload?.asOf,
+    freshness: payload?.freshness,
+    isFallback: payload?.isFallback,
+    isStale: payload?.isStale,
+    isRefreshing: payload?.isRefreshing,
+    delayMinutes: payload?.delayMinutes,
+    warning: payload?.warning,
+    confidence: payload?.confidence,
+    reliableInputCount: payload?.reliableInputCount,
+    fallbackInputCount: payload?.fallbackInputCount,
+    excludedInputCount: payload?.excludedInputCount,
+    isReliable: payload?.isReliable === false
+      ? false
+      : hasCompleteScores
+        ? payload?.isReliable ?? inferredReliable
+        : false,
+    scores: {
+      overall: normalizeMarketTemperatureScore(scores.overall),
+      usRiskAppetite: normalizeMarketTemperatureScore(scores.usRiskAppetite),
+      cnMoneyEffect: normalizeMarketTemperatureScore(scores.cnMoneyEffect),
+      macroPressure: normalizeMarketTemperatureScore(scores.macroPressure),
+      liquidity: normalizeMarketTemperatureScore(scores.liquidity),
+    },
+  };
+}
 
 export type MarketBriefingItem = {
   title: string;

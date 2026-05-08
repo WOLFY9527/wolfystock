@@ -13,6 +13,36 @@ async function signIn(page: Page, redirectPath: string) {
   await page.goto(redirectPath);
 }
 
+async function installPartialTemperaturePayload(page: Page) {
+  await page.route('**/api/v1/market/temperature', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        source: 'computed',
+        sourceLabel: 'Mock model',
+        updatedAt: '2026-05-02T09:00:00Z',
+        asOf: '2026-05-02T09:00:00Z',
+        freshness: 'mock',
+        isFallback: false,
+        confidence: 0.18,
+        reliableInputCount: 1,
+        fallbackInputCount: 3,
+        excludedInputCount: 2,
+        isReliable: false,
+        scores: {
+          liquidity: {
+            value: 51,
+            label: '中性',
+            trend: 'stable',
+            description: '流动性输入部分可用。',
+          },
+        },
+      }),
+    });
+  });
+}
+
 test.describe('scanner and market overview smoke', () => {
   test('scanner keeps controls visible without horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -117,5 +147,31 @@ test.describe('scanner and market overview smoke', () => {
     expect(copiedSummary).toContain('市场总览');
     expect(copiedSummary).toContain('市场温度');
     expect(copiedSummary).toContain('市场解读');
+  });
+
+  test('market overview degrades partial temperature payload without blanking', async ({ page }) => {
+    await installPartialTemperaturePayload(page);
+
+    const viewports = [
+      { width: 1440, height: 1000 },
+      { width: 390, height: 844 },
+    ];
+
+    for (const [index, viewport] of viewports.entries()) {
+      await page.setViewportSize(viewport);
+      if (index === 0) {
+        await signIn(page, '/zh/market-overview');
+      } else {
+        await page.goto('/zh/market-overview');
+        await page.waitForLoadState('domcontentloaded');
+      }
+
+      await expect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('market-overview-temperature-summary')).toContainText(/数据不足/);
+      await expect(page.getByTestId('market-temperature-unreliable-summary')).toBeVisible();
+      await expect(page.getByTestId('market-decision-text')).toContainText(/数据不足/);
+      await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      await expect(await page.locator('body').innerText()).not.toMatch(/raw|payload/i);
+    }
   });
 });
