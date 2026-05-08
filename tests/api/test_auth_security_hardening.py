@@ -28,6 +28,11 @@ def _reset_auth_globals() -> None:
     auth._password_hash_value = None
     auth._rate_limit = {}
     auth._admin_reauth_markers = {}
+    try:
+        from api.middlewares.public_abuse_limiter import reset_public_api_abuse_limiter_state
+    except ModuleNotFoundError:
+        return
+    reset_public_api_abuse_limiter_state()
 
 
 class AuthSecurityHardeningTestCase(unittest.TestCase):
@@ -245,6 +250,45 @@ class AuthSecurityHardeningTestCase(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+
+    def test_public_abuse_limiter_does_not_change_login_limiter_or_authenticated_admin_flow(self) -> None:
+        from api.middlewares.public_abuse_limiter import reset_public_api_abuse_limiter_state
+
+        reset_public_api_abuse_limiter_state()
+        with patch.dict(
+            os.environ,
+            {
+                "PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES": "1",
+                "PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS": "300",
+            },
+            clear=False,
+        ):
+            unauthenticated = self.client.post(
+                "/api/v1/admin/users/user-1/disable",
+                json={"reason": "public abuse limiter rehearsal", "confirm": "DISABLE"},
+                headers={"X-Forwarded-For": "198.51.100.10"},
+            )
+            limited = self.client.post(
+                "/api/v1/admin/users/user-1/disable",
+                json={"reason": "public abuse limiter rehearsal", "confirm": "DISABLE"},
+                headers={"X-Forwarded-For": "198.51.100.10"},
+            )
+
+            login = self._login("admin", "adminpass123", origin="https://app.example.test")
+            reauth = self._reauth_admin(origin="https://app.example.test")
+            authenticated = self.client.post(
+                "/api/v1/admin/users/user-1/disable",
+                json={"reason": "authenticated smoke", "confirm": "DISABLE"},
+                headers={
+                    "Origin": "https://app.example.test",
+                    "X-Forwarded-For": "198.51.100.10",
+                },
+            )
+
+        self.assertEqual([unauthenticated.status_code, limited.status_code], [401, 429])
+        self.assertEqual(login.status_code, 200)
+        self.assertEqual(reauth.status_code, 200)
+        self.assertEqual(authenticated.status_code, 200)
 
 
 class CorsProductionGuardrailTestCase(unittest.TestCase):

@@ -9,5 +9,6 @@ API 中间件模块初始化
 """
 
 from api.middlewares.error_handler import ErrorHandlerMiddleware
+from api.middlewares.public_abuse_limiter import PublicApiAbuseLimiterMiddleware
 
-__all__ = ["ErrorHandlerMiddleware"]
+__all__ = ["ErrorHandlerMiddleware", "PublicApiAbuseLimiterMiddleware"]

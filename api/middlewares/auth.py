@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.deps import resolve_current_user
+from api.middlewares.public_abuse_limiter import add_public_api_abuse_limiter
 from api.security_headers import apply_security_headers
 from src.auth import COOKIE_NAME, is_auth_enabled, is_production_mode
 
@@ -145,3 +146,4 @@ def add_auth_middleware(app):
     any runtime configuration reload.
     """
     app.add_middleware(AuthMiddleware)
+    add_public_api_abuse_limiter(app)

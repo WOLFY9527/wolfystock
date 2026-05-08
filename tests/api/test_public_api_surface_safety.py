@@ -104,6 +104,14 @@ def _reset_auth_globals() -> None:
     auth._admin_reauth_markers = {}
 
 
+def _reset_public_limiter_state_if_available() -> None:
+    try:
+        from api.middlewares.public_abuse_limiter import reset_public_api_abuse_limiter_state
+    except ModuleNotFoundError:
+        return
+    reset_public_api_abuse_limiter_state()
+
+
 def test_launch_surface_route_inventory_remains_stable_and_fixture_safe() -> None:
     app = FastAPI()
     app.include_router(api_v1_router)
@@ -228,7 +236,7 @@ def test_public_request_shape_errors_are_sanitized_for_malformed_json_and_unsupp
         client.close()
 
 
-def test_api_abuse_rate_limit_readiness_is_explicitly_auth_only_until_global_limiter_exists() -> None:
+def test_api_abuse_rate_limit_readiness_has_global_public_limiter() -> None:
     app = FastAPI()
     add_auth_middleware(app)
     app.include_router(api_v1_router)
@@ -242,18 +250,141 @@ def test_api_abuse_rate_limit_readiness_is_explicitly_auth_only_until_global_lim
     evidence = {
         "authLoginRateLimitActive": callable(auth.check_rate_limit) and callable(auth.record_login_failure),
         "globalApiRateLimitActive": bool(rate_limit_middleware_names),
-        "globalApiRateLimitBlocker": "global_api_rate_limit_pending",
-        "runtimeBehaviorChanged": False,
+        "globalApiRateLimitScope": "public_unauthenticated_api_errors",
+        "runtimeBehaviorChanged": True,
     }
 
     assert "AuthMiddleware" in middleware_names
     assert evidence == {
         "authLoginRateLimitActive": True,
-        "globalApiRateLimitActive": False,
-        "globalApiRateLimitBlocker": "global_api_rate_limit_pending",
-        "runtimeBehaviorChanged": False,
+        "globalApiRateLimitActive": True,
+        "globalApiRateLimitScope": "public_unauthenticated_api_errors",
+        "runtimeBehaviorChanged": True,
     }
     _assert_public_surface_safe(evidence)
+
+
+def test_public_malformed_json_bursts_eventually_receive_sanitized_rate_limit(monkeypatch) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "2")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    malformed_body = (
+        '{"symbol":"TEM",'
+        f'"token":"{ABUSE_REHEARSAL_SECRET_BODY}",'
+        f'"databaseDsn":"{ABUSE_REHEARSAL_DSN}",'
+        f'"debug":"{ABUSE_REHEARSAL_DEBUG_PAYLOAD}"'
+    )
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
+            responses = [
+                client.post(
+                    "/api/v1/options/decision/evaluate",
+                    data=malformed_body,
+                    headers={
+                        "content-type": "application/json",
+                        "X-Forwarded-For": "203.0.113.44",
+                    },
+                )
+                for _ in range(3)
+            ]
+
+        assert [response.status_code for response in responses] == [422, 422, 429]
+        assert responses[-1].json() == {
+            "error": "rate_limited",
+            "message": "Too many public API errors; retry later.",
+        }
+        for response in responses:
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
+def test_public_unsupported_method_bursts_eventually_receive_sanitized_rate_limit(monkeypatch) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
+            first = client.patch(
+                "/api/v1/options/underlyings/TEM/summary",
+                data=ABUSE_REHEARSAL_SECRET_BODY,
+                headers={
+                    "content-type": "application/json",
+                    "X-Forwarded-For": "203.0.113.46",
+                },
+            )
+            limited = client.patch(
+                "/api/v1/options/underlyings/TEM/summary",
+                data=ABUSE_REHEARSAL_SECRET_BODY,
+                headers={
+                    "content-type": "application/json",
+                    "X-Forwarded-For": "203.0.113.46",
+                },
+            )
+
+        assert [first.status_code, limited.status_code] == [405, 429]
+        for response in (first, limited):
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
+def test_public_api_abuse_limiter_state_can_be_reset_for_tests(monkeypatch) -> None:
+    from api.middlewares.public_abuse_limiter import reset_public_api_abuse_limiter_state
+
+    _reset_auth_globals()
+    reset_public_api_abuse_limiter_state()
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+            first = client.post(
+                "/api/v1/admin/users/bootstrap-admin/disable",
+                data=(
+                    '{"reason":"malformed",'
+                    f'"token":"{ABUSE_REHEARSAL_SECRET_BODY}",'
+                    f'"databaseDsn":"{ABUSE_REHEARSAL_DSN}"'
+                ),
+                headers={
+                    "content-type": "application/json",
+                    "X-Forwarded-For": "203.0.113.45",
+                },
+            )
+            limited = client.post(
+                "/api/v1/admin/users/bootstrap-admin/disable",
+                data=ABUSE_REHEARSAL_SECRET_BODY,
+                headers={
+                    "content-type": "application/json",
+                    "X-Forwarded-For": "203.0.113.45",
+                },
+            )
+
+            reset_public_api_abuse_limiter_state()
+            after_reset = client.post(
+                "/api/v1/admin/users/bootstrap-admin/disable",
+                data=ABUSE_REHEARSAL_SECRET_BODY,
+                headers={
+                    "content-type": "application/json",
+                    "X-Forwarded-For": "203.0.113.45",
+                },
+            )
+
+        assert [first.status_code, limited.status_code, after_reset.status_code] == [401, 429, 401]
+        for response in (first, limited, after_reset):
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        reset_public_api_abuse_limiter_state()
+        _reset_auth_globals()
 
 
 def test_options_launch_surface_matrix_is_fixture_backed_explicit_and_safe() -> None:
