@@ -170,6 +170,7 @@ const ThemeCard: React.FC<{
   const relativeStrength = theme.relativeStrength?.averageRelativeStrengthPercent;
   const volumeRatio = theme.volume?.averageRelativeVolume;
   const persistenceScore = theme.persistenceScore ?? theme.persistenceEvidence?.score;
+  const nextWatch = theme.alertCandidates?.[0];
   return (
     <article
       data-testid={`rotation-theme-card-${theme.id}`}
@@ -214,6 +215,16 @@ const ThemeCard: React.FC<{
         ) : null}
       </div>
 
+      <div
+        data-testid={`rotation-theme-next-watch-${theme.id}`}
+        className="mt-3 rounded-xl border border-cyan-200/10 bg-cyan-200/[0.035] px-3 py-2 text-[11px] leading-5 text-cyan-50/62"
+      >
+        <span className="font-semibold text-cyan-50/78">下一观察：</span>
+        {nextWatch?.symbol
+          ? `${nextWatch.symbol} · ${nextWatch.signalLabel || nextWatch.label || '观察信号'} · ${nextWatch.readOnly ? '只读证据' : '待确认'}`
+          : '等待可靠候选补齐，保持只读观察'}
+      </div>
+
       <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5" aria-label="风险标签">
         <span className="text-[10px] font-bold uppercase tracking-widest text-white/35">风险标签</span>
         {theme.riskLabels.length ? theme.riskLabels.map((risk) => <RiskChip key={risk} risk={risk} />) : (
@@ -222,11 +233,17 @@ const ThemeCard: React.FC<{
       </div>
 
       {theme.evidence.length ? (
-        <div className="mt-3 grid gap-1 text-[11px] leading-5 text-white/48">
+        <details
+          data-testid={`rotation-theme-mechanics-${theme.id}`}
+          className="mt-3 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 text-[11px] leading-5 text-white/48"
+        >
+          <summary className="cursor-pointer list-none font-semibold text-white/58">证据细节</summary>
+          <div className="mt-2 grid gap-1">
           {theme.evidence.slice(0, 3).map((item) => (
             <p key={item} className="truncate">· {item}</p>
           ))}
-        </div>
+          </div>
+        </details>
       ) : null}
 
       {theme.stageExplanation ? (
@@ -250,8 +267,11 @@ const ThemeCard: React.FC<{
       ) : null}
 
       {theme.timeWindows ? (
-        <div className="mt-4">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">时窗证据</p>
+        <details
+          data-testid={`rotation-theme-time-windows-${theme.id}`}
+          className="mt-4 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2"
+        >
+          <summary className="cursor-pointer list-none text-[10px] font-bold uppercase tracking-widest text-white/45">时窗证据</summary>
           <div className="mt-2 grid grid-cols-2 gap-2">
             {(['5m', '15m', '60m', '1d'] as const).map((window) => (
               <WindowChip key={window} window={theme.timeWindows?.[window] || {
@@ -266,11 +286,15 @@ const ThemeCard: React.FC<{
               }} />
             ))}
           </div>
-        </div>
+        </details>
       ) : null}
 
       {theme.benchmarkProxies ? (
-        <div className="mt-4">
+        <details
+          data-testid={`rotation-theme-proxy-details-${theme.id}`}
+          className="mt-4 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2"
+        >
+          <summary className="flex cursor-pointer list-none flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">ETF 代理质量</p>
             <div
@@ -287,11 +311,8 @@ const ThemeCard: React.FC<{
               <DataFreshnessBadge freshness={theme.proxyQuality?.freshness || theme.freshness} className="px-1.5 text-[9px]" />
             </div>
           </div>
-          <details className="mt-2 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 text-[11px] text-white/48">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-              <span className="font-semibold text-white/58">代理证据明细</span>
-              <span className="font-mono text-white/36">{Object.keys(theme.benchmarkProxies).length} proxies</span>
-            </summary>
+          </summary>
+          <div className="mt-2 text-[11px] text-white/48">
             {theme.proxyQuality?.explanation ? (
               <p className="mt-2 rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2 leading-5">
                 {theme.proxyQuality.explanation}
@@ -320,8 +341,8 @@ const ThemeCard: React.FC<{
                 </div>
               ))}
             </div>
-          </details>
-        </div>
+          </div>
+        </details>
       ) : null}
     </article>
   );
@@ -470,6 +491,31 @@ const ThemeDetailPanel: React.FC<{ theme?: MarketRotationTheme }> = ({ theme }) 
   );
 };
 
+const NextWatchBand: React.FC<{ payload: MarketRotationRadarResponse }> = ({ payload }) => {
+  const signals = payload.summary.watchlistSignals || [];
+  return (
+    <section
+      data-testid="rotation-next-watch-band"
+      className="mt-4 grid min-w-0 grid-cols-1 gap-3 rounded-2xl border border-cyan-200/10 bg-cyan-200/[0.035] p-4 md:grid-cols-[minmax(0,1fr)_auto]"
+    >
+      <div className="min-w-0">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-50/45">下一观察</p>
+        <p className="mt-1 truncate text-base font-semibold text-white">
+          {signals.length ? signals.map((signal) => signal.symbol || signal.themeName).filter(Boolean).slice(0, 4).join(' / ') : '等待候选补齐'}
+        </p>
+        <p className="mt-2 line-clamp-2 text-xs leading-5 text-cyan-50/58">
+          {payload.summary.watchlistSortingExplanation || '只展示观察排序，不触发交易、通知或组合变更。'}
+        </p>
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-end">
+        <EvidenceBadge tone="info">观察优先级</EvidenceBadge>
+        <EvidenceBadge>非交易指令</EvidenceBadge>
+        <EvidenceBadge tone="ok">只读证据</EvidenceBadge>
+      </div>
+    </section>
+  );
+};
+
 const LoadingPanel: React.FC = () => (
   <GlassCard as="section" className="p-5" role="status" aria-label="正在读取资金轮动雷达">
     <div className="flex items-center gap-3 text-white/60">
@@ -605,6 +651,8 @@ const MarketRotationRadarPage: React.FC = () => {
             </div>
           ) : null}
 
+          <NextWatchBand payload={payload} />
+
           <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-12 xl:items-start">
             <section className="min-w-0 space-y-3 xl:col-span-8" aria-label="今日轮动主题 Top list">
               <div className="grid grid-cols-1 gap-3">
@@ -624,8 +672,14 @@ const MarketRotationRadarPage: React.FC = () => {
             </div>
           </div>
 
-          <GlassCard as="section" className="mt-4 p-4 md:p-5">
-            <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-white/46">
+          <details
+            data-testid="rotation-radar-mechanics-details"
+            className="mt-4 rounded-2xl border border-white/5 bg-white/[0.02] p-4 text-sm text-white/55"
+          >
+            <summary className="cursor-pointer list-none text-[11px] font-bold uppercase tracking-widest text-white/42">
+              轮动计算与边界
+            </summary>
+            <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-white/46">
               <Gauge className="h-4 w-4 text-cyan-200/70" aria-hidden="true" />
               <span>轮动强度 = 相对强弱 + 成交额/相对量 + 广度 + 同步性 + VWAP + 持续性，并对备用、过期、薄广度降权。</span>
               <Signal className="ml-2 h-4 w-4 text-emerald-200/70" aria-hidden="true" />
@@ -633,7 +687,7 @@ const MarketRotationRadarPage: React.FC = () => {
               <Waves className="ml-2 h-4 w-4 text-white/40" aria-hidden="true" />
               <span>{payload.noAdviceDisclosure}</span>
             </div>
-          </GlassCard>
+          </details>
 
           <details
             data-testid="rotation-radar-developer-details"

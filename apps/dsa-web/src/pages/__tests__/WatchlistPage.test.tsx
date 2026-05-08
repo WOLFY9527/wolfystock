@@ -338,6 +338,16 @@ describe('WatchlistPage', () => {
     expect(screen.getByRole('button', { name: '清除选择' })).not.toBeDisabled();
   });
 
+  it('keeps candidate rows before secondary filters and batch controls', async () => {
+    renderWatchlist();
+    const rows = await screen.findByTestId('watchlist-candidate-list');
+
+    expect(rows).toContainElement(screen.getByTestId('watchlist-row-NVDA'));
+    expect(screen.getByTestId('watchlist-secondary-controls')).toHaveTextContent('扫描当前筛选');
+    expect(rows).toHaveClass('order-1');
+    expect(screen.getByTestId('watchlist-secondary-controls')).toHaveClass('order-2');
+  });
+
   it('disables intelligence actions for an empty filtered set with a compact reason', async () => {
     renderWatchlist();
     await screen.findByTestId('watchlist-row-NVDA');

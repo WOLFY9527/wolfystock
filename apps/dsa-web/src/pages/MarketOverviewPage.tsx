@@ -1056,6 +1056,7 @@ const MarketDecisionStrip: React.FC<{
       data-testid="market-decision-strip"
       data-command-bar="market-state"
       data-mobile-order="decision"
+      data-market-research-flow="state"
       className={cn(
         MARKET_OVERVIEW_GHOST_CARD_CLASS,
         'relative overflow-hidden p-0 shadow-[0_0_24px_rgba(59,130,246,0.10)]',
@@ -1308,6 +1309,8 @@ const MarketOverviewCacheStatus: React.FC<{
   return (
     <details
       data-testid="market-overview-cache-status"
+      data-market-research-flow="cache"
+      data-mobile-order="cache-status"
       className={cn(
         'group min-w-0 rounded-xl border px-3 py-2 text-xs',
         refreshErrorCount > 0 || dataQuality.hasConcern
@@ -2525,46 +2528,56 @@ const MarketOverviewPage: React.FC = () => {
       <div data-testid="market-overview-workbench" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6">
         <section data-testid="market-overview-pulse-header" className="flex w-full min-w-0 flex-col gap-4">
           <div data-testid="market-overview-top-stack" className="flex w-full min-w-0 flex-col gap-4">
-          <div
-            data-testid="market-overview-category-tabs"
-            data-selector-position="static-safe"
-            data-mobile-order="controls"
-            className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-white/8 bg-white/[0.02] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
-          >
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[10px] font-semibold text-white/42">
-                筛选
-              </span>
-              <div className="ui-scroll-x-quiet min-w-0">
-                <div className="flex w-max gap-2">
-                  {categoryTabs.map((tab) => (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      aria-pressed={activeCategory === tab.key}
-                      className={`ui-truncate shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
-                        activeCategory === tab.key
-                          ? 'bg-white/10 text-white shadow-sm'
-                          : 'bg-transparent text-white/45 hover:text-white/75'
-                      }`}
-                      onClick={() => setActiveCategory(tab.key)}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
+          <MarketDecisionStrip activeCategory={activeCategory} panels={panels} dataQuality={dataQuality} />
+          <section data-testid="market-overview-summary-band" data-mobile-order="summary" data-market-research-flow="trust" className="min-w-0">
+            <MarketOverviewStatusStrip
+              temperature={<MarketTemperatureCompactSummary data={panels.temperature} />}
+              dataQuality={<DataQualityCompactSummary summary={dataQuality} />}
+              briefing={<MarketBriefingCompactSummary data={panels.briefing} />}
+            />
+          </section>
+          <div data-market-research-flow="controls">
+            <div
+              data-testid="market-overview-category-tabs"
+              data-selector-position="static-safe"
+              data-mobile-order="controls"
+              className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-white/8 bg-white/[0.02] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[10px] font-semibold text-white/42">
+                  筛选
+                </span>
+                <div className="ui-scroll-x-quiet min-w-0">
+                  <div className="flex w-max gap-2">
+                    {categoryTabs.map((tab) => (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        aria-pressed={activeCategory === tab.key}
+                        className={`ui-truncate shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
+                          activeCategory === tab.key
+                            ? 'bg-white/10 text-white shadow-sm'
+                            : 'bg-transparent text-white/45 hover:text-white/75'
+                        }`}
+                        onClick={() => setActiveCategory(tab.key)}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
+              <button
+                type="button"
+                data-testid="market-overview-export-summary"
+                className="w-fit rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition hover:bg-white/[0.06] hover:text-white"
+                onClick={() => {
+                  void handleExportSummary();
+                }}
+              >
+                {exportSummaryFeedback || (language === 'en' ? 'Export' : '复制摘要')}
+              </button>
             </div>
-            <button
-              type="button"
-              data-testid="market-overview-export-summary"
-              className="w-fit rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition hover:bg-white/[0.06] hover:text-white"
-              onClick={() => {
-                void handleExportSummary();
-              }}
-            >
-              {exportSummaryFeedback || (language === 'en' ? 'Export' : '复制摘要')}
-            </button>
           </div>
           <MarketOverviewCacheStatus
             hasLocalSnapshot={hasLocalSnapshot}
@@ -2574,15 +2587,9 @@ const MarketOverviewPage: React.FC = () => {
             refreshErrorCount={refreshErrorCount}
             dataQuality={dataQuality}
           />
-          <CrossAssetHeroRibbon anchors={heroAnchors} />
-          <section data-testid="market-overview-summary-band" data-mobile-order="summary" className="min-w-0">
-            <MarketOverviewStatusStrip
-              temperature={<MarketTemperatureCompactSummary data={panels.temperature} />}
-              dataQuality={<DataQualityCompactSummary summary={dataQuality} />}
-              briefing={<MarketBriefingCompactSummary data={panels.briefing} />}
-            />
-          </section>
-          <MarketDecisionStrip activeCategory={activeCategory} panels={panels} dataQuality={dataQuality} />
+          <div data-market-research-flow="pulse">
+            <CrossAssetHeroRibbon anchors={heroAnchors} />
+          </div>
           </div>
         </section>
         {renderDeterministicGrid()}

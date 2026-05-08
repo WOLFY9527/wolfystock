@@ -351,4 +351,19 @@ describe('MarketRotationRadarPage', () => {
     expect(page).not.toHaveTextContent('provider payload');
     expect(page).not.toHaveTextContent('debug schema');
   });
+
+  it('prioritizes theme and next-watch evidence while keeping mechanics collapsed', async () => {
+    render(<MarketRotationRadarPage />);
+
+    await screen.findByTestId('market-rotation-radar-page');
+    expect(screen.getByTestId('rotation-next-watch-band')).toHaveTextContent('APP');
+
+    const themeCard = screen.getByTestId('rotation-theme-card-ai_applications');
+    expect(within(themeCard).getByTestId('rotation-theme-next-watch-ai_applications')).toHaveTextContent('APP');
+    expect(within(themeCard).getByTestId('rotation-theme-mechanics-ai_applications')).not.toHaveAttribute('open');
+    expect(within(themeCard).getByTestId('rotation-theme-proxy-details-ai_applications')).not.toHaveAttribute('open');
+
+    const mechanics = screen.getByTestId('rotation-radar-mechanics-details');
+    expect(mechanics).not.toHaveAttribute('open');
+  });
 });

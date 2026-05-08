@@ -964,7 +964,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-export-summary')).toHaveTextContent('复制摘要');
     expect(screen.getByTestId('market-overview-category-tabs')).not.toHaveClass('sticky', 'top-0', 'z-20', '-mx-4');
     expect(screen.getByTestId('market-overview-top-stack')).toContainElement(screen.getByTestId('market-overview-category-tabs'));
-    expect(screen.getByTestId('market-overview-top-stack').firstElementChild).toBe(screen.getByTestId('market-overview-category-tabs'));
+    expect(screen.getByTestId('market-overview-top-stack').firstElementChild).toBe(screen.getByTestId('market-decision-strip'));
     expect(screen.getByTestId('market-overview-category-tabs')).toHaveAttribute('data-selector-position', 'static-safe');
     expect(screen.getByTestId('market-overview-category-tabs').querySelector('.ui-scroll-x-quiet')).not.toBeNull();
     expect(shell).toContainElement(screen.getByTestId('market-overview-category-tabs'));
@@ -1180,8 +1180,21 @@ describe('MarketOverviewPage', () => {
     const orderedNodes = Array.from(workbench.querySelectorAll('[data-mobile-order]'))
       .map((node) => node.getAttribute('data-mobile-order'));
 
-    expect(orderedNodes).toEqual(['controls', 'pulse', 'summary', 'decision', 'main', 'rail', 'deep']);
+    expect(orderedNodes).toEqual(['decision', 'summary', 'controls', 'cache-status', 'pulse', 'main', 'rail', 'deep']);
     expect(screen.getByTestId('market-decision-strip')).toHaveAttribute('data-mobile-order', 'decision');
+  });
+
+  it('puts market state, trust, and observation hint before controls and panel sprawl', async () => {
+    render(<MarketOverviewPage />);
+
+    const topStack = await screen.findByTestId('market-overview-top-stack');
+    const orderedNodes = Array.from(topStack.querySelectorAll('[data-market-research-flow]'))
+      .map((node) => node.getAttribute('data-market-research-flow'));
+
+    expect(orderedNodes).toEqual(['state', 'trust', 'controls', 'cache', 'pulse']);
+    expect(topStack.firstElementChild).toBe(screen.getByTestId('market-decision-strip'));
+    expect(screen.getByTestId('market-overview-cache-status')).not.toHaveAttribute('open');
+    expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-decision-strip'))).toBe(Node.DOCUMENT_POSITION_PRECEDING);
   });
 
   it('renders each tab with deterministic row groups and the shared decision layer', async () => {

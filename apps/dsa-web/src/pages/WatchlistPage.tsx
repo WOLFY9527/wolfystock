@@ -946,8 +946,9 @@ const WatchlistPage: React.FC = () => {
         <SectionShell
           title={copy.tableTitle}
           description={copy.tableDescription}
-          contentClassName="space-y-4"
+          contentClassName="flex flex-col gap-4"
         >
+          <div data-testid="watchlist-secondary-controls" className="order-2 flex min-w-0 flex-col gap-3">
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-sm backdrop-blur-md">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.autoRefresh}</span>
@@ -1086,9 +1087,10 @@ const WatchlistPage: React.FC = () => {
               </Button>
             </div>
           </div>
+          </div>
 
-          <div className="overflow-x-auto no-scrollbar rounded-2xl border border-white/5">
-            <table className="min-w-[1240px] w-full text-left text-sm">
+          <div data-testid="watchlist-candidate-list" className="order-1 overflow-hidden rounded-2xl border border-white/5">
+            <table className="w-full table-fixed text-left text-sm">
               <thead className="bg-white/[0.03] text-[11px] uppercase tracking-[0.16em] text-white/35">
                 <tr>
                   <th className="px-4 py-3 font-semibold">{copy.symbol}</th>
