@@ -3,13 +3,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import AdminEvidenceWorkflowPage from '../AdminEvidenceWorkflowPage';
 
 const workflowSteps = [
-  '模板生成',
-  '人工填写脱敏证据',
-  '分类校验',
-  'manifest 校验',
-  'bundle 聚合',
-  'review report 渲染',
+  '本地工作区',
+  '生成模板',
+  '脱敏填写',
+  'preflight',
+  'manifest / bundle / archive',
   '人工复核',
+];
+
+const localWorkspaceLabels = [
+  '本地证据草稿',
+  '脱敏输出目录',
+  '复核归档目录',
+  '本机忽略规则',
 ];
 
 const schemaReferenceGroups = [
@@ -52,6 +58,28 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(within(page).getByText('缺少证据时保持 NO-GO')).toBeInTheDocument();
   });
 
+  it('renders the preflight and manual review sequence in order', () => {
+    render(<AdminEvidenceWorkflowPage />);
+
+    const workflowGrid = screen.getByTestId('admin-evidence-workflow-grid');
+    const renderedLabels = workflowSteps.map((step) => within(workflowGrid).getByText(step));
+    renderedLabels.reduce((previous, current) => {
+      expect(previous.compareDocumentPosition(current) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      return current;
+    });
+  });
+
+  it('renders local workspace guard labels without absolute paths', () => {
+    render(<AdminEvidenceWorkflowPage />);
+
+    const guardPanel = screen.getByTestId('admin-evidence-local-workspace-guard');
+    expect(within(guardPanel).getByRole('heading', { name: '本地目录保护' })).toBeInTheDocument();
+    localWorkspaceLabels.forEach((label) => {
+      expect(within(guardPanel).getByText(label)).toBeInTheDocument();
+    });
+    expect(guardPanel.textContent || '').not.toMatch(/^\/|\/Users\/|file:|https?:|\.env/i);
+  });
+
   it('does not render upload, mutation, or launch approval actions', () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
@@ -63,7 +91,7 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(document.querySelector('form')).not.toBeInTheDocument();
     expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
-    expect(document.querySelector('input, textarea, select, [contenteditable="true"]')).not.toBeInTheDocument();
+    expect(document.querySelector('input, textarea, select, button, form, [contenteditable="true"]')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/upload|上传|file|文件/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
@@ -162,7 +190,7 @@ describe('AdminEvidenceWorkflowPage', () => {
     });
 
     const disclosure = screen.getByTestId('admin-evidence-raw-disclosure');
-    const summary = within(disclosure).getByText('原始/Schema 字段').closest('summary');
+    const summary = within(disclosure).getByText('原始/Schema/Provider/Debug 字段').closest('summary');
     expect(summary).not.toBeNull();
     summary?.focus();
     expect(summary).toHaveFocus();
@@ -192,7 +220,11 @@ describe('AdminEvidenceWorkflowPage', () => {
 
     const disclosure = screen.getByTestId('admin-evidence-raw-disclosure');
     expect(disclosure).not.toHaveAttribute('open');
-    expect(within(disclosure).getByText('原始/Schema 字段')).toBeInTheDocument();
+    expect(within(disclosure).getByText('原始/Schema/Provider/Debug 字段')).toBeInTheDocument();
+
+    const schemaNotes = screen.getByTestId('admin-evidence-schema-notes');
+    expect(schemaNotes).not.toHaveAttribute('open');
+    expect(within(schemaNotes).getByText('字段细节与脱敏规则')).toBeInTheDocument();
   });
 
   it('uses responsive ghost-glass layout classes for desktop and narrow screens', () => {
@@ -205,7 +237,7 @@ describe('AdminEvidenceWorkflowPage', () => {
     const runbookGrid = screen.getByTestId('admin-evidence-runbook-references').querySelector('.grid');
 
     expect(page).toHaveClass('overflow-y-auto', 'overflow-x-hidden', 'no-scrollbar', 'bg-[#050505]');
-    expect(workflowGrid).toHaveClass('grid-cols-1', 'lg:grid-cols-7');
+    expect(workflowGrid).toHaveClass('grid-cols-1', 'xl:grid-cols-6');
     expect(statusGrid).toHaveClass('grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-4');
     expect(commandGrid).toHaveClass('grid-cols-1', 'xl:grid-cols-3');
     expect(runbookGrid).toHaveClass('grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-5');

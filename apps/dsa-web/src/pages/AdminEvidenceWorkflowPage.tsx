@@ -30,12 +30,11 @@ type RunbookReference = {
 };
 
 const workflowSteps = [
-  { label: '模板生成', note: '离线模板' },
-  { label: '人工填写脱敏证据', note: '人工录入' },
-  { label: '分类校验', note: '本地校验' },
-  { label: 'manifest 校验', note: '校验和' },
-  { label: 'bundle 聚合', note: '脱敏摘要' },
-  { label: 'review report 渲染', note: '只读报告' },
+  { label: '本地工作区', note: '忽略目录' },
+  { label: '生成模板', note: '空白模板' },
+  { label: '脱敏填写', note: '人工录入' },
+  { label: 'preflight', note: '本地预检' },
+  { label: 'manifest / bundle / archive', note: '校验归档' },
   { label: '人工复核', note: '外部复核' },
 ];
 
@@ -62,6 +61,13 @@ const commandSnippets: CommandSnippet[] = [
     note: '从脱敏 bundle 摘要渲染人工复核 Markdown。',
     command: 'python3 scripts/operator_evidence_workflow_run.py report --bundle-summary <review-output-dir>/bundle-summary.json --output <review-output-dir>/release-review-report.md',
   },
+];
+
+const localWorkspaceGuards = [
+  { label: '本地证据草稿', value: '<local-evidence-draft>' },
+  { label: '脱敏输出目录', value: '<sanitized-evidence-output>' },
+  { label: '复核归档目录', value: '<review-archive-output>' },
+  { label: '本机忽略规则', value: '<gitignored-local-workspace>' },
 ];
 
 const runbookReferences: RunbookReference[] = [
@@ -183,7 +189,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           </div>
           <div
             data-testid="admin-evidence-workflow-grid"
-            className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-7"
+            className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6"
           >
             {workflowSteps.map((step, index) => (
               <article
@@ -198,19 +204,46 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           </div>
         </GlassCard>
 
-        <GlassCard as="section" className="p-4 md:p-5 xl:col-span-4">
-          <div className="flex items-start gap-3">
-            <FileCheck2 className="mt-1 h-4 w-4 text-emerald-200" aria-hidden="true" />
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">能力边界</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">页面不执行动作</h2>
+        <div className="grid grid-cols-1 gap-4 xl:col-span-4">
+          <GlassCard as="section" className="p-4 md:p-5">
+            <div className="flex items-start gap-3">
+              <FileCheck2 className="mt-1 h-4 w-4 text-emerald-200" aria-hidden="true" />
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">能力边界</p>
+                <h2 className="mt-1 text-lg font-semibold text-white">页面不执行动作</h2>
+              </div>
             </div>
-          </div>
-          <div className="mt-5 space-y-3 text-sm leading-6 text-white/58">
-            <p>不提供上传入口，不调用后端写接口，不变更运行时配置。</p>
-            <p>不读取原始 artifact 内容，不展示 provider 载荷、schema 细节或调试字段。</p>
-          </div>
-        </GlassCard>
+            <div className="mt-5 space-y-3 text-sm leading-6 text-white/58">
+              <p>不提供上传入口，不调用后端写接口，不变更运行时配置。</p>
+              <p>不读取原始 artifact 内容，不展示 provider 载荷、schema 细节或调试字段。</p>
+            </div>
+          </GlassCard>
+
+          <GlassCard
+            as="section"
+            data-testid="admin-evidence-local-workspace-guard"
+            className="p-4 md:p-5"
+          >
+            <div className="flex items-start gap-3">
+              <LockKeyhole className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">LOCAL GUARD</p>
+                <h2 className="mt-1 text-lg font-semibold text-white">本地目录保护</h2>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
+              {localWorkspaceGuards.map((guard) => (
+                <div
+                  key={guard.label}
+                  className="min-w-0 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2"
+                >
+                  <p className="text-[11px] font-medium text-white/72">{guard.label}</p>
+                  <p className="mt-1 break-words font-mono text-[11px] text-cyan-100/66">{guard.value}</p>
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+        </div>
       </section>
 
       <section
@@ -403,7 +436,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
         className="rounded-[20px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden"
       >
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
-          <span>原始/Schema 字段</span>
+          <span>原始/Schema/Provider/Debug 字段</span>
           <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">
             默认折叠
           </span>

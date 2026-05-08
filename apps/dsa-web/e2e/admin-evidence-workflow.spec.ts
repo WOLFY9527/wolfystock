@@ -15,6 +15,20 @@ const expectedStaticCommands = [
   'python3 scripts/operator_evidence_workflow_run.py check --artifact-dir <sanitized-evidence-dir> --output-dir <review-output-dir>',
   'python3 scripts/operator_evidence_workflow_run.py report --bundle-summary <review-output-dir>/bundle-summary.json --output <review-output-dir>/release-review-report.md',
 ];
+const expectedWorkflowSteps = [
+  '本地工作区',
+  '生成模板',
+  '脱敏填写',
+  'preflight',
+  'manifest / bundle / archive',
+  '人工复核',
+];
+const localWorkspaceLabels = [
+  '本地证据草稿',
+  '脱敏输出目录',
+  '复核归档目录',
+  '本机忽略规则',
+];
 const schemaReferenceGroups = [
   ['数据源 Provider', 'provider_operator_evidence.json', 'provider_operator_evidence_check.py'],
   ['恢复 / PITR', 'restore_pitr_operator_evidence.json', 'restore_pitr_operator_evidence_check.py'],
@@ -46,6 +60,18 @@ test.describe('admin evidence workflow read-only regression', () => {
       await expect(page.getByRole('heading', { name: '证据工作流复核' })).toBeVisible();
       await expect(page.getByText('只读视图')).toBeVisible();
       await expect(page.getByText('页面不执行动作')).toBeVisible();
+      const workflowGrid = page.getByTestId('admin-evidence-workflow-grid');
+      for (const step of expectedWorkflowSteps) {
+        await expect(workflowGrid.getByText(step)).toBeVisible();
+      }
+      const workflowLabels = await workflowGrid.locator('h3').allInnerTexts();
+      expect(workflowLabels).toEqual(expectedWorkflowSteps);
+      const guardPanel = page.getByTestId('admin-evidence-local-workspace-guard');
+      await expect(guardPanel.getByRole('heading', { name: '本地目录保护' })).toBeVisible();
+      for (const label of localWorkspaceLabels) {
+        await expect(guardPanel.getByText(label)).toBeVisible();
+      }
+      expect(await guardPanel.innerText()).not.toMatch(/^\/|\/Users\/|file:|https?:|\.env/i);
       const statusGrid = page.getByTestId('admin-evidence-status-grid');
       await expect(statusGrid.getByText('manual review required')).toBeVisible();
       await expect(statusGrid.getByText('releaseApproved=false')).toBeVisible();
@@ -71,7 +97,7 @@ test.describe('admin evidence workflow read-only regression', () => {
       await expect(rawDisclosure).not.toHaveAttribute('open', '');
       await expect(rawDisclosure.getByText('默认折叠')).toBeVisible();
       const rawSummary = rawDisclosure.locator('summary');
-      await expect(rawSummary).toHaveAccessibleName(/原始\/Schema 字段/);
+      await expect(rawSummary).toHaveAccessibleName(/原始\/Schema\/Provider\/Debug 字段/);
       await expect(rawSummary).toHaveClass(/focus-visible:ring-2/);
       const rawDetails = rawDisclosure.getByText('原始诊断、provider 载荷、schema 字段和 debug 内容不在本视图展开');
       await expect(rawDetails).toBeHidden();
