@@ -1,0 +1,386 @@
+#!/usr/bin/env python3
+"""Sanitize one offline operator evidence JSON artifact for manual review.
+
+The sanitizer reads only the operator-provided JSON path, writes a redacted copy
+unless --in-place is explicitly supplied, and emits bounded findings. It does
+not call networks, read environment state, inspect credentials, mutate runtime
+configuration, or integrate with launch acceptance.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from collections import Counter
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+try:
+    from evidence_safety import compact_key
+    from evidence_safety import join_path
+    from evidence_safety import normalize_key
+    from evidence_safety import path_label
+    from evidence_safety import scan_json_tree
+except ModuleNotFoundError:  # pragma: no cover - package import fallback
+    from scripts.evidence_safety import compact_key
+    from scripts.evidence_safety import join_path
+    from scripts.evidence_safety import normalize_key
+    from scripts.evidence_safety import path_label
+    from scripts.evidence_safety import scan_json_tree
+
+
+SCHEMA_VERSION = "wolfystock_evidence_artifact_sanitizer_v1"
+REDACTED = "<redacted>"
+
+SECRET_KEY_MARKERS = (
+    "api_key",
+    "apikey",
+    "authorization",
+    "bearer",
+    "cookie",
+    "credential",
+    "database_url",
+    "db_url",
+    "dsn",
+    "password",
+    "passwd",
+    "private_key",
+    "secret",
+    "session",
+    "set_cookie",
+    "token",
+    "webhook",
+)
+SAFE_STRUCTURAL_KEYS = {
+    "credentialbearingurlsincluded",
+    "credentialpresence",
+    "credentialpresenceonly",
+    "credentialvaluesredacted",
+    "productionsecretsread",
+    "rawartifactbodiesincluded",
+    "rawlogsincluded",
+    "secretpresencesummary",
+}
+RAW_KEY_MARKERS = (
+    "debug_payload",
+    "debug_trace",
+    "log_dump",
+    "provider_payload",
+    "raw_log",
+    "raw_payload",
+    "raw_request",
+    "raw_request_body",
+    "raw_response",
+    "raw_response_body",
+    "request_body",
+    "response_body",
+    "stack_trace",
+    "stacktrace",
+    "traceback",
+)
+APPROVAL_BOOLEAN_KEYS = {
+    "approvalboolean",
+    "approvedforlaunch",
+    "automaticgo",
+    "go",
+    "goforlaunch",
+    "launchapproved",
+    "publiclaunchgo",
+    "releaseapproved",
+}
+
+SECRET_VALUE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "private_key",
+        re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*-----END [A-Z ]*PRIVATE KEY-----", re.IGNORECASE | re.DOTALL),
+    ),
+    (
+        "secret_marker",
+        re.compile(
+            r"\b(?:api[-_\s]?key|apikey|authorization|bearer|cookie|password|passwd|"
+            r"secret|session|set-cookie|token)\s*[:=]\s*\S+",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "secret_marker",
+        re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE),
+    ),
+    (
+        "secret_marker",
+        re.compile(r"\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})\b"),
+    ),
+)
+RAW_VALUE_PATTERN = re.compile(
+    r"\b(?:raw[-_\s]?(?:request|response|payload|log)|raw[-_\s]?request[-_\s]?body|"
+    r"raw[-_\s]?response[-_\s]?body|debug[-_\s]?(?:payload|trace)|provider[-_\s]?payload|"
+    r"stack trace|stacktrace|traceback|db dump|database dump)\b",
+    re.IGNORECASE,
+)
+CREDENTIAL_URL_PATTERNS = (
+    re.compile(r"\bhttps?://[^/\s:@]+:[^@\s]+@[^/\s]+", re.IGNORECASE),
+    re.compile(r"\bhttps?://[^\s?#]+[?][^\s]*(?:api[_-]?key|token|secret|password|session|cookie)=", re.IGNORECASE),
+)
+PATH_TRAVERSAL_PATTERN = re.compile(r"(?:^|[\\/])\.\.(?:[\\/]|$)|\.\.[\\/]")
+SENSITIVE_ABSOLUTE_PATH_PATTERN = re.compile(r"^/(?:etc|home|private|root|Users|var)/(?:\S+)")
+APPROVAL_WORDING_PATTERN = re.compile(
+    r"\b(?:launch[-_\s]?approved|production[-_\s]?ready|automatic[-_\s]?go|"
+    r"public\s+launch\s+go|go\s+for\s+launch|launch\s+go|approved\s+for\s+launch|"
+    r"release[-_\s]?approved)\b",
+    re.IGNORECASE,
+)
+UNSAFE_PATH_MARKERS = tuple(SECRET_KEY_MARKERS) + tuple(RAW_KEY_MARKERS) + ("../", "..\\")
+
+
+@dataclass(frozen=True)
+class UnsafeMatch:
+    category: str
+    reason_code: str
+
+
+@dataclass(frozen=True)
+class UnsafeFinding:
+    field: str
+    category: str
+    reason_code: str
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _key_matches(key: Any) -> list[UnsafeMatch]:
+    normalized = normalize_key(key)
+    if normalized in SAFE_STRUCTURAL_KEYS or compact_key(key) in SAFE_STRUCTURAL_KEYS:
+        return []
+    if any(marker in normalized for marker in RAW_KEY_MARKERS):
+        return [UnsafeMatch("raw_body_or_log", "raw_or_debug_key")]
+    if any(marker in normalized for marker in SECRET_KEY_MARKERS):
+        return [UnsafeMatch("secret_marker", "secret_key_marker")]
+    return []
+
+
+def _entry_matches(key: Any, child: Any) -> list[UnsafeMatch]:
+    if child is True and compact_key(key) in APPROVAL_BOOLEAN_KEYS:
+        return [UnsafeMatch("approval_wording", "approval_boolean_forbidden")]
+    return []
+
+
+def _string_matches(value: str) -> list[UnsafeMatch]:
+    matches: list[UnsafeMatch] = []
+    for category, pattern in SECRET_VALUE_PATTERNS:
+        if pattern.search(value):
+            matches.append(UnsafeMatch(category, "secret_value_marker"))
+            break
+    if RAW_VALUE_PATTERN.search(value):
+        matches.append(UnsafeMatch("raw_body_or_log", "raw_or_debug_value"))
+    if any(pattern.search(value) for pattern in CREDENTIAL_URL_PATTERNS):
+        matches.append(UnsafeMatch("credential_url", "credential_url_value"))
+    if PATH_TRAVERSAL_PATTERN.search(value) or SENSITIVE_ABSOLUTE_PATH_PATTERN.search(value):
+        matches.append(UnsafeMatch("path_traversal", "unsafe_path_value"))
+    if APPROVAL_WORDING_PATTERN.search(value):
+        matches.append(UnsafeMatch("approval_wording", "approval_wording_forbidden"))
+    return matches
+
+
+def _scan_key(field: str, key: Any) -> list[dict[str, str]]:
+    return [
+        {"field": field, "category": match.category, "reasonCode": match.reason_code}
+        for match in _key_matches(key)
+    ]
+
+
+def _scan_entry(field: str, key: Any, child: Any) -> list[dict[str, str]]:
+    return [
+        {"field": field, "category": match.category, "reasonCode": match.reason_code}
+        for match in _entry_matches(key, child)
+    ]
+
+
+def _scan_string(field: str, value: Any) -> list[dict[str, str]]:
+    return [
+        {"field": field, "category": match.category, "reasonCode": match.reason_code}
+        for match in _string_matches(value)
+    ]
+
+
+def _collect_findings(value: Any) -> list[UnsafeFinding]:
+    raw_findings = scan_json_tree(
+        value,
+        scan_key=_scan_key,
+        scan_entry=_scan_entry,
+        scan_string=_scan_string,
+        recurse_on_key_findings=False,
+    )
+    deduped: dict[tuple[str, str, str], UnsafeFinding] = {}
+    for item in raw_findings:
+        finding = UnsafeFinding(
+            field=str(item["field"]),
+            category=str(item["category"]),
+            reason_code=str(item["reasonCode"]),
+        )
+        deduped[(finding.field, finding.category, finding.reason_code)] = finding
+    return sorted(deduped.values(), key=lambda finding: (finding.field, finding.category, finding.reason_code))
+
+
+def _contains_unsafe_path_marker(field: str) -> bool:
+    lowered = field.lower()
+    normalized = normalize_key(field)
+    return any(marker in lowered or marker in normalized for marker in UNSAFE_PATH_MARKERS)
+
+
+def _safe_finding_field(field: str, index: int) -> str:
+    if _contains_unsafe_path_marker(field) or Path(field).is_absolute():
+        return f"field_{index:04d}"
+    return field or f"field_{index:04d}"
+
+
+def _sanitize_findings(findings: list[UnsafeFinding]) -> list[dict[str, str]]:
+    return [
+        {
+            "field": _safe_finding_field(finding.field, index),
+            "category": finding.category,
+            "reasonCode": finding.reason_code,
+        }
+        for index, finding in enumerate(findings, start=1)
+    ]
+
+
+def _summary_counts(findings: list[UnsafeFinding]) -> dict[str, Any]:
+    counts = Counter(finding.category for finding in findings)
+    return {
+        "totalFindings": len(findings),
+        "countsByCategory": dict(sorted(counts.items())),
+    }
+
+
+def _sanitize_value(value: Any, *, field: str = "$", force_redact: bool = False) -> Any:
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, child in value.items():
+            key_text = str(key)
+            child_field = join_path(field, key_text)
+            child_force = force_redact or bool(_key_matches(key_text)) or bool(_entry_matches(key_text, child))
+            sanitized[key_text] = _sanitize_value(child, field=child_field, force_redact=child_force)
+        return sanitized
+    if isinstance(value, list):
+        return [
+            _sanitize_value(child, field=f"{field}[{index}]", force_redact=force_redact)
+            for index, child in enumerate(value)
+        ]
+    if force_redact:
+        return REDACTED
+    if isinstance(value, str) and _string_matches(value):
+        return REDACTED
+    return value
+
+
+def _load_json(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise SystemExit(f"[FAIL] input file not found: {path_label(path)}")
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        raise SystemExit(f"[FAIL] input file is not readable JSON: {path_label(path)}")
+
+
+def _write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _build_report(
+    *,
+    mode: str,
+    input_path: Path,
+    output_path: Path | None,
+    findings: list[UnsafeFinding],
+    source_artifact_mutated: bool,
+) -> dict[str, Any]:
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "generatedAt": _now_iso(),
+        "mode": mode,
+        "sanitizerStatus": "needs-review",
+        "inputLabel": path_label(input_path),
+        "outputLabel": path_label(output_path) if output_path else None,
+        "runtimeBehaviorChanged": False,
+        "networkCallsExecuted": False,
+        "rawArtifactBodiesIncluded": False,
+        "sourceArtifactMutated": source_artifact_mutated,
+        "reviewOnly": True,
+        "findings": _sanitize_findings(findings),
+        "summary": _summary_counts(findings),
+    }
+
+
+def _print_report(report: dict[str, Any]) -> None:
+    print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+
+
+def _sanitize_command(args: argparse.Namespace) -> int:
+    input_path = Path(args.input)
+    output_path = input_path if args.in_place else Path(args.output)
+    if not args.in_place and input_path.resolve() == output_path.resolve():
+        raise SystemExit("[FAIL] output must differ from input unless --in-place is supplied")
+
+    payload = _load_json(input_path)
+    findings = _collect_findings(payload)
+    _write_json(output_path, _sanitize_value(payload))
+    report = _build_report(
+        mode="sanitize",
+        input_path=input_path,
+        output_path=output_path,
+        findings=findings,
+        source_artifact_mutated=args.in_place,
+    )
+    _print_report(report)
+    return 1 if args.fail_on_findings and findings else 0
+
+
+def _scan_command(args: argparse.Namespace) -> int:
+    input_path = Path(args.input)
+    payload = _load_json(input_path)
+    findings = _collect_findings(payload)
+    report = _build_report(
+        mode="scan",
+        input_path=input_path,
+        output_path=None,
+        findings=findings,
+        source_artifact_mutated=False,
+    )
+    _print_report(report)
+    return 1 if args.fail_on_findings and findings else 0
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    sanitize = subparsers.add_parser("sanitize", help="write a redacted JSON copy and print bounded findings")
+    sanitize.add_argument("--input", required=True, help="Operator-provided JSON artifact path.")
+    output_group = sanitize.add_mutually_exclusive_group(required=True)
+    output_group.add_argument("--output", help="Separate sanitized JSON output path.")
+    output_group.add_argument("--in-place", action="store_true", help="Overwrite the input artifact with the sanitized copy.")
+    sanitize.add_argument("--fail-on-findings", action="store_true", help="Exit non-zero when unsafe markers were found.")
+    sanitize.set_defaults(func=_sanitize_command)
+
+    scan = subparsers.add_parser("scan", help="print sanitized findings only")
+    scan.add_argument("--input", required=True, help="Operator-provided JSON artifact path.")
+    scan.add_argument("--fail-on-findings", action="store_true", help="Exit non-zero when unsafe markers were found.")
+    scan.set_defaults(func=_scan_command)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
