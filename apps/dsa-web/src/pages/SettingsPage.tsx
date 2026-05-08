@@ -3045,9 +3045,14 @@ const SettingsPage: React.FC = () => {
     >
       <div
         data-testid="settings-workspace"
-        className="flex h-full min-h-0 w-full max-w-none flex-1 flex-col gap-8 px-6 md:flex-row md:px-8 xl:px-12"
+        className={isSystemSettingsSurface
+          ? 'flex h-full min-h-0 w-full max-w-none flex-1 flex-col gap-5 px-4 md:flex-row md:px-6 xl:px-8'
+          : 'flex h-full min-h-0 w-full max-w-none flex-1 flex-col gap-8 px-6 md:flex-row md:px-8 xl:px-12'}
       >
-        <aside className="w-full shrink-0 self-start md:sticky md:top-8 md:w-64">
+        <aside className={isSystemSettingsSurface
+          ? 'order-2 w-full shrink-0 self-start md:sticky md:top-8 md:order-1 md:w-60 xl:w-64'
+          : 'w-full shrink-0 self-start md:sticky md:top-8 md:w-64'}
+        >
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-1">
               <p className="mb-4 px-3 text-xs font-bold uppercase tracking-[0.22em] text-white/40">{t('settings.title')}</p>
@@ -3084,12 +3089,18 @@ const SettingsPage: React.FC = () => {
           </div>
         </aside>
 
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col pl-2 pr-0 md:pr-8">
+        <section className={isSystemSettingsSurface
+          ? 'order-1 flex min-h-0 min-w-0 flex-1 flex-col pr-0 md:order-2'
+          : 'flex min-h-0 min-w-0 flex-1 flex-col pl-2 pr-0 md:pr-8'}
+        >
           <div
             data-testid="settings-main-panel"
             className="min-w-0 flex-1 overflow-y-auto no-scrollbar pb-12 pr-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            <div className="mx-auto w-full max-w-5xl space-y-4">
+            <div
+              data-testid="settings-main-content"
+              className={isSystemSettingsSurface ? 'w-full max-w-none space-y-5' : 'mx-auto w-full max-w-5xl space-y-4'}
+            >
               <div className="mb-4 flex items-center justify-end gap-4">
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <button

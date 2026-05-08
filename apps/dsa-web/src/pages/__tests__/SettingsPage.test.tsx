@@ -1101,6 +1101,26 @@ describe('SettingsPage', () => {
     });
   });
 
+  it('lays out the system overview as a wide operator dashboard with secondary technical zones collapsed', async () => {
+    await withSystemSettingsPath(async () => {
+      render(<SettingsPage />);
+
+      expect(await screen.findByTestId('system-operator-dashboard')).toHaveClass(
+        'xl:grid-cols-[minmax(0,1.38fr)_minmax(20rem,0.62fr)]',
+      );
+      expect(screen.getByTestId('settings-main-content')).toHaveClass('max-w-none');
+      expect(screen.getByTestId('system-operator-dashboard')).toHaveTextContent('系统当前能否安全运行');
+      expect(screen.getByTestId('system-priority-settings')).toHaveTextContent('重要设置组');
+
+      const duckdbDisclosure = screen.getByTestId('system-duckdb-disclosure');
+      const dangerZone = screen.getByTestId('system-danger-zone');
+      expect(duckdbDisclosure).not.toHaveAttribute('open');
+      expect(dangerZone).not.toHaveAttribute('open');
+      expect(dangerZone).toHaveTextContent('危险系统动作');
+      expect(dangerZone).toHaveTextContent('确认后才执行');
+    });
+  });
+
   it('renders the DuckDB panel as optional and blocks write actions while disabled', async () => {
     await withSystemSettingsPath(async () => {
       render(<SettingsPage />);
