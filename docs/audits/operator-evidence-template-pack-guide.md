@@ -18,6 +18,9 @@ validated by the existing offline evidence checkers:
 - config snapshot evidence
 - manual release approval review record
 
+For an operator-facing field reference without fillable JSON bodies, render
+`docs/audits/operator-evidence-schema-reference-guide.md`.
+
 Generated templates are not real evidence. They intentionally use
 `needs-review` outcomes or review-only placeholders and must be replaced with
 operator-sanitized summaries before any release review.
