@@ -1,9 +1,14 @@
 import type React from 'react';
-import { CheckCircle2, FileCheck2, Layers3, LockKeyhole, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, Code2, FileCheck2, Layers3, LockKeyhole, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { Badge, GlassCard } from '../components/common';
 import { cn } from '../utils/cn';
 
 type Tone = 'info' | 'warn' | 'danger' | 'good';
+type CommandSnippet = {
+  label: string;
+  note: string;
+  command: string;
+};
 
 const workflowSteps = [
   { label: '模板生成', note: '离线模板' },
@@ -17,9 +22,27 @@ const workflowSteps = [
 
 const statusCards: Array<{ label: string; value: string; tone: Tone; icon: React.ComponentType<{ className?: string }> }> = [
   { label: '复核入口', value: 'GO-REVIEW-REQUIRED', tone: 'warn', icon: ShieldCheck },
-  { label: '缺证据状态', value: 'NO-GO if missing evidence', tone: 'danger', icon: TriangleAlert },
+  { label: '缺证据状态', value: 'NO-GO when evidence missing', tone: 'danger', icon: TriangleAlert },
   { label: '人工门禁', value: 'manual review required', tone: 'info', icon: LockKeyhole },
   { label: '发布字段', value: 'releaseApproved=false', tone: 'good', icon: CheckCircle2 },
+];
+
+const commandSnippets: CommandSnippet[] = [
+  {
+    label: '模板生成',
+    note: '生成空白脱敏模板，不包含真实目录或凭据。',
+    command: 'python3 scripts/operator_evidence_workflow_run.py init --output-dir <templates-dir>',
+  },
+  {
+    label: '证据检查',
+    note: '读取已脱敏证据目录，输出校验摘要和复核材料。',
+    command: 'python3 scripts/operator_evidence_workflow_run.py check --artifact-dir <sanitized-evidence-dir> --output-dir <review-output-dir>',
+  },
+  {
+    label: '报告渲染',
+    note: '从脱敏 bundle 摘要渲染人工复核 Markdown。',
+    command: 'python3 scripts/operator_evidence_workflow_run.py report --bundle-summary <review-output-dir>/bundle-summary.json --output <review-output-dir>/release-review-report.md',
+  },
 ];
 
 function toneClass(tone: Tone): string {
@@ -34,7 +57,7 @@ function toneClass(tone: Tone): string {
 const AdminEvidenceWorkflowPage: React.FC = () => (
   <div
     data-testid="admin-evidence-workflow-page"
-    className="min-h-0 w-full flex-1 overflow-y-auto no-scrollbar bg-[#050505] px-4 py-5 text-white md:px-6 xl:px-8"
+    className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto no-scrollbar bg-[#050505] px-4 py-5 text-white md:px-6 xl:px-8"
   >
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
       <header className="rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-5 backdrop-blur-md md:px-6">
@@ -113,6 +136,49 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
             </div>
           </GlassCard>
         ))}
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <GlassCard as="section" className="p-4 md:p-5 xl:col-span-8">
+          <div className="flex items-start gap-3">
+            <Code2 className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">离线命令</p>
+              <h2 className="mt-1 text-lg font-semibold text-white">可复制的静态片段</h2>
+            </div>
+          </div>
+          <div
+            data-testid="admin-evidence-command-snippets"
+            className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-3"
+          >
+            {commandSnippets.map((snippet) => (
+              <article
+                key={snippet.label}
+                className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3.5"
+              >
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/34">{snippet.label}</p>
+                <pre className="mt-3 overflow-x-auto no-scrollbar whitespace-pre-wrap break-all rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 font-mono text-[11px] leading-5 text-cyan-100/86">
+                  <code>{snippet.command}</code>
+                </pre>
+                <p className="mt-3 text-xs leading-5 text-white/44">{snippet.note}</p>
+              </article>
+            ))}
+          </div>
+        </GlassCard>
+
+        <GlassCard as="aside" className="p-4 md:p-5 xl:col-span-4">
+          <div className="flex items-start gap-3">
+            <TriangleAlert className="mt-1 h-4 w-4 text-amber-200" aria-hidden="true" />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">空状态</p>
+              <h2 className="mt-1 text-lg font-semibold text-white">缺少证据时保持 NO-GO</h2>
+            </div>
+          </div>
+          <div className="mt-5 space-y-3 text-sm leading-6 text-white/58">
+            <p>页面不会读取证据目录；没有脱敏摘要时，只展示复核路径和静态命令。</p>
+            <p>权限不足时由管理员能力门禁拦截，本页不提供替代入口。</p>
+          </div>
+        </GlassCard>
       </section>
 
       <details
