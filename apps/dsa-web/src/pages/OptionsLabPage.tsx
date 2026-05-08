@@ -591,6 +591,32 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
       ) : null}
       {!emptyMessage && !decisionState.loading && !decisionState.error && decision ? (
         <div className="mt-5 grid gap-4">
+          <div
+            data-testid="options-lab-decision-summary"
+            className="grid gap-4 rounded-2xl border border-cyan-300/10 bg-cyan-400/8 p-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)]"
+          >
+            <div className="min-w-0">
+              <p className={labelClass}>决策摘要</p>
+              <p className={cn('mt-2 text-2xl font-semibold', labelTone)}>{label}</p>
+              <p className="mt-2 text-sm leading-6 text-cyan-100/70">
+                {optimizer?.preferredStrategyKey
+                  ? `可观察结构：${strategyChineseLabel(optimizer.preferredStrategyKey)}`
+                  : `不交易：${noTradeReasonLabel(optimizer?.noTradeReason)}`}
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <DecisionMetric label="交易质量" value={number(decision?.tradeQualityScore)} />
+              <DecisionMetric label="数据质量" value={number(decision?.dataQuality?.dataQualityScore)} />
+              <DecisionMetric label="最大亏损" value={money(decision?.riskReward?.maxLoss)} tone="text-rose-300" />
+            </div>
+            <div className="lg:col-span-2 flex flex-wrap gap-2">
+              <Pill tone="warn">{dataTierLabel(decision?.dataQuality?.dataQualityTier)}</Pill>
+              <Pill tone="info">{decision?.freshness?.freshness || 'synthetic delayed'}</Pill>
+              {(allWarnings.length ? allWarnings : ['不可用于真实交易判断']).slice(0, 3).map((warning) => (
+                <Pill key={warning} tone="warn">{warningLabel(warning)}</Pill>
+              ))}
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
             <DecisionMetric label="系统判断" value={label} tone={labelTone} />
             <DecisionMetric label="交易质量分" value={number(decision?.tradeQualityScore)} />
@@ -1129,11 +1155,49 @@ const OptionsLabPageContent: React.FC = () => {
           </section>
         ) : null}
 
-        {!state.loading && !state.error ? (
-          <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
-            <ChainTable title="Calls 链表" contracts={calls} testId="options-lab-calls-table" />
-            <ChainTable title="Puts 链表" contracts={puts} testId="options-lab-puts-table" />
+        <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} />
+
+        <details data-testid="options-lab-analysis-details" className={panelClass}>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/75">
+            <span className="inline-flex items-center gap-2 text-sm font-semibold">
+              <BarChart3 className="h-4 w-4 text-cyan-200" aria-hidden="true" />
+              情景细节 / 风险控件
+            </span>
+            <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
+          </summary>
+          <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
+            <PlaceholderPanel
+              eyebrow="Ranking"
+              title="候选合约排序"
+              icon={CircleDollarSign}
+              body={topCall ? `当前仅展示占位排序：${topCall.contractSymbol} 的流动性与价差结构较清晰；后续分析仍需使用显式假设与风险预算。` : '等待合约链后展示情景排序占位。'}
+            />
+            <PlaceholderPanel
+              eyebrow="Scenario"
+              title="情景收益结构"
+              icon={BarChart3}
+              body={`目标价 ${targetPrice || '--'}，目标日 ${targetDate || '--'}，预算 ${riskBudget || '--'}。后续 payoff 图应仅表达假设下结构，不表达确定收益。`}
+            />
           </div>
+          <div className="mt-5">
+            <RiskWarnings />
+          </div>
+        </details>
+
+        {!state.loading && !state.error ? (
+          <details data-testid="options-lab-chain-details" className={panelClass}>
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/75">
+              <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                <Layers3 className="h-4 w-4 text-cyan-200" aria-hidden="true" />
+                合约链明细
+              </span>
+              <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
+            </summary>
+            <div className="mt-5 grid grid-cols-1 gap-5 2xl:grid-cols-2">
+              <ChainTable title="Calls 链表" contracts={calls} testId="options-lab-calls-table" />
+              <ChainTable title="Puts 链表" contracts={puts} testId="options-lab-puts-table" />
+            </div>
+          </details>
         ) : null}
 
         {!state.loading && !state.error && !hasChainRows ? (
@@ -1142,26 +1206,19 @@ const OptionsLabPageContent: React.FC = () => {
           </section>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-          <PlaceholderPanel
-            eyebrow="Ranking"
-            title="候选合约排序"
-            icon={CircleDollarSign}
-            body={topCall ? `当前仅展示占位排序：${topCall.contractSymbol} 的流动性与价差结构较清晰；后续分析仍需使用显式假设与风险预算。` : '等待合约链后展示情景排序占位。'}
-          />
-          <PlaceholderPanel
-            eyebrow="Scenario"
-            title="情景收益结构"
-            icon={BarChart3}
-            body={`目标价 ${targetPrice || '--'}，目标日 ${targetDate || '--'}，预算 ${riskBudget || '--'}。后续 payoff 图应仅表达假设下结构，不表达确定收益。`}
-          />
-        </div>
+        <details data-testid="options-lab-strategy-details" className={panelClass}>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/75">
+            <span className="inline-flex items-center gap-2 text-sm font-semibold">
+              <ShieldCheck className="h-4 w-4 text-cyan-200" aria-hidden="true" />
+              策略对比明细
+            </span>
+            <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
+          </summary>
+          <div className="mt-5">
+            <StrategyComparisonPanel comparisonState={comparisonState} loading={comparisonState.loading} emptyMessage={comparisonEmptyMessage} chain={state.chain} />
+          </div>
+        </details>
 
-        <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} />
-
-        <StrategyComparisonPanel comparisonState={comparisonState} loading={comparisonState.loading} emptyMessage={comparisonEmptyMessage} chain={state.chain} />
-
-        <RiskWarnings />
         <DeveloperDetails state={state} />
       </div>
     </main>

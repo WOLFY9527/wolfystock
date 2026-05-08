@@ -673,8 +673,8 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
 }) => {
   const { language } = useI18n();
   const [moreMetricsOpen, setMoreMetricsOpen] = useState(mode === 'professional');
-  const [dataQualityOpen, setDataQualityOpen] = useState(mode === 'professional');
-  const [assumptionsOpen, setAssumptionsOpen] = useState(mode === 'professional');
+  const [dataQualityOpen, setDataQualityOpen] = useState(false);
+  const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const normalized = useMemo(
@@ -821,6 +821,16 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
               </div>
             </div>
             <div className="font-mono text-xs text-white/38">{formatDateTime(run.completedAt || run.runAt)}</div>
+          </div>
+          <div data-testid="backtest-report-result-summary" className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <MetricCard item={{ key: 'summary-return', label: '策略收益', value: signedPct(normalized.metrics.totalReturnPct), tone: toneFor(normalized.metrics.totalReturnPct) }} />
+            <MetricCard item={{ key: 'summary-risk', label: '风险', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
+            <MetricCard item={{ key: 'summary-trades', label: '交易', value: `${normalized.metrics.tradeCount ?? 0} 次`, tone: 'neutral' }} />
+            <MetricCard item={{ key: 'summary-data', label: '数据', value: dataQuality.length ? `${dataQuality.length} 项` : '待补充', tone: dataQuality.length ? 'positive' : 'neutral' }} />
+            <div className="col-span-2 rounded-xl border border-white/5 bg-black/20 p-3 text-xs leading-5 text-white/50 lg:col-span-4">
+              <span className={LABEL_CLASS}>结果摘要</span>
+              <span className="ml-2">先读收益、回撤、交易次数与数据覆盖；曲线、风险、交易和原始证据在下方分区查看。</span>
+            </div>
           </div>
           <div className="mt-4" data-testid="backtest-report-diagnosis">
             <div className="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
@@ -1023,6 +1033,19 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             </table>
           </div>
         </div>
+
+        <details data-testid="backtest-report-evidence-details" className={GHOST_SECTION_CLASS}>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-left">
+            <span>
+              <span className={LABEL_CLASS}>开发者 / 原始证据</span>
+              <span className="ml-2 text-xs text-white/42">数据质量 · 执行假设 · 每日账本</span>
+            </span>
+            <span className="text-xs text-white/45">展开</span>
+          </summary>
+          <p className="mt-3 text-xs leading-5 text-white/50">
+            下方证据区默认保持折叠，只在需要核对数据质量、成交假设或逐日账本时展开。
+          </p>
+        </details>
 
         <div id="backtest-report-数据质量" data-testid="backtest-report-data-quality" className={GHOST_SECTION_CLASS}>
           <button type="button" className="flex min-h-[36px] w-full items-center justify-between gap-3 text-left" onClick={() => setDataQualityOpen((value) => !value)}>

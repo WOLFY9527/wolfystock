@@ -228,9 +228,15 @@ productTest.describe('product launch route smoke', () => {
       const harness = await openProductRouteWithHarness(page, '/zh/options-lab');
 
       await appExpect(page.getByRole('heading', { name: '期权实验室' })).toBeVisible({ timeout: 15_000 });
-      await appExpect(page.getByTestId('options-lab-strategy-comparison')).toBeVisible();
       await appExpect(page.getByTestId('options-lab-decision-engine')).toBeVisible();
+      await appExpect(page.getByTestId('options-lab-decision-summary')).toBeVisible();
+      await appExpect(page.getByTestId('options-lab-analysis-details')).not.toHaveJSProperty('open', true);
+      await appExpect(page.getByTestId('options-lab-chain-details')).not.toHaveJSProperty('open', true);
+      await appExpect(page.getByTestId('options-lab-strategy-details')).not.toHaveJSProperty('open', true);
+      await page.getByTestId('options-lab-chain-details').getByText('合约链明细').click();
       await appExpect(page.getByTestId('options-lab-calls-table')).toBeVisible();
+      await page.getByTestId('options-lab-strategy-details').getByText('策略对比明细').click();
+      await appExpect(page.getByTestId('options-lab-strategy-comparison')).toBeVisible();
       await expectForbiddenTradingWordingAbsent(page);
       await assertProductShell(page);
 
@@ -251,6 +257,7 @@ productTest.describe('product launch route smoke', () => {
       await page.waitForLoadState('domcontentloaded');
       await appExpect(page.getByTestId('portfolio-bento-page')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('portfolio-total-assets-card')).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByTestId('portfolio-workspace-lanes')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('portfolio-current-holdings-panel')).toBeVisible({ timeout: 15_000 });
       await expectVisibleTextPresent(page, visibleOwnerPortfolioSentinels);
       await expectVisibleTextAbsent(page, [

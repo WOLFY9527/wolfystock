@@ -414,9 +414,31 @@ describe('OptionsLabPage', () => {
     expect(within(section).getByText('$7.50')).toBeInTheDocument();
     expect(within(section).getByText('策略优化')).toBeInTheDocument();
     expect(within(section).getByText('推荐状态：数据不足，禁止判断')).toBeInTheDocument();
-    expect(within(section).getByText(/不交易：数据质量未达到可判断等级/)).toBeInTheDocument();
+    expect(within(section).getAllByText(/不交易：数据质量未达到可判断等级/).length).toBeGreaterThan(0);
     expect(within(section).getAllByText(/牛市看涨价差/).length).toBeGreaterThan(0);
     expect(document.body.textContent || '').not.toContain('有条件可交易');
+  });
+
+  it('puts the decision summary before deep option-chain and scenario detail sections', async () => {
+    renderPage();
+
+    const decision = await screen.findByTestId('options-lab-decision-engine');
+    const summary = await screen.findByTestId('options-lab-decision-summary');
+    const analysisDetails = await screen.findByTestId('options-lab-analysis-details');
+    const chainDetails = await screen.findByTestId('options-lab-chain-details');
+    const strategyDetails = await screen.findByTestId('options-lab-strategy-details');
+
+    expect(decision).toContainElement(summary);
+    expect(summary).toHaveTextContent('决策摘要');
+    expect(summary).toHaveTextContent('数据不足，禁止判断');
+    expect(summary).toHaveTextContent('不可用于真实交易判断');
+    expect(analysisDetails).not.toHaveAttribute('open');
+    expect(chainDetails).not.toHaveAttribute('open');
+    expect(strategyDetails).not.toHaveAttribute('open');
+    expect(Boolean(decision.compareDocumentPosition(analysisDetails) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(within(chainDetails).getByTestId('options-lab-calls-table')).toBeInTheDocument();
+    expect(within(chainDetails).getByTestId('options-lab-puts-table')).toBeInTheDocument();
+    expect(within(strategyDetails).getByTestId('options-lab-strategy-comparison')).toBeInTheDocument();
   });
 
   it('renders no-trade optimizer state without black-screening', async () => {
@@ -525,7 +547,7 @@ describe('OptionsLabPage', () => {
     await waitFor(() => {
       expect(within(section).getAllByText('买卖价差过宽').length).toBeGreaterThan(0);
     });
-    expect(within(section).getByText('Greeks 缺失')).toBeInTheDocument();
+    expect(within(section).getAllByText('Greeks 缺失').length).toBeGreaterThan(0);
     expect(within(section).getByText('Greeks 缺失，无法评估时间价值与敏感度')).toBeInTheDocument();
   });
 

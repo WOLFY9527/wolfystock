@@ -2268,6 +2268,24 @@ const PortfolioPage: React.FC = () => {
 	            </section>
             </div>
 
+            <div
+              data-testid="portfolio-workspace-lanes"
+              className="grid grid-cols-1 gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-3 text-xs text-white/50 sm:grid-cols-3"
+            >
+              <div className="rounded-lg bg-black/20 px-3 py-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-white/35">{language === 'zh' ? '账户视图' : 'Account View'}</span>
+                <p className="mt-1 text-white/62">{selectedAccount === 'all' ? copy.allAccounts : scopedAccount?.name || '--'}</p>
+              </div>
+              <div className="rounded-lg bg-black/20 px-3 py-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-white/35">{language === 'zh' ? '持仓与现金' : 'Holdings & Cash'}</span>
+                <p className="mt-1 font-mono text-white/62">{positionRows.length} / {formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</p>
+              </div>
+              <div className="rounded-lg bg-black/20 px-3 py-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-white/35">{language === 'zh' ? '记录录入' : 'Record Entry'}</span>
+                <p className="mt-1 text-white/62">{language === 'zh' ? '手工维护交易、现金与公司行为' : 'Manual trade, cash, and corporate-action maintenance'}</p>
+              </div>
+            </div>
+
             <div data-testid="portfolio-row-execution" className="grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
 	            {hasHoldings ? (
 	              <div
@@ -2368,7 +2386,7 @@ const PortfolioPage: React.FC = () => {
 	              </div>
 	            )}
 	
-		          <section data-testid="portfolio-trade-station-card" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-4 overflow-visible xl:col-span-4 xl:order-1 xl:min-h-0`}>
+		          <section data-testid="portfolio-trade-station-card" data-execution-surface="manual-record-entry" className={`${PORTFOLIO_GLASS_CARD_CLASS} col-span-12 flex flex-col gap-4 overflow-visible xl:col-span-4 xl:order-1 xl:min-h-0`}>
             <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>

@@ -269,7 +269,7 @@ describe('BacktestResultReport', () => {
   });
 
   it('renders enriched execution assumptions and compact warnings', () => {
-    render(<BacktestResultReport run={makeRun()} mode="professional" />);
+    render(<BacktestResultReport run={makeRun()} mode="simple" />);
 
     const panel = screen.getByTestId('backtest-report-execution-assumptions');
     expect(within(panel).getByText('确定性引擎')).toBeInTheDocument();
@@ -282,6 +282,11 @@ describe('BacktestResultReport', () => {
   it('renders diagnosis summary and benchmark verdicts from existing metrics', () => {
     const { rerender } = render(<BacktestResultReport run={makeRun()} mode="professional" />);
 
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('结果摘要');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('策略收益');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('风险');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('交易');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('数据');
     expect(screen.getByTestId('backtest-report-diagnosis')).toHaveTextContent('收益质量');
     expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('跑赢基准');
     expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('+24.60%');
@@ -459,6 +464,7 @@ describe('BacktestResultReport', () => {
     render(<BacktestResultReport run={makeRun()} mode="professional" />);
 
     const report = screen.getByTestId('backtest-result-report');
+    expect(screen.getByTestId('backtest-report-evidence-details')).not.toHaveAttribute('open');
     expect(report).toHaveTextContent('开发者细节');
     expect(report).toHaveTextContent('原始执行轨迹');
     expect(report).not.toHaveTextContent('signal_exit');
