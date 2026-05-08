@@ -71,6 +71,9 @@ review flow.
 - `operator_evidence_bundle_check.py`: aggregates already-sanitized domain
   validator summaries for reviewer convenience. It does not replace real
   operator artifacts or approve launch.
+- `operator_evidence_workflow_smoke.py`: runs the offline workflow against
+  synthetic fixtures, writes the standard review outputs to a temp/local output
+  directory, and verifies unsafe fixture data is rejected safely.
 - `release_review_report_render.py`: renders an offline Markdown review report
   from sanitized summary JSON. The report is informational only and cannot
   approve launch.
