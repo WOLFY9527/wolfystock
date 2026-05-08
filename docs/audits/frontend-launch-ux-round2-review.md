@@ -2,126 +2,186 @@
 
 Date: 2026-05-09
 Branch checked: `main`
-Expected main commit: `94fb248c feat(web): harden home chat launch language`
-Mode: audit-only. No app code, backend logic, provider logic, portfolio logic, package files, runtime configuration, screenshots, or launch matrix files were changed.
+Commit checked: `94fb248c feat(web): harden home chat launch language`
+Mode: audit-only. No app code, backend/provider/scanner/portfolio/backtest logic,
+runtime configuration, launch acceptance shared files, package files, or
+screenshots were changed.
 
 ## Executive Verdict
 
-Frontend launch readiness verdict: **NO-GO** for the committed `main` snapshot.
+Frontend launch readiness verdict: **NO-GO**.
 
-The first productization batch resolved the largest public-facing safety problems on Home, Chat, Scanner, Options Lab, Rotation Radar, and much of the admin read-only evidence flow. However, two original launch blockers are still not fully closed on committed `main`:
+The first productization batch materially improved the launch posture. The
+highest-risk advice wording on Home and Chat is gone, Market Overview no longer
+blanked under the mocked route payload, Options Lab now has explicit read-only
+and no-advice framing, and admin pages are much closer to operator summaries.
 
-1. `Market Overview` partial temperature payload hardening is not committed to `main`. A concurrent local patch appeared during this audit and adds the intended normalization/test coverage, but it is unstaged, outside this audit, and currently breaks `npm run build` with TypeScript errors.
-2. `Portfolio` still exposes `交易工作台`, `股票买卖`, and `提交交易` in the default source. It is better framed by ledger/manual-record metadata than round 1, but the visible Chinese labels still read like trade/order affordances.
+The remaining launch blockers are narrower than round 1, but still block a GO:
 
-Strict P0 disposition: **3 resolved / 2 remaining**.
+1. `/zh/scanner` remains too dense and configuration/diagnostics-led for a
+   launch default surface. Mobile is technically overflow-free, but not usable
+   as a first-run candidate workflow.
+2. `/zh/portfolio` still exposes `交易工作台`, `股票买卖`, `买入`, `卖出`, and
+   `提交交易` in the default visible route content.
 
-Conditional verdict: if the in-flight Market Overview fallback fix lands cleanly and Portfolio copy is changed from trade/order wording to ledger/manual-record wording, the remaining state looks like **GO-WITH-POLISH** rather than broad NO-GO.
+Tracked round-1 P0 disposition: **4 resolved / 2 remaining**.
 
-## Browser Method
+## Browser Evidence
 
-- Browser engine: Playwright Chromium.
-- Initial clean-main validation port: isolated preview port `4178`.
-- Supplemental browser port: existing isolated frontend port `5176`, reused because a later rebuild on `4179` was blocked by unrelated dirty app changes.
-- Viewports: desktop `1440x1000`; mobile/narrow `390x844`.
-- Backend mode: mocked auth/product/admin API routes for protected route inspection; live providers, broker calls, portfolio mutations, scanner runtime, backtest runtime, and destructive admin operations were not called.
-- Screenshots/videos: Playwright generated transient failure artifacts under `apps/dsa-web/test-results/`; no screenshots or videos are committed by this audit.
-- Existing shared ports observed before audit: backend listeners on `8000`/`8001`, Vite listener on `5173`, existing frontend listener on `5176`. No shared server was killed.
+- Method: Playwright Chromium against a task-owned Vite dev server.
+- URL: `http://127.0.0.1:5176`.
+- Viewports: desktop `1440x1000`; mobile `390x844`.
+- Harness: repo smoke fixtures plus temporary `/tmp` audit-only mocks for
+  protected product/admin states.
+- Evidence path: `/tmp/wolfystock-frontend-launch-ux-round2/`.
+- Screenshot path: `/tmp/wolfystock-frontend-launch-ux-round2/screenshots/`.
+- Existing shared ports observed before audit: backend listener on `8000`,
+  frontend listener on `5173`. They were not killed or reused.
+- Task-owned port used: `5176`.
 
-## Validation Evidence
+All 15 routes were inspected at both viewports. No horizontal overflow, no
+solid gray blocks, and no console/page errors were observed in the final audit
+pass.
 
-| Check | Result |
-| --- | --- |
-| Preflight | PASS: `main`, `HEAD=origin/main=94fb248c`, clean at audit start. |
-| `DSA_WEB_PLAYWRIGHT_PORT=4178 npx playwright test e2e/critical-route-launch-smoke.spec.ts --config playwright.config.ts` | PASS: 10/10. Covered Home, Market Overview, Rotation Radar, Scanner, Backtest result, Options Lab, Portfolio, Admin Cost, Provider Circuits, admin user portfolio projection at both viewports. |
-| `DSA_WEB_PLAYWRIGHT_PORT=5176 npx playwright test e2e/public-safety-ai-scanner-options.smoke.spec.ts e2e/market-overview-scanner.smoke.spec.ts e2e/no-secret-critical-surface.smoke.spec.ts e2e/admin-evidence-workflow.spec.ts --config playwright.config.ts` | PARTIAL: 20/23 passed. The three failures were supplemental-harness issues: Options Lab strategy table is now hidden/collapsed where the older no-secret test expected it visible; admin cost/provider request counts doubled on the dev server. No raw-secret/overflow assertion failed before those count/visibility expectations. |
-| Temporary `/tmp/wolfystock-round2-admin-extra.spec.ts` against `5176` | PASS: 3/3. Covered `/zh/admin/users`, `/zh/admin/logs`, `/zh/admin/market-providers` at both viewports with mocked admin data. |
-| Rebuild attempt on `4179` and standalone `npm run build` | BLOCKED by unrelated dirty local app changes in `apps/dsa-web/src/api/market.ts`, `MarketOverviewPage.tsx`, `MarketOverviewPage.test.tsx`, and `market-overview-scanner.smoke.spec.ts`. Current error: `Property 'overall' does not exist on type '{}'` in `src/api/market.ts`. |
-
-## Original P0/P1 Disposition
-
-| Original issue | Round-2 status | Evidence |
-| --- | --- | --- |
-| `/zh` first viewport showed `AI 动作 买入`. | **Resolved** | Browser spot check and launch smoke show a neutral analysis panel/search-first landing. No forbidden trading wording in launch smoke. |
-| `/zh/chat` default prompt led with `开仓执行判断`. | **Resolved** | Public safety e2e shows `WOLFY AI 研究台`, `观察条件检查`, risk/evidence framing, and no advice/raw internals. Source override removes the execution-led starter. |
-| `/zh/scanner` hid candidate flow under config/history/diagnostics and was unusable on mobile. | **Resolved to P1 polish** | Scanner safety and market overview scanner specs pass on desktop/mobile. Candidate pane and scroll region are visible; diagnostics are collapsed by default. |
-| `/zh/market-overview` blanked on incomplete temperature payload. | **Still open on committed main** | The committed `main` version does not normalize partial temperature scores before render. A concurrent local patch adds this normalization and a partial-payload e2e, but it is not part of main and currently fails build. |
-| `/zh/portfolio` read as broker/order/trade affordance. | **Still open** | Source still contains default `交易工作台`, `股票买卖`, and `提交交易`. Existing smoke verifies no raw credentials/order payloads, but the visible Chinese labels still fail the ledger/manual-record framing check. |
-| `/options-lab` showed strategy/chain before safety framing. | **Resolved to polish** | Public safety e2e confirms `数据不足，禁止判断`, synthetic data warning, and collapsed developer details. Older no-secret expectation failed only because a strategy comparison panel is now hidden by default. |
-| `/zh/backtest/results/34` exposed evidence/export controls too close to the result story. | **Mostly resolved / P1 polish** | Critical smoke passes with no raw broker/order artifacts. Export buttons and advanced evidence remain visible but are not P0 launch blockers. |
-| `/zh/admin/logs` raw logs and cleanup were too prominent. | **Partially resolved / P1 remains** | Extra browser probe confirms `业务事件` is default and `原始日志` is secondary, with no overflow. Cleanup preview/destructive controls remain present in the page source and should stay under tighter maintenance framing. |
-| Admin cost/provider/circuit pages exposed raw provider/cache/schema vocabulary. | **Partially resolved / P1 remains** | Developer/response-shape sections are collapsed and secret-free, but `TTL`, `Provider`, `Dry-run`, `Provider SLA`, and route/cache vocabulary remain visible on primary admin surfaces. |
-| `/zh/admin/users` retained English status labels. | **Still open P1** | Extra browser snapshot still shows `No sessions` in the Chinese route. |
-
-## Page-by-Page Score
+## Page-by-Page Result
 
 Scoring: `1` = launch blocker, `5` = launch-ready.
 
-| Route | Score | Round-2 notes |
-| --- | ---: | --- |
-| `/zh` | 4 | Search-first, neutral launch surface. No forbidden first-viewport trading language observed. |
-| `/zh/chat` | 4 | Reframed as research/evidence. Protected route requires auth, but mocked-auth browser path is usable on both viewports. |
-| `/zh/scanner` | 4 | Candidate-first path now test-covered on desktop/mobile; diagnostics collapsed. Remaining polish is density and raw fallback vocabulary in secondary states. |
-| `/zh/watchlist` | 4 | Mobile usability and overflow pass in browser smoke. Batch actions are less launch-blocking but still need hierarchy polish. |
-| `/zh/market-overview` | 2 | Main still lacks committed partial-temperature fallback hardening. In-flight dirty patch appears to fix this but is not launch evidence for main. |
-| `/zh/market/rotation-radar` | 4 | Read-only shell, no trading instruction language, developer details collapsed in launch smoke. |
-| `/zh/backtest/results/34` | 4 | Report/result shell is clean in critical smoke. Export/evidence controls remain P1 polish. |
-| `/options-lab` | 4 | Decision safety leads; synthetic data and no-decision state are explicit; detailed chain/strategy panels are collapsed. |
-| `/zh/portfolio` | 2 | Credential/order payloads are hidden, but default labels still say `交易工作台`, `股票买卖`, `提交交易`. Needs ledger/manual-record copy pass before launch. |
-| `/zh/admin/users` | 3 | Route renders and is overflow-free; Chinese page still shows `No sessions`. |
-| `/zh/admin/logs` | 3 | `业务事件` is default and `原始日志` is secondary; cleanup controls still need maintenance-mode containment. |
-| `/zh/admin/cost-observability` | 3 | Secret/raw details are collapsed, but `dry-run` remains a primary operational concept and the dev server double-triggered quota dry-run requests. |
-| `/zh/admin/evidence-workflow` | 4 | Browser regression passes desktop/mobile. Static read-only boundary, no write/upload/approval affordance, raw/schema notes collapsed. |
-| `/zh/admin/market-providers` | 3 | Read-only and overflow-free; raw-ish provider/cache terms such as `TTL`, provider IDs, cache keys, and Admin Logs drill-through remain visible. |
-| `/zh/admin/provider-circuits` | 3 | Read-only diagnostics and no raw secret leakage, but `Provider SLA`, `Dry-run`, route/category/bucket vocabulary remain primary. |
+| Route | Result | Score | P0 status | P1 status | Round-2 evidence |
+| --- | --- | ---: | --- | --- | --- |
+| `/zh` | PASS | 4 | `AI 动作 买入` resolved. | Still report-first and has one native input, but no direct trade-action label. | No forbidden trading wording; no overflow; no console errors. |
+| `/zh/chat` | PASS | 4 | `开仓执行判断`, buy-point, stop-loss, target-price prompt starters resolved. | Mobile is usable but the composer remains low in the viewport. | First fold uses `WOLFY AI 研究台`, `观察条件检查`, and read-only evidence framing. |
+| `/zh/scanner` | FAIL | 2 | Still open: default surface is config/diagnostics/density-led. | Raw/mock/provider vocabulary and huge action count remain. | Desktop: 131 visible buttons, page height 3411px. Mobile: 130 buttons, page height 6879px. |
+| `/zh/watchlist` | PASS | 4 | No P0 observed. | Native-looking filter controls remain. | Row-first mobile view is usable; no overflow or console errors. |
+| `/zh/market-overview` | PASS | 4 | Blank-route fallback issue not reproduced in final pass. | Cache/fallback vocabulary remains visible in primary content. | Rendered at both viewports with no errors and no overflow. |
+| `/zh/market/rotation-radar` | PASS | 4 | No P0 observed. | `备用`/fallback freshness text remains visible. | Read-only, non-buy/sell framing is primary. |
+| `/zh/backtest/results/34` | PASS-WITH-POLISH | 4 | No P0 observed. | Export/rerun/evidence controls remain close to primary result story. | Result and KPI hierarchy usable on both viewports; no order/broker wording. |
+| `/options-lab` | PASS-WITH-POLISH | 3 | No order CTA observed, but terminology remains close to execution language. | `交易质量判断`, `mock`, `Provider`, and native inputs remain visible. | Safety/no-advice framing is present; chain/strategy details are collapsed. |
+| `/zh/portfolio` | FAIL | 2 | Still open: default content reads like trade/order input. | Native controls and ledger/manual-entry hierarchy need polish. | Body text includes `交易工作台`, `股票买卖`, `买入`, `卖出`, `提交交易`. |
+| `/zh/admin/users` | PASS-WITH-POLISH | 3 | No P0 observed. | English/raw-ish labels remain, including `Read-only F1/F2` and `No sessions` class of issue from round 1. | Operator page renders cleanly with no overflow/errors. |
+| `/zh/admin/logs` | PASS-WITH-POLISH | 3 | Cleanup/raw logs no longer dominate as P0. | `原始日志` and cleanup remain visible secondary concepts; 16-17 buttons. | Business-event framing is primary; no console errors in final pass. |
+| `/zh/admin/cost-observability` | PASS-WITH-POLISH | 3 | No P0 observed. | `Cost Observability`, dry-run, model ledger, and raw ops terms remain prominent. | Details collapsed, no secret-like output, no errors. |
+| `/zh/admin/evidence-workflow` | PASS | 4 | No P0 observed. | Raw/schema notes still exist but are secondary. | Read-only, offline, human-gated framing is clear. |
+| `/zh/admin/market-providers` | PASS-WITH-POLISH | 3 | No P0 observed. | Provider/cache/window terminology remains primary. | Read-only snapshot and no external-call boundary are visible. |
+| `/zh/admin/provider-circuits` | PASS-WITH-POLISH | 3 | No P0 observed. | `Provider`, `fallback`, `MarketCache`, `enforcement`, and `ops:providers:read` remain primary. | Operator summary is improved, but still implementation-console flavored. |
 
-## Remaining Blockers
+## Top Remaining P0 Blockers
 
-### P0
+1. **Scanner launch usability is still not candidate-first enough.**
+   - It is technically usable, but the first viewport still leads with market
+     selectors, scan configuration, history, diagnostics, and many actions
+     before a clean candidate decision story.
+   - Mobile remains especially heavy: 130 buttons and 6879px page height.
 
-1. **Market Overview fallback hardening is not cleanly landed on main.**
-   - Current main can still blank or hard-fail on incomplete temperature score payloads.
-   - The concurrent local patch is directionally correct but currently fails TypeScript build because `payload?.scores || {}` narrows to `{}` before score-key access.
+2. **Portfolio still uses trade/order wording in the default page.**
+   - The route has better portfolio and FX transparency, but the manual-entry
+     station still reads as trading execution.
+   - Required remediation is copy and hierarchy: ledger/manual-record wording
+     first, trading/order vocabulary absent from default launch content.
 
-2. **Portfolio still presents trade/order-like default labels.**
-   - The user-facing route still includes `交易工作台`, `股票买卖`, and `提交交易`.
-   - This should become `记账工作台` / `手工录入：流水` / `提交流水记录` or equivalent, with broker/order wording kept only for clearly read-only import/sync contexts.
+## Top Remaining P1 Issues
 
-### P1
+- Options Lab is safer than round 1 but still shows `交易质量判断`, `mock`,
+  `Provider`, and native inputs in launch-facing content.
+- Admin cost/provider/circuit pages remain too English and implementation-led
+  for operator defaults.
+- Admin Users still has English status/risk-badge language in a Chinese route.
+- Backtest result still puts export/rerun/evidence controls near the main
+  result narrative.
+- Watchlist and Portfolio still contain native-looking selects/inputs where a
+  launch-facing deep-space control should be used.
 
-- Admin Users still leaks English `No sessions` in Chinese UI.
-- Admin Logs raw-log and cleanup controls are secondary but still visible as tab/actions; destructive cleanup should remain behind maintenance confirmation mode.
-- Admin Cost still foregrounds `dry-run` and operational route/cost internals.
-- Market Provider Ops and Provider Circuits still expose provider/cache/TTL/bucket vocabulary as primary operator text.
-- Backtest result still has export/evidence controls close to the primary result narrative.
+## Recommended Next Code Tasks
 
-## File-Conflict-Safe Remediation Clusters
+### Cluster 1: Scanner Launch Hierarchy
 
-1. **Market Overview fallback cluster**
-   - Files: `apps/dsa-web/src/api/market.ts`, `apps/dsa-web/src/pages/MarketOverviewPage.tsx`, `apps/dsa-web/src/pages/__tests__/MarketOverviewPage.test.tsx`, `apps/dsa-web/e2e/market-overview-scanner.smoke.spec.ts`.
-   - Scope: finish partial temperature normalization, fix TypeScript typing, verify degraded state on desktop/mobile.
-   - Conflict note: these files are already dirty from another local session during this audit.
+Files likely involved:
 
-2. **Portfolio ledger-language cluster**
-   - Files: `apps/dsa-web/src/pages/PortfolioPage.tsx`, `apps/dsa-web/src/i18n/core.ts`, `apps/dsa-web/e2e/fixtures/portfolioSmoke.ts`, Portfolio page tests.
-   - Scope: replace trade/order labels with ledger/manual-record wording; keep broker sync/import visibly read-only; add Chinese wording guard for `交易工作台`, `股票买卖`, `提交交易` on default launch route.
+- `apps/dsa-web/src/pages/ScannerSurfacePage.tsx`
+- `apps/dsa-web/src/pages/UserScannerPage.tsx`
+- `apps/dsa-web/src/pages/scannerPageShared.ts`
+- scanner page tests and e2e smoke specs
 
-3. **Admin Logs maintenance cluster**
-   - Files: `apps/dsa-web/src/pages/AdminLogsPage.tsx`, `apps/dsa-web/src/api/adminLogs.ts`, `apps/dsa-web/src/pages/__tests__/AdminLogsPage.test.tsx`, optional e2e harness.
-   - Scope: keep raw logs and cleanup behind a maintenance disclosure/mode; preserve preview-confirm behavior; add browser route coverage.
+Task:
 
-4. **Admin ops vocabulary cluster**
-   - Files: `AdminCostObservabilityPage.tsx`, `MarketProviderOperationsPage.tsx`, `AdminProviderCircuitDiagnosticsPage.tsx`, related API tests and e2e specs.
-   - Scope: lead with operator readiness states; collapse provider/cache/TTL/schema/bucket vocabulary behind details; keep read-only/no-runtime-change evidence visible.
+- Make the default route candidate/evidence-first.
+- Collapse diagnostics/history/provider detail by default.
+- Reduce visible action count and mobile vertical scan burden.
 
-5. **Admin user localization cluster**
-   - Files: `AdminUsersPage.tsx`, `apps/dsa-web/src/i18n/core.ts`, `AdminUsersPage.test.tsx`.
-   - Scope: replace English `No sessions`/risk badges with Chinese labels on `/zh/admin/users`.
+### Cluster 2: Portfolio Ledger Language
 
-6. **Backtest result evidence hierarchy cluster**
-   - Files: deterministic backtest result page/components and tests.
-   - Scope: keep report/KPI narrative first; move export, ledger, trace, and execution assumptions into a compact evidence drawer.
+Files likely involved:
 
-## Final Status
+- `apps/dsa-web/src/pages/PortfolioPage.tsx`
+- `apps/dsa-web/src/i18n/core.ts`
+- `apps/dsa-web/e2e/fixtures/portfolioSmoke.ts`
+- Portfolio page tests/e2e guards
 
-Round 2 shows meaningful productization progress, but launch should not be marked GO until the committed `main` branch has a clean Market Overview partial-payload fallback and Portfolio no longer reads like a trading/order surface by default.
+Task:
+
+- Replace `交易工作台`, `股票买卖`, `买入`, `卖出`, `提交交易` in default
+  launch content with ledger/manual-record wording.
+- Keep broker/order concepts only inside clearly read-only sync/import evidence.
+
+### Cluster 3: Options Lab Polish
+
+Files likely involved:
+
+- `apps/dsa-web/src/pages/OptionsLabPage.tsx`
+- Options Lab API/test/e2e files
+
+Task:
+
+- Rename `交易质量判断` and similar terms to scenario/readiness language.
+- Keep `mock`/`Provider`/developer freshness behind secondary details.
+- Replace native-looking form controls.
+
+### Cluster 4: Admin Ops Vocabulary
+
+Files likely involved:
+
+- `apps/dsa-web/src/pages/AdminCostObservabilityPage.tsx`
+- `apps/dsa-web/src/pages/MarketProviderOperationsPage.tsx`
+- `apps/dsa-web/src/pages/AdminProviderCircuitDiagnosticsPage.tsx`
+- related admin API tests/e2e specs
+
+Task:
+
+- Lead with operator readiness summaries.
+- Move provider/cache/TTL/schema/bucket/route language behind collapsed details.
+- Preserve the current read-only/no-runtime-change boundaries.
+
+### Cluster 5: Admin Logs and Users Polish
+
+Files likely involved:
+
+- `apps/dsa-web/src/pages/AdminLogsPage.tsx`
+- `apps/dsa-web/src/pages/AdminUsersPage.tsx`
+- `apps/dsa-web/src/i18n/core.ts`
+- related admin tests/e2e specs
+
+Task:
+
+- Keep cleanup/raw log operations under a maintenance disclosure.
+- Localize remaining English risk/status labels on `/zh/admin/users`.
+
+### Cluster 6: Backtest Evidence Hierarchy
+
+Files likely involved:
+
+- deterministic backtest result page/components
+- deterministic backtest result tests/e2e specs
+
+Task:
+
+- Keep report/KPI story first.
+- Move export, trace, ledger, and execution assumptions into a compact evidence
+  drawer without changing backtest logic.
+
+## Safety Confirmation
+
+- No backend/provider/scanner/portfolio/backtest runtime logic was touched.
+- No launch acceptance shared files were touched.
+- No app code, tests, package files, or runtime config were changed.
+- Screenshots and JSON metrics remain under `/tmp` and are not committed.
+- This report is the only repository file changed by this audit.
