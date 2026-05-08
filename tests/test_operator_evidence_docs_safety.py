@@ -8,6 +8,7 @@ DOC_PATHS = (
     *sorted((REPO_ROOT / "docs" / "audits").glob("operator-evidence-*.md")),
     *sorted((REPO_ROOT / "docs" / "audits").glob("evidence-*.md")),
     REPO_ROOT / "docs" / "audits" / "release-review-report-renderer-guide.md",
+    REPO_ROOT / "docs" / "audits" / "release-restore-rollback-drill-guide.md",
     REPO_ROOT / "docs" / "audits" / "public-api-abuse-limiter-operator-note.md",
     REPO_ROOT / "scripts" / "README.md",
 )
