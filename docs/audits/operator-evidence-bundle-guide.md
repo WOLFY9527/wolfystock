@@ -17,6 +17,9 @@ Create a local artifact directory containing these sanitized JSON files:
 - `security_operator_acceptance.json`
 - `quota_budget_operator_evidence.json`
 - `staging_ingress_operator_evidence.json`
+- `ws2_sse_operator_decision_evidence.json`
+- `config_snapshot_evidence.json`
+- `manual_release_approval_review_record.json`
 
 Each file must already follow its domain-specific evidence guide and validator
 contract. Unknown extra `*.json` files are not validated as required evidence;
@@ -103,3 +106,6 @@ task explicitly authorizes that integration.
 - `docs/audits/security-operator-acceptance-evidence-guide.md`
 - `docs/audits/quota-budget-operator-evidence-guide.md`
 - `docs/audits/staging-ingress-operator-evidence-guide.md`
+- `docs/audits/ws2-sse-operator-decision-evidence-guide.md`
+- `docs/audits/config-snapshot-operator-evidence-guide.md`
+- `docs/audits/manual-release-approval-evidence-guide.md`

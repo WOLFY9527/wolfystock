@@ -77,10 +77,14 @@ sanitized files are:
 - `security_operator_acceptance.json`
 - `quota_budget_operator_evidence.json`
 - `staging_ingress_operator_evidence.json`
+- `ws2_sse_operator_decision_evidence.json`
+- `config_snapshot_evidence.json`
+- `manual_release_approval_review_record.json`
 
-Supplemental template-pack artifacts, such as WS2/SSE, config snapshot, and
-manual release approval records, remain outside the current required bundle
-checker contract unless a separately scoped task expands that validator.
+The WS2/SSE, config snapshot, and manual release approval review-record
+artifacts remain review-only evidence. They are validated and reported in the
+main category table, but they do not approve launch or update shared launch
+acceptance artifacts.
 
 ## Exit Codes
 

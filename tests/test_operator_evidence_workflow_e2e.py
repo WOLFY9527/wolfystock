@@ -21,6 +21,16 @@ EXPECTED_TEMPLATE_FILES = {
     "config_snapshot_evidence.json",
     "manual_release_approval_review_record.json",
 }
+EXPECTED_TEMPLATE_CATEGORIES = {
+    "provider",
+    "restore-pitr",
+    "security",
+    "quota-budget",
+    "staging-ingress",
+    "ws2-sse",
+    "config-snapshot",
+    "manual-release-approval",
+}
 FORBIDDEN_APPROVAL_PHRASES = (
     "launch-" + "approved",
     "production-" + "ready",
@@ -117,6 +127,13 @@ def test_operator_evidence_workflow_smoke_generates_review_required_outputs(tmp_
     assert bundle["runtimeBehaviorChanged"] is False
     assert bundle["networkCallsExecutedByValidator"] is False
     assert bundle["rawArtifactBodiesIncluded"] is False
+    assert {artifact["category"] for artifact in bundle["artifacts"]} == EXPECTED_TEMPLATE_CATEGORIES
+    assert {artifact["pathLabel"] for artifact in bundle["artifacts"]} == EXPECTED_TEMPLATE_FILES
+    assert bundle["advisories"] == []
+    assert "unknown-extra-artifact" not in json.dumps(bundle)
+    assert "Advisories:" not in rendered_report
+    for category in EXPECTED_TEMPLATE_CATEGORIES:
+        assert f"| {category} | needs-review |" in rendered_report
     assert "Manual operator review is required before any release decision." in rendered_report
     assert "This report is informational only and does not approve launch." in rendered_report
     assert "rawArtifactBodiesIncluded" not in rendered_report

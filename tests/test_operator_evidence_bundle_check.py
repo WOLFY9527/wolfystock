@@ -8,7 +8,14 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+from scripts.operator_evidence_template_pack import TEMPLATE_SPECS
+from scripts.operator_evidence_template_pack import _build_templates
+
 SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_bundle_check.py"
+EXPECTED_TEMPLATE_FILENAMES = {spec.filename for spec in TEMPLATE_SPECS}
+EXPECTED_TEMPLATE_CATEGORIES = {spec.category for spec in TEMPLATE_SPECS}
 
 
 def _provider_artifact(**overrides: object) -> dict[str, object]:
@@ -185,6 +192,67 @@ def _ingress_artifact(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def _ws2_sse_artifact(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "artifactVersion": "wolfystock_ws2_sse_operator_decision_evidence_v1",
+        "environment": "staging",
+        "operator": "ws2-topology-ops",
+        "observedAt": "2026-05-08T10:30:00Z",
+        "topologyMode": "polling-fallback",
+        "sseBroadcastScope": "process-local",
+        "pollingFallbackAccepted": True,
+        "multiInstanceRiskAccepted": False,
+        "userImpactSummary": "Cross-instance status relies on durable owner-scoped polling while SSE remains process-local.",
+        "rollbackOrMitigationSummary": "Keep polling fallback documented until external broadcast is designed.",
+        "outcome": "accepted",
+        "evidenceRedactionVersion": "ws2_sse_operator_decision_redaction_v1",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _config_snapshot_artifact(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "artifactVersion": "config-snapshot-evidence-v1",
+        "environment": "production-like-staging",
+        "operator": "release-ops",
+        "observedAt": "2026-05-08T10:30:00Z",
+        "authConfigSummary": "Admin auth and RBAC posture documented without raw config values.",
+        "providerConfigSummary": "Provider posture documented with redacted-only credential status.",
+        "quotaConfigSummary": "Quota and alert posture documented without owner identifiers.",
+        "notificationConfigSummary": "Notification routing posture documented without webhook values.",
+        "databaseConfigSummary": "Database storage posture documented without DSNs.",
+        "loggingRetentionSummary": "Retention window documented without raw logs.",
+        "rollbackConfigSummary": "Rollback expectations documented without command output.",
+        "secretPresenceSummary": "redacted only",
+        "unsafeDefaultsSummary": "Unsafe defaults reviewed without raw values.",
+        "outcome": "accepted",
+        "evidenceRedactionVersion": "config_snapshot_redaction_v1",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _manual_release_review_artifact(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "artifactVersion": "wolfystock_manual_release_approval_review_record_v1",
+        "releaseCandidateSha": "5a72431e4baf7fa87d43ecae73a10d831451bafb",
+        "reviewerRoleLabels": ["release-manager", "security-reviewer"],
+        "approvalMeetingOrTicketRef": "release-review-ticket-2026-05-08",
+        "approvalTimestamp": "2026-05-08T10:45:00Z",
+        "evidenceBundleRef": "operator-evidence-bundle-v1",
+        "knownResidualRisks": [
+            "async-enrichment-risk-acknowledged",
+            "manual-rollback-risk-acknowledged",
+        ],
+        "rollbackOwnerLabel": "release-rollback-owner",
+        "goNoGoDecision": "approved-for-manual-release-review",
+        "evidenceRedactionVersion": "manual-release-review-redaction-v1",
+    }
+    payload.update(overrides)
+    return payload
+
+
 def _write_bundle(tmp_path: Path, artifacts: dict[str, object]) -> Path:
     bundle = tmp_path / "bundle"
     bundle.mkdir()
@@ -200,7 +268,14 @@ def _accepted_artifacts() -> dict[str, object]:
         "security_operator_acceptance.json": _security_artifact(),
         "quota_budget_operator_evidence.json": _quota_artifact(),
         "staging_ingress_operator_evidence.json": _ingress_artifact(),
+        "ws2_sse_operator_decision_evidence.json": _ws2_sse_artifact(),
+        "config_snapshot_evidence.json": _config_snapshot_artifact(),
+        "manual_release_approval_review_record.json": _manual_release_review_artifact(),
     }
+
+
+def _template_pack_artifacts() -> dict[str, object]:
+    return _build_templates("all")
 
 
 def _run_checker(bundle: Path) -> subprocess.CompletedProcess[str]:
@@ -223,11 +298,43 @@ def test_all_sanitized_accepted_artifacts_require_manual_review(tmp_path: Path) 
     assert result.returncode == 0
     payload = _stdout_json(result)
     assert payload["bundleStatus"] == "complete-review-required"
-    assert {artifact["status"] for artifact in payload["artifacts"]} == {"accepted"}
+    assert {artifact["category"] for artifact in payload["artifacts"]} == EXPECTED_TEMPLATE_CATEGORIES
+    statuses_by_category = {artifact["category"]: artifact["status"] for artifact in payload["artifacts"]}
+    assert statuses_by_category["manual-release-approval"] == "needs-review"
+    assert {status for category, status in statuses_by_category.items() if category != "manual-release-approval"} == {
+        "accepted"
+    }
     assert all(Path(artifact["pathLabel"]).name == artifact["pathLabel"] for artifact in payload["artifacts"])
     assert "launch-approved" not in result.stdout.lower()
     assert "production-ready" not in result.stdout.lower()
     assert "release-approved" not in result.stdout.lower()
+
+
+def test_all_template_pack_artifacts_are_recognized_without_unknown_advisories(tmp_path: Path) -> None:
+    result = _run_checker(_write_bundle(tmp_path, _template_pack_artifacts()))
+
+    assert result.returncode == 0
+    payload = _stdout_json(result)
+    assert payload["bundleStatus"] == "complete-review-required"
+    assert {artifact["category"] for artifact in payload["artifacts"]} == EXPECTED_TEMPLATE_CATEGORIES
+    assert {artifact["pathLabel"] for artifact in payload["artifacts"]} == EXPECTED_TEMPLATE_FILENAMES
+    assert all(artifact["status"] == "needs-review" for artifact in payload["artifacts"])
+    assert payload["advisories"] == []
+
+
+def test_manual_release_review_record_cannot_approve_bundle(tmp_path: Path) -> None:
+    result = _run_checker(_write_bundle(tmp_path, _template_pack_artifacts()))
+
+    assert result.returncode == 0
+    payload = _stdout_json(result)
+    manual = next(
+        artifact for artifact in payload["artifacts"] if artifact["category"] == "manual-release-approval"
+    )
+    assert manual["status"] == "needs-review"
+    assert payload["bundleStatus"] == "complete-review-required"
+    assert payload["runtimeBehaviorChanged"] is False
+    assert "launchApproved" not in result.stdout
+    assert "releaseApproved" not in result.stdout
 
 
 def test_missing_required_artifact_is_incomplete_no_go(tmp_path: Path) -> None:

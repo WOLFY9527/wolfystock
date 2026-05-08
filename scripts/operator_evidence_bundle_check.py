@@ -27,10 +27,13 @@ except ModuleNotFoundError:  # pragma: no cover - package import fallback
     from scripts.evidence_safety import path_label as _path_label
 
 from provider_operator_evidence_check import validate_provider_operator_evidence
+from config_snapshot_evidence_check import validate_config_snapshot_evidence
+from manual_release_approval_evidence_check import validate_manual_release_approval_evidence
 from quota_operator_evidence_check import validate_artifact as validate_quota_operator_evidence
 from restore_pitr_operator_evidence_check import _build_report as validate_restore_pitr_operator_evidence
 from security_operator_acceptance_check import _build_summary as validate_security_operator_acceptance
 from staging_ingress_operator_evidence_check import validate_staging_ingress_operator_evidence
+from ws2_sse_operator_decision_check import validate_ws2_sse_operator_decision
 
 
 SCHEMA_VERSION = "wolfystock_operator_evidence_bundle_summary_v1"
@@ -88,6 +91,24 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         validator_name="staging_ingress_operator_evidence_check.py",
         validate=validate_staging_ingress_operator_evidence,
     ),
+    ArtifactSpec(
+        category="ws2-sse",
+        filename="ws2_sse_operator_decision_evidence.json",
+        validator_name="ws2_sse_operator_decision_check.py",
+        validate=validate_ws2_sse_operator_decision,
+    ),
+    ArtifactSpec(
+        category="config-snapshot",
+        filename="config_snapshot_evidence.json",
+        validator_name="config_snapshot_evidence_check.py",
+        validate=validate_config_snapshot_evidence,
+    ),
+    ArtifactSpec(
+        category="manual-release-approval",
+        filename="manual_release_approval_review_record.json",
+        validator_name="manual_release_approval_evidence_check.py",
+        validate=validate_manual_release_approval_evidence,
+    ),
 )
 
 
@@ -123,6 +144,12 @@ def _validator_passed(summary: dict[str, Any]) -> bool:
     if summary.get("status") in {"pass", "accepted"}:
         return True
     if summary.get("finalStatus") in {"EVIDENCE-READY", "ACCEPTED"}:
+        return True
+    if (
+        summary.get("manualReviewStatus") in {"needs-review", "review-record-valid"}
+        and summary.get("releaseApproved") is False
+        and summary.get("launchApproved") is False
+    ):
         return True
     return False
 
@@ -160,6 +187,16 @@ def _reason_summaries(summary: dict[str, Any]) -> list[str]:
 
 
 def _artifact_status(*, payload: Any, validator_summary: dict[str, Any]) -> str:
+    manual_review_status = str(validator_summary.get("manualReviewStatus") or "").strip()
+    if manual_review_status:
+        if (
+            manual_review_status in {"needs-review", "review-record-valid"}
+            and validator_summary.get("releaseApproved") is False
+            and validator_summary.get("launchApproved") is False
+        ):
+            return "needs-review"
+        return "rejected"
+
     outcomes = _collect_outcomes(payload)
     passed = _validator_passed(validator_summary)
     if passed:
