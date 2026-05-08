@@ -178,7 +178,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           {[
             ['页面用途', '复核脱敏证据路径', '模板、校验、归档、人工复核'],
             ['当前状态', '等待人工复核', '缺证据时保持 NO-GO'],
-            ['下一步', '按本地 runbook 生成复核材料', '不上传、不写入、不进入发布环节'],
+            ['下一步', '按本地 runbook 生成复核材料', '先确认交接状态；命令、Schema、参考文档默认折叠'],
           ].map(([label, value, note]) => (
             <div key={label} className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">{label}</p>
@@ -277,10 +277,15 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
         ))}
       </section>
 
+      <details className="rounded-[20px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
+          <span>二级细节：Runbook 参考</span>
+          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">默认折叠</span>
+        </summary>
       <GlassCard
         as="section"
         data-testid="admin-evidence-runbook-references"
-        className="p-4 md:p-5"
+        className="mt-4 p-4 md:p-5"
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-3">
@@ -319,11 +324,17 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           ))}
         </div>
       </GlassCard>
+      </details>
 
+      <details className="rounded-[20px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
+          <span>二级细节：Schema 与字段参考</span>
+          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">默认折叠</span>
+        </summary>
       <GlassCard
         as="section"
         data-testid="admin-evidence-schema-reference"
-        className="p-4 md:p-5"
+        className="mt-4 p-4 md:p-5"
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-3">
@@ -392,8 +403,14 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           </p>
         </details>
       </GlassCard>
+      </details>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+      <details className="rounded-[20px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
+          <span>二级细节：离线命令与空状态说明</span>
+          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">默认折叠</span>
+        </summary>
+      <section className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
         <GlassCard as="section" className="p-4 md:p-5 xl:col-span-8">
           <div className="flex items-start gap-3">
             <Code2 className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
@@ -441,6 +458,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           </div>
         </GlassCard>
       </section>
+      </details>
 
       <details
         data-testid="admin-evidence-raw-disclosure"

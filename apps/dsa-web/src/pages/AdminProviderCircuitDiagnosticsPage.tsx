@@ -439,36 +439,49 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
   if (!canReadProviders) {
     return null;
   }
+  const productionCallState = isLoading && !data
+    ? '读取中'
+    : summary.open
+      ? '部分生产调用应暂缓'
+      : summary.warn
+        ? '可继续但需观察降级'
+        : '可继续观察';
+  const blockedState = summary.open
+    ? `${summary.open} 个熔断打开`
+    : summary.warn
+      ? `${summary.warn} 个降级观察`
+      : '未发现阻断';
 
   return (
-    <div className="admin-provider-circuit-page flex min-h-0 w-full flex-1 flex-col overflow-y-auto no-scrollbar bg-[#050505] px-4 py-5 text-white md:px-6 xl:px-8">
+    <div data-testid="admin-provider-circuit-diagnostics-page" className="admin-provider-circuit-page flex min-h-0 w-full flex-1 flex-col overflow-y-auto no-scrollbar bg-[#050505] px-4 py-5 text-white md:px-6 xl:px-8">
       <GlassCard as="section" className="relative shrink-0 overflow-hidden p-5 md:p-6">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/50 to-transparent" />
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200/80">
               <CircuitBoard className="h-4 w-4" aria-hidden="true" />
-              Provider circuit diagnostics
+              生产调用门禁
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-normal text-white md:text-4xl">Provider 熔断诊断</h1>
             <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
               {isLoading
                 ? '正在读取只读诊断快照'
-                : `生成 ${safeDate(data?.states.generatedAt)} · 只读观测 · 不改变 fallback / MarketCache`}
+                : `先判断生产调用是否可继续、哪里被阻断、是否缺凭证；路由、bucket、配额、探测细节默认后置。生成 ${safeDate(data?.states.generatedAt)} · 只读观测`}
             </p>
           </div>
           <ReadOnlyBadges data={data} />
         </div>
         {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
-        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <SummaryTile label="页面用途" value="定位 provider 熔断风险" note="SLA、熔断、配额与探测集中查看" tone="info" />
+          <SummaryTile label="当前状态" value={productionCallState} note="只读判断，不改变 provider fallback 或 MarketCache" tone={summary.open ? 'danger' : summary.warn ? 'warn' : 'good'} />
           <SummaryTile
-            label="当前状态"
-            value={isLoading && !data ? '读取中' : `${summary.open} 个熔断需关注`}
+            label="当前阻断"
+            value={blockedState}
             note={`${summary.warn} 个降级观察 · ${summary.states || 0} 个状态快照`}
             tone={summary.open ? 'danger' : summary.warn ? 'warn' : 'good'}
           />
-          <SummaryTile label="下一步" value="优先查看 SLA 就绪与当前熔断" note="事件、配额、探测细节默认后置" tone="neutral" />
+          <SummaryTile label="下一步" value={summary.open || summary.warn ? '先核对凭证与当前熔断' : '保持观察，必要时展开诊断细节'} note="事件、配额、探测细节默认后置" tone={summary.open || summary.warn ? 'warn' : 'neutral'} />
         </div>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
           <SummaryTile label="需关注" value={`${summary.open} 打开 / ${summary.warn} 降级`} tone={summary.open ? 'danger' : summary.warn ? 'warn' : 'good'} />
@@ -489,18 +502,26 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
         </div>
         <div className="min-w-0 space-y-5 xl:col-span-4">
           <BoundaryPanel />
-          <ProbeEventsPanel items={data?.probeEvents.items || []} />
         </div>
       </div>
 
-      <div className="mt-5 grid shrink-0 grid-cols-1 gap-5 xl:grid-cols-12">
-        <div className="min-w-0 xl:col-span-7">
-          <EventsPanel items={data?.events.items || []} />
+      <details className="mt-5 rounded-[20px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
+          <span>二级细节：探测、事件、配额窗口、路由 bucket</span>
+          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">默认折叠</span>
+        </summary>
+        <div className="mt-5 grid shrink-0 grid-cols-1 gap-5 xl:grid-cols-12">
+          <div className="min-w-0 xl:col-span-4">
+            <ProbeEventsPanel items={data?.probeEvents.items || []} />
+          </div>
+          <div className="min-w-0 xl:col-span-4">
+            <EventsPanel items={data?.events.items || []} />
+          </div>
+          <div className="min-w-0 xl:col-span-4">
+            <QuotaWindowsPanel items={data?.quotaWindows.items || []} />
+          </div>
         </div>
-        <div className="min-w-0 xl:col-span-5">
-          <QuotaWindowsPanel items={data?.quotaWindows.items || []} />
-        </div>
-      </div>
+      </details>
     </div>
   );
 };

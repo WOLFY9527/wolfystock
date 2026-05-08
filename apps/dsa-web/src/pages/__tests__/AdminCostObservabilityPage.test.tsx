@@ -339,7 +339,7 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('下一步')).toBeInTheDocument();
     expect(screen.getByText('评估成本与配额风险')).toBeInTheDocument();
     expect(await screen.findByText('12 次 LLM / 18 次 Provider')).toBeInTheDocument();
-    expect(screen.getByText('优先查看配额试运行与账本摘要')).toBeInTheDocument();
+    expect(screen.getByText('先做配额 dry-run，再定位归属')).toBeInTheDocument();
     expect(screen.getByText('成本压力')).toBeInTheDocument();
     expect(screen.getByText('缓存效率')).toBeInTheDocument();
     expect(screen.getByText('只读')).toBeInTheDocument();
@@ -444,6 +444,8 @@ describe('AdminCostObservabilityPage', () => {
     render(<AdminCostObservabilityPage />);
     await screen.findByRole('heading', { name: '成本观测' });
 
+    fireEvent.click(screen.getByText('二级细节：窗口筛选、账本、价格、Provider / 缓存'));
+
     fireEvent.change(screen.getByLabelText('窗口'), { target: { value: '7d' } });
     fireEvent.change(screen.getByLabelText('粒度'), { target: { value: 'day' } });
     fireEvent.change(screen.getByLabelText('区域'), { target: { value: 'scanner-ai' } });
@@ -489,7 +491,7 @@ describe('AdminCostObservabilityPage', () => {
     render(<AdminCostObservabilityPage />);
 
     expect(await screen.findByTestId('llm-ledger-panel')).toBeInTheDocument();
-    expect(getLlmLedgerSummary).toHaveBeenCalledWith({ window: '24h', bucket: 'hour', limit: 50 });
+    await waitFor(() => expect(getLlmLedgerSummary).toHaveBeenCalledWith({ window: '24h', bucket: 'hour', limit: 50 }));
     expect(screen.getByText('总用量')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('llm-ledger-panel')).toHaveTextContent('11,000'));
     expect(screen.getAllByText('$0.12').length).toBeGreaterThan(0);

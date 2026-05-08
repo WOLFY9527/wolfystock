@@ -420,38 +420,46 @@ const MarketProviderOperationsPage: React.FC = () => {
       { label: '事件', value: summary.eventCount, tone: summary.eventCount ? 'info' as const : 'neutral' as const },
     ];
   }, [summary]);
+  const degradedCount = (summary?.fallbackCount || 0)
+    + (summary?.partialCount || 0)
+    + (summary?.unavailableCount || 0)
+    + (summary?.errorCount || 0)
+    + (summary?.failureCount || 0);
+  const readinessLabel = isLoading
+    ? '读取中'
+    : summary
+      ? degradedCount
+        ? `${degradedCount} 个能力降级`
+        : '数据源可用'
+      : '等待快照';
+  const nextAction = degradedCount
+    ? '先查看降级数据源，再进入日志追踪'
+    : '保持只读监控，必要时查看缓存与事件';
 
   return (
-    <div className="market-provider-operations-page flex min-h-0 w-full flex-1 flex-col overflow-y-auto no-scrollbar bg-[#050505] px-4 py-5 text-white md:px-6 xl:px-8">
+    <div data-testid="market-provider-operations-page" className="market-provider-operations-page flex min-h-0 w-full flex-1 flex-col overflow-y-auto no-scrollbar bg-[#050505] px-4 py-5 text-white md:px-6 xl:px-8">
       <GlassCard as="section" className="relative shrink-0 overflow-hidden p-5 md:p-6">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/50 to-transparent" />
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200/80">
               <ServerCog className="h-4 w-4" aria-hidden="true" />
-              运维快照
+              数据源就绪台
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-normal text-white md:text-4xl">市场数据源运维</h1>
             <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
               {isLoading
                 ? '正在读取市场数据源运维快照'
-                : `生成 ${formatDate(response?.generatedAt)} · 窗口 ${response?.window?.key || '24h'} · 只读快照`}
+                : `先看可用能力和降级影响；DuckDB、缓存、事件、接口细节默认后置。生成 ${formatDate(response?.generatedAt)} · 窗口 ${response?.window?.key || '24h'} · 只读快照`}
             </p>
           </div>
           <ReadOnlyBadges response={response} />
         </div>
         {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          {summaryTiles.length ? summaryTiles.map((tile) => (
-            <SummaryTile key={tile.label} label={tile.label} value={tile.value} tone={tile.tone} />
-          )) : (
-            <>
-              <SummaryTile label="数据源" value="--" />
-              <SummaryTile label="实时" value="--" />
-              <SummaryTile label="备用" value="--" />
-              <SummaryTile label="事件" value="--" />
-            </>
-          )}
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <SummaryTile label="当前状态" value={readinessLabel} tone={degradedCount ? 'warn' : 'good'} />
+          <SummaryTile label="需关注" value={`${summary?.fallbackCount || 0} 备用 / ${summary?.failureCount || 0} 失败`} tone={degradedCount ? 'danger' : 'neutral'} />
+          <SummaryTile label="下一步" value={nextAction} tone={degradedCount ? 'warn' : 'info'} />
         </div>
       </GlassCard>
 
@@ -476,27 +484,50 @@ const MarketProviderOperationsPage: React.FC = () => {
                   </div>
                 </div>
               </GlassCard>
-              <CacheStatesPanel cacheStates={response?.cacheStates || []} />
+              <GlassCard as="section" className="p-4 md:p-5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">能力摘要</p>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  {summaryTiles.length ? summaryTiles.slice(0, 4).map((tile) => (
+                    <SummaryTile key={tile.label} label={tile.label} value={tile.value} tone={tile.tone} />
+                  )) : (
+                    <>
+                      <SummaryTile label="数据源" value="--" />
+                      <SummaryTile label="实时" value="--" />
+                      <SummaryTile label="备用" value="--" />
+                      <SummaryTile label="事件" value="--" />
+                    </>
+                  )}
+                </div>
+              </GlassCard>
             </div>
           </div>
 
-          <div className="mt-5 grid shrink-0 grid-cols-1 gap-5 xl:grid-cols-12">
-            <div className="min-w-0 xl:col-span-7">
-              <EventRollupsPanel eventRollups={response?.eventRollups || []} />
-            </div>
-            {response ? (
-              <div className="min-w-0 xl:col-span-5">
-                <LimitationsPanel response={response} />
+          <details className="mt-5 rounded-[20px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
+              <span>二级细节：缓存、事件回卷、限制与响应形状</span>
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">默认折叠</span>
+            </summary>
+            <div className="mt-5 grid shrink-0 grid-cols-1 gap-5 xl:grid-cols-12">
+              <div className="min-w-0 xl:col-span-7">
+                <CacheStatesPanel cacheStates={response?.cacheStates || []} />
               </div>
-            ) : (
-              <GlassCard as="section" className="p-5 xl:col-span-5">
+              <div className="min-w-0 xl:col-span-5">
+                <EventRollupsPanel eventRollups={response?.eventRollups || []} />
+              </div>
+              {response ? (
+                <div className="min-w-0 xl:col-span-12">
+                  <LimitationsPanel response={response} />
+                </div>
+              ) : (
+                <GlassCard as="section" className="p-5 xl:col-span-12">
                 <div className="flex items-center gap-2 text-sm text-white/50">
                   <Activity className="h-4 w-4" aria-hidden="true" />
                   等待运维快照
                 </div>
-              </GlassCard>
-            )}
-          </div>
+                </GlassCard>
+              )}
+            </div>
+          </details>
         </>
       ) : null}
       <span className="sr-only">{language === 'zh' ? '市场数据源运维只读页面' : 'Market provider operations read-only page'}</span>

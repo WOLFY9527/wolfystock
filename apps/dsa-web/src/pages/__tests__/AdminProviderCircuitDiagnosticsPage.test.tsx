@@ -172,8 +172,9 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.getByText('当前状态')).toBeInTheDocument();
     expect(screen.getByText('下一步')).toBeInTheDocument();
     expect(screen.getByText('定位 provider 熔断风险')).toBeInTheDocument();
-    expect(screen.getByText('1 个熔断需关注')).toBeInTheDocument();
-    expect(screen.getByText('优先查看 SLA 就绪与当前熔断')).toBeInTheDocument();
+    expect(screen.getByText('部分生产调用应暂缓')).toBeInTheDocument();
+    expect(screen.getByText('1 个熔断打开')).toBeInTheDocument();
+    expect(screen.getByText('先核对凭证与当前熔断')).toBeInTheDocument();
     expect(screen.getByText('需关注')).toBeInTheDocument();
     expect(screen.getByText('诊断范围')).toBeInTheDocument();
     expect((await screen.findAllByText('finnhub')).length).toBeGreaterThan(0);

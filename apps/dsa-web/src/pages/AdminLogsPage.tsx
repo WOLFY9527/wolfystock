@@ -1367,9 +1367,16 @@ const AdminLogsPage: React.FC = () => {
 
       {error ? <ApiErrorAlert error={error} /> : null}
 
+      <details className="rounded-[20px] border border-white/5 bg-white/[0.02] p-3 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-1 text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
+          <span>{locale === 'zh' ? '二级细节：日志容量与破坏性清理' : 'Secondary details: storage and destructive cleanup'}</span>
+          <span className="rounded-full border border-rose-300/20 bg-rose-500/10 px-2.5 py-1 text-[11px] font-medium text-rose-100">
+            {locale === 'zh' ? '需确认' : 'confirmation required'}
+          </span>
+        </summary>
       <section
         data-testid="admin-logs-storage-summary"
-        className="grid grid-cols-1 gap-2 rounded-xl border border-white/8 bg-black/20 p-2.5 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,1.35fr)_9rem_10rem_10rem_minmax(12rem,1fr)_auto]"
+        className="mt-3 grid grid-cols-1 gap-2 rounded-xl border border-white/8 bg-black/20 p-2.5 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,1.35fr)_9rem_10rem_10rem_minmax(12rem,1fr)_auto]"
       >
         <div className={`rounded-lg border px-3 py-2 ${storageStatusTone(storageSummary?.status)}`}>
           <div className="flex items-start justify-between gap-3">
@@ -1463,6 +1470,7 @@ const AdminLogsPage: React.FC = () => {
           </button>
         </div>
       </section>
+      </details>
 
       <section
         data-testid="admin-logs-health-summary"

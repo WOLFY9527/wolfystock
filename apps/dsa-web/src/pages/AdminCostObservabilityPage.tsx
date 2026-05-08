@@ -1016,52 +1016,57 @@ const AdminCostObservabilityPage: React.FC = () => {
     : state.loading
     ? '读取中'
     : '等待快照';
+  const needsAttentionCount = data
+    ? data.summary.estimatedDuplicateCandidates + data.summary.fallbackAttempts + data.summary.integrityRetries
+    : 0;
+  const attentionLabel = emptyCounters
+    ? '当前窗口暂无可用计数'
+    : needsAttentionCount
+      ? `${compactNumber(needsAttentionCount)} 个成本压力信号`
+      : '暂无明显成本压力';
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar bg-[#050505] px-4 py-4 text-white md:px-6 md:py-6">
+    <div data-testid="admin-cost-observability-page" className="min-h-0 flex-1 overflow-y-auto no-scrollbar bg-[#050505] px-4 py-4 text-white md:px-6 md:py-6">
       <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5">
         <GlassCard as="section" className="p-5 md:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-100/55">Cost Observability</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-100/55">成本压力台</p>
               <h1 className="mt-2 text-2xl font-semibold text-white md:text-3xl">成本观测</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">成本、配额与模型账本的只读运维视图。</p>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">先判断预算压力、异常归属和下一步处理；模型、供应商、缓存细节默认放在二级区。</p>
             </div>
             <ReadOnlyBadges data={data} />
           </div>
-          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <SummaryTile label="页面用途" value="评估成本与配额风险" note={`窗口 ${data?.window?.key || filters.window} · ${data?.window?.bucket || filters.bucket}`} tone="info" />
             <SummaryTile label="当前状态" value={operatorState} note={`生成 ${formatDate(data?.generatedAt)} · ${exactnessLabel(data?.metadata.exactness)}`} tone={emptyCounters ? 'warn' : 'neutral'} />
-            <SummaryTile label="下一步" value="优先查看配额试运行与账本摘要" note="开发者响应形状默认折叠" tone="warn" />
+            <SummaryTile label="需关注" value={attentionLabel} note="重复候选、fallback、integrity retry 汇总" tone={emptyCounters || needsAttentionCount ? 'warn' : 'good'} />
+            <SummaryTile label="下一步" value={needsAttentionCount ? '先做配额 dry-run，再定位归属' : '保持观测，按需切换窗口'} note={`生成 ${formatDate(data?.generatedAt)} · ${exactnessLabel(data?.metadata.exactness)}`} tone={needsAttentionCount ? 'warn' : 'neutral'} />
           </div>
         </GlassCard>
 
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-          <div className="xl:col-span-3">
-            <FilterRail filters={filters} onChange={updateFilters} />
-          </div>
-          <div className="min-w-0 xl:col-span-9">
-            {state.error ? <ApiErrorAlert error={state.error} /> : null}
-            {state.loading ? (
-              <GlassCard as="section" className="p-5">
-                <p className="text-sm text-white/55">正在读取成本观测快照</p>
-              </GlassCard>
-            ) : null}
-            {data ? (
-              <div className="grid gap-5">
-                <GlassCard as="section" className="p-4 md:p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Overview</p>
-                      <h2 className="mt-1 text-lg font-semibold text-white">总览</h2>
-                    </div>
-                    {emptyCounters ? (
-                      <Badge variant="warning" className="border-amber-300/25 bg-amber-400/10 text-amber-100">
-                        计数器尚未接入或当前窗口暂无事件
-                      </Badge>
-                    ) : null}
+        {state.error ? <ApiErrorAlert error={state.error} /> : null}
+        {state.loading ? (
+          <GlassCard as="section" className="p-5">
+            <p className="text-sm text-white/55">正在读取成本观测快照</p>
+          </GlassCard>
+        ) : null}
+        {data ? (
+          <div className="grid gap-5">
+            <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+              <GlassCard as="section" className="p-4 md:p-5 xl:col-span-7">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">操作员判断</p>
+                    <h2 className="mt-1 text-lg font-semibold text-white">压力、异常、归属</h2>
                   </div>
-                  <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  {emptyCounters ? (
+                    <Badge variant="warning" className="border-amber-300/25 bg-amber-400/10 text-amber-100">
+                      计数器尚未接入或当前窗口暂无事件
+                    </Badge>
+                  ) : null}
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                     <SummaryTile
                       label="成本压力"
                       value={`${compactNumber(data.summary.estimatedDuplicateCandidates)} 重复候选`}
@@ -1075,49 +1080,65 @@ const AdminCostObservabilityPage: React.FC = () => {
                       tone="good"
                     />
                     <SummaryTile
-                      label="模型账本"
+                      label="模型归属"
                       value={`${compactNumber(data.summary.llmCalls)} LLM 调用`}
                       note={`${compactNumber(data.summary.llmUsageTokens)} tokens · ${compactNumber(data.summary.llmUsageCalls)} usage rows`}
                       tone="info"
                     />
                     <SummaryTile
-                      label="Scanner AI"
+                      label="功能归属"
                       value={`${compactNumber(data.summary.scannerAiCompleted)} / ${compactNumber(data.summary.scannerAiAttempts)}`}
                       note={`${compactNumber(data.summary.scannerAiSkipped)} skipped`}
                       tone="info"
                     />
-                  </div>
-                </GlassCard>
-                <QuotaDryRunPanel />
-                <LlmLedgerPanel key={`${filters.window}-${filters.bucket}-${filters.limit}`} filters={filters} />
-                <PricingPolicyPanel />
-
-                <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
-                  <SectionCard icon={<Activity className="h-4 w-4" />} eyebrow="LLM" title="LLM 调用">
-                    <RollupList items={data.llm.byCallType} empty="暂无 LLM 调用计数" />
-                  </SectionCard>
-                  <SectionCard icon={<BarChart3 className="h-4 w-4" />} eyebrow="Duplicate" title="Guest Preview / Report duplicate candidates">
-                    <RollupList items={[...data.llm.duplicateCandidates, ...data.providers.duplicateCandidates, ...data.scannerAi.duplicateCandidates]} empty="暂无重复候选" />
-                  </SectionCard>
-                  <SectionCard icon={<DatabaseZap className="h-4 w-4" />} eyebrow="Provider" title="Provider / 数据源 fallback">
-                    <div className="grid gap-3">
-                      <RollupList items={[...data.providers.byCategory, ...data.providers.fallbackDepth, ...data.llm.fallbacks]} empty="暂无 Provider fallback 计数" />
-                      <CacheEfficiencyList items={data.providers.cacheEfficiency} />
-                    </div>
-                  </SectionCard>
-                  <SectionCard icon={<DatabaseZap className="h-4 w-4" />} eyebrow="MarketCache" title="MarketCache 命中 / 过期 / 缺失">
-                    <RollupList items={[...data.marketCache.byPanelKey, ...data.marketCache.staleServed, ...data.marketCache.coldFallbacks, ...data.marketCache.refreshes]} empty="暂无 MarketCache 计数" />
-                  </SectionCard>
-                  <SectionCard icon={<Radar className="h-4 w-4" />} eyebrow="Scanner AI" title="Scanner AI 解释">
-                    <RollupList items={[...data.scannerAi.interpretations, ...data.scannerAi.skips]} empty="暂无 Scanner AI 计数" />
-                  </SectionCard>
-                  <LimitationsPanel data={data} />
                 </div>
-                <DeveloperDetails data={data} />
+              </GlassCard>
+              <div className="min-w-0 xl:col-span-5">
+                <QuotaDryRunPanel />
               </div>
-            ) : null}
+            </section>
+
+            <details
+              className="rounded-[20px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
+                <span>二级细节：窗口筛选、账本、价格、Provider / 缓存</span>
+                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">默认折叠</span>
+              </summary>
+              <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-12">
+                <div className="xl:col-span-3">
+                  <FilterRail filters={filters} onChange={updateFilters} />
+                </div>
+                <div className="min-w-0 space-y-5 xl:col-span-9">
+                  <LlmLedgerPanel key={`${filters.window}-${filters.bucket}-${filters.limit}`} filters={filters} />
+                  <PricingPolicyPanel />
+                  <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
+                    <SectionCard icon={<Activity className="h-4 w-4" />} eyebrow="LLM" title="LLM 调用">
+                      <RollupList items={data.llm.byCallType} empty="暂无 LLM 调用计数" />
+                    </SectionCard>
+                    <SectionCard icon={<BarChart3 className="h-4 w-4" />} eyebrow="Duplicate" title="Guest Preview / Report duplicate candidates">
+                      <RollupList items={[...data.llm.duplicateCandidates, ...data.providers.duplicateCandidates, ...data.scannerAi.duplicateCandidates]} empty="暂无重复候选" />
+                    </SectionCard>
+                    <SectionCard icon={<DatabaseZap className="h-4 w-4" />} eyebrow="Provider" title="Provider / 数据源 fallback">
+                      <div className="grid gap-3">
+                        <RollupList items={[...data.providers.byCategory, ...data.providers.fallbackDepth, ...data.llm.fallbacks]} empty="暂无 Provider fallback 计数" />
+                        <CacheEfficiencyList items={data.providers.cacheEfficiency} />
+                      </div>
+                    </SectionCard>
+                    <SectionCard icon={<DatabaseZap className="h-4 w-4" />} eyebrow="MarketCache" title="MarketCache 命中 / 过期 / 缺失">
+                      <RollupList items={[...data.marketCache.byPanelKey, ...data.marketCache.staleServed, ...data.marketCache.coldFallbacks, ...data.marketCache.refreshes]} empty="暂无 MarketCache 计数" />
+                    </SectionCard>
+                    <SectionCard icon={<Radar className="h-4 w-4" />} eyebrow="Scanner AI" title="Scanner AI 解释">
+                      <RollupList items={[...data.scannerAi.interpretations, ...data.scannerAi.skips]} empty="暂无 Scanner AI 计数" />
+                    </SectionCard>
+                    <LimitationsPanel data={data} />
+                  </div>
+                  <DeveloperDetails data={data} />
+                </div>
+              </div>
+            </details>
           </div>
-        </div>
+        ) : null}
       </div>
     </div>
   );
