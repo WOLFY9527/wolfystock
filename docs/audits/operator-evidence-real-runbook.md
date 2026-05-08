@@ -13,14 +13,14 @@ manual review only.
 1. Work from the repository root:
 
 ```bash
-cd /Users/yehengli/daily_stock_analysis
+cd path/to/daily_stock_analysis
 git status --short
 ```
 
-2. Create a private working directory outside the repo:
+2. Create a private ignored working directory for local evidence files:
 
 ```bash
-export EVIDENCE_DIR=/tmp/wolfystock-operator-evidence
+export EVIDENCE_DIR=operator-evidence-local/sanitized
 mkdir -p "$EVIDENCE_DIR"
 ```
 

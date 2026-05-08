@@ -20,15 +20,15 @@ Render Markdown:
 
 ```bash
 python3 scripts/operator_evidence_schema_reference.py render \
-  --output /tmp/operator-evidence-schema-reference.md
+  --output release-review-local/workflow-output/operator-evidence-schema-reference.md
 ```
 
 Render Markdown plus JSON:
 
 ```bash
 python3 scripts/operator_evidence_schema_reference.py render \
-  --output /tmp/operator-evidence-schema-reference.md \
-  --json-output /tmp/operator-evidence-schema-reference.json
+  --output release-review-local/workflow-output/operator-evidence-schema-reference.md \
+  --json-output release-review-local/workflow-output/operator-evidence-schema-reference.json
 ```
 
 ## Safety
