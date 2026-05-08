@@ -371,7 +371,7 @@ function getPortfolioCopy(
       actionLabel: formatCorporateActionLabel(item.actionType, language),
       symbol: item.symbol,
     }),
-    tradeUidPlaceholder: language === 'en' ? 'Trade reference (optional)' : '交易引用（可选）',
+    tradeUidPlaceholder: language === 'en' ? 'Record reference (optional)' : '流水引用（可选）',
     notePlaceholder: language === 'en' ? 'Note (optional)' : '备注（可选）',
   };
 
@@ -661,22 +661,25 @@ const PortfolioPage: React.FC = () => {
       : 'The symbol settlement currency differs from the account base currency and will rely on FX conversion.')
     : null;
   const tradeCurrencyHint = language === 'zh'
-    ? '自动按标的市场推断，可手动覆盖；交易会保留该结算币种。'
-    : 'Auto-inferred from the symbol market; manual override keeps the trade settlement currency.';
+    ? '自动按标的市场推断，可手动覆盖；流水会保留该结算币种。'
+    : 'Auto-inferred from the symbol market; manual override keeps the record settlement currency.';
   const settingsPath = buildLocalizedPath('/settings', language);
-  const editTradeTitle = language === 'zh' ? '编辑交易' : 'Edit Trade';
+  const editTradeTitle = language === 'zh' ? '编辑持仓流水' : 'Edit holding record';
   const saveTradeChangesLabel = language === 'zh' ? '保存修改' : 'Save Changes';
-  const updateTradeSuccessLabel = language === 'zh' ? '交易已更新 · 持仓已刷新' : 'Trade updated · holdings refreshed';
-  const voidTradeSuccessLabel = language === 'zh' ? '交易已作废 · 持仓已刷新' : 'Trade voided · holdings refreshed';
-  const deleteTradeTitle = language === 'zh' ? '确认作废交易？' : 'Void this trade?';
+  const updateTradeSuccessLabel = language === 'zh' ? '持仓流水已更新 · 持仓已刷新' : 'Holding record updated · holdings refreshed';
+  const voidTradeSuccessLabel = language === 'zh' ? '持仓流水已作废 · 持仓已刷新' : 'Holding record voided · holdings refreshed';
+  const deleteTradeTitle = language === 'zh' ? '确认作废持仓流水？' : 'Void this holding record?';
   const deleteTradeMessage = language === 'zh'
-    ? '该操作会从持仓与现金计算中排除此交易，但保留历史记录。'
-    : 'This removes the trade from holdings and cash calculations while preserving the audit trail.';
+    ? '该操作会从持仓与现金计算中排除此记录，但保留历史流水。'
+    : 'This removes the record from holdings and cash calculations while preserving the audit trail.';
   const voidTradeConfirmLabel = language === 'zh' ? '确认作废' : 'Confirm Void';
   const voidedTradeLabel = language === 'zh' ? '已作废' : 'Voided';
   const editTradeActionLabel = language === 'zh' ? '编辑' : 'Edit';
   const deleteTradeActionLabel = language === 'zh' ? '作废' : 'Void';
   const moreTradeActionsLabel = language === 'zh' ? '更多' : 'More';
+  const manualLedgerDisclosure = language === 'zh'
+    ? '仅用于手工记账，不连接券商执行，也不发起外部委托。'
+    : 'Manual ledger only. No broker execution and no external instruction is sent.';
   const inferredEditTradeCurrency = useMemo(
     () => inferSettlementCurrency(editingTrade?.symbol || '', editingAccount?.baseCurrency),
     [editingAccount?.baseCurrency, editingTrade?.symbol],
@@ -999,7 +1002,7 @@ const PortfolioPage: React.FC = () => {
       await refreshPortfolioData();
       setTradeFeedback({
         tone: 'success',
-        text: `${submittedSymbol || tradeForm.symbol} ${formatSideLabel(submittedSide, language)}已记录 · 已刷新持仓`,
+        text: `${submittedSymbol || tradeForm.symbol} ${formatSideLabel(submittedSide, language)}已保存 · 已刷新持仓`,
       });
       setTradeForm((prev) => ({ ...prev, symbol: '', currency: inferSettlementCurrency('', writableAccount?.baseCurrency), tradeUid: '', note: '' }));
       setTradeCurrencyManuallyEdited(false);
@@ -1482,8 +1485,8 @@ const PortfolioPage: React.FC = () => {
   const fxProviderLabel = fxRateRows.find((item) => item.source && item.source !== 'missing')?.source || 'frankfurter';
   const historyHasNextPage = currentEventCount >= DEFAULT_PAGE_SIZE;
   const totalAssetsTitle = language === 'zh' ? '总资产' : 'Total Assets';
-  const historyDrawerTitle = language === 'en' ? 'Order History' : '历史记录';
-  const zeroAssetStatus = language === 'zh' ? '等待交易录入' : 'Awaiting trade entry';
+  const historyDrawerTitle = language === 'en' ? 'Ledger History' : '历史记录';
+  const zeroAssetStatus = language === 'zh' ? '等待流水记录' : 'Awaiting ledger record';
   const currencyBreakdownTitle = language === 'zh' ? '按币种' : 'By currency';
   const currencyBreakdownEmpty = language === 'zh' ? '按币种：暂无资产' : 'By currency: no assets';
   const displayCurrencyStatus = language === 'zh' ? `显示货币 ${displayCurrency}` : `Display ${displayCurrency}`;
@@ -1512,7 +1515,7 @@ const PortfolioPage: React.FC = () => {
   const realizedPnlDisplay = convertMoney(realizedPnl, pnlSourceCurrency);
   const unrealizedPnlDisplay = convertMoney(unrealizedPnl, pnlSourceCurrency);
   const totalPnlDisplay = convertMoney(totalPnl, pnlSourceCurrency);
-  const analyticsEmptyText = language === 'zh' ? '暂无持仓，录入交易后生成盈亏与资产配置。' : 'No holdings yet. Add trades to generate P&L and allocation.';
+  const analyticsEmptyText = language === 'zh' ? '暂无持仓，保存持仓流水后生成盈亏与资产配置。' : 'No holdings yet. Save holding records to generate P&L and allocation.';
   const pnlLabels = {
     realized: language === 'zh' ? '已实现盈亏' : 'Realized',
     unrealized: language === 'zh' ? '未实现盈亏' : 'Unrealized',
@@ -1599,7 +1602,7 @@ const PortfolioPage: React.FC = () => {
         ? 'text-cyan-300'
         : 'text-emerald-300';
   const concentrationDescription = !hasHoldings || !topPosition
-    ? (language === 'zh' ? '暂无持仓，录入交易后生成集中度。' : 'No holdings yet. Add trades to generate concentration.')
+    ? (language === 'zh' ? '暂无持仓，保存持仓流水后生成集中度。' : 'No holdings yet. Save holding records to generate concentration.')
     : language === 'zh'
       ? `最大持仓占 ${formatPercent(topPositionPercent)}，按持仓市值占比判定为${concentrationLabel}。`
       : `Largest holding is ${formatPercent(topPositionPercent)} of exposure, classified as ${concentrationLabel}.`;
@@ -2282,7 +2285,7 @@ const PortfolioPage: React.FC = () => {
               </div>
               <div className="rounded-lg bg-black/20 px-3 py-2">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-white/35">{language === 'zh' ? '记录录入' : 'Record Entry'}</span>
-                <p className="mt-1 text-white/62">{language === 'zh' ? '手工维护交易、现金与公司行为' : 'Manual trade, cash, and corporate-action maintenance'}</p>
+                <p className="mt-1 text-white/62">{language === 'zh' ? '手工维护持仓、现金与公司行为流水' : 'Manual holding, cash, and corporate-action records'}</p>
               </div>
             </div>
 
@@ -2350,7 +2353,7 @@ const PortfolioPage: React.FC = () => {
 	                  <div className="flex flex-wrap items-start justify-between gap-3">
 	                    <div>
 	                      <h2 className="text-sm font-semibold text-white">{language === 'zh' ? '当前无持仓' : 'No current holdings'}</h2>
-	                      <p className="mt-1 text-sm text-white/45">{language === 'zh' ? '录入第一笔买入交易后自动生成持仓' : 'Enter the first buy trade to generate holdings automatically.'}</p>
+	                      <p className="mt-1 text-sm text-white/45">{language === 'zh' ? '保存第一笔持仓流水后自动生成持仓' : 'Save the first holding record to generate holdings automatically.'}</p>
 	                    </div>
 	                    {hasHistory ? (
 	                      <PillBadge variant="warning" className="text-amber-200">{noHoldingsHistoryNote}</PillBadge>
@@ -2366,14 +2369,14 @@ const PortfolioPage: React.FC = () => {
 	                      <div className="mt-1 font-mono text-lg text-white">{writableAccounts.length}</div>
 	                    </div>
 	                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-		                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">当前交易账户</div>
+		                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">当前记账账户</div>
 	                      <div className="mt-1 truncate text-sm text-white">{writableAccount?.name || copy.allAccounts}</div>
 	                    </div>
 	                  </div>
 	                  <div className="grid gap-2 text-xs text-white/45 sm:grid-cols-3">
 	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '1. 选择账户' : '1. Select account'}</div>
 	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '2. 输入标的' : '2. Enter symbol'}</div>
-	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '3. 提交交易' : '3. Submit trade'}</div>
+	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '3. 保存记录' : '3. Save record'}</div>
 	                  </div>
 	                  {!hasWritableAccounts ? (
 	                    <div className="rounded-lg border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-xs text-amber-200">
@@ -2390,12 +2393,15 @@ const PortfolioPage: React.FC = () => {
             <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-sm text-muted-text uppercase tracking-widest">{language === 'zh' ? '交易工作台' : 'Trade Station'}</h2>
+                  <h2 className="text-sm text-muted-text uppercase tracking-widest">{language === 'zh' ? '手工记账台' : 'Manual Ledger'}</h2>
+                  <p className="mt-1 text-xs leading-5 text-white/45">
+                    {manualLedgerDisclosure}
+                  </p>
                 </div>
               </div>
               <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <Select
-                  label={language === 'zh' ? '交易账户' : 'TRADE ACCOUNT'}
+                  label={language === 'zh' ? '记账账户' : 'LEDGER ACCOUNT'}
                   labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                   value={String(selectedTradeAccount)}
                   onChange={(value) => setSelectedTradeAccount(value === 'all' ? 'all' : Number(value))}
@@ -2445,7 +2451,7 @@ const PortfolioPage: React.FC = () => {
                 value={leftTab}
                 onChange={(value) => setLeftTab(value as 'trade' | 'account' | 'sync' | 'fx')}
                 options={[
-                  { value: 'trade', label: language === 'en' ? 'Trade' : '交易' },
+                  { value: 'trade', label: language === 'en' ? 'Ledger' : '记账' },
                   { value: 'account', label: language === 'en' ? 'Account' : '账户' },
                   { value: 'sync', label: language === 'en' ? 'Sync' : '同步' },
                   { value: 'fx', label: language === 'en' ? 'FX' : '汇率' },
@@ -2468,7 +2474,7 @@ const PortfolioPage: React.FC = () => {
                       value={tradeType}
                       onChange={(value) => setTradeType(value as TradeFormType)}
                       options={[
-                        { value: 'stock', label: language === 'en' ? 'Stock Trade' : '股票买卖' },
+                        { value: 'stock', label: language === 'en' ? 'Holding Ledger' : '持仓流水' },
                         { value: 'fund', label: language === 'en' ? 'Cash Transfer' : '资金划转' },
                         { value: 'corporate', label: language === 'en' ? 'Corporate Action' : '公司行为' },
                       ]}
@@ -2527,7 +2533,7 @@ const PortfolioPage: React.FC = () => {
                         <Input label={copy.note} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} containerClassName={`${PORTFOLIO_FIELD_WRAPPER_CLASS} mt-5`} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.optional} value={tradeForm.note} onChange={(e) => setTradeForm((prev) => ({ ...prev, note: e.target.value }))} />
                         {!writableAccountId ? (
                           <div className="mt-3 rounded-lg border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-xs text-amber-200">
-                            {language === 'zh' ? '请选择具体账户后录入交易' : 'Select a specific account before recording trades'}
+                            {language === 'zh' ? '请选择具体账户后保存持仓流水' : 'Select a specific account before saving holding records'}
                           </div>
                         ) : null}
                         <Button

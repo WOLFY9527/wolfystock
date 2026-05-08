@@ -503,10 +503,18 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('已实现盈亏');
     expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('未实现盈亏');
     expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('总盈亏');
-    expect(screen.getByTestId('portfolio-exposure-card')).toHaveTextContent('暂无持仓，录入交易后生成盈亏与资产配置。');
+    expect(screen.getByTestId('portfolio-exposure-card')).toHaveTextContent('暂无持仓，保存持仓流水后生成盈亏与资产配置。');
     expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('暂无持仓');
     expect(await screen.findByText(translate('zh', 'portfolio.fxStale'))).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '手工记账台' })).toBeInTheDocument();
+    expect(screen.getByText('仅用于手工记账，不连接券商执行，也不发起外部委托。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '持仓流水' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /交易工作台|Trade Station/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '股票买卖' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '提交交易' })).not.toBeInTheDocument();
+    expect(screen.queryByText('买入')).not.toBeInTheDocument();
+    expect(screen.queryByText('卖出')).not.toBeInTheDocument();
     const submitTradeButton = screen.getByRole('button', { name: translate('zh', 'portfolio.submitTrade') });
     expect(submitTradeButton).toHaveAttribute('type', 'submit');
     expect(submitTradeButton).toHaveAttribute('data-variant', 'primary');
@@ -518,12 +526,12 @@ describe('PortfolioPage FX refresh', () => {
     expect(submitTradeButton.className).toContain('py-2.5');
     expect(submitTradeButton.className).toContain('shadow-[0_0_15px_rgba(139,92,246,0.3)]');
     expect(screen.queryByText(translate('zh', 'portfolio.scopeHint'))).not.toBeInTheDocument();
-    expect(getLeftTabButton('交易')).toBeInTheDocument();
+    expect(getLeftTabButton('记账')).toBeInTheDocument();
     expect(getLeftTabButton('账户')).toBeInTheDocument();
     expect(getLeftTabButton('同步')).toBeInTheDocument();
     expect(getLeftTabButton('汇率')).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-left-tab-switcher').className).toContain('bg-white/[0.05]');
-    expect(getLeftTabButton('交易').className).toContain('bg-white/10');
+    expect(getLeftTabButton('记账').className).toContain('bg-white/10');
     expect(getLeftTabButton('账户').className).not.toContain('border-white');
     expect(screen.queryByRole('heading', { name: /^Current Holdings(?: \(|$)/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-start-card')).toBeInTheDocument();
@@ -532,7 +540,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
     expect(screen.getByRole('option', { name: translate('zh', 'portfolio.costFutuDiluted') })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: translate('zh', 'portfolio.costThsPnl') })).toBeInTheDocument();
-    const accountSelect = screen.getByLabelText(/交易账户|TRADE ACCOUNT/) as HTMLSelectElement;
+    const accountSelect = screen.getByLabelText(/记账账户|ledger account/i) as HTMLSelectElement;
     const costMethodSelect = screen.getByLabelText(/成本方法|COST METHOD/) as HTMLSelectElement;
     expect(accountSelect).toHaveClass('select-surface', 'absolute', 'inset-0', 'opacity-0');
     expect(accountSelect.closest('.select-field__control')).toHaveClass('ui-control-shell', 'relative', 'min-w-0', 'w-full');
@@ -547,7 +555,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(costMethodSelect).getByRole('option', { name: translate('zh', 'portfolio.costFifo') })).toBeInTheDocument();
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
     const holdingsPanel = screen.getByTestId('portfolio-empty-workflow-column');
-    const tradeStationSection = screen.getByRole('heading', { name: /交易工作台|Trade Station/ }).closest('section');
+    const tradeStationSection = screen.getByRole('heading', { name: /手工记账台|Trade Station/ }).closest('section');
     expect(Boolean(totalAssetsCard.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(totalAssetsCard.compareDocumentPosition(holdingsPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(holdingsPanel.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
@@ -565,7 +573,7 @@ describe('PortfolioPage FX refresh', () => {
     const startCard = screen.getByTestId('portfolio-start-card');
     const exposureCard = screen.getByTestId('portfolio-exposure-card');
     const riskCard = screen.getByTestId('portfolio-risk-card');
-    const tradeStationSection = screen.getByRole('heading', { name: /交易工作台|Trade Station/ }).closest('section') as HTMLElement;
+    const tradeStationSection = screen.getByRole('heading', { name: /手工记账台|Trade Station/ }).closest('section') as HTMLElement;
     const recentActivity = screen.getByTestId('portfolio-recent-activity');
 
     expect(Boolean(totalAssetsCard.compareDocumentPosition(pnlSummary) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
@@ -602,7 +610,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(workflowColumn).toHaveClass('space-y-4');
     expect(startCard).not.toHaveClass('xl:min-h-[300px]', 'min-h-[520px]');
     expect(within(startCard).getByText('当前无持仓')).toBeInTheDocument();
-    expect(within(startCard).getByText('录入第一笔买入交易后自动生成持仓')).toBeInTheDocument();
+    expect(within(startCard).getByText('保存第一笔持仓流水后自动生成持仓')).toBeInTheDocument();
     expect(within(startCard).getByText('历史记录存在，当前无持仓')).toBeInTheDocument();
     expect(within(startCard).getByText('活跃账户')).toBeInTheDocument();
     expect(within(startCard).getByText('可写账户')).toBeInTheDocument();
@@ -613,8 +621,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(recentActivity).getByText(/2026-03-18/)).toBeInTheDocument();
 
     const tradeStation = screen.getByTestId('portfolio-trade-station-card');
-    expect(within(tradeStation).getByRole('button', { name: '交易' }).className).toContain('bg-white/10');
-    expect(screen.getByLabelText(/交易账户|TRADE ACCOUNT/)).toHaveValue('1');
+    expect(within(tradeStation).getByRole('button', { name: '记账' }).className).toContain('bg-white/10');
+    expect(screen.getByLabelText(/记账账户|ledger account/i)).toHaveValue('1');
     expect(screen.getByTestId('portfolio-trade-station-card')).toHaveClass('gap-4', 'xl:min-h-0');
     expect(within(tradeStation).getByRole('button', { name: translate('zh', 'portfolio.submitTrade') })).not.toBeDisabled();
   });
@@ -844,10 +852,10 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.change(screen.getByLabelText(/交易账户|TRADE ACCOUNT/), { target: { value: 'all' } });
+    fireEvent.change(screen.getByLabelText(/记账账户|ledger account/i), { target: { value: 'all' } });
 
     const tradeStation = screen.getByTestId('portfolio-trade-station-card');
-    expect(within(tradeStation).getByText('请选择具体账户后录入交易')).toBeInTheDocument();
+    expect(within(tradeStation).getByText('请选择具体账户后保存持仓流水')).toBeInTheDocument();
     expect(within(tradeStation).getByRole('button', { name: translate('zh', 'portfolio.submitTrade') })).toBeDisabled();
   });
 
@@ -953,7 +961,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(createTrade).toHaveBeenCalledWith(expect.objectContaining({ currency: 'USD' }));
     await waitFor(() => expect(getSnapshot.mock.calls.length).toBeGreaterThan(snapshotCallsBeforeSubmit));
     await waitFor(() => expect(listTrades.mock.calls.length).toBeGreaterThan(tradeCallsBeforeSubmit));
-    expect(await screen.findByTestId('portfolio-trade-feedback')).toHaveTextContent('AAPL 买入已记录 · 已刷新持仓');
+    expect(await screen.findByTestId('portfolio-trade-feedback')).toHaveTextContent('AAPL 增加持仓已保存 · 已刷新持仓');
     expect(screen.getByLabelText(p('stockCode'))).toHaveValue('');
   });
 
@@ -1058,7 +1066,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText(/交易账户|TRADE ACCOUNT/) as HTMLSelectElement;
+    const accountSelect = screen.getByLabelText(/记账账户|ledger account/i) as HTMLSelectElement;
     fireEvent.change(accountSelect, { target: { value: '1' } });
     fireEvent.click(getLeftTabButton('账户'));
     fireEvent.click(screen.getByRole('button', { name: '删除 Main' }));
@@ -1067,7 +1075,7 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.deleteConfirm') }));
 
     await waitFor(() => expect(deleteAccount).toHaveBeenCalledWith(1));
-    await waitFor(() => expect((screen.getByLabelText(/交易账户|TRADE ACCOUNT/) as HTMLSelectElement).value).toBe('2'));
+    await waitFor(() => expect((screen.getByLabelText(/记账账户|ledger account/i) as HTMLSelectElement).value).toBe('2'));
     expect(await screen.findByText(translate('zh', 'portfolio.accountArchived'))).toBeInTheDocument();
   });
 
@@ -1528,7 +1536,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(screen.getByRole('heading', { name: /总资产|Total Assets/ })).toBeInTheDocument();
-    expect(getLeftTabButton('Trade')).toBeInTheDocument();
+    expect(getLeftTabButton('Ledger')).toBeInTheDocument();
     expect(getLeftTabButton('Account')).toBeInTheDocument();
     expect(getLeftTabButton('Sync')).toBeInTheDocument();
     expect(screen.queryByTestId('portfolio-current-holdings-panel')).not.toBeInTheDocument();
@@ -1593,7 +1601,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.change(screen.getByLabelText(/交易账户|TRADE ACCOUNT/), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText(/记账账户|ledger account/i), { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(getLeftTabButton('Sync'));
     fireEvent.change(
@@ -1644,7 +1652,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    fireEvent.change(screen.getByLabelText(/交易账户|TRADE ACCOUNT/), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText(/记账账户|ledger account/i), { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(getLeftTabButton('同步'));
     fireEvent.change(
@@ -1670,11 +1678,33 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(screen.queryByTestId('portfolio-attribution-dashboard')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /交易工作台|Trade Station/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /手工记账台|Trade Station/ })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /Current Holdings/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-start-card')).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
     expect(screen.getByText('当前无持仓')).toBeInTheDocument();
+  });
+
+  it('frames the default portfolio editor as a manual ledger without trade or order wording', async () => {
+    const { container } = render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(container).toHaveTextContent('手工记账台');
+    expect(container).toHaveTextContent('仅用于手工记账，不连接券商执行，也不发起外部委托。');
+    expect(container).toHaveTextContent('持仓流水');
+    expect(container).toHaveTextContent('保存记录');
+    expect(container).toHaveTextContent('记录日期');
+    expect(container).toHaveTextContent('持仓变动');
+    expect(container).toHaveTextContent('增加持仓');
+    expect(container).toHaveTextContent('减少持仓');
+    expect(container).not.toHaveTextContent('交易工作台');
+    expect(container).not.toHaveTextContent('股票买卖');
+    expect(container).not.toHaveTextContent('提交交易');
+    expect(container).not.toHaveTextContent('下单');
+    expect(container).not.toHaveTextContent('订单执行');
+    expect(container).not.toHaveTextContent('买入');
+    expect(container).not.toHaveTextContent('卖出');
   });
 
   it('locks the portfolio viewport and only renders one trade form at a time', async () => {
@@ -1706,7 +1736,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(summaryBlock.className).toContain('gap-1');
     expect(summaryBlock.className).toContain('py-2');
 
-    expect(screen.getByRole('button', { name: '股票买卖' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '持仓流水' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '资金划转' })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: '公司行为' }).length).toBeGreaterThan(0);
     expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
@@ -1879,7 +1909,7 @@ describe('PortfolioPage FX refresh', () => {
       price: 101,
     })));
     await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText('交易已更新 · 持仓已刷新')).toBeInTheDocument();
+    expect(await screen.findByText('持仓流水已更新 · 持仓已刷新')).toBeInTheDocument();
   });
 
   it('keeps the edit drawer open when trade update fails', async () => {
@@ -1965,12 +1995,12 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     fireEvent.click(screen.getByRole('button', { name: '作废' }));
-    expect(await screen.findByText('确认作废交易？')).toBeInTheDocument();
+    expect(await screen.findByText('确认作废持仓流水？')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认作废' }));
 
     await waitFor(() => expect(deleteTrade).toHaveBeenCalledWith(7));
     await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText('交易已作废 · 持仓已刷新')).toBeInTheDocument();
+    expect(await screen.findByText('持仓流水已作废 · 持仓已刷新')).toBeInTheDocument();
 
     deleteTrade.mockRejectedValueOnce(
       createApiError(
@@ -2074,7 +2104,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByText(translate('zh', 'portfolio.dataSyncTitle'))).toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'portfolio.createAccountTitle'))).not.toBeInTheDocument();
 
-    fireEvent.click(getLeftTabButton('交易'));
+    fireEvent.click(getLeftTabButton('记账'));
     expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
   });
 });
