@@ -38,6 +38,9 @@ notes, fixture examples, or a single product-capability changelog entry.
 - `docs/audits/operator-evidence-real-runbook.md`: concise offline workflow
   for collecting sanitized real operator evidence, validating it, creating a
   manifest, rendering a review report, and handing it to manual reviewers.
+- `docs/audits/operator-evidence-dry-run-handoff.md`: synthetic-fixture-only
+  dry-run handoff sequence for rehearsing the offline evidence workflow without
+  touching launch acceptance plumbing or runtime behavior.
 - `docs/audits/operator-evidence-redaction-checklist.md`: pre-handoff checklist
   for removing secrets, sessions, raw payloads, DB material, logs, personal
   identifiers, and unsafe approval wording from evidence packets.
@@ -61,6 +64,7 @@ notes, fixture examples, or a single product-capability changelog entry.
   `docs/audits/cost-system-final-qa-matrix.md`: current supporting evidence for
   public-safety, security-hardening, and cost-system readiness.
 - `docs/audits/admin-governance-cost-e2e-qa-runbook.md`,
+  `docs/audits/operator-evidence-dry-run-handoff.md`,
   `docs/audits/operator-evidence-real-runbook.md`,
   `docs/audits/operator-evidence-redaction-checklist.md`,
   `docs/audits/provider-data-incident-runbook.md`,
