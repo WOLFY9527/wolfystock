@@ -1,5 +1,13 @@
 ## 2026-05-08
 
+- 🧪 **Review evidence validator integration** — Launch acceptance evidence and
+  release gate summary now include required review evidence for sanitized
+  WS2/SSE operator decisions, config snapshots, and manual release review
+  records, while listing the operator evidence bundle checker only as a
+  review-support aggregation tool. The accepted fixture remains
+  `GO-REVIEW-REQUIRED` with `releaseApproved=false`; missing/unsafe evidence
+  remains **NO-GO**, and manual approval evidence cannot auto-approve release.
+
 - 🧪 **Operator evidence validator integration** — Launch acceptance evidence and
   the release gate summary now recognize domain-local offline validators for
   provider operator evidence, real restore/PITR operator evidence, security
@@ -61,7 +69,7 @@
 - 🧪 **Launch acceptance evidence pack** — Added
   `scripts/launch_acceptance_evidence.py`, stable synthetic fixtures, focused
   tests, and launch-doc references for the operator-supplied evidence required
-  before public launch can move from NO-GO toward manual GO review. The pack
+  before public launch can move from NO-GO toward manual release review. The pack
   covers MFA pilot acceptance, RBAC fallback disable switch, provider
   credential staging dry-run, provider circuit controlled enforcement, quota
   pilot acceptance, real isolated PostgreSQL restore/PITR, staging ingress

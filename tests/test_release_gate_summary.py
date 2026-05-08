@@ -35,6 +35,9 @@ EXPECTED_OPERATOR_CATEGORY_IDS = [
     "security_operator_acceptance",
     "quota_budget_operator_evidence",
     "staging_ingress_operator_evidence",
+    "ws2_sse_operator_decision_evidence",
+    "config_snapshot_evidence",
+    "manual_release_approval_review_record",
 ]
 
 
@@ -53,6 +56,10 @@ def _init_repo(tmp_path: Path) -> Path:
     (repo / "scripts" / "incident_response_evidence.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
     (repo / "scripts" / "staging_ingress_smoke.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
     (repo / "scripts" / "ci_gate_fast.sh").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    (repo / "scripts" / "operator_evidence_bundle_check.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    (repo / "scripts" / "ws2_sse_operator_decision_check.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    (repo / "scripts" / "config_snapshot_evidence_check.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    (repo / "scripts" / "manual_release_approval_evidence_check.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
 
     _run(["git", "init", "-b", "main"], repo, check=True)
     _run(["git", "config", "user.email", "codex@example.com"], repo, check=True)
@@ -83,9 +90,20 @@ def test_release_gate_summary_prints_required_fields_on_clean_repo(tmp_path):
     assert "scripts/incident_response_evidence.py: present" in result.stdout
     assert "scripts/staging_ingress_smoke.py: present" in result.stdout
     assert "scripts/ci_gate_fast.sh: present" in result.stdout
+    assert "scripts/operator_evidence_bundle_check.py: present" in result.stdout
+    assert "scripts/ws2_sse_operator_decision_check.py: present" in result.stdout
+    assert "scripts/config_snapshot_evidence_check.py: present" in result.stdout
+    assert "scripts/manual_release_approval_evidence_check.py: present" in result.stdout
     assert "python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>" in result.stdout
     assert "python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>" in result.stdout
     assert "python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>" in result.stdout
+    assert "python3 scripts/operator_evidence_bundle_check.py <sanitized-operator-evidence-dir>" in result.stdout
+    assert "python3 scripts/ws2_sse_operator_decision_check.py <sanitized-ws2-sse-operator-decision.json>" in result.stdout
+    assert "python3 scripts/config_snapshot_evidence_check.py <sanitized-config-snapshot-evidence.json>" in result.stdout
+    assert (
+        "python3 scripts/manual_release_approval_evidence_check.py --artifact <sanitized-manual-release-review-record.json>"
+        in result.stdout
+    )
     assert "./scripts/release_secret_scan.sh" in result.stdout
     assert "python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>" in result.stdout
     assert "./scripts/ci_gate_fast.sh" in result.stdout
@@ -121,7 +139,14 @@ def test_release_gate_summary_go_no_go_json_keeps_launch_blocked(tmp_path):
         "security_operator_acceptance_validator",
         "quota_budget_operator_evidence_validator",
         "staging_ingress_operator_evidence_validator",
+        "operator_evidence_bundle_review_support",
+        "ws2_sse_operator_decision_validator",
+        "config_snapshot_evidence_validator",
+        "manual_release_approval_review_record_validator",
     } <= evidence_ids
+    support = {item["id"]: item for item in summary["completedFoundationEvidence"]}
+    assert support["operator_evidence_bundle_review_support"]["status"] == "review_support_available"
+    assert support["manual_release_approval_review_record_validator"]["status"] == "offline_validator_available_manual_review_required"
     blocker_ids = {item["id"] for item in summary["hardBlockers"]}
     assert set(EXPECTED_OPERATOR_CATEGORY_IDS) <= blocker_ids
     assert all(item["status"] == "blocking" for item in summary["hardBlockers"])
@@ -139,7 +164,14 @@ def test_release_gate_summary_go_no_go_json_keeps_launch_blocked(tmp_path):
         "python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>"
         in summary["requiredFinalCommands"]
     )
+    assert "python3 scripts/operator_evidence_bundle_check.py <sanitized-operator-evidence-dir>" in summary["requiredFinalCommands"]
+    assert (
+        "python3 scripts/manual_release_approval_evidence_check.py --artifact <sanitized-manual-release-review-record.json>"
+        in summary["requiredFinalCommands"]
+    )
     assert "launch-ready" not in result.stdout
+    assert "launch-" + "approved" not in result.stdout.lower()
+    assert "production-" + "ready" not in result.stdout.lower()
 
 
 def test_release_gate_summary_fails_on_dirty_repo_without_allow_dirty(tmp_path):

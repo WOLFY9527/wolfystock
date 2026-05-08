@@ -603,6 +603,100 @@
         "responseBodiesIncluded": false,
         "productionDataPathsIncluded": false
       }
+    },
+    "ws2_sse_operator_decision_evidence": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-08T00:00:00Z",
+      "evidenceRef": "ws2-sse-operator-decision-validator-synthetic-json",
+      "artifactSummary": {
+        "artifactVersion": "wolfystock_ws2_sse_operator_decision_evidence_v1",
+        "environment": "staging",
+        "topologyMode": "polling-fallback",
+        "sseBroadcastScope": "process-local",
+        "outcome": "accepted"
+      },
+      "checks": {
+        "ws2SseOperatorDecisionValidatorPassed": true,
+        "ws2SseOperatorDecisionGuideReferenced": true,
+        "topologyDecisionAccepted": true,
+        "processLocalSseLimitationPreserved": true,
+        "pollingFallbackOrSingleInstanceLimitationRecorded": true,
+        "networkCallsExecutedByValidatorFalse": true,
+        "runtimeBehaviorUnchanged": true,
+        "manualReviewGateRecorded": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "config_snapshot_evidence": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-08T00:00:00Z",
+      "evidenceRef": "config-snapshot-evidence-validator-synthetic-json",
+      "artifactSummary": {
+        "artifactVersion": "config-snapshot-evidence-v1",
+        "environment": "production-like-staging",
+        "presencePosture": "redacted-only",
+        "outcome": "accepted"
+      },
+      "checks": {
+        "configSnapshotValidatorPassed": true,
+        "configSnapshotGuideReferenced": true,
+        "authProviderQuotaDatabaseSummariesRecorded": true,
+        "secretPresenceOnlyOrRedacted": true,
+        "rawConfigAndEnvValuesExcluded": true,
+        "externalServicesCalledByValidatorFalse": true,
+        "runtimeBehaviorUnchanged": true,
+        "manualReviewGateRecorded": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "manual_release_approval_review_record": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-08T00:00:00Z",
+      "evidenceRef": "manual-release-review-record-validator-synthetic-json",
+      "artifactSummary": {
+        "artifactVersion": "wolfystock_manual_release_approval_review_record_v1",
+        "releaseCandidateSha": "5ba3ffb5",
+        "reviewerRoleLabelCount": 2,
+        "approvalMeetingOrTicketRef": "release-review-ticket-2026-05-08",
+        "evidenceBundleRef": "launch-acceptance-evidence-pack-v1",
+        "knownResidualRiskCount": 2,
+        "goNoGoDecision": "approved-for-manual-release-review"
+      },
+      "checks": {
+        "manualReleaseApprovalValidatorPassed": true,
+        "manualReleaseApprovalGuideReferenced": true,
+        "reviewRecordSanitized": true,
+        "releaseApprovedFalse": true,
+        "launchApprovedFalse": true,
+        "manualApprovalDoesNotAutoApprove": true,
+        "runtimeBehaviorUnchanged": true,
+        "externalReleaseApprovalRemainsManual": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
     }
   }
 }

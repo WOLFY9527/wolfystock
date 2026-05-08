@@ -65,9 +65,39 @@ SENSITIVE_KEY_MARKERS = (
     "debug payload",
     "debug_payload",
     "debugpayload",
+    "raw config",
+    "raw_config",
+    "rawconfig",
+    "config_dump",
+    "configdump",
+    "raw_env",
+    "rawenv",
+    "env_dump",
+    "envdump",
+    "dotenv",
+    "environment_dump",
+    "environmentdump",
     "request body",
     "request_body",
     "requestbody",
+    "raw meeting",
+    "raw_meeting",
+    "rawmeeting",
+    "raw transcript",
+    "raw_transcript",
+    "rawtranscript",
+    "meeting transcript",
+    "transcript",
+    "chat log",
+    "chat_log",
+    "chatlog",
+    "screenshot",
+    "screen shot",
+    "person_name",
+    "real_name",
+    "user_name",
+    "username",
+    "email",
     "traceback",
     "stack trace",
     "stack_trace",
@@ -90,6 +120,9 @@ SENSITIVE_VALUE_PATTERNS = (
     re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}"),
     re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}"),
     re.compile(r"https?://[^\s?#]+[?][^\s]+", re.IGNORECASE),
+    re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
+    re.compile(r"\b(?:raw\s+)?(?:env|dotenv|environment|config)\s+dump\b", re.IGNORECASE),
+    re.compile(r"\b(?:meeting transcript|chat log|raw[_\s-]?(?:meeting|chat|log|transcript|screenshot))\b", re.IGNORECASE),
 )
 
 REQUIRED_SANITIZATION: dict[str, bool] = {
@@ -550,6 +583,67 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
             "manualReviewGateRecorded",
         ),
     ),
+    CategorySpec(
+        id="ws2_sse_operator_decision_evidence",
+        title="WS2/SSE topology operator decision validator evidence",
+        required_evidence=(
+            "accepted sanitized WS2/SSE topology operator decision evidence validated by "
+            "scripts/ws2_sse_operator_decision_check.py, with the WS2/SSE operator decision guide referenced, "
+            "process-local SSE limitation preserved, polling fallback or single-instance limitation recorded, "
+            "no network calls by the validator, unchanged runtime behavior, and manual review gate"
+        ),
+        required_checks=(
+            "ws2SseOperatorDecisionValidatorPassed",
+            "ws2SseOperatorDecisionGuideReferenced",
+            "topologyDecisionAccepted",
+            "processLocalSseLimitationPreserved",
+            "pollingFallbackOrSingleInstanceLimitationRecorded",
+            "networkCallsExecutedByValidatorFalse",
+            "runtimeBehaviorUnchanged",
+            "manualReviewGateRecorded",
+        ),
+    ),
+    CategorySpec(
+        id="config_snapshot_evidence",
+        title="Config snapshot evidence validator evidence",
+        required_evidence=(
+            "accepted sanitized configuration snapshot evidence validated by "
+            "scripts/config_snapshot_evidence_check.py, with the config snapshot guide referenced, "
+            "auth/provider/quota/database summaries recorded, secret posture represented only as presence or redacted labels, "
+            "raw config and env values excluded, no external services by the validator, unchanged runtime behavior, "
+            "and manual review gate"
+        ),
+        required_checks=(
+            "configSnapshotValidatorPassed",
+            "configSnapshotGuideReferenced",
+            "authProviderQuotaDatabaseSummariesRecorded",
+            "secretPresenceOnlyOrRedacted",
+            "rawConfigAndEnvValuesExcluded",
+            "externalServicesCalledByValidatorFalse",
+            "runtimeBehaviorUnchanged",
+            "manualReviewGateRecorded",
+        ),
+    ),
+    CategorySpec(
+        id="manual_release_approval_review_record",
+        title="Manual release approval review-record validator evidence",
+        required_evidence=(
+            "accepted sanitized manual release review-record evidence validated by "
+            "scripts/manual_release_approval_evidence_check.py, with the manual release approval guide referenced, "
+            "review record sanitized, releaseApproved=false, launchApproved=false, no automatic approval derived from input, "
+            "unchanged runtime behavior, and release approval remaining external/manual"
+        ),
+        required_checks=(
+            "manualReleaseApprovalValidatorPassed",
+            "manualReleaseApprovalGuideReferenced",
+            "reviewRecordSanitized",
+            "releaseApprovedFalse",
+            "launchApprovedFalse",
+            "manualApprovalDoesNotAutoApprove",
+            "runtimeBehaviorUnchanged",
+            "externalReleaseApprovalRemainsManual",
+        ),
+    ),
 )
 
 
@@ -646,6 +740,8 @@ def _category_result(spec: CategorySpec, raw_category: Any) -> dict[str, Any]:
             "reasonCodes": reason_codes,
             "acceptedEvidence": False,
         }
+    if raw_category.get("releaseApproved") is True or raw_category.get("launchApproved") is True:
+        reason_codes.append("release_approval_boolean_present")
     if _contains_sensitive_value(raw_category):
         reason_codes.append("sensitive_value_present")
     elif str(raw_category.get("status") or "").strip().lower() != "accepted":

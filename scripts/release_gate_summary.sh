@@ -253,6 +253,42 @@ summary = {
                 "validator output must not include network calls by the validator, credential URLs, raw bodies, headers, cookies, or ingress runtime changes",
             ],
         },
+        {
+            "id": "operator_evidence_bundle_review_support",
+            "status": "review_support_available",
+            "evidence": [
+                "scripts/operator_evidence_bundle_check.py aggregates existing sanitized operator-validator summaries offline",
+                "bundle output is a review aid only and is not counted as a separate operator artifact",
+                "reviewers must still inspect real source artifacts and manual release approval remains external/manual",
+            ],
+        },
+        {
+            "id": "ws2_sse_operator_decision_validator",
+            "status": "offline_validator_available_review_required",
+            "evidence": [
+                "scripts/ws2_sse_operator_decision_check.py validates sanitized WS2/SSE topology operator decisions offline",
+                "process-local SSE limitations and durable polling fallback remain review-gated",
+                "validator output must not include network calls, raw logs, secrets, launch approval claims, or runtime behavior changes",
+            ],
+        },
+        {
+            "id": "config_snapshot_evidence_validator",
+            "status": "offline_validator_available_review_required",
+            "evidence": [
+                "scripts/config_snapshot_evidence_check.py validates sanitized config snapshot summaries offline",
+                "real config posture still requires operator-produced evidence with labels and presence states only",
+                "validator output must not include raw env values, raw config dumps, deployment state reads, secrets, or runtime changes",
+            ],
+        },
+        {
+            "id": "manual_release_approval_review_record_validator",
+            "status": "offline_validator_available_manual_review_required",
+            "evidence": [
+                "scripts/manual_release_approval_evidence_check.py validates a sanitized manual review-record shape offline",
+                "a passing review record never sets releaseApproved=true and never approves launch automatically",
+                "release approval remains external/manual and cannot be derived from arbitrary fixture input",
+            ],
+        },
     ],
     "operatorEvidencePack": {
         "schemaVersion": "wolfystock_launch_acceptance_evidence_summary_v1",
@@ -285,6 +321,9 @@ summary = {
             "security_operator_acceptance",
             "quota_budget_operator_evidence",
             "staging_ingress_operator_evidence",
+            "ws2_sse_operator_decision_evidence",
+            "config_snapshot_evidence",
+            "manual_release_approval_review_record",
         ],
         "finalStatus": "NO-GO",
         "releaseApproved": False,
@@ -430,15 +469,34 @@ summary = {
             "status": "blocking",
             "requiredEvidence": "accepted sanitized staging ingress operator evidence from scripts/staging_ingress_operator_evidence_check.py plus guide reference and unchanged ingress runtime behavior",
         },
+        {
+            "id": "ws2_sse_operator_decision_evidence",
+            "status": "blocking",
+            "requiredEvidence": "accepted sanitized WS2/SSE topology operator decision evidence from scripts/ws2_sse_operator_decision_check.py with process-local SSE limitation, polling fallback or single-instance limitation, and unchanged runtime behavior",
+        },
+        {
+            "id": "config_snapshot_evidence",
+            "status": "blocking",
+            "requiredEvidence": "accepted sanitized config snapshot evidence from scripts/config_snapshot_evidence_check.py with auth/provider/quota/database summaries, redacted-only secret posture, no raw config values, and unchanged runtime behavior",
+        },
+        {
+            "id": "manual_release_approval_review_record",
+            "status": "blocking",
+            "requiredEvidence": "accepted sanitized manual release review-record evidence from scripts/manual_release_approval_evidence_check.py with releaseApproved=false, launchApproved=false, and release approval remaining external/manual",
+        },
     ],
     "requiredFinalCommands": [
         "python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>",
         "python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>",
+        "python3 scripts/operator_evidence_bundle_check.py <sanitized-operator-evidence-dir>",
         "python3 scripts/provider_operator_evidence_check.py <sanitized-provider-operator-evidence.json>",
         "python3 scripts/restore_pitr_operator_evidence_check.py --artifact <sanitized-restore-pitr-operator-evidence.json>",
         "python3 scripts/security_operator_acceptance_check.py --artifact <sanitized-security-operator-artifact.json>",
         "python3 scripts/quota_operator_evidence_check.py --evidence <sanitized-quota-budget-operator-evidence.json>",
         "python3 scripts/staging_ingress_operator_evidence_check.py <sanitized-staging-ingress-operator-evidence.json>",
+        "python3 scripts/ws2_sse_operator_decision_check.py <sanitized-ws2-sse-operator-decision.json>",
+        "python3 scripts/config_snapshot_evidence_check.py <sanitized-config-snapshot-evidence.json>",
+        "python3 scripts/manual_release_approval_evidence_check.py --artifact <sanitized-manual-release-review-record.json>",
         "python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>",
         "./scripts/release_secret_scan.sh",
         "python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>",
@@ -489,16 +547,24 @@ echo "scripts/launch_acceptance_evidence.py: $(script_status "scripts/launch_acc
 echo "scripts/incident_response_evidence.py: $(script_status "scripts/incident_response_evidence.py")"
 echo "scripts/staging_ingress_smoke.py: $(script_status "scripts/staging_ingress_smoke.py")"
 echo "scripts/ci_gate_fast.sh: $(script_status "scripts/ci_gate_fast.sh")"
+echo "scripts/operator_evidence_bundle_check.py: $(script_status "scripts/operator_evidence_bundle_check.py")"
+echo "scripts/ws2_sse_operator_decision_check.py: $(script_status "scripts/ws2_sse_operator_decision_check.py")"
+echo "scripts/config_snapshot_evidence_check.py: $(script_status "scripts/config_snapshot_evidence_check.py")"
+echo "scripts/manual_release_approval_evidence_check.py: $(script_status "scripts/manual_release_approval_evidence_check.py")"
 
 print_step "final required commands"
 cat <<'COMMANDS'
 python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>
 python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>
+python3 scripts/operator_evidence_bundle_check.py <sanitized-operator-evidence-dir>
 python3 scripts/provider_operator_evidence_check.py <sanitized-provider-operator-evidence.json>
 python3 scripts/restore_pitr_operator_evidence_check.py --artifact <sanitized-restore-pitr-operator-evidence.json>
 python3 scripts/security_operator_acceptance_check.py --artifact <sanitized-security-operator-artifact.json>
 python3 scripts/quota_operator_evidence_check.py --evidence <sanitized-quota-budget-operator-evidence.json>
 python3 scripts/staging_ingress_operator_evidence_check.py <sanitized-staging-ingress-operator-evidence.json>
+python3 scripts/ws2_sse_operator_decision_check.py <sanitized-ws2-sse-operator-decision.json>
+python3 scripts/config_snapshot_evidence_check.py <sanitized-config-snapshot-evidence.json>
+python3 scripts/manual_release_approval_evidence_check.py --artifact <sanitized-manual-release-review-record.json>
 python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>
 ./scripts/release_secret_scan.sh
 python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>

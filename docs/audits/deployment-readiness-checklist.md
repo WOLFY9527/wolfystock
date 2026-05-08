@@ -346,17 +346,33 @@ The following must all be true before public multi-user deployment:
   fallback evidence, AI report/guest-preview safety, Options derivatives
   safety, API abuse/request-safety, final clean gate, and domain-local provider
   operator, restore/PITR operator, security MFA/RBAC operator, quota/budget
-  operator, and staging ingress operator evidence categories without approving
-  launch.
+  operator, staging ingress operator, WS2/SSE operator decision, config
+  snapshot, and manual release review-record evidence categories without
+  approving launch.
+- [x] Operator evidence bundle review support exists through
+  `python3 scripts/operator_evidence_bundle_check.py <sanitized-operator-evidence-dir>`;
+  it aggregates already-sanitized validator statuses only and does not replace
+  any required operator artifact.
 - [x] Domain-local offline validators/templates exist for provider operator
   evidence, real restore/PITR operator evidence, security MFA/RBAC operator
   acceptance, quota/budget operator evidence, and staging ingress operator
   evidence. These validators are rehearsal/evidence plumbing only; they do not
   perform runtime calls or approve launch.
+- [x] Offline validators/templates exist for WS2/SSE operator decisions,
+  config snapshot evidence, and manual release review records. These are
+  review plumbing only: real operator artifacts are still required, and release
+  approval remains external/manual.
 - [x] Production config/secret contract preflight exists through
   `python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>`;
   it consumes only synthetic or operator-sanitized flag names and secret
   presence states, emits stable JSON, and never prints secret values.
+- [ ] Sanitized config snapshot evidence is attached and accepted through
+  `python3 scripts/config_snapshot_evidence_check.py <sanitized-config-snapshot-evidence.json>`
+  without raw `.env` values, deployment state reads, or secret-bearing values.
+- [ ] Sanitized WS2/SSE topology operator decision evidence is attached and
+  accepted through
+  `python3 scripts/ws2_sse_operator_decision_check.py <sanitized-ws2-sse-operator-decision.json>`
+  without cross-instance SSE claims or runtime cutover.
 - [x] Incident-response audit evidence pack exists through
   `python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>`;
   it validates sanitized admin-critical action evidence, preview-first cleanup,
@@ -365,7 +381,11 @@ The following must all be true before public multi-user deployment:
 - [ ] Sanitized operator evidence pack is accepted for every hard blocker; the
   checker may move from **NO-GO** to `GO-REVIEW-REQUIRED`, but
   `releaseApproved` remains false until manual approval.
-- [ ] Real operator-produced artifacts for the five domain-local validator
+- [ ] Sanitized manual release review-record evidence is attached and validated
+  through
+  `python3 scripts/manual_release_approval_evidence_check.py --artifact <sanitized-manual-release-review-record.json>`;
+  this validator must still emit `releaseApproved=false`.
+- [ ] Real operator-produced artifacts for the domain-local validator
   categories are attached and accepted by reviewers for the target environment.
 - [ ] Staging smoke passes through HTTPS reverse proxy on synthetic users/data.
 - [ ] WS2 multi-instance smoke passes or deployment is explicitly constrained to

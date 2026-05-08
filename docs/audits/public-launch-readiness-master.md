@@ -8,6 +8,10 @@ Related docs: `docs/audits/public-launch-gap-register.md`,
 `docs/audits/deployment-readiness-checklist.md`,
 `docs/audits/launch-acceptance-evidence-pack.md`,
 `docs/audits/incident-response-audit-evidence-pack.md`,
+`docs/audits/operator-evidence-bundle-guide.md`,
+`docs/audits/ws2-sse-operator-decision-evidence-guide.md`,
+`docs/audits/config-snapshot-operator-evidence-guide.md`,
+`docs/audits/manual-release-approval-evidence-guide.md`,
 `docs/audits/archive/final-pre-push-audit.md`,
 `docs/audits/known-test-warnings-register.md`
 
@@ -53,6 +57,13 @@ evidence. That coverage only proves the local validators and sanitized
 templates exist. Real operator-produced artifacts are still required for launch
 review, and final approval remains manual.
 
+The latest review plumbing also recognizes the offline WS2/SSE topology
+operator decision validator, config snapshot evidence validator, and manual
+release review-record validator. `scripts/operator_evidence_bundle_check.py`
+is available only as an aggregation aid for already-sanitized domain
+artifacts. None of these helpers grants release approval, and
+`releaseApproved` remains false in machine-readable launch evidence.
+
 ## Master readiness view
 
 | Area | Current posture | Launch status | Blocking requirement |
@@ -65,9 +76,10 @@ review, and final approval remains manual.
 | Deployment, backup, rollback | Deployment checklist, local backup/restore dry-run preflight, release secret-scan, admin harness coverage, and a safe staging-ingress dry-run/live opt-in preflight exist, but launch still lacks accepted isolated PostgreSQL restore/PITR drill, retention tiers, real staging ingress proof, and final release-candidate gate. | **NO-GO** | Clean release-candidate gate, clean worktree, HTTPS reverse-proxy smoke with attached ingress evidence, no public backend `:8000`, backup/restore drill, retention dry runs, rollback plan, and owner-isolation smoke. |
 | Final gate requirements | Docs-only checks can validate this document, but they do not prove runtime readiness. | **NO-GO** | Every item in `deployment-readiness-checklist.md` section 10 must be checked or explicitly accepted as a documented production exception. |
 
-## GO criteria
+## Manual Release Criteria
 
-Public launch may move to **GO** only when all of the following are true:
+Public launch may leave **NO-GO** only through an external/manual release
+decision after all of the following are true:
 
 - `./scripts/ci_gate.sh` is clean on the release candidate.
 - `scripts/release_secret_scan.sh` is clean on the release candidate. This is a
@@ -101,7 +113,22 @@ Public launch may move to **GO** only when all of the following are true:
   derivatives safety, API abuse/request-safety evidence, final clean full
   `ci_gate`, and the five domain-local operator validator categories for
   provider, restore/PITR, security MFA/RBAC, quota/budget, and staging ingress
-  evidence.
+  evidence, plus WS2/SSE operator decision evidence, config snapshot evidence,
+  and manual release review-record evidence.
+- Review-support bundle output may be attached through
+  `python3 scripts/operator_evidence_bundle_check.py <sanitized-operator-evidence-dir>`,
+  but it aggregates existing artifacts only and does not count as a separate
+  launch artifact.
+- WS2/SSE operator decision evidence is validated through
+  `python3 scripts/ws2_sse_operator_decision_check.py <sanitized-ws2-sse-operator-decision.json>`
+  without changing SSE or polling runtime behavior.
+- Config snapshot evidence is validated through
+  `python3 scripts/config_snapshot_evidence_check.py <sanitized-config-snapshot-evidence.json>`
+  without reading raw `.env` values, deployment state, or secrets.
+- Manual release review-record evidence is validated through
+  `python3 scripts/manual_release_approval_evidence_check.py --artifact <sanitized-manual-release-review-record.json>`;
+  the validator always keeps `releaseApproved=false` and cannot approve
+  release from arbitrary input.
 - Sanitized incident-response evidence is attached through
   `python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>`
   for admin-critical audit events, preview-first cleanup, provider/notification

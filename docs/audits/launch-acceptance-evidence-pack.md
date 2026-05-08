@@ -11,8 +11,8 @@ pack.
 ## 1. Purpose
 
 The launch acceptance evidence pack defines the sanitized operator-supplied
-evidence required to move public launch review from **NO-GO** toward a manual
-GO decision. It does not approve launch by itself.
+evidence required to move public launch review from **NO-GO** toward manual
+release review. It does not approve launch by itself.
 
 The checker is:
 
@@ -38,10 +38,15 @@ human release approval.
 
 The matrix also includes domain-local operator validator categories for
 provider operations, real restore/PITR, security MFA/RBAC acceptance,
-quota/budget evidence, and staging ingress evidence. These categories recognize
-the local validator outputs and evidence guides as review attachments only. The
-launch checker does not execute those validators, make provider/network/DB
-calls, or approve launch.
+quota/budget evidence, staging ingress evidence, WS2/SSE topology operator
+decisions, sanitized config snapshots, and manual release review records. These
+categories recognize the local validator outputs and evidence guides as review
+attachments only. The launch checker does not execute those validators, make
+provider/network/DB calls, or approve launch.
+
+`scripts/operator_evidence_bundle_check.py` is a review-support aggregation
+tool for already-sanitized domain artifacts. It is not counted as separate
+operator evidence and cannot replace any real artifact or manual approval.
 
 ## 2. Required Evidence Categories
 
@@ -78,6 +83,9 @@ incomplete evidence keeps the summary at **NO-GO**.
 | `security_operator_acceptance` | Accepted sanitized MFA/RBAC operator acceptance from `scripts/security_operator_acceptance_check.py` and `docs/audits/security-operator-acceptance-evidence-guide.md`; MFA/RBAC sections accepted, `releaseApproved=false`, no auth/RBAC runtime mutation, and manual review required. |
 | `quota_budget_operator_evidence` | Accepted sanitized quota/budget operator evidence from `scripts/quota_operator_evidence_check.py` and `docs/audits/quota-budget-operator-evidence-guide.md`; quota/budget sections accepted, no outbound notifications by the validator, no quota runtime mutation, and advisory review required. |
 | `staging_ingress_operator_evidence` | Accepted sanitized staging ingress operator evidence from `scripts/staging_ingress_operator_evidence_check.py` and `docs/audits/staging-ingress-operator-evidence-guide.md`; artifact summary sanitized, no network calls by the validator, no ingress runtime mutation, and manual review required. |
+| `ws2_sse_operator_decision_evidence` | Accepted sanitized WS2/SSE topology operator decision evidence from `scripts/ws2_sse_operator_decision_check.py` and `docs/audits/ws2-sse-operator-decision-evidence-guide.md`; process-local SSE limitation preserved, polling fallback or single-instance limitation recorded, no validator network calls, no runtime mutation, and manual review required. |
+| `config_snapshot_evidence` | Accepted sanitized config snapshot evidence from `scripts/config_snapshot_evidence_check.py` and `docs/audits/config-snapshot-operator-evidence-guide.md`; auth/provider/quota/database summaries recorded, secret posture represented only as presence/redacted labels, no raw config/env values, no runtime mutation, and manual review required. |
+| `manual_release_approval_review_record` | Accepted sanitized manual release review-record evidence from `scripts/manual_release_approval_evidence_check.py` and `docs/audits/manual-release-approval-evidence-guide.md`; review record sanitized, `releaseApproved=false`, `launchApproved=false`, no automatic approval derived from input, and release approval remains external/manual. |
 
 ## 3. Input Contract
 
@@ -157,6 +165,18 @@ Release review should attach:
   `scripts/security_operator_acceptance_check.py`,
   `scripts/quota_operator_evidence_check.py`, and
   `scripts/staging_ingress_operator_evidence_check.py`.
+- Review-support bundle summary from
+  `scripts/operator_evidence_bundle_check.py <sanitized-operator-evidence-dir>`.
+  This summary aggregates validator statuses only and must not be treated as a
+  substitute for real operator artifacts.
+- WS2/SSE topology operator decision evidence from
+  `scripts/ws2_sse_operator_decision_check.py <sanitized-ws2-sse-operator-decision.json>`.
+- Config snapshot evidence from
+  `scripts/config_snapshot_evidence_check.py <sanitized-config-snapshot-evidence.json>`.
+- Manual release review-record validation from
+  `scripts/manual_release_approval_evidence_check.py --artifact <sanitized-manual-release-review-record.json>`.
+  A valid record still emits `releaseApproved=false` and does not approve
+  launch.
 - `scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>` output for incident/audit sanitization evidence.
 - `scripts/backup_restore_drill_check.sh` output for synthetic preflight and,
   when available, accepted sanitized real restore/PITR evidence.

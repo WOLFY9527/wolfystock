@@ -38,6 +38,9 @@ EXPECTED_CATEGORY_IDS = {
     "security_operator_acceptance",
     "quota_budget_operator_evidence",
     "staging_ingress_operator_evidence",
+    "ws2_sse_operator_decision_evidence",
+    "config_snapshot_evidence",
+    "manual_release_approval_review_record",
 }
 NEW_OPERATOR_CATEGORY_IDS = {
     "provider_operator_evidence",
@@ -45,6 +48,9 @@ NEW_OPERATOR_CATEGORY_IDS = {
     "security_operator_acceptance",
     "quota_budget_operator_evidence",
     "staging_ingress_operator_evidence",
+    "ws2_sse_operator_decision_evidence",
+    "config_snapshot_evidence",
+    "manual_release_approval_review_record",
 }
 
 
@@ -100,7 +106,7 @@ def test_launch_acceptance_evidence_missing_categories_remain_no_go() -> None:
         "runtimeDefaultsChanged": False,
     }
     assert evidence["summary"]["accepted"] == 0
-    assert evidence["summary"]["blocking"] == 28
+    assert evidence["summary"]["blocking"] == 31
     blocker_ids = {item["id"] for item in evidence["hardBlockers"]}
     assert EXPECTED_CATEGORY_IDS == blocker_ids
 
@@ -120,7 +126,7 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
     assert evidence["finalStatus"] == "GO-REVIEW-REQUIRED"
     assert evidence["releaseApproved"] is False
     assert evidence["statusReason"] == "All hard blockers have accepted sanitized evidence; release approval remains manual."
-    assert evidence["summary"]["accepted"] == 28
+    assert evidence["summary"]["accepted"] == 31
     assert evidence["summary"]["blocking"] == 0
     assert evidence["hardBlockers"] == []
     categories = {item["id"]: item for item in evidence["categories"]}
@@ -312,6 +318,36 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
         "runtimeBehaviorUnchanged",
         "manualReviewGateRecorded",
     ]
+    assert categories["ws2_sse_operator_decision_evidence"]["requiredChecks"] == [
+        "ws2SseOperatorDecisionValidatorPassed",
+        "ws2SseOperatorDecisionGuideReferenced",
+        "topologyDecisionAccepted",
+        "processLocalSseLimitationPreserved",
+        "pollingFallbackOrSingleInstanceLimitationRecorded",
+        "networkCallsExecutedByValidatorFalse",
+        "runtimeBehaviorUnchanged",
+        "manualReviewGateRecorded",
+    ]
+    assert categories["config_snapshot_evidence"]["requiredChecks"] == [
+        "configSnapshotValidatorPassed",
+        "configSnapshotGuideReferenced",
+        "authProviderQuotaDatabaseSummariesRecorded",
+        "secretPresenceOnlyOrRedacted",
+        "rawConfigAndEnvValuesExcluded",
+        "externalServicesCalledByValidatorFalse",
+        "runtimeBehaviorUnchanged",
+        "manualReviewGateRecorded",
+    ]
+    assert categories["manual_release_approval_review_record"]["requiredChecks"] == [
+        "manualReleaseApprovalValidatorPassed",
+        "manualReleaseApprovalGuideReferenced",
+        "reviewRecordSanitized",
+        "releaseApprovedFalse",
+        "launchApprovedFalse",
+        "manualApprovalDoesNotAutoApprove",
+        "runtimeBehaviorUnchanged",
+        "externalReleaseApprovalRemainsManual",
+    ]
 
 
 def test_launch_acceptance_evidence_missing_new_operator_categories_keep_no_go(tmp_path: Path) -> None:
@@ -345,6 +381,24 @@ def test_launch_acceptance_evidence_input_release_approved_true_is_ignored(tmp_p
     evidence = _json(result)
     assert evidence["finalStatus"] == "GO-REVIEW-REQUIRED"
     assert evidence["releaseApproved"] is False
+
+
+def test_manual_approval_evidence_cannot_auto_approve_release(tmp_path: Path) -> None:
+    payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    payload["categories"]["manual_release_approval_review_record"]["releaseApproved"] = True
+    payload["categories"]["manual_release_approval_review_record"]["launchApproved"] = True
+    evidence_path = tmp_path / "manual-approval-cannot-auto-approve.json"
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_checker("--evidence", str(evidence_path))
+
+    assert result.returncode == 1
+    evidence = _json(result)
+    assert evidence["finalStatus"] == "NO-GO"
+    assert evidence["releaseApproved"] is False
+    category = next(item for item in evidence["categories"] if item["id"] == "manual_release_approval_review_record")
+    assert category["status"] == "blocking"
+    assert category["reasonCodes"] == ["release_approval_boolean_present"]
 
 
 def test_launch_acceptance_evidence_keeps_provider_circuit_required_when_missing(tmp_path: Path) -> None:
@@ -484,6 +538,21 @@ def test_launch_acceptance_evidence_rejects_new_operator_unsafe_markers_without_
             "stagingIngressOperatorValidatorPassed",
             "debugPayload",
             "Traceback (most recent call last): should-not-print",
+        ),
+        "ws2_sse_operator_decision_evidence": (
+            "ws2SseOperatorDecisionValidatorPassed",
+            "sessionCookie",
+            "session=should-not-print",
+        ),
+        "config_snapshot_evidence": (
+            "configSnapshotValidatorPassed",
+            "rawEnvDump",
+            "APP_ENV=should-not-print",
+        ),
+        "manual_release_approval_review_record": (
+            "manualReleaseApprovalValidatorPassed",
+            "rawMeetingTranscript",
+            "meeting transcript should-not-print",
         ),
     }
     for category_id, (first_check, unsafe_key, unsafe_value) in unsafe_cases.items():
