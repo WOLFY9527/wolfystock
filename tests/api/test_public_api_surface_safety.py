@@ -7,6 +7,7 @@ import json
 from unittest.mock import patch
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
@@ -91,6 +92,17 @@ def _auth_guarded_client() -> TestClient:
     app = FastAPI()
     add_auth_middleware(app)
     app.include_router(api_v1_router)
+    return TestClient(app)
+
+
+def _limiter_probe_client() -> TestClient:
+    app = FastAPI()
+    add_auth_middleware(app)
+
+    @app.get("/api/v1/limiter-probe/fails")
+    async def limiter_probe_fails():
+        return JSONResponse(status_code=422, content={"error": "probe_validation_failed"})
+
     return TestClient(app)
 
 
@@ -295,6 +307,7 @@ def test_public_malformed_json_bursts_eventually_receive_sanitized_rate_limit(mo
             "error": "rate_limited",
             "message": "Too many public API errors; retry later.",
         }
+        assert responses[-1].headers["Retry-After"] == "300"
         for response in responses:
             _assert_public_surface_safe(response.json())
     finally:
@@ -384,6 +397,120 @@ def test_public_api_abuse_limiter_state_can_be_reset_for_tests(monkeypatch) -> N
     finally:
         client.close()
         reset_public_api_abuse_limiter_state()
+        _reset_auth_globals()
+
+
+def test_public_api_abuse_limiter_env_values_are_bounded_and_safe(monkeypatch) -> None:
+    from api.middlewares import public_abuse_limiter as limiter
+
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "5")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "0")
+    assert limiter._window_seconds() == 60
+    assert limiter._max_failures() == 1
+
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "999999")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "999999")
+    assert limiter._window_seconds() == 3600
+    assert limiter._max_failures() == 100
+
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "not-an-int")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "not-an-int")
+    assert limiter._window_seconds() == limiter.PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS_DEFAULT
+    assert limiter._max_failures() == limiter.PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES_DEFAULT
+
+
+def test_public_api_abuse_limiter_isolates_failure_buckets_per_client(monkeypatch) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("TRUST_X_FORWARDED_FOR", "true")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+            first_client_first_failure = client.post(
+                "/api/v1/admin/users/bootstrap-admin/disable",
+                json={"reason": "public abuse limiter bucket isolation", "confirm": "DISABLE"},
+                headers={"X-Forwarded-For": "203.0.113.100"},
+            )
+            first_client_limited = client.post(
+                "/api/v1/admin/users/bootstrap-admin/disable",
+                json={"reason": "public abuse limiter bucket isolation", "confirm": "DISABLE"},
+                headers={"X-Forwarded-For": "203.0.113.100"},
+            )
+            second_client_first_failure = client.post(
+                "/api/v1/admin/users/bootstrap-admin/disable",
+                json={"reason": "public abuse limiter bucket isolation", "confirm": "DISABLE"},
+                headers={"X-Forwarded-For": "203.0.113.101"},
+            )
+
+        assert [
+            first_client_first_failure.status_code,
+            first_client_limited.status_code,
+            second_client_first_failure.status_code,
+        ] == [401, 429, 401]
+        assert first_client_limited.headers["Retry-After"] == "300"
+        for response in (first_client_first_failure, first_client_limited, second_client_first_failure):
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
+def test_valid_session_cookie_bypasses_public_api_abuse_limiter(monkeypatch, tmp_path) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setattr(auth, "_get_data_dir", lambda: tmp_path)
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    auth._auth_enabled = True
+    auth.set_initial_password("adminpass123")
+    session_cookie = auth.create_session()
+    client = _limiter_probe_client()
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+            responses = [
+                client.get(
+                    "/api/v1/limiter-probe/fails",
+                    cookies={auth.COOKIE_NAME: session_cookie},
+                    headers={"X-Forwarded-For": "203.0.113.102"},
+                )
+                for _ in range(3)
+            ]
+
+        assert [response.status_code for response in responses] == [422, 422, 422]
+        for response in responses:
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
+def test_public_api_abuse_limiter_excludes_auth_routes(monkeypatch) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+            responses = [
+                client.patch(
+                    "/api/v1/auth/status",
+                    data=ABUSE_REHEARSAL_SECRET_BODY,
+                    headers={"content-type": "application/json", "X-Forwarded-For": "203.0.113.103"},
+                )
+                for _ in range(3)
+            ]
+
+        assert [response.status_code for response in responses] == [405, 405, 405]
+        for response in responses:
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
         _reset_auth_globals()
 
 

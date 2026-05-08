@@ -17,6 +17,10 @@ from src.auth import COOKIE_NAME, get_client_ip, get_session_identity
 
 PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS_DEFAULT = 300
 PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES_DEFAULT = 12
+PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS_MIN = 60
+PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS_MAX = 3600
+PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES_MIN = 1
+PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES_MAX = 100
 
 _TRACKED_FAILURE_STATUSES = frozenset({400, 401, 403, 405, 422})
 _EXEMPT_PREFIXES = (
@@ -31,19 +35,20 @@ _PUBLIC_API_ABUSE_BUCKETS: dict[str, tuple[int, float]] = {}
 _PUBLIC_API_ABUSE_LOCK = threading.Lock()
 
 
-def _env_int(name: str, default: int, *, minimum: int) -> int:
+def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
     try:
         value = int(os.getenv(name, str(default)))
     except ValueError:
         value = default
-    return max(minimum, value)
+    return min(maximum, max(minimum, value))
 
 
 def _window_seconds() -> int:
     return _env_int(
         "PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS",
         PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS_DEFAULT,
-        minimum=60,
+        minimum=PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS_MIN,
+        maximum=PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS_MAX,
     )
 
 
@@ -51,7 +56,8 @@ def _max_failures() -> int:
     return _env_int(
         "PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES",
         PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES_DEFAULT,
-        minimum=1,
+        minimum=PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES_MIN,
+        maximum=PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES_MAX,
     )
 
 
