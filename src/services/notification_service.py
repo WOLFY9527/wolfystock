@@ -40,6 +40,7 @@ SENSITIVE_KEYS = (
     "api_key",
     "apikey",
     "cookie",
+    "email",
     "session",
     "credential",
 )
