@@ -37,13 +37,13 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
     onClick: handleOpenDetailsClick,
     onPointerUp: handleOpenDetailsPointerUp,
   } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
-  const isEntryMetric = (label: string) => label === '建仓区间' || label === 'Entry Zone';
+  const isEntryMetric = (label: string) => label === '观察区间' || label === '建仓区间' || label === 'Watch Zone' || label === 'Entry Zone';
   const getMetricLabel = (label: string) => {
-    if (label === '建仓区间') {
-      return '理想买入点';
+    if (label === '观察区间' || label === '建仓区间') {
+      return '观察条件区';
     }
-    if (label === 'Entry Zone') {
-      return 'Ideal Buy Point';
+    if (label === 'Watch Zone' || label === 'Entry Zone') {
+      return 'Watch Zone';
     }
     return label;
   };

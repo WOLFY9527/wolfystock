@@ -79,6 +79,46 @@ type QuickQuestion = {
   skill: string;
 };
 
+const CHAT_COPY_OVERRIDES: Record<'zh' | 'en', Record<string, string>> = {
+  zh: {
+    documentTitle: 'AI 研究台 - WolfyStock',
+    title: 'WOLFY AI 研究台',
+    description: '用自然语言调用只读证据，形成分析观察与风险边界',
+    emptyBody: '先明确观察结论，再继续细化风险、催化和数据可信度。',
+    'starterCards.entryDecision.title': '观察条件检查',
+    'starterCards.entryDecision.description': '基于只读证据复核当前是否具备继续观察的条件。',
+    'starterCards.entryDecision.prompt': '请基于只读证据分析 NVDA 的观察条件、风险边界和需要等待的确认信号',
+    'starterCards.positionReview.title': '持仓风险复盘',
+    'starterCards.positionReview.description': '适合已有持仓时复核风险暴露、情景假设和后续观察条件。',
+    'starterCards.positionReview.prompt': '我持有 TSLA，请复核当前风险暴露、需要观察的确认信号和情景分歧',
+    'starterCards.eventFollowUp.description': '聚焦财报、催化、风险与情绪，不给出行动指令。',
+    'starterCards.eventFollowUp.prompt': 'ORCL 财报后是否仍值得观察？请列出催化、风险和数据缺口',
+    'quickQuestions.q1': '分析 ORCL 是否仍值得观察',
+    'quickQuestions.q2': '我持有 AAPL，主要风险和确认信号是什么',
+    'skills.general': '综合观察',
+    inputPlaceholder: '例如：分析 600519 / 茅台当前观察条件是什么？（回车发送，Shift+回车换行）',
+    suggestedFocus: '优先提问：观察条件、风险边界、数据可信度和催化。',
+  },
+  en: {
+    documentTitle: 'AI Research Desk - WolfyStock',
+    title: 'WOLFY AI Research Desk',
+    description: 'Use natural language to call read-only evidence for observation analysis and risk boundaries.',
+    emptyBody: 'Start with an observation thesis, then narrow into risk, catalysts, and data confidence.',
+    'starterCards.entryDecision.title': 'Readiness check',
+    'starterCards.entryDecision.description': 'Review read-only evidence for observation conditions and risk boundaries.',
+    'starterCards.entryDecision.prompt': 'Use read-only evidence to analyze NVDA observation conditions, risk boundaries, and confirmation signals.',
+    'starterCards.positionReview.description': 'For existing positions, review exposure, scenarios, and follow-up observation conditions.',
+    'starterCards.positionReview.prompt': 'I hold TSLA. Review current risk exposure, confirmation signals to watch, and scenario disagreements.',
+    'starterCards.eventFollowUp.description': 'Focus on catalysts, risks, and data gaps without action instructions.',
+    'starterCards.eventFollowUp.prompt': 'After ORCL earnings, is it still worth observing? List catalysts, risks, and data gaps.',
+    'quickQuestions.q1': 'Analyze whether ORCL is still worth observing',
+    'quickQuestions.q2': 'I hold AAPL. What are the main risks and confirmation signals?',
+    'skills.general': 'General observation',
+    inputPlaceholder: 'Example: What are the current observation conditions for 600519 / Kweichow Moutai? (Enter to send, Shift+Enter for newline)',
+    suggestedFocus: 'Suggested focus: observation conditions, risk boundaries, data confidence, and catalysts.',
+  },
+};
+
 type ChatConsoleMode = 'engines' | 'history';
 type StockMarket = 'US' | 'CN' | 'HK' | 'unknown';
 type SmartRouteIntent =
@@ -159,17 +199,17 @@ const QUICK_QUESTIONS: QuickQuestion[] = [
   { id: 'q6', skill: 'emotion_cycle' },
 ];
 
-const STOCK_CHAT_ANSWER_SECTIONS = ['结论', '关键依据', '关键价位', '风险', '操作计划', '数据可信度'];
+const STOCK_CHAT_ANSWER_SECTIONS = ['结论', '关键依据', '关键价位', '风险', '观察计划', '数据可信度'];
 
 const PRIMARY_ANALYSIS_LENSES: AnalysisLens[] = [
-  { id: 'general', label: '综合判断', description: '适合普通问股，综合趋势、风险、基本面与操作计划。' },
-  { id: 'trend_following', label: '趋势跟踪', description: '判断趋势延续、回调、破位与趋势衰竭。', skillId: 'bull_trend' },
+  { id: 'general', label: '综合观察', description: '适合普通问股，综合趋势、风险、基本面与观察条件。' },
+  { id: 'trend_following', label: '趋势跟踪', description: '判断趋势延续、回调、结构失效与趋势衰竭。', skillId: 'bull_trend' },
   { id: 'ma_system', label: '均线系统', description: '关注 MA5/10/20/60 排列、金叉死叉和支撑压力。', skillId: 'ma_cross' },
   { id: 'volume_breakout', label: '放量突破', description: '关注平台突破、成交量确认、假突破与回踩。', skillId: 'volume_breakout' },
   { id: 'range_box', label: '箱体震荡', description: '适合判断区间上沿/下沿、突破与跌破。', skillId: 'box_oscillation' },
   { id: 'emotion_cycle', label: '情绪周期', description: '适合题材股、短线强弱和市场情绪判断。', skillId: 'emotion_cycle' },
   { id: 'leader_strategy', label: '龙头策略', description: '关注板块地位、相对强度、资金承接和持续性。', skillId: 'leader_strategy' },
-  { id: 'position_risk', label: '持仓风控', description: '结合成本、仓位、盈亏和止损线给出仓位建议。', skillId: 'volume_pullback' },
+  { id: 'position_risk', label: '持仓风险', description: '结合成本、风险暴露、盈亏和风险线复核观察条件。', skillId: 'volume_pullback' },
   { id: 'fundamental_quality', label: '基本面质量', description: '关注收入、利润、估值、ROE、现金流和财报质量。' },
   { id: 'event_driven', label: '事件驱动', description: '关注财报、政策、产品、并购、宏观事件影响。' },
 ];
@@ -378,16 +418,16 @@ const detectSymbols = (text: string): string[] => {
 const classifyIntent = (text: string, symbols: string[]): Pick<SmartRouteResult, 'intent' | 'intentLabel' | 'recommendedLenses' | 'confidence'> => {
   const value = text.toLowerCase();
   if (symbols.length > 1 || /哪个|谁更强|比较|compare|vs\.?|versus/.test(value)) {
-    return { intent: 'compare', intentLabel: '对比', recommendedLenses: ['综合判断', '龙头策略'], confidence: symbols.length > 1 ? 'high' : 'medium' };
+    return { intent: 'compare', intentLabel: '对比', recommendedLenses: ['综合观察', '龙头策略'], confidence: symbols.length > 1 ? 'high' : 'medium' };
   }
   if (/持有|持仓|仓位|加仓|减仓|卖|sell|reduce|trim/.test(value)) {
-    return { intent: 'position_management', intentLabel: '持仓管理', recommendedLenses: ['持仓风控', '趋势跟踪'], confidence: 'high' };
+    return { intent: 'position_management', intentLabel: '持仓管理', recommendedLenses: ['持仓风险', '趋势跟踪'], confidence: 'high' };
   }
   if (/突破|breakout|放量|有效/.test(value)) {
     return { intent: 'breakout', intentLabel: '突破确认', recommendedLenses: ['放量突破', '均线系统'], confidence: 'high' };
   }
   if (/风险|止损|回撤|risk/.test(value)) {
-    return { intent: 'risk_check', intentLabel: '风险检查', recommendedLenses: ['持仓风控', '趋势跟踪'], confidence: 'high' };
+    return { intent: 'risk_check', intentLabel: '风险检查', recommendedLenses: ['持仓风险', '趋势跟踪'], confidence: 'high' };
   }
   if (/短线|趋势|回踩|破位|trend/.test(value)) {
     return { intent: 'trend', intentLabel: '趋势', recommendedLenses: ['趋势跟踪', '均线系统'], confidence: 'medium' };
@@ -396,12 +436,12 @@ const classifyIntent = (text: string, symbols: string[]): Pick<SmartRouteResult,
     return { intent: 'fundamental', intentLabel: '基本面', recommendedLenses: ['基本面质量'], confidence: 'high' };
   }
   if (/新闻|事件|财报后|政策|并购|earnings|event|catalyst/.test(value)) {
-    return { intent: 'event', intentLabel: '事件', recommendedLenses: ['事件驱动', '综合判断'], confidence: 'high' };
+    return { intent: 'event', intentLabel: '事件', recommendedLenses: ['事件驱动', '综合观察'], confidence: 'high' };
   }
   if (/买|还能|介入|持有|buy|hold/.test(value)) {
-    return { intent: 'buy_or_hold', intentLabel: '买入/持有', recommendedLenses: ['综合判断', '趋势跟踪'], confidence: 'high' };
+    return { intent: 'buy_or_hold', intentLabel: '观察复核', recommendedLenses: ['综合观察', '趋势跟踪'], confidence: 'high' };
   }
-  return { intent: 'general', intentLabel: '普通问股', recommendedLenses: ['综合判断', '趋势跟踪'], confidence: symbols.length > 0 ? 'medium' : 'low' };
+  return { intent: 'general', intentLabel: '普通问股', recommendedLenses: ['综合观察', '趋势跟踪'], confidence: symbols.length > 0 ? 'medium' : 'low' };
 };
 
 const routeStockQuestion = (text: string): SmartRouteResult => {
@@ -516,8 +556,8 @@ const ChatPage: React.FC = () => {
   const seenAssistantMessageIdsRef = useRef<Set<string>>(new Set());
   const hasHydratedAssistantMessagesRef = useRef(false);
   const chat = useCallback(
-    (key: string, vars?: Record<string, string | number | undefined>) => t(`chat.${key}`, vars),
-    [t],
+    (key: string, vars?: Record<string, string | number | undefined>) => CHAT_COPY_OVERRIDES[language]?.[key] || t(`chat.${key}`, vars),
+    [language, t],
   );
 
   useEffect(() => {
@@ -753,10 +793,10 @@ const ChatPage: React.FC = () => {
   }, [evidenceSymbolKey, smartRoute.market]);
   const engineSwitcherLabel = language === 'en' ? 'Engine, lenses, data' : '引擎、视角与数据';
   const composerDisclaimer = language === 'en'
-    ? 'AI insights are for reference only and are not investment advice. Confirm your risk tolerance before trading.'
-    : 'AI 洞察仅供参考，不构成实质性投资建议。执行交易前请确认风险承受能力。';
+    ? 'AI insights are for research only and are not investment advice. Review risk tolerance independently.'
+    : 'AI 洞察仅供研究参考，不构成投资建议。请自行评估风险承受能力。';
   const chatConsoleTitle = language === 'en' ? 'Research console' : '综合控制台';
-  const mobileConsoleTitle = language === 'en' ? 'Decision console' : '决策台控制台';
+  const mobileConsoleTitle = language === 'en' ? 'Research console' : '研究控制台';
   const hasMessages = messages.length > 0;
   const showEmptyState = !hasMessages && !loading;
 
@@ -830,7 +870,7 @@ const ChatPage: React.FC = () => {
       stock_chat: {
         response_mode: 'structured_stock_analysis_v1',
         answer_sections: STOCK_CHAT_ANSWER_SECTIONS,
-        instruction: '请用中文简洁输出：结论、关键依据、关键价位、风险、操作计划、数据可信度。数据缺失必须明确说明；不要承诺确定性收益。',
+        instruction: '请用中文简洁输出：结论、关键依据、关键价位、风险、观察计划、数据可信度。数据缺失必须明确说明；不要承诺确定性收益。',
         selected_lens: selectedLens.label,
         data_context: evidenceItems.map(({ key, label, status, source, updatedAt }) => ({ key, label, status, source, updatedAt })),
         smart_route: {
@@ -1110,7 +1150,7 @@ const ChatPage: React.FC = () => {
         </summary>
         <div className="mt-2 space-y-1">
           <p>LLM: <span className="font-mono text-white/72">{footer.provider || '自动/未知'} {footer.model || ''}</span></p>
-          <p>视角: {(footer.lenses || []).join(' / ') || '综合判断'}</p>
+          <p>视角: {(footer.lenses || []).join(' / ') || '综合观察'}</p>
           <p>数据: {dataText || '未知'}</p>
         </div>
       </details>
@@ -1561,7 +1601,7 @@ const ChatPage: React.FC = () => {
           type="button"
           onClick={openConsoleButton.onClick}
           onPointerUp={openConsoleButton.onPointerUp}
-          aria-label={language === 'en' ? 'Open decision console' : '打开决策台控制台'}
+          aria-label={language === 'en' ? 'Open research console' : '打开研究控制台'}
           data-testid="chat-bento-brief-trigger"
           className={CARD_BUTTON_CLASS}
           title={language === 'en' ? 'Open console' : '打开控制台'}

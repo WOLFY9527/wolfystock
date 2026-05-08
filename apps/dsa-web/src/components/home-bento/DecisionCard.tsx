@@ -48,10 +48,10 @@ type DecisionCardProps = {
 function resolveSignalActionKey(signalLabel: string, tone: SignalTone): SignalActionKey {
   const normalized = signalLabel.trim().toUpperCase();
 
-  if (/SELL|SHORT|BEAR|REDUCE|TRIM|卖|空|看空|减仓/.test(normalized)) {
+  if (/SELL|SHORT|BEAR|REDUCE|TRIM|卖|空|看空|减仓|不建议|风险复核/.test(normalized)) {
     return 'sell';
   }
-  if (/HOLD|NEUTRAL|WAIT|WATCH|OBSERVE|持有|中性|观望/.test(normalized)) {
+  if (/HOLD|NEUTRAL|WAIT|WATCH|OBSERVE|持有|中性|观望|观察|等待确认|数据不足/.test(normalized)) {
     return 'hold';
   }
   if (/BUY|LONG|BULL|买|多|看多|乐观|偏多/.test(normalized)) {
@@ -104,24 +104,37 @@ function getSignalCommand(locale: 'zh' | 'en', signalLabel: string, tone: Signal
   const explicitCommand = normalizeSignalCommandLabel(locale, signalLabel);
 
   if (explicitCommand) {
-    return { actionKey, command: explicitCommand, bias: actionKey === 'sell' ? (locale === 'en' ? 'BEARISH' : '看空') : (locale === 'en' ? 'NEUTRAL' : '中性') };
+    return locale === 'en'
+      ? { actionKey, command: 'RISK REVIEW', bias: actionKey === 'sell' ? 'RISK UP' : 'NEUTRAL' }
+      : { actionKey, command: '风险复核', bias: actionKey === 'sell' ? '风险升高' : '中性' };
   }
 
   if (actionKey === 'sell') {
     return locale === 'en'
-      ? { actionKey, command: /STRONG|SHORT/i.test(signalLabel) ? 'STRONG SELL' : 'SELL', bias: 'BEARISH' }
-      : { actionKey, command: /强|空/.test(signalLabel) ? '强力做空' : '卖出', bias: '看空' };
+      ? { actionKey, command: 'NOT READY', bias: 'RISK UP' }
+      : { actionKey, command: '不建议判断', bias: '风险升高' };
   }
 
   if (actionKey === 'hold') {
+    if (locale === 'zh') {
+      if (/有条件观察/.test(signalLabel)) {
+        return { actionKey, command: '有条件观察', bias: '建设性' };
+      }
+      if (/等待确认/.test(signalLabel)) {
+        return { actionKey, command: '等待确认', bias: '中性' };
+      }
+      if (/数据不足/.test(signalLabel)) {
+        return { actionKey, command: '数据不足', bias: '中性' };
+      }
+    }
     return locale === 'en'
-      ? { actionKey, command: /HOLD/i.test(signalLabel) ? 'HOLD' : 'WAIT', bias: 'NEUTRAL' }
-      : { actionKey, command: /持有/.test(signalLabel) ? '继续持有' : '观望', bias: '中性' };
+      ? { actionKey, command: 'OBSERVE', bias: 'NEUTRAL' }
+      : { actionKey, command: '仅观察', bias: '中性' };
   }
 
   return locale === 'en'
-    ? { actionKey, command: /STRONG|LONG/i.test(signalLabel) ? 'STRONG BUY' : 'BUY', bias: 'BULLISH' }
-    : { actionKey, command: /强|多/.test(signalLabel) ? '强力做多' : '买入', bias: '看多' };
+    ? { actionKey, command: 'WATCHLIST', bias: 'CONSTRUCTIVE' }
+    : { actionKey, command: '有条件观察', bias: '建设性' };
 }
 
 function getActionTone(actionKey: SignalActionKey): SignalTone {
@@ -342,7 +355,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             data-testid="home-bento-decision-hero-row"
           >
             <div className="col-span-1 min-w-0" data-testid="home-bento-decision-action">
-              <Label micro className="text-white/28">{isEnglish ? 'ACTION' : 'AI 动作'}</Label>
+              <Label micro className="text-white/28">{isEnglish ? 'ANALYSIS STATE' : '分析状态'}</Label>
               <span
                 className={`mt-3 block text-5xl font-black leading-none tracking-[0] md:text-6xl ${getActionToneClass(actionTone, marketColorConvention)}`}
                 data-testid="home-bento-decision-signal-hero"
@@ -398,7 +411,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             className="max-w-3xl text-sm text-white/70 leading-relaxed mb-10"
             data-testid="home-bento-decision-insight"
           >
-            <Label micro className="text-white/28">{isEnglish ? 'AI INSIGHT' : '执行主线'}</Label>
+            <Label micro className="text-white/28">{isEnglish ? 'AI INSIGHT' : '分析主线'}</Label>
             <p className="mt-3" data-testid="home-bento-decision-insight-copy">
               {insightCopy}
             </p>

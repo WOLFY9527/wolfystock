@@ -81,7 +81,7 @@ const mockStoreState: {
 };
 
 const canonicalBullTrendLabel = (language: 'zh' | 'en') => translate(language, 'chat.skills.labels.bull_trend');
-const canonicalGeneralLabel = (language: 'zh' | 'en') => translate(language, 'chat.skills.general');
+const canonicalGeneralLabel = (language: 'zh' | 'en') => (language === 'zh' ? '综合观察' : 'General observation');
 
 vi.mock('../../api/agent', () => ({
   agentApi: {
@@ -337,8 +337,8 @@ describe('ChatPage', () => {
     );
 
     await screen.findByTestId('chat-lens-section');
-    expect(screen.getAllByText('综合判断').length).toBeGreaterThan(0);
-    expect(screen.getByText('适合普通问股，综合趋势、风险、基本面与操作计划。')).toBeInTheDocument();
+    expect(screen.getAllByText('综合观察').length).toBeGreaterThan(0);
+    expect(screen.getByText('适合普通问股，综合趋势、风险、基本面与观察条件。')).toBeInTheDocument();
   });
 
   it('detects US tickers, buy/hold intent, and quick actions from the composer input', async () => {
@@ -350,12 +350,12 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    fireEvent.change(await screen.findByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
+    fireEvent.change(await screen.findByPlaceholderText('例如：分析 600519 / 茅台当前观察条件是什么？（回车发送，Shift+回车换行）'), {
       target: { value: 'ORCL 还能买吗？' },
     });
 
-    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('ORCL · US · 买入/持有');
-    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('综合判断 / 趋势跟踪');
+    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('ORCL · US · 观察复核');
+    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('综合观察 / 趋势跟踪');
     expect(screen.getAllByRole('link', { name: '回测 ORCL' })[0]).toHaveAttribute('href', '/backtest?symbol=ORCL&market=US&source=chat');
     await waitFor(() => expect(screen.getAllByRole('button', { name: '已在观察列表 ORCL' }).length).toBeGreaterThan(0));
     expect(screen.getAllByRole('link', { name: '查看持仓 ORCL' })[0]).toHaveAttribute('href', '/portfolio?symbol=ORCL');
@@ -371,8 +371,8 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole('heading', { name: 'WOLFY AI 决策台' })).toBeInTheDocument();
-    expect(screen.getByText('用自然语言调用行情、持仓、扫描器与回测证据')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'WOLFY AI 研究台' })).toBeInTheDocument();
+    expect(screen.getByText('用自然语言调用只读证据，形成分析观察与风险边界')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '问股' })).not.toBeInTheDocument();
   });
 
@@ -403,7 +403,7 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    fireEvent.change(await screen.findByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
+    fireEvent.change(await screen.findByPlaceholderText('例如：分析 600519 / 茅台当前观察条件是什么？（回车发送，Shift+回车换行）'), {
       target: { value: 'ORCL 还能买吗？' },
     });
 
@@ -443,13 +443,13 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    const inputBox = await screen.findByPlaceholderText(translate('zh', 'chat.inputPlaceholder'));
+    const inputBox = await screen.findByPlaceholderText('例如：分析 600519 / 茅台当前观察条件是什么？（回车发送，Shift+回车换行）');
     fireEvent.change(inputBox, { target: { value: '用短线视角看 600519' } });
     expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('600519 · CN · 趋势');
 
     fireEvent.change(inputBox, { target: { value: 'NVDA 和 AMD 谁更强？' } });
     expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('NVDA, AMD · US · 对比');
-    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('综合判断 / 龙头策略');
+    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('综合观察 / 龙头策略');
     await waitFor(() => expect(mockGetStockEvidence).toHaveBeenCalledWith(['NVDA', 'AMD']));
     expect(screen.getByTestId('chat-evidence-panel')).toBeInTheDocument();
   });
@@ -463,9 +463,9 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    const inputBox = await screen.findByPlaceholderText(translate('zh', 'chat.inputPlaceholder'));
+    const inputBox = await screen.findByPlaceholderText('例如：分析 600519 / 茅台当前观察条件是什么？（回车发送，Shift+回车换行）');
     fireEvent.change(inputBox, { target: { value: '我持有 AAPL，要不要减仓？' } });
-    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('持仓风控 / 趋势跟踪');
+    expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('持仓风险 / 趋势跟踪');
 
     fireEvent.change(inputBox, { target: { value: 'WULF 是否突破有效？' } });
     expect(screen.getByTestId('chat-smart-route-strip')).toHaveTextContent('放量突破 / 均线系统');
@@ -498,7 +498,7 @@ describe('ChatPage', () => {
                     watchlist: expect.objectContaining({ status: expect.any(String) }),
                   }),
                 }),
-                answer_sections: ['结论', '关键依据', '关键价位', '风险', '操作计划', '数据可信度'],
+                answer_sections: ['结论', '关键依据', '关键价位', '风险', '观察计划', '数据可信度'],
               smart_route: expect.objectContaining({
                 symbols: ['600519'],
                 market: 'CN',
@@ -517,11 +517,11 @@ describe('ChatPage', () => {
         id: 'assistant-evidence',
         role: 'assistant',
         content: '结论：谨慎观察',
-        skillName: '综合判断',
+        skillName: '综合观察',
         evidenceFooter: {
           provider: 'DeepSeek',
           model: 'deepseek-chat',
-          lenses: ['综合判断', '趋势跟踪'],
+          lenses: ['综合观察', '趋势跟踪'],
           items: [
             { label: '行情', status: 'unknown' },
             { label: '技术', status: 'available', summary: '可用' },
@@ -547,7 +547,7 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-answer-evidence-footer-assistant-evidence')).toHaveTextContent('数据: 行情 未知 · 技术 可用 · 基本面 部分 · 持仓 无 · 观察列表 已加入 · Scanner 最近入选 · 回测 有');
     expect(screen.getByTestId('chat-answer-evidence-footer-assistant-evidence')).not.toHaveTextContent('UNKNOWN');
 
-    fireEvent.change(screen.getByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
+    fireEvent.change(screen.getByPlaceholderText('例如：分析 600519 / 茅台当前观察条件是什么？（回车发送，Shift+回车换行）'), {
       target: { value: 'ORCL 还能买吗？' },
     });
     await waitFor(() => expect(mockGetRuleBacktestRuns).toHaveBeenCalled());
@@ -597,7 +597,7 @@ describe('ChatPage', () => {
     expect(screen.queryByText('Data Evidence')).not.toBeInTheDocument();
     expect(screen.queryByText('Smart Route')).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
+    fireEvent.change(screen.getByPlaceholderText('例如：分析 600519 / 茅台当前观察条件是什么？（回车发送，Shift+回车换行）'), {
       target: { value: 'ORCL 还能买吗？' },
     });
     await waitFor(() => expect(screen.getAllByRole('button', { name: '加入观察列表 ORCL' }).length).toBeGreaterThan(0));
@@ -681,7 +681,7 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-main')).not.toHaveClass('relative');
     expect(screen.queryByTestId('chat-status-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-bento-hero-skill')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: translate('zh', 'chat.title') })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'WOLFY AI 研究台' })).toBeInTheDocument();
     expect(screen.queryByTitle('查看摘要')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-message-scroll')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-message-stream')).not.toBeInTheDocument();
@@ -709,7 +709,7 @@ describe('ChatPage', () => {
       'p-2',
       'shadow-2xl',
     );
-    expect(screen.getByText('AI 洞察仅供参考，不构成实质性投资建议。执行交易前请确认风险承受能力。')).toHaveClass('mt-3', 'text-[10px]', 'text-center', 'text-white/30');
+    expect(screen.getByText('AI 洞察仅供研究参考，不构成投资建议。请自行评估风险承受能力。')).toHaveClass('mt-3', 'text-[10px]', 'text-center', 'text-white/30');
     expect(screen.queryByTestId('chat-skill-toolbar')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'h-full', 'min-h-0', 'w-full', 'shrink-0', 'flex-col', 'gap-5', 'overflow-y-auto', 'border-l', 'border-white/5', 'bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent', 'p-5', 'lg:w-[320px]', 'xl:w-[360px]');
     expect(screen.getByTestId('chat-console-mode-toggle')).toBeInTheDocument();
@@ -719,7 +719,7 @@ describe('ChatPage', () => {
 
     fireEvent.click(screen.getByTestId('chat-bento-brief-trigger'));
     expect(await screen.findByTestId('chat-bento-drawer')).toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: '决策台控制台' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '研究控制台' })).toBeInTheDocument();
   });
 
   it('switches the right-side console between engines and history', async () => {
@@ -795,13 +795,13 @@ describe('ChatPage', () => {
 
     expect(await screen.findByText(translate('zh', 'chat.emptyTitle'))).toBeInTheDocument();
     expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex-1', 'overflow-y-auto', 'flex', 'flex-col', 'items-center', 'justify-start');
-    expect(screen.getByRole('heading', { name: translate('zh', 'chat.title') })).toHaveClass('text-xl', 'font-bold', 'text-white');
+    expect(screen.getByRole('heading', { name: 'WOLFY AI 研究台' })).toHaveClass('text-xl', 'font-bold', 'text-white');
     const entryDecisionCard = screen.getByTestId('chat-starter-card-entryDecision');
     expect(entryDecisionCard).toHaveClass('flex', 'flex-col', 'items-center', 'justify-center', 'rounded-2xl', 'border', 'border-white/5', 'bg-white/[0.02]', 'px-4', 'py-3', 'text-center', 'hover:bg-white/[0.05]');
-    expect(screen.getAllByText(translate('zh', 'chat.starterCards.entryDecision.title')).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(translate('zh', 'chat.starterCards.positionReview.title')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('观察条件检查').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('持仓风险复盘').length).toBeGreaterThan(0);
     expect(screen.getByTestId('chat-mobile-template-eventFollowUp')).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'chat.description'))).toBeInTheDocument();
+    expect(screen.getByText('用自然语言调用只读证据，形成分析观察与风险边界')).toBeInTheDocument();
     expect(screen.getByTestId('chat-quick-question-cloud')).toHaveClass('hidden', 'flex-wrap', 'justify-center');
     expect(screen.getByText(translate('zh', 'chat.quickQuestions.q3'))).toHaveClass(
       'inline-flex',
@@ -1029,7 +1029,7 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: /综合判断/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /综合观察/ })).toBeInTheDocument();
 
     const sendButton = screen.getByRole('button', {
       name: new RegExp(`${translate('zh', 'chat.notifyAction')}|${translate('zh', 'chat.notifySending').replace(/\./g, '\\.')}`),
@@ -1084,7 +1084,7 @@ describe('ChatPage', () => {
       expect(screen.queryByText(translate('zh', 'chat.followUpContextLoading'))).not.toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByPlaceholderText(translate('zh', 'chat.inputPlaceholder')), {
+    fireEvent.change(screen.getByPlaceholderText('例如：分析 600519 / 茅台当前观察条件是什么？（回车发送，Shift+回车换行）'), {
       target: { value: '继续分析成交量' },
     });
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'chat.notifyAction') }));
@@ -1176,7 +1176,7 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByDisplayValue('请深入分析 AAPL')).toBeInTheDocument();
-    await screen.findByRole('button', { name: /综合判断/ });
+    await screen.findByRole('button', { name: /综合观察/ });
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'chat.notifyAction') }));
 
@@ -1306,7 +1306,7 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
-    expect(document.title).toBe('AI Decision Desk - WolfyStock');
+    expect(document.title).toBe('AI Research Desk - WolfyStock');
   });
 
   it('updates hero and input copy immediately when language switches to english', async () => {
@@ -1321,7 +1321,7 @@ describe('ChatPage', () => {
 
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
     expect(screen.getByText('Start with a concrete question')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Example: Is 600519 / Kweichow Moutai a buy right now? (Enter to send, Shift+Enter for newline)')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Example: What are the current observation conditions for 600519 / Kweichow Moutai? (Enter to send, Shift+Enter for newline)')).toBeInTheDocument();
   });
 
   it('localizes session actions in english mode', async () => {

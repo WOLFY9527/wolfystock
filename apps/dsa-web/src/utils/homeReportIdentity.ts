@@ -279,7 +279,7 @@ export function buildInstitutionalReportMarkdown(
     '## 基本面摘要 / Fundamental Snapshot',
     ...(fundamentalFields.length ? fundamentalFields.map((field) => `- ${field.label}: ${safeReportValue(field.value)}`) : ['- 数据缺失']),
     '',
-    '## 作战计划 / Trading Plan',
+    '## 观察计划 / Observation Plan',
     `- Ideal buy: ${safeReportValue(decisionPanel?.idealEntry || report?.strategy?.idealBuy || fieldValue(battleFields, ['ideal', '理想']))}`,
     `- Secondary buy: ${safeReportValue(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy || fieldValue(battleFields, ['secondary', '次级']))}`,
     `- Stop loss: ${safeReportValue(decisionPanel?.stopLoss || report?.strategy?.stopLoss || fieldValue(battleFields, ['stop', '止损']))}`,

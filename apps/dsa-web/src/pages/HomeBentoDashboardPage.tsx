@@ -325,12 +325,12 @@ function traceFieldLabel(name: string, locale: DashboardLocale): string {
     return name;
   }
   const labels: Record<string, string> = {
-    action: '操作',
+    action: '分析状态',
     score: '评分',
     confidence: '置信度',
-    entry: '入场',
-    target: '目标',
-    stop: '止损',
+    entry: '观察区',
+    target: '上方观察',
+    stop: '风险线',
   };
   return labels[name.trim().toLowerCase()] || name;
 }
@@ -359,7 +359,7 @@ function localizeTraceMessage(value: string | undefined, type: string | undefine
   }
   const normalizedType = String(type || '').toLowerCase();
   if (normalizedType === 'action_plan_mismatch') {
-    return '操作建议与执行计划存在不一致，已在决策来源中标注。';
+    return '分析状态与后续计划存在不一致，已在决策来源中标注。';
   }
   if (!text) {
     return '决策链路存在需要复核的提示。';
@@ -554,7 +554,7 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
       id: 'summary',
       title: '投资结论',
       rows: [
-        { label: '动作', value: safeReportValue(summaryPanel?.operationAdvice || report?.summary.operationAdvice || dashboard.decision.signalLabel) },
+        { label: '分析状态', value: safeReportValue(summaryPanel?.operationAdvice || report?.summary.operationAdvice || dashboard.decision.signalLabel) },
         { label: '评分', value: safeReportValue(summaryPanel?.score ?? dashboard.decision.heroValue) },
         { label: '趋势/结构', value: safeReportValue(decisionPanel?.marketStructure || summaryPanel?.trendPrediction || report?.summary.trendPrediction || dashboard.decision.scoreValue) },
         { label: '一句话判断', value: safeReportValue(summaryPanel?.oneSentence || report?.summary.analysisSummary || dashboard.decision.summary) },
@@ -644,18 +644,18 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
       ],
     },
     {
-      id: 'trading-plan',
-      title: '作战计划',
+      id: 'observation-plan',
+      title: '观察计划',
       rows: [
-        { label: '理想买点', value: safeReportValue(decisionPanel?.idealEntry || report?.strategy?.idealBuy || fieldValue(battleFields, ['ideal', '理想'])) },
-        { label: '次级买点', value: safeReportValue(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy || fieldValue(battleFields, ['secondary', '次级'])) },
-        { label: '止损', value: safeReportValue(decisionPanel?.stopLoss || report?.strategy?.stopLoss || fieldValue(battleFields, ['stop', '止损'])) },
-        { label: '目标', value: safeReportValue(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || fieldValue(battleFields, ['target', '目标'])) },
-        { label: '仓位', value: safeReportValue(decisionPanel?.positionSizing || battleCards.find((item) => /position|仓位/i.test(item.label))?.value) },
-        { label: '入场策略', value: safeReportValue(decisionPanel?.buildStrategy || battleNotes.find((item) => /entry|建仓|入场/i.test(item.label))?.value) },
-        { label: '风控策略', value: safeReportValue(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason) },
-        { label: '空仓建议', value: safeReportValue(decisionPanel?.noPositionAdvice) },
-        { label: '持仓建议', value: safeReportValue(decisionPanel?.holderAdvice) },
+        { label: '优先观察区', value: safeReportValue(decisionPanel?.idealEntry || report?.strategy?.idealBuy || fieldValue(battleFields, ['ideal', '理想'])) },
+        { label: '次级观察区', value: safeReportValue(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy || fieldValue(battleFields, ['secondary', '次级'])) },
+        { label: '风险失效线', value: safeReportValue(decisionPanel?.stopLoss || report?.strategy?.stopLoss || fieldValue(battleFields, ['stop', '止损'])) },
+        { label: '上方观察区', value: safeReportValue(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || fieldValue(battleFields, ['target', '目标'])) },
+        { label: '风险暴露', value: safeReportValue(decisionPanel?.positionSizing || battleCards.find((item) => /position|仓位/i.test(item.label))?.value) },
+        { label: '观察条件', value: safeReportValue(decisionPanel?.buildStrategy || battleNotes.find((item) => /entry|建仓|入场/i.test(item.label))?.value) },
+        { label: '风险边界', value: safeReportValue(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason) },
+        { label: '空仓观察', value: safeReportValue(decisionPanel?.noPositionAdvice) },
+        { label: '持仓复核', value: safeReportValue(decisionPanel?.holderAdvice) },
       ],
       bullets: decisionPanel?.executionReminders,
     },
@@ -664,8 +664,8 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
       title: '检查清单',
       checklist: checklistItems.length ? checklistItems : [
         { label: '趋势与行动一致', status: '未知' },
-        { label: '入场区间明确', status: '未知' },
-        { label: '止损纪律明确', status: '未知' },
+        { label: '观察区间明确', status: '未知' },
+        { label: '风险边界明确', status: '未知' },
         { label: '数据覆盖充分', status: '未知' },
         { label: '冲突已标注', status: '未知' },
       ],
@@ -780,7 +780,7 @@ function FullDecisionReportDrawer({
                 {identity.companyWithTicker}
               </h2>
               <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 text-sm text-white/68 sm:grid-cols-2">
-                <span>操作：{dashboard.decision.signalLabel}</span>
+                <span>分析状态：{dashboard.decision.signalLabel}</span>
                 <span>评分：{dashboard.decision.heroValue}{dashboard.decision.heroUnit || ''}</span>
                 <span>置信度：{dashboard.decision.confidenceValue || '--'}</span>
                 <span>生成时间：{identity.generatedAt}</span>
@@ -1512,7 +1512,7 @@ const CONTENT: Record<DashboardLocale, {
   zh: {
     documentTitle: '首页 - WolfyStock',
     eyebrow: 'SYSTEM VIEW',
-    heading: 'WolfyStock 决策面板',
+    heading: 'WolfyStock 分析面板',
     description: '',
     omnibarPlaceholder: '输入代码唤醒 AI (如 ORCL)...',
     analyzeButton: '分析',
@@ -1521,32 +1521,32 @@ const CONTENT: Record<DashboardLocale, {
     sessionBadge: '美股 AI 基础设施',
     regimeBadge: '动量回升',
     decision: {
-      eyebrow: 'WOLFY AI 决策',
+      eyebrow: 'WOLFY AI 分析',
       company: '英伟达',
       heroValue: '8.6',
       heroUnit: '/10',
       heroLabel: '置信度',
-      signalLabel: '看多',
+      signalLabel: '有条件观察',
       signalTone: 'bullish',
       scoreLabel: '信号方向',
       scoreValue: '72H 继续偏强',
       badge: '动能回升 · 机构跟进',
       chartLabel: '突破完成',
-      summary: '订单动能回升，价格重新贴近强趋势区间，适合用回踩确认来组织仓位。',
+      summary: '订单动能回升，价格重新贴近强趋势区间，适合继续等待回踩确认。',
       reasonTitle: '最近报告归因',
       reasonBody: '盘中监测到大级别资金吸筹，价格成功站稳 MA60 关键支撑位，并伴随 MACD 零轴上方金叉，确认箱体突破有效。',
       detailLabel: '完整报告',
     },
     strategy: {
-      title: '执行策略',
+      title: '观察框架',
       metrics: [
-        { label: '建仓区间', value: '118.40 - 121.00', tone: 'neutral' },
-        { label: '目标位', value: '136.00', tone: 'bullish' },
-        { label: '止损位', value: '111.80', tone: 'bearish' },
+        { label: '观察区间', value: '118.40 - 121.00', tone: 'neutral' },
+        { label: '上方观察区', value: '136.00', tone: 'bullish' },
+        { label: '风险失效线', value: '111.80', tone: 'bearish' },
       ],
-      positionLabel: '仓位节奏',
-      positionBody: '首笔仓位控制在 6% 左右，确认站稳后再扩到 15%。若放量跌破关键支撑，优先执行收缩仓位。',
-      detailLabel: '查看策略细节',
+      positionLabel: '跟踪节奏',
+      positionBody: '先记录小样本观察假设，只有确认站稳后再提高关注级别；若放量跌破关键支撑，优先回到等待状态。',
+      detailLabel: '查看观察细节',
     },
     tech: {
       title: '技术形态',
@@ -1580,7 +1580,7 @@ const CONTENT: Record<DashboardLocale, {
   en: {
     documentTitle: 'Home - WolfyStock',
     eyebrow: 'SYSTEM VIEW',
-    heading: 'WolfyStock Command Center',
+    heading: 'WolfyStock Analysis Center',
     description: '',
     omnibarPlaceholder: 'Enter a ticker to wake the AI (for example ORCL)...',
     analyzeButton: 'Analyze',
@@ -1589,32 +1589,32 @@ const CONTENT: Record<DashboardLocale, {
     sessionBadge: 'US AI infrastructure',
     regimeBadge: 'Momentum rebuilding',
     decision: {
-      eyebrow: 'WOLFY AI DECISION',
+      eyebrow: 'WOLFY AI ANALYSIS',
       company: 'NVIDIA',
       heroValue: '8.6',
       heroUnit: '/10',
       heroLabel: 'Conviction',
-      signalLabel: 'Bullish',
+      signalLabel: 'Watchlist',
       signalTone: 'bullish',
       scoreLabel: 'Signal Direction',
       scoreValue: 'Bias stays constructive for 72H',
       badge: 'Momentum rebuild · institutional follow-through',
       chartLabel: 'Breakout Confirmed',
-      summary: 'Order momentum is improving and price is moving back into a strong-trend zone, so the cleaner plan is still a pullback confirmation entry.',
+      summary: 'Order momentum is improving and price is moving back into a strong-trend zone, so the cleaner plan is to wait for pullback confirmation.',
       reasonTitle: 'Latest Report Context',
       reasonBody: 'Intraday flow points to institutional accumulation, price reclaimed MA60 support, and the MACD bullish cross stayed above zero to validate the range escape.',
       detailLabel: 'Open Decision Brief',
     },
     strategy: {
-      title: 'Execution Strategy',
+      title: 'Observation Framework',
       metrics: [
-        { label: 'Entry Zone', value: '118.40 - 121.00', tone: 'neutral' },
-        { label: 'Target', value: '136.00', tone: 'bullish' },
-        { label: 'Stop', value: '111.80', tone: 'bearish' },
+        { label: 'Watch Zone', value: '118.40 - 121.00', tone: 'neutral' },
+        { label: 'Upper Watch Zone', value: '136.00', tone: 'bullish' },
+        { label: 'Invalidation Line', value: '111.80', tone: 'bearish' },
       ],
-      positionLabel: 'Position Rhythm',
-      positionBody: 'Keep the first clip around 6%, then expand toward 15% only after the reclaim holds. If support breaks on volume, shrink risk first.',
-      detailLabel: 'Open Strategy Brief',
+      positionLabel: 'Tracking Rhythm',
+      positionBody: 'Keep this as an observation hypothesis, then raise attention only after the reclaim holds. If support breaks on volume, return to waiting.',
+      detailLabel: 'Open Observation Brief',
     },
     tech: {
       title: 'Technical Structure',
@@ -1694,16 +1694,16 @@ function normalizeDecisionAction(value: unknown, locale: DashboardLocale): strin
   }
   const normalized = text.toLowerCase();
   const zhLabels: Record<string, string> = {
-    buy: '买入',
-    hold: '观望',
-    sell: '卖出',
-    reduce: '减仓',
+    buy: '有条件观察',
+    hold: '仅观察',
+    sell: '不建议判断',
+    reduce: '风险复核',
   };
   const enLabels: Record<string, string> = {
-    buy: 'Buy',
-    hold: 'Hold',
-    sell: 'Sell',
-    reduce: 'Reduce',
+    buy: 'Watchlist',
+    hold: 'Observe',
+    sell: 'Not ready',
+    reduce: 'Risk review',
   };
   if (normalized in zhLabels) {
     return locale === 'en' ? enLabels[normalized] : zhLabels[normalized];
@@ -1901,22 +1901,22 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
         ...CONTENT.zh.decision,
         company: '甲骨文',
         heroValue: '7.8',
-        signalLabel: '偏多',
+        signalLabel: '有条件观察',
         signalTone: 'bullish',
         scoreValue: '财报驱动后维持上沿强势',
         badge: '云订单抬升 · 企业 IT 预算回流',
         chartLabel: '平台上破',
-        summary: '云业务订单与数据库续费提供中线托底，回踩不破时更适合顺势跟进。',
+        summary: '云业务订单与数据库续费提供中线托底，回踩不破时更适合继续观察确认。',
         reasonBody: '财报后资金没有快速撤离，价格保持在前高之上，企业软件主线继续提供趋势支撑。',
       },
       strategy: {
         ...CONTENT.zh.strategy,
         metrics: [
-          { label: '建仓区间', value: '121.80 - 124.60', tone: 'neutral' },
-          { label: '目标位', value: '133.50', tone: 'bullish' },
-          { label: '止损位', value: '117.40', tone: 'bearish' },
+          { label: '观察区间', value: '121.80 - 124.60', tone: 'neutral' },
+          { label: '上方观察区', value: '133.50', tone: 'bullish' },
+          { label: '风险失效线', value: '117.40', tone: 'bearish' },
         ],
-        positionBody: '先用轻仓跟随财报后的强势平台，确认回踩缩量后再补到计划仓位。',
+        positionBody: '先观察财报后的强势平台是否保持，确认回踩缩量后再提高关注级别。',
       },
       tech: {
         ...CONTENT.zh.tech,
@@ -1949,22 +1949,22 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
         ...CONTENT.zh.decision,
         company: '特斯拉',
         heroValue: '6.9',
-        signalLabel: '中性偏多',
+        signalLabel: '等待确认',
         signalTone: 'neutral',
         scoreValue: '事件驱动后仍需量能确认',
         badge: '波动放大 · 需要二次确认',
         chartLabel: '反弹测试',
-        summary: '价格快速反抽后进入验证区，若量能跟不上，更适合等待第二次确认而不是追价。',
+        summary: '价格快速反抽后进入验证区，若量能跟不上，更适合等待第二次确认。',
         reasonBody: '高波动资产的反弹更多依赖事件催化，当前结构尚未给出完全顺滑的趋势延续信号。',
       },
       strategy: {
         ...CONTENT.zh.strategy,
         metrics: [
-          { label: '建仓区间', value: '166.00 - 171.50', tone: 'neutral' },
-          { label: '目标位', value: '183.00', tone: 'bullish' },
-          { label: '止损位', value: '159.20', tone: 'bearish' },
+          { label: '观察区间', value: '166.00 - 171.50', tone: 'neutral' },
+          { label: '上方观察区', value: '183.00', tone: 'bullish' },
+          { label: '风险失效线', value: '159.20', tone: 'bearish' },
         ],
-        positionBody: '只在确认量能延续时加仓，否则保留试错仓，避免在事件回落中被动扩大风险。',
+        positionBody: '只在确认量能延续时提高关注级别，否则保持试错假设，避免在事件回落中被动扩大风险。',
       },
       tech: {
         ...CONTENT.zh.tech,
@@ -2013,9 +2013,9 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
       strategy: {
         ...CONTENT.en.strategy,
         metrics: [
-          { label: 'Entry Zone', value: '121.80 - 124.60', tone: 'neutral' },
-          { label: 'Target', value: '133.50', tone: 'bullish' },
-          { label: 'Stop', value: '117.40', tone: 'bearish' },
+          { label: 'Watch Zone', value: '121.80 - 124.60', tone: 'neutral' },
+          { label: 'Upper Watch Zone', value: '133.50', tone: 'bullish' },
+          { label: 'Invalidation Line', value: '117.40', tone: 'bearish' },
         ],
         positionBody: 'Start light into the earnings-led base, then add only if the pullback stays orderly on lighter volume.',
       },
@@ -2061,9 +2061,9 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
       strategy: {
         ...CONTENT.en.strategy,
         metrics: [
-          { label: 'Entry Zone', value: '166.00 - 171.50', tone: 'neutral' },
-          { label: 'Target', value: '183.00', tone: 'bullish' },
-          { label: 'Stop', value: '159.20', tone: 'bearish' },
+          { label: 'Watch Zone', value: '166.00 - 171.50', tone: 'neutral' },
+          { label: 'Upper Watch Zone', value: '183.00', tone: 'bullish' },
+          { label: 'Invalidation Line', value: '159.20', tone: 'bearish' },
         ],
         positionBody: 'Add only when follow-through volume confirms. Otherwise keep risk in probe size and avoid forcing size into a news-driven retrace.',
       },
@@ -2700,27 +2700,27 @@ function buildStrategyMetricDetails(locale: DashboardLocale, label: string, valu
     return EMPTY_FIELD_VALUE;
   }
 
-  if (key === '建仓区间' || key === 'entryzone') {
+  if (key === '观察区间' || key === '建仓区间' || key === 'entryzone' || key === 'watchzone') {
     return isEnglish
-      ? `Use ${value} as the preferred accumulation band. Only step in when intraday structure remains orderly instead of expanding on disorderly volume.`
-      : `以 ${value} 作为优先吸纳带，只有当日内结构维持有序、没有失控放量时，才考虑执行首笔仓位。`;
+      ? `Use ${value} as the preferred observation band. Treat it as a readiness condition, not an instruction.`
+      : `以 ${value} 作为优先观察带，只有当日内结构维持有序、没有失控放量时，才提高关注级别。`;
   }
 
-  if (key === '目标位' || key === 'target') {
+  if (key === '上方观察区' || key === '目标位' || key === 'target') {
     return isEnglish
-      ? `The ${value} objective maps to the next supply zone or rerating band, so profit-taking efficiency should be reassessed as price approaches that area.`
-      : `${value} 对应下一层压力带或估值修复上沿，价格接近该区间时要重新评估兑现效率。`;
+      ? `${value} maps to the next supply zone or rerating band, so the observation thesis should be reassessed near that area.`
+      : `${value} 对应下一层压力带或估值修复上沿，价格接近该区间时要重新评估观察假设。`;
   }
 
-  if (key === '止损位' || key === 'stop') {
+  if (key === '风险失效线' || key === '止损位' || key === 'stop') {
     return isEnglish
-      ? `The ${value} stop is the structure invalidation line. A decisive break there means the thesis should be re-underwritten rather than averaged down.`
-      : `${value} 是结构失效位；一旦有效跌破，应该重做交易假设，而不是机械摊低成本。`;
+      ? `${value} is the structure invalidation line. A decisive break means the thesis should be reviewed from scratch.`
+      : `${value} 是结构失效线；一旦有效跌破，应该重新评估分析假设。`;
   }
 
   return isEnglish
-    ? `${label} is currently set to ${value}, and execution should continue to respect that same operating constraint.`
-    : `${label} 当前设定为 ${value}，执行层必须继续遵守这一条约束。`;
+    ? `${label} is currently set to ${value}, and the analysis should keep that same constraint visible.`
+    : `${label} 当前设定为 ${value}，分析层需要继续保留这一条约束。`;
 }
 
 function enrichDashboardPayload(locale: DashboardLocale, payload: DashboardVariant | DashboardPayload): DashboardPayload {
@@ -2756,7 +2756,7 @@ function buildDrawerPayload(locale: DashboardLocale, dashboard: DashboardPayload
   const isEnglish = locale === 'en';
   const titleMap: Record<DetailDrawerKey, string> = {
     decision: isEnglish ? `${dashboard.ticker} Decision Drill-down` : `${dashboard.ticker} 决策下钻`,
-    strategy: isEnglish ? `${dashboard.ticker} Execution Drill-down` : `${dashboard.ticker} 执行下钻`,
+    strategy: isEnglish ? `${dashboard.ticker} Observation Drill-down` : `${dashboard.ticker} 观察下钻`,
     tech: isEnglish ? `${dashboard.ticker} Technical Drill-down` : `${dashboard.ticker} 技术下钻`,
     fundamentals: isEnglish ? `${dashboard.ticker} Fundamental Drill-down` : `${dashboard.ticker} 基本面下钻`,
   };
@@ -2778,7 +2778,7 @@ function buildDrawerPayload(locale: DashboardLocale, dashboard: DashboardPayload
               glow: true,
             },
             {
-              label: isEnglish ? 'Trade Thesis' : '交易主线',
+              label: isEnglish ? 'Analysis Thesis' : '分析主线',
               value: dashboard.decision.summary,
               details: dashboard.decision.reasonBody,
               tone: 'neutral',
@@ -2802,7 +2802,7 @@ function buildDrawerPayload(locale: DashboardLocale, dashboard: DashboardPayload
         {
           id: 'strategy',
           eyebrow: dashboard.strategy.title,
-          title: isEnglish ? 'Execution Constraints' : '执行约束',
+          title: isEnglish ? 'Observation Constraints' : '观察约束',
           metrics: [
             ...dashboard.strategy.metrics.map((metric) => ({
               label: metric.label,
@@ -2914,17 +2914,17 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
       ...seed.strategy,
       metrics: [
         {
-          label: locale === 'en' ? 'Entry Zone' : '建仓区间',
+          label: locale === 'en' ? 'Watch Zone' : '观察区间',
           value: localizedEntryValue,
           tone: 'neutral',
         },
         {
-          label: locale === 'en' ? 'Target' : '目标位',
+          label: locale === 'en' ? 'Upper Watch Zone' : '上方观察区',
           value: localizedTargetValue,
           tone: isPendingMetricValue(localizedTargetValue) ? 'neutral' : 'bullish',
         },
         {
-          label: locale === 'en' ? 'Stop' : '止损位',
+          label: locale === 'en' ? 'Invalidation Line' : '风险失效线',
           value: localizedStopValue,
           tone: isPendingMetricValue(localizedStopValue) ? 'neutral' : 'bearish',
         },
@@ -2988,8 +2988,8 @@ function buildGuestDashboardFromPreview(
         value: metric.value === EMPTY_FIELD_VALUE ? (locale === 'en' ? 'Unlock after account creation' : '创建账户后解锁') : metric.value,
       })),
       positionBody: locale === 'en'
-        ? 'Execution levels, stop discipline, and sizing logic unlock after a free account is created.'
-        : '建仓点位、止损纪律与仓位节奏会在免费创建账户后解锁。',
+        ? 'Observation bands, risk boundaries, and pacing notes unlock after a free account is created.'
+        : '观察区间、风险边界与跟踪节奏会在免费创建账户后解锁。',
     },
   });
 }
@@ -3019,7 +3019,7 @@ function InPlaceDecisionSkeleton({
   const progressValue = typeof progress === 'number' ? Math.max(0, Math.min(progress, 99)) : 12;
   return (
     <BentoCard
-      eyebrow={locale === 'en' ? 'WOLFY AI DECISION' : 'WOLFY AI 决策'}
+      eyebrow={locale === 'en' ? 'WOLFY AI ANALYSIS' : 'WOLFY AI 分析'}
       className={`h-full w-full rounded-[24px] ${SKELETON_CARD_CLASS}`}
       testId="home-bento-card-decision"
     >
@@ -3088,7 +3088,7 @@ function InPlaceDecisionSkeleton({
 function InPlaceStrategySkeleton({ locale }: { locale: DashboardLocale }) {
   return (
     <BentoCard
-      eyebrow={locale === 'en' ? 'Execution Strategy' : '执行策略'}
+      eyebrow={locale === 'en' ? 'Observation Framework' : '观察框架'}
       className={`w-full rounded-[24px] ${SKELETON_CARD_CLASS}`}
       testId="home-bento-card-strategy"
     >
@@ -3794,10 +3794,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               />
               <div>
                 <h1 className="text-3xl font-black tracking-[0] text-white md:text-5xl">
-                  {locale === 'en' ? 'WolfyStock Command Center' : 'WolfyStock 决策面板'}
+                  {locale === 'en' ? 'WolfyStock Analysis Center' : 'WolfyStock 分析面板'}
                 </h1>
                 <p className="mt-3 text-sm text-white/45">
-                  {locale === 'en' ? 'Enter a ticker to wake the AI decision dashboard.' : '输入股票代码，搜索后生成 AI 决策面板。'}
+                  {locale === 'en' ? 'Enter a ticker to generate an analysis view.' : '输入股票代码，搜索后生成 AI 分析面板。'}
                 </p>
               </div>
             </div>
