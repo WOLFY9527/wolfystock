@@ -10,6 +10,11 @@ const forbiddenApprovalPattern =
   /launch[-\s]?approved|production[-\s]?ready|automatic[-\s]?go|自动\s*go|上线批准|生产就绪|批准上线|批准发布/i;
 const launchApprovalAffordancePattern =
   /upload|上传|file|文件|write|写入|提交|保存|approve|approval|批准|launch[-\s]?approved|production[-\s]?ready|automatic[-\s]?go|上线批准|生产就绪|批准上线|批准发布/i;
+const expectedStaticCommands = [
+  'python3 scripts/operator_evidence_workflow_run.py init --output-dir <templates-dir>',
+  'python3 scripts/operator_evidence_workflow_run.py check --artifact-dir <sanitized-evidence-dir> --output-dir <review-output-dir>',
+  'python3 scripts/operator_evidence_workflow_run.py report --bundle-summary <review-output-dir>/bundle-summary.json --output <review-output-dir>/release-review-report.md',
+];
 
 test.describe('admin evidence workflow read-only regression', () => {
   test('renders the read-only evidence workflow for ops-log admins on desktop and mobile', async ({ page }) => {
@@ -24,6 +29,8 @@ test.describe('admin evidence workflow read-only regression', () => {
       await expect(page.getByRole('heading', { name: '证据工作流复核' })).toBeVisible();
       await expect(page.getByText('只读视图')).toBeVisible();
       await expect(page.getByText('页面不执行动作')).toBeVisible();
+      await expect(page.getByText('manual review required')).toBeVisible();
+      await expect(page.getByText('releaseApproved=false')).toBeVisible();
       await expectNoHorizontalOverflow(page);
       if (viewport.width >= 1024) {
         await expect(page.getByRole('link', { name: '证据复核' })).toHaveAttribute('href', /\/zh\/admin\/evidence-workflow$/);
@@ -37,18 +44,44 @@ test.describe('admin evidence workflow read-only regression', () => {
       await expect(workflowPage.getByRole('button', { name: launchApprovalAffordancePattern })).toHaveCount(0);
       await expect(workflowPage.getByRole('link', { name: launchApprovalAffordancePattern })).toHaveCount(0);
       await expect(workflowPage.locator('[contenteditable="true"]')).toHaveCount(0);
+      await expect(workflowPage.locator('[class*="bg-gray-"], [class*="bg-zinc-"], [class*="bg-slate-"], [class*="bg-neutral-"]')).toHaveCount(0);
+      await expect(workflowPage).toHaveClass(/overflow-x-hidden/);
+      await expect(workflowPage).toHaveClass(/no-scrollbar/);
 
       const rawDisclosure = page.getByTestId('admin-evidence-raw-disclosure');
       await expect(rawDisclosure).toBeVisible();
       await expect(rawDisclosure).not.toHaveAttribute('open', '');
       await expect(rawDisclosure.getByText('默认折叠')).toBeVisible();
+      const rawSummary = rawDisclosure.locator('summary');
+      await expect(rawSummary).toHaveAccessibleName(/原始\/Schema 字段/);
+      await expect(rawSummary).toHaveClass(/focus-visible:ring-2/);
+      const rawDetails = rawDisclosure.getByText('原始诊断、provider 载荷、schema 字段和 debug 内容不在本视图展开');
+      await expect(rawDetails).toBeHidden();
+      await rawSummary.click();
+      await expect(rawDisclosure).toHaveAttribute('open', '');
+      await expect(rawDetails).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+      await rawSummary.click();
+      await expect(rawDisclosure).not.toHaveAttribute('open', '');
 
       const commandPanel = page.getByTestId('admin-evidence-command-snippets');
-      await expect(commandPanel.getByText('python3 scripts/operator_evidence_workflow_run.py init --output-dir <templates-dir>')).toBeVisible();
-      await expect(commandPanel.getByText('python3 scripts/operator_evidence_workflow_run.py check --artifact-dir <sanitized-evidence-dir> --output-dir <review-output-dir>')).toBeVisible();
-      await expect(commandPanel.getByText('python3 scripts/operator_evidence_workflow_run.py report --bundle-summary <review-output-dir>/bundle-summary.json --output <review-output-dir>/release-review-report.md')).toBeVisible();
+      await expect(commandPanel.locator('pre')).toHaveCount(3);
+      await expect(commandPanel.locator('pre').first()).toHaveClass(/no-scrollbar/);
+      await expect(commandPanel.locator('pre code')).toHaveText(expectedStaticCommands);
+      for (const command of expectedStaticCommands) {
+        await expect(commandPanel.getByText(command)).toBeVisible();
+        expect(command).toMatch(/<[^>]+>/);
+        expect(command).not.toMatch(/\/Users\/|\.env|token|secret|password|api[_-]?key|cookie|session|bearer|sk-[a-z0-9_-]{12,}/i);
+        expect(command).not.toMatch(/--approve|--approval|--upload|--write|--launch|releaseApproved=true/i);
+      }
       await expect(commandPanel.getByRole('group', { name: /可复制命令/ })).toHaveCount(3);
       await expect(commandPanel.getByRole('button')).toHaveCount(0);
+      for (const snippet of await commandPanel.getByRole('group', { name: /可复制命令/ }).all()) {
+        await expect(snippet).toHaveAttribute('tabindex', '0');
+        await expect(snippet).toHaveClass(/focus-visible:ring-2/);
+        await snippet.focus();
+        await expect(snippet).toBeFocused();
+      }
 
       const bodyText = await page.locator('body').innerText();
       expect(bodyText).not.toMatch(forbiddenApprovalPattern);
