@@ -49,6 +49,7 @@ const MarketProviderOperationsPage = lazy(() => import('./pages/MarketProviderOp
 const AdminProviderCircuitDiagnosticsPage = lazy(() => import('./pages/AdminProviderCircuitDiagnosticsPage'));
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
 const AdminCostObservabilityPage = lazy(() => import('./pages/AdminCostObservabilityPage'));
+const AdminEvidenceWorkflowPage = lazy(() => import('./pages/AdminEvidenceWorkflowPage'));
 
 type GateCopy = {
   eyebrow: string;
@@ -64,9 +65,11 @@ type GateCopy = {
 function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: boolean): GateCopy {
   const isEnglish = language === 'en';
 
-  if (pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/provider-circuits') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/cost-observability')) {
+  if (pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/evidence-workflow') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/provider-circuits') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/cost-observability')) {
     const surfaceName = pathname.startsWith('/admin/cost-observability')
       ? (isEnglish ? 'cost observability' : '成本观测')
+      : pathname.startsWith('/admin/evidence-workflow')
+      ? (isEnglish ? 'evidence workflow' : '证据工作流')
       : pathname.startsWith('/admin/provider-circuits')
       ? (isEnglish ? 'provider circuit diagnostics' : 'Provider 熔断诊断')
       : pathname.startsWith('/admin/market-providers')
@@ -267,6 +270,8 @@ export const AppContent: React.FC = () => {
     || routePathname.startsWith('/settings/')
     || routePathname === '/admin/logs'
     || routePathname.startsWith('/admin/logs/')
+    || routePathname === '/admin/evidence-workflow'
+    || routePathname.startsWith('/admin/evidence-workflow/')
     || routePathname === '/admin/notifications'
     || routePathname.startsWith('/admin/notifications/')
     || routePathname === '/admin/market-providers'
@@ -391,6 +396,7 @@ export const AppContent: React.FC = () => {
               <Route path="/settings" element={<PersonalSettingsPage />} />
               <Route path="/settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
               <Route path="/admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
+              <Route path="/admin/evidence-workflow" element={<AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute>} />
               <Route path="/admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
               <Route path="/admin/market-providers" element={<AdminSurfaceRoute><MarketProviderOperationsPage /></AdminSurfaceRoute>} />
               <Route path="/admin/provider-circuits" element={<AdminSurfaceRoute><AdminProviderCircuitDiagnosticsPage /></AdminSurfaceRoute>} />
@@ -416,6 +422,7 @@ export const AppContent: React.FC = () => {
               <Route path="settings" element={<PersonalSettingsPage />} />
               <Route path="settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
               <Route path="admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
+              <Route path="admin/evidence-workflow" element={<AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute>} />
               <Route path="admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
               <Route path="admin/market-providers" element={<AdminSurfaceRoute><MarketProviderOperationsPage /></AdminSurfaceRoute>} />
               <Route path="admin/provider-circuits" element={<AdminSurfaceRoute><AdminProviderCircuitDiagnosticsPage /></AdminSurfaceRoute>} />

@@ -158,6 +158,10 @@ vi.mock('../pages/AdminCostObservabilityPage', () => ({
   default: () => <div>admin-cost-observability-page</div>,
 }));
 
+vi.mock('../pages/AdminEvidenceWorkflowPage', () => ({
+  default: () => <div>admin-evidence-workflow-page</div>,
+}));
+
 vi.mock('../pages/LoginPage', () => ({
   default: () => <div>login-page</div>,
 }));
@@ -483,6 +487,7 @@ describe('AppContent route flows', () => {
     ['/zh/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
     ['/zh/admin/provider-circuits', { ...noCapabilities, canReadProviders: true }, 'admin-provider-circuit-diagnostics-page'],
     ['/zh/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
+    ['/zh/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
     ['/zh/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
   ])('renders %s only with its matching capability', async (path, adminCapabilities, pageText) => {
     useAuthMock.mockReturnValue({
@@ -502,6 +507,28 @@ describe('AppContent route flows', () => {
     renderAt(path);
 
     await waitFor(() => expect(screen.getByText(pageText)).toBeInTheDocument());
+  });
+
+  it('blocks evidence workflow access when admin ops-log capability is absent', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: true,
+      isAdminAccount: true,
+      isAdminMode: true,
+      adminCapabilities: noCapabilities,
+    });
+
+    renderAt('/zh/admin/evidence-workflow');
+
+    expect(await screen.findByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeInTheDocument();
+    expect(screen.queryByText('admin-evidence-workflow-page')).not.toBeInTheDocument();
   });
 
   it('renders the localized cost observability route for admin accounts', async () => {

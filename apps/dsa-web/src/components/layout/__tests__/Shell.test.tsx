@@ -343,6 +343,7 @@ describe('Shell', () => {
     expect(screen.getByRole('button', { name: translate('zh', 'language.toggle') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '证据复核' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.notifications') })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('zh', 'nav.logout') })).toBeInTheDocument();
 
@@ -558,6 +559,7 @@ describe('Shell', () => {
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'language.toggle') })).toHaveTextContent('EN');
     expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();
     expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
+    expect(within(actionIsland).getByRole('link', { name: '证据复核' })).toBeInTheDocument();
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.logout') })).toBeInTheDocument();
     expect(actionIsland.querySelectorAll('[data-testid="shell-header-utility-divider"]')).toHaveLength(2);
   });
@@ -592,6 +594,7 @@ describe('Shell', () => {
     expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.userGovernance') })).toBeInTheDocument();
     expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.costObservability') })).toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.providerCircuits') })).not.toBeInTheDocument();
@@ -617,6 +620,7 @@ describe('Shell', () => {
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.userGovernance') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.costObservability') })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();

@@ -33,7 +33,7 @@ function resolveRailDescription(pathname: string, t: (key: string) => string): s
   return t('shell.archiveDesc');
 }
 
-function resolveMobileRouteLabel(pathname: string, t: (key: string) => string): string {
+function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, language: string): string {
   if (pathname === '/' || pathname === '') {
     return t('nav.home');
   }
@@ -69,6 +69,9 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string): 
   }
   if (pathname.startsWith('/admin/logs')) {
     return t('adminNav.logs');
+  }
+  if (pathname.startsWith('/admin/evidence-workflow')) {
+    return language === 'en' ? 'Evidence Review' : '证据复核';
   }
   if (pathname.startsWith('/admin/market-providers')) {
     return t('nav.marketProviders');
@@ -106,7 +109,7 @@ const ShellRailPanel: React.FC<{
 };
 
 export const Shell: React.FC<ShellProps> = ({ children }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const location = useLocation();
   const surfacePathname = stripLocalePrefix(location.pathname);
   const isBacktestRoute = surfacePathname.startsWith('/backtest');
@@ -115,6 +118,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isScannerRoute = surfacePathname.startsWith('/scanner');
   const isSystemControlRoute = surfacePathname.startsWith('/settings/system')
     || surfacePathname.startsWith('/admin/logs')
+    || surfacePathname.startsWith('/admin/evidence-workflow')
     || surfacePathname.startsWith('/admin/notifications')
     || surfacePathname.startsWith('/admin/market-providers')
     || surfacePathname.startsWith('/admin/provider-circuits')
@@ -138,7 +142,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const hasRailContent = Boolean(railContent);
   const isMobileNavVisible = mobileNavOpen;
   const isRailVisible = hasRailContent && railOpen;
-  const mobileRouteLabel = resolveMobileRouteLabel(surfacePathname, t);
+  const mobileRouteLabel = resolveMobileRouteLabel(surfacePathname, t, language);
 
   const closeMobileNav = useCallback(() => {
     setMobileNavOpen(false);

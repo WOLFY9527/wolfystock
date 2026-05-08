@@ -13,6 +13,7 @@ import {
   CircuitBoard,
   DatabaseZap,
   FlaskConical,
+  FileCheck2,
   Globe,
   Home,
   LogIn,
@@ -133,6 +134,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     isGuest,
     canReadCostObservability,
     canReadNotifications,
+    canReadOpsLogs,
     canReadProviders,
     canReadSystemConfig,
     canReadUsers,
@@ -149,8 +151,10 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const providerCircuitsLabel = t('nav.providerCircuits');
   const userGovernanceLabel = t('nav.userGovernance');
   const costObservabilityLabel = t('nav.costObservability');
+  const evidenceWorkflowLabel = language === 'en' ? 'Evidence Review' : '证据复核';
   const signInPath = buildLoginPath(location.pathname + location.search);
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
+  const evidenceWorkflowPath = routeLocale ? buildLocalizedPath('/admin/evidence-workflow', routeLocale) : '/admin/evidence-workflow';
   const notificationsPath = routeLocale ? buildLocalizedPath('/admin/notifications', routeLocale) : '/admin/notifications';
   const marketProvidersPath = routeLocale ? buildLocalizedPath('/admin/market-providers', routeLocale) : '/admin/market-providers';
   const providerCircuitsPath = routeLocale ? buildLocalizedPath('/admin/provider-circuits', routeLocale) : '/admin/provider-circuits';
@@ -306,6 +310,30 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
         </>
       ) : (
         <span>{notificationsLabel}</span>
+      )}
+    </NavLink>
+  ) : null;
+
+  const evidenceWorkflowAction = canReadOpsLogs ? (
+    <NavLink
+      to={evidenceWorkflowPath}
+      onClick={onNavigate}
+      className={({ isActive }) => cn(
+        isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
+        !isDrawer && isActive ? 'text-white' : '',
+        isDrawer && isActive ? 'is-active' : '',
+      )}
+      aria-label={evidenceWorkflowLabel}
+    >
+      {isDrawer ? (
+        <>
+          <span className="shell-nav-item__icon" aria-hidden="true">
+            <FileCheck2 className="h-4 w-4" />
+          </span>
+          <DrawerUtilityLabel label={evidenceWorkflowLabel} />
+        </>
+      ) : (
+        <span>{evidenceWorkflowLabel}</span>
       )}
     </NavLink>
   ) : null;
@@ -468,6 +496,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             {systemAction}
             {userGovernanceAction}
             {costObservabilityAction}
+            {evidenceWorkflowAction}
             {notificationAction}
             {marketProviderAction}
             {providerCircuitAction}
@@ -497,6 +526,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
               {systemAction}
               {userGovernanceAction}
               {costObservabilityAction}
+              {evidenceWorkflowAction}
               {notificationAction}
               {marketProviderAction}
               {providerCircuitAction}
