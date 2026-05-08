@@ -196,6 +196,23 @@ function renderAtWithLocationProbe(path: string) {
   );
 }
 
+function mockSignedInAdminWithCapabilities(adminCapabilities: AdminCapabilityFlags) {
+  useAuthMock.mockReturnValue({
+    authEnabled: true,
+    loggedIn: true,
+    isLoading: false,
+    loadError: null,
+    refreshStatus: vi.fn(),
+  });
+  useProductSurfaceMock.mockReturnValue({
+    isGuest: false,
+    isAdmin: true,
+    isAdminAccount: true,
+    isAdminMode: true,
+    adminCapabilities,
+  });
+}
+
 describe('AppContent route flows', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -510,20 +527,7 @@ describe('AppContent route flows', () => {
   });
 
   it('blocks evidence workflow access when admin ops-log capability is absent', async () => {
-    useAuthMock.mockReturnValue({
-      authEnabled: true,
-      loggedIn: true,
-      isLoading: false,
-      loadError: null,
-      refreshStatus: vi.fn(),
-    });
-    useProductSurfaceMock.mockReturnValue({
-      isGuest: false,
-      isAdmin: true,
-      isAdminAccount: true,
-      isAdminMode: true,
-      adminCapabilities: noCapabilities,
-    });
+    mockSignedInAdminWithCapabilities(noCapabilities);
 
     renderAt('/zh/admin/evidence-workflow');
 
@@ -531,26 +535,31 @@ describe('AppContent route flows', () => {
     expect(screen.queryByText('admin-evidence-workflow-page')).not.toBeInTheDocument();
   });
 
-  it('does not unlock evidence workflow with adjacent system-config capability only', async () => {
-    useAuthMock.mockReturnValue({
-      authEnabled: true,
-      loggedIn: true,
-      isLoading: false,
-      loadError: null,
-      refreshStatus: vi.fn(),
-    });
-    useProductSurfaceMock.mockReturnValue({
-      isGuest: false,
-      isAdmin: true,
-      isAdminAccount: true,
-      isAdminMode: true,
-      adminCapabilities: { ...noCapabilities, canReadSystemConfig: true },
-    });
+  it.each([
+    ['system config', { ...noCapabilities, canReadSystemConfig: true }],
+    ['provider operations', { ...noCapabilities, canReadProviders: true }],
+    ['notifications', { ...noCapabilities, canReadNotifications: true }],
+    ['cost observability', { ...noCapabilities, canReadCostObservability: true }],
+    ['user governance', { ...noCapabilities, canReadUsers: true }],
+    ['user activity', { ...noCapabilities, canReadUserActivity: true }],
+    ['user portfolio', { ...noCapabilities, canReadUserPortfolio: true }],
+    ['user security write', { ...noCapabilities, canWriteUserSecurity: true }],
+  ])('does not unlock evidence workflow with adjacent %s capability only', async (_label, adminCapabilities) => {
+    mockSignedInAdminWithCapabilities(adminCapabilities);
 
     renderAt('/zh/admin/evidence-workflow');
 
     expect(await screen.findByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeInTheDocument();
     expect(screen.queryByText('admin-evidence-workflow-page')).not.toBeInTheDocument();
+  });
+
+  it('renders evidence workflow with ops logs read as the only admin capability', async () => {
+    mockSignedInAdminWithCapabilities({ ...noCapabilities, canReadOpsLogs: true });
+
+    renderAt('/zh/admin/evidence-workflow');
+
+    await waitFor(() => expect(screen.getByText('admin-evidence-workflow-page')).toBeInTheDocument());
+    expect(screen.queryByRole('heading', { name: '这个管理页面需要对应管理员能力' })).not.toBeInTheDocument();
   });
 
   it('renders the localized cost observability route for admin accounts', async () => {

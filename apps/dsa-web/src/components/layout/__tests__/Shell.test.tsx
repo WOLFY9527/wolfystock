@@ -600,6 +600,80 @@ describe('Shell', () => {
     expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.providerCircuits') })).not.toBeInTheDocument();
   });
 
+  it('shows only the Chinese-first evidence workflow nav entry for ops-log admins', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: {
+        isAdmin: true,
+        canReadUsers: false,
+        canReadCostObservability: false,
+        canReadOpsLogs: true,
+        canReadProviders: false,
+        canReadNotifications: false,
+        canReadSystemConfig: false,
+      },
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/zh/admin/logs']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    const evidenceLink = within(actionIsland).getByRole('link', { name: '证据复核' });
+    expect(evidenceLink).toHaveAttribute('href', '/zh/admin/evidence-workflow');
+    expect(within(actionIsland).queryByRole('link', { name: 'Evidence Review' })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.userGovernance') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.costObservability') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('link', { name: translate('zh', 'nav.providerCircuits') })).not.toBeInTheDocument();
+  });
+
+  it('does not show evidence workflow nav for adjacent admin capabilities without ops-log read', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: {
+        isAdmin: true,
+        canReadUsers: true,
+        canReadCostObservability: true,
+        canReadOpsLogs: false,
+        canReadProviders: true,
+        canReadNotifications: true,
+        canReadSystemConfig: true,
+      },
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/zh/admin/market-providers']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
+    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
+    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.userGovernance') })).toBeInTheDocument();
+    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.costObservability') })).toBeInTheDocument();
+    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.notifications') })).toBeInTheDocument();
+    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.marketProviders') })).toBeInTheDocument();
+    expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.providerCircuits') })).toBeInTheDocument();
+  });
+
   it('fails closed for sensitive admin nav when capability fields are absent', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,

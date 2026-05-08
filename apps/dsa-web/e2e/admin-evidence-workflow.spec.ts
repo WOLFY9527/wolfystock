@@ -25,6 +25,12 @@ test.describe('admin evidence workflow read-only regression', () => {
       await expect(page.getByText('只读视图')).toBeVisible();
       await expect(page.getByText('页面不执行动作')).toBeVisible();
       await expectNoHorizontalOverflow(page);
+      if (viewport.width >= 1024) {
+        await expect(page.getByRole('link', { name: '证据复核' })).toHaveAttribute('href', /\/zh\/admin\/evidence-workflow$/);
+      } else {
+        await expect(page.getByTestId('shell-mobile-active-route')).toHaveText('证据复核');
+      }
+      await expect(page.getByRole('link', { name: 'Evidence Review' })).toHaveCount(0);
 
       await expect(workflowPage.locator('input[type="file"]')).toHaveCount(0);
       await expect(workflowPage.locator('input, textarea, select, form')).toHaveCount(0);
@@ -51,18 +57,29 @@ test.describe('admin evidence workflow read-only regression', () => {
     }
   });
 
-  test('blocks the route and hides the nav affordance for adjacent admin capabilities', async ({ page }) => {
-    const harness = await openAdminRouteWithHarness(page, '/zh/admin/evidence-workflow', {
-      capabilities: ['ops:providers:read'],
+  for (const capability of [
+    'users:read',
+    'users:activity:read',
+    'users:portfolio:read',
+    'users:security:write',
+    'cost:observability:read',
+    'ops:providers:read',
+    'ops:notifications:read',
+    'ops:system_config:read',
+  ] as const) {
+    test(`blocks the route and hides the nav affordance for adjacent ${capability}`, async ({ page }) => {
+      const harness = await openAdminRouteWithHarness(page, '/zh/admin/evidence-workflow', {
+        capabilities: [capability],
+      });
+
+      await expect(page.getByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('admin-evidence-workflow-page')).toHaveCount(0);
+      await expect(page.getByRole('link', { name: '证据复核' })).toHaveCount(0);
+      await expectNoHorizontalOverflow(page);
+
+      const bodyText = await page.locator('body').innerText();
+      expect(bodyText).not.toMatch(forbiddenApprovalPattern);
+      expect(harness.requests.calls.filter((entry) => writeMethodPattern.test(entry))).toEqual([]);
     });
-
-    await expect(page.getByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('admin-evidence-workflow-page')).toHaveCount(0);
-    await expect(page.getByRole('link', { name: '证据复核' })).toHaveCount(0);
-    await expectNoHorizontalOverflow(page);
-
-    const bodyText = await page.locator('body').innerText();
-    expect(bodyText).not.toMatch(forbiddenApprovalPattern);
-    expect(harness.requests.calls.filter((entry) => writeMethodPattern.test(entry))).toEqual([]);
-  });
+  }
 });

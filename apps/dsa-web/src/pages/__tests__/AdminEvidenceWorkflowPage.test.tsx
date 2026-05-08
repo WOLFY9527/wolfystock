@@ -39,10 +39,11 @@ describe('AdminEvidenceWorkflowPage', () => {
     render(<AdminEvidenceWorkflowPage />);
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(document.querySelector('form')).not.toBeInTheDocument();
     expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
-    expect(document.querySelector('input, textarea, select')).not.toBeInTheDocument();
+    expect(document.querySelector('input, textarea, select, [contenteditable="true"]')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/upload|上传|file|文件/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
@@ -58,7 +59,10 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(commandText).toContain('python3 scripts/operator_evidence_workflow_run.py init --output-dir <templates-dir>');
     expect(commandText).toContain('python3 scripts/operator_evidence_workflow_run.py check --artifact-dir <sanitized-evidence-dir> --output-dir <review-output-dir>');
     expect(commandText).toContain('python3 scripts/operator_evidence_workflow_run.py report --bundle-summary <review-output-dir>/bundle-summary.json --output <review-output-dir>/release-review-report.md');
-    expect(commandText).not.toMatch(/\/Users\/|\.env|token|secret|password|api[_-]?key|cookie|session/i);
+    expect(commandText).not.toMatch(/\/Users\/|\.env|token|secret|password|api[_-]?key|cookie|session|bearer|sk-[a-z0-9_-]{12,}/i);
+    expect(within(commandPanel).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(commandPanel).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(commandPanel).queryByRole('textbox')).not.toBeInTheDocument();
   });
 
   it('keeps command snippets and raw details keyboard-focusable without adding write controls', () => {
@@ -96,7 +100,7 @@ describe('AdminEvidenceWorkflowPage', () => {
     render(<AdminEvidenceWorkflowPage />);
 
     const pageText = screen.getByTestId('admin-evidence-workflow-page').textContent || '';
-    expect(pageText).not.toMatch(/launch-approved|production-ready|automatic[- ]?go|自动\s*go|上线批准|生产就绪|批准上线|批准发布/i);
+    expect(pageText).not.toMatch(/launch-approved|launch\s+approved|production-ready|production\s+ready|automatic[- ]?go|自动\s*go|上线批准|生产就绪|批准上线|批准发布/i);
   });
 
   it('keeps raw and schema review notes collapsed by default', () => {
