@@ -20,6 +20,7 @@ type TechCardProps = {
   signals: TechSignal[];
   detailLabel: string;
   onOpenDetails: () => void;
+  researchCard?: string;
 };
 
 function isMutedValue(value: string): boolean {
@@ -32,6 +33,7 @@ export const TechCard: React.FC<TechCardProps> = ({
   signals,
   detailLabel,
   onOpenDetails,
+  researchCard,
 }) => {
   const { marketColorConvention } = useUiPreferences();
   const {
@@ -56,6 +58,7 @@ export const TechCard: React.FC<TechCardProps> = ({
     <BentoCard
       eyebrow={title}
       className="w-full rounded-[24px]"
+      researchCard={researchCard}
       testId="home-bento-card-tech"
       action={(
         <button

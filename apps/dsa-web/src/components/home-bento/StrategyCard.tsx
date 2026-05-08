@@ -20,6 +20,7 @@ type StrategyCardProps = {
   positionBody: string;
   detailLabel: string;
   onOpenDetails: () => void;
+  researchCard?: string;
 };
 
 export const StrategyCard: React.FC<StrategyCardProps> = ({
@@ -30,6 +31,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
   positionBody,
   detailLabel,
   onOpenDetails,
+  researchCard,
 }) => {
   const { marketColorConvention } = useUiPreferences();
   const {
@@ -64,6 +66,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
       subtitle={subtitle}
       className="w-full overflow-visible rounded-[24px]"
       contentClassName="h-auto"
+      researchCard={researchCard}
       testId="home-bento-card-strategy"
       action={(
         <button

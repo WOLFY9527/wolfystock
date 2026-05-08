@@ -309,6 +309,26 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   const confidencePresentation = resolveConfidencePresentation(confidenceValue);
   const convictionDisplay = confidencePresentation.display;
   const activeConvictionSegments = confidencePresentation.activeSegments;
+  const researchStateTiles = [
+    {
+      label: isEnglish ? 'Opportunity' : '机会',
+      value: signalCommand.command,
+      tone: actionTone,
+      detail: isEnglish ? 'Read-only thesis' : '只读观察结论',
+    },
+    {
+      label: isEnglish ? 'Risk' : '风险',
+      value: isEnglish ? 'Risk boundary' : '风险边界',
+      tone: 'neutral' as SignalTone,
+      detail: isEnglish ? 'What can break the thesis' : '什么会破坏当前观察假设',
+    },
+    {
+      label: isEnglish ? 'Context' : '上下文',
+      value: isEnglish ? 'Read-only data state' : '只读数据状态',
+      tone: 'neutral' as SignalTone,
+      detail: isEnglish ? 'Data and source state' : '数据与来源状态',
+    },
+  ];
 
   return (
     <BentoCard
@@ -318,6 +338,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
       accentGlowClassName={SYSTEM_ACCENT_GLOW_CLASS}
       className="w-full overflow-visible rounded-[24px] xl:flex xl:h-full xl:flex-col xl:overflow-hidden"
       contentClassName="h-auto xl:h-full xl:min-h-0"
+      researchCard="decision"
       testId="home-bento-card-decision"
       action={reportActions ? (
         <div className="flex max-w-[min(100%,16rem)] flex-wrap items-center justify-end gap-2 sm:max-w-[min(100%,28rem)]" data-testid="home-bento-decision-header-actions">
@@ -347,6 +368,21 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         ) : null}
 
         <div
+          className="grid gap-3 rounded-[24px] border border-white/[0.05] bg-white/[0.02] p-3 md:grid-cols-3"
+          data-testid="home-bento-research-state-row"
+        >
+          {researchStateTiles.map((tile) => (
+            <div key={tile.label} className="min-w-0 rounded-2xl border border-white/[0.05] bg-black/15 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/36">{tile.label}</p>
+              <p className={`mt-2 break-words text-sm font-medium leading-relaxed ${getActionToneClass(tile.tone, marketColorConvention)}`} style={getActionToneStyle(tile.tone, marketColorConvention)}>
+                {tile.value}
+              </p>
+              <p className="mt-1 break-words text-[11px] leading-5 text-white/34">{tile.detail}</p>
+            </div>
+          ))}
+        </div>
+
+        <div
           className="overflow-visible pr-2 pb-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:no-scrollbar xl:[&::-webkit-scrollbar]:hidden xl:[-ms-overflow-style:none] xl:[scrollbar-width:none]"
           data-testid="home-bento-decision-scroll-body"
         >
@@ -357,7 +393,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             <div className="col-span-1 min-w-0" data-testid="home-bento-decision-action">
               <Label micro className="text-white/28">{isEnglish ? 'ANALYSIS STATE' : '分析状态'}</Label>
               <span
-                className={`mt-3 block text-5xl font-black leading-none tracking-[0] md:text-6xl ${getActionToneClass(actionTone, marketColorConvention)}`}
+                className={`mt-3 block text-4xl font-black leading-none tracking-[0] md:text-5xl ${getActionToneClass(actionTone, marketColorConvention)}`}
                 data-testid="home-bento-decision-signal-hero"
                 style={getActionToneStyle(actionTone, marketColorConvention)}
               >
@@ -372,7 +408,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
                 data-testid="home-bento-decision-core-metrics"
               >
                 <p
-                  className="font-mono text-5xl font-semibold leading-none text-white"
+                  className="font-mono text-4xl font-semibold leading-none text-white md:text-5xl"
                   data-testid="home-bento-decision-score-value"
                 >
                   {heroValue}
@@ -385,7 +421,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
               <div className="flex items-end justify-between gap-4">
                 <Label micro className="text-white/40">{isEnglish ? 'AI CONVICTION' : '确信度'}</Label>
                 <span
-                  className="font-mono text-3xl font-semibold leading-none text-white"
+                  className="font-mono text-2xl font-semibold leading-none text-white md:text-3xl"
                   data-testid="home-bento-decision-conviction-value"
                 >
                   {convictionDisplay}

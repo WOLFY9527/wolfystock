@@ -300,9 +300,9 @@ describe('HomeSurfacePage', () => {
     expect(main.firstElementChild).toBe(grid);
     expect(grid).toHaveClass('grid', 'w-full', 'grid-cols-1', 'items-start', 'gap-6', 'xl:grid-cols-12');
     expect(grid).not.toHaveClass('flex', 'xl:flex-row', 'items-stretch');
-    expect(primaryStack).toHaveClass('col-span-1', 'flex', 'flex-col', 'h-auto', 'min-h-0', 'w-full', 'xl:h-full', 'xl:col-span-5');
+    expect(primaryStack).toHaveClass('col-span-1', 'flex', 'flex-col', 'h-auto', 'min-h-0', 'w-full', 'xl:h-full', 'xl:col-span-6');
     expect(grid.firstElementChild).toBe(primaryStack);
-    expect(secondaryStack).toHaveClass('col-span-1', 'flex', 'flex-col', 'gap-6', 'w-full', 'min-h-0', 'min-w-0', 'xl:col-span-7');
+    expect(secondaryStack).toHaveClass('col-span-1', 'flex', 'flex-col', 'gap-6', 'w-full', 'min-h-0', 'min-w-0', 'xl:col-span-6');
     expect(secondaryStack.firstElementChild).toBe(omnibarShell);
     expect(secondaryGrid).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2', 'gap-6', 'w-full', 'xl:flex-1', 'items-stretch');
     expect(homeSearch).toHaveAttribute('placeholder', '输入代码唤醒 AI (如 ORCL)...');
@@ -354,6 +354,10 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('AI 信号方向')).not.toBeInTheDocument();
     expect(screen.queryByText('最近报告归因')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('仅观察');
+    expect(screen.getByTestId('home-bento-research-state-row')).toBeInTheDocument();
+    expect(strategyCard).toHaveAttribute('data-research-card', 'opportunity');
+    expect(techCard).toHaveAttribute('data-research-card', 'risk-context');
+    expect(fundamentalsCard).toHaveAttribute('data-research-card', 'data-context');
     expect(screen.getByTestId('home-bento-decision-company-header')).toHaveTextContent('Oracle Corporation');
     expect(screen.getByTestId('home-bento-decision-sector')).toHaveTextContent('科技');
     expect(screen.getByTestId('home-bento-decision-score-value')).toHaveTextContent('78');
@@ -1257,8 +1261,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-history-drawer-trigger')).toBeInTheDocument();
     expect(grid).toHaveClass('grid', 'w-full', 'grid-cols-1', 'gap-6', 'xl:grid-cols-12');
     expect(grid).toHaveAttribute('data-bento-grid', 'true');
-    expect(primaryStack).toHaveClass('col-span-1', 'flex', 'flex-col', 'h-auto', 'min-h-0', 'w-full', 'xl:h-full', 'xl:col-span-5');
-    expect(secondaryStack).toHaveClass('col-span-1', 'flex', 'flex-col', 'gap-6', 'w-full', 'min-h-0', 'min-w-0', 'xl:col-span-7');
+    expect(primaryStack).toHaveClass('col-span-1', 'flex', 'flex-col', 'h-auto', 'min-h-0', 'w-full', 'xl:h-full', 'xl:col-span-6');
+    expect(secondaryStack).toHaveClass('col-span-1', 'flex', 'flex-col', 'gap-6', 'w-full', 'min-h-0', 'min-w-0', 'xl:col-span-6');
     expect(secondaryStack.firstElementChild).toBe(screen.getByTestId('home-bento-omnibar-shell'));
     expect(secondaryGrid).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-2', 'gap-6', 'w-full', 'xl:flex-1');
     expect(screen.getByTestId('home-bento-card-decision')).toBeInTheDocument();

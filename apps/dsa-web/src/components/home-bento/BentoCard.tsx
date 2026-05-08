@@ -13,6 +13,7 @@ type BentoCardProps = {
   tone?: SignalTone;
   accentGlow?: boolean;
   accentGlowClassName?: string;
+  researchCard?: string;
   testId?: string;
 };
 
@@ -27,10 +28,12 @@ export const BentoCard: React.FC<BentoCardProps> = ({
   tone = 'neutral',
   accentGlow = false,
   accentGlowClassName = SYSTEM_ACCENT_GLOW_CLASS,
+  researchCard,
   testId,
 }) => (
   <section
     data-testid={testId}
+    data-research-card={researchCard}
     className={cn(
       'group relative overflow-hidden rounded-[36px] border border-white/5 bg-white/[0.02] px-8 py-7 backdrop-blur-2xl transition-transform duration-200 ease-out md:px-10 md:py-8 [backface-visibility:hidden] [transform:translateZ(0)] hover:-translate-y-[2px]',
       className,

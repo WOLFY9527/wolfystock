@@ -1455,6 +1455,58 @@ const ChatPage: React.FC = () => {
     );
   };
 
+  const renderContextBriefRail = (testId = 'chat-context-brief-rail') => {
+    const availableCount = evidenceItems.filter((item) => item.status === 'available' || item.status === 'used').length;
+    const partialCount = evidenceItems.filter((item) => item.status === 'partial' || item.status === 'stale' || item.status === 'fallback').length;
+    const missingCount = evidenceItems.filter((item) => item.status === 'missing' || item.status === 'error').length;
+    const routeText = smartRoute.symbols.length
+      ? formatRouteLabel(smartRoute)
+      : (language === 'en' ? 'Ask about a symbol or scenario' : '输入标的或情景后生成上下文');
+    const lensText = smartRoute.symbols.length
+      ? smartRoute.recommendedLenses.slice(0, 2).join(' / ')
+      : selectedLens.label;
+    return (
+      <section
+        data-testid={testId}
+        className="rounded-[24px] border border-white/[0.06] bg-white/[0.025] p-4 text-left shadow-[0_18px_60px_rgba(0,0,0,0.18)]"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/36">
+              {language === 'en' ? 'Research context' : '研究上下文'}
+            </p>
+            <p className="mt-2 text-sm font-semibold text-white">{language === 'en' ? 'Read-only evidence' : '只读证据'}</p>
+          </div>
+          <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200">
+            {language === 'en' ? 'analysis only' : '仅分析'}
+          </span>
+        </div>
+        <div className="mt-4 grid gap-2">
+          {[
+            { label: language === 'en' ? 'Question route' : '问题路径', value: routeText },
+            { label: language === 'en' ? 'Observation lens' : '观察条件', value: lensText },
+            {
+              label: language === 'en' ? 'Evidence state' : '证据状态',
+              value: language === 'en'
+                ? `${availableCount} ready · ${partialCount} partial · ${missingCount} missing`
+                : `${availableCount} 可用 · ${partialCount} 部分 · ${missingCount} 缺失`,
+            },
+          ].map((item) => (
+            <div key={item.label} className="rounded-2xl border border-white/[0.05] bg-black/20 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/32">{item.label}</p>
+              <p className="mt-1 break-words text-xs leading-5 text-white/68">{item.value}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-[11px] leading-5 text-white/36">
+          {language === 'en'
+            ? 'This composer organizes research questions and never triggers account actions.'
+            : '该入口只组织研究问题，不触发账户动作。'}
+        </p>
+      </section>
+    );
+  };
+
   const quoteEvidence = evidenceItems.find((item) => item.key === 'quote');
   const renderSmartRouteStrip = () => (
     <div data-testid="chat-smart-route-strip" className="mb-3 rounded-2xl border border-white/8 bg-black/35 px-3 py-2 text-xs text-white/58">
@@ -1733,7 +1785,7 @@ const ChatPage: React.FC = () => {
                   data-testid="chat-empty-state"
                   className="flex flex-1 flex-col items-center justify-start overflow-y-auto no-scrollbar"
                 >
-                  <div className="flex w-full max-w-5xl flex-col items-center gap-5 px-4 pt-5 text-center sm:gap-10 md:px-8 xl:px-12">
+                  <div className="flex w-full max-w-6xl flex-col items-center gap-5 px-4 pb-6 pt-5 text-center sm:gap-7 md:px-8 xl:px-12">
                     {skillsLoadError ? (
                       <ApiErrorAlert
                         error={skillsLoadError}
@@ -1755,7 +1807,24 @@ const ChatPage: React.FC = () => {
                       <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-white/40">{chat('emptyTitle')}</p>
                     </div>
 
-                    <div className="grid w-full max-w-5xl grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 lg:gap-6">
+                    <div
+                      data-testid="chat-research-entry-grid"
+                      className="grid w-full grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_20rem]"
+                    >
+                      <div data-testid="chat-input-shell" className="w-full shrink-0 min-w-0">
+                        <div data-testid="chat-input-gradient" className="w-full shrink-0">
+                          <div
+                            data-testid="chat-console-inner"
+                            className="w-full"
+                          >
+                            {renderComposerBody()}
+                          </div>
+                        </div>
+                      </div>
+                      {renderContextBriefRail()}
+                    </div>
+
+                    <div data-testid="chat-starter-grid" className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
                       {starterPromptCards.slice(0, 2).map((card, index) => (
                         <GlassCard
                           key={card.id}
@@ -1825,17 +1894,6 @@ const ChatPage: React.FC = () => {
                         ))}
                       </div>
                     ) : null}
-                  </div>
-                </div>
-
-                <div data-testid="chat-input-shell" className="shrink-0 w-full">
-                  <div data-testid="chat-input-gradient" className="w-full shrink-0 px-6 pb-6 pt-4 md:px-8 xl:px-12">
-                    <div
-                      data-testid="chat-console-inner"
-                      className="w-full"
-                    >
-                      {renderComposerBody()}
-                    </div>
                   </div>
                 </div>
               </main>
@@ -1997,7 +2055,7 @@ const ChatPage: React.FC = () => {
 
           <aside
             data-testid="chat-strategy-panel"
-            className="hidden h-full min-h-0 w-full shrink-0 flex-col gap-5 overflow-y-auto border-l border-white/5 bg-gradient-to-b from-white/[0.01] to-transparent p-5 no-scrollbar lg:flex lg:w-[320px] xl:w-[360px]"
+            className="hidden h-full min-h-0 w-full shrink-0 flex-col gap-4 overflow-y-auto border-l border-white/5 bg-gradient-to-b from-white/[0.01] to-transparent p-4 no-scrollbar lg:flex lg:w-[288px] xl:w-[320px]"
           >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -2016,7 +2074,10 @@ const ChatPage: React.FC = () => {
 
             <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar pr-1">
               {consoleMode === 'engines' ? (
-                renderControlPanel('chat-control-panel')
+                <div className="flex flex-col gap-4">
+                  {renderContextBriefRail('chat-context-brief-rail-desktop')}
+                  {renderControlPanel('chat-control-panel')}
+                </div>
               ) : (
                 <div className="flex min-h-full flex-col gap-4">
                   <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-white/50">{chat('historyTitle')}</h3>

@@ -75,4 +75,54 @@ describe('ReportMarkdown', () => {
       expect(screen.getByText('当前未识别到缺失字段。')).toBeInTheDocument();
     });
   });
+
+  it('leads with an executive summary and keeps technical evidence collapsed', async () => {
+    const standardReport: StandardReport = {
+      summaryPanel: {
+        oneSentence: '只读证据显示仍处观察状态。',
+        operationAdvice: '仅观察',
+        score: 68,
+      },
+      decisionPanel: {
+        confidence: '中等',
+        riskControlStrategy: '跌破关键支撑则观察假设失效。',
+      },
+      reasonLayer: {
+        topRisk: '财报后波动仍未收敛。',
+      },
+      technicalFields: [
+        { label: 'RSI-14', value: '54' },
+        { label: 'MACD', value: '拐点初现' },
+      ],
+      fundamentalFields: [
+        { label: 'Revenue', value: '+9.4%' },
+      ],
+      coverageNotes: {
+        dataSources: ['quote: used', 'fundamental: partial'],
+      },
+    };
+
+    render(
+      <ReportMarkdown
+        recordId={3}
+        stockName="Oracle"
+        stockCode="ORCL"
+        onClose={() => undefined}
+        standardReport={standardReport}
+        initialContent="## Raw Technical Detail\n| Field | Value |\n| --- | --- |\n| RSI-14 | 54 |"
+      />,
+    );
+
+    const executiveSummary = await screen.findByTestId('report-executive-summary');
+    const evidenceDetails = screen.getByTestId('report-technical-evidence-details');
+    const readingSurface = screen.getByTestId('full-report-reading-surface');
+
+    expect(executiveSummary).toHaveTextContent('执行摘要');
+    expect(executiveSummary).toHaveTextContent('只读证据显示仍处观察状态。');
+    expect(executiveSummary).toHaveTextContent('观察结论');
+    expect(executiveSummary).toHaveTextContent('置信度');
+    expect(executiveSummary).toHaveTextContent('关键风险');
+    expect(evidenceDetails).not.toHaveAttribute('open');
+    expect(readingSurface.firstElementChild).toBe(executiveSummary);
+  });
 });

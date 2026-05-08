@@ -690,12 +690,12 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('chat-input-shell')).toHaveClass('w-full', 'shrink-0');
     expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('mt-auto', 'pt-4', 'pb-8', 'pb-10', 'mb-8');
     expect(screen.getByTestId('chat-input-shell')).not.toHaveClass('absolute', 'bottom-0', 'left-0', 'z-50', 'pointer-events-none');
-    expect(screen.getByTestId('chat-input-gradient')).toHaveClass('w-full', 'shrink-0', 'px-6', 'pb-6', 'pt-4', 'md:px-8', 'xl:px-12');
+    expect(screen.getByTestId('chat-input-gradient')).toHaveClass('w-full', 'shrink-0');
     expect(screen.getByTestId('chat-input-gradient')).not.toHaveClass('pb-20', 'mb-32');
     expect(screen.getByTestId('chat-console-inner')).toHaveClass('w-full');
     expect(screen.getByTestId('chat-console-inner')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12');
     expect(screen.getByTestId('chat-console-inner')).not.toHaveClass('max-w-4xl', 'mx-auto');
-    expect(screen.getByTestId('chat-input-shell').parentElement).toBe(screen.getByTestId('chat-main'));
+    expect(screen.getByTestId('chat-input-shell').parentElement).toBe(screen.getByTestId('chat-research-entry-grid'));
     expect(screen.getByTestId('chat-input-shell').parentElement).not.toBe(screen.getByTestId('chat-main-panel'));
     expect(screen.getByTestId('chat-composer-omnibar')).toHaveClass(
       'relative',
@@ -711,7 +711,7 @@ describe('ChatPage', () => {
     );
     expect(screen.getByText('AI 洞察仅供研究参考，不构成投资建议。请自行评估风险承受能力。')).toHaveClass('mt-3', 'text-[10px]', 'text-center', 'text-white/30');
     expect(screen.queryByTestId('chat-skill-toolbar')).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'h-full', 'min-h-0', 'w-full', 'shrink-0', 'flex-col', 'gap-5', 'overflow-y-auto', 'border-l', 'border-white/5', 'bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent', 'p-5', 'lg:w-[320px]', 'xl:w-[360px]');
+    expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'h-full', 'min-h-0', 'w-full', 'shrink-0', 'flex-col', 'gap-4', 'overflow-y-auto', 'border-l', 'border-white/5', 'bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent', 'p-4', 'lg:w-[288px]', 'xl:w-[320px]');
     expect(screen.getByTestId('chat-console-mode-toggle')).toBeInTheDocument();
     expect(screen.getByTestId('chat-strategy-grid')).toHaveClass('grid', 'grid-cols-2', 'gap-2');
     expect(mockLoadInitialSession).toHaveBeenCalled();
@@ -818,6 +818,29 @@ describe('ChatPage', () => {
     );
     expect(screen.queryByTestId('chat-footer-starter-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-footer-quick-questions')).not.toBeInTheDocument();
+  });
+
+  it('puts the research composer ahead of templates and keeps context compact', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('chat-research-entry-grid')).toBeInTheDocument();
+    const composer = screen.getByTestId('chat-composer-omnibar');
+    const starterGrid = screen.getByTestId('chat-starter-grid');
+    const contextRail = screen.getByTestId('chat-context-brief-rail');
+
+    expect(composer.compareDocumentPosition(starterGrid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(contextRail).toHaveTextContent('只读证据');
+    expect(contextRail).toHaveTextContent('观察条件');
+    expect(contextRail).not.toHaveTextContent('DeepSeek');
+    expect(contextRail).not.toHaveTextContent('provider');
+    expect(screen.getByTestId('chat-empty-state')).toHaveClass('justify-start');
+    expect(screen.getByTestId('chat-quick-question-cloud').textContent).not.toMatch(/买|卖|下单|开仓/);
   });
 
   it('animates only the latest assistant reply while generation is active', async () => {

@@ -17,6 +17,7 @@ type FundamentalsCardProps = {
   metrics: FundamentalMetric[];
   detailLabel: string;
   onOpenDetails: () => void;
+  researchCard?: string;
 };
 
 function splitMetricSurprise(value: string): { main: string; surprise?: string; tone: SignalTone } {
@@ -50,6 +51,7 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
   metrics,
   detailLabel,
   onOpenDetails,
+  researchCard,
 }) => {
   const { marketColorConvention } = useUiPreferences();
   const {
@@ -62,6 +64,7 @@ export const FundamentalsCard: React.FC<FundamentalsCardProps> = ({
     <BentoCard
       eyebrow={title}
       className="w-full h-full rounded-[24px]"
+      researchCard={researchCard}
       testId="home-bento-card-fundamentals"
       action={(
         <button

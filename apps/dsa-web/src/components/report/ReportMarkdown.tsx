@@ -109,6 +109,34 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
   }, [content, normalizedLanguage]);
 
   const coverageBuckets = coverageAudit.buckets.filter((bucket) => bucket.entries.length > 0);
+  const executiveSummary = useMemo(() => {
+    const summaryPanel = standardReport?.summaryPanel;
+    const decisionPanel = standardReport?.decisionPanel;
+    const reasonLayer = standardReport?.reasonLayer;
+    const highlights = standardReport?.highlights;
+    const firstLine = String(
+      summaryPanel?.oneSentence
+      || reasonLayer?.latestKeyUpdate
+      || content.split('\n').find((line) => line.trim() && !line.trim().startsWith('#'))
+      || (normalizedLanguage === 'en' ? 'Report content is available for review.' : '报告内容已生成，可继续复核。'),
+    ).trim();
+    const observation = String(
+      summaryPanel?.operationAdvice
+      || decisionPanel?.keyAction
+      || (normalizedLanguage === 'en' ? 'Observation only' : '仅观察'),
+    ).trim();
+    const confidence = String(
+      decisionPanel?.confidence
+      || (normalizedLanguage === 'en' ? 'Unstated' : '未标注'),
+    ).trim();
+    const keyRisk = String(
+      reasonLayer?.topRisk
+      || highlights?.riskAlerts?.[0]
+      || decisionPanel?.riskControlStrategy
+      || (normalizedLanguage === 'en' ? 'No explicit risk item in the structured report.' : '结构化报告未给出明确风险条目。'),
+    ).trim();
+    return { firstLine, observation, confidence, keyRisk };
+  }, [content, normalizedLanguage, standardReport]);
 
   const coverageCategoryLabel = useCallback((category: MissingFieldCategory): string => {
     if (category === 'integrated_unavailable') {
@@ -225,6 +253,29 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
           />
         ) : (
           <div className="space-y-5" data-testid="full-report-reading-surface">
+            <div data-testid="report-executive-summary">
+              <SupportPanel
+                className="px-5 py-4 md:px-6"
+                title={normalizedLanguage === 'en' ? 'Executive Summary' : '执行摘要'}
+                body={executiveSummary.firstLine}
+                titleClassName={headingClassName}
+                bodyClassName="text-sm leading-6 text-secondary-text"
+              >
+                <div className="grid gap-2 text-xs text-secondary-text sm:grid-cols-3">
+                  {[
+                    { label: normalizedLanguage === 'en' ? 'Observation' : '观察结论', value: executiveSummary.observation },
+                    { label: normalizedLanguage === 'en' ? 'Confidence' : '置信度', value: executiveSummary.confidence },
+                    { label: normalizedLanguage === 'en' ? 'Key risk' : '关键风险', value: executiveSummary.keyRisk },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/35 px-3 py-2.5">
+                      <p className={captionClassName}>{item.label}</p>
+                      <p className="mt-1.5 break-words leading-5 text-foreground/80">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </SupportPanel>
+            </div>
+
             <SupportPanel
               className="px-5 py-4 md:px-6"
               title={text.coverageAuditTitle}
@@ -260,8 +311,19 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
               )}
             </SupportPanel>
 
-            <SupportPanel className="px-5 py-5 md:px-6">
-              <div className="mx-auto w-full max-w-[86ch]">
+            <details
+              data-testid="report-technical-evidence-details"
+              className="theme-panel-subtle rounded-[var(--cohere-radius-medium)] px-5 py-4 md:px-6"
+            >
+              <summary className="cursor-pointer list-none text-sm font-semibold tracking-[0.06em] text-foreground">
+                {normalizedLanguage === 'en' ? 'Technical evidence and full markdown' : '技术证据与完整 Markdown'}
+              </summary>
+              <p className="mt-2 text-sm leading-6 text-muted-text">
+                {normalizedLanguage === 'en'
+                  ? 'Raw tables, source notes, diagnostics, and full report text are kept secondary.'
+                  : '原始表格、来源说明、诊断信息与完整正文默认放在次级区域。'}
+              </p>
+              <div className="mt-4 mx-auto w-full max-w-[86ch]">
                 <div
                   className="home-markdown-prose prose prose-invert max-w-none
                     prose-headings:text-foreground prose-headings:font-semibold prose-headings:tracking-tight
@@ -288,7 +350,7 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
                   </Markdown>
                 </div>
               </div>
-            </SupportPanel>
+            </details>
           </div>
         )}
 

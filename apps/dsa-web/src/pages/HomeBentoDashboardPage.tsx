@@ -698,6 +698,21 @@ function FullDecisionReportDrawer({
   const sections = useMemo(() => buildFullReportSections(report, dashboard), [dashboard, report]);
   const identity = useMemo(() => buildReportIdentity(report, dashboard), [dashboard, report]);
   const markdown = useMemo(() => buildInstitutionalReportMarkdown(report), [report]);
+  const summarySection = sections.find((section) => section.id === 'summary');
+  const riskSection = sections.find((section) => section.id === 'risks');
+  const observationSection = sections.find((section) => section.id === 'observation-plan');
+  const primaryReportSections = [riskSection, observationSection].filter((section): section is FullReportSection => Boolean(section));
+  const technicalSections = sections.filter((section) => !['summary', 'risks', 'observation-plan'].includes(section.id));
+  const summaryLine = summarySection?.rows?.find((row) => row.label === '一句话判断')?.value
+    || dashboard.decision.summary
+    || '--';
+  const observationLine = summarySection?.rows?.find((row) => row.label === '分析状态')?.value
+    || dashboard.decision.signalLabel
+    || '--';
+  const confidenceLine = dashboard.decision.confidenceValue || '--';
+  const riskLine = riskSection?.bullets?.find((item) => item && item !== '--')
+    || observationSection?.rows?.find((row) => row.label === '风险边界' || row.label === '风险失效线')?.value
+    || '--';
 
   const handleCopyReport = async () => {
     try {
@@ -825,8 +840,34 @@ function FullDecisionReportDrawer({
           </p>
         </header>
 
-        <div className="grid min-w-0 grid-cols-1 gap-4">
-          {sections.map((section) => (
+        <section
+          className="min-w-0 rounded-3xl border border-white/[0.08] bg-white/[0.03] p-4 sm:p-5"
+          data-testid="home-bento-report-executive-summary"
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">EXECUTIVE SUMMARY</p>
+          <h3 className="mt-2 text-xl font-semibold tracking-[0] text-white">投资结论 · 先看结论，再看证据</h3>
+          <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold tracking-[0.08em] text-white/42">
+            {['投资结论'].map((label) => (
+              <span key={label} className="rounded-full border border-white/[0.06] bg-black/20 px-2 py-1">{label}</span>
+            ))}
+          </div>
+          <p className="mt-3 break-words text-sm leading-6 text-white/72">{summaryLine}</p>
+          <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3">
+            {[
+              { label: '观察结论', value: observationLine },
+              { label: '置信度', value: confidenceLine },
+              { label: '关键风险', value: riskLine },
+            ].map((item) => (
+              <div key={item.label} className="min-w-0 rounded-2xl border border-white/[0.06] bg-black/20 px-3 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">{item.label}</p>
+                <p className="mt-1.5 break-words text-sm leading-6 text-white/76">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
+          {primaryReportSections.map((section) => (
             <section key={section.id} className="min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 sm:p-5" data-testid={`home-bento-full-report-section-${section.id}`}>
               <h3 className="text-base font-semibold tracking-[0] text-white">{section.title}</h3>
               {section.rows ? (
@@ -846,7 +887,40 @@ function FullDecisionReportDrawer({
                   ))}
                 </ul>
               ) : null}
-              {section.checklist ? (
+            </section>
+          ))}
+        </div>
+
+        <details
+          className="min-w-0 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 sm:p-5"
+          data-testid="home-bento-full-report-technical-details"
+        >
+          <summary className="cursor-pointer list-none text-sm font-semibold tracking-[0] text-white">
+            技术指标、基本面、来源与诊断
+          </summary>
+          <p className="mt-2 text-sm leading-6 text-white/52">原始字段与技术表格默认折叠，避免淹没结论与风险边界。</p>
+          <div className="mt-4 grid min-w-0 grid-cols-1 gap-4">
+            {technicalSections.map((section) => (
+              <section key={section.id} className="min-w-0 rounded-2xl border border-white/[0.07] bg-black/16 p-4" data-testid={`home-bento-full-report-section-${section.id}`}>
+                <h3 className="text-base font-semibold tracking-[0] text-white">{section.title}</h3>
+                {section.rows ? (
+                  <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                    {section.rows.map((row) => (
+                      <div key={`${section.id}-${row.label}`} className="min-w-0 rounded-xl border border-white/[0.06] bg-black/16 px-3 py-2">
+                        <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">{row.label}</p>
+                        <p className="mt-1 break-words text-sm leading-6 text-white/76">{row.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {section.bullets ? (
+                  <ul className="mt-4 space-y-2 text-sm leading-6 text-white/68">
+                    {section.bullets.map((item) => (
+                      <li key={`${section.id}-${item}`} className="break-words border-l border-white/10 pl-3">{item}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                {section.checklist ? (
                 <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                   {section.checklist.map((item) => (
                     <div key={`${section.id}-${item.label}`} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-black/16 px-3 py-2 text-sm">
@@ -856,9 +930,10 @@ function FullDecisionReportDrawer({
                   ))}
                 </div>
               ) : null}
-            </section>
-          ))}
-        </div>
+              </section>
+            ))}
+          </div>
+        </details>
       </article>
     </Drawer>
   );
@@ -3814,7 +3889,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               className="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-12"
             >
               <div
-                className="col-span-1 flex h-auto min-h-0 w-full flex-col xl:col-span-5 xl:h-full"
+                className="col-span-1 flex h-auto min-h-0 w-full flex-col xl:col-span-6 xl:h-full"
                 data-testid="home-bento-primary-stack"
               >
                 <div className="min-h-0 flex-1 xl:h-full">
@@ -3858,7 +3933,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 </div>
               </div>
               <div
-                className="col-span-1 flex min-h-0 w-full min-w-0 flex-col gap-6 xl:col-span-7"
+                className="col-span-1 flex min-h-0 w-full min-w-0 flex-col gap-6 xl:col-span-6"
                 data-testid="home-bento-secondary-stack"
               >
                 {omnibarModule}
@@ -3884,6 +3959,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           positionLabel={readyCopy.strategy.positionLabel}
                           positionBody={readyCopy.strategy.positionBody}
                           detailLabel={readyCopy.strategy.detailLabel}
+                          researchCard="opportunity"
                           onOpenDetails={() => setActiveDrawer('strategy')}
                         />
                         {activeDataQualityReport ? (
@@ -3899,12 +3975,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                             title={readyCopy.tech.title}
                             signals={readyCopy.tech.signals}
                             detailLabel={readyCopy.tech.detailLabel}
+                            researchCard="risk-context"
                             onOpenDetails={() => setActiveDrawer('tech')}
                           />
                           <FundamentalsCard
                             title={readyCopy.fundamentals.title}
                             metrics={readyCopy.fundamentals.metrics}
                             detailLabel={readyCopy.fundamentals.detailLabel}
+                            researchCard="data-context"
                             onOpenDetails={() => setActiveDrawer('fundamentals')}
                           />
                         </div>
