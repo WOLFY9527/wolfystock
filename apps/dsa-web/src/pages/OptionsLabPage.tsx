@@ -38,10 +38,10 @@ type DecisionState = {
 };
 
 const DIRECTION_OPTIONS: Array<{ value: OptionsDirection; label: string }> = [
-  { value: 'bullish', label: '看涨' },
-  { value: 'bearish', label: '看跌' },
-  { value: 'neutral', label: '中性' },
-  { value: 'volatility', label: '赌波动' },
+  { value: 'bullish', label: '上涨情景' },
+  { value: 'bearish', label: '下跌情景' },
+  { value: 'neutral', label: '区间情景' },
+  { value: 'volatility', label: '波动扩张' },
 ];
 
 const RISK_PROFILE_OPTIONS: Array<{ value: OptionsRiskProfile; label: string }> = [
@@ -88,10 +88,10 @@ function asArray<T>(value: T[] | null | undefined): T[] {
 }
 
 function limitationLabel(value: string): string {
-  if (value === 'provider_validation_required') return 'Provider 待验证';
-  if (value === 'mocked_frontend_shell') return '前端 Fixture';
-  if (value === 'mocked_chain') return '模拟链';
-  if (value === 'mock') return '本地模拟';
+  if (value === 'provider_validation_required') return '数据待验证';
+  if (value === 'mocked_frontend_shell') return '浏览器验证数据';
+  if (value === 'mocked_chain') return '演示链';
+  if (value === 'mock') return '演示数据';
   if (value === 'fixture') return '本地 Fixture';
   if (value === 'wide_spread_watch') return '价差观察';
   if (value === 'low_oi_watch') return 'OI 偏低';
@@ -149,9 +149,17 @@ function warningLabel(value: string): string {
 function dataTierLabel(value?: string | null): string {
   if (value === 'live_usable') return 'Live 可分析';
   if (value === 'delayed_usable') return 'Delayed 可观察';
-  if (value === 'synthetic_demo_only') return 'Synthetic Demo Only';
+  if (value === 'synthetic_demo_only') return '演示/延迟数据';
   if (value === 'insufficient') return '数据不足';
   return '--';
+}
+
+function freshnessLabel(value?: string | null): string {
+  if (value === 'live') return '实时';
+  if (value === 'mock') return '演示/延迟数据';
+  if (value === 'synthetic_delayed') return '演示/延迟数据';
+  if (value === 'fixture') return '浏览器验证数据';
+  return value ? limitationLabel(value) : '--';
 }
 
 function expectedMoveSourceLabel(value?: string | null): string {
@@ -336,7 +344,7 @@ const SnapshotPanel: React.FC<{ summary: OptionsUnderlyingSummaryResponse | null
         </div>
         <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
           <p className={labelClass}>Freshness</p>
-          <p className="mt-2 font-mono text-base font-semibold text-cyan-100">{underlying?.freshness || '--'}</p>
+          <p className="mt-2 font-mono text-base font-semibold text-cyan-100">{freshnessLabel(underlying?.freshness)}</p>
           <p className="mt-1 truncate text-xs text-white/35">{underlying?.asOf || '--'}</p>
         </div>
       </div>
@@ -571,7 +579,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
       : 'text-amber-100';
   return (
     <section className={cn(panelClass, 'xl:col-span-12')} data-testid="options-lab-decision-engine">
-      <SectionHeader eyebrow="Decision Engine R2" title="交易质量判断" icon={ShieldCheck}>
+      <SectionHeader eyebrow="Decision Engine R2" title="情景结论" icon={ShieldCheck}>
         <div className="flex flex-wrap justify-end gap-2">
           <Pill tone="warn">{label}</Pill>
           <Pill tone="info">{dataTierLabel(decision?.dataQuality?.dataQualityTier)}</Pill>
@@ -581,13 +589,13 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
         <p className="mt-5 rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-4 text-sm text-white/55">{emptyMessage}</p>
       ) : null}
       {!emptyMessage && decisionState.loading ? (
-        <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 font-mono text-sm text-cyan-100">正在计算交易质量判断...</p>
+        <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 font-mono text-sm text-cyan-100">正在计算情景结论...</p>
       ) : null}
       {!emptyMessage && !decisionState.loading && decisionState.error ? (
         <p className="mt-5 rounded-2xl border border-rose-300/20 bg-rose-500/10 px-4 py-4 text-sm text-rose-100">{decisionState.error}</p>
       ) : null}
       {!emptyMessage && !decisionState.loading && !decisionState.error && !decision ? (
-        <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/45">等待交易质量判断。</p>
+        <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/45">等待情景结论。</p>
       ) : null}
       {!emptyMessage && !decisionState.loading && !decisionState.error && decision ? (
         <div className="mt-5 grid gap-4">
@@ -605,13 +613,13 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
               </p>
             </div>
             <div className="grid gap-2 sm:grid-cols-3">
-              <DecisionMetric label="交易质量" value={number(decision?.tradeQualityScore)} />
-              <DecisionMetric label="数据质量" value={number(decision?.dataQuality?.dataQualityScore)} />
-              <DecisionMetric label="最大亏损" value={money(decision?.riskReward?.maxLoss)} tone="text-rose-300" />
+              <DecisionMetric label="情景质量" value={number(decision?.tradeQualityScore)} />
+              <DecisionMetric label="数据准备度" value={number(decision?.dataQuality?.dataQualityScore)} />
+              <DecisionMetric label="主要风险边界" value={money(decision?.riskReward?.maxLoss)} tone="text-rose-300" />
             </div>
             <div className="lg:col-span-2 flex flex-wrap gap-2">
               <Pill tone="warn">{dataTierLabel(decision?.dataQuality?.dataQualityTier)}</Pill>
-              <Pill tone="info">{decision?.freshness?.freshness || 'synthetic delayed'}</Pill>
+              <Pill tone="info">{freshnessLabel(decision?.freshness?.freshness)}</Pill>
               {(allWarnings.length ? allWarnings : ['不可用于真实交易判断']).slice(0, 3).map((warning) => (
                 <Pill key={warning} tone="warn">{warningLabel(warning)}</Pill>
               ))}
@@ -619,8 +627,8 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
           </div>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
             <DecisionMetric label="系统判断" value={label} tone={labelTone} />
-            <DecisionMetric label="交易质量分" value={number(decision?.tradeQualityScore)} />
-            <DecisionMetric label="数据质量" value={number(decision?.dataQuality?.dataQualityScore)} />
+            <DecisionMetric label="情景质量分" value={number(decision?.tradeQualityScore)} />
+            <DecisionMetric label="数据准备度" value={number(decision?.dataQuality?.dataQualityScore)} />
             <DecisionMetric label="流动性评分" value={number(decision?.liquidity?.liquidityScore)} />
             <DecisionMetric label="波动率 / Greeks 就绪度" value={number(decision?.ivGreeks?.ivReadiness)} />
             <DecisionMetric label="风险回报" value={number(decision?.riskReward?.score)} />
@@ -716,7 +724,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
             <div className="rounded-2xl border border-cyan-300/10 bg-cyan-400/8 p-4">
               <p className={labelClass}>数据状态</p>
               <p className="mt-2 text-sm leading-6 text-cyan-100/78">
-                当前为 {decision?.freshness?.freshness || 'synthetic delayed'} / 演示数据；不可用于真实交易判断。
+                {freshnessLabel(decision?.freshness?.freshness)}；不可用于真实交易判断。
               </p>
             </div>
             <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
@@ -738,7 +746,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
             </summary>
             <div className="mt-4 grid gap-2 text-xs leading-5 text-white/45">
               <p>Source: {decision?.freshness?.source || '--'}</p>
-              <p>Freshness: {decision?.freshness?.freshness || '--'}</p>
+              <p>Freshness: {freshnessLabel(decision?.freshness?.freshness)}</p>
               <p>IV Rank: {ivRankStatus === 'available' ? `${number(ivRank, 2)} / ${number(ivPercentile, 2)}` : 'IV Rank 不可用'}</p>
               <p>Expected Move Source: {expectedMoveSourceLabel(expectedMove?.expectedMoveSource)}</p>
               <p>Optimizer: {optimizer?.optimizerLabel || '--'}</p>
@@ -784,7 +792,7 @@ const DeveloperDetails: React.FC<{ state: LoadState }> = ({ state }) => (
     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/68">
       <span className="inline-flex items-center gap-2">
         <ShieldCheck className="h-4 w-4 text-cyan-200" aria-hidden="true" />
-        Freshness / Developer Details
+        数据准备度 / 开发者细节
       </span>
       <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
     </summary>
@@ -1040,7 +1048,7 @@ const OptionsLabPageContent: React.FC = () => {
         if (ignored) return;
         setDecisionState({
           loading: false,
-          error: '交易质量判断暂不可用。请稍后重试或调整假设。',
+          error: '情景结论暂不可用。请稍后重试或调整假设。',
           decision: null,
         });
       }
@@ -1098,10 +1106,10 @@ const OptionsLabPageContent: React.FC = () => {
     return null;
   }, [expirations.length, hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
   const decisionEmptyMessage = useMemo(() => {
-    if (state.loading) return '正在加载基础数据，稍后将自动计算交易质量判断。';
-    if (state.error) return '期权链暂不可用，交易质量判断已暂停。';
+    if (state.loading) return '正在加载基础数据，稍后将自动计算情景结论。';
+    if (state.error) return '期权链暂不可用，情景结论已暂停。';
     const targetPriceValue = Number(targetPrice);
-    if (!state.summary || !state.expirations || !state.chain || !hasChainRows) return '先加载合约链后，再进入交易质量判断。';
+    if (!state.summary || !state.expirations || !state.chain || !hasChainRows) return '先加载合约链后，再进入情景结论。';
     if (!Number.isFinite(targetPriceValue) || targetPriceValue <= 0 || !targetDate.trim()) return '先补齐目标价格与目标日期。';
     return null;
   }, [hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
@@ -1124,7 +1132,9 @@ const OptionsLabPageContent: React.FC = () => {
           </div>
         </header>
 
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} />
+
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-12" data-testid="options-lab-assumptions-row">
           <AssumptionPanel
             symbol={symbolInput}
             direction={direction}
@@ -1154,8 +1164,6 @@ const OptionsLabPageContent: React.FC = () => {
             {state.error}
           </section>
         ) : null}
-
-        <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} />
 
         <details data-testid="options-lab-analysis-details" className={panelClass}>
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/75">

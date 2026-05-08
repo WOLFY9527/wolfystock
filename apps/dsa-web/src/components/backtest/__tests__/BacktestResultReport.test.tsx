@@ -282,11 +282,11 @@ describe('BacktestResultReport', () => {
   it('renders diagnosis summary and benchmark verdicts from existing metrics', () => {
     const { rerender } = render(<BacktestResultReport run={makeRun()} mode="professional" />);
 
-    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('结果摘要');
-    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('策略收益');
-    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('风险');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('研究结论');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('表现');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('回撤');
     expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('交易');
-    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('数据');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('可靠性');
     expect(screen.getByTestId('backtest-report-diagnosis')).toHaveTextContent('收益质量');
     expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('跑赢基准');
     expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('+24.60%');
@@ -464,9 +464,11 @@ describe('BacktestResultReport', () => {
     render(<BacktestResultReport run={makeRun()} mode="professional" />);
 
     const report = screen.getByTestId('backtest-result-report');
-    expect(screen.getByTestId('backtest-report-evidence-details')).not.toHaveAttribute('open');
-    expect(report).toHaveTextContent('开发者细节');
-    expect(report).toHaveTextContent('原始执行轨迹');
+    const evidence = screen.getByTestId('backtest-report-evidence-details');
+    expect(evidence).not.toHaveAttribute('open');
+    expect(evidence).toHaveTextContent('证据与原始明细');
+    expect(evidence).toHaveTextContent('导出、执行假设、每日账本和原始 Trace 默认折叠');
+    expect(report).toHaveTextContent('研究结论');
     expect(report).not.toHaveTextContent('signal_exit');
     expect(report).not.toHaveTextContent('stop_loss');
     expect(report).not.toHaveTextContent('Full metrics');
@@ -474,5 +476,32 @@ describe('BacktestResultReport', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /开发者细节/ }));
     expect(screen.getByText(/扩展指标在上方折叠区展示/)).toBeInTheDocument();
+  });
+
+  it('puts launch research conclusions before secondary exports and evidence controls', () => {
+    render(<BacktestResultReport run={makeRun()} mode="professional" />);
+
+    const summary = screen.getByTestId('backtest-report-summary');
+    const keyMetrics = screen.getByTestId('backtest-report-key-metrics');
+    const chart = screen.getByTestId('backtest-report-chart');
+    const tradeTable = screen.getByTestId('backtest-report-trade-table');
+    const evidence = screen.getByTestId('backtest-report-evidence-details');
+    const dataQuality = screen.getByTestId('backtest-report-data-quality');
+    const assumptions = screen.getByTestId('backtest-report-execution-assumptions');
+    const advanced = screen.getByTestId('backtest-report-advanced-details');
+
+    expect(summary).toHaveTextContent('研究结论');
+    expect(summary).toHaveTextContent('表现');
+    expect(summary).toHaveTextContent('回撤');
+    expect(summary).toHaveTextContent('交易');
+    expect(summary).toHaveTextContent('可靠性');
+    expect(Boolean(summary.compareDocumentPosition(keyMetrics) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(keyMetrics.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(chart.compareDocumentPosition(tradeTable) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(tradeTable.compareDocumentPosition(evidence) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(evidence.compareDocumentPosition(dataQuality) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(dataQuality.compareDocumentPosition(assumptions) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(assumptions.compareDocumentPosition(advanced) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(screen.queryByTestId('backtest-report-ledger-table')).not.toBeInTheDocument();
   });
 });

@@ -794,7 +794,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
     >
       <div className="flex min-w-0 flex-col gap-4 text-sm text-white/70">
         <nav className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="Backtest result sections">
-          {['概览', '曲线', '交易', '归因', '风险', '数据质量', '执行假设', '账本'].map((item) => (
+          {['概览', '曲线', '交易', '归因', '风险', '证据'].map((item) => (
             <a key={item} href={`#backtest-report-${item}`} className="inline-flex min-h-[36px] shrink-0 items-center rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60 hover:bg-white/10 md:min-h-[32px] md:py-1.5">
               {item}
             </a>
@@ -823,13 +823,13 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <div className="font-mono text-xs text-white/38">{formatDateTime(run.completedAt || run.runAt)}</div>
           </div>
           <div data-testid="backtest-report-result-summary" className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <MetricCard item={{ key: 'summary-return', label: '策略收益', value: signedPct(normalized.metrics.totalReturnPct), tone: toneFor(normalized.metrics.totalReturnPct) }} />
-            <MetricCard item={{ key: 'summary-risk', label: '风险', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
+            <MetricCard item={{ key: 'summary-return', label: '表现', value: signedPct(normalized.metrics.totalReturnPct), tone: toneFor(normalized.metrics.totalReturnPct) }} />
+            <MetricCard item={{ key: 'summary-risk', label: '回撤', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
             <MetricCard item={{ key: 'summary-trades', label: '交易', value: `${normalized.metrics.tradeCount ?? 0} 次`, tone: 'neutral' }} />
-            <MetricCard item={{ key: 'summary-data', label: '数据', value: dataQuality.length ? `${dataQuality.length} 项` : '待补充', tone: dataQuality.length ? 'positive' : 'neutral' }} />
+            <MetricCard item={{ key: 'summary-data', label: '可靠性', value: dataQuality.length ? `${dataQuality.length} 项` : '待补充', tone: dataQuality.length ? 'positive' : 'neutral' }} />
             <div className="col-span-2 rounded-xl border border-white/5 bg-black/20 p-3 text-xs leading-5 text-white/50 lg:col-span-4">
-              <span className={LABEL_CLASS}>结果摘要</span>
-              <span className="ml-2">先读收益、回撤、交易次数与数据覆盖；曲线、风险、交易和原始证据在下方分区查看。</span>
+              <span className={LABEL_CLASS}>研究结论</span>
+              <span className="ml-2">先读表现、回撤、交易次数与可靠性；曲线和风险解释跟随结论，导出、执行假设、账本和 Trace 默认进入证据区。</span>
             </div>
           </div>
           <div className="mt-4" data-testid="backtest-report-diagnosis">
@@ -1034,16 +1034,16 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           </div>
         </div>
 
-        <details data-testid="backtest-report-evidence-details" className={GHOST_SECTION_CLASS}>
+        <details id="backtest-report-证据" data-testid="backtest-report-evidence-details" className={GHOST_SECTION_CLASS}>
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-left">
             <span>
-              <span className={LABEL_CLASS}>开发者 / 原始证据</span>
-              <span className="ml-2 text-xs text-white/42">数据质量 · 执行假设 · 每日账本</span>
+              <span className={LABEL_CLASS}>证据与原始明细</span>
+              <span className="ml-2 text-xs text-white/42">数据质量 · 执行假设 · 每日账本 · Trace</span>
             </span>
             <span className="text-xs text-white/45">展开</span>
           </summary>
           <p className="mt-3 text-xs leading-5 text-white/50">
-            下方证据区默认保持折叠，只在需要核对数据质量、成交假设或逐日账本时展开。
+            导出、执行假设、每日账本和原始 Trace 默认折叠，只在需要复核研究证据时展开。
           </p>
         </details>
 

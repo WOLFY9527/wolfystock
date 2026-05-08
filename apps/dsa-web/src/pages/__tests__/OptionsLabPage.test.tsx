@@ -363,16 +363,16 @@ describe('OptionsLabPage', () => {
     expect(screen.getByText('分析支持 / 不构成投资建议')).toBeInTheDocument();
     expect(screen.getByText('情景假设')).toBeInTheDocument();
     expect(screen.getByLabelText('标的代码')).toHaveValue('TEM');
-    expect(screen.getByText('看涨')).toBeInTheDocument();
-    expect(screen.getByText('看跌')).toBeInTheDocument();
-    expect(screen.getByText('中性')).toBeInTheDocument();
-    expect(screen.getByText('赌波动')).toBeInTheDocument();
+    expect(screen.getByText('上涨情景')).toBeInTheDocument();
+    expect(screen.getByText('下跌情景')).toBeInTheDocument();
+    expect(screen.getByText('区间情景')).toBeInTheDocument();
+    expect(screen.getByText('波动扩张')).toBeInTheDocument();
 
-    expect(await screen.findByText('TEM260619C00055000')).toBeInTheDocument();
-    expect(screen.getByText('TEM260619P00050000')).toBeInTheDocument();
-    expect(screen.getByText('候选合约排序')).toBeInTheDocument();
-    expect(screen.getByText('策略对比')).toBeInTheDocument();
-    expect(screen.getByText('情景收益结构')).toBeInTheDocument();
+    expect(await screen.findByTestId('options-lab-decision-engine')).toBeInTheDocument();
+    expect(screen.getByTestId('options-lab-chain-details')).not.toHaveAttribute('open');
+    expect(screen.getByTestId('options-lab-strategy-details')).not.toHaveAttribute('open');
+    expect(screen.getByText('合约链明细')).toBeInTheDocument();
+    expect(screen.getByText('策略对比明细')).toBeInTheDocument();
     expect(screen.getByText('期权可能归零，最大亏损可能达到全部权利金。')).toBeInTheDocument();
     expect(screen.getByText('本模块不提供交易执行或收益承诺。')).toBeInTheDocument();
   });
@@ -401,12 +401,14 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-decision-engine');
-    expect(within(section).getByText('交易质量判断')).toBeInTheDocument();
+    expect(within(section).getByText('情景结论')).toBeInTheDocument();
     await waitFor(() => {
       expect(within(section).getByText('Expected Move')).toBeInTheDocument();
     });
+    expect(within(section).getAllByText('数据准备度').length).toBeGreaterThanOrEqual(1);
+    expect(within(section).getByText('主要风险边界')).toBeInTheDocument();
     expect(within(section).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
-    expect(within(section).getAllByText('当前为 synthetic delayed / 演示数据').length).toBeGreaterThan(0);
+    expect(within(section).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
     expect(within(section).getAllByText('不可用于真实交易判断').length).toBeGreaterThan(0);
     expect(within(section).getByText('波动率 / Greeks 就绪度')).toBeInTheDocument();
     expect(within(section).getAllByText('IV Rank 不可用').length).toBeGreaterThan(0);
@@ -428,10 +430,12 @@ describe('OptionsLabPage', () => {
     const chainDetails = await screen.findByTestId('options-lab-chain-details');
     const strategyDetails = await screen.findByTestId('options-lab-strategy-details');
 
+    const assumptions = screen.getByTestId('options-lab-assumptions-row');
     expect(decision).toContainElement(summary);
     expect(summary).toHaveTextContent('决策摘要');
     expect(summary).toHaveTextContent('数据不足，禁止判断');
     expect(summary).toHaveTextContent('不可用于真实交易判断');
+    expect(Boolean(decision.compareDocumentPosition(assumptions) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(analysisDetails).not.toHaveAttribute('open');
     expect(chainDetails).not.toHaveAttribute('open');
     expect(strategyDetails).not.toHaveAttribute('open');
@@ -824,7 +828,7 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-decision-engine');
-    expect(within(section).getByText('交易质量判断')).toBeInTheDocument();
+    expect(within(section).getByText('情景结论')).toBeInTheDocument();
     await waitFor(() => {
       expect(within(section).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
     });

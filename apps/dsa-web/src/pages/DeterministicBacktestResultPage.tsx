@@ -1082,24 +1082,33 @@ const DeterministicBacktestResultPage: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="backtest-result-bento__actions">
-              <Button variant="ghost" size={density.buttonSize} onClick={() => navigate('/backtest')}>
-                {resultPage('hero.backToConfig')}
-              </Button>
-              <Button
-                variant="secondary"
-                size={density.buttonSize}
-                onClick={() => navigate('/backtest', { state: { draftRun: run } })}
-              >
-                {resultPage('hero.rerunSameParameters')}
-              </Button>
-              <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
-                {resultPage('hero.savePreset')}
-              </Button>
-              <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
-                {resultPage('hero.refreshResult')}
-              </Button>
-            </div>
+            <details
+              className="rounded-2xl border border-white/5 bg-white/[0.02] p-3"
+              data-testid="deterministic-result-secondary-actions"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-white/70">
+                <span>{resultPage('tabs.history')} / {resultPage('hero.rerunSameParameters')}</span>
+                <span className="text-xs font-normal text-white/40">展开</span>
+              </summary>
+              <div className="backtest-result-bento__actions mt-3">
+                <Button variant="ghost" size={density.buttonSize} onClick={() => navigate('/backtest')}>
+                  {resultPage('hero.backToConfig')}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size={density.buttonSize}
+                  onClick={() => navigate('/backtest', { state: { draftRun: run } })}
+                >
+                  {resultPage('hero.rerunSameParameters')}
+                </Button>
+                <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
+                  {resultPage('hero.savePreset')}
+                </Button>
+                <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
+                  {resultPage('hero.refreshResult')}
+                </Button>
+              </div>
+            </details>
           </div>
           <div className="backtest-result-bento__metrics" data-testid="deterministic-result-kpi-bento">
             {completedHeroMetrics.map((metric) => (
