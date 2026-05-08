@@ -460,6 +460,96 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
             "diffCheckPassed",
         ),
     ),
+    CategorySpec(
+        id="provider_operator_evidence",
+        title="Provider operator evidence validator evidence",
+        required_evidence=(
+            "accepted sanitized provider operator evidence validated by "
+            "scripts/provider_operator_evidence_check.py, with the provider operator evidence guide referenced, "
+            "sanitized artifact summary, no provider calls by the validator, unchanged runtime behavior, "
+            "and advisory review gate"
+        ),
+        required_checks=(
+            "providerOperatorValidatorPassed",
+            "providerOperatorGuideReferenced",
+            "artifactSummarySanitized",
+            "networkCallsExecutedByValidatorFalse",
+            "runtimeBehaviorUnchanged",
+            "advisoryReviewGateRecorded",
+        ),
+    ),
+    CategorySpec(
+        id="restore_pitr_operator_evidence",
+        title="Restore/PITR operator evidence validator evidence",
+        required_evidence=(
+            "accepted sanitized real restore/PITR operator evidence validated by "
+            "scripts/restore_pitr_operator_evidence_check.py, with the restore/PITR operator guide referenced, "
+            "real restore artifact summary sanitized, no database commands by the validator, production storage untouched, "
+            "and manual review gate"
+        ),
+        required_checks=(
+            "restorePitrOperatorValidatorPassed",
+            "restorePitrGuideReferenced",
+            "realRestoreArtifactSanitized",
+            "databaseCommandsRunByValidatorFalse",
+            "productionStorageUntouched",
+            "manualReviewGateRecorded",
+        ),
+    ),
+    CategorySpec(
+        id="security_operator_acceptance",
+        title="Security MFA/RBAC operator acceptance validator evidence",
+        required_evidence=(
+            "accepted sanitized security MFA/RBAC operator acceptance validated by "
+            "scripts/security_operator_acceptance_check.py, with the security operator acceptance guide referenced, "
+            "MFA/RBAC sections accepted, release approval false, unchanged auth/RBAC runtime behavior, "
+            "and manual review gate"
+        ),
+        required_checks=(
+            "securityOperatorValidatorPassed",
+            "securityOperatorGuideReferenced",
+            "mfaRbacSectionsAccepted",
+            "releaseApprovedFalse",
+            "runtimeBehaviorUnchanged",
+            "manualReviewGateRecorded",
+        ),
+    ),
+    CategorySpec(
+        id="quota_budget_operator_evidence",
+        title="Quota/budget operator evidence validator evidence",
+        required_evidence=(
+            "accepted sanitized quota/budget operator evidence validated by "
+            "scripts/quota_operator_evidence_check.py, with the quota/budget operator guide referenced, "
+            "quota/budget sections accepted, no outbound notifications by the validator, unchanged quota runtime behavior, "
+            "and advisory review gate"
+        ),
+        required_checks=(
+            "quotaOperatorValidatorPassed",
+            "quotaBudgetGuideReferenced",
+            "quotaBudgetSectionsAccepted",
+            "outboundNotificationsSentByValidatorFalse",
+            "runtimeBehaviorUnchanged",
+            "advisoryReviewGateRecorded",
+        ),
+    ),
+    CategorySpec(
+        id="staging_ingress_operator_evidence",
+        title="Staging ingress operator evidence validator evidence",
+        required_evidence=(
+            "accepted sanitized staging ingress operator evidence validated by "
+            "scripts/staging_ingress_operator_evidence_check.py, with the staging ingress operator guide referenced, "
+            "staging ingress artifact sanitized, no network calls by the validator, unchanged ingress runtime behavior, "
+            "and manual review gate"
+        ),
+        required_checks=(
+            "stagingIngressOperatorValidatorPassed",
+            "stagingIngressGuideReferenced",
+            "stagingIngressArtifactSanitized",
+            "networkCallsExecutedByValidatorFalse",
+            "runtimeBehaviorUnchanged",
+            "manualReviewGateRecorded",
+        ),
+    ),
 )
 
 

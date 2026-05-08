@@ -33,7 +33,37 @@ EXPECTED_CATEGORY_IDS = {
     "options_derivatives_safety",
     "api_abuse_request_safety",
     "final_clean_full_ci_gate",
+    "provider_operator_evidence",
+    "restore_pitr_operator_evidence",
+    "security_operator_acceptance",
+    "quota_budget_operator_evidence",
+    "staging_ingress_operator_evidence",
 }
+NEW_OPERATOR_CATEGORY_IDS = {
+    "provider_operator_evidence",
+    "restore_pitr_operator_evidence",
+    "security_operator_acceptance",
+    "quota_budget_operator_evidence",
+    "staging_ingress_operator_evidence",
+}
+
+
+def _accepted_category(required_checks: list[str]) -> dict:
+    return {
+        "status": "accepted",
+        "acceptedBy": "release-operator",
+        "capturedAt": "2026-05-08T00:00:00Z",
+        "evidenceRef": "synthetic-operator-evidence-json",
+        "checks": {check: True for check in required_checks},
+        "sanitization": {
+            "externalServicesCalledByChecker": False,
+            "realSecretsIncluded": False,
+            "rawCredentialValuesIncluded": False,
+            "rawProviderPayloadsIncluded": False,
+            "responseBodiesIncluded": False,
+            "productionDataPathsIncluded": False,
+        },
+    }
 
 
 def _run_checker(*args: str) -> subprocess.CompletedProcess[str]:
@@ -70,7 +100,7 @@ def test_launch_acceptance_evidence_missing_categories_remain_no_go() -> None:
         "runtimeDefaultsChanged": False,
     }
     assert evidence["summary"]["accepted"] == 0
-    assert evidence["summary"]["blocking"] == 23
+    assert evidence["summary"]["blocking"] == 28
     blocker_ids = {item["id"] for item in evidence["hardBlockers"]}
     assert EXPECTED_CATEGORY_IDS == blocker_ids
 
@@ -90,7 +120,7 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
     assert evidence["finalStatus"] == "GO-REVIEW-REQUIRED"
     assert evidence["releaseApproved"] is False
     assert evidence["statusReason"] == "All hard blockers have accepted sanitized evidence; release approval remains manual."
-    assert evidence["summary"]["accepted"] == 23
+    assert evidence["summary"]["accepted"] == 28
     assert evidence["summary"]["blocking"] == 0
     assert evidence["hardBlockers"] == []
     categories = {item["id"]: item for item in evidence["categories"]}
@@ -242,6 +272,79 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
         "debugTracebackAndRequestBodiesRedacted",
         "runtimeDefaultUnchanged",
     ]
+    assert categories["provider_operator_evidence"]["requiredChecks"] == [
+        "providerOperatorValidatorPassed",
+        "providerOperatorGuideReferenced",
+        "artifactSummarySanitized",
+        "networkCallsExecutedByValidatorFalse",
+        "runtimeBehaviorUnchanged",
+        "advisoryReviewGateRecorded",
+    ]
+    assert categories["restore_pitr_operator_evidence"]["requiredChecks"] == [
+        "restorePitrOperatorValidatorPassed",
+        "restorePitrGuideReferenced",
+        "realRestoreArtifactSanitized",
+        "databaseCommandsRunByValidatorFalse",
+        "productionStorageUntouched",
+        "manualReviewGateRecorded",
+    ]
+    assert categories["security_operator_acceptance"]["requiredChecks"] == [
+        "securityOperatorValidatorPassed",
+        "securityOperatorGuideReferenced",
+        "mfaRbacSectionsAccepted",
+        "releaseApprovedFalse",
+        "runtimeBehaviorUnchanged",
+        "manualReviewGateRecorded",
+    ]
+    assert categories["quota_budget_operator_evidence"]["requiredChecks"] == [
+        "quotaOperatorValidatorPassed",
+        "quotaBudgetGuideReferenced",
+        "quotaBudgetSectionsAccepted",
+        "outboundNotificationsSentByValidatorFalse",
+        "runtimeBehaviorUnchanged",
+        "advisoryReviewGateRecorded",
+    ]
+    assert categories["staging_ingress_operator_evidence"]["requiredChecks"] == [
+        "stagingIngressOperatorValidatorPassed",
+        "stagingIngressGuideReferenced",
+        "stagingIngressArtifactSanitized",
+        "networkCallsExecutedByValidatorFalse",
+        "runtimeBehaviorUnchanged",
+        "manualReviewGateRecorded",
+    ]
+
+
+def test_launch_acceptance_evidence_missing_new_operator_categories_keep_no_go(tmp_path: Path) -> None:
+    payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    for category_id in NEW_OPERATOR_CATEGORY_IDS:
+        payload["categories"].pop(category_id, None)
+    evidence_path = tmp_path / "missing-new-operator-evidence.json"
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_checker("--evidence", str(evidence_path))
+
+    assert result.returncode == 1
+    evidence = _json(result)
+    assert evidence["finalStatus"] == "NO-GO"
+    assert evidence["releaseApproved"] is False
+    assert evidence["summary"]["blocking"] == len(NEW_OPERATOR_CATEGORY_IDS)
+    blocker_ids = {item["id"] for item in evidence["hardBlockers"]}
+    assert blocker_ids == NEW_OPERATOR_CATEGORY_IDS
+
+
+def test_launch_acceptance_evidence_input_release_approved_true_is_ignored(tmp_path: Path) -> None:
+    payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    payload["releaseApproved"] = True
+    payload["launchApproved"] = True
+    evidence_path = tmp_path / "input-release-approved-ignored.json"
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_checker("--evidence", str(evidence_path))
+
+    assert result.returncode == 0
+    evidence = _json(result)
+    assert evidence["finalStatus"] == "GO-REVIEW-REQUIRED"
+    assert evidence["releaseApproved"] is False
 
 
 def test_launch_acceptance_evidence_keeps_provider_circuit_required_when_missing(tmp_path: Path) -> None:
@@ -353,6 +456,53 @@ def test_launch_acceptance_evidence_rejects_traceback_debug_markers_without_leak
     category = next(item for item in evidence["categories"] if item["id"] == "api_abuse_request_safety")
     assert category["status"] == "blocking"
     assert category["reasonCodes"] == ["sensitive_value_present"]
+
+
+def test_launch_acceptance_evidence_rejects_new_operator_unsafe_markers_without_leaking(tmp_path: Path) -> None:
+    unsafe_cases = {
+        "provider_operator_evidence": (
+            "providerOperatorValidatorPassed",
+            "providerPayload",
+            "provider credential raw body should-not-print",
+        ),
+        "restore_pitr_operator_evidence": (
+            "restorePitrOperatorValidatorPassed",
+            "dsn",
+            "postgresql://operator:should-not-print@example.invalid/wolfy",
+        ),
+        "security_operator_acceptance": (
+            "securityOperatorValidatorPassed",
+            "sessionCookie",
+            "session=should-not-print",
+        ),
+        "quota_budget_operator_evidence": (
+            "quotaOperatorValidatorPassed",
+            "requestBody",
+            "request_body=should-not-print",
+        ),
+        "staging_ingress_operator_evidence": (
+            "stagingIngressOperatorValidatorPassed",
+            "debugPayload",
+            "Traceback (most recent call last): should-not-print",
+        ),
+    }
+    for category_id, (first_check, unsafe_key, unsafe_value) in unsafe_cases.items():
+        payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+        category = payload["categories"].get(category_id) or _accepted_category([first_check])
+        category["operatorArtifact"] = {unsafe_key: unsafe_value}
+        payload["categories"][category_id] = category
+        evidence_path = tmp_path / f"unsafe-{category_id}.json"
+        evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        result = _run_checker("--evidence", str(evidence_path))
+
+        assert result.returncode == 1, category_id
+        combined_output = result.stdout + result.stderr
+        assert "should-not-print" not in combined_output
+        evidence = _json(result)
+        category_result = next(item for item in evidence["categories"] if item["id"] == category_id)
+        assert category_result["status"] == "blocking"
+        assert category_result["reasonCodes"] == ["sensitive_value_present"]
 
 
 def test_launch_acceptance_evidence_requires_provider_live_probe_contract_checks(tmp_path: Path) -> None:

@@ -46,6 +46,13 @@ portfolio/backtest browser and export proof, notification delivery, user data
 privacy/export/deletion, market freshness/fallback, AI guest-preview safety,
 Options derivatives safety, and API abuse/request-safety evidence.
 
+Offline validator/template coverage is also available for provider operator
+evidence, real restore/PITR operator evidence, security MFA/RBAC operator
+acceptance, quota/budget operator evidence, and staging ingress operator
+evidence. That coverage only proves the local validators and sanitized
+templates exist. Real operator-produced artifacts are still required for launch
+review, and final approval remains manual.
+
 ## Master readiness view
 
 | Area | Current posture | Launch status | Blocking requirement |
@@ -91,8 +98,10 @@ Public launch may move to **GO** only when all of the following are true:
   portfolio/backtest export and browser proof, notification delivery
   rehearsal, user data privacy/export/deletion rehearsal, market data
   freshness/fallback evidence, AI report/guest-preview safety, Options
-  derivatives safety, API abuse/request-safety evidence, and final clean full
-  `ci_gate`.
+  derivatives safety, API abuse/request-safety evidence, final clean full
+  `ci_gate`, and the five domain-local operator validator categories for
+  provider, restore/PITR, security MFA/RBAC, quota/budget, and staging ingress
+  evidence.
 - Sanitized incident-response evidence is attached through
   `python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>`
   for admin-critical audit events, preview-first cleanup, provider/notification

@@ -36,6 +36,13 @@ until every hard blocker has accepted sanitized evidence. When every category is
 accepted, it emits `finalStatus=GO-REVIEW-REQUIRED`, which still requires a
 human release approval.
 
+The matrix also includes domain-local operator validator categories for
+provider operations, real restore/PITR, security MFA/RBAC acceptance,
+quota/budget evidence, and staging ingress evidence. These categories recognize
+the local validator outputs and evidence guides as review attachments only. The
+launch checker does not execute those validators, make provider/network/DB
+calls, or approve launch.
+
 ## 2. Required Evidence Categories
 
 All categories are hard blockers. Missing, pending, rejected, unsafe, or
@@ -66,6 +73,11 @@ incomplete evidence keeps the summary at **NO-GO**.
 | `options_derivatives_safety` | Options derivatives safety evidence proving read-only/no-order posture, no broker or portfolio mutation, fixture/delayed/fallback caps, no guaranteed-return wording, and sanitized provider evidence. |
 | `api_abuse_request_safety` | API abuse and request-safety evidence covering rate-limit/invalid-request handling, oversized payload safety, sanitized denial/audit output, no traceback/debug/request-body leakage, and unchanged runtime defaults. |
 | `final_clean_full_ci_gate` | Clean worktree, full `ci_gate`, release secret scan, and final diff check evidence. |
+| `provider_operator_evidence` | Accepted sanitized provider operator evidence from `scripts/provider_operator_evidence_check.py` and `docs/audits/provider-operator-evidence-guide.md`; advisory/review-gated, no validator provider calls, no raw provider payloads or credentials, and runtime behavior unchanged. |
+| `restore_pitr_operator_evidence` | Accepted sanitized real restore/PITR operator evidence from `scripts/restore_pitr_operator_evidence_check.py` and `docs/audits/db-real-restore-pitr-operator-evidence-guide.md`; real restore artifact summary sanitized, no DB commands by the validator, production storage untouched, and manual review required. |
+| `security_operator_acceptance` | Accepted sanitized MFA/RBAC operator acceptance from `scripts/security_operator_acceptance_check.py` and `docs/audits/security-operator-acceptance-evidence-guide.md`; MFA/RBAC sections accepted, `releaseApproved=false`, no auth/RBAC runtime mutation, and manual review required. |
+| `quota_budget_operator_evidence` | Accepted sanitized quota/budget operator evidence from `scripts/quota_operator_evidence_check.py` and `docs/audits/quota-budget-operator-evidence-guide.md`; quota/budget sections accepted, no outbound notifications by the validator, no quota runtime mutation, and advisory review required. |
+| `staging_ingress_operator_evidence` | Accepted sanitized staging ingress operator evidence from `scripts/staging_ingress_operator_evidence_check.py` and `docs/audits/staging-ingress-operator-evidence-guide.md`; artifact summary sanitized, no network calls by the validator, no ingress runtime mutation, and manual review required. |
 
 ## 3. Input Contract
 
@@ -139,6 +151,12 @@ Release review should attach:
 - `scripts/release_gate_summary.sh --go-no-go-json` output.
 - `scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>` output.
 - `scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>` output for every final matrix category, including the domain-local rehearsal tracks now split into explicit blockers.
+- Domain-local validator outputs for accepted operator artifacts:
+  `scripts/provider_operator_evidence_check.py`,
+  `scripts/restore_pitr_operator_evidence_check.py`,
+  `scripts/security_operator_acceptance_check.py`,
+  `scripts/quota_operator_evidence_check.py`, and
+  `scripts/staging_ingress_operator_evidence_check.py`.
 - `scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>` output for incident/audit sanitization evidence.
 - `scripts/backup_restore_drill_check.sh` output for synthetic preflight and,
   when available, accepted sanitized real restore/PITR evidence.

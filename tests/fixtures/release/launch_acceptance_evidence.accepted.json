@@ -493,6 +493,116 @@
         "responseBodiesIncluded": false,
         "productionDataPathsIncluded": false
       }
+    },
+    "provider_operator_evidence": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-08T00:00:00Z",
+      "evidenceRef": "provider-operator-evidence-validator-synthetic-json",
+      "checks": {
+        "providerOperatorValidatorPassed": true,
+        "providerOperatorGuideReferenced": true,
+        "artifactSummarySanitized": true,
+        "networkCallsExecutedByValidatorFalse": true,
+        "runtimeBehaviorUnchanged": true,
+        "advisoryReviewGateRecorded": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "restore_pitr_operator_evidence": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-08T00:00:00Z",
+      "evidenceRef": "restore-pitr-operator-evidence-validator-synthetic-json",
+      "checks": {
+        "restorePitrOperatorValidatorPassed": true,
+        "restorePitrGuideReferenced": true,
+        "realRestoreArtifactSanitized": true,
+        "databaseCommandsRunByValidatorFalse": true,
+        "productionStorageUntouched": true,
+        "manualReviewGateRecorded": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "security_operator_acceptance": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-08T00:00:00Z",
+      "evidenceRef": "security-operator-acceptance-validator-synthetic-json",
+      "checks": {
+        "securityOperatorValidatorPassed": true,
+        "securityOperatorGuideReferenced": true,
+        "mfaRbacSectionsAccepted": true,
+        "releaseApprovedFalse": true,
+        "runtimeBehaviorUnchanged": true,
+        "manualReviewGateRecorded": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "quota_budget_operator_evidence": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-08T00:00:00Z",
+      "evidenceRef": "quota-budget-operator-evidence-validator-synthetic-json",
+      "checks": {
+        "quotaOperatorValidatorPassed": true,
+        "quotaBudgetGuideReferenced": true,
+        "quotaBudgetSectionsAccepted": true,
+        "outboundNotificationsSentByValidatorFalse": true,
+        "runtimeBehaviorUnchanged": true,
+        "advisoryReviewGateRecorded": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
+    },
+    "staging_ingress_operator_evidence": {
+      "status": "accepted",
+      "acceptedBy": "release-operator",
+      "capturedAt": "2026-05-08T00:00:00Z",
+      "evidenceRef": "staging-ingress-operator-evidence-validator-synthetic-json",
+      "checks": {
+        "stagingIngressOperatorValidatorPassed": true,
+        "stagingIngressGuideReferenced": true,
+        "stagingIngressArtifactSanitized": true,
+        "networkCallsExecutedByValidatorFalse": true,
+        "runtimeBehaviorUnchanged": true,
+        "manualReviewGateRecorded": true
+      },
+      "sanitization": {
+        "externalServicesCalledByChecker": false,
+        "realSecretsIncluded": false,
+        "rawCredentialValuesIncluded": false,
+        "rawProviderPayloadsIncluded": false,
+        "responseBodiesIncluded": false,
+        "productionDataPathsIncluded": false
+      }
     }
   }
 }

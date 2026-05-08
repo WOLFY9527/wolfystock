@@ -1,5 +1,15 @@
 ## 2026-05-08
 
+- 🧪 **Operator evidence validator integration** — Launch acceptance evidence and
+  the release gate summary now recognize domain-local offline validators for
+  provider operator evidence, real restore/PITR operator evidence, security
+  MFA/RBAC operator acceptance, quota/budget operator evidence, and staging
+  ingress operator evidence. The synthetic accepted fixture can reach
+  `GO-REVIEW-REQUIRED` only with `releaseApproved=false`; missing or unsafe
+  evidence remains **NO-GO**. This is evidence plumbing only and does not change
+  runtime provider, auth/RBAC, quota, ingress, storage, scanner, AI,
+  portfolio, or backtest behavior.
+
 - 🧪 **Launch acceptance final operator matrix** — Launch acceptance evidence now
   has one explicit hard-blocker category for MFA admin pilot, RBAC fallback
   switch, provider credential dry-run, provider staging probe artifact,

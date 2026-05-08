@@ -344,8 +344,15 @@ The following must all be true before public multi-user deployment:
   portfolio/backtest export and browser proof, notification delivery
   rehearsal, user data privacy/export/deletion rehearsal, market freshness and
   fallback evidence, AI report/guest-preview safety, Options derivatives
-  safety, API abuse/request-safety, and final clean gate categories without
-  approving launch.
+  safety, API abuse/request-safety, final clean gate, and domain-local provider
+  operator, restore/PITR operator, security MFA/RBAC operator, quota/budget
+  operator, and staging ingress operator evidence categories without approving
+  launch.
+- [x] Domain-local offline validators/templates exist for provider operator
+  evidence, real restore/PITR operator evidence, security MFA/RBAC operator
+  acceptance, quota/budget operator evidence, and staging ingress operator
+  evidence. These validators are rehearsal/evidence plumbing only; they do not
+  perform runtime calls or approve launch.
 - [x] Production config/secret contract preflight exists through
   `python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>`;
   it consumes only synthetic or operator-sanitized flag names and secret
@@ -358,6 +365,8 @@ The following must all be true before public multi-user deployment:
 - [ ] Sanitized operator evidence pack is accepted for every hard blocker; the
   checker may move from **NO-GO** to `GO-REVIEW-REQUIRED`, but
   `releaseApproved` remains false until manual approval.
+- [ ] Real operator-produced artifacts for the five domain-local validator
+  categories are attached and accepted by reviewers for the target environment.
 - [ ] Staging smoke passes through HTTPS reverse proxy on synthetic users/data.
 - [ ] WS2 multi-instance smoke passes or deployment is explicitly constrained to
   single API process with documented SSE/task limitations.

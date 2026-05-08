@@ -208,6 +208,51 @@ summary = {
                 "incident/audit evidence must exclude tokens, passwords, API keys, cookies, sessions, DSNs, provider credentials, and raw response bodies",
             ],
         },
+        {
+            "id": "provider_operator_evidence_validator",
+            "status": "foundation_evidence_present",
+            "evidence": [
+                "scripts/provider_operator_evidence_check.py validates sanitized provider operator artifacts offline",
+                "provider operator evidence remains advisory and review-gated",
+                "validator output must not include provider calls, raw credentials, raw provider payloads, or runtime provider changes",
+            ],
+        },
+        {
+            "id": "restore_pitr_operator_evidence_validator",
+            "status": "foundation_evidence_present",
+            "evidence": [
+                "scripts/restore_pitr_operator_evidence_check.py validates externally produced restore/PITR artifacts offline",
+                "real restore/PITR evidence still requires operator-run isolated restore artifacts",
+                "validator output must not include database commands run by the validator, production storage mutation, DSNs, dumps, or raw SQL",
+            ],
+        },
+        {
+            "id": "security_operator_acceptance_validator",
+            "status": "foundation_evidence_present",
+            "evidence": [
+                "scripts/security_operator_acceptance_check.py validates sanitized MFA/RBAC operator acceptance artifacts offline",
+                "security operator evidence remains manual-review gated with releaseApproved=false",
+                "validator output must not include auth runtime changes, raw MFA secrets, sessions, cookies, or RBAC payload dumps",
+            ],
+        },
+        {
+            "id": "quota_budget_operator_evidence_validator",
+            "status": "foundation_evidence_present",
+            "evidence": [
+                "scripts/quota_operator_evidence_check.py validates sanitized quota/budget operator artifacts offline",
+                "quota/budget operator evidence remains advisory and does not enable enforcement",
+                "validator output must not include outbound notifications, billing/provider calls, threshold mutations, or raw request/response bodies",
+            ],
+        },
+        {
+            "id": "staging_ingress_operator_evidence_validator",
+            "status": "foundation_evidence_present",
+            "evidence": [
+                "scripts/staging_ingress_operator_evidence_check.py validates sanitized staging ingress operator artifacts offline",
+                "real ingress proof still requires operator-captured staging artifacts",
+                "validator output must not include network calls by the validator, credential URLs, raw bodies, headers, cookies, or ingress runtime changes",
+            ],
+        },
     ],
     "operatorEvidencePack": {
         "schemaVersion": "wolfystock_launch_acceptance_evidence_summary_v1",
@@ -235,6 +280,11 @@ summary = {
             "options_derivatives_safety",
             "api_abuse_request_safety",
             "final_clean_full_ci_gate",
+            "provider_operator_evidence",
+            "restore_pitr_operator_evidence",
+            "security_operator_acceptance",
+            "quota_budget_operator_evidence",
+            "staging_ingress_operator_evidence",
         ],
         "finalStatus": "NO-GO",
         "releaseApproved": False,
@@ -355,10 +405,40 @@ summary = {
             "status": "blocking",
             "requiredEvidence": "clean worktree, full ci_gate, release secret scan, and final diff check evidence",
         },
+        {
+            "id": "provider_operator_evidence",
+            "status": "blocking",
+            "requiredEvidence": "accepted sanitized provider operator evidence from scripts/provider_operator_evidence_check.py plus guide reference, advisory gate, and unchanged runtime behavior",
+        },
+        {
+            "id": "restore_pitr_operator_evidence",
+            "status": "blocking",
+            "requiredEvidence": "accepted sanitized real restore/PITR operator evidence from scripts/restore_pitr_operator_evidence_check.py plus guide reference and manual review gate",
+        },
+        {
+            "id": "security_operator_acceptance",
+            "status": "blocking",
+            "requiredEvidence": "accepted sanitized MFA/RBAC operator acceptance evidence from scripts/security_operator_acceptance_check.py with releaseApproved=false and unchanged auth/RBAC runtime behavior",
+        },
+        {
+            "id": "quota_budget_operator_evidence",
+            "status": "blocking",
+            "requiredEvidence": "accepted sanitized quota/budget operator evidence from scripts/quota_operator_evidence_check.py with no outbound notifications by the validator and unchanged quota runtime behavior",
+        },
+        {
+            "id": "staging_ingress_operator_evidence",
+            "status": "blocking",
+            "requiredEvidence": "accepted sanitized staging ingress operator evidence from scripts/staging_ingress_operator_evidence_check.py plus guide reference and unchanged ingress runtime behavior",
+        },
     ],
     "requiredFinalCommands": [
         "python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>",
         "python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>",
+        "python3 scripts/provider_operator_evidence_check.py <sanitized-provider-operator-evidence.json>",
+        "python3 scripts/restore_pitr_operator_evidence_check.py --artifact <sanitized-restore-pitr-operator-evidence.json>",
+        "python3 scripts/security_operator_acceptance_check.py --artifact <sanitized-security-operator-artifact.json>",
+        "python3 scripts/quota_operator_evidence_check.py --evidence <sanitized-quota-budget-operator-evidence.json>",
+        "python3 scripts/staging_ingress_operator_evidence_check.py <sanitized-staging-ingress-operator-evidence.json>",
         "python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>",
         "./scripts/release_secret_scan.sh",
         "python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>",
@@ -414,6 +494,11 @@ print_step "final required commands"
 cat <<'COMMANDS'
 python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>
 python3 scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>
+python3 scripts/provider_operator_evidence_check.py <sanitized-provider-operator-evidence.json>
+python3 scripts/restore_pitr_operator_evidence_check.py --artifact <sanitized-restore-pitr-operator-evidence.json>
+python3 scripts/security_operator_acceptance_check.py --artifact <sanitized-security-operator-artifact.json>
+python3 scripts/quota_operator_evidence_check.py --evidence <sanitized-quota-budget-operator-evidence.json>
+python3 scripts/staging_ingress_operator_evidence_check.py <sanitized-staging-ingress-operator-evidence.json>
 python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>
 ./scripts/release_secret_scan.sh
 python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>

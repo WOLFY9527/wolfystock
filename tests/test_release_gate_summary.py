@@ -30,6 +30,11 @@ EXPECTED_OPERATOR_CATEGORY_IDS = [
     "options_derivatives_safety",
     "api_abuse_request_safety",
     "final_clean_full_ci_gate",
+    "provider_operator_evidence",
+    "restore_pitr_operator_evidence",
+    "security_operator_acceptance",
+    "quota_budget_operator_evidence",
+    "staging_ingress_operator_evidence",
 ]
 
 
@@ -111,6 +116,11 @@ def test_release_gate_summary_go_no_go_json_keeps_launch_blocked(tmp_path):
         "production_config_secret_contract_preflight",
         "supply_chain_dependency_build_artifact_safety",
         "incident_response_audit_evidence_pack",
+        "provider_operator_evidence_validator",
+        "restore_pitr_operator_evidence_validator",
+        "security_operator_acceptance_validator",
+        "quota_budget_operator_evidence_validator",
+        "staging_ingress_operator_evidence_validator",
     } <= evidence_ids
     blocker_ids = {item["id"] for item in summary["hardBlockers"]}
     assert set(EXPECTED_OPERATOR_CATEGORY_IDS) <= blocker_ids
