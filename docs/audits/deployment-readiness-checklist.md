@@ -362,10 +362,23 @@ The following must all be true before public multi-user deployment:
   config snapshot evidence, and manual release review records. These are
   review plumbing only: real operator artifacts are still required, and release
   approval remains external/manual.
+- [x] Offline operator evidence workflow tooling exists for sanitized template
+  generation, per-category validation, checksum manifest creation/verification,
+  bundle aggregation, and Markdown review-report rendering. The tooling is
+  review support only and does not change launch acceptance status.
 - [x] Production config/secret contract preflight exists through
   `python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>`;
   it consumes only synthetic or operator-sanitized flag names and secret
   presence states, emits stable JSON, and never prints secret values.
+- [ ] Sanitized operator templates have been filled with real
+  target-environment operator artifact summaries and validated by their
+  matching category validators.
+- [ ] Sanitized checksum manifest has been created and verified for the
+  target-environment operator artifacts through
+  `python3 scripts/operator_evidence_manifest_check.py`.
+- [ ] Offline review report has been rendered from sanitized bundle and
+  manifest summaries through
+  `python3 scripts/release_review_report_render.py` and reviewed manually.
 - [ ] Sanitized config snapshot evidence is attached and accepted through
   `python3 scripts/config_snapshot_evidence_check.py <sanitized-config-snapshot-evidence.json>`
   without raw `.env` values, deployment state reads, or secret-bearing values.

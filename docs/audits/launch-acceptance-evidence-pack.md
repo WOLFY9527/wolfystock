@@ -48,6 +48,26 @@ provider/network/DB calls, or approve launch.
 tool for already-sanitized domain artifacts. It is not counted as separate
 operator evidence and cannot replace any real artifact or manual approval.
 
+The offline workflow tools can reduce reviewer drift, but they do not change
+launch semantics:
+
+1. Generate sanitized templates with
+   `python3 scripts/operator_evidence_template_pack.py <template-dir>`.
+2. Fill those templates manually with operator-produced, sanitized evidence for
+   the target environment.
+3. Validate each artifact with the matching category validator.
+4. Create and verify file-integrity metadata with
+   `python3 scripts/operator_evidence_manifest_check.py create --artifact-dir <sanitized-operator-evidence-dir> --output <manifest.json>`
+   and
+   `python3 scripts/operator_evidence_manifest_check.py verify --artifact-dir <sanitized-operator-evidence-dir> --manifest <manifest.json>`.
+5. Aggregate already-sanitized domain artifacts with
+   `python3 scripts/operator_evidence_bundle_check.py <sanitized-operator-evidence-dir>`.
+6. Render an offline review report with
+   `python3 scripts/release_review_report_render.py <bundle-summary.json> --manifest <manifest-summary.json>`.
+7. Complete final release review outside these tools. Generated templates,
+   checksum manifests, bundle summaries, and rendered reports are review
+   support only.
+
 ## 2. Required Evidence Categories
 
 All categories are hard blockers. Missing, pending, rejected, unsafe, or
@@ -165,10 +185,22 @@ Release review should attach:
   `scripts/security_operator_acceptance_check.py`,
   `scripts/quota_operator_evidence_check.py`, and
   `scripts/staging_ingress_operator_evidence_check.py`.
+- Optional sanitized template pack from
+  `scripts/operator_evidence_template_pack.py <template-dir>`. Reviewers must
+  treat these as blank templates until operators fill them with sanitized
+  target-environment artifacts.
+- Sanitized checksum manifest creation and verification from
+  `scripts/operator_evidence_manifest_check.py create --artifact-dir <sanitized-operator-evidence-dir> --output <manifest.json>`
+  and
+  `scripts/operator_evidence_manifest_check.py verify --artifact-dir <sanitized-operator-evidence-dir> --manifest <manifest.json>`.
 - Review-support bundle summary from
   `scripts/operator_evidence_bundle_check.py <sanitized-operator-evidence-dir>`.
   This summary aggregates validator statuses only and must not be treated as a
   substitute for real operator artifacts.
+- Offline review report from
+  `scripts/release_review_report_render.py <bundle-summary.json> --manifest <manifest-summary.json>`.
+  The report can support manual review, but it does not approve launch and
+  cannot satisfy missing required operator evidence.
 - WS2/SSE topology operator decision evidence from
   `scripts/ws2_sse_operator_decision_check.py <sanitized-ws2-sse-operator-decision.json>`.
 - Config snapshot evidence from

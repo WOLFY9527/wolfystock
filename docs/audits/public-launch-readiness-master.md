@@ -64,6 +64,16 @@ is available only as an aggregation aid for already-sanitized domain
 artifacts. None of these helpers grants release approval, and
 `releaseApproved` remains false in machine-readable launch evidence.
 
+The offline operator evidence workflow is now documented as a reviewer support
+path: generate sanitized templates with
+`scripts/operator_evidence_template_pack.py`, fill them manually with sanitized
+operator artifacts, run the category validators, create and verify checksum
+metadata with `scripts/operator_evidence_manifest_check.py`, aggregate with
+`scripts/operator_evidence_bundle_check.py`, and render a bounded report with
+`scripts/release_review_report_render.py`. These steps improve review
+traceability only. They do not create real operator evidence, satisfy missing
+hard blockers, or replace the external/manual release decision.
+
 ## Master readiness view
 
 | Area | Current posture | Launch status | Blocking requirement |
@@ -115,10 +125,22 @@ decision after all of the following are true:
   provider, restore/PITR, security MFA/RBAC, quota/budget, and staging ingress
   evidence, plus WS2/SSE operator decision evidence, config snapshot evidence,
   and manual release review-record evidence.
+- Sanitized evidence templates may be generated through
+  `python3 scripts/operator_evidence_template_pack.py <template-dir>`, then
+  manually filled by operators with sanitized target-environment artifact
+  summaries. Blank or placeholder templates are not evidence.
+- Sanitized file-integrity metadata may be created and verified through
+  `python3 scripts/operator_evidence_manifest_check.py create --artifact-dir <sanitized-operator-evidence-dir> --output <manifest.json>`
+  and
+  `python3 scripts/operator_evidence_manifest_check.py verify --artifact-dir <sanitized-operator-evidence-dir> --manifest <manifest.json>`.
 - Review-support bundle output may be attached through
   `python3 scripts/operator_evidence_bundle_check.py <sanitized-operator-evidence-dir>`,
   but it aggregates existing artifacts only and does not count as a separate
   launch artifact.
+- A bounded offline review report may be rendered through
+  `python3 scripts/release_review_report_render.py <bundle-summary.json> --manifest <manifest-summary.json>`;
+  the report supports manual review only and cannot approve release from
+  arbitrary input.
 - WS2/SSE operator decision evidence is validated through
   `python3 scripts/ws2_sse_operator_decision_check.py <sanitized-ws2-sse-operator-decision.json>`
   without changing SSE or polling runtime behavior.

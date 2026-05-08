@@ -86,6 +86,23 @@ review-record evidence as required review items while keeping
 `releaseApproved=false`; accepted fixture evidence can reach only
 `GO-REVIEW-REQUIRED`.
 
+The end-to-end offline operator workflow tooling is available for release
+review support:
+
+- `scripts/operator_evidence_template_pack.py` can generate sanitized blank
+  templates for operators to fill manually.
+- Category validators can check filled sanitized artifacts without runtime
+  calls.
+- `scripts/operator_evidence_manifest_check.py` can create and verify checksum
+  metadata for the sanitized artifact files.
+- `scripts/operator_evidence_bundle_check.py` can aggregate validator statuses.
+- `scripts/release_review_report_render.py` can render a bounded Markdown
+  review report from sanitized summaries.
+
+This tooling availability does not mark any target-environment operator
+artifact complete by itself. Missing required operator artifacts remain
+**NO-GO**, and the current public launch posture remains review-gated.
+
 ## Non-blocking Product Capabilities
 
 Market Rotation Radar is tracked as a read-only product capability, not as a

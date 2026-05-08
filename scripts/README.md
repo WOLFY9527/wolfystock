@@ -40,6 +40,40 @@ review flow.
 - `launch_acceptance_evidence.py`: validates sanitized launch-acceptance
   evidence packs for public launch review.
 
+## Operator evidence workflow
+
+- `operator_evidence_template_pack.py`: generates sanitized JSON templates for
+  operator evidence categories. Operators must replace placeholders with
+  sanitized evidence before review; generated templates are not real evidence.
+- `provider_operator_evidence_check.py`: validates sanitized provider operator
+  evidence offline.
+- `restore_pitr_operator_evidence_check.py`: validates sanitized real
+  restore/PITR operator evidence offline; it does not execute restore commands.
+- `security_operator_acceptance_check.py`: validates sanitized MFA/RBAC
+  operator acceptance evidence offline.
+- `quota_operator_evidence_check.py`: validates sanitized quota/budget operator
+  evidence offline and does not send notifications.
+- `staging_ingress_operator_evidence_check.py`: validates sanitized staging
+  ingress operator evidence offline and does not make network calls.
+- `ws2_sse_operator_decision_check.py`: validates sanitized WS2/SSE topology
+  operator decision evidence offline.
+- `config_snapshot_evidence_check.py`: validates sanitized config snapshot
+  evidence offline without reading raw `.env` values.
+- `manual_release_approval_evidence_check.py`: validates sanitized manual
+  release review-record evidence while keeping release approval external and
+  manual.
+- `operator_evidence_manifest_check.py`: creates and verifies checksum
+  manifests for sanitized operator artifact files without printing raw artifact
+  bodies.
+- `operator_evidence_bundle_check.py`: aggregates already-sanitized domain
+  validator summaries for reviewer convenience. It does not replace real
+  operator artifacts or approve launch.
+- `release_review_report_render.py`: renders an offline Markdown review report
+  from sanitized summary JSON. The report is informational only and cannot
+  approve launch.
+- `evidence_safety.py`: internal helper module for sanitized labels and JSON
+  traversal used by offline evidence validators.
+
 ## Backup / restore / PITR
 
 - `backup_restore_drill_check.sh`: dry-run PostgreSQL backup/restore/PITR
@@ -50,9 +84,6 @@ review flow.
 - `staging_ingress_smoke.py`: safe-by-default staging ingress preflight; only
   performs live HTTP checks when explicitly opted in. It also accepts sanitized
   operator evidence JSON for offline validation.
-- `staging_ingress_operator_evidence_check.py`: domain-local offline validator
-  for sanitized staging ingress operator evidence. It makes no network calls,
-  changes no runtime ingress behavior, and does not integrate launch acceptance.
 
 ## Incident response evidence
 

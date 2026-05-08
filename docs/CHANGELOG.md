@@ -1,5 +1,14 @@
 ## 2026-05-08
 
+- 🧪 **Operator evidence workflow docs** — Release documentation and
+  `scripts/README.md` now describe the offline operator evidence workflow:
+  sanitized template generation, manual operator fill-in, category validation,
+  checksum manifest creation/verification, bundle aggregation, and Markdown
+  review-report rendering. The workflow remains review support only; generated
+  templates and rendered reports are not real operator artifacts,
+  `releaseApproved=false` remains required, missing evidence remains **NO-GO**,
+  and final release review remains external/manual.
+
 - 🧪 **Review evidence validator integration** — Launch acceptance evidence and
   release gate summary now include required review evidence for sanitized
   WS2/SSE operator decisions, config snapshots, and manual release review
