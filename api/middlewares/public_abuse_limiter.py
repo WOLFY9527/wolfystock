@@ -67,6 +67,29 @@ def reset_public_api_abuse_limiter_state() -> None:
         _PUBLIC_API_ABUSE_BUCKETS.clear()
 
 
+def get_public_api_abuse_limiter_snapshot() -> dict[str, int | bool | str]:
+    """Return sanitized process-local limiter counters without client identities."""
+    now = time.time()
+    window = _window_seconds()
+    max_failures = _max_failures()
+    with _PUBLIC_API_ABUSE_LOCK:
+        _prune_expired(now, window)
+        counts = [count for count, _ in _PUBLIC_API_ABUSE_BUCKETS.values()]
+        first_seen_values = [first_seen for _, first_seen in _PUBLIC_API_ABUSE_BUCKETS.values()]
+        oldest_age = int(max(0, now - min(first_seen_values))) if first_seen_values else 0
+        return {
+            "bucketCount": len(counts),
+            "totalFailures": sum(counts),
+            "maxBucketFailures": max(counts, default=0),
+            "limitedBucketCount": sum(1 for count in counts if count >= max_failures),
+            "oldestBucketAgeSeconds": oldest_age,
+            "windowSeconds": window,
+            "maxFailures": max_failures,
+            "processLocal": True,
+            "identityRedaction": "client_identity_not_exposed",
+        }
+
+
 def _is_api_surface(path: str) -> bool:
     return path.startswith("/api/v1/")
 
