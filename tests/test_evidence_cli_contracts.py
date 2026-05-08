@@ -18,6 +18,7 @@ CLI_SCRIPTS = (
     "scripts/operator_evidence_archive_pack.py",
     "scripts/operator_evidence_bundle_diff.py",
     "scripts/operator_evidence_schema_reference.py",
+    "scripts/operator_evidence_preflight.py",
     "scripts/release_review_report_render.py",
 )
 MISSING_REQUIRED_ARG_SCRIPTS = tuple(
