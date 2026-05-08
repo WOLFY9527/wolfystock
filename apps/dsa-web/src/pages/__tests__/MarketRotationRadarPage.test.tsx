@@ -10,6 +10,9 @@ vi.mock('../../api/marketRotation', () => ({
   },
 }));
 
+const forbiddenTradingActionPattern =
+  /买入按钮|建议买入|建议卖出|卖出指令|立即交易|下单|提交订单|订单载荷|开仓|平仓|加仓|减仓|持仓建议|仓位建议|决策级|decision[-\s]?grade|buy now|sell now|place order|submit order|best contract|guaranteed/i;
+
 const radarFixture = (): MarketRotationRadarResponse => ({
   endpoint: '/api/v1/market/rotation-radar',
   generatedAt: '2026-05-07T09:50:00Z',
@@ -191,6 +194,9 @@ describe('MarketRotationRadarPage', () => {
     expect(page).toHaveTextContent('观察信号 / 非买卖建议');
     expect(page).toHaveTextContent('关注候选');
     expect(page).toHaveTextContent('只读证据');
+    expect(page).toHaveTextContent('观察队列');
+    expect(page).toHaveTextContent('非交易指令');
+    expect(page).toHaveTextContent('交付关闭');
     expect(page).toHaveTextContent('排序逻辑');
     expect(page).toHaveTextContent('观察清单证据');
     expect(page).toHaveTextContent('仅观察，不构成买卖建议');
@@ -204,11 +210,15 @@ describe('MarketRotationRadarPage', () => {
     expect(within(themeCard).getByText('78')).toBeInTheDocument();
     expect(within(themeCard).getByText('无明显新闻的同步异动')).toBeInTheDocument();
     expect(within(themeCard).getByText('高开回落风险')).toBeInTheDocument();
-    expect(screen.getByTestId('rotation-radar-developer-details')).not.toHaveAttribute('open');
+
+    const developerDetails = screen.getByTestId('rotation-radar-developer-details');
+    expect(developerDetails).not.toHaveAttribute('open');
+    expect(developerDetails).toHaveTextContent('开发者详情');
+    expect(developerDetails).toHaveTextContent('schemaVersion');
 
     const bodyText = page.textContent?.toLowerCase() || '';
     expect(bodyText).not.toMatch(/raw_payload|provider_payload|api_key|password|session_id|cookie|secret/);
-    expect(bodyText).not.toMatch(/建议买入|必买|稳赚|下单|buy now|sell now|guaranteed|best contract/i);
+    expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
   });
 
   it('marks fallback radar data as fallback instead of live', async () => {
@@ -322,6 +332,23 @@ describe('MarketRotationRadarPage', () => {
     expect(candidate).toHaveTextContent('非交易指令');
     expect(candidate).toHaveTextContent('交付关闭');
     expect(candidate).toHaveTextContent('只读证据');
-    expect(candidate.textContent).not.toMatch(/买入|卖出|下单|立即交易|有条件可交易/);
+    expect(candidate.textContent).not.toMatch(forbiddenTradingActionPattern);
+  });
+
+  it('keeps noisy provider and schema evidence behind collapsed developer details', async () => {
+    render(<MarketRotationRadarPage />);
+
+    const page = await screen.findByTestId('market-rotation-radar-page');
+    const developerDetails = screen.getByTestId('rotation-radar-developer-details');
+
+    expect(developerDetails.tagName.toLowerCase()).toBe('details');
+    expect(developerDetails).not.toHaveAttribute('open');
+    expect(developerDetails).toHaveTextContent('schemaVersion');
+    expect(developerDetails).toHaveTextContent('/api/v1/market/rotation-radar');
+    expect(page).toHaveTextContent('数据新鲜度');
+    expect(page).toHaveTextContent('ETF 代理质量');
+    expect(page).not.toHaveTextContent('raw payload');
+    expect(page).not.toHaveTextContent('provider payload');
+    expect(page).not.toHaveTextContent('debug schema');
   });
 });

@@ -27,6 +27,7 @@ const viewports = [
 
 const rawLaunchArtifactPattern = /raw\s+(payload|response|trace)|debug\s+(payload|response|schema|panel)|provider\s+(payload|credential)|stack\s+(trace|details)|traceback|bearer\s+[a-z0-9._-]+|api[_\s-]?key\s*[=:]|password\s*[=:]|session[_\s-]?id\s*[=:]|cookie\s*[=:]|secret\s*[=:]|sk-[a-z0-9_-]{12,}|ghp_[a-z0-9_]{12,}|xox[baprs]-[a-z0-9-]{12,}/i;
 const brokerCredentialOrOrderPattern = /broker[_\s-]?credentials?|broker[_\s-]?order|order[_\s-]?payload|place[_\s-]?order|submit[_\s-]?order|execute[_\s-]?order|payload_json|sync_metadata_json|raw[_\s-]?provider[_\s-]?payload|provider[_\s-]?credential|api[_\s-]?key|access[_\s-]?token|refresh[_\s-]?token|session[_\s-]?token|cookie\s*[=:]|debug[_\s-]?schema|stack[_\s-]?trace/i;
+const rotationRadarTradingActionPattern = /买入按钮|建议买入|建议卖出|卖出指令|立即交易|下单|提交订单|订单载荷|开仓|平仓|加仓|减仓|持仓建议|仓位建议|决策级|decision[-\s]?grade|buy now|sell now|place order|submit order|best contract|guaranteed/i;
 
 async function installAuthenticatedAppSmokeSession(page: Page) {
   await page.route('**/api/v1/auth/status', async (route) => {
@@ -76,6 +77,17 @@ async function expectVisibleTextAbsent(page: Page, sentinels: string[]) {
   for (const sentinel of sentinels) {
     expect(bodyText).not.toContain(sentinel);
   }
+}
+
+async function assertRotationRadarReadOnlyShell(page: Page) {
+  const bodyText = await page.locator('body').innerText();
+  expect(bodyText).toContain('观察信号 / 非买卖建议');
+  expect(bodyText).toContain('ETF 代理质量');
+  expect(bodyText).toContain('只读证据');
+  expect(bodyText).toContain('非交易指令');
+  expect(bodyText).toContain('交付关闭');
+  expect(bodyText).not.toMatch(rotationRadarTradingActionPattern);
+  await appExpect(page.getByTestId('rotation-radar-developer-details')).not.toHaveJSProperty('open', true);
 }
 
 async function assertPublicShell(page: Page) {
@@ -164,6 +176,7 @@ appTest.describe('public launch route smoke', () => {
       }
       await appExpect(page.getByTestId('rotation-radar-summary-band')).toBeVisible();
       await appExpect(page.getByTestId('rotation-theme-card-ai_applications')).toBeVisible();
+      await assertRotationRadarReadOnlyShell(page);
       await assertPublicShell(page);
     }
   });
