@@ -9,6 +9,7 @@ import { portfolioApi } from '../api/portfolio';
 import { scannerApi } from '../api/scanner';
 import { backtestApi } from '../api/backtest';
 import { ApiErrorAlert, ConfirmDialog, Drawer, GlassCard, TypewriterText } from '../components/common';
+import { DensityRail, GuidedDisclosure, InsightStack, SectionIntro } from '../components/guidance';
 import { CARD_BUTTON_CLASS } from '../components/home-bento';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import type { SkillInfo } from '../api/agent';
@@ -531,7 +532,6 @@ const ChatPage: React.FC = () => {
   const [providerHealth, setProviderHealth] = useState<AgentProviderHealthResponse | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<string>('');
   const [showSkillDesc, setShowSkillDesc] = useState<string | null>(null);
-  const [showAdvancedLenses, setShowAdvancedLenses] = useState(false);
   const [watchlistAction, setWatchlistAction] = useState<{ symbol: string; type: 'success' | 'error'; message: string } | null>(null);
   const [expandedThinking, setExpandedThinking] = useState<Set<string>>(new Set());
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -1468,44 +1468,96 @@ const ChatPage: React.FC = () => {
     return (
       <section
         data-testid={testId}
-        className="rounded-[24px] border border-white/[0.06] bg-white/[0.025] p-4 text-left shadow-[0_18px_60px_rgba(0,0,0,0.18)]"
+        className="text-left"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/36">
-              {language === 'en' ? 'Research context' : '研究上下文'}
-            </p>
-            <p className="mt-2 text-sm font-semibold text-white">{language === 'en' ? 'Read-only evidence' : '只读证据'}</p>
-          </div>
-          <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200">
-            {language === 'en' ? 'analysis only' : '仅分析'}
-          </span>
-        </div>
-        <div className="mt-4 grid gap-2">
-          {[
-            { label: language === 'en' ? 'Question route' : '问题路径', value: routeText },
-            { label: language === 'en' ? 'Observation lens' : '观察条件', value: lensText },
+        <DensityRail
+          title={language === 'en' ? 'Research context' : '研究上下文'}
+          className="md:max-w-none"
+          items={[
             {
+              id: 'evidence',
+              label: language === 'en' ? 'Evidence mode' : '只读证据',
+              value: language === 'en' ? 'Analysis only' : '仅分析',
+              helper: language === 'en'
+                ? 'The workspace organizes research questions and avoids account actions.'
+                : '该入口只组织研究问题，不触发账户动作。',
+              tone: 'info',
+            },
+            {
+              id: 'route',
+              label: language === 'en' ? 'Question route' : '问题路径',
+              value: routeText,
+              helper: language === 'en' ? 'Generated after a symbol or scenario appears.' : '输入标的或情景后生成。',
+            },
+            {
+              id: 'lens',
+              label: language === 'en' ? 'Observation lens' : '观察条件',
+              value: lensText,
+              helper: language === 'en' ? 'You can refine this before sending.' : '发送前可继续细化视角。',
+              tone: 'neutral',
+            },
+            {
+              id: 'state',
               label: language === 'en' ? 'Evidence state' : '证据状态',
               value: language === 'en'
                 ? `${availableCount} ready · ${partialCount} partial · ${missingCount} missing`
                 : `${availableCount} 可用 · ${partialCount} 部分 · ${missingCount} 缺失`,
+              helper: language === 'en' ? 'Missing context is called out in the answer.' : '缺失上下文会在回答中显式说明。',
+              tone: missingCount > 0 ? 'caution' : 'info',
             },
-          ].map((item) => (
-            <div key={item.label} className="rounded-2xl border border-white/[0.05] bg-black/20 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/32">{item.label}</p>
-              <p className="mt-1 break-words text-xs leading-5 text-white/68">{item.value}</p>
-            </div>
-          ))}
-        </div>
-        <p className="mt-3 text-[11px] leading-5 text-white/36">
-          {language === 'en'
-            ? 'This composer organizes research questions and never triggers account actions.'
-            : '该入口只组织研究问题，不触发账户动作。'}
-        </p>
+          ]}
+        />
       </section>
     );
   };
+
+  const renderResearchTaskStack = () => (
+    <div data-testid="chat-research-task-stack" className="grid gap-4 text-left">
+      <SectionIntro
+        purpose={language === 'en' ? 'Research workflow' : '研究任务栈'}
+        summary={language === 'en' ? 'Start with a precise question, then let evidence, gaps, and risk boundaries shape the answer.' : '先提出一个清晰研究问题，再让证据、缺口和风险边界决定答案范围。'}
+        nextStep={language === 'en' ? 'Enter a symbol, event, or portfolio context; keep the request framed as observation and validation.' : '输入标的、事件或持仓背景；默认聚焦观察、验证和风险复核。'}
+        status={{ label: language === 'en' ? 'analysis only' : '仅分析', tone: 'neutral' }}
+      />
+      <InsightStack
+        title={language === 'en' ? 'Empty-state research flow' : '空状态研究流程'}
+        insights={[
+          {
+            id: 'ask',
+            severity: 'info',
+            title: language === 'en' ? 'What can I ask?' : '我能问什么',
+            explanation: language === 'en'
+              ? 'Ask for observation conditions, risk boundaries, catalysts, data confidence, or scenario comparisons.'
+              : '可以询问观察条件、风险边界、催化因素、数据可信度或情景对比。',
+          },
+          {
+            id: 'evidence',
+            severity: 'success',
+            title: language === 'en' ? 'What evidence is available?' : '可用证据',
+            explanation: language === 'en'
+              ? 'The desk can attach quote, technical, fundamentals, watchlist, portfolio, scanner, backtest, and news context when available.'
+              : '研究台会在可用时附带行情、技术、基本面、观察列表、组合、扫描器、回测和新闻上下文。',
+          },
+          {
+            id: 'missing',
+            severity: 'warning',
+            title: language === 'en' ? 'What context is missing?' : '缺失上下文',
+            explanation: language === 'en'
+              ? 'If no symbol, timeframe, position background, or event is supplied, the answer should mark those gaps instead of pretending certainty.'
+              : '如果缺少标的、时间窗口、持仓背景或事件，回答应标明缺口，而不是伪装成确定结论。',
+          },
+          {
+            id: 'safe-next',
+            severity: 'info',
+            title: language === 'en' ? 'What is the safe next step?' : '安全下一步',
+            explanation: language === 'en'
+              ? 'Use the first answer to refine assumptions, inspect evidence, or prepare a report-quality observation plan.'
+              : '用第一轮回答继续细化假设、核验证据，或整理成报告级观察计划。',
+          },
+        ]}
+      />
+    </div>
+  );
 
   const quoteEvidence = evidenceItems.find((item) => item.key === 'quote');
   const renderSmartRouteStrip = () => (
@@ -1557,37 +1609,51 @@ const ChatPage: React.FC = () => {
     const primaryModel = agentModels.find((model) => model.is_primary) || agentModels[0];
     const currentProvider = providerHealth?.currentProvider || providerHealth?.providers.find((item) => item.selected)?.label || primaryModel?.provider || 'DeepSeek';
     const currentModel = providerHealth?.currentModel || providerHealth?.providers.find((item) => item.selected)?.model || primaryModel?.model || 'provider auto-select';
+    const primaryVisibleLenses = PRIMARY_ANALYSIS_LENSES.slice(0, 4);
+    const secondaryLenses = [...PRIMARY_ANALYSIS_LENSES.slice(4), ...ADVANCED_ANALYSIS_LENSES];
     return (
-      <div data-testid={testId} className="flex flex-col gap-4">
+      <div data-testid={testId} className="flex flex-col gap-3">
         <section data-testid="chat-engine-section" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">AI 引擎</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">AI 引擎</p>
+            <span className="rounded-full border border-white/8 bg-white/[0.03] px-2 py-0.5 font-mono text-[10px] uppercase text-white/36">
+              {providerHealth?.routingMode || 'auto'}
+            </span>
+          </div>
           <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-white/6 bg-black/25 px-3 py-2">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-white">{providerHealth?.routingMode || 'AUTO'} → {currentProvider}</p>
               <p className="truncate font-mono text-[10px] text-white/36">{currentModel}</p>
             </div>
-            <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 font-mono text-[10px] uppercase text-emerald-400">
-              {providerHealth?.routingMode || 'auto'}
-            </span>
           </div>
-          <div className="mt-2 grid grid-cols-1 gap-1.5">
-            {(providerHealth?.providers || []).map((provider) => (
-              <div key={provider.id} className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-white/5 bg-black/20 px-2 py-1.5">
-                <span className={`truncate text-xs ${provider.selected ? 'text-white' : 'text-white/58'}`}>
-                  {provider.label} {providerStatusLabel[provider.status] || provider.status}
-                </span>
-                <span className={`font-mono text-[10px] uppercase ${
-                  provider.status === 'available'
-                    ? 'text-emerald-400'
-                    : provider.status === 'not_configured' || provider.status === 'offline' || provider.status === 'disabled'
-                      ? 'text-rose-400'
-                      : 'text-white/36'
-                }`}>
-                  {providerStatusLabel[provider.status] || provider.status}
-                </span>
+          <GuidedDisclosure
+            title={language === 'en' ? 'Provider detail' : '引擎明细'}
+            summary={language === 'en' ? 'Routing and provider health are secondary diagnostics.' : '路由和供应商健康状态属于辅助诊断。'}
+            className="mt-2"
+            beginner={language === 'en'
+              ? 'The desk selects an available research engine automatically when configured.'
+              : '配置可用时，研究台会自动选择可用研究引擎。'}
+            professional={(
+              <div className="grid gap-1.5">
+                {(providerHealth?.providers || []).map((provider) => (
+                  <div key={provider.id} className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-white/5 bg-black/20 px-2 py-1.5">
+                    <span className={`truncate text-xs ${provider.selected ? 'text-white' : 'text-white/58'}`}>
+                      {provider.label} {providerStatusLabel[provider.status] || provider.status}
+                    </span>
+                    <span className={`font-mono text-[10px] uppercase ${
+                      provider.status === 'available'
+                        ? 'text-emerald-400'
+                        : provider.status === 'not_configured' || provider.status === 'offline' || provider.status === 'disabled'
+                          ? 'text-rose-400'
+                          : 'text-white/36'
+                    }`}>
+                      {providerStatusLabel[provider.status] || provider.status}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          />
         </section>
 
         <section data-testid="chat-lens-section" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
@@ -1596,30 +1662,27 @@ const ChatPage: React.FC = () => {
             <p className="truncate text-[10px] text-white/30">{selectedLens.label}</p>
           </div>
           <div data-testid="chat-strategy-grid" className="grid grid-cols-2 gap-2">
-            {PRIMARY_ANALYSIS_LENSES.map(renderLensButton)}
+            {primaryVisibleLenses.map(renderLensButton)}
           </div>
-          <div className="mt-3">
-            <button
-              type="button"
-              className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white/40 transition-all hover:bg-white/[0.07] hover:text-white/70"
-              onClick={() => setShowAdvancedLenses((value) => !value)}
-            >
-              高级视角 {showAdvancedLenses ? '收起' : '展开'}
-            </button>
-            {showAdvancedLenses ? (
-              <div className="mt-2 grid grid-cols-1 gap-2">
-                {ADVANCED_ANALYSIS_LENSES.map(renderLensButton)}
+          <GuidedDisclosure
+            title={language === 'en' ? 'More lenses' : '更多视角'}
+            summary={language === 'en' ? 'Advanced frameworks stay collapsed until needed.' : '高级框架默认折叠，只作辅助观察。'}
+            className="mt-3"
+            beginner={language === 'en'
+              ? 'Choose one lens when you want the answer to emphasize a specific evidence style.'
+              : '需要强调某类证据时，再切换特定研究视角。'}
+            professional={(
+              <div className="grid grid-cols-1 gap-2">
+                {secondaryLenses.map(renderLensButton)}
               </div>
-            ) : (
-              <p className="mt-1 text-[10px] leading-relaxed text-white/30">缠论、波浪等高级框架默认折叠；它们只作辅助观察，不是确定性信号。</p>
             )}
-          </div>
+          />
         </section>
 
         <section data-testid="chat-data-context-section" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">数据上下文</p>
           <div className="flex flex-wrap gap-1.5">
-            {evidenceItems.map((item) => (
+            {evidenceItems.slice(0, 5).map((item) => (
               <span key={item.key} className="rounded-full border border-white/8 bg-black/25 px-2 py-1 text-[10px] text-white/52">
                 {item.label} · <span className="text-white/36">{formatDataEvidenceStatus(item.status)}</span>
               </span>
@@ -1627,7 +1690,14 @@ const ChatPage: React.FC = () => {
           </div>
         </section>
 
-        {renderDataEvidencePanel()}
+        <GuidedDisclosure
+          title={language === 'en' ? 'Evidence detail' : '证据明细'}
+          summary={language === 'en' ? 'Open only when you need source-by-source readiness.' : '需要逐项查看证据状态时再展开。'}
+          beginner={language === 'en'
+            ? 'Missing data reduces confidence and should be called out in the response.'
+            : '缺失数据会降低可信度，并应在回答中明确说明。'}
+          professional={renderDataEvidencePanel()}
+        />
         <div className="hidden lg:block">
           {renderQuickActions()}
         </div>
@@ -1635,34 +1705,36 @@ const ChatPage: React.FC = () => {
     );
   };
 
-  const renderComposerBody = () => (
-    <>
-      <div className="mb-3 flex items-center justify-between gap-3 lg:hidden">
-        <button
-          ref={startNewChatMobileButton.ref}
-          type="button"
-          onClick={startNewChatMobileButton.onClick}
-          onPointerUp={startNewChatMobileButton.onPointerUp}
-          aria-label={chat('newChatTitle')}
-          className="flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm font-medium text-white transition-colors hover:bg-white/[0.08]"
-        >
-          + {language === 'en' ? 'New chat' : '新对话'}
-        </button>
-        <button
-          ref={openConsoleButton.ref}
-          type="button"
-          onClick={openConsoleButton.onClick}
-          onPointerUp={openConsoleButton.onPointerUp}
-          aria-label={language === 'en' ? 'Open research console' : '打开研究控制台'}
-          data-testid="chat-bento-brief-trigger"
-          className={CARD_BUTTON_CLASS}
-          title={language === 'en' ? 'Open console' : '打开控制台'}
-        >
-          <PanelRightOpen className="h-4 w-4" />
-          <span>{language === 'en' ? 'Console' : '控制台'}</span>
-        </button>
-      </div>
+  const renderMobileComposerActions = () => (
+    <div className="mt-3 flex items-center justify-between gap-3 lg:hidden">
+      <button
+        ref={startNewChatMobileButton.ref}
+        type="button"
+        onClick={startNewChatMobileButton.onClick}
+        onPointerUp={startNewChatMobileButton.onPointerUp}
+        aria-label={chat('newChatTitle')}
+        className="flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm font-medium text-white transition-colors hover:bg-white/[0.08]"
+      >
+        + {language === 'en' ? 'New chat' : '新对话'}
+      </button>
+      <button
+        ref={openConsoleButton.ref}
+        type="button"
+        onClick={openConsoleButton.onClick}
+        onPointerUp={openConsoleButton.onPointerUp}
+        aria-label={language === 'en' ? 'Open research console' : '打开研究控制台'}
+        data-testid="chat-bento-brief-trigger"
+        className={CARD_BUTTON_CLASS}
+        title={language === 'en' ? 'Open console' : '打开控制台'}
+      >
+        <PanelRightOpen className="h-4 w-4" />
+        <span>{language === 'en' ? 'Console' : '控制台'}</span>
+      </button>
+    </div>
+  );
 
+  const renderComposerBody = (showMobileActions = true) => (
+    <>
       {sendToast ? (
         <p className={`mb-3 text-right text-xs ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
           {sendToast.message}
@@ -1736,6 +1808,7 @@ const ChatPage: React.FC = () => {
         <p className="mt-3 text-center text-[10px] text-white/30">
           {composerDisclaimer}
         </p>
+        {showMobileActions ? renderMobileComposerActions() : null}
       </div>
 
       {isFollowUpContextLoading ? (
@@ -1785,7 +1858,7 @@ const ChatPage: React.FC = () => {
                   data-testid="chat-empty-state"
                   className="flex flex-1 flex-col items-center justify-start overflow-y-auto no-scrollbar"
                 >
-                  <div className="flex w-full max-w-6xl flex-col items-center gap-5 px-4 pb-6 pt-5 text-center sm:gap-7 md:px-8 xl:px-12">
+                  <div className="flex w-full max-w-7xl flex-col items-stretch gap-4 px-4 pb-6 pt-4 text-left sm:gap-5 md:px-6 xl:px-8">
                     {skillsLoadError ? (
                       <ApiErrorAlert
                         error={skillsLoadError}
@@ -1796,12 +1869,12 @@ const ChatPage: React.FC = () => {
                       />
                     ) : null}
 
-                    <div className="flex w-full max-w-4xl flex-col items-center">
-                      <div className="mb-2 flex items-center justify-center gap-3">
+                    <div className="flex w-full flex-col items-start">
+                      <div className="mb-2 flex items-center justify-start gap-3">
                         <Lightbulb className="h-5 w-5 text-white/80 sm:h-6 sm:w-6" aria-hidden="true" />
                         <h1 className="text-xl font-bold text-white sm:text-3xl">{chat('title')}</h1>
                       </div>
-                      <p className="mt-1 max-w-3xl text-xs leading-relaxed text-white/62 sm:mt-3 sm:text-sm">
+                      <p className="mt-1 max-w-3xl text-xs leading-relaxed text-white/62 sm:text-sm">
                         {chat('description')}
                       </p>
                       <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-white/40">{chat('emptyTitle')}</p>
@@ -1809,22 +1882,24 @@ const ChatPage: React.FC = () => {
 
                     <div
                       data-testid="chat-research-entry-grid"
-                      className="grid w-full grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_20rem]"
+                      className="grid w-full grid-cols-1 gap-4 lg:items-start"
                     >
-                      <div data-testid="chat-input-shell" className="w-full shrink-0 min-w-0">
+                      <div data-testid="chat-input-shell" className="w-full shrink-0 min-w-0 lg:col-start-1 lg:row-start-1">
                         <div data-testid="chat-input-gradient" className="w-full shrink-0">
                           <div
                             data-testid="chat-console-inner"
                             className="w-full"
                           >
-                            {renderComposerBody()}
+                            {renderComposerBody(false)}
                           </div>
                         </div>
                       </div>
-                      {renderContextBriefRail()}
-                    </div>
 
-                    <div data-testid="chat-starter-grid" className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
+                      <div className="lg:col-start-1 lg:row-start-2">
+                        {renderResearchTaskStack()}
+                      </div>
+
+                      <div data-testid="chat-starter-grid" className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:col-start-1 lg:row-start-3 lg:grid-cols-3 lg:gap-4">
                       {starterPromptCards.slice(0, 2).map((card, index) => (
                         <GlassCard
                           key={card.id}
@@ -1846,14 +1921,14 @@ const ChatPage: React.FC = () => {
                           </div>
                         </GlassCard>
                       ))}
-                    </div>
+                      </div>
 
-                    {starterPromptCards.length > 2 ? (
+                      {starterPromptCards.length > 2 ? (
                       <details
                         data-testid="chat-more-templates"
                         open={mobileTemplatesOpen}
                         onToggle={(event) => setMobileTemplatesOpen((event.currentTarget as HTMLDetailsElement).open)}
-                        className="w-full max-w-5xl text-left sm:hidden"
+                        className="w-full text-left sm:hidden"
                       >
                         <summary className="cursor-pointer list-none text-center text-[10px] font-bold uppercase tracking-widest text-white/40">
                           更多模板
@@ -1875,12 +1950,12 @@ const ChatPage: React.FC = () => {
                           ))}
                         </div>
                       </details>
-                    ) : null}
+                      ) : null}
 
-                    {quickQuestions.length > 0 ? (
+                      {quickQuestions.length > 0 ? (
                       <div
                         data-testid="chat-quick-question-cloud"
-                        className="hidden flex-wrap justify-center gap-2 sm:flex sm:gap-3"
+                        className="hidden flex-wrap justify-center gap-2 sm:flex sm:gap-3 lg:col-start-1 lg:row-start-4"
                       >
                         {quickQuestions.map((q) => (
                           <button
@@ -1893,7 +1968,28 @@ const ChatPage: React.FC = () => {
                           </button>
                         ))}
                       </div>
-                    ) : null}
+                      ) : null}
+
+                      <div className="lg:hidden">
+                        {renderMobileComposerActions()}
+                      </div>
+
+                      <details
+                        data-testid="chat-secondary-context-disclosure"
+                        className="rounded-[16px] border border-white/5 bg-white/[0.02] text-left backdrop-blur-md lg:hidden"
+                      >
+                        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-white/80 [&::-webkit-details-marker]:hidden">
+                          {language === 'en' ? 'Research context' : '研究上下文'}
+                          <span className="ml-2 text-xs font-normal text-white/40">
+                            {language === 'en' ? 'collapsed' : '已折叠'}
+                          </span>
+                        </summary>
+                        <div className="border-t border-white/[0.04] p-3">
+                          {renderContextBriefRail('chat-context-brief-rail-mobile')}
+                        </div>
+                      </details>
+
+                    </div>
                   </div>
                 </div>
               </main>
@@ -2055,7 +2151,7 @@ const ChatPage: React.FC = () => {
 
           <aside
             data-testid="chat-strategy-panel"
-            className="hidden h-full min-h-0 w-full shrink-0 flex-col gap-4 overflow-y-auto border-l border-white/5 bg-gradient-to-b from-white/[0.01] to-transparent p-4 no-scrollbar lg:flex lg:w-[288px] xl:w-[320px]"
+            className="hidden h-full min-h-0 w-full shrink-0 flex-col gap-3 overflow-y-auto border-l border-white/5 bg-gradient-to-b from-white/[0.01] to-transparent p-3 no-scrollbar lg:flex lg:w-[280px] xl:w-[304px]"
           >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -2075,7 +2171,7 @@ const ChatPage: React.FC = () => {
             <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar pr-1">
               {consoleMode === 'engines' ? (
                 <div className="flex flex-col gap-4">
-                  {renderContextBriefRail('chat-context-brief-rail-desktop')}
+                  {renderContextBriefRail()}
                   {renderControlPanel('chat-control-panel')}
                 </div>
               ) : (

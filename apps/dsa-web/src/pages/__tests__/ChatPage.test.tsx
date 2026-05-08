@@ -711,7 +711,7 @@ describe('ChatPage', () => {
     );
     expect(screen.getByText('AI 洞察仅供研究参考，不构成投资建议。请自行评估风险承受能力。')).toHaveClass('mt-3', 'text-[10px]', 'text-center', 'text-white/30');
     expect(screen.queryByTestId('chat-skill-toolbar')).not.toBeInTheDocument();
-    expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'h-full', 'min-h-0', 'w-full', 'shrink-0', 'flex-col', 'gap-4', 'overflow-y-auto', 'border-l', 'border-white/5', 'bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent', 'p-4', 'lg:w-[288px]', 'xl:w-[320px]');
+    expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'h-full', 'min-h-0', 'w-full', 'shrink-0', 'flex-col', 'gap-3', 'overflow-y-auto', 'border-l', 'border-white/5', 'bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent', 'p-3', 'lg:w-[280px]', 'xl:w-[304px]');
     expect(screen.getByTestId('chat-console-mode-toggle')).toBeInTheDocument();
     expect(screen.getByTestId('chat-strategy-grid')).toHaveClass('grid', 'grid-cols-2', 'gap-2');
     expect(mockLoadInitialSession).toHaveBeenCalled();
@@ -841,6 +841,30 @@ describe('ChatPage', () => {
     expect(contextRail).not.toHaveTextContent('provider');
     expect(screen.getByTestId('chat-empty-state')).toHaveClass('justify-start');
     expect(screen.getByTestId('chat-quick-question-cloud').textContent).not.toMatch(/买|卖|下单|开仓/);
+  });
+
+  it('renders a guided research flow before secondary context', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('chat-research-task-stack')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-research-task-stack')).toHaveTextContent('我能问什么');
+    expect(screen.getByTestId('chat-research-task-stack')).toHaveTextContent('可用证据');
+    expect(screen.getByTestId('chat-research-task-stack')).toHaveTextContent('缺失上下文');
+    expect(screen.getByTestId('chat-research-task-stack')).toHaveTextContent('安全下一步');
+    expect(screen.getByTestId('chat-secondary-context-disclosure')).not.toHaveAttribute('open');
+
+    const composer = screen.getByTestId('chat-composer-omnibar');
+    const flow = screen.getByTestId('chat-research-task-stack');
+    const context = screen.getByTestId('chat-context-brief-rail');
+
+    expect(composer.compareDocumentPosition(flow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(flow.compareDocumentPosition(context) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('animates only the latest assistant reply while generation is active', async () => {
