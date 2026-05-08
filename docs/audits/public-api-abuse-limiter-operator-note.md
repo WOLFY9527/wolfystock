@@ -16,7 +16,7 @@ The limiter reads these environment variables at request time:
 | `PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES` | `12` | `1` to `100` | Maximum tracked failures before returning `429`. |
 | `PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS` | `4096` | `16` to `65536` | Maximum process-local client buckets retained before oldest-bucket eviction. |
 
-Invalid or out-of-range values fall back to the documented bounds. The `Retry-After` response header uses the bounded window value.
+Invalid integer values fall back to the documented defaults. Out-of-range values are clamped to the documented bounds. The `Retry-After` response header uses the bounded window value.
 
 ## Sanitized Observability
 

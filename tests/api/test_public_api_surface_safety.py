@@ -815,6 +815,214 @@ def test_public_api_abuse_limiter_excludes_auth_routes(monkeypatch) -> None:
         _reset_auth_globals()
 
 
+def test_public_api_abuse_limiter_operator_env_knobs_are_clamped_in_snapshot(monkeypatch) -> None:
+    from api.middlewares import public_abuse_limiter as limiter
+
+    _reset_public_limiter_state_if_available()
+    try:
+        monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "5")
+        monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "0")
+        monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS", "0")
+        assert _limiter_snapshot() == {
+            "bucketCount": 0,
+            "totalFailures": 0,
+            "maxBucketFailures": 0,
+            "limitedBucketCount": 0,
+            "oldestBucketAgeSeconds": 0,
+            "windowSeconds": 60,
+            "maxFailures": 1,
+            "maxBuckets": 16,
+            "processLocal": True,
+            "identityRedaction": "client_identity_not_exposed",
+        }
+
+        monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "999999")
+        monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "999999")
+        monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS", "999999")
+        high_snapshot = _limiter_snapshot()
+        assert high_snapshot["windowSeconds"] == 3600
+        assert high_snapshot["maxFailures"] == 100
+        assert high_snapshot["maxBuckets"] == 65536
+
+        monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "not-an-int")
+        monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "not-an-int")
+        monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS", "not-an-int")
+        invalid_snapshot = _limiter_snapshot()
+        assert invalid_snapshot["windowSeconds"] == limiter.PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS_DEFAULT
+        assert invalid_snapshot["maxFailures"] == limiter.PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES_DEFAULT
+        assert invalid_snapshot["maxBuckets"] == limiter.PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS_DEFAULT
+    finally:
+        _reset_public_limiter_state_if_available()
+
+
+def test_public_api_abuse_limiter_operator_bucket_cap_evicts_oldest_process_local_entries(monkeypatch) -> None:
+    from api.middlewares import public_abuse_limiter as limiter
+
+    _reset_public_limiter_state_if_available()
+    current_time = [1_000.0]
+    monkeypatch.setattr(limiter.time, "time", lambda: current_time[0])
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS", "16")
+    try:
+        with limiter._PUBLIC_API_ABUSE_LOCK:
+            for index in range(18):
+                limiter._PUBLIC_API_ABUSE_BUCKETS[f"operator-client-{index}"] = (1, 800.0 + index)
+
+        snapshot = _limiter_snapshot()
+
+        assert snapshot["bucketCount"] == 16
+        assert snapshot["maxBuckets"] == 16
+        assert snapshot["processLocal"] is True
+        with limiter._PUBLIC_API_ABUSE_LOCK:
+            assert set(limiter._PUBLIC_API_ABUSE_BUCKETS) == {
+                f"operator-client-{index}" for index in range(2, 18)
+            }
+    finally:
+        _reset_public_limiter_state_if_available()
+
+
+def test_public_api_abuse_limiter_operator_snapshot_exposes_only_redacted_aggregate_fields(monkeypatch) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setenv("TRUST_X_FORWARDED_FOR", "true")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "2")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    client = _auth_guarded_client()
+    raw_header = "raw-operator-header-token"
+    raw_client_ip = "203.0.113.175"
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
+            response = client.post(
+                "/api/v1/options/decision/evaluate",
+                content=(
+                    '{"symbol":"TEM",'
+                    f'"token":"{ABUSE_REHEARSAL_SECRET_BODY}",'
+                    f'"databaseDsn":"{ABUSE_REHEARSAL_DSN}"'
+                ),
+                headers={
+                    "content-type": "application/json",
+                    "Authorization": f"Bearer {ABUSE_REHEARSAL_BEARER}",
+                    "Cookie": f"dsa_session={ABUSE_REHEARSAL_COOKIE}",
+                    "X-Forwarded-For": raw_client_ip,
+                    "X-Operator-Rehearsal": raw_header,
+                },
+            )
+
+        assert response.status_code == 422
+        snapshot = _limiter_snapshot()
+        assert set(snapshot) == {
+            "bucketCount",
+            "totalFailures",
+            "maxBucketFailures",
+            "limitedBucketCount",
+            "oldestBucketAgeSeconds",
+            "windowSeconds",
+            "maxFailures",
+            "maxBuckets",
+            "processLocal",
+            "identityRedaction",
+        }
+        assert snapshot["bucketCount"] == 1
+        assert snapshot["identityRedaction"] == "client_identity_not_exposed"
+        snapshot_text = _json_text(snapshot)
+        for marker in (
+            raw_client_ip,
+            raw_header,
+            ABUSE_REHEARSAL_SECRET_BODY,
+            ABUSE_REHEARSAL_COOKIE,
+            ABUSE_REHEARSAL_BEARER,
+            ABUSE_REHEARSAL_DSN,
+            "headers",
+            "cookies",
+            "session",
+            "validation",
+            "traceback",
+        ):
+            assert marker.lower() not in snapshot_text.lower()
+        _assert_public_surface_safe(snapshot)
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
+def test_public_api_abuse_limiter_operator_retry_after_uses_bounded_window(monkeypatch) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    client = _auth_guarded_client()
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
+            monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+            monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "5")
+            low_first = client.post(
+                "/api/v1/options/decision/evaluate",
+                content='{"symbol":"TEM"',
+                headers={"content-type": "application/json", "X-Forwarded-For": "203.0.113.176"},
+            )
+            low_limited = client.post(
+                "/api/v1/options/decision/evaluate",
+                content='{"symbol":"TEM"',
+                headers={"content-type": "application/json", "X-Forwarded-For": "203.0.113.176"},
+            )
+
+            _reset_public_limiter_state_if_available()
+            monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "999999")
+            high_first = client.post(
+                "/api/v1/options/decision/evaluate",
+                content='{"symbol":"TEM"',
+                headers={"content-type": "application/json", "X-Forwarded-For": "203.0.113.177"},
+            )
+            high_limited = client.post(
+                "/api/v1/options/decision/evaluate",
+                content='{"symbol":"TEM"',
+                headers={"content-type": "application/json", "X-Forwarded-For": "203.0.113.177"},
+            )
+
+        assert [low_first.status_code, low_limited.status_code] == [422, 429]
+        assert [high_first.status_code, high_limited.status_code] == [422, 429]
+        assert low_limited.headers["Retry-After"] == "60"
+        assert high_limited.headers["Retry-After"] == "3600"
+        for response in (low_first, low_limited, high_first, high_limited):
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
+def test_public_api_abuse_limiter_operator_valid_session_bypass_survives_strict_env(monkeypatch, tmp_path) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setattr(auth, "_get_data_dir", lambda: tmp_path)
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "5")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS", "0")
+    auth._auth_enabled = True
+    auth.set_initial_password("adminpass123")
+    session_cookie = auth.create_session()
+    client = _limiter_probe_client()
+    client.cookies.set(auth.COOKIE_NAME, session_cookie)
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+            responses = [
+                client.get(
+                    "/api/v1/limiter-probe/fails",
+                    headers={"X-Forwarded-For": "203.0.113.178"},
+                )
+                for _ in range(3)
+            ]
+
+        assert [response.status_code for response in responses] == [422, 422, 422]
+        assert _limiter_snapshot()["bucketCount"] == 0
+        assert all("Retry-After" not in response.headers for response in responses)
+        for response in responses:
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
 def test_options_launch_surface_matrix_is_fixture_backed_explicit_and_safe() -> None:
     client = _options_client()
     try:
