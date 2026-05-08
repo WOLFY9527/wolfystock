@@ -132,6 +132,13 @@ def _limiter_snapshot() -> dict[str, object]:
     return get_public_api_abuse_limiter_snapshot()
 
 
+def _format_warning_messages(caught: list[warnings.WarningMessage]) -> list[str]:
+    return [
+        f"{warning.category.__name__}: {warning.message}"
+        for warning in caught
+    ]
+
+
 def test_launch_surface_route_inventory_remains_stable_and_fixture_safe() -> None:
     app = FastAPI()
     app.include_router(api_v1_router)
@@ -759,7 +766,7 @@ def test_public_api_test_client_raw_body_and_cookie_patterns_are_warning_free(mo
     client.cookies.set(auth.COOKIE_NAME, session_cookie)
     try:
         with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always", DeprecationWarning)
+            warnings.simplefilter("default")
             with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
                 malformed = client.post(
                     "/api/v1/options/decision/evaluate",
@@ -772,13 +779,7 @@ def test_public_api_test_client_raw_body_and_cookie_patterns_are_warning_free(mo
                 )
 
         assert [malformed.status_code, valid_cookie.status_code] == [422, 200]
-        deprecation_text = "\n".join(
-            str(warning.message)
-            for warning in caught
-            if issubclass(warning.category, DeprecationWarning)
-        )
-        assert "content=<...>" not in deprecation_text
-        assert "per-request cookies=<...>" not in deprecation_text
+        assert _format_warning_messages(caught) == []
         assert _limiter_snapshot()["bucketCount"] == 0
         for response in (malformed, valid_cookie):
             _assert_public_surface_safe(response.json())
