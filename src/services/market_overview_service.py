@@ -39,7 +39,7 @@ SOURCE_TYPE_CONFIDENCE = {
     "computed_from_real": 0.6,
 }
 
-FALLBACK_SOURCE_TOKENS = ("fallback", "mock", "static", "sample")
+FALLBACK_SOURCE_TOKENS = ("fallback", "mock", "static", "sample", "synthetic")
 
 SOURCE_TYPE_BY_SOURCE = {
     "sina": "public_api",
@@ -213,7 +213,7 @@ def get_freshness_status(
             "delayMinutes": 0,
             "warning": "模拟数据，不代表当前行情",
         }
-    if is_fallback or source_key == "fallback":
+    if is_fallback or source_key in {"fallback", "synthetic"}:
         return {
             "freshness": "fallback",
             "isFallback": True,
