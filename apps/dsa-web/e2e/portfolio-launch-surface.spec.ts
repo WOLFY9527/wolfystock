@@ -58,7 +58,8 @@ test.describe('portfolio launch surface', () => {
       await expect(primaryGrid).toContainText('持仓状态');
       await expect(primaryGrid).toContainText('现金状态');
       await expect(primaryGrid).toContainText('敞口状态');
-      await expect(primaryGrid).toContainText('需要关注');
+      await expect(priorityPanel).toContainText('关注与风险摘要');
+      await expect(priorityPanel).toContainText('需要关注');
       await expect(holdingsPanel).toBeVisible({ timeout: 15_000 });
       await expect(secondaryCallout).toContainText('次级：手工记账');
       await expect(manualPanel).toContainText('仅用于手工记账');
@@ -67,7 +68,7 @@ test.describe('portfolio launch surface', () => {
       const priorityBox = await priorityPanel.boundingBox();
       const holdingsBox = await holdingsPanel.boundingBox();
       const manualBox = await manualPanel.boundingBox();
-      expect(heroBox?.y ?? Infinity).toBeLessThan(220);
+      expect(heroBox?.y ?? Infinity).toBeLessThan(viewport.name === 'mobile' ? viewport.height * 0.38 : 280);
       expect(priorityBox?.y ?? Infinity).toBeLessThan(viewport.height * 0.6);
       expect(holdingsBox?.y ?? Infinity).toBeLessThan(manualBox?.y ?? 0);
       expect((manualBox?.y ?? 0) - (holdingsBox?.y ?? 0)).toBeGreaterThan(80);

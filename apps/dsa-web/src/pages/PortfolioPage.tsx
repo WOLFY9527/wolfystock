@@ -5,6 +5,15 @@ import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Drawer, Input, PillBadge, SectionShell, SegmentedControl, Select } from '../components/common';
+import {
+  DensityRail,
+  GuidedDisclosure,
+  InsightStack,
+  MetricNarrativeCard,
+  SectionIntro,
+  type DensityRailItem,
+  type InsightItem,
+} from '../components/guidance';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
   getSafariReadySurfaceClassName,
@@ -1493,8 +1502,6 @@ const PortfolioPage: React.FC = () => {
   const editDisplayCurrencyLabel = language === 'zh' ? '在设置中修改' : 'Change in Settings';
   const fxUnavailableLabel = language === 'zh' ? '折算不可用' : 'FX unavailable';
   const accountCurrencyLabel = language === 'zh' ? '账户币种' : 'Account currencies';
-  const activeAccountsLabel = language === 'zh' ? '活跃账户' : 'Active accounts';
-  const writableAccountsLabel = language === 'zh' ? '可写账户' : 'Writable accounts';
   const noHoldingsHistoryNote = language === 'zh' ? '历史记录存在，当前无持仓' : 'History exists while current holdings are empty';
   const recentActivityTitle = language === 'zh' ? '近期活动' : 'Recent Activity';
   const emptyRecentActivityLabel = language === 'zh' ? '暂无历史记录' : 'No history yet';
@@ -1665,6 +1672,67 @@ const PortfolioPage: React.FC = () => {
     hasFxUnavailable ? fxUnavailableLabel : null,
     ...riskHintTexts.slice(0, 2),
   ].filter(Boolean) as string[];
+  const accountStateSummary = !hasActiveAccounts
+    ? (language === 'zh' ? '暂无可用账户' : 'No available account')
+    : selectedAccount === 'all'
+      ? (language === 'zh' ? `${activeAccounts.length} 个活跃账户` : `${activeAccounts.length} active accounts`)
+      : scopedAccount?.name || copy.allAccounts;
+  const sourceSyncState = ibkrConnection
+    ? (language === 'zh' ? '只读同步已配置' : 'Read-only sync configured')
+    : (language === 'zh' ? '手工台账优先' : 'Manual ledger first');
+  const portfolioRailItems: DensityRailItem[] = [
+    {
+      id: 'account-state',
+      label: language === 'zh' ? '账户状态' : 'Account state',
+      value: accountStateSummary,
+      helper: selectedAccount === 'all' ? noAccountSelectedLabel : accountSelectedLabel,
+      tone: hasActiveAccounts ? 'info' : 'caution',
+    },
+    {
+      id: 'source-sync',
+      label: language === 'zh' ? '来源 / 同步' : 'Source / sync',
+      value: sourceSyncState,
+      helper: language === 'zh' ? '不连接券商 / 不执行交易 / 仅手工记录' : 'No broker connection / no execution / manual records only',
+      tone: ibkrConnection ? 'positive' : 'neutral',
+    },
+    {
+      id: 'display-currency',
+      label: displayCurrencyStatus,
+      value: displayCurrency,
+      helper: `${fxProviderLabel.toUpperCase()} · ${fxFreshnessLabel} · ${fxLastUpdated}`,
+      tone: hasFxUnavailable ? 'caution' : 'positive',
+    },
+    {
+      id: 'base-currencies',
+      label: accountCurrencyLabel,
+      value: accountBaseCurrencies.join(' / ') || '--',
+      helper: language === 'zh' ? `可写账户 ${writableAccounts.length}` : `${writableAccounts.length} writable accounts`,
+      tone: 'neutral',
+    },
+  ];
+  const portfolioInsightItems: InsightItem[] = [
+    {
+      id: 'attention',
+      severity: attentionItems.some((item) => item === fxUnavailableLabel || item === noCashLabel) ? 'warning' : hasHoldings ? 'success' : 'info',
+      title: attentionSnapshotTitle,
+      explanation: (attentionItems.length ? attentionItems : [language === 'zh' ? '暂无需要处理项' : 'No attention items']).slice(0, 4).join(' · '),
+    },
+    {
+      id: 'concentration',
+      severity: topPositionPercent >= 50 ? 'critical' : topPositionPercent >= 20 ? 'warning' : hasHoldings ? 'success' : 'info',
+      title: language === 'zh' ? '集中度' : 'Concentration',
+      explanation: concentrationDescription,
+      detail: hasHoldings && topPosition ? `${topPosition.label || topPosition.key} · ${formatPercent(topPositionPercent)}` : undefined,
+    },
+    {
+      id: 'fx-readiness',
+      severity: hasFxUnavailable ? 'warning' : 'success',
+      title: language === 'zh' ? '折算可信度' : 'FX readiness',
+      explanation: hasFxUnavailable
+        ? (language === 'zh' ? '部分折算不可用，页面保留原币值并提示风险。' : 'Some conversions are unavailable; native values remain visible.')
+        : (language === 'zh' ? '汇率状态可用于当前资产展示。' : 'FX state is usable for the current asset view.'),
+    },
+  ];
   const renderMiniExposureRow = (
     row: PortfolioExposureItem,
     options: { testIdPrefix: string; label?: string; showNative?: boolean },
@@ -1974,203 +2042,240 @@ const PortfolioPage: React.FC = () => {
       >
         <section className="w-full max-w-[1680px] mx-auto px-0 flex flex-col gap-5">
           <div data-testid="portfolio-workspace-grid" className="flex flex-col gap-5">
-            <div data-testid="portfolio-row-macro" className="grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
-		            <div
-		              data-testid="portfolio-total-assets-card"
-		              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-5 grid shrink-0 gap-4 lg:grid-cols-1 lg:items-stretch`}
-		            >
-	              <div className="flex min-w-0 flex-col justify-between gap-4">
-                  <div className="min-w-0">
-	                <div className="mb-3 flex min-w-0 flex-wrap items-center gap-3">
-	                  <h1 className="text-xs uppercase tracking-widest text-muted-text">{totalAssetsTitle}</h1>
-	                  {selectedAccount === 'all' ? (
-	                    <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">{copy.allAccounts}</span>
-	                  ) : scopedAccount ? (
-	                    <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">{scopedAccount.name}</span>
-	                  ) : null}
-	                </div>
-	                <div
-	                  data-testid="portfolio-total-assets-value"
-	                  className="font-mono text-[2rem] font-bold leading-none text-foreground tabular-nums md:text-[2.8rem]"
-	                  style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
-	                >
-	                  {formatDisplayMoney(totalEquity, totalEquityDisplay, snapshotCurrency)}
-	                </div>
-	                {totalEquity === 0 ? (
-	                  <div className="mt-2 text-xs text-white/35">{zeroAssetStatus}</div>
-	                ) : null}
-	                {snapshotCurrency !== displayCurrency ? (
-	                  <div className="mt-2 font-mono text-xs text-white/35">≈ {formatMoney(totalEquity, snapshotCurrency)}</div>
-	                ) : null}
-	                <div data-testid="portfolio-ledger-disclosure" className="mt-2 max-w-2xl text-xs leading-5 text-white/45">
-	                  {manualLedgerDisclosure}
-	                </div>
-                  </div>
-                  <div className="flex min-w-0 flex-wrap gap-2">
-                    <span className="rounded-full border border-white/5 bg-white/[0.025] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white/40">
-                      {copy.costMethodLabel} {costMethod.toUpperCase()}
-                    </span>
-	                    {hasFxUnavailable ? (
-                      <PillBadge variant="warning" className="text-amber-200">{fxUnavailableLabel}</PillBadge>
-                    ) : null}
-                  </div>
-	              </div>
-	              <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
-	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.totalCash}</div>
-	                  <div className="mt-1 font-mono text-sm text-white tabular-nums">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</div>
-	                </div>
-	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.totalMarketValue}</div>
-	                  <div className="mt-1 font-mono text-sm text-white tabular-nums">{formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}</div>
-	                </div>
-	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.positionUnrealized}</div>
-	                  <div className={`mt-1 font-mono text-sm tabular-nums ${totalUnrealizedPnl >= 0 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]' : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'}`}>
-	                    {totalUnrealizedDisplay ? formatSignedMoney(totalUnrealizedDisplay.value, displayCurrency) : formatSignedMoney(0, displayCurrency)}
-	                  </div>
-	                </div>
-	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.accountCount}</div>
-	                  <div className="mt-1 font-mono text-sm text-white tabular-nums">{snapshot?.accountCount ?? activeAccounts.length}</div>
-	                </div>
-	              </div>
-	              <div className="flex min-w-0 flex-col justify-between gap-3">
-	                <Select
-	                  label={language === 'zh' ? '资产范围' : 'ASSET SCOPE'}
-	                  labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
-	                  value={String(selectedAccount)}
-	                  onChange={(value) => setSelectedAccount(value === 'all' ? 'all' : Number(value))}
-	                  options={[
-	                    { value: 'all', label: copy.allAccounts },
-	                    ...activeAccounts.map((account) => ({ value: String(account.id), label: account.name })),
-	                  ]}
-	                  className={PORTFOLIO_SELECT_CLASS}
-	                />
-                  <div data-testid="portfolio-display-currency-status" className="hidden rounded-xl bg-white/[0.025] px-3 py-3 sm:block">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{displayCurrencyStatus}</span>
-                      <a
-                        href={settingsPath}
-                        className="inline-flex items-center gap-1 text-xs text-white/55 transition-colors hover:text-white"
-                      >
-                        <Settings className="h-3.5 w-3.5" aria-hidden="true" />
-                        {editDisplayCurrencyLabel}
-                      </a>
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/35">
-                      <span>{fxProviderLabel.toUpperCase()}</span>
-                      <span>·</span>
-                      <span>{fxFreshnessLabel}</span>
-                      <span>·</span>
-                      <span>{fxLastUpdated}</span>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className={`${PORTFOLIO_TEXT_BUTTON_CLASS} mt-2 px-0`}
-                      onClick={() => void handleRefreshDisplayFx()}
-                      disabled={isLoading || fxRefreshing}
-                    >
-                      {copy.refreshFx}
-                    </Button>
-                  </div>
-                  <div data-testid="portfolio-currency-breakdown" className="hidden rounded-xl bg-white/[0.025] px-3 py-3 sm:block">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{currencyBreakdownTitle}</div>
-                    {currencyBuckets.length ? (
-                      <div className="mt-2 flex flex-col gap-1.5">
-                        {currencyBuckets.map((item) => (
-                          <div key={item.currency} className="flex items-center justify-between gap-3 text-xs">
-                            <span className="font-mono text-white/45">{item.currency}</span>
-                            <span className="font-mono text-white tabular-nums">{formatMoney(item.value, item.currency)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="mt-2 text-xs text-white/40">{currencyBreakdownEmpty}</div>
-                    )}
-                  </div>
-                  <div className="hidden rounded-xl bg-white/[0.025] px-3 py-3 text-xs text-white/45 sm:block">
-                    <div className="flex justify-between gap-3"><span>{activeAccountsLabel}</span><span className="font-mono text-white">{activeAccounts.length}</span></div>
-                    <div className="mt-1 flex justify-between gap-3"><span>{writableAccountsLabel}</span><span className="font-mono text-white">{writableAccounts.length}</span></div>
-                    <div className="mt-1 flex justify-between gap-3"><span>{accountCurrencyLabel}</span><span className="min-w-0 truncate font-mono text-white">{accountBaseCurrencies.join(' / ') || '--'}</span></div>
-                  </div>
-	                {fxRefreshFeedback && leftTab !== 'fx' ? (
-	                  <div className={`text-xs ${
-	                    fxRefreshFeedback.tone === 'success'
-	                      ? 'text-emerald-300'
-	                      : fxRefreshFeedback.tone === 'warning'
-	                        ? 'text-amber-200'
-	                        : 'text-secondary-text'
-	                  }`}>
-	                    {fxRefreshFeedback.text}
-	                  </div>
-		                ) : null}
-		              </div>
-		            </div>
-                <section
-                  data-testid="portfolio-launch-priority-panel"
-                  className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-7 flex flex-col gap-4`}
+            <div data-testid="portfolio-row-macro" className="grid grid-cols-1 gap-4 xl:grid-cols-12 2xl:gap-5 items-start">
+              <section
+                data-testid="portfolio-launch-priority-panel"
+                className="xl:col-span-8 flex min-w-0 flex-col gap-4"
+              >
+                <SectionIntro
+                  purpose={launchSurfaceTitle}
+                  summary={launchSurfaceSubtitle}
+                  nextStep={hasHoldings
+                    ? (language === 'zh' ? '先复核集中度、现金与汇率，再进入流水记录。' : 'Review concentration, cash, and FX before opening ledger records.')
+                    : (language === 'zh' ? '先确认账户与只读边界，再用下方手工记账补齐第一笔流水。' : 'Confirm account and read-only boundaries, then add the first ledger record below.')}
+                  status={{
+                    label: holdingsPrimaryValue,
+                    tone: hasHoldings ? 'ready' : 'watch',
+                  }}
+                />
+
+                <div
+                  data-testid="portfolio-total-assets-card"
+                  className={`${PORTFOLIO_GLASS_CARD_CLASS} grid shrink-0 gap-4 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:items-center`}
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h2 className="text-xs uppercase tracking-widest text-muted-text">{launchSurfaceTitle}</h2>
-                      <p className="mt-1 max-w-3xl text-xs leading-5 text-white/45">{launchSurfaceSubtitle}</p>
+                  <div className="min-w-0">
+                    <div className="mb-3 flex min-w-0 flex-wrap items-center gap-3">
+                      <h1 className="text-xs uppercase tracking-widest text-muted-text">{totalAssetsTitle}</h1>
+                      {selectedAccount === 'all' ? (
+                        <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">{copy.allAccounts}</span>
+                      ) : scopedAccount ? (
+                        <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">{scopedAccount.name}</span>
+                      ) : null}
+                      <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">
+                        {copy.costMethodLabel} {costMethod.toUpperCase()}
+                      </span>
+                      {hasFxUnavailable ? (
+                        <PillBadge variant="warning" className="text-amber-200">{fxUnavailableLabel}</PillBadge>
+                      ) : null}
                     </div>
-                    <PillBadge variant={hasHoldings ? 'success' : 'default'} className={hasHoldings ? 'text-emerald-200' : 'text-white/40'}>
-                      {holdingsPrimaryValue}
-                    </PillBadge>
+                    <div
+                      data-testid="portfolio-total-assets-value"
+                      className="font-mono text-[2rem] font-bold leading-none text-foreground tabular-nums md:text-[2.8rem]"
+                      style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
+                    >
+                      {formatDisplayMoney(totalEquity, totalEquityDisplay, snapshotCurrency)}
+                    </div>
+                    {totalEquity === 0 ? (
+                      <div className="mt-2 text-xs text-white/35">{zeroAssetStatus}</div>
+                    ) : null}
+                    {snapshotCurrency !== displayCurrency ? (
+                      <div className="mt-2 font-mono text-xs text-white/35">≈ {formatMoney(totalEquity, snapshotCurrency)}</div>
+                    ) : null}
+                    <div data-testid="portfolio-ledger-disclosure" className="mt-3 max-w-2xl text-xs leading-5 text-white/45">
+                      {manualLedgerDisclosure}
+                    </div>
                   </div>
+                  <div className="grid min-w-0 grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.totalMarketValue}</div>
+                      <div className="mt-1 font-mono text-sm text-white tabular-nums">{formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}</div>
+                    </div>
+                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.totalCash}</div>
+                      <div className="mt-1 font-mono text-sm text-white tabular-nums">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</div>
+                    </div>
+                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.positionUnrealized}</div>
+                      <div className={`mt-1 font-mono text-sm tabular-nums ${totalUnrealizedPnl >= 0 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]' : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'}`}>
+                        {totalUnrealizedDisplay ? formatSignedMoney(totalUnrealizedDisplay.value, displayCurrency) : formatSignedMoney(0, displayCurrency)}
+                      </div>
+                    </div>
+                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.accountCount}</div>
+                      <div className="mt-1 font-mono text-sm text-white tabular-nums">{snapshot?.accountCount ?? activeAccounts.length}</div>
+                    </div>
+                  </div>
+                </div>
 
-                  <div data-testid="portfolio-first-fold-primary-grid" className="grid gap-3 md:grid-cols-2">
-                    <div className="rounded-xl bg-white/[0.025] px-4 py-4">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{holdingsSnapshotTitle}</div>
-                      <div className="mt-2 font-mono text-lg text-white tabular-nums">{holdingsPrimaryValue}</div>
-                      <div className="mt-2 text-xs leading-5 text-white/45">
-                        {hasHoldings
-                          ? `${topPosition?.label || positionRows[0]?.symbol || '--'} · ${formatPercent(topPosition?.percent)}`
-                          : (language === 'zh' ? '保存第一笔持仓流水后自动生成持仓。' : 'Save the first holding record to generate holdings.')}
-                      </div>
+                <div
+                  data-testid="portfolio-mobile-priority-summary"
+                  className="grid gap-2 rounded-[16px] border border-white/5 bg-white/[0.02] p-3 md:hidden"
+                >
+                  <div className="flex items-center justify-between gap-3 rounded-xl bg-black/20 px-3 py-2.5">
+                    <span className="text-[11px] text-white/42">{language === 'zh' ? '账户状态' : 'Account state'}</span>
+                    <span className="min-w-0 truncate text-right text-sm font-semibold text-cyan-100">{accountStateSummary}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="min-w-0 rounded-xl bg-black/20 px-2.5 py-2">
+                      <div className="text-[10px] text-white/38">{holdingsSnapshotTitle}</div>
+                      <div className="mt-1 truncate text-xs font-semibold text-white">{holdingsPrimaryValue}</div>
                     </div>
-                    <div className="rounded-xl bg-white/[0.025] px-4 py-4">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{cashSnapshotTitle}</div>
-                      <div className="mt-2 font-mono text-lg text-white tabular-nums">{cashPrimaryValue}</div>
-                      <div className="mt-2 text-xs leading-5 text-white/45">
-                        {currencyBuckets.length
-                          ? currencyBuckets.slice(0, 2).map((item) => `${item.currency} ${formatMoney(item.value, item.currency)}`).join(' · ')
-                          : (language === 'zh' ? '录入资金流水后显示现金币种。' : 'Cash currencies appear after cash ledger records.')}
-                      </div>
+                    <div className="min-w-0 rounded-xl bg-black/20 px-2.5 py-2">
+                      <div className="text-[10px] text-white/38">{cashSnapshotTitle}</div>
+                      <div className="mt-1 truncate font-mono text-xs font-semibold text-white">{cashPrimaryValue}</div>
                     </div>
-                    <div className="rounded-xl bg-white/[0.025] px-4 py-4">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{exposureSnapshotTitle}</div>
-                      <div className="mt-2 truncate text-lg text-white">{exposurePrimaryValue}</div>
-                      <div className="mt-2 text-xs leading-5 text-white/45">
-                        {hasHoldings
-                          ? `${language === 'zh' ? '最大敞口' : 'Largest exposure'} ${formatPercent(topPosition?.percent || topCurrency?.percent || topMarket?.percent)}`
-                          : (language === 'zh' ? '暂无配置数据，等待持仓生成。' : 'No exposure data yet.')}
-                      </div>
-                    </div>
-                    <div className="rounded-xl bg-white/[0.025] px-4 py-4">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{attentionSnapshotTitle}</div>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {(attentionItems.length ? attentionItems : [language === 'zh' ? '暂无需要处理项' : 'No attention items']).slice(0, 5).map((item) => (
-                          <PillBadge key={item} variant={item === accountSelectedLabel ? 'info' : 'default'} className="text-white/55">{item}</PillBadge>
-                        ))}
-                      </div>
+                    <div className="min-w-0 rounded-xl bg-black/20 px-2.5 py-2">
+                      <div className="text-[10px] text-white/38">{exposureSnapshotTitle}</div>
+                      <div className="mt-1 truncate text-xs font-semibold text-white">{exposurePrimaryValue}</div>
                     </div>
                   </div>
+                  <div className="rounded-xl bg-black/20 px-3 py-2.5">
+                    <div className="text-[10px] text-white/38">{language === 'zh' ? '关注与风险摘要' : 'Attention and Risk Summary'}</div>
+                    <div className="mt-1 text-xs leading-5 text-white/66">
+                      {(attentionItems.length ? attentionItems : [language === 'zh' ? '暂无需要处理项' : 'No attention items']).slice(0, 3).join(' · ')}
+                    </div>
+                  </div>
+                </div>
 
-                  <div
-                    data-testid="portfolio-manual-secondary-callout"
-                    className="flex flex-col gap-2 rounded-xl border border-white/[0.04] bg-black/20 px-4 py-3 text-xs text-white/45 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">{manualPanelSecondaryTitle}</div>
-                      <div className="mt-1 leading-5">{manualPanelSecondaryHint}</div>
+                <div data-testid="portfolio-first-fold-primary-grid" className="hidden gap-3 md:grid md:grid-cols-3">
+                  <MetricNarrativeCard
+                    label={holdingsSnapshotTitle}
+                    value={holdingsPrimaryValue}
+                    meaning={hasHoldings
+                      ? `${topPosition?.label || positionRows[0]?.symbol || '--'} · ${formatPercent(topPosition?.percent)}`
+                      : (language === 'zh' ? '保存第一笔持仓流水后自动生成持仓。' : 'Save the first holding record to generate holdings.')}
+                    freshnessNote={accountStateSummary}
+                    tone={hasHoldings ? 'positive' : 'caution'}
+                    className="min-h-[184px]"
+                  />
+                  <MetricNarrativeCard
+                    label={cashSnapshotTitle}
+                    value={cashPrimaryValue}
+                    meaning={currencyBuckets.length
+                      ? currencyBuckets.slice(0, 2).map((item) => `${item.currency} ${formatMoney(item.value, item.currency)}`).join(' · ')
+                      : (language === 'zh' ? '录入资金流水后显示现金币种。' : 'Cash currencies appear after cash ledger records.')}
+                    freshnessNote={displayCurrencyStatus}
+                    tone={totalCash === 0 ? 'caution' : 'info'}
+                    className="min-h-[184px]"
+                  />
+                  <MetricNarrativeCard
+                    label={exposureSnapshotTitle}
+                    value={exposurePrimaryValue}
+                    meaning={hasHoldings
+                      ? `${language === 'zh' ? '最大敞口' : 'Largest exposure'} ${formatPercent(topPosition?.percent || topCurrency?.percent || topMarket?.percent)}`
+                      : (language === 'zh' ? '暂无配置数据，等待持仓生成。' : 'No exposure data yet.')}
+                    freshnessNote={fxFreshnessLabel}
+                    tone={hasFxUnavailable ? 'caution' : hasHoldings ? 'info' : 'neutral'}
+                    className="min-h-[184px]"
+                  />
+                </div>
+
+                <InsightStack
+                  insights={portfolioInsightItems}
+                  title={language === 'zh' ? '关注与风险摘要' : 'Attention and Risk Summary'}
+                  className="hidden min-h-0 md:block"
+                />
+              </section>
+
+              <aside data-testid="portfolio-secondary-zone" className="xl:col-span-4 flex min-w-0 flex-col gap-4">
+                <div className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col gap-3`}>
+                  <div className="flex min-w-0 flex-col gap-3">
+                    <Select
+                      label={language === 'zh' ? '资产范围' : 'ASSET SCOPE'}
+                      labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
+                      value={String(selectedAccount)}
+                      onChange={(value) => setSelectedAccount(value === 'all' ? 'all' : Number(value))}
+                      options={[
+                        { value: 'all', label: copy.allAccounts },
+                        ...activeAccounts.map((account) => ({ value: String(account.id), label: account.name })),
+                      ]}
+                      className={PORTFOLIO_SELECT_CLASS}
+                    />
+                    <div data-testid="portfolio-display-currency-status">
+                      <DensityRail
+                        title={language === 'zh' ? '账户与来源' : 'Account and Source'}
+                        items={portfolioRailItems}
+                        className="md:max-w-none"
+                      />
                     </div>
-                    <span className="shrink-0 font-mono text-[11px] uppercase tracking-widest text-white/45">{manualPanelAnchor}</span>
+                    <div data-testid="portfolio-currency-breakdown" className="rounded-xl bg-white/[0.025] px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{currencyBreakdownTitle}</span>
+                        <a
+                          href={settingsPath}
+                          className="inline-flex items-center gap-1 text-xs text-white/55 transition-colors hover:text-white"
+                        >
+                          <Settings className="h-3.5 w-3.5" aria-hidden="true" />
+                          {editDisplayCurrencyLabel}
+                        </a>
+                      </div>
+                      {currencyBuckets.length ? (
+                        <div className="mt-2 flex flex-col gap-1.5">
+                          {currencyBuckets.map((item) => (
+                            <div key={item.currency} className="flex items-center justify-between gap-3 text-xs">
+                              <span className="font-mono text-white/45">{item.currency}</span>
+                              <span className="font-mono text-white tabular-nums">{formatMoney(item.value, item.currency)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-xs text-white/40">{currencyBreakdownEmpty}</div>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className={`${PORTFOLIO_TEXT_BUTTON_CLASS} mt-2 px-0`}
+                        onClick={() => void handleRefreshDisplayFx()}
+                        disabled={isLoading || fxRefreshing}
+                      >
+                        {copy.refreshFx}
+                      </Button>
+                      {fxRefreshFeedback && leftTab !== 'fx' ? (
+                        <div className={`mt-2 text-xs ${
+                          fxRefreshFeedback.tone === 'success'
+                            ? 'text-emerald-300'
+                            : fxRefreshFeedback.tone === 'warning'
+                              ? 'text-amber-200'
+                              : 'text-secondary-text'
+                        }`}>
+                          {fxRefreshFeedback.text}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                </section>
+                </div>
+                <div data-testid="portfolio-manual-secondary-callout">
+                  <GuidedDisclosure
+                    title={manualPanelSecondaryTitle}
+                    summary={manualPanelSecondaryHint}
+                    beginner={(
+                      <p>
+                        {language === 'zh'
+                          ? '资产台账先展示账户、持仓、现金、敞口和关注项；手工记账只用于补录流水。'
+                          : 'The ledger shows account, holdings, cash, exposure, and attention first; manual entry only records ledger events.'}
+                      </p>
+                    )}
+                    professional={(
+                      <p>
+                        {manualLedgerDisclosure}
+                        {' '}
+                        {manualPanelAnchor}
+                      </p>
+                    )}
+                    className="bg-white/[0.02]"
+                  />
+                </div>
+              </aside>
             </div>
 
             <div data-testid="portfolio-row-routing" className="grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
@@ -2476,7 +2581,21 @@ const PortfolioPage: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <details
+                data-testid="portfolio-manual-record-disclosure"
+                className="group mt-4 rounded-[16px] border border-white/[0.05] bg-black/20 open:bg-white/[0.02]"
+              >
+                <summary className="flex min-h-[56px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 [&::-webkit-details-marker]:hidden">
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-white">{language === 'zh' ? '手工记账' : 'Manual ledger'}</span>
+                    <span className="mt-1 block text-xs leading-5 text-white/45">{language === 'zh' ? '展开后选择流水类型并保存记录' : 'Expand to choose a ledger type and save a record'}</span>
+                  </span>
+                  <span className="shrink-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-1 text-[11px] font-semibold text-white/50 group-open:text-cyan-100">
+                    {copy.submitTrade}
+                  </span>
+                </summary>
+                <div className="border-t border-white/[0.04] px-4 pb-4 pt-4">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <Select
                   label={language === 'zh' ? '记账账户' : 'LEDGER ACCOUNT'}
                   labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
@@ -2852,6 +2971,8 @@ const PortfolioPage: React.FC = () => {
                   ) : null}
                 </div>
               ) : null}
+            </div>
+              </details>
             </div>
           </section>
 
