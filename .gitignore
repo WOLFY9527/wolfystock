@@ -53,6 +53,9 @@ logs/
 reports/
 backtest_outputs/
 output/
+operator-evidence-local/
+evidence-artifacts-local/
+release-review-local/
 repo_archive/
 repo_trash/
 *.db
