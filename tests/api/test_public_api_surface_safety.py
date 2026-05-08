@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -201,7 +202,7 @@ def test_unauthenticated_admin_abuse_payloads_fail_closed_before_request_body_is
                 ),
                 client.post(
                     "/api/v1/admin/users/bootstrap-admin/disable",
-                    data=(
+                    content=(
                         '{"reason":"malformed",'
                         f'"token":"{ABUSE_REHEARSAL_SECRET_BODY}",'
                         f'"databaseDsn":"{ABUSE_REHEARSAL_DSN}"'
@@ -234,12 +235,12 @@ def test_public_request_shape_errors_are_sanitized_for_malformed_json_and_unsupp
     try:
         malformed = client.post(
             "/api/v1/options/decision/evaluate",
-            data=malformed_body,
+            content=malformed_body,
             headers={"content-type": "application/json"},
         )
         unsupported = client.patch(
             "/api/v1/options/underlyings/TEM/summary",
-            data=ABUSE_REHEARSAL_SECRET_BODY,
+            content=ABUSE_REHEARSAL_SECRET_BODY,
             headers={
                 "content-type": "application/json",
                 "Authorization": f"Bearer {ABUSE_REHEARSAL_BEARER}",
@@ -300,7 +301,7 @@ def test_public_malformed_json_bursts_eventually_receive_sanitized_rate_limit(mo
             responses = [
                 client.post(
                     "/api/v1/options/decision/evaluate",
-                    data=malformed_body,
+                    content=malformed_body,
                     headers={
                         "content-type": "application/json",
                         "X-Forwarded-For": "203.0.113.44",
@@ -333,7 +334,7 @@ def test_public_unsupported_method_bursts_eventually_receive_sanitized_rate_limi
         with patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
             first = client.patch(
                 "/api/v1/options/underlyings/TEM/summary",
-                data=ABUSE_REHEARSAL_SECRET_BODY,
+                content=ABUSE_REHEARSAL_SECRET_BODY,
                 headers={
                     "content-type": "application/json",
                     "X-Forwarded-For": "203.0.113.46",
@@ -341,7 +342,7 @@ def test_public_unsupported_method_bursts_eventually_receive_sanitized_rate_limi
             )
             limited = client.patch(
                 "/api/v1/options/underlyings/TEM/summary",
-                data=ABUSE_REHEARSAL_SECRET_BODY,
+                content=ABUSE_REHEARSAL_SECRET_BODY,
                 headers={
                     "content-type": "application/json",
                     "X-Forwarded-For": "203.0.113.46",
@@ -369,7 +370,7 @@ def test_public_api_abuse_limiter_state_can_be_reset_for_tests(monkeypatch) -> N
         with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
             first = client.post(
                 "/api/v1/admin/users/bootstrap-admin/disable",
-                data=(
+                content=(
                     '{"reason":"malformed",'
                     f'"token":"{ABUSE_REHEARSAL_SECRET_BODY}",'
                     f'"databaseDsn":"{ABUSE_REHEARSAL_DSN}"'
@@ -381,7 +382,7 @@ def test_public_api_abuse_limiter_state_can_be_reset_for_tests(monkeypatch) -> N
             )
             limited = client.post(
                 "/api/v1/admin/users/bootstrap-admin/disable",
-                data=ABUSE_REHEARSAL_SECRET_BODY,
+                content=ABUSE_REHEARSAL_SECRET_BODY,
                 headers={
                     "content-type": "application/json",
                     "X-Forwarded-For": "203.0.113.45",
@@ -391,7 +392,7 @@ def test_public_api_abuse_limiter_state_can_be_reset_for_tests(monkeypatch) -> N
             reset_public_api_abuse_limiter_state()
             after_reset = client.post(
                 "/api/v1/admin/users/bootstrap-admin/disable",
-                data=ABUSE_REHEARSAL_SECRET_BODY,
+                content=ABUSE_REHEARSAL_SECRET_BODY,
                 headers={
                     "content-type": "application/json",
                     "X-Forwarded-For": "203.0.113.45",
@@ -418,7 +419,7 @@ def test_public_api_abuse_limiter_snapshot_redacts_client_identity(monkeypatch) 
         with patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
             response = client.post(
                 "/api/v1/options/decision/evaluate",
-                data='{"symbol":"TEM"',
+                content='{"symbol":"TEM"',
                 headers={
                     "content-type": "application/json",
                     "X-Forwarded-For": "203.0.113.150",
@@ -453,7 +454,7 @@ def test_public_api_abuse_limiter_does_not_log_or_expose_raw_request_values(monk
         with caplog.at_level(logging.INFO), patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
             first = client.post(
                 "/api/v1/options/decision/evaluate",
-                data=(
+                content=(
                     '{"symbol":"TEM",'
                     f'"token":"{ABUSE_REHEARSAL_SECRET_BODY}",'
                     f'"databaseDsn":"{ABUSE_REHEARSAL_DSN}"'
@@ -467,7 +468,7 @@ def test_public_api_abuse_limiter_does_not_log_or_expose_raw_request_values(monk
             )
             limited = client.post(
                 "/api/v1/options/decision/evaluate",
-                data=ABUSE_REHEARSAL_SECRET_BODY,
+                content=ABUSE_REHEARSAL_SECRET_BODY,
                 headers={
                     "content-type": "application/json",
                     "Authorization": f"Bearer {ABUSE_REHEARSAL_BEARER}",
@@ -513,7 +514,7 @@ def test_public_api_abuse_limiter_retry_after_is_bounded_and_stable(monkeypatch)
             responses = [
                 client.post(
                     "/api/v1/options/decision/evaluate",
-                    data='{"symbol":"TEM"',
+                    content='{"symbol":"TEM"',
                     headers={"content-type": "application/json"},
                 )
                 for _ in range(3)
@@ -543,7 +544,7 @@ def test_public_api_abuse_limiter_snapshot_prunes_expired_buckets(monkeypatch) -
         with patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
             response = client.post(
                 "/api/v1/options/decision/evaluate",
-                data='{"symbol":"TEM"',
+                content='{"symbol":"TEM"',
                 headers={"content-type": "application/json"},
             )
 
@@ -622,17 +623,17 @@ def test_malformed_request_bursts_from_separate_clients_stay_isolated(monkeypatc
         with patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
             first_client_failure = client.post(
                 "/api/v1/options/decision/evaluate",
-                data='{"symbol":"TEM"',
+                content='{"symbol":"TEM"',
                 headers={"content-type": "application/json", "X-Forwarded-For": "203.0.113.160"},
             )
             first_client_limited = client.post(
                 "/api/v1/options/decision/evaluate",
-                data='{"symbol":"TEM"',
+                content='{"symbol":"TEM"',
                 headers={"content-type": "application/json", "X-Forwarded-For": "203.0.113.160"},
             )
             second_client_failure = client.post(
                 "/api/v1/options/decision/evaluate",
-                data='{"symbol":"TEM"',
+                content='{"symbol":"TEM"',
                 headers={"content-type": "application/json", "X-Forwarded-For": "203.0.113.161"},
             )
 
@@ -724,12 +725,12 @@ def test_valid_session_cookie_bypasses_public_api_abuse_limiter(monkeypatch, tmp
     auth.set_initial_password("adminpass123")
     session_cookie = auth.create_session()
     client = _limiter_probe_client()
+    client.cookies.set(auth.COOKIE_NAME, session_cookie)
     try:
         with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
             responses = [
                 client.get(
                     "/api/v1/limiter-probe/fails",
-                    cookies={auth.COOKIE_NAME: session_cookie},
                     headers={"X-Forwarded-For": "203.0.113.102"},
                 )
                 for _ in range(3)
@@ -738,6 +739,48 @@ def test_valid_session_cookie_bypasses_public_api_abuse_limiter(monkeypatch, tmp
         assert [response.status_code for response in responses] == [422, 422, 422]
         assert _limiter_snapshot()["bucketCount"] == 0
         for response in responses:
+            _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_public_limiter_state_if_available()
+        _reset_auth_globals()
+
+
+def test_public_api_test_client_raw_body_and_cookie_patterns_are_warning_free(monkeypatch, tmp_path) -> None:
+    _reset_auth_globals()
+    _reset_public_limiter_state_if_available()
+    monkeypatch.setattr(auth, "_get_data_dir", lambda: tmp_path)
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "1")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    auth._auth_enabled = True
+    auth.set_initial_password("adminpass123")
+    session_cookie = auth.create_session()
+    client = _auth_guarded_client()
+    client.cookies.set(auth.COOKIE_NAME, session_cookie)
+    try:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", DeprecationWarning)
+            with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+                malformed = client.post(
+                    "/api/v1/options/decision/evaluate",
+                    content='{"symbol":"TEM"',
+                    headers={"content-type": "application/json", "X-Forwarded-For": "203.0.113.104"},
+                )
+                valid_cookie = client.get(
+                    "/api/v1/admin/users",
+                    headers={"X-Forwarded-For": "203.0.113.104"},
+                )
+
+        assert [malformed.status_code, valid_cookie.status_code] == [422, 200]
+        deprecation_text = "\n".join(
+            str(warning.message)
+            for warning in caught
+            if issubclass(warning.category, DeprecationWarning)
+        )
+        assert "content=<...>" not in deprecation_text
+        assert "per-request cookies=<...>" not in deprecation_text
+        assert _limiter_snapshot()["bucketCount"] == 0
+        for response in (malformed, valid_cookie):
             _assert_public_surface_safe(response.json())
     finally:
         client.close()
@@ -756,7 +799,7 @@ def test_public_api_abuse_limiter_excludes_auth_routes(monkeypatch) -> None:
             responses = [
                 client.patch(
                     "/api/v1/auth/status",
-                    data=ABUSE_REHEARSAL_SECRET_BODY,
+                    content=ABUSE_REHEARSAL_SECRET_BODY,
                     headers={"content-type": "application/json", "X-Forwarded-For": "203.0.113.103"},
                 )
                 for _ in range(3)
