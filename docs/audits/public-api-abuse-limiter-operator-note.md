@@ -14,6 +14,7 @@ The limiter reads these environment variables at request time:
 | --- | ---: | ---: | --- |
 | `PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS` | `300` | `60` to `3600` | Rolling window for public error bursts. |
 | `PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES` | `12` | `1` to `100` | Maximum tracked failures before returning `429`. |
+| `PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS` | `4096` | `16` to `65536` | Maximum process-local client buckets retained before oldest-bucket eviction. |
 
 Invalid or out-of-range values fall back to the documented bounds. The `Retry-After` response header uses the bounded window value.
 
@@ -27,6 +28,7 @@ Use `api.middlewares.public_abuse_limiter.get_public_api_abuse_limiter_snapshot(
 - number of buckets currently at or above the limit
 - oldest bucket age in seconds
 - bounded window and failure-limit settings
+- bounded max-bucket setting
 - `processLocal=true`
 - `identityRedaction=client_identity_not_exposed`
 
@@ -45,3 +47,5 @@ Operators should correlate limiter behavior with ingress or platform telemetry b
 ## Limitations
 
 State is stored in process memory. Buckets are not shared across workers, hosts, restarts, deploys, or autoscaling events. Use upstream ingress controls for fleet-wide enforcement and long-term analytics.
+
+When bucket count exceeds `PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS`, expired buckets are pruned first, then the oldest remaining buckets are evicted until the cap is respected. This keeps memory growth bounded without changing the normal request path for valid authenticated traffic.

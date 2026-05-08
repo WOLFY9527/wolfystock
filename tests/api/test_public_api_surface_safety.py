@@ -560,6 +560,57 @@ def test_public_api_abuse_limiter_snapshot_prunes_expired_buckets(monkeypatch) -
         _reset_auth_globals()
 
 
+def test_public_api_abuse_limiter_prunes_expired_buckets_before_cap_eviction(monkeypatch) -> None:
+    from api.middlewares import public_abuse_limiter as limiter
+
+    _reset_public_limiter_state_if_available()
+    current_time = [1_000.0]
+    monkeypatch.setattr(limiter.time, "time", lambda: current_time[0])
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "60")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS", "16")
+    try:
+        with limiter._PUBLIC_API_ABUSE_LOCK:
+            limiter._PUBLIC_API_ABUSE_BUCKETS["expired-client"] = (1, 900.0)
+            for index in range(16):
+                limiter._PUBLIC_API_ABUSE_BUCKETS[f"active-client-{index}"] = (1, 960.0 + index)
+
+        snapshot = _limiter_snapshot()
+
+        assert snapshot["bucketCount"] == 16
+        with limiter._PUBLIC_API_ABUSE_LOCK:
+            assert "expired-client" not in limiter._PUBLIC_API_ABUSE_BUCKETS
+            assert set(limiter._PUBLIC_API_ABUSE_BUCKETS) == {
+                f"active-client-{index}" for index in range(16)
+            }
+    finally:
+        _reset_public_limiter_state_if_available()
+
+
+def test_public_api_abuse_limiter_evicts_oldest_buckets_over_cap(monkeypatch) -> None:
+    from api.middlewares import public_abuse_limiter as limiter
+
+    _reset_public_limiter_state_if_available()
+    current_time = [1_000.0]
+    monkeypatch.setattr(limiter.time, "time", lambda: current_time[0])
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "300")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS", "16")
+    try:
+        with limiter._PUBLIC_API_ABUSE_LOCK:
+            for index in range(17):
+                limiter._PUBLIC_API_ABUSE_BUCKETS[f"client-{index}"] = (1, 800.0 + index)
+
+        snapshot = _limiter_snapshot()
+
+        assert snapshot["bucketCount"] == 16
+        with limiter._PUBLIC_API_ABUSE_LOCK:
+            assert "client-0" not in limiter._PUBLIC_API_ABUSE_BUCKETS
+            assert set(limiter._PUBLIC_API_ABUSE_BUCKETS) == {
+                f"client-{index}" for index in range(1, 17)
+            }
+    finally:
+        _reset_public_limiter_state_if_available()
+
+
 def test_malformed_request_bursts_from_separate_clients_stay_isolated(monkeypatch) -> None:
     _reset_auth_globals()
     _reset_public_limiter_state_if_available()
@@ -604,18 +655,24 @@ def test_public_api_abuse_limiter_env_values_are_bounded_and_safe(monkeypatch) -
 
     monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "5")
     monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "0")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS", "0")
     assert limiter._window_seconds() == 60
     assert limiter._max_failures() == 1
+    assert limiter._max_buckets() == 16
 
     monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "999999")
     monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "999999")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS", "999999")
     assert limiter._window_seconds() == 3600
     assert limiter._max_failures() == 100
+    assert limiter._max_buckets() == 65536
 
     monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS", "not-an-int")
     monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES", "not-an-int")
+    monkeypatch.setenv("PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS", "not-an-int")
     assert limiter._window_seconds() == limiter.PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS_DEFAULT
     assert limiter._max_failures() == limiter.PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES_DEFAULT
+    assert limiter._max_buckets() == limiter.PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS_DEFAULT
 
 
 def test_public_api_abuse_limiter_isolates_failure_buckets_per_client(monkeypatch) -> None:
@@ -679,6 +736,7 @@ def test_valid_session_cookie_bypasses_public_api_abuse_limiter(monkeypatch, tmp
             ]
 
         assert [response.status_code for response in responses] == [422, 422, 422]
+        assert _limiter_snapshot()["bucketCount"] == 0
         for response in responses:
             _assert_public_surface_safe(response.json())
     finally:

@@ -17,10 +17,13 @@ from src.auth import COOKIE_NAME, get_client_ip, get_session_identity
 
 PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS_DEFAULT = 300
 PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES_DEFAULT = 12
+PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS_DEFAULT = 4096
 PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS_MIN = 60
 PUBLIC_API_ABUSE_LIMIT_WINDOW_SECONDS_MAX = 3600
 PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES_MIN = 1
 PUBLIC_API_ABUSE_LIMIT_MAX_FAILURES_MAX = 100
+PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS_MIN = 16
+PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS_MAX = 65536
 
 _TRACKED_FAILURE_STATUSES = frozenset({400, 401, 403, 405, 422})
 _EXEMPT_PREFIXES = (
@@ -61,6 +64,15 @@ def _max_failures() -> int:
     )
 
 
+def _max_buckets() -> int:
+    return _env_int(
+        "PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS",
+        PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS_DEFAULT,
+        minimum=PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS_MIN,
+        maximum=PUBLIC_API_ABUSE_LIMIT_MAX_BUCKETS_MAX,
+    )
+
+
 def reset_public_api_abuse_limiter_state() -> None:
     """Clear process-local limiter state for deterministic tests."""
     with _PUBLIC_API_ABUSE_LOCK:
@@ -72,8 +84,9 @@ def get_public_api_abuse_limiter_snapshot() -> dict[str, int | bool | str]:
     now = time.time()
     window = _window_seconds()
     max_failures = _max_failures()
+    max_buckets = _max_buckets()
     with _PUBLIC_API_ABUSE_LOCK:
-        _prune_expired(now, window)
+        _prune_buckets(now, window, max_buckets)
         counts = [count for count, _ in _PUBLIC_API_ABUSE_BUCKETS.values()]
         first_seen_values = [first_seen for _, first_seen in _PUBLIC_API_ABUSE_BUCKETS.values()]
         oldest_age = int(max(0, now - min(first_seen_values))) if first_seen_values else 0
@@ -85,6 +98,7 @@ def get_public_api_abuse_limiter_snapshot() -> dict[str, int | bool | str]:
             "oldestBucketAgeSeconds": oldest_age,
             "windowSeconds": window,
             "maxFailures": max_failures,
+            "maxBuckets": max_buckets,
             "processLocal": True,
             "identityRedaction": "client_identity_not_exposed",
         }
@@ -120,11 +134,31 @@ def _prune_expired(now: float, window_seconds: int) -> None:
         del _PUBLIC_API_ABUSE_BUCKETS[key]
 
 
+def _prune_to_max_buckets(max_buckets: int) -> None:
+    overflow = len(_PUBLIC_API_ABUSE_BUCKETS) - max_buckets
+    if overflow <= 0:
+        return
+
+    oldest_keys = [
+        key
+        for _, key in sorted(
+            (first_seen, key) for key, (_, first_seen) in _PUBLIC_API_ABUSE_BUCKETS.items()
+        )[:overflow]
+    ]
+    for key in oldest_keys:
+        del _PUBLIC_API_ABUSE_BUCKETS[key]
+
+
+def _prune_buckets(now: float, window_seconds: int, max_buckets: int) -> None:
+    _prune_expired(now, window_seconds)
+    _prune_to_max_buckets(max_buckets)
+
+
 def _bucket_limited(key: str) -> bool:
     now = time.time()
     window = _window_seconds()
     with _PUBLIC_API_ABUSE_LOCK:
-        _prune_expired(now, window)
+        _prune_buckets(now, window, _max_buckets())
         count, _ = _PUBLIC_API_ABUSE_BUCKETS.get(key, (0, now))
         return count >= _max_failures()
 
@@ -133,12 +167,15 @@ def _record_failure(key: str) -> None:
     now = time.time()
     window = _window_seconds()
     with _PUBLIC_API_ABUSE_LOCK:
-        _prune_expired(now, window)
+        max_buckets = _max_buckets()
+        _prune_buckets(now, window, max_buckets)
         count, first_seen = _PUBLIC_API_ABUSE_BUCKETS.get(key, (0, now))
         if now - first_seen > window:
             _PUBLIC_API_ABUSE_BUCKETS[key] = (1, now)
+            _prune_to_max_buckets(max_buckets)
             return
         _PUBLIC_API_ABUSE_BUCKETS[key] = (count + 1, first_seen)
+        _prune_to_max_buckets(max_buckets)
 
 
 def _rate_limited_response(request: Request) -> JSONResponse:
