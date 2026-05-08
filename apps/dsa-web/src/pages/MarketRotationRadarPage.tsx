@@ -287,34 +287,40 @@ const ThemeCard: React.FC<{
               <DataFreshnessBadge freshness={theme.proxyQuality?.freshness || theme.freshness} className="px-1.5 text-[9px]" />
             </div>
           </div>
-          {theme.proxyQuality?.explanation ? (
-            <p className="mt-2 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 text-[11px] leading-5 text-white/48">
-              {theme.proxyQuality.explanation}
-            </p>
-          ) : null}
-          <div className="mt-2 grid gap-2">
-            {Object.values(theme.benchmarkProxies).map((proxy) => (
-              <div
-                key={proxy.symbol}
-                data-testid={`rotation-proxy-row-${proxy.symbol}`}
-                className="grid min-w-0 grid-cols-1 gap-2 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-white/82">{proxy.symbol}</span>
-                  <span className="block truncate text-[11px] text-white/38">
-                    {proxy.role === 'sector_proxy' ? '行业代理' : '市场代理'} · {proxy.quality?.qualityLabel || proxyMissingReasonLabel(proxy.quality?.missingReason)}
+          <details className="mt-2 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 text-[11px] text-white/48">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+              <span className="font-semibold text-white/58">代理证据明细</span>
+              <span className="font-mono text-white/36">{Object.keys(theme.benchmarkProxies).length} proxies</span>
+            </summary>
+            {theme.proxyQuality?.explanation ? (
+              <p className="mt-2 rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2 leading-5">
+                {theme.proxyQuality.explanation}
+              </p>
+            ) : null}
+            <div className="mt-2 grid gap-2">
+              {Object.values(theme.benchmarkProxies).map((proxy) => (
+                <div
+                  key={proxy.symbol}
+                  data-testid={`rotation-proxy-row-${proxy.symbol}`}
+                  className="grid min-w-0 grid-cols-1 gap-2 rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-white/82">{proxy.symbol}</span>
+                    <span className="block truncate text-[11px] text-white/38">
+                      {proxy.role === 'sector_proxy' ? '行业代理' : '市场代理'} · {proxy.quality?.qualityLabel || proxyMissingReasonLabel(proxy.quality?.missingReason)}
+                    </span>
                   </span>
-                </span>
-                <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/50 sm:justify-end sm:text-right">
-                  <span className="font-mono text-sm text-cyan-100">{signedPercent(proxy.relativeStrength)}</span>
-                  <DataFreshnessBadge freshness={proxy.quality?.freshness || proxy.freshness} className="px-1.5 text-[9px]" />
-                  <EvidenceBadge tone={proxy.quality?.available === false ? 'warn' : 'ok'}>
-                    {proxyMissingReasonLabel(proxy.quality?.missingReason)}
-                  </EvidenceBadge>
-                </span>
-              </div>
-            ))}
-          </div>
+                  <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/50 sm:justify-end sm:text-right">
+                    <span className="font-mono text-sm text-cyan-100">{signedPercent(proxy.relativeStrength)}</span>
+                    <DataFreshnessBadge freshness={proxy.quality?.freshness || proxy.freshness} className="px-1.5 text-[9px]" />
+                    <EvidenceBadge tone={proxy.quality?.available === false ? 'warn' : 'ok'}>
+                      {proxyMissingReasonLabel(proxy.quality?.missingReason)}
+                    </EvidenceBadge>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </details>
         </div>
       ) : null}
     </article>

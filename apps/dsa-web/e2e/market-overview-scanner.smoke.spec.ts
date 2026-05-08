@@ -15,7 +15,7 @@ async function signIn(page: Page, redirectPath: string) {
 
 test.describe('scanner and market overview smoke', () => {
   test('scanner keeps controls visible without horizontal overflow', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await signIn(page, '/scanner');
 
     await expect(page.getByTestId('user-scanner-bento-page')).toBeVisible();
@@ -41,6 +41,30 @@ test.describe('scanner and market overview smoke', () => {
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
     await expect(page.getByTestId('scanner-sidebar')).toBeVisible();
+
+    await page.goto('/watchlist');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.getByTestId('watchlist-page')).toBeVisible();
+    await expect(page.getByTestId('watchlist-filter-grid')).toBeVisible();
+    await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+
+  test('scanner and watchlist stay usable on mobile launch viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page, '/scanner');
+
+    await expect(page.getByTestId('user-scanner-bento-page')).toBeVisible();
+    await expect(page.getByTestId('scanner-results-pane')).toBeVisible();
+    await expect(page.getByTestId('scanner-candidate-scroll-region')).toBeVisible();
+    await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    await page.goto('/watchlist');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.getByTestId('watchlist-page')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /观察列表|watchlist/i })).toBeVisible();
+    await expect(page.getByTestId('watchlist-filter-grid')).toBeVisible();
+    await expect(page.getByRole('link', { name: /打开扫描器|open scanner/i }).first()).toBeVisible();
+    await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
   test('scanner copy and export actions are clickable without console errors', async ({ page }) => {

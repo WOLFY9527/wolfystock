@@ -283,7 +283,7 @@ function getCopy(language: 'zh' | 'en') {
   if (language === 'en') {
     return {
       title: 'Watchlist',
-      subtitle: 'Track scanner candidates and continue analysis/backtesting',
+      subtitle: 'Manage scanner-candidate evidence and separate missing, verified, and backtested records.',
       totalTracked: 'Total tracked',
       marketsRepresented: 'Markets represented',
       scannerSourced: 'Scanner-sourced',
@@ -353,10 +353,10 @@ function getCopy(language: 'zh' | 'en') {
       copySymbol: 'Copy symbol',
       copied: 'Copied',
       emptyTitle: 'No tracked candidates yet.',
-      emptyBody: 'Add candidates from Scanner.',
+      emptyBody: 'No watched symbols yet. Add candidates from Scanner, or adjust filters to review existing evidence.',
       openScanner: 'Open Scanner',
       tableTitle: 'Tracked candidates',
-      tableDescription: 'Scanner context is kept with each candidate so you can re-run analysis or hand it to Backtest.',
+      tableDescription: 'Each candidate keeps scanner, simulation, and backtest evidence; missing evidence is marked explicitly.',
       loading: 'Loading watchlist...',
       removed: 'Removed from watchlist.',
       copyFailed: 'Copy failed.',
@@ -370,7 +370,7 @@ function getCopy(language: 'zh' | 'en') {
   }
   return {
     title: '观察列表',
-    subtitle: '跟踪扫描候选，继续分析与回测',
+    subtitle: '管理扫描候选的证据状态，区分待补齐、已验证与历史回测记录',
     totalTracked: '追踪总数',
     marketsRepresented: '覆盖市场',
     scannerSourced: '扫描来源',
@@ -440,10 +440,10 @@ function getCopy(language: 'zh' | 'en') {
     copySymbol: '复制代码',
     copied: '已复制',
     emptyTitle: '暂无追踪候选。',
-    emptyBody: '从扫描器添加候选到观察列表。',
+    emptyBody: '当前没有观察标的。可以先从扫描器加入候选，或调整筛选条件查看已有证据。',
     openScanner: '打开扫描器',
     tableTitle: '追踪候选',
-    tableDescription: '每个候选都保留扫描上下文，可继续分析或交接到回测。',
+    tableDescription: '每个候选保留扫描、历史模拟和回测证据；缺失证据会明确标记，避免误读。',
     loading: '正在加载观察列表...',
     removed: '已从观察列表移除。',
     copyFailed: '复制失败。',
@@ -919,7 +919,7 @@ const WatchlistPage: React.FC = () => {
           </Link>
         </header>
 
-        <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label="watchlist summary">
+        <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6" aria-label="watchlist summary">
           {[
             { label: copy.trackedSymbols, value: summary.total },
             { label: copy.scannerCoverage, value: summary.scannerResults || (summary.total ? copy.noEvidence : copy.noEvidence) },
@@ -928,9 +928,9 @@ const WatchlistPage: React.FC = () => {
             { label: copy.failureCoverage, value: summary.failedOrNoData },
             { label: copy.latestUpdate, value: summary.latestTime ? formatDateTime(summary.latestTime, language) : (language === 'zh' ? '暂无情报' : 'No intelligence') },
           ].map((card) => (
-            <div key={card.label} className="rounded-[20px] border border-white/5 bg-white/[0.02] px-4 py-4">
+            <div key={card.label} className="rounded-[16px] border border-white/5 bg-white/[0.02] px-3 py-3">
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/35">{card.label}</p>
-              <p className="mt-3 truncate text-2xl font-semibold text-white">{card.value}</p>
+              <p className="mt-2 truncate font-mono text-xl font-semibold text-white">{card.value}</p>
             </div>
           ))}
         </section>
@@ -972,7 +972,7 @@ const WatchlistPage: React.FC = () => {
           </div>
           <div
             data-testid="watchlist-filter-grid"
-            className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6"
+            className="grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-white/5 bg-black/20 p-3 md:grid-cols-2 xl:grid-cols-6"
           >
             <Input
               label={copy.search}
@@ -1088,7 +1088,7 @@ const WatchlistPage: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto no-scrollbar rounded-2xl border border-white/5">
-            <table className="min-w-[1420px] w-full text-left text-sm">
+            <table className="min-w-[1240px] w-full text-left text-sm">
               <thead className="bg-white/[0.03] text-[11px] uppercase tracking-[0.16em] text-white/35">
                 <tr>
                   <th className="px-4 py-3 font-semibold">{copy.symbol}</th>
@@ -1200,7 +1200,12 @@ const WatchlistPage: React.FC = () => {
                       <td className="px-4 py-3">
                         <div className="flex max-w-[420px] flex-wrap items-center gap-1.5 text-[11px]">
                           {!hasAnyEvidence ? (
-                            <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/40">{copy.noEvidence}</Badge>
+                            <>
+                              <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/40">{copy.noEvidence}</Badge>
+                              <span className="rounded-lg border border-amber-300/15 bg-amber-300/[0.06] px-2 py-1 text-[11px] text-amber-100/68" data-testid={`watchlist-no-evidence-note-${item.symbol}`}>
+                                {language === 'zh' ? '可刷新情报或返回扫描器补齐证据' : 'Refresh intelligence or return to Scanner for evidence'}
+                              </span>
+                            </>
                           ) : null}
                           <StatusBadge status={scannerStatus} label={scannerStatusLabel} variant="soft" size="sm" />
                           {scannerStatusLabel === '扫描失败' && scannerFailure ? (
@@ -1317,13 +1322,15 @@ const WatchlistPage: React.FC = () => {
           ) : null}
 
           {!isLoading && filteredItems.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-5 py-10 text-center">
-              <p className="text-base font-semibold text-white">{copy.emptyTitle}</p>
-              <p className="mt-2 text-sm text-white/45">{copy.emptyBody}</p>
-                <Link
-                  to={buildLocalizedPath('/scanner', language)}
-                  className={`${WATCHLIST_LINK_BUTTON_CLASS} mt-5 h-10 px-4 text-sm font-medium`}
-                >
+            <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-5 py-6 text-left sm:flex sm:items-center sm:justify-between sm:gap-4">
+              <div className="min-w-0">
+                <p className="text-base font-semibold text-white">{copy.emptyTitle}</p>
+                <p className="mt-2 text-sm text-white/45">{copy.emptyBody}</p>
+              </div>
+              <Link
+                to={buildLocalizedPath('/scanner', language)}
+                className={`${WATCHLIST_LINK_BUTTON_CLASS} mt-5 h-10 px-4 text-sm font-medium sm:mt-0`}
+              >
                 <ExternalLink className="h-4 w-4" />
                 {copy.openScanner}
               </Link>

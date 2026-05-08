@@ -1173,10 +1173,10 @@ const ActionHintRailCard: React.FC<{ temperature: MarketTemperatureResponse }> =
     <CompactRailCard
       railKey="action-hint"
       testId="market-overview-rail-action-hint"
-      eyebrow="ACTION HINT"
+      eyebrow="观察提示"
       title={reliable ? '同步观察' : '安全状态'}
       lines={[
-        reliable ? '关注风险/流动性/宽度的同步变化' : '等待实时源补齐后再生成强判断',
+        reliable ? '优先观察风险、流动性、宽度是否同向变化' : '等待实时源补齐后再生成强判断',
       ]}
     />
   );
@@ -1304,27 +1304,42 @@ const MarketOverviewCacheStatus: React.FC<{
         : '实时数据已更新';
   const timestamp = formatMarketOverviewTimestamp(localSnapshotSavedAt) || '';
   return (
-    <section
+    <details
       data-testid="market-overview-cache-status"
       className={cn(
-        'flex min-w-0 flex-col gap-2 rounded-xl border px-3 py-2 text-xs md:flex-row md:items-center md:justify-between',
+        'group min-w-0 rounded-xl border px-3 py-2 text-xs',
         refreshErrorCount > 0 || dataQuality.hasConcern
           ? 'border-amber-300/18 bg-amber-400/[0.055] text-amber-100/82'
           : 'border-emerald-300/16 bg-emerald-400/[0.045] text-emerald-100/78',
       )}
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="shrink-0 rounded-md border border-current/20 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest">
-          {statusLabel}
+      <summary className="flex cursor-pointer list-none flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <span className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="shrink-0 rounded-md border border-current/20 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest">
+            {statusLabel}
+          </span>
+          <span className="min-w-0 truncate">{message}</span>
         </span>
-        <span className="min-w-0 truncate">{message}</span>
-        {refreshingPanel ? <span className="font-mono text-[10px] text-white/45">刷新 {String(refreshingPanel)}</span> : null}
+        <span className="shrink-0 text-[10px] font-semibold text-white/42 group-open:text-white/62">
+          {dataQuality.hasConcern || refreshErrorCount > 0 ? '查看数据状态' : '状态详情'}
+        </span>
+      </summary>
+      <div className="mt-2 flex min-w-0 flex-col gap-2 border-t border-white/[0.05] pt-2 md:flex-row md:items-center md:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="shrink-0 rounded-md border border-current/20 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest">
+            {statusLabel}
+          </span>
+          {refreshingPanel ? <span className="font-mono text-[10px] text-white/45">刷新 {String(refreshingPanel)}</span> : null}
+          <span className="font-mono text-[10px] text-white/45">
+            可用 {dataQuality.counts.live + dataQuality.counts.delayed + dataQuality.counts.cached} · 备用 {dataQuality.counts.fallback} · 过期 {dataQuality.counts.stale}
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-2 font-mono text-[10px] tracking-widest text-white/42">
+          {timestamp ? <span>本地 {timestamp}</span> : null}
+          <span data-testid="market-overview-refresh-error-count">错误 {refreshErrorCount}</span>
+        </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2 font-mono text-[10px] tracking-widest text-white/42">
-        {timestamp ? <span>本地 {timestamp}</span> : null}
-        <span data-testid="market-overview-refresh-error-count">错误 {refreshErrorCount}</span>
-      </div>
-    </section>
+    </details>
   );
 };
 

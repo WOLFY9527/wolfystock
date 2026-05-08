@@ -1226,6 +1226,18 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
       return fulfillJson(route, { items: [] });
     }
 
+    if (method === 'GET' && path === '/api/v1/watchlist/refresh-status') {
+      return fulfillJson(route, {
+        enabled: true,
+        usTime: '08:45',
+        cnTime: '09:00',
+        hkTime: '09:00',
+        status: 'idle',
+        lastRunAt: null,
+        nextRunAt: null,
+      });
+    }
+
     if (method === 'POST' && path === '/api/v1/watchlist/items') {
       return fulfillJson(route, {
         id: 2001,

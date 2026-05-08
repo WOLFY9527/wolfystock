@@ -1284,6 +1284,20 @@ function ActionButton({
   );
 }
 
+function safeScannerFieldLabel(label: string): string {
+  const normalized = normalizeLabel(label);
+  if (normalized === 'entry range' || normalized === '建仓' || normalized === '入场' || normalized === 'buy') {
+    return '观察区间';
+  }
+  if (normalized === 'target price' || normalized === '目标价') {
+    return '上方观察';
+  }
+  if (normalized === 'stop loss' || normalized === '止损位' || normalized === 'stop') {
+    return '风险边界';
+  }
+  return label;
+}
+
 function PillTagGroup({
   label,
   value,
@@ -1340,7 +1354,7 @@ function PillTagGroup({
 function FieldChip({ label, value }: { label: string; value: string }) {
   return (
     <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-white/8 bg-white/[0.035] px-1.5 py-0.5 text-[10px] text-white/72">
-      <span className="shrink-0 text-white/36">{label}</span>
+      <span className="shrink-0 text-white/36">{safeScannerFieldLabel(label)}</span>
       <span className="min-w-0 truncate">{value}</span>
     </span>
   );
@@ -3746,7 +3760,7 @@ const UserScannerPage: React.FC = () => {
                   {([
                     ['score', language === 'en' ? 'scanner score' : '扫描评分'],
                     ['symbol', language === 'en' ? 'symbol' : '代码'],
-                    ['target', language === 'en' ? 'target price' : '目标价'],
+                    ['target', language === 'en' ? 'upper watch' : '上方观察'],
                     ['risk', language === 'en' ? 'risk/score' : '风险/评分'],
                   ] as const).map(([key, label]) => (
                     <button
@@ -3786,7 +3800,6 @@ const UserScannerPage: React.FC = () => {
                         const isMoreOpen = rowMoreSymbol === candidate.symbol;
                         const friendlyReason = formatFriendlyDiagnosticReason(candidate, language);
                         const dataQuality = formatCandidateDataQuality(candidate, language);
-                        const providerLabel = formatFriendlyProvider(candidate.provider, language);
                         const isSelectedCandidate = isOfficialSelected(candidate);
                         return (
                           <article
@@ -3825,7 +3838,7 @@ const UserScannerPage: React.FC = () => {
                                   {dataQuality}
                                 </p>
                                 <p className="truncate text-[10px] text-white/32">
-                                  {providerLabel}
+                                  {language === 'en' ? 'Evidence summary' : '证据摘要'}
                                 </p>
                               </div>
                               <ActionButton
@@ -3931,7 +3944,6 @@ const UserScannerPage: React.FC = () => {
                       const entryRange = getEntryRange(candidate);
 	                      const targetPrice = getTargetPrice(candidate);
 	                      const stopLoss = getStopLoss(candidate);
-	                      const sourceBadge = getSourceBadge(candidate, runDetail, language);
 	                      const comparison = comparisonState.bySymbol.get(normalizeCandidateSymbol(candidate.symbol) || '');
 	                      return (
                         <article
@@ -3958,15 +3970,9 @@ const UserScannerPage: React.FC = () => {
                                 </span>
                                 {candidate.aiInterpretation?.available ? (
                                   <span className="inline-flex rounded border border-indigo-400/20 bg-indigo-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-100">
-                                    {language === 'en' ? 'AI interpretation' : 'AI 解读'}
-                                    {candidate.aiInterpretation.provider ? ` · ${candidate.aiInterpretation.provider}` : ''}
+                                    {language === 'en' ? 'AI interpretation available' : 'AI 解读可用'}
                                   </span>
                                 ) : null}
-	                                {sourceBadge ? (
-	                                  <span className="inline-flex max-w-[220px] truncate rounded border border-white/8 bg-white/[0.035] px-1.5 py-0.5 text-[10px] text-white/45">
-	                                    {sourceBadge}
-	                                  </span>
-	                                ) : null}
 	                                {comparison?.label ? (
 	                                  <span className="inline-flex rounded border border-cyan-300/15 bg-cyan-300/[0.07] px-1.5 py-0.5 text-[10px] font-semibold text-cyan-100/80">
 	                                    {comparison.label}
@@ -4007,15 +4013,15 @@ const UserScannerPage: React.FC = () => {
 
                             <section className="grid grid-cols-3 gap-2 rounded-lg border border-white/5 bg-black/20 p-2">
                               <div>
-                                <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Entry range' : '建仓区间'}</div>
+                                <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Watch range' : '观察区间'}</div>
                                 <div className="truncate text-xs text-white font-medium">{entryRange || '--'}</div>
                               </div>
                               <div>
-                                <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Target price' : '目标价'}</div>
+                                <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Upper watch' : '上方观察'}</div>
                                 <div className="truncate text-xs font-medium text-white">{targetPrice || '--'}</div>
                               </div>
                               <div>
-                                <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Stop loss' : '止损位'}</div>
+                                <div className="text-[10px] text-white/40 mb-1 uppercase">{language === 'en' ? 'Risk boundary' : '风险边界'}</div>
                                 <div className="truncate text-xs text-red-300 font-medium">{stopLoss || '--'}</div>
                               </div>
                             </section>
@@ -4174,9 +4180,9 @@ const UserScannerPage: React.FC = () => {
                           <th className="px-2.5 py-2">{language === 'en' ? 'Symbol' : '代码'}</th>
                           <th className="px-2.5 py-2">{language === 'en' ? 'Name' : '名称'}</th>
                           <th className="px-2.5 py-2">{language === 'en' ? 'Scanner score' : '扫描评分'}</th>
-                          <th className="px-2.5 py-2">{language === 'en' ? 'Entry range' : '建仓区间'}</th>
-                          <th className="px-2.5 py-2">{language === 'en' ? 'Target price' : '目标价'}</th>
-                          <th className="px-2.5 py-2">{language === 'en' ? 'Stop loss' : '止损位'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Watch range' : '观察区间'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Upper watch' : '上方观察'}</th>
+                          <th className="px-2.5 py-2">{language === 'en' ? 'Risk boundary' : '风险边界'}</th>
                           <th className="px-2.5 py-2">{language === 'en' ? 'Key reason' : '关键原因'}</th>
                           <th className="px-2.5 py-2">{language === 'en' ? 'Risk summary' : '风险摘要'}</th>
                           <th className="px-2.5 py-2">{language === 'en' ? 'Data/source' : '数据/来源'}</th>

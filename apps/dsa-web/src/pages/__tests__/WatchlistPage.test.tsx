@@ -283,7 +283,7 @@ describe('WatchlistPage', () => {
 
     expect(await screen.findByTestId('watchlist-row-NVDA')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '观察列表' })).toBeInTheDocument();
-    expect(screen.getByText('跟踪扫描候选，继续分析与回测')).toBeInTheDocument();
+    expect(screen.getByText('管理扫描候选的证据状态，区分待补齐、已验证与历史回测记录')).toBeInTheDocument();
     expect(screen.queryByText(/Track scanner candidates/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-TSM')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-600519')).toBeInTheDocument();
@@ -471,6 +471,7 @@ describe('WatchlistPage', () => {
 
     const row = await screen.findByTestId('watchlist-row-MARA');
     expect(within(row).getByText('暂无策略证据')).toBeInTheDocument();
+    expect(within(row).getByTestId('watchlist-no-evidence-note-MARA')).toHaveTextContent('补齐证据');
   });
 
   it('sorts by backtest return and historical hit rate', async () => {

@@ -860,7 +860,7 @@ describe('UserScannerPage', () => {
     expect(screen.getByText('扫描评分 88/100')).toBeInTheDocument();
     expect(screen.queryByText(/AI score|AI 评分/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Annualized return forecast|年化收益预测/)).not.toBeInTheDocument();
-    expect(screen.getByText(/AI 解读 · gemini/)).toBeInTheDocument();
+    expect(screen.getByText(/AI 解读可用/)).toBeInTheDocument();
   });
 
   it('renders compact scanner workspace without the old decorative hero', async () => {
@@ -961,9 +961,9 @@ describe('UserScannerPage', () => {
     expect(within(table).getByText('代码')).toBeInTheDocument();
     expect(within(table).getByText('名称')).toBeInTheDocument();
     expect(within(table).getByText('扫描评分')).toBeInTheDocument();
-    expect(within(table).getByText('建仓区间')).toBeInTheDocument();
-    expect(within(table).getByText('目标价')).toBeInTheDocument();
-    expect(within(table).getByText('止损位')).toBeInTheDocument();
+    expect(within(table).getByText('观察区间')).toBeInTheDocument();
+    expect(within(table).getByText('上方观察')).toBeInTheDocument();
+    expect(within(table).getByText('风险边界')).toBeInTheDocument();
     expect(within(table).getByText('关键原因')).toBeInTheDocument();
     expect(within(table).getByText('风险摘要')).toBeInTheDocument();
     expect(within(table).getByText('数据/来源')).toBeInTheDocument();
