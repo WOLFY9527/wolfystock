@@ -17,6 +17,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+try:
+    from evidence_safety import finding as _finding
+    from evidence_safety import normalize_key as _normalize_key
+    from evidence_safety import scan_json_tree
+except ModuleNotFoundError:  # pragma: no cover - package import fallback
+    from scripts.evidence_safety import finding as _finding
+    from scripts.evidence_safety import normalize_key as _normalize_key
+    from scripts.evidence_safety import scan_json_tree
+
 
 SCHEMA_VERSION = "wolfystock_staging_ingress_operator_evidence_validation_v1"
 ARTIFACT_VERSION = "wolfystock_staging_ingress_operator_evidence_v1"
@@ -113,14 +122,6 @@ RAW_KEY_MARKERS = (
 )
 
 
-def _finding(field: str, reason_code: str) -> dict[str, str]:
-    return {"field": field, "reasonCode": reason_code}
-
-
-def _normalize_key(value: Any) -> str:
-    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
-
-
 def _is_non_empty_text(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
@@ -199,47 +200,57 @@ def _summary_is_safe(value: Any) -> bool:
     return True
 
 
-def _scan_value(value: Any, *, field: str = "$") -> list[dict[str, str]]:
+def _scan_value_key(field: str, key: Any) -> list[dict[str, str]]:
+    normalized = _normalize_key(key)
+    if any(marker in normalized for marker in RAW_KEY_MARKERS):
+        reason = "debug_trace_forbidden" if any(
+            marker in normalized
+            for marker in (
+                "debug_payload",
+                "debugpayload",
+                "debug_trace",
+                "debugtrace",
+                "stack_trace",
+                "stacktrace",
+                "traceback",
+            )
+        ) else "raw_payload_forbidden"
+        return [_finding(field, reason)]
+    if any(marker in normalized for marker in SENSITIVE_KEY_MARKERS):
+        return [_finding(field, "secret_or_header_marker_forbidden")]
+    return []
+
+
+def _scan_value_string(field: str, value: Any) -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
-    if isinstance(value, dict):
-        for key, nested in value.items():
-            key_text = str(key)
-            nested_field = key_text if field == "$" else f"{field}.{key_text}"
-            normalized = _normalize_key(key_text)
-            if any(marker in normalized for marker in RAW_KEY_MARKERS):
-                reason = "debug_trace_forbidden" if any(
-                    marker in normalized for marker in ("debug_payload", "debugpayload", "debug_trace", "debugtrace", "stack_trace", "stacktrace", "traceback")
-                ) else "raw_payload_forbidden"
-                findings.append(_finding(nested_field, reason))
-                continue
-            if any(marker in normalized for marker in SENSITIVE_KEY_MARKERS):
-                findings.append(_finding(nested_field, "secret_or_header_marker_forbidden"))
-                continue
-            findings.extend(_scan_value(nested, field=nested_field))
+    text = value.strip()
+    if not text or _is_safe_placeholder(text):
         return findings
-    if isinstance(value, list):
-        for index, nested in enumerate(value):
-            findings.extend(_scan_value(nested, field=f"{field}[{index}]"))
-        return findings
-    if isinstance(value, str):
-        text = value.strip()
-        if not text or _is_safe_placeholder(text):
-            return findings
-        if URL_WITH_CREDENTIALS_PATTERN.search(text):
-            findings.append(_finding(field, "credential_url_forbidden"))
-        if RAW_PAYLOAD_PATTERN.search(text):
-            reason = "debug_trace_forbidden" if re.search(
-                r"(?i)\b(?:debug[_\s-]?payload|debug[_\s-]?trace|stack trace|traceback)\b",
-                text,
-            ) else "raw_payload_forbidden"
-            findings.append(_finding(field, reason))
-        if SECRET_MARKER_PATTERN.search(text):
-            findings.append(_finding(field, "secret_or_header_marker_forbidden"))
-        if GO_CLAIM_PATTERN.search(text):
-            findings.append(_finding(field, "launch_approval_claim_forbidden"))
-        if DESTRUCTIVE_PATTERN.search(text):
-            findings.append(_finding(field, "production_mutation_or_destructive_command_forbidden"))
+    if URL_WITH_CREDENTIALS_PATTERN.search(text):
+        findings.append(_finding(field, "credential_url_forbidden"))
+    if RAW_PAYLOAD_PATTERN.search(text):
+        reason = "debug_trace_forbidden" if re.search(
+            r"(?i)\b(?:debug[_\s-]?payload|debug[_\s-]?trace|stack trace|traceback)\b",
+            text,
+        ) else "raw_payload_forbidden"
+        findings.append(_finding(field, reason))
+    if SECRET_MARKER_PATTERN.search(text):
+        findings.append(_finding(field, "secret_or_header_marker_forbidden"))
+    if GO_CLAIM_PATTERN.search(text):
+        findings.append(_finding(field, "launch_approval_claim_forbidden"))
+    if DESTRUCTIVE_PATTERN.search(text):
+        findings.append(_finding(field, "production_mutation_or_destructive_command_forbidden"))
     return findings
+
+
+def _scan_value(value: Any, *, field: str = "$") -> list[dict[str, str]]:
+    return scan_json_tree(
+        value,
+        field=field,
+        scan_key=_scan_value_key,
+        scan_string=_scan_value_string,
+        recurse_on_key_findings=False,
+    )
 
 
 def _validate_route(route: Any, index: int) -> list[dict[str, str]]:

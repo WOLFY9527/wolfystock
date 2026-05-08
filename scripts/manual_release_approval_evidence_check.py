@@ -16,6 +16,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+try:
+    from evidence_safety import compact_key
+    from evidence_safety import finding as _finding
+    from evidence_safety import normalize_key
+    from evidence_safety import scan_json_tree
+except ModuleNotFoundError:  # pragma: no cover - package import fallback
+    from scripts.evidence_safety import compact_key
+    from scripts.evidence_safety import finding as _finding
+    from scripts.evidence_safety import normalize_key
+    from scripts.evidence_safety import scan_json_tree
+
 
 SCHEMA_VERSION = "wolfystock_manual_release_approval_evidence_validation_v1"
 ARTIFACT_VERSION = "wolfystock_manual_release_approval_review_record_v1"
@@ -67,10 +78,6 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def _finding(field: str, reason_code: str) -> dict[str, str]:
-    return {"field": field, "reasonCode": reason_code}
-
-
 def _load_json(path: Path) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -102,60 +109,47 @@ def _is_iso_timestamp(value: Any) -> bool:
     return True
 
 
-def _path(parent: str, key: str) -> str:
-    return key if parent == "$" else f"{parent}.{key}"
-
-
-def _scan_unsafe(value: Any, *, field: str = "$") -> list[dict[str, str]]:
+def _scan_unsafe_key(field: str, key: Any) -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
-    if isinstance(value, dict):
-        for key, nested in value.items():
-            key_text = str(key)
-            nested_field = _path(field, key_text)
-            normalized_key = re.sub(r"[^a-z0-9]+", "_", key_text.lower()).strip("_")
-            compact_key = re.sub(r"[^a-z0-9]+", "", key_text.lower())
-            if any(marker in normalized_key for marker in ("email", "user_name", "username", "person_name", "real_name")):
-                findings.append(_finding(nested_field, "personal_identifier_field_forbidden"))
-                findings.extend(_scan_unsafe(nested, field=nested_field))
-                continue
-            if DEBUG_TRACE_PATTERN.search(key_text):
-                findings.append(_finding(nested_field, "debug_or_stack_trace_forbidden"))
-                findings.extend(_scan_unsafe(nested, field=nested_field))
-                continue
-            if RAW_RECORD_PATTERN.search(key_text) or any(
-                marker in compact_key
-                for marker in ("rawmeeting", "rawtranscript", "rawchat", "chatlog", "screenshot")
-            ):
-                findings.append(_finding(nested_field, "raw_transcript_or_screenshot_forbidden"))
-                findings.extend(_scan_unsafe(nested, field=nested_field))
-                continue
-            if SECRET_PATTERN.search(key_text):
-                findings.append(_finding(nested_field, "secret_marker_forbidden"))
-                findings.extend(_scan_unsafe(nested, field=nested_field))
-                continue
-            findings.extend(_scan_unsafe(nested, field=nested_field))
-        return findings
-    if isinstance(value, list):
-        for index, nested in enumerate(value):
-            findings.extend(_scan_unsafe(nested, field=f"{field}[{index}]"))
-        return findings
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return findings
-        if EMAIL_PATTERN.search(text):
-            findings.append(_finding(field, "email_or_personal_identifier_forbidden"))
-        if URL_WITH_CREDENTIALS_PATTERN.search(text):
-            findings.append(_finding(field, "credential_url_forbidden"))
-        if RAW_RECORD_PATTERN.search(text):
-            findings.append(_finding(field, "raw_transcript_or_screenshot_forbidden"))
-        if DEBUG_TRACE_PATTERN.search(text):
-            findings.append(_finding(field, "debug_or_stack_trace_forbidden"))
-        if SECRET_PATTERN.search(text) or SECRET_VALUE_PATTERN.search(text):
-            findings.append(_finding(field, "secret_marker_forbidden"))
-        if LAUNCH_APPROVAL_PATTERN.search(text) or text.upper() == "GO":
-            findings.append(_finding(field, "launch_approval_claim_forbidden"))
+    key_text = str(key)
+    normalized_key = normalize_key(key_text)
+    compact = compact_key(key_text)
+    if any(marker in normalized_key for marker in ("email", "user_name", "username", "person_name", "real_name")):
+        findings.append(_finding(field, "personal_identifier_field_forbidden"))
+    if DEBUG_TRACE_PATTERN.search(key_text):
+        findings.append(_finding(field, "debug_or_stack_trace_forbidden"))
+    if RAW_RECORD_PATTERN.search(key_text) or any(
+        marker in compact
+        for marker in ("rawmeeting", "rawtranscript", "rawchat", "chatlog", "screenshot")
+    ):
+        findings.append(_finding(field, "raw_transcript_or_screenshot_forbidden"))
+    if SECRET_PATTERN.search(key_text):
+        findings.append(_finding(field, "secret_marker_forbidden"))
     return findings
+
+
+def _scan_unsafe_string(field: str, value: Any) -> list[dict[str, str]]:
+    findings: list[dict[str, str]] = []
+    text = value.strip()
+    if not text:
+        return findings
+    if EMAIL_PATTERN.search(text):
+        findings.append(_finding(field, "email_or_personal_identifier_forbidden"))
+    if URL_WITH_CREDENTIALS_PATTERN.search(text):
+        findings.append(_finding(field, "credential_url_forbidden"))
+    if RAW_RECORD_PATTERN.search(text):
+        findings.append(_finding(field, "raw_transcript_or_screenshot_forbidden"))
+    if DEBUG_TRACE_PATTERN.search(text):
+        findings.append(_finding(field, "debug_or_stack_trace_forbidden"))
+    if SECRET_PATTERN.search(text) or SECRET_VALUE_PATTERN.search(text):
+        findings.append(_finding(field, "secret_marker_forbidden"))
+    if LAUNCH_APPROVAL_PATTERN.search(text) or text.upper() == "GO":
+        findings.append(_finding(field, "launch_approval_claim_forbidden"))
+    return findings
+
+
+def _scan_unsafe(value: Any) -> list[dict[str, str]]:
+    return scan_json_tree(value, scan_key=_scan_unsafe_key, scan_string=_scan_unsafe_string)
 
 
 def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, Any]]:

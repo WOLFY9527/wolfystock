@@ -21,6 +21,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+try:
+    from evidence_safety import path_label as _path_label
+except ModuleNotFoundError:  # pragma: no cover - package import fallback
+    from scripts.evidence_safety import path_label as _path_label
+
 from provider_operator_evidence_check import validate_provider_operator_evidence
 from quota_operator_evidence_check import validate_artifact as validate_quota_operator_evidence
 from restore_pitr_operator_evidence_check import _build_report as validate_restore_pitr_operator_evidence
@@ -88,10 +93,6 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-
-def _path_label(path: Path) -> str:
-    return path.name
 
 
 def _load_json(path: Path) -> tuple[Any | None, str | None]:

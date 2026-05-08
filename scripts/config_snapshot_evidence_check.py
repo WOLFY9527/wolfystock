@@ -16,6 +16,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+try:
+    from evidence_safety import finding as _finding
+    from evidence_safety import normalize_key as _normalize_key
+    from evidence_safety import scan_json_tree
+except ModuleNotFoundError:  # pragma: no cover - package import fallback
+    from scripts.evidence_safety import finding as _finding
+    from scripts.evidence_safety import normalize_key as _normalize_key
+    from scripts.evidence_safety import scan_json_tree
+
 
 SUMMARY_SCHEMA_VERSION = "wolfystock_config_snapshot_evidence_summary_v1"
 ALLOWED_ENVIRONMENTS = {"staging", "production-like-staging", "production-review"}
@@ -112,14 +121,6 @@ LAUNCH_APPROVAL_PATTERN = re.compile(
 ENV_VAR_KEY_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{2,}$")
 
 
-def _finding(field: str, reason_code: str) -> dict[str, str]:
-    return {"field": field, "reasonCode": reason_code}
-
-
-def _normalize_key(value: object) -> str:
-    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
-
-
 def _non_empty_string(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
@@ -162,19 +163,8 @@ def _scan_string(field: str, value: str) -> list[dict[str, str]]:
     return findings
 
 
-def _scan_tree(value: Any, field: str = "$") -> list[dict[str, str]]:
-    findings: list[dict[str, str]] = []
-    if isinstance(value, dict):
-        for key, child in value.items():
-            child_field = f"{field}.{key}" if field != "$" else str(key)
-            findings.extend(_scan_key(child_field, key))
-            findings.extend(_scan_tree(child, child_field))
-    elif isinstance(value, list):
-        for index, child in enumerate(value):
-            findings.extend(_scan_tree(child, f"{field}[{index}]"))
-    elif isinstance(value, str):
-        findings.extend(_scan_string(field, value))
-    return findings
+def _scan_tree(value: Any) -> list[dict[str, str]]:
+    return scan_json_tree(value, scan_key=_scan_key, scan_string=_scan_string)
 
 
 def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, bool]]:

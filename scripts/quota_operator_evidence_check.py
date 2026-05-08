@@ -16,6 +16,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+try:
+    from evidence_safety import finding as _finding
+    from evidence_safety import normalize_key as _normalize_key
+    from evidence_safety import scan_json_tree
+except ModuleNotFoundError:  # pragma: no cover - package import fallback
+    from scripts.evidence_safety import finding as _finding
+    from scripts.evidence_safety import normalize_key as _normalize_key
+    from scripts.evidence_safety import scan_json_tree
+
 
 INPUT_SCHEMA_VERSION = "wolfystock_quota_operator_evidence_v1"
 SUMMARY_SCHEMA_VERSION = "wolfystock_quota_operator_evidence_summary_v1"
@@ -110,10 +119,6 @@ MUTATION_VALUE_PATTERN = re.compile(
 TRACEBACK_PATTERN = re.compile(r"Traceback \(most recent call last\):", re.IGNORECASE)
 
 
-def _finding(field: str, reason_code: str) -> dict[str, str]:
-    return {"field": field, "reasonCode": reason_code}
-
-
 def _normalize_outcome(value: object) -> str:
     return str(value or "").strip().lower()
 
@@ -133,8 +138,7 @@ def _is_valid_observed_at(value: object) -> bool:
 
 
 def _scan_key(field: str, key: object) -> list[dict[str, str]]:
-    key_text = str(key or "")
-    lowered = key_text.lower().replace("-", "_")
+    lowered = _normalize_key(key)
     findings: list[dict[str, str]] = []
     if any(marker in lowered for marker in RAW_PAYLOAD_KEY_MARKERS):
         findings.append(_finding(field, "raw_payload_forbidden"))
@@ -162,19 +166,8 @@ def _scan_string(field: str, value: str) -> list[dict[str, str]]:
     return findings
 
 
-def _scan_tree(value: Any, field: str = "$") -> list[dict[str, str]]:
-    findings: list[dict[str, str]] = []
-    if isinstance(value, dict):
-        for key, child in value.items():
-            child_field = f"{field}.{key}" if field != "$" else str(key)
-            findings.extend(_scan_key(child_field, key))
-            findings.extend(_scan_tree(child, child_field))
-    elif isinstance(value, list):
-        for index, child in enumerate(value):
-            findings.extend(_scan_tree(child, f"{field}[{index}]"))
-    elif isinstance(value, str):
-        findings.extend(_scan_string(field, value))
-    return findings
+def _scan_tree(value: Any) -> list[dict[str, str]]:
+    return scan_json_tree(value, scan_key=_scan_key, scan_string=_scan_string)
 
 
 def _validate_section(section_id: str, section: Any) -> tuple[dict[str, Any], list[dict[str, str]]]:

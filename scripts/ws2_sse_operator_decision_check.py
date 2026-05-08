@@ -18,6 +18,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+try:
+    from evidence_safety import compact_key
+    from evidence_safety import finding as _finding
+    from evidence_safety import normalize_key as _normalize_key
+    from evidence_safety import scan_json_tree
+except ModuleNotFoundError:  # pragma: no cover - package import fallback
+    from scripts.evidence_safety import compact_key
+    from scripts.evidence_safety import finding as _finding
+    from scripts.evidence_safety import normalize_key as _normalize_key
+    from scripts.evidence_safety import scan_json_tree
+
 
 SCHEMA_VERSION = "wolfystock_ws2_sse_operator_decision_validation_v1"
 ARTIFACT_VERSION = "wolfystock_ws2_sse_operator_decision_evidence_v1"
@@ -118,14 +129,6 @@ MULTI_INSTANCE_REVIEW_TERMS = (
 )
 
 
-def _finding(field: str, reason_code: str) -> dict[str, str]:
-    return {"field": field, "reasonCode": reason_code}
-
-
-def _normalize_key(value: Any) -> str:
-    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
-
-
 def _is_non_empty_text(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
@@ -149,48 +152,48 @@ def _is_iso_timestamp(value: Any) -> bool:
     return True
 
 
-def _path_join(path: str, key: str) -> str:
-    return key if path == "$" else f"{path}.{key}"
+def _scan_value_key(field: str, key: Any) -> list[dict[str, str]]:
+    normalized_key = _normalize_key(key)
+    if any(marker in normalized_key for marker in RAW_DEBUG_KEY_MARKERS):
+        return [_finding(field, "raw_debug_or_trace_marker_forbidden")]
+    if any(marker in normalized_key for marker in SENSITIVE_KEY_MARKERS):
+        return [_finding(field, "secret_or_cookie_marker_forbidden")]
+    return []
+
+
+def _scan_value_entry(field: str, key: Any, value: Any) -> list[dict[str, str]]:
+    if compact_key(key) in LAUNCH_APPROVAL_KEYS and value is True:
+        return [_finding(field, "launch_approval_claim_forbidden")]
+    return []
+
+
+def _scan_value_string(field: str, value: Any) -> list[dict[str, str]]:
+    findings: list[dict[str, str]] = []
+    text = value.strip()
+    if not text:
+        return findings
+    if URL_WITH_CREDENTIALS_PATTERN.search(text):
+        findings.append(_finding(field, "credential_url_forbidden"))
+    if RAW_DEBUG_VALUE_PATTERN.search(text):
+        findings.append(_finding(field, "raw_debug_or_trace_marker_forbidden"))
+    if SECRET_VALUE_PATTERN.search(text):
+        findings.append(_finding(field, "secret_or_cookie_marker_forbidden"))
+    for pattern in LAUNCH_APPROVAL_TEXT_PATTERNS:
+        if pattern.search(text):
+            findings.append(_finding(field, "launch_approval_claim_forbidden"))
+            break
+    return findings
 
 
 def _scan_value(value: Any, *, field: str = "$") -> list[dict[str, str]]:
-    findings: list[dict[str, str]] = []
-    if isinstance(value, dict):
-        for key, nested in value.items():
-            key_text = str(key)
-            nested_field = _path_join(field, key_text)
-            normalized_key = _normalize_key(key_text)
-            if any(marker in normalized_key for marker in RAW_DEBUG_KEY_MARKERS):
-                findings.append(_finding(nested_field, "raw_debug_or_trace_marker_forbidden"))
-                continue
-            if any(marker in normalized_key for marker in SENSITIVE_KEY_MARKERS):
-                findings.append(_finding(nested_field, "secret_or_cookie_marker_forbidden"))
-                continue
-            compact_key = re.sub(r"[^a-z0-9]", "", key_text.lower())
-            if compact_key in LAUNCH_APPROVAL_KEYS and nested is True:
-                findings.append(_finding(nested_field, "launch_approval_claim_forbidden"))
-                continue
-            findings.extend(_scan_value(nested, field=nested_field))
-        return findings
-    if isinstance(value, list):
-        for index, nested in enumerate(value):
-            findings.extend(_scan_value(nested, field=f"{field}[{index}]"))
-        return findings
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return findings
-        if URL_WITH_CREDENTIALS_PATTERN.search(text):
-            findings.append(_finding(field, "credential_url_forbidden"))
-        if RAW_DEBUG_VALUE_PATTERN.search(text):
-            findings.append(_finding(field, "raw_debug_or_trace_marker_forbidden"))
-        if SECRET_VALUE_PATTERN.search(text):
-            findings.append(_finding(field, "secret_or_cookie_marker_forbidden"))
-        for pattern in LAUNCH_APPROVAL_TEXT_PATTERNS:
-            if pattern.search(text):
-                findings.append(_finding(field, "launch_approval_claim_forbidden"))
-                break
-    return findings
+    return scan_json_tree(
+        value,
+        field=field,
+        scan_key=_scan_value_key,
+        scan_entry=_scan_value_entry,
+        scan_string=_scan_value_string,
+        recurse_on_key_findings=False,
+    )
 
 
 def _has_forbidden_multi_instance_sse_claim(artifact: dict[str, Any]) -> bool:

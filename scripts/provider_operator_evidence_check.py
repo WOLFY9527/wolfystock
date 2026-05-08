@@ -16,6 +16,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+try:
+    from evidence_safety import finding as _finding
+    from evidence_safety import normalize_key as _normalize_key
+    from evidence_safety import scan_json_tree
+except ModuleNotFoundError:  # pragma: no cover - package import fallback
+    from scripts.evidence_safety import finding as _finding
+    from scripts.evidence_safety import normalize_key as _normalize_key
+    from scripts.evidence_safety import scan_json_tree
+
 
 SCHEMA_VERSION = "wolfystock_provider_operator_evidence_validation_v1"
 ALLOWED_ENVIRONMENTS = {"staging", "production-like", "sandbox"}
@@ -87,14 +96,6 @@ FORBIDDEN_LAUNCH_APPROVAL_PATTERNS = (
 )
 
 
-def _finding(field: str, reason_code: str) -> dict[str, str]:
-    return {"field": field, "reasonCode": reason_code}
-
-
-def _normalize_key(value: Any) -> str:
-    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
-
-
 def _parse_observed_at(value: Any) -> bool:
     text = str(value or "").strip()
     if not text:
@@ -118,44 +119,45 @@ def _state_summary_present(value: Any) -> bool:
     return False
 
 
-def _find_unsafe_markers(value: Any, *, field: str = "$") -> list[dict[str, str]]:
+def _scan_unsafe_key(field: str, key: Any) -> list[dict[str, str]]:
+    normalized_key = _normalize_key(key)
+    if not any(marker in normalized_key for marker in UNSAFE_KEY_MARKERS):
+        return []
+    reason = "unsafe_debug_marker" if any(
+        marker in normalized_key
+        for marker in (
+            "debug_payload",
+            "debug_trace",
+            "raw_payload",
+            "raw_request",
+            "raw_response",
+            "stack_trace",
+            "traceback",
+        )
+    ) else "unsafe_marker"
+    return [_finding(field, reason)]
+
+
+def _scan_unsafe_string(field: str, value: Any) -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
-    if isinstance(value, dict):
-        for key, nested in value.items():
-            key_text = str(key)
-            nested_field = key_text if field == "$" else f"{field}.{key_text}"
-            normalized_key = _normalize_key(key_text)
-            if any(marker in normalized_key for marker in UNSAFE_KEY_MARKERS):
-                reason = "unsafe_debug_marker" if any(
-                    marker in normalized_key
-                    for marker in (
-                        "debug_payload",
-                        "debug_trace",
-                        "raw_payload",
-                        "raw_request",
-                        "raw_response",
-                        "stack_trace",
-                        "traceback",
-                    )
-                ) else "unsafe_marker"
-                findings.append(_finding(nested_field, reason))
-                continue
-            findings.extend(_find_unsafe_markers(nested, field=nested_field))
-        return findings
-    if isinstance(value, list):
-        for index, nested in enumerate(value):
-            findings.extend(_find_unsafe_markers(nested, field=f"{field}[{index}]"))
-        return findings
-    if isinstance(value, str):
-        for reason_code, pattern in UNSAFE_VALUE_PATTERNS:
-            if pattern.search(value):
-                findings.append(_finding(field, reason_code))
-                break
-        for pattern in FORBIDDEN_LAUNCH_APPROVAL_PATTERNS:
-            if pattern.search(value):
-                findings.append(_finding(field, "launch_approval_claim_forbidden"))
-                break
+    for reason_code, pattern in UNSAFE_VALUE_PATTERNS:
+        if pattern.search(value):
+            findings.append(_finding(field, reason_code))
+            break
+    for pattern in FORBIDDEN_LAUNCH_APPROVAL_PATTERNS:
+        if pattern.search(value):
+            findings.append(_finding(field, "launch_approval_claim_forbidden"))
+            break
     return findings
+
+
+def _find_unsafe_markers(value: Any) -> list[dict[str, str]]:
+    return scan_json_tree(
+        value,
+        scan_key=_scan_unsafe_key,
+        scan_string=_scan_unsafe_string,
+        recurse_on_key_findings=False,
+    )
 
 
 def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, bool]]:
