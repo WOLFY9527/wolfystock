@@ -1166,7 +1166,7 @@ describe('PortfolioPage FX refresh', () => {
 
     fireEvent.change(
       screen.getByPlaceholderText(translate('zh', 'portfolio.ibkrSessionTokenPlaceholder')),
-      { target: { value: 'session-token-123' } },
+      { target: { value: 'unit-test-not-a-real-session' } },
     );
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.syncIbkr') }));
 
@@ -1174,7 +1174,7 @@ describe('PortfolioPage FX refresh', () => {
       accountId: 1,
       brokerConnectionId: 9,
       brokerAccountRef: 'U1234567',
-      sessionToken: 'session-token-123',
+      sessionToken: 'unit-test-not-a-real-session',
       apiBaseUrl: 'https://localhost:5000/v1/api',
       verifySsl: false,
     }));
