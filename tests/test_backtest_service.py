@@ -34,6 +34,11 @@ class BacktestServiceTestCase(unittest.TestCase):
         Config._instance = None
         DatabaseManager.reset_instance()
         self.db = DatabaseManager.get_instance()
+        self._history_fetch_patch = patch(
+            "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",
+            return_value=(None, None),
+        )
+        self._history_fetch_patch.start()
 
         # Ensure analysis is old enough for default min_age_days=14
         old_created_at = datetime(2024, 1, 1, 0, 0, 0)
@@ -79,6 +84,7 @@ class BacktestServiceTestCase(unittest.TestCase):
             session.commit()
 
     def tearDown(self) -> None:
+        self._history_fetch_patch.stop()
         DatabaseManager.reset_instance()
         if self._original_database_path is None:
             os.environ.pop("DATABASE_PATH", None)
@@ -522,6 +528,23 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertIn("成熟期", status["excluded_recent_message"])
 
     def test_clear_samples_and_results_separate_reset_paths(self) -> None:
+        with self.db.get_session() as session:
+            session.add_all(
+                [
+                    StockDaily(
+                        code="600519",
+                        date=date(2024, 1, 5) + timedelta(days=index),
+                        open=108.0 + index,
+                        high=109.0 + index,
+                        low=107.0 + index,
+                        close=108.5 + index,
+                        data_source="DatabaseCache",
+                    )
+                    for index in range(20)
+                ]
+            )
+            session.commit()
+
         service = BacktestService(self.db)
         service.prepare_backtest_samples(code="600519", sample_count=60, eval_window_days=3, min_age_days=14)
         service.run_backtest(code="600519", force=False, eval_window_days=3, min_age_days=14, limit=10)

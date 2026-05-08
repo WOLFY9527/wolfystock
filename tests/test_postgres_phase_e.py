@@ -47,9 +47,21 @@ class PostgresPhaseEStorageTestCase(unittest.TestCase):
         self.env_path = self.data_dir / ".env"
         self.sqlite_db_path = self.data_dir / "legacy.sqlite"
         self.phase_db_path = self.data_dir / "phase-baseline.sqlite"
+        self._backtest_history_fetch_patch = patch(
+            "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",
+            return_value=(None, None),
+        )
+        self._rule_history_fetch_patch = patch(
+            "src.services.rule_backtest_service.fetch_daily_history_with_local_us_fallback",
+            return_value=(None, None),
+        )
+        self._backtest_history_fetch_patch.start()
+        self._rule_history_fetch_patch.start()
         self._configure_environment(enable_phase_e=True)
 
     def tearDown(self) -> None:
+        self._rule_history_fetch_patch.stop()
+        self._backtest_history_fetch_patch.stop()
         DatabaseManager.reset_instance()
         Config.reset_instance()
         os.environ.pop("ENV_FILE", None)

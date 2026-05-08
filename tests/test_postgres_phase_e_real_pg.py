@@ -48,9 +48,21 @@ class PostgresPhaseERealPgTestCase(unittest.TestCase):
         self.sqlite_db_path = self.data_dir / "legacy.sqlite"
         self.pg_engine = create_engine(REAL_PG_DSN, echo=False, pool_pre_ping=True)
         self._drop_phase_e_tables()
+        self._backtest_history_fetch_patch = patch(
+            "src.services.backtest_service.fetch_daily_history_with_local_us_fallback",
+            return_value=(None, None),
+        )
+        self._rule_history_fetch_patch = patch(
+            "src.services.rule_backtest_service.fetch_daily_history_with_local_us_fallback",
+            return_value=(None, None),
+        )
+        self._backtest_history_fetch_patch.start()
+        self._rule_history_fetch_patch.start()
         self._configure_environment()
 
     def tearDown(self) -> None:
+        self._rule_history_fetch_patch.stop()
+        self._backtest_history_fetch_patch.stop()
         DatabaseManager.reset_instance()
         Config.reset_instance()
         os.environ.pop("ENV_FILE", None)

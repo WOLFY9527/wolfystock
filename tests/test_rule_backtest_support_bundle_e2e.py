@@ -152,6 +152,11 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
 
         Config.reset_instance()
         DatabaseManager.reset_instance()
+        self._history_fetch_patch = patch(
+            "src.services.rule_backtest_service.fetch_daily_history_with_local_us_fallback",
+            return_value=(None, None),
+        )
+        self._history_fetch_patch.start()
 
         self.app = create_app(static_dir=self.data_dir / "empty-static")
         self.client = TestClient(self.app)
@@ -198,6 +203,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             session.commit()
 
     def tearDown(self) -> None:
+        self._history_fetch_patch.stop()
         self.client.close()
         DatabaseManager.reset_instance()
         Config.reset_instance()
