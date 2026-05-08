@@ -15,6 +15,7 @@ DOC_PATHS = (
     REPO_ROOT / "docs" / "audits" / "operator-evidence-local-workspace-guide.md",
     REPO_ROOT / "docs" / "audits" / "operator-evidence-schema-reference-guide.md",
     REPO_ROOT / "docs" / "audits" / "operator-evidence-archive-pack-guide.md",
+    REPO_ROOT / "docs" / "audits" / "operator-evidence-gap-analyzer-guide.md",
     REPO_ROOT / "scripts" / "README.md",
 )
 
@@ -24,6 +25,7 @@ EXPECTED_OFFLINE_CLI_SCRIPTS = (
     "scripts/operator_evidence_workflow_run.py",
     "scripts/operator_evidence_schema_reference.py",
     "scripts/operator_evidence_archive_pack.py",
+    "scripts/operator_evidence_gap_analyzer.py",
     "scripts/operator_evidence_bundle_diff.py",
     "scripts/evidence_artifact_sanitize.py",
 )
