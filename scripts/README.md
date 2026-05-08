@@ -50,6 +50,9 @@ review flow.
 - `staging_ingress_smoke.py`: safe-by-default staging ingress preflight; only
   performs live HTTP checks when explicitly opted in. It also accepts sanitized
   operator evidence JSON for offline validation.
+- `staging_ingress_operator_evidence_check.py`: domain-local offline validator
+  for sanitized staging ingress operator evidence. It makes no network calls,
+  changes no runtime ingress behavior, and does not integrate launch acceptance.
 
 ## Incident response evidence
 
