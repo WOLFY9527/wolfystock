@@ -23,6 +23,7 @@ from operator_evidence_bundle_check import (
 )
 from operator_evidence_manifest_check import create_manifest, verify_manifest
 from operator_evidence_template_pack import _build_templates, _write_templates
+from release_review_report_render import _sanitize_status as _sanitize_report_status
 from release_review_report_render import render_report
 
 
@@ -148,7 +149,8 @@ def _workflow_exit(bundle: dict[str, Any], verification: dict[str, Any]) -> tupl
 
     bundle_status = str(bundle.get("bundleStatus") or "")
     if bundle_status not in REPORT_OK_STATUSES:
-        return EXIT_VALIDATOR_REJECTION, f"[FAIL] bundle status requires review blocker: {bundle_status}"
+        safe_status = _sanitize_report_status(bundle_status)
+        return EXIT_VALIDATOR_REJECTION, f"[FAIL] bundle status requires review blocker: {safe_status}"
 
     return EXIT_OK, "[OK] operator evidence workflow completed: review-required"
 
@@ -204,7 +206,8 @@ def _run_report(args: argparse.Namespace) -> int:
     if bundle_status in REPORT_OK_STATUSES:
         print("[OK] release review report rendered")
         return EXIT_OK
-    print(f"[FAIL] report rendered for non-passing bundle status: {bundle_status}", file=sys.stderr)
+    safe_status = _sanitize_report_status(bundle_status)
+    print(f"[FAIL] report rendered for non-passing bundle status: {safe_status}", file=sys.stderr)
     return EXIT_VALIDATOR_REJECTION
 
 

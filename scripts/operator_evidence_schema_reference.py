@@ -136,6 +136,12 @@ def _markdown_list(values: list[str]) -> str:
     return ", ".join(f"`{value}`" for value in values)
 
 
+def _markdown_bullets(values: list[str]) -> list[str]:
+    if not values:
+        return ["  - `<none>`"]
+    return [f"  - `{value}`" for value in values]
+
+
 def render_markdown(reference: dict[str, Any]) -> str:
     lines = [
         f"# {REFERENCE_TITLE}",
@@ -163,7 +169,8 @@ def render_markdown(reference: dict[str, Any]) -> str:
                 f"- Expected artifact filename: `{entry['artifactFilename']}`",
                 f"- Validator script: `{entry['validatorScript']}`",
                 "- Review posture: manual review required, releaseApproved=false",
-                f"- Required top-level fields: {_markdown_list(entry['requiredTopLevelFields'])}",
+                "- Required top-level fields:",
+                *_markdown_bullets(entry["requiredTopLevelFields"]),
                 f"- Safe placeholder examples: {_markdown_list(entry['safePlaceholderExamples'])}",
                 f"- Redaction notes: {' '.join(entry['redactionNotes'])}",
                 "",

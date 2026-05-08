@@ -16,6 +16,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from evidence_safety import path_label
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_workflow_run.py"
@@ -149,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_SMOKE_FAILED
 
     _print("artifactFixture=synthetic-sanitized")
-    _print(f"outputDir={output_dir}")
+    _print(f"outputDir={path_label(output_dir)}")
     _print(f"bundleStatus={bundle_status}")
     _print("outputs=" + ",".join(EXPECTED_OUTPUTS))
     _print(f"unsafeFixtureStatus={unsafe_status}")

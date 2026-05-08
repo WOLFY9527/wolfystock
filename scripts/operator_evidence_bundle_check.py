@@ -247,7 +247,7 @@ def build_bundle_summary(artifact_dir: Path) -> dict[str, Any]:
     return {
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": _now_iso(),
-        "artifactDirectoryLabel": artifact_dir.name,
+        "artifactDirectoryLabel": _path_label(artifact_dir),
         "bundleStatus": bundle_status,
         "runtimeBehaviorChanged": False,
         "networkCallsExecutedByValidator": False,
@@ -267,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
         summary = {
             "schemaVersion": SCHEMA_VERSION,
             "generatedAt": _now_iso(),
-            "artifactDirectoryLabel": artifact_dir.name,
+            "artifactDirectoryLabel": _path_label(artifact_dir),
             "bundleStatus": BUNDLE_STATUSES["incomplete"],
             "runtimeBehaviorChanged": False,
             "networkCallsExecutedByValidator": False,

@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from operator_evidence_bundle_check import ARTIFACT_SPECS
+from evidence_safety import path_label
 
 
 MANIFEST_SCHEMA_VERSION = "wolfystock_operator_evidence_manifest_v1"
@@ -188,14 +189,16 @@ def _finding(category: Any, file_label: Any, reason_code: str) -> dict[str, str]
 
 
 def _safe_manifest_label(path: Path) -> str:
-    return path.name if _is_safe_file_label(path.name) else "manifest.json"
+    if not _is_safe_file_label(path.name):
+        return "manifest.json"
+    return path_label(path)
 
 
 def _verification_summary(artifact_dir: Path, manifest_path: Path, findings: list[dict[str, str]]) -> dict[str, Any]:
     return {
         "schemaVersion": VERIFY_SCHEMA_VERSION,
         "generatedAt": _now_iso(),
-        "artifactDirectoryLabel": artifact_dir.name,
+        "artifactDirectoryLabel": path_label(artifact_dir),
         "manifestLabel": _safe_manifest_label(manifest_path),
         "verificationStatus": "pass" if not findings else "fail",
         "runtimeBehaviorChanged": False,

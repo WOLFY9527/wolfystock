@@ -16,6 +16,45 @@ Finding = dict[str, str]
 ScanCallback = Callable[[str, Any], list[Finding]]
 EntryScanCallback = Callable[[str, Any, Any], list[Finding]]
 
+UNSAFE_LABEL_MARKERS = (
+    "../",
+    "..\\",
+    "api_key",
+    "apikey",
+    "authorization",
+    "bearer",
+    "cookie",
+    "credential",
+    "database_url",
+    "db_url",
+    "debug_payload",
+    "password",
+    "payload",
+    "private_key",
+    "raw",
+    "request",
+    "response",
+    "secret",
+    "session",
+    "set-cookie",
+    "sk-",
+    "stack trace",
+    "stacktrace",
+    "token",
+    "traceback",
+    "webhook",
+)
+FORBIDDEN_APPROVAL_LABEL_PHRASES = (
+    "launch-approved",
+    "production-ready",
+    "automatic-go",
+    "automatic go",
+    "public launch go",
+    "go for launch",
+    "approved for launch",
+    "release-approved",
+)
+
 
 def finding(field: str, reason_code: str, *, field_key: str = "field") -> Finding:
     return {field_key: field, "reasonCode": reason_code}
@@ -36,7 +75,11 @@ def join_path(parent: str, key: str) -> str:
 
 
 def path_label(path: Path) -> str:
-    return path.name
+    label = path.name
+    lowered = label.lower()
+    if any(marker in lowered for marker in UNSAFE_LABEL_MARKERS + FORBIDDEN_APPROVAL_LABEL_PHRASES):
+        return "[redacted]"
+    return label
 
 
 def scan_json_tree(
