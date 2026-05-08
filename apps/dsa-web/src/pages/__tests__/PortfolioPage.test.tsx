@@ -490,7 +490,14 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('max-w-[1920px]', 'mx-auto', 'px-4', 'py-2');
     expect(screen.queryByTestId('portfolio-bento-hero')).not.toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-total-assets-card')).toHaveClass('xl:col-span-12');
+    expect(screen.getByTestId('portfolio-total-assets-card')).toHaveClass('xl:col-span-5');
+    expect(screen.getByTestId('portfolio-launch-priority-panel')).toHaveClass('xl:col-span-7');
+    expect(screen.getByTestId('portfolio-launch-priority-panel')).toHaveTextContent('资产台账总览');
+    expect(screen.getByTestId('portfolio-first-fold-primary-grid')).toHaveTextContent('持仓状态');
+    expect(screen.getByTestId('portfolio-first-fold-primary-grid')).toHaveTextContent('现金状态');
+    expect(screen.getByTestId('portfolio-first-fold-primary-grid')).toHaveTextContent('敞口状态');
+    expect(screen.getByTestId('portfolio-first-fold-primary-grid')).toHaveTextContent('需要关注');
+    expect(screen.getByTestId('portfolio-manual-secondary-callout')).toHaveTextContent('次级：手工记账');
     expect(screen.getByRole('heading', { name: /总资产|Total Assets/ })).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
     expect(within(screen.getByTestId('portfolio-total-assets-card')).queryByLabelText('DISPLAY CURRENCY')).not.toBeInTheDocument();
