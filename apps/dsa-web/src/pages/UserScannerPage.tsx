@@ -1255,57 +1255,34 @@ function ActionButton({
   label,
   icon,
   onClick,
-  href,
   disabled = false,
   title,
-  variant = 'default',
+  variant = 'compact',
   testId,
 }: {
   label: string;
   icon?: React.ReactNode;
-  onClick?: (event: React.MouseEvent<HTMLElement>) => void;
-  href?: string;
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   disabled?: boolean;
   title?: string;
-  variant?: 'default' | 'primary';
+  variant?: 'default' | 'primary' | 'secondary' | 'compact';
   testId?: string;
 }) {
-  const className = [
-    'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors',
-    variant === 'primary'
-      ? 'border-emerald-300/15 bg-emerald-300/[0.12] text-emerald-100 shadow-[0_0_14px_rgba(16,185,129,0.16)] hover:border-emerald-200/30 hover:bg-emerald-300/[0.18]'
-      : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white',
-    disabled ? 'cursor-not-allowed border-white/5 bg-white/[0.02] text-white/28 hover:bg-white/[0.02] hover:text-white/28' : '',
-  ].join(' ');
+  const resolvedVariant = variant === 'default' ? 'compact' : variant === 'primary' ? 'secondary' : variant;
+  const sizeClass = resolvedVariant === 'secondary' ? 'px-3 py-1.5 text-xs' : 'px-2.5 py-1 text-xs';
   const content = (
     <>
       {icon}
-      <span>{label}</span>
+      <span className="truncate">{label}</span>
     </>
   );
 
-  if (href && !disabled) {
-    return (
-      <Link
-        to={href}
-        data-testid={testId}
-        onClick={(event) => {
-          event.stopPropagation();
-          onClick?.(event);
-        }}
-        title={title}
-        className={className}
-      >
-        {content}
-      </Link>
-    );
-  }
-
   return (
-    <button
+    <TerminalButton
       type="button"
       data-testid={testId}
-      className={className}
+      variant={resolvedVariant}
+      className={`min-w-0 ${sizeClass}`.trim()}
       onClick={(event) => {
         event.stopPropagation();
         onClick?.(event);
@@ -1314,7 +1291,7 @@ function ActionButton({
       title={title}
     >
       {content}
-    </button>
+    </TerminalButton>
   );
 }
 
@@ -1711,7 +1688,7 @@ function CandidateDetailPanel({
           icon={<Play className="h-3.5 w-3.5" />}
           onClick={() => onAnalyze(candidate)}
           disabled={isAnalyzing}
-          variant="primary"
+          variant="compact"
         />
         <ActionButton
           label={isCopied ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy symbol' : '复制代码')}
@@ -1723,7 +1700,7 @@ function CandidateDetailPanel({
           icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
           onClick={() => onTrack(candidate)}
           disabled={isTrackPending || isTracked}
-          variant={isTracked ? 'default' : 'primary'}
+          variant="compact"
           title={getWatchlistActionTitle(isTracked, isWatchlistAuthBlocked, language)}
         />
         <ActionButton
@@ -2034,7 +2011,7 @@ function ScannerBacktestLab({
           <FieldChip label={language === 'en' ? 'Strategy' : '策略'} value={language === 'en' ? 'Default MA deterministic template' : '默认均线确定性模板'} />
         </div>
         <div className="flex max-w-full flex-wrap gap-1.5">
-          <ActionButton label={language === 'en' ? 'Official selected' : '回测官方入选'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('official_selected')} disabled={isRunning || counts.official_selected === 0} variant="primary" />
+          <ActionButton label={language === 'en' ? 'Official selected' : '回测官方入选'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('official_selected')} disabled={isRunning || counts.official_selected === 0} variant="secondary" />
           <ActionButton label={language === 'en' ? 'Preview selected' : '回测预览入选'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('preview_selected')} disabled={isRunning || counts.preview_selected === 0} />
           <ActionButton label={language === 'en' ? 'Top 5' : '回测前 5 名'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('top_5')} disabled={isRunning || counts.top_5 === 0} />
           <ActionButton label={language === 'en' ? 'Filtered' : '回测当前筛选'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('current_filter')} disabled={isRunning || counts.current_filter === 0} />
@@ -3402,17 +3379,18 @@ const UserScannerPage: React.FC = () => {
                             {validationErrors.customThemeManualSymbols}
                           </p>
                         ) : null}
-                        <button
+                        <TerminalButton
                           ref={generateThemeButton.ref}
                           type="button"
+                          variant="secondary"
                           disabled={generateThemeDisabled}
                           onPointerUp={generateThemeButton.onPointerUp}
                           onClick={generateThemeButton.onClick}
-                          className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-lg border border-indigo-300/20 bg-indigo-300/10 px-3 text-xs font-medium text-indigo-100 transition hover:border-indigo-200/35 hover:bg-indigo-300/15 disabled:cursor-not-allowed disabled:opacity-45"
+                          className="h-8 px-3 text-xs"
                         >
                           <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                           <span>{isGeneratingTheme ? (language === 'en' ? 'Generating...' : '生成中...') : (language === 'en' ? 'Generate theme' : '生成主题')}</span>
-                        </button>
+                        </TerminalButton>
                         {themeSuggestions.length ? (
                           <div className="flex flex-col gap-1.5" data-testid="scanner-ai-theme-suggestions">
                             {themeSuggestions.slice(0, 6).map((suggestion) => (
@@ -3501,28 +3479,29 @@ const UserScannerPage: React.FC = () => {
 		                          data-testid="scanner-primary-actions"
 		                          className="grid min-w-0 grid-cols-1 gap-1.5 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_auto]"
 		                        >
-	                          <ActionButton
-	                            label={singleSelectedSymbol
-	                              ? (language === 'en' ? `View ${singleSelectedSymbol}` : `查看 ${singleSelectedSymbol}`)
-	                              : (language === 'en' ? 'View leading evidence' : '查看头号证据')}
+		                          <ActionButton
+		                            label={singleSelectedSymbol
+		                              ? (language === 'en' ? `View ${singleSelectedSymbol}` : `查看 ${singleSelectedSymbol}`)
+		                              : (language === 'en' ? 'View leading evidence' : '查看头号证据')}
 	                            icon={<Info className="h-3.5 w-3.5" />}
-	                            onClick={() => {
-	                              setInspectorSymbol(primarySelectedCandidate.symbol);
-	                              setExpandedSymbol(primarySelectedCandidate.symbol);
-	                            }}
-	                            variant="primary"
-		                          />
-	                          <div data-testid="scanner-more-actions" className="relative min-w-0">
-	                            <button
-	                              type="button"
-	                              aria-expanded={isMoreActionsOpen}
-	                              aria-label={language === 'en' ? 'More scanner actions' : '更多扫描操作'}
-	                              className="inline-flex h-full w-full min-w-0 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white"
-	                              onClick={() => setIsMoreActionsOpen((current) => !current)}
-	                            >
-	                              <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-	                              <span>{language === 'en' ? 'More' : '更多'}</span>
-	                            </button>
+		                            onClick={() => {
+		                              setInspectorSymbol(primarySelectedCandidate.symbol);
+		                              setExpandedSymbol(primarySelectedCandidate.symbol);
+		                            }}
+		                            variant="secondary"
+			                          />
+		                          <div data-testid="scanner-more-actions" className="relative min-w-0">
+		                            <TerminalButton
+		                              type="button"
+                              variant="secondary"
+		                              aria-expanded={isMoreActionsOpen}
+		                              aria-label={language === 'en' ? 'More scanner actions' : '更多扫描操作'}
+		                              className="h-full w-full px-2.5 py-1 text-xs"
+		                              onClick={() => setIsMoreActionsOpen((current) => !current)}
+		                            >
+		                              <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+		                              <span>{language === 'en' ? 'More' : '更多'}</span>
+		                            </TerminalButton>
 	                            {isMoreActionsOpen ? (
 	                          <div data-testid="scanner-more-actions-panel" className="mt-2 grid min-w-[220px] gap-1.5 rounded-lg border border-white/5 bg-black/90 p-2 backdrop-blur-md">
 	                            <ActionButton
@@ -3546,17 +3525,18 @@ const UserScannerPage: React.FC = () => {
                               onClick={() => void handleCopyText(sortedCandidates.slice(0, 5).map((candidate) => candidate.symbol).join(', '), 'top-5-symbols')}
                               disabled={!sortedCandidates.length}
                             />
-	                            <button
-	                              ref={openHistoryDrawerButton.ref}
-	                              type="button"
-                              data-testid="user-scanner-bento-drawer-trigger"
-	                              onClick={openHistoryDrawerButton.onClick}
-                              onPointerUp={openHistoryDrawerButton.onPointerUp}
-                              className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-	                            >
-	                              <History className="h-3.5 w-3.5" aria-hidden="true" />
-	                              <span>{language === 'en' ? 'Historical replay' : '历史扫描回放'}</span>
-	                            </button>
+		                            <TerminalButton
+		                              ref={openHistoryDrawerButton.ref}
+		                              type="button"
+                              variant="compact"
+	                              data-testid="user-scanner-bento-drawer-trigger"
+		                              onClick={openHistoryDrawerButton.onClick}
+	                              onPointerUp={openHistoryDrawerButton.onPointerUp}
+		                              className="w-full px-2.5 py-1 text-xs"
+		                            >
+		                              <History className="h-3.5 w-3.5" aria-hidden="true" />
+		                              <span>{language === 'en' ? 'Historical replay' : '历史扫描回放'}</span>
+		                            </TerminalButton>
 	                            <ActionButton
 	                              label={language === 'en' ? 'Add official selected' : '加入全部入选'}
 	                              icon={<BookmarkPlus className="h-3.5 w-3.5" />}
@@ -3593,17 +3573,18 @@ const UserScannerPage: React.FC = () => {
 	                        </div>
 	                      </div>
                     ) : (
-                      <button
-                        ref={openHistoryDrawerButton.ref}
-                        type="button"
-                        data-testid="user-scanner-bento-drawer-trigger"
-                        onClick={openHistoryDrawerButton.onClick}
-                        onPointerUp={openHistoryDrawerButton.onPointerUp}
-                        className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.05] px-2.5 py-1 text-xs text-white/80 transition-colors hover:bg-white/[0.1]"
-                      >
-	                        <History className="h-4 w-4" aria-hidden="true" />
-                        <span>{language === 'en' ? 'Historical replay' : '历史扫描回放'}</span>
-                      </button>
+	                      <TerminalButton
+	                        ref={openHistoryDrawerButton.ref}
+	                        type="button"
+                        variant="secondary"
+	                        data-testid="user-scanner-bento-drawer-trigger"
+	                        onClick={openHistoryDrawerButton.onClick}
+	                        onPointerUp={openHistoryDrawerButton.onPointerUp}
+	                        className="px-2.5 py-1 text-xs"
+	                      >
+		                        <History className="h-4 w-4" aria-hidden="true" />
+	                        <span>{language === 'en' ? 'Historical replay' : '历史扫描回放'}</span>
+	                      </TerminalButton>
                     )}
                   </div>
                 </div>
@@ -3926,18 +3907,19 @@ const UserScannerPage: React.FC = () => {
                                 ) : null}
                               </div>
                             </div>
-	                            <button
-	                              type="button"
-	                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-white/8 bg-white/[0.04] px-2.5 py-1 text-xs text-white/65 hover:bg-white/[0.08]"
-	                              onClick={(event) => {
-	                                event.stopPropagation();
-	                                setInspectorSymbol(candidate.symbol);
-	                                setExpandedSymbol(isExpanded ? null : candidate.symbol);
-	                              }}
-	                            >
-                              {language === 'en' ? 'Detail' : '详情'}
-                              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                            </button>
+		                            <TerminalButton
+		                              type="button"
+                              variant="compact"
+		                              className="shrink-0 px-2.5 py-1 text-xs"
+		                              onClick={(event) => {
+		                                event.stopPropagation();
+		                                setInspectorSymbol(candidate.symbol);
+		                                setExpandedSymbol(isExpanded ? null : candidate.symbol);
+		                              }}
+		                            >
+		                              {language === 'en' ? 'Detail' : '详情'}
+		                              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+		                            </TerminalButton>
                           </div>
 
                           <div className="mt-2.5 grid gap-2">
@@ -3974,14 +3956,14 @@ const UserScannerPage: React.FC = () => {
                             ) : null}
 
 	                            <div className="flex flex-wrap gap-1.5 pt-0.5">
-	                              <ActionButton
-	                                label={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
-	                                icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
-	                                onClick={() => void handleTrackCandidate(candidate)}
-	                                disabled={isTracked || isTrackPending}
-	                                variant={isTracked ? 'default' : 'primary'}
-	                                title={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
-	                              />
+		                              <ActionButton
+		                                label={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
+		                                icon={isTracked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
+		                                onClick={() => void handleTrackCandidate(candidate)}
+		                                disabled={isTracked || isTrackPending}
+		                                variant="compact"
+		                                title={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
+		                              />
 	                              <ActionButton
 	                                label={language === 'en' ? 'View evidence' : '查看证据'}
 	                                icon={isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
@@ -4035,53 +4017,56 @@ const UserScannerPage: React.FC = () => {
                               ? `${runDetail?.summary?.universeCount ? Math.max(0, runDetail.summary.universeCount - sortedCandidates.length) : previewCandidates.length} other candidates were not selected`
                               : `其余 ${runDetail?.summary?.universeCount ? Math.max(0, runDetail.summary.universeCount - sortedCandidates.length) : previewCandidates.length} 个候选未入选`}
                           </span>
-	                          <button
-	                            type="button"
-	                            className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/70 hover:bg-white/10"
-	                            onClick={() => setCandidateFilter('pool')}
-	                          >
-                            {language === 'en' ? 'View all candidates' : '查看全部候选'}
-                          </button>
+		                          <TerminalButton
+		                            type="button"
+                              variant="compact"
+		                            className="shrink-0 px-2 py-1 text-xs"
+		                            onClick={() => setCandidateFilter('pool')}
+		                          >
+	                            {language === 'en' ? 'View all candidates' : '查看全部候选'}
+	                          </TerminalButton>
                         </div>
                         {previewAddedDiagnostics.length ? (
                           <div data-testid="scanner-preview-added-list" className="mb-2 grid gap-1.5">
                             {previewAddedDiagnostics.slice(0, 4).map((candidate) => (
-	                              <button
-	                                key={`preview-added-${candidate.symbol}`}
-	                                type="button"
-	                                data-testid={`scanner-preview-added-${candidate.symbol}`}
-	                                className="grid min-w-0 grid-cols-[minmax(54px,0.45fr)_minmax(72px,0.55fr)_minmax(0,1fr)] items-center gap-2 rounded-lg border border-blue-400/15 bg-blue-400/[0.06] px-2 py-1.5 text-left text-xs hover:bg-blue-400/10"
-	                                onClick={() => {
-	                                  setInspectorSymbol(candidate.symbol);
-	                                  setCandidateFilter('pool');
-	                                }}
-	                              >
+		                              <TerminalButton
+		                                key={`preview-added-${candidate.symbol}`}
+		                                type="button"
+                                variant="compact"
+		                                data-testid={`scanner-preview-added-${candidate.symbol}`}
+		                                className="grid w-full min-w-0 grid-cols-[minmax(54px,0.45fr)_minmax(72px,0.55fr)_minmax(0,1fr)] items-center justify-start gap-2 px-2 py-1.5 text-left text-xs"
+		                                onClick={() => {
+		                                  setInspectorSymbol(candidate.symbol);
+		                                  setCandidateFilter('pool');
+		                                }}
+		                              >
                                 <span className="truncate font-mono font-semibold text-blue-100">{candidate.symbol}</span>
                                 <span className="truncate font-mono text-blue-100/58">{diagnosticScoreValue(candidate)}</span>
                                 <span className="truncate text-white/50" title={formatFriendlyDiagnosticReason(candidate, language)}>
                                   {formatFriendlyDiagnosticReason(candidate, language)}
                                 </span>
-                              </button>
+		                              </TerminalButton>
                             ))}
                           </div>
                         ) : null}
                         <div className="grid gap-1.5">
                           {previewCandidates.map((candidate) => (
-	                            <button
-	                              key={`preview-${candidate.symbol}`}
-	                              type="button"
-	                              className="grid min-w-0 grid-cols-[minmax(54px,0.45fr)_minmax(72px,0.55fr)_minmax(0,1fr)] items-center gap-2 rounded-lg border border-white/5 bg-black/20 px-2 py-1.5 text-left text-xs hover:bg-white/[0.04]"
-	                              onClick={() => {
-	                                setInspectorSymbol(candidate.symbol);
-	                                setCandidateFilter('pool');
-	                              }}
-	                            >
+		                            <TerminalButton
+		                              key={`preview-${candidate.symbol}`}
+		                              type="button"
+                              variant="compact"
+		                              className="grid w-full min-w-0 grid-cols-[minmax(54px,0.45fr)_minmax(72px,0.55fr)_minmax(0,1fr)] items-center justify-start gap-2 px-2 py-1.5 text-left text-xs"
+		                              onClick={() => {
+		                                setInspectorSymbol(candidate.symbol);
+		                                setCandidateFilter('pool');
+		                              }}
+		                            >
                               <span className="truncate font-mono font-semibold text-white/78">{candidate.symbol}</span>
                               <span className="truncate font-mono text-white/42">{diagnosticScoreValue(candidate)}</span>
                               <span className="truncate text-white/50" title={formatFriendlyDiagnosticReason(candidate, language)}>
                                 {formatFriendlyDiagnosticReason(candidate, language)}
                               </span>
-                            </button>
+		                            </TerminalButton>
                           ))}
                         </div>
                       </div>
@@ -4146,7 +4131,7 @@ const UserScannerPage: React.FC = () => {
                                         void handleAnalyzeCandidate(candidate);
                                       }}
                                       disabled={pendingAnalyzeSymbol === candidate.symbol}
-                                      variant="primary"
+                                      variant="compact"
                                     />
                                     <ActionButton
                                       label={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
@@ -4156,7 +4141,7 @@ const UserScannerPage: React.FC = () => {
                                         void handleTrackCandidate(candidate);
                                       }}
                                       disabled={isTracked || isTrackPending}
-                                      variant={isTracked ? 'default' : 'primary'}
+                                      variant="compact"
                                       title={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
                                     />
                                     <ActionButton

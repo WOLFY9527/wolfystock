@@ -887,6 +887,27 @@ describe('UserScannerPage', () => {
     expect(screen.queryByText(/provider_timeout|MarketCache|generatedCandidates|failedCandidates/i)).not.toBeInTheDocument();
   });
 
+  it('uses terminal button variants for primary scanner controls and candidate actions', async () => {
+    renderUserScannerPage({ initialEntry: '/zh/scanner' });
+
+    const runButton = await screen.findByTestId('scanner-run-button');
+    const moreActions = await screen.findByTestId('scanner-more-actions');
+    const moreTrigger = within(moreActions).getByRole('button', { name: /更多|More/i });
+    const card = await screen.findByTestId('scanner-result-card-NVDA');
+
+    expect(runButton).toHaveAttribute('data-terminal-primitive', 'button');
+    expect(moreTrigger).toHaveAttribute('data-terminal-primitive', 'button');
+    expect(within(card).getByRole('button', { name: /查看证据|View evidence/i })).toHaveAttribute('data-terminal-primitive', 'button');
+    expect(within(card).getByRole('button', { name: /追踪|Track/i })).toHaveAttribute('data-terminal-primitive', 'button');
+    expect(within(card).getByRole('button', { name: /详情|Detail/i })).toHaveAttribute('data-terminal-primitive', 'button');
+
+    fireEvent.click(moreTrigger);
+
+    const morePanel = await screen.findByTestId('scanner-more-actions-panel');
+    expect(within(morePanel).getByRole('button', { name: /导出 CSV|Export CSV/i })).toHaveAttribute('data-terminal-primitive', 'button');
+    expect(within(morePanel).getByRole('button', { name: /历史扫描回放|Historical replay/i })).toHaveAttribute('data-terminal-primitive', 'button');
+  });
+
   it('loads scanner run history once on initial route entry', async () => {
     renderUserScannerPage();
 
