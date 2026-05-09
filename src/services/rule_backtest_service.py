@@ -22,6 +22,7 @@ from src.config import get_config
 from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
 from src.repositories.stock_repo import StockRepository
+from src.services.local_data_preflight_service import LocalDataPreflightService
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
 from src.storage import (
     DatabaseManager,
@@ -518,6 +519,7 @@ class RuleBacktestService:
         self.db = db_manager or DatabaseManager.get_instance()
         self.repo = RuleBacktestRepository(self.db)
         self.stock_repo = StockRepository(self.db)
+        self.local_data_preflight = LocalDataPreflightService(self.stock_repo)
         self.parser = RuleBacktestParser()
         self.engine = RuleBacktestEngine()
         self._llm_adapter = llm_adapter
@@ -992,6 +994,19 @@ class RuleBacktestService:
             raise ValueError(f"max universe size is {DEFAULT_RULE_BACKTEST_UNIVERSE_MAX_SYMBOLS}")
 
         normalized_start, normalized_end = self._normalize_date_range(start_date=start_date, end_date=end_date)
+        required_bars = self._resolve_universe_preflight_required_bars(
+            start_date=normalized_start,
+            end_date=normalized_end,
+            lookback_bars=lookback_bars,
+        )
+        preflight = self.preflight_local_data_coverage(
+            symbols=normalized_symbols,
+            start_date=normalized_start,
+            end_date=normalized_end,
+            minimum_required_bars=required_bars,
+            minimum_coverage_ratio=0.8,
+        )
+        preflight_by_symbol = {str(item["symbol"]): item for item in preflight.get("items", [])}
         created_at = datetime.now()
         strategy_snapshot = {
             "strategy_text": raw_text,
@@ -1019,22 +1034,17 @@ class RuleBacktestService:
         owner_id = self.db.require_user_id(self.owner_id)
         for sequence_index, symbol in enumerate(normalized_symbols):
             check_started = datetime.now()
-            local_rows = self._load_local_universe_rows(
-                symbol=symbol,
-                start_date=normalized_start,
-                end_date=normalized_end,
-                lookback_bars=lookback_bars,
-            )
+            coverage = preflight_by_symbol.get(symbol) or {}
             runtime_ms = int((datetime.now() - check_started).total_seconds() * 1000)
-            if local_rows:
+            if coverage.get("state") == "ready":
                 status = "ready_local_data"
                 reason_code = None
                 reason_message = None
                 completed_count += 1
             else:
                 status = "skipped"
-                reason_code = "blocked_missing_local_data"
-                reason_message = "No local daily bars found for requested window."
+                reason_code = str(coverage.get("reason_code") or "blocked_missing_local_data")
+                reason_message = str(coverage.get("reason_message") or "No local daily bars found for requested window.")
                 skipped_count += 1
 
             symbol_rows.append(
@@ -1046,7 +1056,7 @@ class RuleBacktestService:
                     reason_code=reason_code,
                     reason_message=reason_message,
                     runtime_ms=runtime_ms,
-                    metrics_json=self._serialize_json({}),
+                    metrics_json=self._serialize_json({"local_data_preflight": coverage}),
                     single_run_id=None,
                     created_at=created_at,
                     updated_at=datetime.now(),
@@ -1078,6 +1088,23 @@ class RuleBacktestService:
         )
         saved = self.repo.save_universe_job(job, symbol_rows)
         return self._universe_job_row_to_dict(saved)
+
+    def preflight_local_data_coverage(
+        self,
+        *,
+        symbols: List[str],
+        start_date: Optional[Any] = None,
+        end_date: Optional[Any] = None,
+        minimum_required_bars: int = 1,
+        minimum_coverage_ratio: float = 1.0,
+    ) -> Dict[str, Any]:
+        return self.local_data_preflight.preflight_coverage(
+            symbols=symbols,
+            start_date=start_date,
+            end_date=end_date,
+            minimum_required_bars=minimum_required_bars,
+            minimum_coverage_ratio=minimum_coverage_ratio,
+        )
 
     def get_universe_job_status(self, job_id: int) -> Optional[Dict[str, Any]]:
         row = self.repo.get_universe_job(job_id, **self._owner_kwargs())
@@ -1111,24 +1138,19 @@ class RuleBacktestService:
 
     @staticmethod
     def _normalize_universe_symbols(symbols: List[str]) -> List[str]:
-        normalized: set[str] = set()
-        for symbol in symbols or []:
-            code = normalize_stock_code(str(symbol or "").strip()).upper()
-            if code:
-                normalized.add(code)
-        return sorted(normalized)
+        return LocalDataPreflightService.normalize_symbols(symbols)
 
-    def _load_local_universe_rows(
-        self,
+    @staticmethod
+    def _resolve_universe_preflight_required_bars(
         *,
-        symbol: str,
         start_date: Optional[date],
         end_date: Optional[date],
         lookback_bars: int,
-    ) -> List[Any]:
+    ) -> int:
+        requested = max(1, int(lookback_bars or 1))
         if start_date is not None and end_date is not None:
-            return self.stock_repo.get_range(symbol, start_date, end_date)
-        return list(reversed(self.stock_repo.get_latest(symbol, days=max(1, int(lookback_bars)))))
+            return max(1, min(requested, (end_date - start_date).days + 1))
+        return requested
 
     @staticmethod
     def _universe_job_row_to_dict(row: RuleBacktestUniverseJob) -> Dict[str, Any]:

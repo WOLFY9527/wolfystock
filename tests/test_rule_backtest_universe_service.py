@@ -74,6 +74,70 @@ class RuleBacktestUniverseServiceTestCase(unittest.TestCase):
         self.assertEqual(results["items"][2]["status"], "skipped")
         self.assertEqual(results["items"][2]["reason_code"], "blocked_missing_local_data")
 
+    def test_preflight_local_data_coverage_reports_ready_partial_missing_and_insufficient(self) -> None:
+        self._seed_history("AAPL", [10.0, 10.2, 10.4, 10.6, 10.8])
+        self._seed_history("MSFT", [20.0, 20.2, 20.4, 20.6], start=date(2025, 1, 2))
+        self._seed_history("NVDA", [30.0, 30.2, 30.4])
+        service = RuleBacktestService(self.db)
+
+        with patch.object(RuleBacktestService, "_ensure_market_history") as ensure_mock, patch(
+            "src.services.rule_backtest_service.fetch_daily_history_with_local_us_fallback"
+        ) as fetch_mock:
+            result = service.preflight_local_data_coverage(
+                symbols=["zzz", "MSFT", "aapl", "AAPL", "NVDA"],
+                start_date="2025-01-01",
+                end_date="2025-01-05",
+                minimum_required_bars=5,
+                minimum_coverage_ratio=0.8,
+            )
+
+        ensure_mock.assert_not_called()
+        fetch_mock.assert_not_called()
+        self.assertEqual(result["symbols"], ["AAPL", "MSFT", "NVDA", "ZZZ"])
+        self.assertEqual(result["summary"]["total"], 4)
+        self.assertEqual(result["summary"]["ready"], 1)
+        self.assertEqual(result["summary"]["partial"], 1)
+        self.assertEqual(result["summary"]["insufficient_data"], 1)
+        self.assertEqual(result["summary"]["missing"], 1)
+        by_symbol = {item["symbol"]: item for item in result["items"]}
+        self.assertEqual(by_symbol["AAPL"]["state"], "ready")
+        self.assertEqual(by_symbol["MSFT"]["state"], "partial")
+        self.assertEqual(by_symbol["MSFT"]["reason_code"], "partial_local_data")
+        self.assertEqual(by_symbol["NVDA"]["state"], "insufficient_data")
+        self.assertEqual(by_symbol["NVDA"]["reason_code"], "insufficient_data")
+        self.assertEqual(by_symbol["ZZZ"]["state"], "missing")
+        self.assertEqual(by_symbol["ZZZ"]["reason_code"], "blocked_missing_local_data")
+
+    def test_create_universe_job_uses_local_coverage_preflight_reason_codes(self) -> None:
+        self._seed_history("AAPL", [10.0, 10.2, 10.4, 10.6, 10.8])
+        self._seed_history("MSFT", [20.0, 20.2, 20.4, 20.6], start=date(2025, 1, 2))
+        service = RuleBacktestService(self.db)
+
+        with patch.object(RuleBacktestService, "_ensure_market_history") as ensure_mock, patch(
+            "src.services.rule_backtest_service.fetch_daily_history_with_local_us_fallback"
+        ) as fetch_mock:
+            job = service.create_universe_job(
+                symbols=["MSFT", "AAPL", "ZZZ"],
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                start_date="2025-01-01",
+                end_date="2025-01-05",
+                lookback_bars=5,
+            )
+
+        ensure_mock.assert_not_called()
+        fetch_mock.assert_not_called()
+        self.assertEqual(job["completed_count"], 1)
+        self.assertEqual(job["skipped_count"], 2)
+
+        results = service.list_universe_job_results(job["id"], page=1, limit=10)
+        by_symbol = {item["symbol"]: item for item in results["items"]}
+        self.assertEqual(by_symbol["AAPL"]["status"], "ready_local_data")
+        self.assertEqual(by_symbol["AAPL"]["metrics"]["local_data_preflight"]["state"], "ready")
+        self.assertEqual(by_symbol["MSFT"]["status"], "skipped")
+        self.assertEqual(by_symbol["MSFT"]["reason_code"], "partial_local_data")
+        self.assertEqual(by_symbol["MSFT"]["metrics"]["local_data_preflight"]["state"], "partial")
+        self.assertEqual(by_symbol["ZZZ"]["reason_code"], "blocked_missing_local_data")
+
     def test_universe_job_results_are_paginated_by_sequence_index(self) -> None:
         for code in ["AAPL", "MSFT", "NVDA"]:
             self._seed_history(code, [10.0, 10.2, 10.4, 10.6, 10.8])
