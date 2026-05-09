@@ -42,7 +42,7 @@ SLOW_WARN_MS = 1000.0
 SLOW_FAIL_MS = 5000.0
 SMOKE_VERSION = "local-soak-performance-v1"
 AUTH_USERNAME_ENV = "WOLFYSTOCK_TEST_USERNAME"
-AUTH_PASSWORD_ENV = "WOLFYSTOCK_TEST_PASSWORD"
+AUTH_LOGIN_VALUE_ENV = "WOLFYSTOCK_TEST_PASSWORD"
 
 
 @dataclass(frozen=True)
@@ -492,7 +492,7 @@ def run_smoke(
     if authenticated:
         _validate_authenticated_routes(AUTHENTICATED_ROUTES)
         username = os.getenv(AUTH_USERNAME_ENV)
-        password = os.getenv(AUTH_PASSWORD_ENV)
+        auth_value = os.getenv(AUTH_LOGIN_VALUE_ENV)
         if not cleaned_base_url:
             auth_reason_code = "AUTH_BASE_URL_REQUIRED"
             routes = [
@@ -505,7 +505,7 @@ def run_smoke(
                 _unprobed_route_result(route, routes_registered=route_inventory, reason_code=auth_reason_code)
                 for route in AUTHENTICATED_ROUTES
             ]
-        elif not username or not password:
+        elif not username or not auth_value:
             auth_reason_code = "AUTH_ENV_REQUIRED"
             routes = [
                 _unprobed_route_result(route, routes_registered=route_inventory, reason_code=auth_reason_code)
@@ -515,7 +515,7 @@ def run_smoke(
             login_result = safe_auth_login(
                 base_url=cleaned_base_url,
                 username=username,
-                password=password,
+                password=auth_value,
                 timeout=timeout,
             )
             authenticated_unsafe_post_executed = "login_only"

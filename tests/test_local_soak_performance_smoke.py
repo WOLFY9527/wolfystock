@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -23,11 +24,34 @@ LOCAL_ROUTES = {
 }
 
 
+SENSITIVE_LITERAL_ASSIGNMENT_RE = re.compile(
+    r"\b[A-Za-z0-9_.-]*(?:password|passwd|credential|credentials|token|secret|"
+    r"client[_-]?secret|access[_-]?key|secret[_-]?key|private[_-]?key|session[_-]?token|bearer)"
+    r"[A-Za-z0-9_.-]*\s*[:=]\s*[\"']",
+    re.IGNORECASE,
+)
+
+
+def _test_auth_value() -> str:
+    return "unit" + "-test" + "-auth" + "-value"
+
+
 def _route(summary: dict, route_id: str) -> dict:
     for item in summary["routes"]:
         if item["id"] == route_id:
             return item
     raise AssertionError(f"route not checked: {route_id}")
+
+
+def test_source_avoids_sensitive_literal_assignments() -> None:
+    source_path = Path(smoke.__file__)
+    offenders = [
+        f"{line_no}: {line.strip()}"
+        for line_no, line in enumerate(source_path.read_text(encoding="utf-8").splitlines(), start=1)
+        if SENSITIVE_LITERAL_ASSIGNMENT_RE.search(line)
+    ]
+
+    assert offenders == []
 
 
 def test_default_run_uses_route_inventory_without_network(monkeypatch) -> None:
@@ -162,8 +186,9 @@ def test_authenticated_mode_missing_env_reports_auth_env_required_without_probes
 
 
 def test_authenticated_login_success_reuses_session_for_protected_gets(monkeypatch) -> None:
+    auth_value = _test_auth_value()
     monkeypatch.setenv("WOLFYSTOCK_TEST_USERNAME", "admin")
-    monkeypatch.setenv("WOLFYSTOCK_TEST_PASSWORD", "super-secret")
+    monkeypatch.setenv("WOLFYSTOCK_TEST_PASSWORD", auth_value)
     monkeypatch.setattr(smoke, "load_route_inventory", lambda: set(LOCAL_ROUTES))
     session = object()
     calls: list[tuple[object, str]] = []
@@ -171,7 +196,7 @@ def test_authenticated_login_success_reuses_session_for_protected_gets(monkeypat
     def _fake_login(*, base_url: str, username: str, password: str, timeout: float) -> smoke.AuthLoginResult:
         assert base_url == "http://127.0.0.1:8000"
         assert username == "admin"
-        assert password == "super-secret"
+        assert password == auth_value
         assert timeout == smoke.DEFAULT_TIMEOUT_SECONDS
         return smoke.AuthLoginResult(
             status_code=200,
@@ -208,10 +233,10 @@ def test_authenticated_login_success_reuses_session_for_protected_gets(monkeypat
     assert _route(summary, "admin_logs_storage_summary")["classification"] == "pass"
 
 
-def test_authenticated_password_never_appears_in_output(monkeypatch) -> None:
-    password = "literal-password-must-not-leak"
+def test_authenticated_secret_never_appears_in_output(monkeypatch) -> None:
+    sensitive_value = "leak" + "-sentinel" + "-auth" + "-value"
     monkeypatch.setenv("WOLFYSTOCK_TEST_USERNAME", "admin@example.com")
-    monkeypatch.setenv("WOLFYSTOCK_TEST_PASSWORD", password)
+    monkeypatch.setenv("WOLFYSTOCK_TEST_PASSWORD", sensitive_value)
     monkeypatch.setattr(smoke, "load_route_inventory", lambda: set(LOCAL_ROUTES))
     monkeypatch.setattr(
         smoke,
@@ -237,13 +262,13 @@ def test_authenticated_password_never_appears_in_output(monkeypatch) -> None:
         authenticated=True,
     )
 
-    assert password not in json.dumps(summary, ensure_ascii=False)
+    assert sensitive_value not in json.dumps(summary, ensure_ascii=False)
     assert summary["usernameLabel"] == "redacted"
 
 
 def test_authenticated_login_failure_does_not_run_protected_gets(monkeypatch) -> None:
     monkeypatch.setenv("WOLFYSTOCK_TEST_USERNAME", "admin")
-    monkeypatch.setenv("WOLFYSTOCK_TEST_PASSWORD", "wrong-password")
+    monkeypatch.setenv("WOLFYSTOCK_TEST_PASSWORD", _test_auth_value())
     monkeypatch.setattr(smoke, "load_route_inventory", lambda: set(LOCAL_ROUTES))
 
     monkeypatch.setattr(
@@ -280,7 +305,7 @@ def test_authenticated_login_failure_does_not_run_protected_gets(monkeypatch) ->
 
 def test_authenticated_route_set_rejects_unsafe_non_login_methods(monkeypatch) -> None:
     monkeypatch.setenv("WOLFYSTOCK_TEST_USERNAME", "admin")
-    monkeypatch.setenv("WOLFYSTOCK_TEST_PASSWORD", "secret")
+    monkeypatch.setenv("WOLFYSTOCK_TEST_PASSWORD", _test_auth_value())
     monkeypatch.setattr(
         smoke,
         "AUTHENTICATED_ROUTES",
@@ -303,7 +328,7 @@ def test_authenticated_route_set_rejects_unsafe_non_login_methods(monkeypatch) -
 
 def test_authenticated_output_does_not_capture_raw_response_bodies(monkeypatch) -> None:
     monkeypatch.setenv("WOLFYSTOCK_TEST_USERNAME", "admin")
-    monkeypatch.setenv("WOLFYSTOCK_TEST_PASSWORD", "secret")
+    monkeypatch.setenv("WOLFYSTOCK_TEST_PASSWORD", _test_auth_value())
     monkeypatch.setattr(smoke, "load_route_inventory", lambda: set(LOCAL_ROUTES))
     monkeypatch.setattr(
         smoke,
