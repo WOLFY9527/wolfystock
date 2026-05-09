@@ -967,39 +967,39 @@ function getReportQuality(report: AnalysisReport | null | undefined): ReportQual
 }
 
 function traceQualityLabel(status: ReportQuality['traceStatus']): string {
-  if (status === 'present') return '溯源完整';
-  if (status === 'partial') return '溯源部分';
-  if (status === 'missing') return '未包含决策溯源';
-  return '溯源未知';
+  if (status === 'present') return '决策依据可查看';
+  if (status === 'partial') return '依据部分可用';
+  if (status === 'missing') return '缺少决策依据';
+  return '依据未确认';
 }
 
 function schemaQualityLabel(status: ReportQuality['schemaStatus']): string {
-  if (status === 'ok') return '结构确认';
-  if (status === 'unconfirmed') return '结构未确认';
-  if (status === 'missing') return '结构缺失';
-  return '结构未知';
+  if (status === 'ok') return '结果已整理';
+  if (status === 'unconfirmed') return '依据需复核';
+  if (status === 'missing') return '结果待整理';
+  return '依据需复核';
 }
 
 function summaryQualityLabel(status: ReportQuality['summaryStatus']): string {
-  if (status === 'complete') return '摘要完整';
+  if (status === 'complete') return '摘要可读';
   if (status === 'partial') return '摘要部分可用';
   return '摘要缺失';
 }
 
 function reportQualityLabel(status: ReportQuality['reportStatus']): string {
-  if (status === 'complete') return '报告完整';
+  if (status === 'complete') return '报告可读';
   if (status === 'partial') return '报告部分可用';
   return '报告缺失';
 }
 
 function qualityChipTone(label: string): 'neutral' | 'used' | 'warning' | 'missing' {
-  if (/完整|确认|可用/.test(label) && !/部分|未确认/.test(label)) {
+  if (/可信度较高|可查看|可读|已整理|可用/.test(label) && !/部分|未确认|复核/.test(label)) {
     return 'used';
   }
-  if (/缺失|失败|未包含/.test(label)) {
+  if (/缺失|失败|缺少/.test(label)) {
     return 'missing';
   }
-  if (/部分|旧版|未确认|未知/.test(label)) {
+  if (/部分|旧版|未确认|未知|复核|待整理/.test(label)) {
     return 'warning';
   }
   return 'neutral';
@@ -1011,7 +1011,7 @@ function ReportQualityChip({ label }: { label: string }) {
 
 function buildQualityStatusSummary(quality: ReportQuality): string {
   return [
-    quality.userLabel,
+    quality.userLabel === '完整' ? '可信度较高' : quality.userLabel,
     traceQualityLabel(quality.traceStatus),
     schemaQualityLabel(quality.schemaStatus),
     summaryQualityLabel(quality.summaryStatus),
@@ -1023,18 +1023,22 @@ function buildTraceSummary(trace?: DecisionTrace, quality?: ReportQuality): stri
   if (!trace) {
     return qualitySummary || '未包含决策溯源';
   }
-  const hasRule = Object.values(trace.decisionFields || {}).some((field) => /rule/.test(String(field.source || '').toLowerCase()));
-  const hasLlm = Boolean(trace.llm?.used) || Object.values(trace.decisionFields || {}).some((field) => /llm/.test(String(field.source || '').toLowerCase()));
-  const sourceLabel = [hasRule ? '规则' : null, hasLlm ? 'LLM' : null].filter(Boolean).join(' + ') || '未知';
   const sourceCount = trace.dataSources?.length || 0;
   const usedCount = (trace.dataSources || []).filter((source) => String(source.status || '').toLowerCase() === 'used').length;
   const conflictCount = trace.conflicts?.length || 0;
-  const schemaLabel = trace.llm?.schemaValidated ? '结构确认' : '结构未确认';
+  const dataLabel = sourceCount === 0
+    ? '数据覆盖未确认'
+    : usedCount === 0
+      ? '数据不足，结论仅供观察'
+      : usedCount < sourceCount
+        ? '部分数据可用'
+        : '数据覆盖较充分';
+  const conflictLabel = conflictCount > 0 ? '存在需复核的证据冲突' : '未发现主要证据冲突';
+  const schemaLabel = trace.llm?.schemaValidated ? null : '依据需复核';
   return [
     qualitySummary,
-    `来源：${sourceLabel}`,
-    `数据 ${usedCount}/${sourceCount}`,
-    `冲突 ${conflictCount}`,
+    dataLabel,
+    conflictLabel,
     schemaLabel,
   ].filter(Boolean).join(' · ');
 }
@@ -1220,6 +1224,32 @@ function summarizeEnrichmentGaps(report: DataQualityReport): string[] {
   return Array.from(new Set(sources)).slice(0, 5);
 }
 
+function dataQualityFieldLabel(value: string, locale: DashboardLocale): string {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return locale === 'en' ? 'Unconfirmed data gap' : '数据缺口未确认';
+  if (normalized.includes('fundamental')) return locale === 'en' ? 'Fundamental data missing' : '基本面数据不完整';
+  if (normalized.includes('earning')) return locale === 'en' ? 'Earnings data missing' : '财报数据暂缺';
+  if (normalized.includes('news')) return locale === 'en' ? 'News data missing' : '新闻数据暂缺';
+  if (normalized.includes('sentiment')) return locale === 'en' ? 'Sentiment data missing' : '情绪数据暂缺';
+  if (normalized.includes('technical')) return locale === 'en' ? 'Technical data missing' : '技术指标暂不可用';
+  if (normalized.includes('optional')) return locale === 'en' ? 'Optional enrichment pending' : '部分增强数据待补充';
+  return value.replace(/[_-]+/g, ' ');
+}
+
+function dataQualityReasonLabel(value: string, locale: DashboardLocale): string {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return locale === 'en' ? 'Reason unconfirmed' : '原因未确认';
+  if (normalized.includes('optional_news_timeout') || normalized.includes('news')) return locale === 'en' ? 'News data temporarily unavailable' : '新闻数据暂缺';
+  if (normalized.includes('fundamentals_unavailable') || normalized.includes('fundamental')) return locale === 'en' ? 'Fundamental data missing' : '基本面数据缺失';
+  if (normalized.includes('earnings_unavailable') || normalized.includes('earning')) return locale === 'en' ? 'Earnings data temporarily unavailable' : '财报数据暂缺';
+  if (normalized.includes('technical_indicators_unavailable') || normalized.includes('technical')) return locale === 'en' ? 'Technical indicators temporarily unavailable' : '技术指标暂不可用';
+  if (normalized.includes('provider_timeout') || normalized.includes('timeout') || normalized.includes('provider')) {
+    return locale === 'en' ? 'Some external data is temporarily unavailable' : '部分外部数据暂不可用';
+  }
+  if (normalized.includes('unavailable') || normalized.includes('missing')) return locale === 'en' ? 'Some data is missing' : '部分数据缺失';
+  return value.replace(/[_-]+/g, ' ');
+}
+
 function summarizeEnrichmentReasons(report: DataQualityReport): string[] {
   const reasonMap = report.enrichmentReasons || {};
   const reasons = Object.values(reasonMap).flat().filter(Boolean);
@@ -1227,6 +1257,7 @@ function summarizeEnrichmentReasons(report: DataQualityReport): string[] {
 }
 
 function DataQualityCompactPanel({ report, locale }: { report: DataQualityReport | undefined; locale: DashboardLocale }) {
+  const [developerOpen, setDeveloperOpen] = useState(false);
   if (!report) return null;
   const isEnglish = locale === 'en';
   const quickDecisionText = report.requiredAvailable === false
@@ -1234,16 +1265,19 @@ function DataQualityCompactPanel({ report, locale }: { report: DataQualityReport
     : (isEnglish ? 'Fast decision complete' : '快速判断已完成');
   const missingCritical = report.requiredAvailable === false
     ? (isEnglish ? 'Required quote/candle data missing' : '缺失关键行情或 K 线数据')
-    : report.importantMissing?.slice(0, 3).join('、') || (isEnglish ? 'No required gaps' : '关键数据已满足');
+    : report.importantMissing?.slice(0, 3).map((item) => dataQualityFieldLabel(item, locale)).join('、') || (isEnglish ? 'No required gaps' : '关键数据已满足');
   const enrichmentGaps = summarizeEnrichmentGaps(report);
-  const enrichmentReasons = summarizeEnrichmentReasons(report);
+  const enrichmentReasons = summarizeEnrichmentReasons(report).map((item) => dataQualityReasonLabel(item, locale));
   const optionalText = [
     enrichmentStatusLabel(report.enrichmentStatus, locale),
     enrichmentGaps.length
-      ? `${isEnglish ? 'Missing' : '缺失项'}：${enrichmentGaps.join('、')}`
+      ? `${isEnglish ? 'Missing' : '缺失项'}：${enrichmentGaps.map((item) => dataQualityFieldLabel(item, locale)).join('、')}`
       : (isEnglish ? 'No visible enrichment gaps' : '暂无可见增强缺口'),
     enrichmentReasons.length
       ? `${isEnglish ? 'Reasons' : '原因'}：${enrichmentReasons.join('、')}`
+      : null,
+    report.providerTimeouts?.length || report.providerCooldowns?.length
+      ? (isEnglish ? 'Some external data is temporarily unavailable' : '部分外部数据暂不可用')
       : null,
   ].filter(Boolean).join(' · ');
   const providerLabels = [...(report.providerTimeouts || []), ...(report.providerCooldowns || [])].slice(0, 4);
@@ -1281,21 +1315,20 @@ function DataQualityCompactPanel({ report, locale }: { report: DataQualityReport
           <p className="mt-1 break-words text-sm text-white/72">{optionalText}</p>
         </div>
       </div>
-      {providerLabels.length ? (
-        <div className="mt-3 flex min-w-0 flex-wrap gap-2">
-          {providerLabels.map((label) => <TraceBadge key={label}>{label}</TraceBadge>)}
-        </div>
-      ) : null}
       <details
         className="mt-3 rounded-xl border border-white/6 bg-black/10 px-3 py-2"
         data-testid="home-bento-data-quality-developer"
+        onToggle={(event) => setDeveloperOpen(event.currentTarget.open)}
       >
         <summary className="cursor-pointer text-[11px] font-semibold tracking-[0] text-white/58">
           {isEnglish ? 'Developer Details' : '开发者细节'}
         </summary>
-        <p className="mt-2 break-words text-xs text-white/50">
-          {(report.reasonCodes || []).join('、') || (isEnglish ? 'No reason codes.' : '暂无原因码。')}
-        </p>
+        {developerOpen ? (
+          <div className="mt-2 space-y-2 break-words text-xs text-white/50">
+            <p>{(report.reasonCodes || []).join('、') || (isEnglish ? 'No reason codes.' : '暂无原因码。')}</p>
+            {providerLabels.length ? <p>{providerLabels.join('、')}</p> : null}
+          </div>
+        ) : null}
       </details>
     </section>
   );
@@ -4064,7 +4097,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             const shouldShowTickerMeta = ticker && companyLabel.toUpperCase() !== ticker;
             const itemQuality = item.reportQuality || reportQualityFallback();
             const historyQualityLabels = [
-              itemQuality.userLabel,
+              itemQuality.userLabel === '完整' ? '可信度较高' : itemQuality.userLabel,
               traceQualityLabel(itemQuality.traceStatus),
               reportQualityLabel(itemQuality.reportStatus),
               itemQuality.schemaStatus === 'ok' || itemQuality.schemaStatus === 'unconfirmed'

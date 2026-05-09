@@ -796,8 +796,8 @@ function buildDecisionSummary(
       ? `Main rejection: ${rejectionBuckets[0]?.label || 'n/a'}`
       : `主要淘汰原因：${rejectionBuckets[0]?.label || '暂无'}`,
     data: dataFailedCount
-      ? (language === 'en' ? `Data status: ${dataFailedCount} data failed` : `数据状态：${dataFailedCount} 个数据失败`)
-      : (language === 'en' ? 'Data status: no data failures' : '数据状态：无数据失败'),
+      ? (language === 'en' ? 'Data status: partial data missing' : '数据状态：部分数据缺失')
+      : (language === 'en' ? 'Data status: enough for observation' : '数据状态：可用于观察'),
   };
 }
 
@@ -1457,6 +1457,13 @@ function ScannerLaunchEvidenceSummary({
   const dataReadyCount = coverage?.eligibleAfterDataAvailabilityFilter ?? evaluatedCount;
   const missingCount = provider?.missingDataSymbolCount ?? runDetail?.summary?.dataFailedCount ?? 0;
   const readinessLabel = runDetail ? getRunDataStatusLabel(runDetail, language) : (language === 'en' ? 'Waiting for scan' : '等待扫描');
+  const readinessPlainText = !runDetail
+    ? (language === 'en' ? 'Waiting for scan' : '等待扫描')
+    : missingCount > 0
+      ? (language === 'en' ? 'Partial data missing' : '部分数据缺失')
+      : dataReadyCount > 0
+        ? (language === 'en' ? 'Enough data for observation' : '数据可用于观察')
+        : readinessLabel;
   const stateLabel = runDetail ? compactScannerStateLabel(runDetail.status, language) : (language === 'en' ? 'No scan loaded' : '暂无扫描');
   const nextStep = !runDetail
     ? (language === 'en' ? 'Run or open a recent scan to inspect candidates.' : '运行扫描或打开近期扫描后查看候选。')
@@ -1491,7 +1498,7 @@ function ScannerLaunchEvidenceSummary({
         <div className="rounded-2xl border border-white/5 bg-black/20 p-3">
           <span className="block text-[10px] font-bold uppercase tracking-widest text-white/38">{language === 'en' ? 'Data readiness' : '数据就绪'}</span>
           <span className="mt-1 block text-sm font-medium text-white/78">{readinessLabel}</span>
-          <span className="mt-0.5 block font-mono text-[11px] text-white/42">{dataReadyCount}/{evaluatedCount || '--'} · {language === 'en' ? 'missing' : '缺失'} {missingCount}</span>
+          <span className="mt-0.5 block text-[11px] text-white/42">{readinessPlainText}</span>
         </div>
         <div className="rounded-2xl border border-white/5 bg-black/20 p-3">
           <span className="block text-[10px] font-bold uppercase tracking-widest text-white/38">{language === 'en' ? 'Next observation' : '下一步观察'}</span>
@@ -3609,12 +3616,12 @@ const UserScannerPage: React.FC = () => {
                 <div className="shrink-0 border-b border-white/5 px-3 py-2" data-testid="scanner-diagnostic-summary">
                   <div data-testid="scanner-summary-counters" className="flex flex-wrap items-center gap-1.5 rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 backdrop-blur-md">
                     {[
-                      [language === 'en' ? 'UNIVERSE' : '候选范围', runDetail.summary?.universeCount ?? runDetail.acceptedSymbolsCount ?? runDetail.universeSize],
-                      [language === 'en' ? 'EVALUATED' : '已评估', runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize],
-                      [language === 'en' ? 'SELECTED' : '入选', runDetail.summary?.selectedCount ?? shortlistCount],
-                      [language === 'en' ? 'REJECTED' : '淘汰', runDetail.summary?.rejectedCount ?? 0],
-                      [language === 'en' ? 'DATA FAILED' : '数据失败', runDetail.summary?.dataFailedCount ?? 0],
-                      [language === 'en' ? 'SKIPPED' : '跳过', runDetail.summary?.skippedCount ?? 0],
+                      [language === 'en' ? 'Universe' : '候选范围', runDetail.summary?.universeCount ?? runDetail.acceptedSymbolsCount ?? runDetail.universeSize],
+                      [language === 'en' ? 'Evaluated' : '已评估', runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize],
+                      [language === 'en' ? 'Selected' : '入选', runDetail.summary?.selectedCount ?? shortlistCount],
+                      [language === 'en' ? 'Not selected' : '未入选', runDetail.summary?.rejectedCount ?? 0],
+                      [language === 'en' ? 'Data thin' : '数据不足', runDetail.summary?.dataFailedCount ?? 0],
+                      [language === 'en' ? 'Not processed' : '暂未处理', runDetail.summary?.skippedCount ?? 0],
                     ].map(([label, value]) => (
                       <span key={label} className="inline-flex items-baseline gap-1 rounded-lg border border-white/5 bg-black/20 px-2 py-1">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{label}</span>
@@ -3642,7 +3649,6 @@ const UserScannerPage: React.FC = () => {
                           runDetail.summary?.limitedByResultCap
                             ? (language === 'en' ? 'result cap active' : '结果上限生效')
                             : null,
-                          formatProviderDiagnostics(getRunProviderDiagnostics(runDetail), language),
                         ].filter(Boolean).join(' · ')}
                       </p>
                     </div>
@@ -4048,8 +4054,8 @@ const UserScannerPage: React.FC = () => {
 	                              >
                                 <span className="truncate font-mono font-semibold text-blue-100">{candidate.symbol}</span>
                                 <span className="truncate font-mono text-blue-100/58">{diagnosticScoreValue(candidate)}</span>
-                                <span className="truncate text-white/50" title={getDiagnosticReason(candidate, language)}>
-                                  {getDiagnosticReason(candidate, language)}
+                                <span className="truncate text-white/50" title={formatFriendlyDiagnosticReason(candidate, language)}>
+                                  {formatFriendlyDiagnosticReason(candidate, language)}
                                 </span>
                               </button>
                             ))}
@@ -4068,8 +4074,8 @@ const UserScannerPage: React.FC = () => {
 	                            >
                               <span className="truncate font-mono font-semibold text-white/78">{candidate.symbol}</span>
                               <span className="truncate font-mono text-white/42">{diagnosticScoreValue(candidate)}</span>
-                              <span className="truncate text-white/50" title={getDiagnosticReason(candidate, language)}>
-                                {getDiagnosticReason(candidate, language)}
+                              <span className="truncate text-white/50" title={formatFriendlyDiagnosticReason(candidate, language)}>
+                                {formatFriendlyDiagnosticReason(candidate, language)}
                               </span>
                             </button>
                           ))}

@@ -1,5 +1,12 @@
 ## 2026-05-09
 
+- 🧭 **Frontend information hygiene** — AI research, Scanner, and Chat default
+  surfaces now translate developer diagnostics into plain user-facing Chinese
+  data sufficiency and risk language, keeping raw provider/schema/reason-code
+  details collapsed or on admin/operator pages. Backend behavior, provider
+  routing, scanner scoring, backtest calculations, portfolio accounting,
+  auth/RBAC, and notifications are unchanged.
+
 - 🧪 **Backtest large-universe scaffold** — Rule backtest now has a stored local-only universe job scaffold with compact metadata rows, per-symbol readiness rows, deterministic normalized symbol ordering, a 500-symbol default cap, and paginated status/result APIs. This first slice is preflight-only: it checks existing local daily bars, marks missing symbols as `blocked_missing_local_data`, does not execute single-symbol calculations, does not call live providers, does not add worker concurrency, and does not make DuckDB a runtime source of truth.
 
 - 🦆 **DuckDB local-RC diagnostic hardening** — Optional DuckDB quant diagnostics now avoid creating a missing DB file on enabled read-only health/coverage/benchmark checks, return sanitized unavailable reason codes for corrupt/unreadable, permission-denied, and schema-mismatched local DB files, and cap explicit payload ingest at 5,000 rows per request. DuckDB remains disabled by default and diagnostic-only; this does not connect DuckDB to scanner scoring, backtest calculations, portfolio accounting, provider routing, AI decisions, notifications, auth/RBAC, or production runtime paths.

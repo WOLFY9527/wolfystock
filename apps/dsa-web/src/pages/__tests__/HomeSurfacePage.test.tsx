@@ -431,12 +431,15 @@ describe('HomeSurfacePage', () => {
     expect(panel).toHaveTextContent('数据等级: 分析级');
     expect(panel).toHaveTextContent('置信度上限 70');
     expect(panel).toHaveTextContent('快速判断已完成');
-    expect(panel).toHaveTextContent('fundamentals.eps');
+    expect(panel).toHaveTextContent('基本面数据不完整');
     expect(panel).toHaveTextContent('增强数据补充中');
-    expect(panel).toHaveTextContent('缺失项：news、detailed_fundamentals');
-    expect(panel).toHaveTextContent('optional_news_timeout');
-    expect(panel).toHaveTextContent('gnews:news');
-    expect(panel).toHaveTextContent('fmp:fundamentals');
+    expect(panel).toHaveTextContent('缺失项：新闻数据暂缺、基本面数据不完整');
+    expect(panel).toHaveTextContent('新闻数据暂缺');
+    expect(panel).toHaveTextContent('部分外部数据暂不可用');
+    expect(panel).not.toHaveTextContent('fundamentals.eps');
+    expect(panel).not.toHaveTextContent('optional_news_timeout');
+    expect(panel).not.toHaveTextContent('gnews:news');
+    expect(panel).not.toHaveTextContent('fmp:fundamentals');
     expect(screen.getByTestId('home-bento-data-quality-developer')).not.toHaveAttribute('open');
     expect(panel).not.toHaveTextContent(/api[_-]?key|token|secret|stack trace|sk-/i);
   });
@@ -811,7 +814,11 @@ describe('HomeSurfacePage', () => {
     const panel = await screen.findByTestId('home-bento-decision-trace-panel');
     const developerDetails = within(panel).getByTestId('home-bento-decision-trace-developer');
     expect(developerDetails).not.toHaveAttribute('open');
-    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('结构未确认');
+    const sourceSummary = screen.getByTestId('home-bento-decision-source-summary');
+    expect(sourceSummary).toHaveTextContent('依据需复核');
+    expect(sourceSummary).not.toHaveTextContent('结构未确认');
+    expect(sourceSummary).not.toHaveTextContent('来源：');
+    expect(sourceSummary).not.toHaveTextContent('规则 + LLM');
     expect(within(panel).getByText('报价')).toBeInTheDocument();
     expect(within(panel).getByText('部分可用')).toBeInTheDocument();
   });
@@ -921,7 +928,7 @@ describe('HomeSurfacePage', () => {
     await screen.findByText('Oracle Corporation');
 
     expect(screen.getByTestId('home-bento-decision-source-summary')).not.toHaveTextContent('未包含决策溯源');
-    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('结构未确认');
+    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('依据需复核');
     expect(screen.getByTestId('home-bento-decision-conviction-value')).not.toHaveTextContent('0%');
 
     fireEvent.click(screen.getByRole('button', { name: '决策来源' }));
@@ -1029,7 +1036,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '决策来源' }));
 
     expect(await screen.findByTestId('home-bento-decision-trace-panel')).toHaveTextContent('当前分析未包含决策溯源');
-    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('未包含决策溯源');
+    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('缺少决策依据');
     expect(screen.getByTestId('home-bento-decision-trace-developer')).not.toHaveAttribute('open');
   });
 
@@ -1155,14 +1162,16 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
 
     const complete = await screen.findByTestId('home-bento-history-quality-41');
-    expect(within(complete).getByText('完整')).toBeInTheDocument();
-    expect(within(complete).getByText('溯源完整')).toBeInTheDocument();
-    expect(within(complete).getByText('报告完整')).toBeInTheDocument();
-    expect(within(complete).getByText('结构确认')).toBeInTheDocument();
+    expect(within(complete).getByText('可信度较高')).toBeInTheDocument();
+    expect(within(complete).getByText('决策依据可查看')).toBeInTheDocument();
+    expect(within(complete).getByText('报告可读')).toBeInTheDocument();
+    expect(within(complete).getByText('结果已整理')).toBeInTheDocument();
+    expect(complete).not.toHaveTextContent('溯源完整');
+    expect(complete).not.toHaveTextContent('结构确认');
     const usable = screen.getByTestId('home-bento-history-quality-42');
     expect(within(usable).getByText('可用')).toBeInTheDocument();
-    expect(within(usable).getByText('未包含决策溯源')).toBeInTheDocument();
-    expect(within(usable).getByText('结构未确认')).toBeInTheDocument();
+    expect(within(usable).getByText('缺少决策依据')).toBeInTheDocument();
+    expect(within(usable).getByText('依据需复核')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-history-quality-43')).toHaveTextContent('旧版记录');
     expect(screen.getByTestId('home-bento-history-quality-44')).toHaveTextContent('分析失败');
   });
@@ -1192,8 +1201,9 @@ describe('HomeSurfacePage', () => {
 
     await screen.findByText('Oracle Corporation');
     expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('可用');
-    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('未包含决策溯源');
-    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('结构未确认');
+    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('缺少决策依据');
+    expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('依据需复核');
+    expect(screen.getByTestId('home-bento-decision-source-summary')).not.toHaveTextContent('结构未确认');
     expect(screen.getByTestId('home-bento-decision-conviction-value')).toHaveTextContent('-');
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '重新分析' })).toBeEnabled();

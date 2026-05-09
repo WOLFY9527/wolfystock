@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { ArrowUp, Download, Lightbulb, PanelRightOpen, SendHorizontal } from 'lucide-react';
+import { ArrowUp, ChevronDown, Download, Lightbulb, PanelRightOpen, SendHorizontal } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { agentApi, type AgentModelDeployment, type AgentProviderHealthResponse, type AgentProviderHealthStatus, type AgentStockEvidenceItem } from '../api/agent';
+import { agentApi, type AgentProviderHealthResponse, type AgentProviderHealthStatus, type AgentStockEvidenceItem } from '../api/agent';
 import { watchlistApi } from '../api/watchlist';
 import { portfolioApi } from '../api/portfolio';
 import { scannerApi } from '../api/scanner';
@@ -528,12 +528,12 @@ const ChatPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState('');
   const [skills, setSkills] = useState<SkillInfo[]>([]);
-  const [agentModels, setAgentModels] = useState<AgentModelDeployment[]>([]);
   const [providerHealth, setProviderHealth] = useState<AgentProviderHealthResponse | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<string>('');
   const [showSkillDesc, setShowSkillDesc] = useState<string | null>(null);
   const [watchlistAction, setWatchlistAction] = useState<{ symbol: string; type: 'success' | 'error'; message: string } | null>(null);
   const [expandedThinking, setExpandedThinking] = useState<Set<string>>(new Set());
+  const [engineDetailsOpen, setEngineDetailsOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [isFollowUpContextLoading, setIsFollowUpContextLoading] = useState(false);
@@ -612,11 +612,6 @@ const ChatPage: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    void agentApi.getModels().then((res) => {
-      if (!cancelled) setAgentModels(res.models || []);
-    }).catch(() => {
-      if (!cancelled) setAgentModels([]);
-    });
     void agentApi.getProviderHealth().then((res) => {
       if (!cancelled) setProviderHealth(res);
     }).catch(() => {
@@ -1606,9 +1601,6 @@ const ChatPage: React.FC = () => {
   };
 
   const renderControlPanel = (testId: string) => {
-    const primaryModel = agentModels.find((model) => model.is_primary) || agentModels[0];
-    const currentProvider = providerHealth?.currentProvider || providerHealth?.providers.find((item) => item.selected)?.label || primaryModel?.provider || 'DeepSeek';
-    const currentModel = providerHealth?.currentModel || providerHealth?.providers.find((item) => item.selected)?.model || primaryModel?.model || 'provider auto-select';
     const primaryVisibleLenses = PRIMARY_ANALYSIS_LENSES.slice(0, 4);
     const secondaryLenses = [...PRIMARY_ANALYSIS_LENSES.slice(4), ...ADVANCED_ANALYSIS_LENSES];
     return (
@@ -1617,24 +1609,40 @@ const ChatPage: React.FC = () => {
           <div className="flex items-center justify-between gap-3">
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">AI 引擎</p>
             <span className="rounded-full border border-white/8 bg-white/[0.03] px-2 py-0.5 font-mono text-[10px] uppercase text-white/36">
-              {providerHealth?.routingMode || 'auto'}
+              {language === 'en' ? 'auto' : '自动'}
             </span>
           </div>
           <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-white/6 bg-black/25 px-3 py-2">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">{providerHealth?.routingMode || 'AUTO'} → {currentProvider}</p>
-              <p className="truncate font-mono text-[10px] text-white/36">{currentModel}</p>
+              <p className="truncate text-sm font-semibold text-white">
+                {language === 'en' ? 'Automatically select an available research engine' : '自动选择可用研究引擎'}
+              </p>
+              <p className="truncate text-[10px] text-white/36">
+                {language === 'en' ? 'Provider health stays in diagnostics.' : '供应商状态保留在诊断详情中。'}
+              </p>
             </div>
           </div>
-          <GuidedDisclosure
-            title={language === 'en' ? 'Provider detail' : '引擎明细'}
-            summary={language === 'en' ? 'Routing and provider health are secondary diagnostics.' : '路由和供应商健康状态属于辅助诊断。'}
-            className="mt-2"
-            beginner={language === 'en'
-              ? 'The desk selects an available research engine automatically when configured.'
-              : '配置可用时，研究台会自动选择可用研究引擎。'}
-            professional={(
-              <div className="grid gap-1.5">
+          <details
+            className="group mt-2 rounded-[16px] border border-white/5 bg-white/[0.02] transition-colors open:border-cyan-200/15 open:bg-white/[0.03]"
+            open={engineDetailsOpen}
+          >
+            <summary
+              className="flex min-h-[48px] cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 [&::-webkit-details-marker]:hidden"
+              onClick={(event) => {
+                event.preventDefault();
+                setEngineDetailsOpen((value) => !value);
+              }}
+            >
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-white">{language === 'en' ? 'Provider detail' : '引擎明细'}</span>
+                <span className="mt-1 block text-xs leading-5 text-white/48">
+                  {language === 'en' ? 'Routing and provider health are secondary diagnostics.' : '路由和供应商健康状态属于辅助诊断。'}
+                </span>
+              </span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-white/45 transition-transform group-open:rotate-180" aria-hidden="true" />
+            </summary>
+            {engineDetailsOpen ? (
+              <div className="grid gap-1.5 border-t border-white/[0.04] px-3 pb-3 pt-2">
                 {(providerHealth?.providers || []).map((provider) => (
                   <div key={provider.id} className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-white/5 bg-black/20 px-2 py-1.5">
                     <span className={`truncate text-xs ${provider.selected ? 'text-white' : 'text-white/58'}`}>
@@ -1652,8 +1660,8 @@ const ChatPage: React.FC = () => {
                   </div>
                 ))}
               </div>
-            )}
-          />
+            ) : null}
+          </details>
         </section>
 
         <section data-testid="chat-lens-section" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">

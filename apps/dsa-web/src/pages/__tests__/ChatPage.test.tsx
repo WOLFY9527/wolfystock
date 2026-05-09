@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { historyApi } from '../../api/history';
@@ -324,6 +324,9 @@ describe('ChatPage', () => {
     expect(screen.getByText('AI 引擎')).toBeInTheDocument();
     expect(screen.getByText('分析视角')).toBeInTheDocument();
     expect(screen.getByText('数据上下文')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-engine-section')).toHaveTextContent('自动选择可用研究引擎');
+    expect(screen.getByTestId('chat-engine-section')).not.toHaveTextContent('AUTO → DeepSeek');
+    expect(screen.getByTestId('chat-engine-section')).not.toHaveTextContent('deepseek-chat');
     expect(screen.queryByRole('button', { name: '引擎视角' })).not.toBeInTheDocument();
   });
 
@@ -386,7 +389,10 @@ describe('ChatPage', () => {
     );
 
     const engineSection = await screen.findByTestId('chat-engine-section');
-    expect(engineSection).toHaveTextContent('AUTO → DeepSeek');
+    expect(engineSection).toHaveTextContent('自动选择可用研究引擎');
+    expect(engineSection).not.toHaveTextContent('AUTO → DeepSeek');
+    expect(engineSection).not.toHaveTextContent('DeepSeek 可用');
+    fireEvent.click(within(engineSection).getByText(/引擎明细|Provider detail/i));
     expect(engineSection).toHaveTextContent('DeepSeek 可用');
     expect(engineSection).toHaveTextContent('OpenAI 未配置');
     expect(engineSection).toHaveTextContent('Gemini 离线');
