@@ -55,16 +55,16 @@ import type {
 } from '../types/portfolio';
 
 const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
-const PORTFOLIO_GLASS_CARD_CLASS = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md p-5 transition-all hover:border-white/10';
+const PORTFOLIO_GLASS_CARD_CLASS = 'bg-white/[0.02] border border-white/5 backdrop-blur-md rounded-[16px] p-5 transition-all hover:border-white/10';
 const PORTFOLIO_FIELD_LABEL_CLASS = '!mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40';
 const PORTFOLIO_FIELD_WRAPPER_CLASS = 'flex flex-col gap-1.5';
 const PORTFOLIO_FORM_GRID_CLASS = 'mt-4 grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2';
 const PORTFOLIO_INPUT_CLASS = 'h-10 rounded-lg border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white placeholder:text-white/20 outline-none focus:border-emerald-500/50';
 const PORTFOLIO_SELECT_CLASS = 'min-w-0';
-const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'h-10 rounded-xl border-0 bg-gradient-to-r from-blue-600 to-purple-600 px-4 text-sm font-bold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] hover:from-blue-500 hover:to-purple-500';
-const PORTFOLIO_SUBMIT_BUTTON_CLASS = 'w-full mt-5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium rounded-lg px-6 py-2.5 shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed';
-const PORTFOLIO_SECONDARY_BUTTON_CLASS = 'h-9 rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white';
-const PORTFOLIO_TEXT_BUTTON_CLASS = 'h-8 rounded-md border-0 bg-transparent px-2 text-xs text-white/40 hover:bg-transparent hover:text-white disabled:text-white/15';
+const PORTFOLIO_PRIMARY_BUTTON_CLASS = 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium shadow-[0_0_15px_rgba(139,92,246,0.3)] px-6 py-2.5 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed';
+const PORTFOLIO_SUBMIT_BUTTON_CLASS = 'w-full mt-5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium shadow-[0_0_15px_rgba(139,92,246,0.3)] px-6 py-2.5 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed';
+const PORTFOLIO_SECONDARY_BUTTON_CLASS = 'bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white hover:border-white/20 px-5 py-2.5 rounded-lg transition-all duration-300';
+const PORTFOLIO_TEXT_BUTTON_CLASS = 'bg-white/[0.03] border border-white/10 text-white/60 hover:bg-white/[0.07] hover:text-white px-3 py-1.5 rounded-lg text-xs transition-all disabled:text-white/15 disabled:opacity-50';
 const PORTFOLIO_ICON_BUTTON_CLASS = 'h-9 w-9 rounded-xl border-0 bg-white/[0.04] p-0 text-white/45 hover:bg-white/10 hover:text-white';
 const PORTFOLIO_DANGER_GHOST_CLASS = 'h-8 w-8 rounded-lg border-0 bg-transparent p-0 text-white/30 hover:bg-red-500/10 hover:text-red-400';
 const CASH_CURRENCY_OPTIONS = ['CNY', 'HKD', 'USD'] as const;
@@ -1531,7 +1531,7 @@ const PortfolioPage: React.FC = () => {
     native: language === 'zh' ? '原币' : 'Native',
   };
   const exposureTitle = language === 'zh' ? '资产配置' : 'Exposure';
-  const riskTitle = language === 'zh' ? '组合质量' : 'Portfolio Quality';
+  const riskTitle = language === 'zh' ? '组合风险' : 'Portfolio Risk';
   const exposureEmpty = language === 'zh' ? '暂无配置数据' : 'No exposure data';
   const riskWarningLabels: Record<string, string> = {
     no_holdings: language === 'zh' ? '暂无持仓' : 'No holdings',
@@ -1966,7 +1966,7 @@ const PortfolioPage: React.FC = () => {
   const recentActivityContent = (
     <section
       data-testid="portfolio-recent-activity"
-      className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col gap-3`}
+      className={`${PORTFOLIO_GLASS_CARD_CLASS} order-3 col-span-12 flex flex-col gap-3 xl:col-span-8`}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -2022,7 +2022,7 @@ const PortfolioPage: React.FC = () => {
           ))}
         </div>
       ) : (
-        <div className="rounded-xl bg-white/[0.025] px-4 py-3 text-sm text-white/40">
+        <div className="min-h-[72px] rounded-xl border border-white/[0.02] bg-black/20 px-4 py-3 text-xs text-white/35">
           {emptyRecentActivityLabel}
         </div>
       )}
@@ -2355,7 +2355,7 @@ const PortfolioPage: React.FC = () => {
             <div data-testid="portfolio-row-routing" className="order-3 grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
 	            <section
 	              data-testid="portfolio-pnl-summary"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-4 grid gap-2 sm:grid-cols-3`}
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-6 grid gap-2 sm:grid-cols-3`}
 	            >
 	              {renderPnlTile('realized', realizedPnl, realizedPnlDisplay)}
 	              {renderPnlTile('unrealized', unrealizedPnl, unrealizedPnlDisplay)}
@@ -2364,7 +2364,7 @@ const PortfolioPage: React.FC = () => {
 
 	            <section
 	              data-testid="portfolio-exposure-card"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-4 flex flex-col gap-4`}
+	              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-6 flex flex-col gap-4`}
 	            >
 	              <div className="flex flex-wrap items-center justify-between gap-3">
 	                <h2 className="text-xs uppercase tracking-widest text-muted-text">{exposureTitle}</h2>
@@ -2420,129 +2420,6 @@ const PortfolioPage: React.FC = () => {
 	              )}
 	            </section>
 
-	            <section
-	              data-testid="portfolio-risk-card"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-4 flex flex-col gap-3`}
-	            >
-	              <div className="flex flex-wrap items-start justify-between gap-3">
-	                <div>
-	                  <h2 className="text-xs uppercase tracking-widest text-muted-text">{riskTitle}</h2>
-	                  <p className="mt-1 text-xs text-white/40">{language === 'zh' ? '风险概览 · 持仓集中度 · 盈亏贡献' : 'Risk overview · concentration · P&L contribution'}</p>
-	                </div>
-	                <span data-testid="portfolio-concentration-label">
-                    <PillBadge
-                      variant={topPositionPercent >= 50 ? 'danger' : topPositionPercent >= 20 ? 'warning' : hasHoldings ? 'success' : 'default'}
-                      className={hasHoldings ? concentrationToneClass : 'text-white/35'}
-                    >
-	                    {concentrationLabel}
-                    </PillBadge>
-	                </span>
-	              </div>
-
-	              <div data-testid="portfolio-risk-overview" className="grid grid-cols-2 gap-2">
-	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                  <div className="text-[10px] uppercase tracking-widest text-white/40">{language === 'zh' ? '最大持仓' : 'Largest Position'}</div>
-	                  <div className="mt-1 truncate text-sm text-white">{topPosition?.label || '--'}</div>
-	                  <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topPosition?.percent)}</div>
-	                </div>
-	                <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                  <div className="text-[10px] uppercase tracking-widest text-white/40">{language === 'zh' ? '持仓数量' : 'Holdings'}</div>
-	                  <div className="mt-1 font-mono text-sm text-white">{analytics?.risk.holdingCount ?? positionRows.length}</div>
-	                  <div className="mt-1 font-mono text-xs text-white/45">{language === 'zh' ? '账户' : 'Accounts'} {analytics?.risk.accountCount ?? snapshot?.accountCount ?? 0}</div>
-	                </div>
-	              </div>
-
-	              <div data-testid="portfolio-concentration-drilldown" className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                <div className="flex items-center justify-between gap-3">
-	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '持仓集中度' : 'Concentration'}</div>
-	                  <div className={`font-mono text-xs ${hasHoldings ? concentrationToneClass : 'text-white/35'}`}>{formatPercent(topPosition?.percent)}</div>
-	                </div>
-	                <p className="mt-2 text-xs leading-5 text-white/45">{concentrationDescription}</p>
-	                {symbolExposureRows.length ? (
-	                  <div className="mt-2 flex flex-col gap-1.5">
-	                    {symbolExposureRows.slice(0, 3).map((row) => renderMiniExposureRow(row, { testIdPrefix: 'portfolio-top-position' }))}
-	                  </div>
-	                ) : null}
-	              </div>
-
-	              <div className="grid gap-2 sm:grid-cols-2">
-	                <div data-testid="portfolio-currency-exposure-drilldown" className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                  <div className="flex items-center justify-between gap-3">
-	                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '币种敞口' : 'Currency Exposure'}</div>
-	                    <PillBadge variant={topCurrency?.fxStatus === 'unavailable' ? 'warning' : 'info'} className="shrink-0 text-cyan-200">{currencyFxContext}</PillBadge>
-	                  </div>
-	                  <div className="mt-2 text-[10px] uppercase tracking-widest text-white/35">{language === 'zh' ? '最大币种' : 'Largest Currency'}</div>
-	                  <div className="mt-2 text-sm text-white">{topCurrency?.label || '--'}</div>
-	                  <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topCurrency?.percent)}</div>
-	                  {topCurrency ? (
-	                    <div className="mt-2">{renderMiniExposureRow(topCurrency, { testIdPrefix: 'portfolio-top-currency', showNative: true })}</div>
-	                  ) : (
-	                    <div className="mt-2 text-xs text-white/40">{language === 'zh' ? '暂无币种敞口' : 'No currency exposure'}</div>
-	                  )}
-	                  {topCurrency?.fxStatus === 'unavailable' ? (
-	                    <div className="mt-2 text-[11px] text-amber-200">{language === 'zh' ? '折算值仅供参考，原币统计可用。' : 'Converted value is indicative; native analytics remain available.'}</div>
-	                  ) : null}
-	                </div>
-
-	                <div data-testid="portfolio-market-exposure-drilldown" className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                  <div className="flex items-center justify-between gap-3">
-	                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '市场敞口' : 'Market Exposure'}</div>
-	                    <PillBadge variant={marketExposureRows.length <= 1 || Number(topMarket?.percent || 0) >= 80 ? 'warning' : 'info'} className="shrink-0 text-cyan-200">{marketRiskHint}</PillBadge>
-	                  </div>
-	                  <div className="mt-2 text-[10px] uppercase tracking-widest text-white/35">{language === 'zh' ? '最大市场' : 'Largest Market'}</div>
-	                  <div className="mt-2 text-sm text-white">{formatExposureMarketLabel(topMarket, language)}</div>
-	                  <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topMarket?.percent)} · {language === 'zh' ? '市场数' : 'Markets'} {marketExposureRows.length}</div>
-	                  {topMarket ? (
-	                    <div className="mt-2">{renderMiniExposureRow(topMarket, { testIdPrefix: 'portfolio-top-market', label: formatExposureMarketLabel(topMarket, language) })}</div>
-	                  ) : (
-	                    <div className="mt-2 text-xs text-white/40">{language === 'zh' ? '暂无市场分类' : 'No market category'}</div>
-	                  )}
-	                </div>
-	              </div>
-
-	              <div data-testid="portfolio-pnl-contributors" className="rounded-xl bg-white/[0.025] px-3 py-3">
-	                <div className="flex flex-wrap items-center justify-between gap-2">
-	                  <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '盈亏贡献' : 'P&L Contribution'}</div>
-	                  <div className="font-mono text-[11px] text-white/40">
-	                    {pnlLabels.realized} {formatSignedMoney(realizedPnl, pnlSourceCurrency)} · {pnlLabels.unrealized} {formatSignedMoney(unrealizedPnl, pnlSourceCurrency)}
-	                  </div>
-	                </div>
-	                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-	                  <div className="min-w-0">
-	                    <div className="mb-1 text-[10px] text-emerald-300">{language === 'zh' ? '贡献盈利' : 'Gain contributors'}</div>
-	                    {gainContributors.length ? (
-	                      <div className="flex flex-col gap-1.5">
-	                        {gainContributors.map((row) => renderContributorRow(row, 'text-emerald-300', 'portfolio-gain-contributor'))}
-	                      </div>
-	                    ) : (
-	                      <div className="rounded-lg bg-white/[0.025] px-3 py-2 text-xs text-white/40">{language === 'zh' ? '暂无盈利贡献' : 'No gain contributor'}</div>
-	                    )}
-	                  </div>
-	                  <div className="min-w-0">
-	                    <div className="mb-1 text-[10px] text-rose-300">{language === 'zh' ? '拖累亏损' : 'Loss contributors'}</div>
-	                    {lossContributors.length ? (
-	                      <div className="flex flex-col gap-1.5">
-	                        {lossContributors.map((row) => renderContributorRow(row, 'text-rose-300', 'portfolio-loss-contributor'))}
-	                      </div>
-	                    ) : (
-	                      <div className="rounded-lg bg-white/[0.025] px-3 py-2 text-xs text-white/40">{language === 'zh' ? '暂无亏损拖累' : 'No loss contributor'}</div>
-	                    )}
-	                  </div>
-	                </div>
-	              </div>
-
-	              <div data-testid="portfolio-risk-hints" className="rounded-xl bg-white/[0.025] px-3 py-3 text-xs text-white/45">
-	                <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '风险提示' : 'Risk Hints'}</div>
-	                <div className="flex flex-wrap gap-1.5">
-	                  {(riskHintTexts.length ? riskHintTexts : [language === 'zh' ? '暂无显著集中风险' : 'No notable concentration risk']).map((hint) => (
-	                    <PillBadge key={hint} variant="default" className="text-white/55">{hint}</PillBadge>
-	                  ))}
-	                  {safeRiskWarningLabels.map((warning) => (
-	                    <PillBadge key={warning} variant="warning" className="text-white/55">{warning}</PillBadge>
-	                  ))}
-	                </div>
-	              </div>
-	            </section>
             </div>
 
             <div data-testid="portfolio-summary-and-holdings-row" className="order-2 grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
@@ -2624,7 +2501,155 @@ const PortfolioPage: React.FC = () => {
 		                </div>
 		              </div>
 
-			          <section data-testid="portfolio-trade-station-card" data-execution-surface="manual-record-entry" className={`${PORTFOLIO_GLASS_CARD_CLASS} order-2 col-span-12 flex flex-col gap-4 overflow-visible xl:col-span-4 xl:min-h-0`}>
+                  <section
+                    data-testid="portfolio-risk-card"
+                    className={`${PORTFOLIO_GLASS_CARD_CLASS} order-2 col-span-12 flex flex-col gap-3 xl:col-span-4`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h2 className="text-[10px] font-bold uppercase tracking-widest text-white/40">{riskTitle}</h2>
+                        <p className="mt-1 text-xs leading-5 text-white/40">
+                          {hasHoldings ? (language === 'zh' ? '集中度、币种与市场敞口。' : 'Concentration, currency, and market exposure.') : (language === 'zh' ? '暂无持仓，风险指标待生成。' : 'No holdings yet. Risk metrics pending.')}
+                        </p>
+                      </div>
+                      <span data-testid="portfolio-concentration-label">
+                        <PillBadge
+                          variant={topPositionPercent >= 50 ? 'danger' : topPositionPercent >= 20 ? 'warning' : hasHoldings ? 'success' : 'default'}
+                          className={hasHoldings ? concentrationToneClass : 'text-white/35'}
+                        >
+                          {concentrationLabel}
+                        </PillBadge>
+                      </span>
+                    </div>
+
+                    <div data-testid="portfolio-risk-overview" className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '最大持仓' : 'Largest Position'}</div>
+                        <div className="mt-1 truncate text-sm text-white">{topPosition?.label || '--'}</div>
+                        <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topPosition?.percent)}</div>
+                      </div>
+                      <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '持仓数量' : 'Holdings'}</div>
+                        <div className="mt-1 font-mono text-sm text-white">{analytics?.risk.holdingCount ?? positionRows.length}</div>
+                        <div className="mt-1 font-mono text-xs text-white/45">{language === 'zh' ? '账户' : 'Accounts'} {analytics?.risk.accountCount ?? snapshot?.accountCount ?? 0}</div>
+                      </div>
+                    </div>
+
+                    {hasHoldings ? (<>
+                    <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '持仓集中度' : 'Concentration'}</div>
+                        <div className={`font-mono text-xs ${hasHoldings ? concentrationToneClass : 'text-white/35'}`}>{formatPercent(topPosition?.percent)}</div>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-white/45">{concentrationDescription}</p>
+                      {symbolExposureRows.length ? (
+                        <div className="mt-2 flex flex-col gap-1.5">
+                          {symbolExposureRows.slice(0, 3).map((row) => renderMiniExposureRow(row, { testIdPrefix: 'portfolio-top-position' }))}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="grid gap-2">
+                      <div data-testid="portfolio-currency-exposure-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '币种敞口' : 'Currency Exposure'}</div>
+                          <PillBadge variant={topCurrency?.fxStatus === 'unavailable' ? 'warning' : 'info'} className="shrink-0 text-cyan-200">{currencyFxContext}</PillBadge>
+                        </div>
+                        <div className="mt-2 text-[10px] uppercase tracking-widest text-white/35">{language === 'zh' ? '最大币种' : 'Largest Currency'}</div>
+                        <div className="mt-2 text-sm text-white">{topCurrency?.label || '--'}</div>
+                        <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topCurrency?.percent)}</div>
+                        {topCurrency ? (
+                          <div className="mt-2">{renderMiniExposureRow(topCurrency, { testIdPrefix: 'portfolio-top-currency', showNative: true })}</div>
+                        ) : (
+                          <div className="mt-2 text-xs text-white/35">{language === 'zh' ? '暂无持仓，风险指标待生成。' : 'No holdings yet. Risk metrics pending.'}</div>
+                        )}
+                        {topCurrency?.fxStatus === 'unavailable' ? (
+                          <div className="mt-2 text-[11px] text-amber-200">{language === 'zh' ? '折算值仅供参考，原币统计可用。' : 'Converted value is indicative; native analytics remain available.'}</div>
+                        ) : null}
+                      </div>
+
+                      <div data-testid="portfolio-market-exposure-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '市场敞口' : 'Market Exposure'}</div>
+                          <PillBadge variant={marketExposureRows.length <= 1 || Number(topMarket?.percent || 0) >= 80 ? 'warning' : 'info'} className="shrink-0 text-cyan-200">{marketRiskHint}</PillBadge>
+                        </div>
+                        <div className="mt-2 text-[10px] uppercase tracking-widest text-white/35">{language === 'zh' ? '最大市场' : 'Largest Market'}</div>
+                        <div className="mt-2 text-sm text-white">{formatExposureMarketLabel(topMarket, language)}</div>
+                        <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topMarket?.percent)} · {language === 'zh' ? '市场数' : 'Markets'} {marketExposureRows.length}</div>
+                        {topMarket ? (
+                          <div className="mt-2">{renderMiniExposureRow(topMarket, { testIdPrefix: 'portfolio-top-market', label: formatExposureMarketLabel(topMarket, language) })}</div>
+                        ) : (
+                          <div className="mt-2 text-xs text-white/35">{language === 'zh' ? '暂无市场分类。' : 'No market category.'}</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div data-testid="portfolio-pnl-contributors" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '盈亏贡献' : 'P&L Contribution'}</div>
+                        <div className="font-mono text-[11px] text-white/40">
+                          {pnlLabels.realized} {formatSignedMoney(realizedPnl, pnlSourceCurrency)} · {pnlLabels.unrealized} {formatSignedMoney(unrealizedPnl, pnlSourceCurrency)}
+                        </div>
+                      </div>
+                      <div className="mt-2 grid gap-2">
+                        <div className="min-w-0">
+                          <div className="mb-1 text-[10px] text-emerald-300">{language === 'zh' ? '贡献盈利' : 'Gain contributors'}</div>
+                          {gainContributors.length ? (
+                            <div className="flex flex-col gap-1.5">
+                              {gainContributors.map((row) => renderContributorRow(row, 'text-emerald-300', 'portfolio-gain-contributor'))}
+                            </div>
+                          ) : (
+                            <div className="rounded-lg bg-white/[0.015] px-3 py-2 text-xs text-white/35">{language === 'zh' ? '暂无盈利贡献' : 'No gain contributor'}</div>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="mb-1 text-[10px] text-rose-300">{language === 'zh' ? '拖累亏损' : 'Loss contributors'}</div>
+                          {lossContributors.length ? (
+                            <div className="flex flex-col gap-1.5">
+                              {lossContributors.map((row) => renderContributorRow(row, 'text-rose-300', 'portfolio-loss-contributor'))}
+                            </div>
+                          ) : (
+                            <div className="rounded-lg bg-white/[0.015] px-3 py-2 text-xs text-white/35">{language === 'zh' ? '暂无亏损拖累' : 'No loss contributor'}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div data-testid="portfolio-risk-hints" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3 text-xs text-white/45">
+                      <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '风险提示' : 'Risk Hints'}</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(riskHintTexts.length ? riskHintTexts : [language === 'zh' ? '暂无显著集中风险' : 'No notable concentration risk']).map((hint) => (
+                          <PillBadge key={hint} variant="default" className="text-white/55">{hint}</PillBadge>
+                        ))}
+                        {safeRiskWarningLabels.map((warning) => (
+                          <PillBadge key={warning} variant="warning" className="text-white/55">{warning}</PillBadge>
+                        ))}
+                      </div>
+                    </div>
+                    </>) : (
+                      <div className="grid gap-2">
+                        <div data-testid="portfolio-concentration-drilldown" className="min-h-[72px] rounded-xl border border-white/[0.02] bg-black/20 px-3 py-3 text-xs leading-5 text-white/35">
+                          {language === 'zh' ? '暂无持仓，风险指标待生成。' : 'No holdings yet. Risk metrics pending.'}
+                        </div>
+                        <div data-testid="portfolio-currency-exposure-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2 text-xs text-white/35">
+                          {language === 'zh' ? '暂无持仓，风险指标待生成。' : 'No holdings yet. Risk metrics pending.'}
+                        </div>
+                        <div data-testid="portfolio-market-exposure-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2 text-xs text-white/35">
+                          {language === 'zh' ? '暂无市场分类。' : 'No market category.'}
+                        </div>
+                        <div data-testid="portfolio-pnl-contributors" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2 text-xs text-white/35">
+                          {language === 'zh' ? '暂无盈亏贡献。' : 'No P&L contribution.'}
+                        </div>
+                        <div data-testid="portfolio-risk-hints" className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2 text-xs text-white/35">
+                          {language === 'zh' ? '暂无显著集中风险。' : 'No notable concentration risk.'}
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {!hasHoldings ? recentActivityContent : null}
+
+			          <section data-testid="portfolio-trade-station-card" data-execution-surface="manual-record-entry" className={`${PORTFOLIO_GLASS_CARD_CLASS} order-4 col-span-12 flex flex-col gap-4 overflow-visible xl:col-span-4 xl:min-h-0`}>
             <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -3030,12 +3055,6 @@ const PortfolioPage: React.FC = () => {
               </details>
             </div>
           </section>
-
-            {!hasHoldings ? (
-              <div className="order-2 col-span-12">
-                {recentActivityContent}
-              </div>
-            ) : null}
 
             {shouldRenderFullHistory ? (
               <section data-testid="portfolio-history-full" className={`${PORTFOLIO_GLASS_CARD_CLASS} order-4 col-span-12 flex flex-col overflow-hidden ${currentEventCount > 5 ? 'max-h-[640px] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]' : 'max-h-none'}`}>

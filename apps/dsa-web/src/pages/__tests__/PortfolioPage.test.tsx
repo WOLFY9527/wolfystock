@@ -566,7 +566,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(Boolean(holdingsPanel.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
-  it('renders the mobile empty portfolio order as hero, pnl, exposure, risk, start, trade station, recent activity', async () => {
+  it('renders the mobile empty portfolio order as hero, pnl, exposure, holdings, risk, recent activity, trade station', async () => {
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
 
     render(<PortfolioPage />);
@@ -583,10 +583,10 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(Boolean(totalAssetsCard.compareDocumentPosition(pnlSummary) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(pnlSummary.compareDocumentPosition(exposureCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(exposureCard.compareDocumentPosition(riskCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(riskCard.compareDocumentPosition(startCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(startCard.compareDocumentPosition(tradeStationSection) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(tradeStationSection.compareDocumentPosition(recentActivity) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(exposureCard.compareDocumentPosition(startCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(startCard.compareDocumentPosition(riskCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(riskCard.compareDocumentPosition(recentActivity) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(recentActivity.compareDocumentPosition(tradeStationSection) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
   });
 
@@ -649,6 +649,7 @@ describe('PortfolioPage FX refresh', () => {
 
     const workspace = screen.getByTestId('portfolio-workspace-grid');
     expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8');
+    expect(screen.getByTestId('portfolio-bento-page').className).not.toMatch(/\bbg-(black|\[#050505\]|gray-|zinc-|slate-|neutral-)/);
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('xl:col-span-12');
     expect(screen.getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '导入交易' })).toBeInTheDocument();
@@ -667,6 +668,13 @@ describe('PortfolioPage FX refresh', () => {
     expect(container).not.toHaveTextContent(/developer|debug|raw|schema|trace|provider_timeout|not_enough_history|fallback|MarketCache/i);
     expect(screen.getByTestId('portfolio-summary-and-holdings-row')).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-current-holdings-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-summary-and-holdings-row')).toContainElement(screen.getByTestId('portfolio-risk-card'));
+    expect(screen.getByTestId('portfolio-risk-card')).toHaveClass('xl:col-span-4');
+    expect(screen.getByTestId('portfolio-recent-activity')).toHaveClass('xl:col-span-8');
+    expect(screen.getByTestId('portfolio-trade-station-card')).toHaveClass('xl:col-span-4');
+    expect(
+      Boolean(screen.getByTestId('portfolio-recent-activity').compareDocumentPosition(screen.getByTestId('portfolio-trade-station-card')) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
   });
 
   it('renders pnl, holding unrealized percent, exposure tabs, and risk summary for active holdings', async () => {
@@ -1758,7 +1766,7 @@ describe('PortfolioPage FX refresh', () => {
 
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
     expect(totalAssetsCard.className).toContain('min-w-0');
-    expect(screen.getByTestId('portfolio-account-status-strip').className).toContain('rounded-xl');
+    expect(screen.getByTestId('portfolio-account-status-strip').className).toContain('rounded-[16px]');
     expect(screen.getByTestId('portfolio-account-status-strip').className).toContain('border-white/5');
 
     const summaryBlock = screen.getByTestId('portfolio-trade-station-summary');
