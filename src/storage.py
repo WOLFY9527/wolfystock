@@ -8996,6 +8996,80 @@ class DatabaseManager:
                 )
             return items, int(total)
 
+    def list_execution_log_session_details(self, session_ids: Iterable[str]) -> Dict[str, Dict[str, Any]]:
+        """Return execution sessions and event timelines for a bounded id set."""
+        ordered_ids: List[str] = []
+        seen: set[str] = set()
+        for raw_id in session_ids:
+            session_id = str(raw_id or "").strip()
+            if not session_id or session_id in seen:
+                continue
+            ordered_ids.append(session_id)
+            seen.add(session_id)
+            if len(ordered_ids) >= 200:
+                break
+        if not ordered_ids:
+            return {}
+
+        with self.get_session() as session:
+            rows = session.execute(
+                select(ExecutionLogSession).where(ExecutionLogSession.session_id.in_(ordered_ids))
+            ).scalars().all()
+            row_map = {row.session_id: row for row in rows}
+
+            event_rows = session.execute(
+                select(ExecutionLogEvent)
+                .where(ExecutionLogEvent.session_id.in_(ordered_ids))
+                .order_by(asc(ExecutionLogEvent.event_at), asc(ExecutionLogEvent.id))
+            ).scalars().all()
+            events_by_session: Dict[str, List[Dict[str, Any]]] = {session_id: [] for session_id in ordered_ids}
+            for event in event_rows:
+                detail = {}
+                try:
+                    detail = json.loads(event.detail_json or "{}")
+                except Exception:
+                    detail = {}
+                events_by_session.setdefault(event.session_id, []).append(
+                    {
+                        "id": event.id,
+                        "event_at": event.event_at.isoformat() if event.event_at else None,
+                        "phase": event.phase,
+                        "step": event.step,
+                        "target": event.target,
+                        "status": event.status,
+                        "truth_level": event.truth_level,
+                        "message": event.message,
+                        "error_code": event.error_code,
+                        "detail": detail if isinstance(detail, dict) else {},
+                    }
+                )
+
+            details: Dict[str, Dict[str, Any]] = {}
+            for session_id in ordered_ids:
+                row = row_map.get(session_id)
+                if row is None:
+                    continue
+                summary = {}
+                try:
+                    summary = json.loads(row.summary_json or "{}")
+                except Exception:
+                    summary = {}
+                details[session_id] = {
+                    "session_id": row.session_id,
+                    "task_id": row.task_id,
+                    "query_id": row.query_id,
+                    "analysis_history_id": row.analysis_history_id,
+                    "code": row.code,
+                    "name": row.name,
+                    "overall_status": row.overall_status,
+                    "truth_level": row.truth_level,
+                    "started_at": row.started_at.isoformat() if row.started_at else None,
+                    "ended_at": row.ended_at.isoformat() if row.ended_at else None,
+                    "summary": summary if isinstance(summary, dict) else {},
+                    "events": events_by_session.get(session_id, []),
+                }
+            return details
+
     def get_execution_log_session_detail(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Return one execution session with its event timeline."""
         if not session_id:

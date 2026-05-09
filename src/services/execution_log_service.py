@@ -3237,8 +3237,27 @@ class ExecutionLogService:
             "stepTraceAvailable": bool(steps),
         }
 
-    def _session_to_business_event(self, row: Dict[str, Any], *, include_steps: bool = False) -> Optional[Dict[str, Any]]:
-        detail = self.db.get_execution_log_session_detail(str(row.get("session_id") or "")) or {}
+    def _load_session_details(self, rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        session_ids = [str(row.get("session_id") or "") for row in rows if isinstance(row, dict)]
+        batch_loader = getattr(self.db, "list_execution_log_session_details", None)
+        if callable(batch_loader):
+            details = batch_loader(session_ids)
+            return details if isinstance(details, dict) else {}
+        return {
+            session_id: self.db.get_execution_log_session_detail(session_id) or {}
+            for session_id in session_ids
+            if session_id
+        }
+
+    def _session_to_business_event(
+        self,
+        row: Dict[str, Any],
+        *,
+        include_steps: bool = False,
+        detail: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        if detail is None:
+            detail = self.db.get_execution_log_session_detail(str(row.get("session_id") or "")) or {}
         summary = detail.get("summary") if isinstance(detail.get("summary"), dict) else (row.get("summary") if isinstance(row.get("summary"), dict) else {})
         business = summary.get("business_event") if isinstance(summary.get("business_event"), dict) else {}
         meta = summary.get("meta") if isinstance(summary.get("meta"), dict) else {}
@@ -3365,8 +3384,10 @@ class ExecutionLogService:
         status_filter = _normalize_business_status(status) if status else None
         query_text = _as_str(query).lower()
         items: List[Dict[str, Any]] = []
+        details_by_session = self._load_session_details(rows)
         for row in rows:
-            event = self._session_to_business_event(row)
+            session_id = str(row.get("session_id") or "")
+            event = self._session_to_business_event(row, detail=details_by_session.get(session_id, {}))
             if event is None:
                 continue
             if category_filter and event.get("category") != category_filter:
@@ -3473,10 +3494,11 @@ class ExecutionLogService:
         exact_level = _normalize_log_level(level, "") if level else None
         category_filter = _normalize_log_category(category, "") if category else None
         query_text = _as_str(query).lower()
+        details_by_session = self._load_session_details(rows)
         for row in rows:
             row = _sanitize_metadata(row)
             summary = _sanitize_metadata(row.get("summary") if isinstance(row.get("summary"), dict) else {})
-            detail = _sanitize_metadata(self.db.get_execution_log_session_detail(str(row.get("session_id") or "")) or {})
+            detail = _sanitize_metadata(details_by_session.get(str(row.get("session_id") or ""), {}))
             events = detail.get("events") if isinstance(detail.get("events"), list) else []
             enriched_events = [_sanitize_metadata(self._enrich_event(event)) for event in events if isinstance(event, dict)]
             top_event = self._top_event(enriched_events)

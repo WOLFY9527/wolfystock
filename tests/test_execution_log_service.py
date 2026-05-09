@@ -918,6 +918,136 @@ class ExecutionLogServiceTestCase(unittest.TestCase):
         self.assertEqual(total, 1)
         self.assertEqual(items[0]["event"], "AAPL")
 
+    def test_storage_batch_session_details_match_single_detail_projection(self) -> None:
+        self.db.create_execution_log_session(
+            session_id="batch-session-1",
+            task_id="ExternalSourceTimeout",
+            code="TSLA",
+            name="ExternalSourceTimeout",
+            overall_status="failed",
+            summary={"meta": {"subsystem": "data_source"}},
+        )
+        self.db.append_execution_log_event(
+            session_id="batch-session-1",
+            phase="data_source",
+            step="ExternalSourceTimeout",
+            target="fmp",
+            status="failed",
+            message="failed url https://x.com?apikey=SECRET",
+            detail={"level": "ERROR", "category": "data_source", "api_key": "SECRET"},
+        )
+
+        single = self.db.get_execution_log_session_detail("batch-session-1")
+        batch = self.db.list_execution_log_session_details(["batch-session-1", "missing-session"])
+
+        self.assertEqual(batch["batch-session-1"], single)
+        self.assertNotIn("missing-session", batch)
+
+    def test_list_sessions_uses_batch_projection_without_per_row_detail_loads(self) -> None:
+        self.db.create_execution_log_session(
+            session_id="batch-list-error",
+            task_id="AnalysisFailed",
+            code="TSLA",
+            name="AnalysisFailed",
+            overall_status="failed",
+            summary={"meta": {"subsystem": "analysis"}},
+        )
+        self.db.append_execution_log_event(
+            session_id="batch-list-error",
+            phase="analysis",
+            step="AnalysisFailed",
+            target="TSLA",
+            status="failed",
+            message="provider token=SECRET",
+            detail={"level": "ERROR", "category": "analysis", "event_name": "AnalysisFailed"},
+        )
+        self.db.create_execution_log_session(
+            session_id="batch-list-warning",
+            task_id="ExternalSourceTimeout",
+            code="NVDA",
+            name="ExternalSourceTimeout",
+            overall_status="timed_out",
+            summary={"meta": {"subsystem": "data_source"}},
+        )
+        self.db.append_execution_log_event(
+            session_id="batch-list-warning",
+            phase="data_source",
+            step="ExternalSourceTimeout",
+            target="fmp",
+            status="timed_out",
+            message="source timeout",
+            detail={"level": "WARNING", "category": "data_source", "event_name": "ExternalSourceTimeout"},
+        )
+        original_get_detail = self.db.get_execution_log_session_detail
+        calls = {"batch": 0, "detail": 0}
+
+        def counting_batch(session_ids):
+            calls["batch"] += 1
+            return {session_id: original_get_detail(session_id) for session_id in session_ids}
+
+        def counting_detail(session_id):
+            calls["detail"] += 1
+            return original_get_detail(session_id)
+
+        self.db.list_execution_log_session_details = counting_batch  # type: ignore[method-assign]
+        self.db.get_execution_log_session_detail = counting_detail  # type: ignore[method-assign]
+
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            items, total = service.list_sessions(min_level="WARNING", since="", limit=10)
+
+        self.assertEqual(total, 2)
+        self.assertEqual(calls, {"batch": 1, "detail": 0})
+        self.assertEqual([item["session_id"] for item in items], ["batch-list-warning", "batch-list-error"])
+        self.assertNotIn("SECRET", str(items))
+
+    def test_list_business_events_uses_batch_projection_without_per_row_detail_loads(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="TSLA",
+                summary="用户分析 TSLA",
+                subject="TSLA",
+                symbol="TSLA",
+                request_id="req-tsla",
+            )
+            service.start_step(execution_id, "fetch_quote", "获取行情", category="data_source", provider="fmp")
+            service.finish_step_failed(
+                execution_id,
+                "fetch_quote",
+                provider="fmp",
+                error_type="TimeoutError",
+                error_message="provider timeout token=SECRET",
+                reason="timeout",
+            )
+            service.finish_execution(execution_id, status="failed")
+
+        original_get_detail = self.db.get_execution_log_session_detail
+        calls = {"batch": 0, "detail": 0}
+
+        def counting_batch(session_ids):
+            calls["batch"] += 1
+            return {session_id: original_get_detail(session_id) for session_id in session_ids}
+
+        def counting_detail(session_id):
+            calls["detail"] += 1
+            return original_get_detail(session_id)
+
+        self.db.list_execution_log_session_details = counting_batch  # type: ignore[method-assign]
+        self.db.get_execution_log_session_detail = counting_detail  # type: ignore[method-assign]
+
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            items, total = service.list_business_events(category="analysis", status="failed", query="TSLA", limit=10)
+
+        self.assertEqual(total, 1)
+        self.assertEqual(calls, {"batch": 1, "detail": 0})
+        self.assertEqual(items[0]["id"], execution_id)
+        self.assertEqual(items[0]["failedStepCount"], 1)
+        self.assertNotIn("SECRET", str(items))
+
 
 if __name__ == "__main__":
     unittest.main()
