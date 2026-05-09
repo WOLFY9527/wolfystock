@@ -36,6 +36,9 @@ from api.v1.schemas.backtest import (
     RuleBacktestParseResponse,
     RuleBacktestRunRequest,
     RuleBacktestRunResponse,
+    RuleBacktestUniverseJobCreateRequest,
+    RuleBacktestUniverseJobResponse,
+    RuleBacktestUniverseResultsResponse,
 )
 from api.v1.schemas.common import ErrorResponse
 from src.services.backtest_service import BacktestService
@@ -606,6 +609,92 @@ def run_rule_backtest(
         background_tasks.add_task(service.process_submitted_run, int(data["id"]))
         return _build_model(RuleBacktestRunResponse, data)
     return _run_endpoint("规则回测失败", _operation, allow_validation_error=True)
+
+
+@router.post(
+    "/rule/universe-jobs",
+    response_model=RuleBacktestUniverseJobResponse,
+    responses={
+        200: {"description": "本地宇宙回测预检任务已创建"},
+        400: {"description": "请求参数错误", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="创建本地规则回测宇宙预检任务",
+    description="创建 stored local-only universe job scaffold；仅检查本地日线数据可用性，不执行单标的回测，不触发 provider 拉取。",
+)
+def create_rule_backtest_universe_job(
+    request: RuleBacktestUniverseJobCreateRequest,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> RuleBacktestUniverseJobResponse:
+    def _operation() -> RuleBacktestUniverseJobResponse:
+        service = _build_rule_backtest_service(db_manager, current_user)
+        data = service.create_universe_job(
+            symbols=request.symbols,
+            strategy_text=request.strategy_text,
+            parsed_strategy=request.parsed_strategy,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            lookback_bars=request.lookback_bars,
+            initial_capital=request.initial_capital,
+            fee_bps=request.fee_bps,
+            slippage_bps=request.slippage_bps,
+            benchmark_mode=request.benchmark_mode,
+            benchmark_code=request.benchmark_code,
+            request_label=request.request_label,
+        )
+        return _build_model(RuleBacktestUniverseJobResponse, data)
+    return _run_endpoint("创建规则回测宇宙预检任务失败", _operation, allow_validation_error=True)
+
+
+@router.get(
+    "/rule/universe-jobs/{job_id}/status",
+    response_model=RuleBacktestUniverseJobResponse,
+    responses={
+        200: {"description": "本地宇宙回测预检任务状态"},
+        404: {"description": "记录不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取本地规则回测宇宙任务状态",
+)
+def get_rule_backtest_universe_job_status(
+    job_id: int,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> RuleBacktestUniverseJobResponse:
+    def _operation() -> RuleBacktestUniverseJobResponse:
+        service = _build_rule_backtest_service(db_manager, current_user)
+        data = service.get_universe_job_status(job_id)
+        if data is None:
+            raise _not_found_error("规则回测宇宙任务不存在")
+        return _build_model(RuleBacktestUniverseJobResponse, data)
+    return _run_endpoint("查询规则回测宇宙任务状态失败", _operation)
+
+
+@router.get(
+    "/rule/universe-jobs/{job_id}/results",
+    response_model=RuleBacktestUniverseResultsResponse,
+    responses={
+        200: {"description": "本地宇宙回测预检任务标的结果"},
+        404: {"description": "记录不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="分页获取本地规则回测宇宙标的结果",
+)
+def list_rule_backtest_universe_job_results(
+    job_id: int,
+    page: int = Query(1, ge=1, description="页码"),
+    limit: int = Query(50, ge=1, le=100, description="每页数量"),
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> RuleBacktestUniverseResultsResponse:
+    def _operation() -> RuleBacktestUniverseResultsResponse:
+        service = _build_rule_backtest_service(db_manager, current_user)
+        if service.get_universe_job_status(job_id) is None:
+            raise _not_found_error("规则回测宇宙任务不存在")
+        data = service.list_universe_job_results(job_id, page=page, limit=limit)
+        return _build_model(RuleBacktestUniverseResultsResponse, data)
+    return _run_endpoint("查询规则回测宇宙任务结果失败", _operation)
 
 
 @router.get(

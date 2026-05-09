@@ -18,6 +18,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     clear_backtest_samples,
     cancel_rule_backtest_run,
     compare_rule_backtest_runs,
+    create_rule_backtest_universe_job,
     get_backtest_performance,
     get_backtest_stock_performance,
     get_rule_backtest_execution_trace_csv,
@@ -29,6 +30,8 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     get_rule_backtest_support_export_index,
     get_rule_backtest_support_bundle_manifest,
     get_rule_backtest_run_status,
+    get_rule_backtest_universe_job_status,
+    list_rule_backtest_universe_job_results,
     router as backtest_router,
     run_rule_backtest,
 )
@@ -43,6 +46,9 @@ from api.v1.schemas.backtest import (  # noqa: E402
     RuleBacktestRunRequest,
     RuleBacktestRunResponse,
     RuleBacktestStatusResponse,
+    RuleBacktestUniverseJobCreateRequest,
+    RuleBacktestUniverseJobResponse,
+    RuleBacktestUniverseResultsResponse,
     RuleBacktestExecutionTraceExportResponse,
     RuleBacktestSupportExportIndexResponse,
     RuleBacktestSupportBundleManifestResponse,
@@ -741,6 +747,73 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(service.run_backtest.call_args.kwargs["parsed_strategy"]["setup"]["indicator_family"], "macd")
         self.assertEqual(service.run_backtest.call_args.kwargs["parsed_strategy"]["strategy_spec"], {})
+
+    def test_rule_backtest_universe_job_endpoints_are_bound_to_compact_contracts(self) -> None:
+        service = MagicMock()
+        service.create_universe_job.return_value = {
+            "id": 42,
+            "request_label": "local preflight",
+            "status": "completed_with_failures",
+            "strategy_hash": "abc123",
+            "symbol_count": 2,
+            "completed_count": 1,
+            "skipped_count": 1,
+            "failed_count": 0,
+            "pending_count": 0,
+            "running_count": 0,
+            "cancel_requested": False,
+            "local_data_only": True,
+            "execution_mode": "preflight_only",
+            "created_at": "2026-05-09T10:00:00",
+            "started_at": "2026-05-09T10:00:00",
+            "completed_at": "2026-05-09T10:00:01",
+        }
+        service.get_universe_job_status.return_value = dict(service.create_universe_job.return_value)
+        service.list_universe_job_results.return_value = {
+            "job_id": 42,
+            "total": 2,
+            "page": 1,
+            "limit": 1,
+            "items": [
+                {
+                    "id": 7,
+                    "job_id": 42,
+                    "sequence_index": 0,
+                    "symbol": "AAPL",
+                    "status": "ready_local_data",
+                    "reason_code": None,
+                    "reason_message": None,
+                    "runtime_ms": 0,
+                    "metrics": {},
+                    "single_run_id": None,
+                    "created_at": "2026-05-09T10:00:00",
+                    "updated_at": "2026-05-09T10:00:00",
+                }
+            ],
+        }
+        request = RuleBacktestUniverseJobCreateRequest(
+            symbols=["MSFT", "AAPL"],
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            start_date="2025-01-01",
+            end_date="2025-01-31",
+            request_label="local preflight",
+        )
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            created = create_rule_backtest_universe_job(request, db_manager=MagicMock())
+            status = get_rule_backtest_universe_job_status(42, db_manager=MagicMock())
+            results = list_rule_backtest_universe_job_results(42, page=1, limit=1, db_manager=MagicMock())
+
+        self.assertIsInstance(created, RuleBacktestUniverseJobResponse)
+        self.assertIsInstance(status, RuleBacktestUniverseJobResponse)
+        self.assertIsInstance(results, RuleBacktestUniverseResultsResponse)
+        self.assertEqual(created.execution_mode, "preflight_only")
+        self.assertTrue(created.local_data_only)
+        self.assertEqual(results.items[0].symbol, "AAPL")
+        self.assertEqual(results.items[0].sequence_index, 0)
+        service.create_universe_job.assert_called_once()
+        self.assertEqual(service.create_universe_job.call_args.kwargs["symbols"], ["MSFT", "AAPL"])
+        self.assertEqual(service.list_universe_job_results.call_args.kwargs["limit"], 1)
 
     def test_get_backtest_performance_returns_global_summary_contract(self) -> None:
         service = MagicMock()

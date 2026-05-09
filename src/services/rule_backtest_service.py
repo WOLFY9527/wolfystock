@@ -23,13 +23,20 @@ from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, 
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
 from src.repositories.stock_repo import StockRepository
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
-from src.storage import DatabaseManager, RuleBacktestRun, RuleBacktestTrade
+from src.storage import (
+    DatabaseManager,
+    RuleBacktestRun,
+    RuleBacktestTrade,
+    RuleBacktestUniverseJob,
+    RuleBacktestUniverseSymbolResult,
+)
 
 logger = logging.getLogger(__name__)
 _UNSET = object()
 _CONFIRMATION_REQUIRED_ERROR = "请先确认解析结果后再运行规则回测。"
 TERMINAL_RULE_RUN_STATUSES = frozenset({"completed", "failed", "cancelled"})
 CANCELLABLE_RULE_RUN_STATUSES = frozenset({"queued", "parsing", "running", "summarizing"})
+DEFAULT_RULE_BACKTEST_UNIVERSE_MAX_SYMBOLS = 500
 
 BENCHMARK_MODE_AUTO = "auto"
 BENCHMARK_MODE_NONE = "none"
@@ -950,6 +957,217 @@ class RuleBacktestService:
             return self.get_run_status(run_id)
 
         return self.get_run_status(run_id)
+
+    def create_universe_job(
+        self,
+        *,
+        symbols: List[str],
+        strategy_text: str,
+        parsed_strategy: Optional[Dict[str, Any]] = None,
+        start_date: Optional[Any] = None,
+        end_date: Optional[Any] = None,
+        lookback_bars: int = 252,
+        initial_capital: float = 100000.0,
+        fee_bps: float = 0.0,
+        slippage_bps: float = 0.0,
+        benchmark_mode: str = BENCHMARK_MODE_NONE,
+        benchmark_code: Optional[str] = None,
+        request_label: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a stored local-data-only universe preflight job.
+
+        This initial scaffold intentionally does not execute the rule engine or
+        call provider hydration. It records deterministic per-symbol readiness
+        rows so later phases can add sequential execution without changing the
+        existing single-symbol run path.
+        """
+
+        raw_text = str(strategy_text or "").strip()
+        if not raw_text:
+            raise ValueError("strategy_text is required")
+        normalized_symbols = self._normalize_universe_symbols(symbols)
+        if not normalized_symbols:
+            raise ValueError("symbols are required")
+        if len(normalized_symbols) > DEFAULT_RULE_BACKTEST_UNIVERSE_MAX_SYMBOLS:
+            raise ValueError(f"max universe size is {DEFAULT_RULE_BACKTEST_UNIVERSE_MAX_SYMBOLS}")
+
+        normalized_start, normalized_end = self._normalize_date_range(start_date=start_date, end_date=end_date)
+        created_at = datetime.now()
+        strategy_snapshot = {
+            "strategy_text": raw_text,
+            "parsed_strategy": parsed_strategy or {},
+            "request": {
+                "start_date": normalized_start.isoformat() if normalized_start else None,
+                "end_date": normalized_end.isoformat() if normalized_end else None,
+                "lookback_bars": int(lookback_bars),
+                "initial_capital": float(initial_capital),
+                "fee_bps": float(fee_bps),
+                "slippage_bps": float(slippage_bps),
+                "benchmark_mode": str(benchmark_mode or BENCHMARK_MODE_NONE),
+                "benchmark_code": benchmark_code,
+                "local_data_only": True,
+                "execution_mode": "preflight_only",
+            },
+        }
+        strategy_hash = hashlib.sha256(
+            self._serialize_json(strategy_snapshot).encode("utf-8")
+        ).hexdigest()
+
+        symbol_rows: List[RuleBacktestUniverseSymbolResult] = []
+        completed_count = 0
+        skipped_count = 0
+        owner_id = self.db.require_user_id(self.owner_id)
+        for sequence_index, symbol in enumerate(normalized_symbols):
+            check_started = datetime.now()
+            local_rows = self._load_local_universe_rows(
+                symbol=symbol,
+                start_date=normalized_start,
+                end_date=normalized_end,
+                lookback_bars=lookback_bars,
+            )
+            runtime_ms = int((datetime.now() - check_started).total_seconds() * 1000)
+            if local_rows:
+                status = "ready_local_data"
+                reason_code = None
+                reason_message = None
+                completed_count += 1
+            else:
+                status = "skipped"
+                reason_code = "blocked_missing_local_data"
+                reason_message = "No local daily bars found for requested window."
+                skipped_count += 1
+
+            symbol_rows.append(
+                RuleBacktestUniverseSymbolResult(
+                    owner_id=owner_id,
+                    sequence_index=sequence_index,
+                    symbol=symbol,
+                    status=status,
+                    reason_code=reason_code,
+                    reason_message=reason_message,
+                    runtime_ms=runtime_ms,
+                    metrics_json=self._serialize_json({}),
+                    single_run_id=None,
+                    created_at=created_at,
+                    updated_at=datetime.now(),
+                )
+            )
+
+        completed_at = datetime.now()
+        status = "completed" if skipped_count == 0 else "completed_with_failures"
+        job = RuleBacktestUniverseJob(
+            owner_id=owner_id,
+            request_label=str(request_label or "").strip()[:128] or None,
+            strategy_text=raw_text,
+            strategy_snapshot_json=self._serialize_json(strategy_snapshot),
+            strategy_hash=strategy_hash,
+            status=status,
+            symbol_count=len(normalized_symbols),
+            completed_count=completed_count,
+            skipped_count=skipped_count,
+            failed_count=0,
+            pending_count=0,
+            running_count=0,
+            cancel_requested=False,
+            local_data_only=True,
+            execution_mode="preflight_only",
+            created_at=created_at,
+            started_at=created_at,
+            completed_at=completed_at,
+            updated_at=completed_at,
+        )
+        saved = self.repo.save_universe_job(job, symbol_rows)
+        return self._universe_job_row_to_dict(saved)
+
+    def get_universe_job_status(self, job_id: int) -> Optional[Dict[str, Any]]:
+        row = self.repo.get_universe_job(job_id, **self._owner_kwargs())
+        if row is None:
+            return None
+        return self._universe_job_row_to_dict(row)
+
+    def list_universe_job_results(self, job_id: int, *, page: int = 1, limit: int = 50) -> Dict[str, Any]:
+        if self.get_universe_job_status(job_id) is None:
+            return {
+                "job_id": int(job_id),
+                "total": 0,
+                "page": page,
+                "limit": limit,
+                "items": [],
+            }
+        offset = max(page - 1, 0) * limit
+        rows, total = self.repo.get_universe_symbol_results_paginated(
+            job_id,
+            offset=offset,
+            limit=limit,
+            **self._owner_kwargs(),
+        )
+        return {
+            "job_id": int(job_id),
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "items": [self._universe_symbol_row_to_dict(row) for row in rows],
+        }
+
+    @staticmethod
+    def _normalize_universe_symbols(symbols: List[str]) -> List[str]:
+        normalized: set[str] = set()
+        for symbol in symbols or []:
+            code = normalize_stock_code(str(symbol or "").strip()).upper()
+            if code:
+                normalized.add(code)
+        return sorted(normalized)
+
+    def _load_local_universe_rows(
+        self,
+        *,
+        symbol: str,
+        start_date: Optional[date],
+        end_date: Optional[date],
+        lookback_bars: int,
+    ) -> List[Any]:
+        if start_date is not None and end_date is not None:
+            return self.stock_repo.get_range(symbol, start_date, end_date)
+        return list(reversed(self.stock_repo.get_latest(symbol, days=max(1, int(lookback_bars)))))
+
+    @staticmethod
+    def _universe_job_row_to_dict(row: RuleBacktestUniverseJob) -> Dict[str, Any]:
+        return {
+            "id": int(row.id),
+            "request_label": row.request_label,
+            "status": row.status,
+            "strategy_hash": row.strategy_hash,
+            "symbol_count": int(row.symbol_count or 0),
+            "completed_count": int(row.completed_count or 0),
+            "skipped_count": int(row.skipped_count or 0),
+            "failed_count": int(row.failed_count or 0),
+            "pending_count": int(row.pending_count or 0),
+            "running_count": int(row.running_count or 0),
+            "cancel_requested": bool(row.cancel_requested),
+            "local_data_only": bool(row.local_data_only),
+            "execution_mode": row.execution_mode,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "started_at": row.started_at.isoformat() if row.started_at else None,
+            "completed_at": row.completed_at.isoformat() if row.completed_at else None,
+        }
+
+    @staticmethod
+    def _universe_symbol_row_to_dict(row: RuleBacktestUniverseSymbolResult) -> Dict[str, Any]:
+        metrics = RuleBacktestService._load_json_payload(row.metrics_json)
+        return {
+            "id": int(row.id),
+            "job_id": int(row.job_id),
+            "sequence_index": int(row.sequence_index),
+            "symbol": row.symbol,
+            "status": row.status,
+            "reason_code": row.reason_code,
+            "reason_message": row.reason_message,
+            "runtime_ms": int(row.runtime_ms or 0),
+            "metrics": metrics if isinstance(metrics, dict) else {},
+            "single_run_id": int(row.single_run_id) if row.single_run_id is not None else None,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
 
     def parse_and_run(
         self,

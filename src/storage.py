@@ -1508,6 +1508,65 @@ class RuleBacktestTrade(Base):
     )
 
 
+class RuleBacktestUniverseJob(Base):
+    """Persisted local-only universe backtest job metadata."""
+
+    __tablename__ = 'rule_backtest_universe_jobs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True, default=BOOTSTRAP_ADMIN_USER_ID)
+    request_label = Column(String(128))
+    strategy_text = Column(Text, nullable=False)
+    strategy_snapshot_json = Column(Text, nullable=False)
+    strategy_hash = Column(String(64), nullable=False, index=True)
+
+    status = Column(String(32), nullable=False, default='queued', index=True)
+    symbol_count = Column(Integer, nullable=False, default=0)
+    completed_count = Column(Integer, nullable=False, default=0)
+    skipped_count = Column(Integer, nullable=False, default=0)
+    failed_count = Column(Integer, nullable=False, default=0)
+    pending_count = Column(Integer, nullable=False, default=0)
+    running_count = Column(Integer, nullable=False, default=0)
+    cancel_requested = Column(Boolean, nullable=False, default=False)
+    local_data_only = Column(Boolean, nullable=False, default=True)
+    execution_mode = Column(String(32), nullable=False, default='preflight_only')
+
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    started_at = Column(DateTime)
+    completed_at = Column(DateTime, index=True)
+    updated_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index('ix_rule_backtest_universe_owner_created', 'owner_id', 'created_at'),
+        Index('ix_rule_backtest_universe_status_created', 'status', 'created_at'),
+    )
+
+
+class RuleBacktestUniverseSymbolResult(Base):
+    """Compact per-symbol row for a local-only universe backtest job."""
+
+    __tablename__ = 'rule_backtest_universe_symbol_results'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(Integer, ForeignKey('rule_backtest_universe_jobs.id'), nullable=False, index=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True, default=BOOTSTRAP_ADMIN_USER_ID)
+    sequence_index = Column(Integer, nullable=False)
+    symbol = Column(String(32), nullable=False, index=True)
+    status = Column(String(32), nullable=False, default='pending', index=True)
+    reason_code = Column(String(64))
+    reason_message = Column(Text)
+    runtime_ms = Column(Integer, nullable=False, default=0)
+    metrics_json = Column(Text)
+    single_run_id = Column(Integer, ForeignKey('rule_backtest_runs.id'), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index('ix_rule_backtest_universe_symbol_sequence', 'job_id', 'sequence_index'),
+        Index('ix_rule_backtest_universe_symbol_status', 'job_id', 'status'),
+    )
+
+
 class MarketScannerRun(Base):
     """Persisted market scanner run metadata."""
 
@@ -2302,6 +2361,8 @@ class DatabaseManager:
             self._add_column_if_missing(conn, "backtest_results", "owner_id", "VARCHAR(64)")
             self._add_column_if_missing(conn, "backtest_runs", "owner_id", "VARCHAR(64)")
             self._add_column_if_missing(conn, "rule_backtest_runs", "owner_id", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "rule_backtest_universe_jobs", "owner_id", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "rule_backtest_universe_symbol_results", "owner_id", "VARCHAR(64)")
             self._add_column_if_missing(conn, "market_scanner_runs", "owner_id", "VARCHAR(64)")
             self._add_column_if_missing(conn, "portfolio_trades", "is_active", "BOOLEAN NOT NULL DEFAULT 1")
             self._add_column_if_missing(conn, "portfolio_trades", "voided_at", "DATETIME")
@@ -2411,6 +2472,30 @@ class DatabaseManager:
                 "ix_rule_backtest_owner_time",
                 "rule_backtest_runs",
                 "owner_id, run_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_rule_backtest_universe_owner_created",
+                "rule_backtest_universe_jobs",
+                "owner_id, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_rule_backtest_universe_status_created",
+                "rule_backtest_universe_jobs",
+                "status, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_rule_backtest_universe_symbol_sequence",
+                "rule_backtest_universe_symbol_results",
+                "job_id, sequence_index",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_rule_backtest_universe_symbol_status",
+                "rule_backtest_universe_symbol_results",
+                "job_id, status",
             )
             self._create_index_if_missing(
                 conn,
@@ -2653,6 +2738,16 @@ class DatabaseManager:
             )
             conn.exec_driver_sql(
                 "UPDATE rule_backtest_runs SET owner_id = :owner_id "
+                "WHERE owner_id IS NULL OR TRIM(owner_id) = ''",
+                {"owner_id": bootstrap_user_id},
+            )
+            conn.exec_driver_sql(
+                "UPDATE rule_backtest_universe_jobs SET owner_id = :owner_id "
+                "WHERE owner_id IS NULL OR TRIM(owner_id) = ''",
+                {"owner_id": bootstrap_user_id},
+            )
+            conn.exec_driver_sql(
+                "UPDATE rule_backtest_universe_symbol_results SET owner_id = :owner_id "
                 "WHERE owner_id IS NULL OR TRIM(owner_id) = ''",
                 {"owner_id": bootstrap_user_id},
             )

@@ -422,6 +422,63 @@ class RuleBacktestRunRequest(BaseModel):
     wait_for_completion: bool = Field(False, description="是否阻塞等待回测完成；默认异步提交并轮询状态")
 
 
+class RuleBacktestUniverseJobCreateRequest(BaseModel):
+    symbols: List[str] = Field(..., min_length=1, max_length=500, description="显式标的列表；后端按规范化代码去重并排序")
+    strategy_text: str = Field(..., description="策略文本快照")
+    parsed_strategy: Optional[Dict[str, Any]] = Field(None, description="可选的已确认结构化策略快照")
+    start_date: Optional[str] = Field(None, description="本地数据预检开始日期（YYYY-MM-DD）")
+    end_date: Optional[str] = Field(None, description="本地数据预检结束日期（YYYY-MM-DD）")
+    lookback_bars: int = Field(252, ge=10, le=5000, description="预检窗口（交易 bars）")
+    initial_capital: float = Field(100000.0, gt=0, description="初始资金快照")
+    fee_bps: float = Field(0.0, ge=0, le=500, description="单边手续费（bp）快照")
+    slippage_bps: float = Field(0.0, ge=0, le=500, description="单边滑点（bp）快照")
+    benchmark_mode: str = Field("none", description="宇宙预检默认不加载外部基准")
+    benchmark_code: Optional[str] = Field(None, description="自定义基准代码快照")
+    request_label: Optional[str] = Field(None, max_length=128, description="操作者本地标签")
+
+
+class RuleBacktestUniverseJobResponse(BaseModel):
+    id: int
+    request_label: Optional[str] = None
+    status: str
+    strategy_hash: str
+    symbol_count: int
+    completed_count: int = 0
+    skipped_count: int = 0
+    failed_count: int = 0
+    pending_count: int = 0
+    running_count: int = 0
+    cancel_requested: bool = False
+    local_data_only: bool = True
+    execution_mode: str = "preflight_only"
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+class RuleBacktestUniverseSymbolResultItem(BaseModel):
+    id: int
+    job_id: int
+    sequence_index: int
+    symbol: str
+    status: str
+    reason_code: Optional[str] = None
+    reason_message: Optional[str] = None
+    runtime_ms: int = 0
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+    single_run_id: Optional[int] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class RuleBacktestUniverseResultsResponse(BaseModel):
+    job_id: int
+    total: int
+    page: int
+    limit: int
+    items: List[RuleBacktestUniverseSymbolResultItem] = Field(default_factory=list)
+
+
 class RuleBacktestCompareRequest(BaseModel):
     run_ids: List[int] = Field(
         ...,

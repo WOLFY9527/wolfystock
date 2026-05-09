@@ -7,7 +7,13 @@ from typing import Any, List, Optional, Tuple
 
 from sqlalchemy import and_, delete, desc, func, select
 
-from src.storage import DatabaseManager, RuleBacktestRun, RuleBacktestTrade
+from src.storage import (
+    DatabaseManager,
+    RuleBacktestRun,
+    RuleBacktestTrade,
+    RuleBacktestUniverseJob,
+    RuleBacktestUniverseSymbolResult,
+)
 
 
 class RuleBacktestRepository:
@@ -179,3 +185,62 @@ class RuleBacktestRepository:
         for run_id in sorted({int(value) for value in run_ids}):
             self.db.sync_phase_e_rule_backtest_shadow(int(run_id))
         return int(deleted)
+
+    def save_universe_job(
+        self,
+        job: RuleBacktestUniverseJob,
+        symbol_results: List[RuleBacktestUniverseSymbolResult],
+    ) -> RuleBacktestUniverseJob:
+        job.owner_id = self.db.require_user_id(getattr(job, "owner_id", None))
+        for result in symbol_results:
+            result.owner_id = job.owner_id
+        with self.db.get_session() as session:
+            session.add(job)
+            session.flush()
+            for result in symbol_results:
+                result.job_id = int(job.id)
+                session.add(result)
+            session.commit()
+            session.refresh(job)
+        return job
+
+    def get_universe_job(
+        self,
+        job_id: int,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[RuleBacktestUniverseJob]:
+        with self.db.get_session() as session:
+            conditions = [RuleBacktestUniverseJob.id == int(job_id)]
+            if not include_all_owners:
+                conditions.append(RuleBacktestUniverseJob.owner_id == self.db.require_user_id(owner_id))
+            return session.execute(
+                select(RuleBacktestUniverseJob).where(and_(*conditions)).limit(1)
+            ).scalar_one_or_none()
+
+    def get_universe_symbol_results_paginated(
+        self,
+        job_id: int,
+        *,
+        offset: int,
+        limit: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Tuple[List[RuleBacktestUniverseSymbolResult], int]:
+        with self.db.get_session() as session:
+            conditions = [RuleBacktestUniverseSymbolResult.job_id == int(job_id)]
+            if not include_all_owners:
+                conditions.append(RuleBacktestUniverseSymbolResult.owner_id == self.db.require_user_id(owner_id))
+            where_clause = and_(*conditions)
+            total = session.execute(
+                select(func.count(RuleBacktestUniverseSymbolResult.id)).where(where_clause)
+            ).scalar() or 0
+            rows = session.execute(
+                select(RuleBacktestUniverseSymbolResult)
+                .where(where_clause)
+                .order_by(RuleBacktestUniverseSymbolResult.sequence_index.asc())
+                .offset(offset)
+                .limit(limit)
+            ).scalars().all()
+            return list(rows), int(total)
