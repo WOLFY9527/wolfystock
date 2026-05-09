@@ -135,6 +135,7 @@ FAST_DECISION_TIMEOUT_SECONDS = {
     DataCategory.NEWS: 1.5,
     DataCategory.SENTIMENT: 1.5,
 }
+FAST_DECISION_PLAN_DEADLINE_SECONDS = 3.0
 
 
 def _normalize_market(symbol: str, market: Optional[str]) -> str:
@@ -276,8 +277,12 @@ class AnalysisProviderExecutor:
         symbol: str,
         providers_by_category: Mapping[DataCategory, Mapping[str, Callable[[], Any]]],
         max_workers: int = 4,
+        deadline_seconds: Optional[float] = None,
+        required_categories: Optional[Iterable[DataCategory | str]] = None,
     ) -> dict[DataCategory, ProviderCategoryResult]:
         results: dict[DataCategory, ProviderCategoryResult] = {}
+        required = {DataCategory(category) for category in (required_categories or [])}
+        deadline_at = time.monotonic() + deadline_seconds if deadline_seconds and deadline_seconds > 0 else None
         with ThreadPoolExecutor(max_workers=max(1, max_workers), thread_name_prefix="provider_category_") as pool:
             future_map = {
                 pool.submit(
@@ -285,6 +290,7 @@ class AnalysisProviderExecutor:
                     category_plan,
                     symbol=symbol,
                     providers=providers_by_category.get(category, {}),
+                    deadline_at=None if category in required else deadline_at,
                 ): category
                 for category, category_plan in plan.categories.items()
                 if category in providers_by_category
@@ -294,6 +300,24 @@ class AnalysisProviderExecutor:
                 results[category] = future.result()
         return results
 
+    @staticmethod
+    def _deadline_exceeded_result(category_plan: CategoryProviderPlan) -> ProviderCategoryResult:
+        return ProviderCategoryResult(
+            category=category_plan.category,
+            source_provider=None,
+            data=None,
+            source_category=category_plan.category.value,
+            warnings=["analysis_deadline_exceeded"],
+            attempts=[
+                {
+                    "provider": category_plan.primary,
+                    "status": "failed",
+                    "reason": "analysis_deadline_exceeded",
+                }
+            ],
+            partial=True,
+        )
+
     def execute_category(
         self,
         category_plan: CategoryProviderPlan,
@@ -302,6 +326,7 @@ class AnalysisProviderExecutor:
         providers: Mapping[str, Callable[[], Any]],
         params: Optional[Mapping[str, Any]] = None,
         sufficient: Optional[Callable[[Any], bool]] = None,
+        deadline_at: Optional[float] = None,
     ) -> ProviderCategoryResult:
         sufficient = sufficient or self._has_sufficient_data
         warnings: list[str] = []
@@ -309,6 +334,12 @@ class AnalysisProviderExecutor:
         available = [provider for provider in category_plan.providers if provider in providers]
         attempted_providers = available[: category_plan.max_attempts]
         for index, provider in enumerate(attempted_providers):
+            provider_timeout = category_plan.timeout_seconds
+            if deadline_at is not None:
+                remaining = deadline_at - time.monotonic()
+                if remaining <= 0:
+                    return self._deadline_exceeded_result(category_plan)
+                provider_timeout = min(provider_timeout, remaining)
             if self._is_circuit_open(provider, category_plan.category):
                 attempts.append({"provider": provider, "status": "skipped", "reason": "circuit_open"})
                 warnings.append(f"{provider}: circuit_open")
@@ -334,6 +365,7 @@ class AnalysisProviderExecutor:
                     symbol=symbol,
                     params=params or {},
                     call=providers[provider],
+                    timeout_seconds=provider_timeout,
                 )
                 duration_ms = int((time.monotonic() - started) * 1000)
                 if not sufficient(data):
@@ -436,7 +468,10 @@ class AnalysisProviderExecutor:
             except Exception as exc:
                 duration_ms = int((time.monotonic() - started) * 1000)
                 reason = self._classify_exception(exc)
-                self._record_failure(provider, category_plan.category, reason)
+                if reason == "timeout" and deadline_at is not None and time.monotonic() >= deadline_at:
+                    reason = "analysis_deadline_exceeded"
+                if reason != "analysis_deadline_exceeded":
+                    self._record_failure(provider, category_plan.category, reason)
                 self._emit_provider_event(
                     "provider_call_failed",
                     provider=provider,
@@ -506,6 +541,8 @@ class AnalysisProviderExecutor:
                         reason,
                         duration_ms,
                     )
+                if reason == "analysis_deadline_exceeded":
+                    break
                 self._emit_provider_fallback_attempt(
                     provider=provider,
                     category_plan=category_plan,
@@ -533,6 +570,7 @@ class AnalysisProviderExecutor:
         symbol: str,
         params: Mapping[str, Any],
         call: Callable[[], Any],
+        timeout_seconds: Optional[float] = None,
     ) -> tuple[Any, bool]:
         key = self._cache_key(provider, category_plan.category, symbol, params)
         cache_key_hash = hash_label_value(key)
@@ -612,7 +650,7 @@ class AnalysisProviderExecutor:
                 outcome="started",
             )
         try:
-            data = future.result(timeout=category_plan.timeout_seconds)
+            data = future.result(timeout=timeout_seconds or category_plan.timeout_seconds)
         except TimeoutError as exc:
             raise ProviderTimeout(f"{provider}:{category_plan.category.value} timed out") from exc
         if self._has_sufficient_data(data):

@@ -3,6 +3,7 @@ import time
 import pytest
 
 from src.services.analysis_provider_planner import (
+    CategoryProviderPlan,
     AnalysisProviderExecutor,
     DataCategory,
     ProviderQuotaExceeded,
@@ -229,3 +230,79 @@ def test_independent_categories_run_concurrently_and_duplicate_provider_category
         "news",
         "technical",
     }
+
+
+def test_execute_plan_deadline_returns_optional_partial_gap_without_waiting_for_slow_provider():
+    executor = AnalysisProviderExecutor()
+    plan = build_analysis_provider_plan(
+        "ORCL",
+        market="us",
+        categories=[DataCategory.QUOTE, DataCategory.NEWS],
+    )
+
+    started = time.monotonic()
+    results = executor.execute_plan(
+        plan,
+        symbol="ORCL",
+        providers_by_category={
+            DataCategory.QUOTE: {"alpaca": lambda: {"price": 100}},
+            DataCategory.NEWS: {"gnews": lambda: time.sleep(0.25) or {"headline": "SECRET raw payload"}},
+        },
+        max_workers=2,
+        deadline_seconds=0.02,
+        required_categories={DataCategory.QUOTE},
+    )
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.12
+    assert results[DataCategory.QUOTE].source_provider == "alpaca"
+    news_result = results[DataCategory.NEWS]
+    assert news_result.source_provider is None
+    assert news_result.partial is True
+    assert news_result.attempts[0]["provider"] == "gnews"
+    assert news_result.attempts[0]["status"] == "failed"
+    assert news_result.attempts[0]["reason"] == "analysis_deadline_exceeded"
+    assert any("analysis_deadline_exceeded" in warning for warning in news_result.warnings)
+    assert "SECRET raw payload" not in str(news_result.metadata())
+
+
+def test_execute_plan_deadline_preserves_required_category_timeout_behavior():
+    executor = AnalysisProviderExecutor()
+    quote_plan = CategoryProviderPlan(
+        category=DataCategory.QUOTE,
+        providers=["required_quote"],
+        timeout_seconds=0.03,
+        cache_ttl_seconds=1,
+        max_attempts=1,
+    )
+    news_plan = CategoryProviderPlan(
+        category=DataCategory.NEWS,
+        providers=["news"],
+        timeout_seconds=0.2,
+        cache_ttl_seconds=1,
+        max_attempts=1,
+    )
+    plan = build_analysis_provider_plan("ORCL", market="us", categories=[])
+    plan.categories[DataCategory.QUOTE] = quote_plan
+    plan.categories[DataCategory.NEWS] = news_plan
+
+    started = time.monotonic()
+    results = executor.execute_plan(
+        plan,
+        symbol="ORCL",
+        providers_by_category={
+            DataCategory.QUOTE: {"required_quote": lambda: time.sleep(0.08) or {"price": 100}},
+            DataCategory.NEWS: {"news": lambda: time.sleep(0.2) or {"headline": "later"}},
+        },
+        max_workers=2,
+        deadline_seconds=0.01,
+        required_categories={DataCategory.QUOTE},
+    )
+    elapsed = time.monotonic() - started
+
+    assert elapsed >= 0.025
+    quote_result = results[DataCategory.QUOTE]
+    assert quote_result.source_provider is None
+    assert quote_result.partial is True
+    assert quote_result.attempts[0]["reason"] == "timeout"
+    assert results[DataCategory.NEWS].attempts[0]["reason"] == "analysis_deadline_exceeded"

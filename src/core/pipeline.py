@@ -43,6 +43,7 @@ from src.search_service import SearchService
 from src.services.social_sentiment_service import SocialSentimentService
 from src.services.analysis_provider_planner import (
     DataCategory,
+    FAST_DECISION_PLAN_DEADLINE_SECONDS,
     ProviderCategoryResult,
     build_fast_decision_provider_plan,
     get_analysis_provider_executor,
@@ -1009,6 +1010,8 @@ class StockAnalysisPipeline:
             symbol=code,
             providers_by_category=providers_by_category,
             max_workers=min(4, max(1, len(categories))),
+            deadline_seconds=FAST_DECISION_PLAN_DEADLINE_SECONDS,
+            required_categories={DataCategory.QUOTE} if include_quote else set(),
         )
         payload: Dict[str, Any] = {
             "plan": {
