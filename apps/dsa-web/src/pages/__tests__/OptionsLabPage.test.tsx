@@ -365,11 +365,18 @@ describe('OptionsLabPage', () => {
     const pageRoot = screen.getByTestId('options-lab-page-root');
     expect(pageRoot).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6');
     expect(pageRoot.className).not.toMatch(/\bbg-(black|\[#000\]|\[#050505\]|gray-|zinc-|slate-|neutral-)/);
-    expect(screen.getByTestId('options-lab-snapshot-panel')).toHaveTextContent('标的快照');
+    const snapshotPanel = screen.getByTestId('options-lab-snapshot-panel');
+    expect(snapshotPanel).toHaveTextContent('标的快照');
+    expect(within(snapshotPanel).getByTestId('options-lab-snapshot-metric-grid')).toHaveClass('grid-cols-2', 'md:grid-cols-3', 'xl:grid-cols-6');
+    expect(within(snapshotPanel).getByText('标的')).toBeInTheDocument();
+    expect(within(snapshotPanel).getByText('IV 分位')).toBeInTheDocument();
     expect(screen.getByTestId('options-lab-bento-grid')).toHaveClass('grid', 'grid-cols-1', 'gap-6', 'items-start', 'xl:grid-cols-12');
     ['标的快照', '期权假设', '策略决策', '风险边界', '策略候选'].forEach((label) => {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     });
+    expect(screen.getByTestId('options-lab-decision-engine')).toHaveClass('xl:col-span-5');
+    expect(screen.getByTestId('options-lab-assumptions-panel')).toHaveClass('xl:col-span-4');
+    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveClass('xl:col-span-3');
     expect(screen.getByText('期权假设')).toBeInTheDocument();
     expect(screen.getByLabelText('标的代码')).toHaveValue('TEM');
     expect(screen.getByRole('button', { name: '执行' })).toHaveClass('bg-gradient-to-r', 'from-blue-600', 'to-purple-600', 'shadow-[0_0_15px_rgba(139,92,246,0.3)]');
@@ -385,6 +392,9 @@ describe('OptionsLabPage', () => {
     expect(screen.queryByTestId('options-lab-strategy-details')).not.toBeInTheDocument();
     expect((await screen.findAllByText('Call 链')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Put 链').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('行权价').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('中间价').length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('options-lab-chain-panel')).toHaveLength(2);
     expect(screen.getAllByText('不可作为交易信号').length).toBeGreaterThan(0);
   });
 
@@ -406,6 +416,8 @@ describe('OptionsLabPage', () => {
     expect(within(section).queryByText('流动性提示')).not.toBeInTheDocument();
     expect(within(section).queryByText('波动率 / 时间价值提示')).not.toBeInTheDocument();
     expect(within(section).getByText('风险提示已合并')).toBeInTheDocument();
+    expect(document.body.textContent || '').not.toContain('Bull Call Spread');
+    expect(document.body.textContent || '').not.toContain('Long Call');
   });
 
   it('renders the R2 decision section with IV rank, expected move, optimizer, and synthetic guardrails', async () => {
@@ -416,19 +428,34 @@ describe('OptionsLabPage', () => {
     await waitFor(() => {
       expect(within(section).getAllByText('预期波动').length).toBeGreaterThan(0);
     });
-    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('数据充分性');
+    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('数据状态');
     expect(within(section).getByText('最大亏损')).toBeInTheDocument();
     expect(within(section).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
     expect(within(section).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
-    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('不可用于真实交易判断');
-    expect(within(section).getByText('IV / Greeks')).toBeInTheDocument();
-    expect(within(section).getAllByText('IV Rank 不可用').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('不可作为交易信号');
+    expect(within(section).getByText('IV / 敏感度')).toBeInTheDocument();
+    expect(within(section).getAllByText('IV 分位不可用').length).toBeGreaterThan(0);
     expect(within(section).getAllByText('$7.50').length).toBeGreaterThan(0);
     expect(within(section).getByText('主要策略')).toBeInTheDocument();
     expect(within(section).getByText('暂无可执行策略')).toBeInTheDocument();
     expect(within(section).getAllByText(/不交易：数据质量未达到可判断等级/).length).toBeGreaterThan(0);
     expect(within(section).getAllByText(/牛市看涨价差/).length).toBeGreaterThan(0);
     expect(document.body.textContent || '').not.toContain('有条件可交易');
+  });
+
+  it('consolidates risk warnings into a compact boundary with hidden overflow caveats', async () => {
+    renderPage();
+
+    const riskPanel = await screen.findByTestId('options-lab-risk-boundary-panel');
+    await waitFor(() => {
+      expect(within(riskPanel).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
+    });
+    const visibleWarnings = within(riskPanel).getAllByTestId('options-lab-visible-risk-warning');
+    expect(visibleWarnings.length).toBeLessThanOrEqual(3);
+    expect(within(riskPanel).getByText('更多限制')).toBeInTheDocument();
+    expect(within(riskPanel).getByText('数据状态')).toBeInTheDocument();
+    expect(riskPanel.textContent || '').not.toContain('synthetic_or_fixture_data_not_decision_grade');
+    expect(riskPanel.textContent || '').not.toContain('synthetic delayed');
   });
 
   it('puts the decision summary before deep option-chain and scenario detail sections', async () => {
@@ -503,7 +530,7 @@ describe('OptionsLabPage', () => {
     expect(within(decision).getByText(/不交易：候选结构边际优势或风险回报不足/)).toBeInTheDocument();
   });
 
-  it('renders missing Greeks and liquidity warnings in the decision section', async () => {
+  it('renders missing sensitivity and liquidity warnings in the decision section', async () => {
     vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValueOnce({
       symbol: 'TEM',
       strategy: 'long_call',
@@ -563,8 +590,8 @@ describe('OptionsLabPage', () => {
     await waitFor(() => {
       expect(within(riskPanel).getAllByText('买卖价差过宽').length).toBeGreaterThan(0);
     });
-    expect(within(riskPanel).getAllByText('Greeks 缺失').length).toBeGreaterThan(0);
-    expect(within(section).getByText('Greeks 缺失，无法评估时间价值与敏感度')).toBeInTheDocument();
+    expect(within(riskPanel).getAllByText('敏感度缺失').length).toBeGreaterThan(0);
+    expect(section).toHaveTextContent('策略决策');
   });
 
   it('does not fire compare before required assumptions are ready and shows a compact empty state', async () => {

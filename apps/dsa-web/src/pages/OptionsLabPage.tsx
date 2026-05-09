@@ -104,15 +104,15 @@ function limitationLabel(value: string): string {
   if (value === 'risk_profile_conservative') return '风险偏好：保守';
   if (value === 'risk_profile_balanced') return '风险偏好：均衡';
   if (value === 'risk_profile_aggressive') return '风险偏好：进取';
-  return value.replace(/_/g, ' ');
+  return '部分外部数据暂不可用';
 }
 
 function strategyLabel(value: OptionsStrategyType): string {
   const labels: Record<OptionsStrategyType, string> = {
-    long_call: 'Long Call',
-    long_put: 'Long Put',
-    bull_call_spread: 'Bull Call Spread',
-    bear_put_spread: 'Bear Put Spread',
+    long_call: 'Call 多头',
+    long_put: 'Put 多头',
+    bull_call_spread: 'Call 借方价差',
+    bear_put_spread: 'Put 借方价差',
   };
   return labels[value];
 }
@@ -132,16 +132,20 @@ function warningLabel(value: string): string {
   if (value === 'expected_move_uses_fixture_mid_prices') return '预期波动使用延迟中间价估算';
   if (value === 'expected_move_unavailable') return '预期波动暂不可用';
   if (value === 'expected_move_unavailable_degrade_confidence') return '预期波动缺失降低可信度';
-  if (value === 'iv_rank_unavailable_degrade_confidence') return 'IV Rank 缺失降低可信度';
+  if (value === 'iv_rank_unavailable_degrade_confidence') return 'IV 分位缺失降低可信度';
   if (value === 'wide_bid_ask_spread') return '买卖价差过宽';
-  if (value === 'missing_greeks') return 'Greeks 缺失';
-  if (value === 'missing_greeks_degrade_confidence') return 'Greeks 缺失降低可信度';
+  if (value === 'missing_greeks') return '敏感度缺失';
+  if (value === 'missing_greeks_degrade_confidence') return '敏感度缺失降低可信度';
+  if (value.includes('Greeks 缺失')) return '敏感度缺失，无法评估时间价值与敏感度';
   if (value === 'low_or_missing_volume') return '成交量不足或缺失';
   if (value === 'low_or_missing_open_interest') return 'OI 不足或缺失';
   if (value === 'breakeven_requires_large_underlying_move') return '盈亏平衡需要较大标的波动';
   if (value === 'max_gain_not_defined_for_long_option') return '单腿多头收益边界不固定';
-  if (value === 'iv_rank_unavailable') return 'IV Rank 不可用';
+  if (value === 'iv_rank_unavailable') return 'IV 分位不可用';
   if (value === 'synthetic_or_fixture_data_not_decision_grade') return '演示数据不可用于真实判断';
+  if (value === '不可作为交易信号') return '不可作为交易信号';
+  if (value === '不可用于真实交易判断') return '不可作为交易信号';
+  if (value === '需人工复核') return '需人工复核';
   return limitationLabel(value);
 }
 
@@ -375,9 +379,9 @@ const SnapshotPanel: React.FC<{
           <span>不可作为交易信号</span>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-6">
+      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" data-testid="options-lab-snapshot-metric-grid">
         <div className={cn(innerBlockClass, 'p-3')}>
-          <p className={labelClass}>标的代码</p>
+          <p className={labelClass}>标的</p>
           <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-white">{summary?.symbol || chain?.symbol || '--'}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
@@ -389,7 +393,7 @@ const SnapshotPanel: React.FC<{
           <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-emerald-300">{ratio(underlying?.changePct)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
-          <p className={labelClass}>IV Rank / Percentile</p>
+          <p className={labelClass}>IV 分位</p>
           <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-cyan-300">{ivRank == null ? '--' : number(ivRank, 1)} / {ivPercentile == null ? '--' : number(ivPercentile, 1)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
@@ -408,29 +412,29 @@ const SnapshotPanel: React.FC<{
 };
 
 const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId: string; className?: string }> = ({ title, contracts, testId, className }) => (
-  <section className={cn(panelClass, 'min-h-[320px]', className)}>
+  <section className={cn(panelClass, 'min-h-[280px]', className)} data-testid="options-lab-chain-panel">
     <SectionHeader eyebrow="期权链" title={title} icon={BarChart3} />
     {contracts.length === 0 ? (
       <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 text-sm text-white/45')}>暂无数据，保留假设面板与风险提示。</p>
     ) : (
-      <div className="mt-5 overflow-x-auto no-scrollbar" data-testid={testId}>
+      <div className="mt-4 overflow-x-auto no-scrollbar" data-testid={testId}>
         <table className="w-full min-w-[720px] border-separate border-spacing-y-1 text-left">
           <thead className="text-[10px] uppercase tracking-[0.16em] text-white/35">
             <tr>
               <th className="px-3 py-2">合约</th>
-              <th className="px-3 py-2">Strike</th>
-              <th className="px-3 py-2">Mid</th>
+              <th className="px-3 py-2">行权价</th>
+              <th className="px-3 py-2">中间价</th>
               <th className="px-3 py-2">买价 / 卖价</th>
               <th className="px-3 py-2">IV</th>
               <th className="px-3 py-2">Delta</th>
               <th className="px-3 py-2">Theta</th>
-              <th className="px-3 py-2">OI / Vol</th>
+              <th className="px-3 py-2">OI / 成交量</th>
               <th className="px-3 py-2">流动性</th>
             </tr>
           </thead>
           <tbody>
             {contracts.map((contract) => (
-              <tr key={contract.contractSymbol} className="rounded-xl border border-white/[0.02] bg-black/20 text-xs text-white/72">
+              <tr key={contract.contractSymbol} className="rounded-xl border border-white/[0.03] bg-white/[0.015] text-xs text-white/72">
                 <td className="rounded-l-xl px-3 py-2 font-mono text-xs text-white">{contract.contractSymbol}</td>
                 <td className="px-3 py-2 font-mono">{money(contract.strike)}</td>
                 <td className="px-3 py-2 font-mono">{money(contract.mid)}</td>
@@ -480,10 +484,10 @@ const StrategyRow: React.FC<{
   <article
     data-testid={highlighted ? 'options-lab-primary-strategy-row' : undefined}
     className={cn(
-      'grid min-w-0 gap-3 rounded-xl border px-3 py-3 text-sm transition-all xl:grid-cols-[minmax(0,1.4fr)_0.7fr_repeat(4,minmax(0,0.8fr))_minmax(0,1.5fr)] xl:items-center',
+      'grid min-w-0 gap-3 rounded-xl border px-3 py-2 text-sm transition-all xl:grid-cols-[minmax(0,1.4fr)_0.7fr_repeat(4,minmax(0,0.8fr))_minmax(0,1.5fr)] xl:items-center',
       highlighted
         ? 'border-cyan-300/25 bg-cyan-400/[0.06] shadow-[0_0_20px_rgba(34,211,238,0.08)]'
-        : 'border-white/[0.04] bg-black/20 hover:border-white/10 hover:bg-white/[0.03]',
+        : 'border-white/[0.03] bg-white/[0.015] hover:border-white/10 hover:bg-white/[0.03]',
     )}
   >
     <div className="min-w-0">
@@ -600,7 +604,6 @@ const DecisionMetric: React.FC<{ label: string; value: string; tone?: string }> 
 const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: string | null; className?: string }> = ({ decisionState, emptyMessage, className }) => {
   const decision = decisionState.decision;
   const label = decision?.decisionLabel || '数据不足，禁止判断';
-  const reasons = asArray(decision?.primaryReasons);
   const expectedMove = decision?.expectedMove;
   const optimizer = decision?.optimizer;
   const rankedAlternatives = asArray(decision?.rankedAlternatives).length
@@ -619,7 +622,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
   const decisionTags = [...new Set([
     dataTierLabel(decision?.dataQuality?.dataQualityTier),
     freshnessLabel(decision?.freshness?.freshness),
-    ivRankStatus === 'available' ? 'IV Rank 可用' : 'IV Rank 不可用',
+    ivRankStatus === 'available' ? 'IV 分位可用' : 'IV 分位不可用',
   ].filter((item) => item && item !== '--'))].slice(0, 3);
   return (
     <section className={cn(panelClass, className)} data-testid="options-lab-decision-engine">
@@ -667,7 +670,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
               <DecisionMetric label="情景质量" value={number(decision?.tradeQualityScore)} />
               <DecisionMetric label="最大亏损" value={money(decision?.riskReward?.maxLoss)} tone="text-rose-300" />
               <DecisionMetric label="预期波动" value={money(expectedMove?.expectedMoveAbs)} />
-              <DecisionMetric label="IV / Greeks" value={number(decision?.ivGreeks?.ivReadiness)} tone="text-cyan-100" />
+              <DecisionMetric label="IV / 敏感度" value={number(decision?.ivGreeks?.ivReadiness)} tone="text-cyan-100" />
             </div>
             <div className={cn(innerBlockClass, 'mt-4 p-3')}>
               <p className={labelClass}>主要策略</p>
@@ -686,7 +689,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
               <p className="mt-1 text-sm text-white/52">所需波动：{ratio(decision?.breakeven?.requiredMovePct)}</p>
             </div>
             <div className={cn(innerBlockClass, 'p-4')}>
-              <p className={labelClass}>IV Rank / Percentile</p>
+              <p className={labelClass}>IV 分位</p>
               {ivRankStatus === 'available' ? (
                 <>
                   <p className="mt-2 font-mono text-base font-semibold tracking-tight text-cyan-300">{number(ivRank, 1)} / {number(ivPercentile, 1)}</p>
@@ -694,7 +697,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
                 </>
               ) : (
                 <>
-                  <p className="mt-2 font-mono text-base font-semibold tracking-tight text-white/62">IV Rank 不可用</p>
+                  <p className="mt-2 font-mono text-base font-semibold tracking-tight text-white/62">IV 分位不可用</p>
                   <p className="mt-1 text-sm text-white/52">缺少历史 IV 或代理序列，置信度降低。</p>
                 </>
               )}
@@ -703,14 +706,6 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
               <p className={labelClass}>预期波动</p>
               <p className="mt-2 font-mono text-base font-semibold tracking-tight text-white">{money(expectedMove?.expectedMoveAbs)}</p>
               <p className="mt-1 text-sm text-white/52">{ratio(expectedMove?.expectedMovePct)} · {expectedMoveSourceLabel(expectedMove?.expectedMoveSource)}</p>
-            </div>
-          </div>
-          <div className={cn(innerBlockClass, 'p-4')}>
-            <p className={labelClass}>关键依据</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {(reasons.length ? reasons : ['数据不足，禁止判断']).slice(0, 3).map((reason) => (
-                <Pill key={reason} tone="risk">{warningLabel(reason)}</Pill>
-              ))}
             </div>
           </div>
         </div>
@@ -738,7 +733,7 @@ const RiskBoundaryPanel: React.FC<{
     ...asArray(decision?.expectedMove?.expectedMoveWarnings),
   ];
   const riskWarnings = asArray(decision?.riskWarnings);
-  const compactWarnings = [...new Set([
+  const allWarnings = [...new Set([
     loading ? '等待快照' : null,
     error ? '部分外部数据暂不可用' : null,
     decision?.dataQuality?.dataQualityTier === 'synthetic_demo_only' ? '不可作为交易信号' : null,
@@ -747,38 +742,65 @@ const RiskBoundaryPanel: React.FC<{
     ...ivWarnings,
     ...riskWarnings,
     '需人工复核',
-  ].filter(Boolean) as string[])].slice(0, 7);
+  ].filter(Boolean) as string[])];
+  const visibleWarnings = allWarnings.slice(0, 3);
+  const hiddenWarnings = allWarnings.slice(3);
   const dataState = loading
     ? '等待快照'
     : error
       ? '部分外部数据暂不可用'
       : dataTierLabel(decision?.dataQuality?.dataQualityTier);
+  const topState = decisionStatusLabel(decision);
   return (
     <section className={cn(panelClass, 'order-4 xl:order-none', className)} data-testid="options-lab-risk-boundary-panel">
       <SectionHeader eyebrow="风险控制" title="风险边界" icon={AlertTriangle}>
-        <Pill tone={decisionStatusLabel(decision).includes('禁止') ? 'risk' : 'info'}>
-          {decisionStatusLabel(decision)}
+        <Pill tone={topState.includes('禁止') ? 'risk' : 'info'}>
+          {topState}
         </Pill>
       </SectionHeader>
-      <div className="mt-5 grid gap-3">
-        <div className={cn(innerBlockClass, 'p-3')}>
-          <p className={labelClass}>数据充分性</p>
-          <p className="mt-2 text-sm font-semibold text-white/80">{dataState}</p>
+      <div className="mt-5 grid gap-3 text-sm">
+        <div className="rounded-xl border border-rose-400/20 bg-rose-500/5 p-3">
+          <p className={labelClass}>禁止判断</p>
+          <p className="mt-2 text-sm font-semibold text-rose-200">{topState}</p>
+          <p className="mt-1 text-xs leading-5 text-white/45">仅供观察，不可作为交易信号。</p>
         </div>
-        <div className={cn(innerBlockClass, 'p-3')}>
-          <p className={labelClass}>流动性边界</p>
-          <p className="mt-2 text-sm text-white/62">
-            {liquidityWarnings.length ? liquidityWarnings.map(warningLabel).join(' · ') : '需结合成交量、OI 与买卖价差复核。'}
-          </p>
+        <div className={cn(innerBlockClass, 'flex items-center justify-between gap-3 p-3')}>
+          <span className={labelClass}>数据状态</span>
+          <Pill tone={dataState.includes('不足') || dataState.includes('延迟') ? 'warn' : 'info'}>{dataState}</Pill>
         </div>
         <ul className="grid gap-2" aria-label="风险边界警示">
-          {compactWarnings.map((warning) => (
-            <li key={warning} className="flex gap-2 rounded-xl border border-amber-300/20 bg-amber-400/5 px-3 py-2 text-xs leading-5 text-amber-300">
+          {visibleWarnings.map((warning) => (
+            <li
+              key={warning}
+              data-testid="options-lab-visible-risk-warning"
+              className="flex gap-2 rounded-xl border border-amber-300/20 bg-amber-400/5 px-3 py-2 text-xs leading-5 text-amber-300"
+            >
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden="true" />
               <span>{warningLabel(warning)}</span>
             </li>
           ))}
         </ul>
+        {hiddenWarnings.length ? (
+          <details className="rounded-xl border border-white/[0.03] bg-white/[0.015] px-3 py-2 text-xs text-white/48">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/55">
+              <span>更多限制</span>
+              <ChevronDown className="h-3.5 w-3.5 text-white/30" aria-hidden="true" />
+            </summary>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {hiddenWarnings.map((warning) => (
+                <Pill key={warning} tone="neutral">{warningLabel(warning)}</Pill>
+              ))}
+            </div>
+          </details>
+        ) : (
+          <details className="rounded-xl border border-white/[0.03] bg-white/[0.015] px-3 py-2 text-xs text-white/48">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/55">
+              <span>更多限制</span>
+              <ChevronDown className="h-3.5 w-3.5 text-white/30" aria-hidden="true" />
+            </summary>
+            <p className="mt-2">暂无更多可见限制，仍需人工复核。</p>
+          </details>
+        )}
         <p className="text-xs leading-5 text-white/35">
           仅供观察，不可作为交易信号。本页不接入交易执行、组合变更或通知路由。
         </p>
