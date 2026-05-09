@@ -65,6 +65,7 @@ class SocialSentimentService:
 
     # Cache TTL for trending endpoints (seconds)
     _TRENDING_CACHE_TTL = 600  # 10 minutes
+    _CONTEXT_CACHE_TTL = 1800  # 30 minutes
 
     def __init__(self, api_key: Optional[str] = None, api_url: str = "https://api.adanos.org"):
         self._api_key = (api_key or "").strip() or None
@@ -155,7 +156,15 @@ class SocialSentimentService:
         if not self.is_available:
             return None
 
-        ticker_upper = ticker.upper()
+        ticker_upper = str(ticker or "").strip().upper()
+        if not ticker_upper:
+            return None
+
+        context_cache_key = f"social_context:{ticker_upper}"
+        now = time.monotonic()
+        cached = self._cache.get(context_cache_key)
+        if cached and (now - cached[0]) < self._CONTEXT_CACHE_TTL:
+            return cached[1]
 
         # 1. Reddit per-ticker report (richest data)
         reddit_data = self.fetch_reddit_report(ticker_upper)
@@ -176,7 +185,9 @@ class SocialSentimentService:
         if not reddit_data and not x_entry and not poly_entry:
             return None
 
-        return self._format_social_intel(ticker_upper, reddit_data, x_entry, poly_entry)
+        formatted = self._format_social_intel(ticker_upper, reddit_data, x_entry, poly_entry)
+        self._cache[context_cache_key] = (now, formatted)
+        return formatted
 
     # ------------------------------------------------------------------
     # Formatting

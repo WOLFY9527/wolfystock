@@ -187,6 +187,27 @@ class TestGetSocialContext(unittest.TestCase):
         self.assertIn("65", result)  # X buzz
         self.assertIn("120", result)  # Polymarket trades
 
+    @patch("src.services.social_sentiment_service._get_with_retry")
+    def test_get_social_context_reuses_ticker_cache(self, mock_get):
+        def side_effect(url, **kwargs):
+            resp = MagicMock()
+            resp.status_code = 200
+            if "/report/" in url:
+                resp.json.return_value = {"report": {"buzz_score": 80, "trend": "rising"}}
+            else:
+                resp.json.return_value = {"trending": []}
+            return resp
+
+        mock_get.side_effect = side_effect
+
+        svc = SocialSentimentService(api_key="sk_live_test")
+        first = svc.get_social_context("AAPL")
+        second = svc.get_social_context(" aapl ")
+
+        self.assertEqual(first, second)
+        report_calls = [call for call in mock_get.call_args_list if "/report/" in call.args[0]]
+        self.assertEqual(len(report_calls), 1)
+
 
 class TestZeroValueHandling(unittest.TestCase):
     """Verify that zero-valued numeric fields (e.g. neutral sentiment) are preserved."""

@@ -6,6 +6,7 @@ Unit tests for strict news freshness filtering and strategy window logic (Issue 
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -151,6 +152,78 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         self.assertEqual([r.title for r in resp.results], ["fresh"])
         p1.search.assert_called_once()
         p2.search.assert_called_once()
+
+    def test_search_stock_news_caches_filtered_empty_gap_with_sanitized_diagnostics(self) -> None:
+        """Repeated filtered-empty news search should surface the gap without refetching providers."""
+        today = datetime.now().date()
+        old = (today - timedelta(days=90)).isoformat()
+
+        service = SearchService(
+            bocha_keys=["dummy_key"],
+            searxng_public_instances_enabled=False,
+            news_max_age_days=3,
+            news_strategy_profile="short",
+        )
+
+        provider = SimpleNamespace(
+            is_available=True,
+            name="P1",
+            search=MagicMock(
+                return_value=SearchResponse(
+                    query="raw query",
+                    results=[_result("too_old", old)],
+                    provider="P1",
+                    success=True,
+                    error_message='{"raw": "provider body"}',
+                )
+            ),
+        )
+        service._providers = [provider]
+
+        first = service.search_stock_news("600519", "贵州茅台", max_results=3)
+        second = service.search_stock_news("600519", "贵州茅台", max_results=3)
+
+        self.assertTrue(first.success)
+        self.assertEqual(first.provider, "Filtered")
+        self.assertEqual(first.results, [])
+        provider.search.assert_called_once()
+        self.assertEqual(second.provider, "Filtered")
+        self.assertEqual(second.results, [])
+        self.assertTrue(any(item.get("result") == "skipped_by_cache" for item in second.attempts))
+        diagnostics_text = str(second.attempts) + str(second.diagnostics)
+        self.assertNotIn("provider body", diagnostics_text)
+        self.assertNotIn('"raw"', diagnostics_text)
+
+    def test_batch_search_dedupes_identical_symbol_and_name_inputs(self) -> None:
+        """Batch search should avoid calling stock-news twice for identical normalized inputs."""
+        service = SearchService(searxng_public_instances_enabled=False)
+        response = _response([_result("fresh", datetime.now().date().isoformat())])
+        service.search_stock_news = MagicMock(return_value=response)
+
+        with patch("src.search_service.time.sleep") as mock_sleep:
+            results = service.batch_search(
+                [
+                    {"code": "600519", "name": "贵州茅台"},
+                    {"code": " 600519 ", "name": " 贵州茅台 "},
+                    {"code": "000001", "name": "平安银行"},
+                ],
+                max_results_per_stock=3,
+                delay_between=0,
+            )
+
+        self.assertEqual(service.search_stock_news.call_count, 2)
+        self.assertEqual(mock_sleep.call_count, 1)
+        self.assertEqual(results["600519"].provider, "Mock")
+        self.assertEqual(results["000001"].provider, "Mock")
+        self.assertTrue(any(item.get("result") == "skipped_by_cache" for item in results["600519"].attempts))
+
+    def test_scanner_paths_do_not_wire_search_news_providers(self) -> None:
+        """Scanner-wide service must not instantiate Tavily/GNews/search news providers."""
+        scanner_source = Path("src/services/market_scanner_service.py").read_text(encoding="utf-8")
+        self.assertNotIn("SearchService", scanner_source)
+        self.assertNotIn("TavilySearchProvider", scanner_source)
+        self.assertNotIn("GNewsSearchProvider", scanner_source)
+        self.assertNotIn("search_stock_news", scanner_source)
 
     def test_search_comprehensive_intel_reuses_cached_dimension_queries(self) -> None:
         """Repeated comprehensive-intel runs should not refetch the same dimension queries."""

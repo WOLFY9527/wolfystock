@@ -221,6 +221,7 @@ class SearchResponse:
     error_message: Optional[str] = None
     search_time: float = 0.0  # 搜索耗时（秒）
     attempts: List[Dict[str, Any]] = field(default_factory=list)
+    diagnostics: Dict[str, Any] = field(default_factory=dict)
     
     def to_context(self, max_results: int = 5) -> str:
         """将搜索结果转换为可用于 AI 分析的上下文"""
@@ -415,9 +416,9 @@ class TavilySearchProvider(BaseSearchProvider):
                 **search_kwargs,
             )
             
-            # 记录原始响应到日志
+            # 仅记录响应形状，避免日志泄露 raw provider payload。
             logger.info(f"[Tavily] 搜索完成，query='{query}', 返回 {len(response.get('results', []))} 条结果")
-            logger.debug(f"[Tavily] 原始响应: {response}")
+            logger.debug("[Tavily] 响应摘要: keys=%s, result_count=%s", sorted(response.keys()), len(response.get('results', [])))
             
             # 解析结果
             results = []
@@ -757,7 +758,7 @@ class SerpAPISearchProvider(BaseSearchProvider):
             search = GoogleSearch(params)
             response = search.get_dict()
             
-            # 记录原始响应到日志
+            # 仅记录响应形状，避免日志泄露 raw provider payload。
             logger.debug(f"[SerpAPI] 原始响应 keys: {response.keys()}")
             
             # 解析结果
@@ -1026,9 +1027,9 @@ class BochaSearchProvider(BaseSearchProvider):
                     error_message=error_msg
                 )
             
-            # 记录原始响应到日志
+            # 仅记录响应形状，避免日志泄露 raw provider payload。
             logger.info(f"[Bocha] 搜索完成，query='{query}'")
-            logger.debug(f"[Bocha] 原始响应: {data}")
+            logger.debug("[Bocha] 响应摘要: keys=%s", sorted(data.keys()) if isinstance(data, dict) else type(data).__name__)
             
             # 解析搜索结果
             results = []
@@ -1411,7 +1412,7 @@ class BraveSearchProvider(BaseSearchProvider):
                 )
 
             logger.info(f"[Brave] 搜索完成，query='{query}'")
-            logger.debug(f"[Brave] 原始响应: {data}")
+            logger.debug("[Brave] 响应摘要: keys=%s", sorted(data.keys()) if isinstance(data, dict) else type(data).__name__)
 
             # 解析搜索结果
             results = []
@@ -2106,6 +2107,62 @@ class SearchService:
         normalized_scope = str(scope or "default").strip().lower()
         return f"{normalized_scope}|{normalized_query}|{max_results}|{days}"
 
+    @staticmethod
+    def _search_quota_diagnostics(route_family: str) -> Dict[str, Any]:
+        """Build advisory-only search budget counters."""
+        return {
+            "route_family": route_family,
+            "attempted_providers": 0,
+            "skipped_by_cache": 0,
+            "skipped_by_budget": 0,
+            "provider_timeout": 0,
+        }
+
+    @staticmethod
+    def _sanitize_attempt_reason(reason: Optional[str]) -> Optional[str]:
+        """Return a stable reason bucket without raw provider payloads."""
+        text = str(reason or "").strip().lower()
+        if not text:
+            return None
+        if "timeout" in text or "timed out" in text:
+            return "provider_timeout"
+        if "invalid" in text or "parse" in text or "json" in text:
+            return "invalid_response"
+        if "rate" in text or "429" in text or "quota" in text:
+            return "provider_rate_limited"
+        if "filtered" in text or "qualified" in text:
+            return "filtered_empty"
+        return "provider_failed"
+
+    def _with_cache_hit_diagnostic(
+        self,
+        response: 'SearchResponse',
+        *,
+        route_family: str,
+    ) -> 'SearchResponse':
+        diagnostics = dict(response.diagnostics or self._search_quota_diagnostics(route_family))
+        diagnostics["skipped_by_cache"] = int(diagnostics.get("skipped_by_cache") or 0) + 1
+        attempts = list(response.attempts or [])
+        attempts.append(
+            {
+                "provider": "cache",
+                "route_family": route_family,
+                "action": "skipped",
+                "result": "skipped_by_cache",
+                "message": "Search provider call skipped because a matching in-process cache entry exists.",
+            }
+        )
+        return SearchResponse(
+            query=response.query,
+            results=response.results,
+            provider=response.provider,
+            success=response.success,
+            error_message=response.error_message,
+            search_time=response.search_time,
+            attempts=attempts,
+            diagnostics=diagnostics,
+        )
+
     def _get_cached(self, key: str) -> Optional['SearchResponse']:
         """Return cached SearchResponse if still valid, else None."""
         entry = self._cache.get(key)
@@ -2448,14 +2505,27 @@ class SearchService:
         cached = self._get_cached(cache_key)
         if cached is not None:
             logger.info(f"使用缓存搜索结果: {stock_name}({stock_code})")
-            return cached
+            return self._with_cache_hit_diagnostic(cached, route_family="stock_news")
 
         # 依次尝试各个搜索引擎（若过滤后为空，继续尝试下一引擎）
         had_provider_success = False
+        diagnostics = self._search_quota_diagnostics("stock_news")
+        attempt_trace: List[Dict[str, Any]] = []
         for provider in self._providers:
             if not provider.is_available:
                 continue
 
+            diagnostics["attempted_providers"] += 1
+            attempt_trace.append(
+                {
+                    "sequence": len(attempt_trace) + 1,
+                    "provider": provider.name,
+                    "route_family": "stock_news",
+                    "action": "attempting",
+                    "result": "attempting",
+                    "message": f"Attempting news provider {provider.name}.",
+                }
+            )
             if isinstance(provider, TavilySearchProvider):
                 response = provider.search(query, provider_max_results, days=search_days, topic="news")
             elif hasattr(provider, "search_news"):
@@ -2476,9 +2546,32 @@ class SearchService:
                 log_scope=f"{stock_code}:{provider.name}:stock_news",
             )
             had_provider_success = had_provider_success or bool(response.success)
+            reason = self._sanitize_attempt_reason(filtered_response.error_message or response.error_message)
+            result = "succeeded" if filtered_response.success and filtered_response.results else (
+                "empty_result" if response.success else reason or "failed"
+            )
+            if result == "provider_timeout":
+                diagnostics["provider_timeout"] += 1
+            attempt_trace.append(
+                {
+                    "sequence": len(attempt_trace) + 1,
+                    "provider": provider.name,
+                    "route_family": "stock_news",
+                    "action": "succeeded" if result == "succeeded" else "failed",
+                    "result": result,
+                    "reason": reason,
+                    "message": (
+                        f"{provider.name} succeeded for stock_news."
+                        if result == "succeeded"
+                        else f"{provider.name} {result} for stock_news."
+                    ),
+                }
+            )
 
             if filtered_response.success and filtered_response.results:
                 logger.info(f"使用 {provider.name} 搜索成功")
+                filtered_response.attempts = attempt_trace
+                filtered_response.diagnostics = diagnostics
                 self._put_cache(cache_key, filtered_response)
                 return filtered_response
             else:
@@ -2495,13 +2588,17 @@ class SearchService:
                     )
 
         if had_provider_success:
-            return SearchResponse(
+            filtered_empty = SearchResponse(
                 query=query,
                 results=[],
                 provider="Filtered",
                 success=True,
                 error_message=None,
+                attempts=attempt_trace,
+                diagnostics=diagnostics,
             )
+            self._put_cache(cache_key, filtered_empty)
+            return filtered_empty
         
         # 所有引擎都失败
         return SearchResponse(
@@ -2509,7 +2606,9 @@ class SearchService:
             results=[],
             provider="None",
             success=False,
-            error_message="所有搜索引擎都不可用或搜索失败"
+            error_message="所有搜索引擎都不可用或搜索失败",
+            attempts=attempt_trace,
+            diagnostics=diagnostics,
         )
     
     def search_stock_events(
@@ -2711,12 +2810,12 @@ class SearchService:
             error_text = str(filtered.error_message or response.error_message or "").strip()
             lowered = error_text.lower()
             if "timeout" in lowered or "timed out" in lowered:
-                return "timeout", error_text or "provider timeout"
+                return "timeout", "provider_timeout"
             if response.success and not filtered.results:
-                return "empty_result", error_text or "no qualified results after filtering"
+                return "empty_result", "filtered_empty"
             if "invalid" in lowered or "parse" in lowered or "json" in lowered:
-                return "invalid_response", error_text or "invalid provider response"
-            return "failed", error_text or "provider failed"
+                return "invalid_response", "invalid_response"
+            return "failed", self._sanitize_attempt_reason(error_text) or "provider_failed"
         
         for dim in search_dimensions:
             if search_count >= max_searches:
@@ -2734,7 +2833,10 @@ class SearchService:
             )
             cached = self._get_cached(cache_key)
             if cached is not None:
-                results[dim["name"]] = cached
+                results[dim["name"]] = self._with_cache_hit_diagnostic(
+                    cached,
+                    route_family=f"intel:{dim['name']}",
+                )
                 search_count += 1
                 logger.info("[情报搜索] %s: 命中缓存，跳过重复 provider 请求", dim["desc"])
                 time.sleep(0.5)
@@ -2750,9 +2852,11 @@ class SearchService:
             final_response = last_response
             last_raw_count = 0
             attempt_trace: List[Dict[str, Any]] = []
+            diagnostics = self._search_quota_diagnostics(f"intel:{dim['name']}")
 
             for provider_idx, provider in enumerate(available_providers):
                 logger.info(f"[情报搜索] {dim['desc']}: 尝试 {provider.name}")
+                diagnostics["attempted_providers"] += 1
                 attempt_trace.append(
                     {
                         "sequence": len(attempt_trace) + 1,
@@ -2763,13 +2867,39 @@ class SearchService:
                         "message": f"Attempting news provider {provider.name} for {dim['name']}.",
                     }
                 )
-                if isinstance(provider, TavilySearchProvider) and dim.get('tavily_topic'):
+                provider_call_scope = (
+                    f"provider_call:{provider.name}:"
+                    f"{dim.get('tavily_topic') or 'search'}"
+                )
+                provider_call_cache_key = self._cache_key(
+                    dim["query"],
+                    provider_max_results,
+                    search_days,
+                    scope=provider_call_scope,
+                )
+                cached_provider_response = self._get_cached(provider_call_cache_key)
+                if cached_provider_response is not None:
+                    diagnostics["skipped_by_cache"] += 1
+                    attempt_trace.append(
+                        {
+                            "sequence": len(attempt_trace) + 1,
+                            "provider": provider.name,
+                            "dimension": dim["name"],
+                            "action": "skipped",
+                            "result": "skipped_by_cache",
+                            "message": f"{provider.name} provider call skipped by in-process cache.",
+                        }
+                    )
+                    response = cached_provider_response
+                elif isinstance(provider, TavilySearchProvider) and dim.get('tavily_topic'):
                     response = provider.search(
                         dim['query'],
                         max_results=provider_max_results,
                         days=search_days,
                         topic=dim['tavily_topic'],
                     )
+                    if response.success:
+                        self._put_cache(provider_call_cache_key, response)
                 elif hasattr(provider, "search_news"):
                     response = provider.search_news(
                         stock_code=stock_code,
@@ -2779,12 +2909,16 @@ class SearchService:
                         days=search_days,
                         dimension=dim['name'],
                     )
+                    if response.success:
+                        self._put_cache(provider_call_cache_key, response)
                 else:
                     response = provider.search(
                         dim['query'],
                         max_results=provider_max_results,
                         days=search_days,
                     )
+                    if response.success:
+                        self._put_cache(provider_call_cache_key, response)
 
                 if dim['strict_freshness']:
                     filtered_response = self._filter_news_response(
@@ -2802,6 +2936,8 @@ class SearchService:
                 last_response = filtered_response
                 last_raw_count = len(response.results)
                 outcome, reason = classify_attempt_outcome(response, filtered_response)
+                if outcome == "timeout":
+                    diagnostics["provider_timeout"] += 1
                 attempt_trace.append(
                     {
                         "sequence": len(attempt_trace) + 1,
@@ -2853,6 +2989,7 @@ class SearchService:
                 final_response = filtered_response
 
             final_response.attempts = attempt_trace
+            final_response.diagnostics = diagnostics
             if final_response.success:
                 self._put_cache(cache_key, final_response)
 
@@ -2936,15 +3073,26 @@ class SearchService:
             Dict of results
         """
         results = {}
+        seen: Dict[Tuple[str, str, int], SearchResponse] = {}
+        executed_searches = 0
         
-        for i, stock in enumerate(stocks):
-            if i > 0:
+        for stock in stocks:
+            code = str(stock.get('code', '') or '').strip()
+            name = str(stock.get('name', '') or '').strip()
+            dedupe_key = (code.upper(), " ".join(name.split()).lower(), int(max_results_per_stock))
+            if dedupe_key in seen:
+                results[code] = self._with_cache_hit_diagnostic(
+                    seen[dedupe_key],
+                    route_family="batch_search",
+                )
+                continue
+
+            if executed_searches > 0:
                 time.sleep(delay_between)
             
-            code = stock.get('code', '')
-            name = stock.get('name', '')
-            
             response = self.search_stock_news(code, name, max_results_per_stock)
+            executed_searches += 1
+            seen[dedupe_key] = response
             results[code] = response
         
         return results
