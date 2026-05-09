@@ -20,6 +20,7 @@ class QuantDuckDBService:
     """Small DuckDB service for bounded quant data validation and benchmarks."""
 
     DEFAULT_RECENT_ROW_LIMIT = 252
+    MAX_PAYLOAD_ROWS = 5000
     FACTOR_COLUMNS = (
         "return_1d",
         "log_return_1d",
@@ -81,12 +82,18 @@ class QuantDuckDBService:
             payload["status"] = "unavailable"
             return payload
 
+        if not self._database_exists():
+            payload["available"] = True
+            payload["status"] = "empty"
+            payload["error"] = "DuckDB database does not exist"
+            return payload
+
         try:
-            with self._connect() as conn:
+            with self._connect(read_only=True) as conn:
                 payload["schemaInitialized"] = self._schema_initialized(conn)
         except Exception as exc:
             payload["status"] = "unavailable"
-            payload["error"] = str(exc)
+            payload["error"] = self._sanitize_duckdb_error(exc)
         return payload
 
     def init_database(self, *, force: bool = False) -> dict:
@@ -174,6 +181,15 @@ class QuantDuckDBService:
         records = self._records_from_rows(rows)
         if not records:
             return {"status": "empty", "engine": "duckdb", "ingestedRows": 0, "symbolCount": 0, "durationMs": 0.0}
+        if len(records) > self.MAX_PAYLOAD_ROWS:
+            return {
+                "status": "invalid_request",
+                "engine": "duckdb",
+                "ingestedRows": 0,
+                "symbolCount": 0,
+                "durationMs": 0.0,
+                "error": "DuckDB payload ingest row limit exceeded",
+            }
 
         started = time.perf_counter()
         parsed_rows = [self._normalize_ohlcv_row(row) for row in records]
@@ -426,39 +442,44 @@ class QuantDuckDBService:
         available, _version, error = self._duckdb_status()
         if not available:
             return self._empty_coverage("unavailable", error or "DuckDB is unavailable")
+        if not self._database_exists():
+            return self._empty_coverage("empty", "DuckDB database does not exist")
 
         limit = max(1, min(int(sample_limit or 20), 100))
-        with self._connect(create_parent=True) as conn:
-            if not self._schema_initialized(conn):
-                return self._empty_coverage("unavailable", "DuckDB quant schema is not initialized")
-            totals = conn.execute(
-                """
-                SELECT COUNT(*), COUNT(DISTINCT symbol), MIN(trade_date), MAX(trade_date)
-                FROM ohlcv_daily
-                """
-            ).fetchone()
-            factor_totals = conn.execute("SELECT COUNT(*), MAX(trade_date) FROM factor_daily").fetchone()
-            symbol_rows = conn.execute(
-                """
-                SELECT
-                    o.symbol,
-                    COUNT(*) AS ohlcv_rows,
-                    MIN(o.trade_date) AS min_date,
-                    MAX(o.trade_date) AS max_date,
-                    COALESCE(f.factor_rows, 0) AS factor_rows,
-                    f.latest_factor_date
-                FROM ohlcv_daily o
-                LEFT JOIN (
-                    SELECT symbol, COUNT(*) AS factor_rows, MAX(trade_date) AS latest_factor_date
-                    FROM factor_daily
-                    GROUP BY symbol
-                ) f ON f.symbol = o.symbol
-                GROUP BY o.symbol, f.factor_rows, f.latest_factor_date
-                ORDER BY o.symbol
-                LIMIT ?
-                """,
-                [limit],
-            ).fetchall()
+        try:
+            with self._connect(read_only=True) as conn:
+                if not self._schema_initialized(conn):
+                    return self._empty_coverage("unavailable", "DuckDB quant schema is not initialized")
+                totals = conn.execute(
+                    """
+                    SELECT COUNT(*), COUNT(DISTINCT symbol), MIN(trade_date), MAX(trade_date)
+                    FROM ohlcv_daily
+                    """
+                ).fetchone()
+                factor_totals = conn.execute("SELECT COUNT(*), MAX(trade_date) FROM factor_daily").fetchone()
+                symbol_rows = conn.execute(
+                    """
+                    SELECT
+                        o.symbol,
+                        COUNT(*) AS ohlcv_rows,
+                        MIN(o.trade_date) AS min_date,
+                        MAX(o.trade_date) AS max_date,
+                        COALESCE(f.factor_rows, 0) AS factor_rows,
+                        f.latest_factor_date
+                    FROM ohlcv_daily o
+                    LEFT JOIN (
+                        SELECT symbol, COUNT(*) AS factor_rows, MAX(trade_date) AS latest_factor_date
+                        FROM factor_daily
+                        GROUP BY symbol
+                    ) f ON f.symbol = o.symbol
+                    GROUP BY o.symbol, f.factor_rows, f.latest_factor_date
+                    ORDER BY o.symbol
+                    LIMIT ?
+                    """,
+                    [limit],
+                ).fetchall()
+        except Exception as exc:
+            return self._empty_coverage("unavailable", self._sanitize_duckdb_error(exc))
 
         total_ohlcv = int(totals[0] or 0)
         total_factor = int(factor_totals[0] or 0)
@@ -496,6 +517,10 @@ class QuantDuckDBService:
             result = self._benchmark_disabled_result("unavailable")
             result["error"] = error
             return result
+        if not self._database_exists():
+            result = self._benchmark_disabled_result("empty")
+            result["error"] = "DuckDB database does not exist"
+            return result
 
         limit = self._normalize_symbol_limit(symbol_limit)
         start = self._parse_optional_date(start_date)
@@ -506,59 +531,64 @@ class QuantDuckDBService:
             return result
         where_sql, params = self._date_filter_sql("trade_date", start, end, prefix="WHERE")
         started = time.perf_counter()
-        with self._connect(create_parent=True) as conn:
-            if not self._schema_initialized(conn):
-                result = self._benchmark_disabled_result("unavailable")
-                result["error"] = "DuckDB quant schema is not initialized"
-                return result
-            row = conn.execute(
-                f"""
-                WITH selected_symbols AS (
-                    SELECT symbol
-                    FROM factor_daily
-                    GROUP BY symbol
-                    ORDER BY symbol
-                    LIMIT ?
-                ),
-                scoped AS (
-                    SELECT *
-                    FROM factor_daily
-                    WHERE symbol IN (SELECT symbol FROM selected_symbols)
-                )
-                SELECT
-                    COUNT(*) AS factor_rows,
-                    COUNT(DISTINCT symbol) AS symbol_count,
-                    COUNT(DISTINCT trade_date) AS date_count,
-                    AVG(factor_score) AS avg_factor_score,
-                    MIN(trade_date) AS min_date,
-                    MAX(trade_date) AS max_date
-                FROM scoped
-                {where_sql}
-                """,
-                [limit, *params],
-            ).fetchone()
-            top_rows = conn.execute(
-                f"""
-                WITH selected_symbols AS (
-                    SELECT symbol
-                    FROM factor_daily
-                    GROUP BY symbol
-                    ORDER BY symbol
-                    LIMIT ?
-                ),
-                scoped AS (
-                    SELECT *
-                    FROM factor_daily
-                    WHERE symbol IN (SELECT symbol FROM selected_symbols)
-                )
-                SELECT symbol, trade_date, close, return_1d, ma20, momentum_20d, volatility_20d, close_vs_ma20, factor_score
-                FROM scoped
-                {where_sql}
-                ORDER BY factor_score DESC NULLS LAST, symbol, trade_date DESC
-                LIMIT 5
-                """,
-                [limit, *params],
-            ).fetchall()
+        try:
+            with self._connect(read_only=True) as conn:
+                if not self._schema_initialized(conn):
+                    result = self._benchmark_disabled_result("unavailable")
+                    result["error"] = "DuckDB quant schema is not initialized"
+                    return result
+                row = conn.execute(
+                    f"""
+                    WITH selected_symbols AS (
+                        SELECT symbol
+                        FROM factor_daily
+                        GROUP BY symbol
+                        ORDER BY symbol
+                        LIMIT ?
+                    ),
+                    scoped AS (
+                        SELECT *
+                        FROM factor_daily
+                        WHERE symbol IN (SELECT symbol FROM selected_symbols)
+                    )
+                    SELECT
+                        COUNT(*) AS factor_rows,
+                        COUNT(DISTINCT symbol) AS symbol_count,
+                        COUNT(DISTINCT trade_date) AS date_count,
+                        AVG(factor_score) AS avg_factor_score,
+                        MIN(trade_date) AS min_date,
+                        MAX(trade_date) AS max_date
+                    FROM scoped
+                    {where_sql}
+                    """,
+                    [limit, *params],
+                ).fetchone()
+                top_rows = conn.execute(
+                    f"""
+                    WITH selected_symbols AS (
+                        SELECT symbol
+                        FROM factor_daily
+                        GROUP BY symbol
+                        ORDER BY symbol
+                        LIMIT ?
+                    ),
+                    scoped AS (
+                        SELECT *
+                        FROM factor_daily
+                        WHERE symbol IN (SELECT symbol FROM selected_symbols)
+                    )
+                    SELECT symbol, trade_date, close, return_1d, ma20, momentum_20d, volatility_20d, close_vs_ma20, factor_score
+                    FROM scoped
+                    {where_sql}
+                    ORDER BY factor_score DESC NULLS LAST, symbol, trade_date DESC
+                    LIMIT 5
+                    """,
+                    [limit, *params],
+                ).fetchall()
+        except Exception as exc:
+            result = self._benchmark_disabled_result("unavailable")
+            result["error"] = self._sanitize_duckdb_error(exc)
+            return result
         elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
         factor_rows = int(row[0] or 0)
         if factor_rows == 0:
@@ -641,39 +671,47 @@ class QuantDuckDBService:
         as_of = self._parse_optional_date(as_of_date)
         lookback = self._normalize_lookback_days(lookback_days)
         started = time.perf_counter()
-        with self._connect() as conn:
-            if not self._schema_initialized(conn):
-                return self._empty_factor_snapshot(
-                    "unavailable",
-                    requested_symbols,
-                    "DuckDB quant schema is not initialized",
-                    data_mode="unavailable",
-                )
-            if as_of is None:
-                row = conn.execute(
-                    "SELECT MAX(trade_date) FROM factor_daily WHERE symbol IN (" + ", ".join(["?"] * len(requested_symbols)) + ")",
-                    requested_symbols,
-                ).fetchone()
-                as_of = row[0] if row else None
-            if as_of is None:
-                return self._empty_factor_snapshot("empty", requested_symbols, "No factor rows are available", data_mode="empty")
-            start = as_of - timedelta(days=lookback - 1) if lookback else None
-            date_clauses = ["trade_date <= ?"]
-            params: list[Any] = [as_of]
-            if start is not None:
-                date_clauses.append("trade_date >= ?")
-                params.append(start)
-            symbol_sql = ", ".join(["?"] * len(requested_symbols))
-            select_columns = ", ".join(selected_factors)
-            rows = conn.execute(
-                f"""
-                SELECT symbol, trade_date, {select_columns}
-                FROM factor_daily
-                WHERE symbol IN ({symbol_sql}) AND {" AND ".join(date_clauses)}
-                ORDER BY symbol, trade_date
-                """,
-                [*requested_symbols, *params],
-            ).fetchall()
+        try:
+            with self._connect(read_only=True) as conn:
+                if not self._schema_initialized(conn):
+                    return self._empty_factor_snapshot(
+                        "unavailable",
+                        requested_symbols,
+                        "DuckDB quant schema is not initialized",
+                        data_mode="unavailable",
+                    )
+                if as_of is None:
+                    row = conn.execute(
+                        "SELECT MAX(trade_date) FROM factor_daily WHERE symbol IN (" + ", ".join(["?"] * len(requested_symbols)) + ")",
+                        requested_symbols,
+                    ).fetchone()
+                    as_of = row[0] if row else None
+                if as_of is None:
+                    return self._empty_factor_snapshot("empty", requested_symbols, "No factor rows are available", data_mode="empty")
+                start = as_of - timedelta(days=lookback - 1) if lookback else None
+                date_clauses = ["trade_date <= ?"]
+                params: list[Any] = [as_of]
+                if start is not None:
+                    date_clauses.append("trade_date >= ?")
+                    params.append(start)
+                symbol_sql = ", ".join(["?"] * len(requested_symbols))
+                select_columns = ", ".join(selected_factors)
+                rows = conn.execute(
+                    f"""
+                    SELECT symbol, trade_date, {select_columns}
+                    FROM factor_daily
+                    WHERE symbol IN ({symbol_sql}) AND {" AND ".join(date_clauses)}
+                    ORDER BY symbol, trade_date
+                    """,
+                    [*requested_symbols, *params],
+                ).fetchall()
+        except Exception as exc:
+            return self._empty_factor_snapshot(
+                "unavailable",
+                requested_symbols,
+                self._sanitize_duckdb_error(exc),
+                data_mode="unavailable",
+            )
 
         return self._factor_snapshot_from_rows(
             rows,
@@ -714,24 +752,32 @@ class QuantDuckDBService:
         min_rows = max(1, int(min_factor_rows or 1))
         where_sql, params = self._scope_filter_sql("trade_date", start, end, requested_symbols)
         started = time.perf_counter()
-        with self._connect() as conn:
-            if not self._schema_initialized(conn):
-                return self._empty_factor_validation(
-                    "unavailable",
-                    requested_symbols,
-                    "DuckDB quant schema is not initialized",
-                    data_mode="unavailable",
-                )
-            rows = conn.execute(
-                f"""
-                SELECT symbol, COUNT(*) AS factor_rows, MIN(trade_date), MAX(trade_date)
-                FROM factor_daily
-                {where_sql}
-                GROUP BY symbol
-                ORDER BY symbol
-                """,
-                params,
-            ).fetchall()
+        try:
+            with self._connect(read_only=True) as conn:
+                if not self._schema_initialized(conn):
+                    return self._empty_factor_validation(
+                        "unavailable",
+                        requested_symbols,
+                        "DuckDB quant schema is not initialized",
+                        data_mode="unavailable",
+                    )
+                rows = conn.execute(
+                    f"""
+                    SELECT symbol, COUNT(*) AS factor_rows, MIN(trade_date), MAX(trade_date)
+                    FROM factor_daily
+                    {where_sql}
+                    GROUP BY symbol
+                    ORDER BY symbol
+                    """,
+                    params,
+                ).fetchall()
+        except Exception as exc:
+            return self._empty_factor_validation(
+                "unavailable",
+                requested_symbols,
+                self._sanitize_duckdb_error(exc),
+                data_mode="unavailable",
+            )
         return self._factor_validation_from_rows(
             rows,
             requested_symbols=requested_symbols,
@@ -788,10 +834,12 @@ class QuantDuckDBService:
         available, _version, _error = self._duckdb_status()
         if not available:
             return []
+        if not self._database_exists():
+            return []
 
         as_of = self._parse_optional_date(as_of_date)
         normalized_limit = max(1, min(int(limit or 100), 1000))
-        with self._connect(create_parent=True) as conn:
+        with self._connect(read_only=True) as conn:
             if not self._schema_initialized(conn):
                 return []
             if as_of is None:
@@ -1030,7 +1078,7 @@ class QuantDuckDBService:
 
     def _count_ohlcv_rows(self, start: Optional[date], end: Optional[date], limit: int) -> int:
         where_sql, params = self._date_filter_sql("trade_date", start, end, prefix="WHERE")
-        with self._connect(create_parent=True) as conn:
+        with self._connect(read_only=True) as conn:
             row = conn.execute(
                 f"""
                 WITH selected_symbols AS (
@@ -1053,12 +1101,12 @@ class QuantDuckDBService:
             ).fetchone()
         return int(row[0] or 0)
 
-    def _connect(self, *, create_parent: bool = False):
+    def _connect(self, *, create_parent: bool = False, read_only: bool = False):
         duckdb = importlib.import_module("duckdb")
         db_path = Path(self.database_path)
-        if create_parent:
+        if create_parent and not read_only:
             db_path.parent.mkdir(parents=True, exist_ok=True)
-        return duckdb.connect(str(db_path))
+        return duckdb.connect(str(db_path), read_only=read_only)
 
     def _duckdb_status(self) -> tuple[bool, Optional[str], Optional[str]]:
         try:
@@ -1265,6 +1313,21 @@ class QuantDuckDBService:
     @staticmethod
     def _schema_missing_result() -> dict:
         return {"status": "unavailable", "engine": "duckdb", "error": "DuckDB quant schema is not initialized"}
+
+    @staticmethod
+    def _sanitize_duckdb_error(exc: Exception) -> str:
+        message = str(exc).lower()
+        if isinstance(exc, PermissionError) or "permission denied" in message or "access denied" in message:
+            reason = "permission_denied"
+        elif "not a valid duckdb database" in message or "corrupt" in message:
+            reason = "corrupt_or_unreadable"
+        elif "referenced column" in message or "binder error" in message or "catalog error" in message:
+            reason = "schema_mismatch"
+        elif "lock" in message or "conflict" in message:
+            reason = "locked"
+        else:
+            reason = "storage_error"
+        return f"DuckDB database is unavailable: {reason}"
 
     def _invalid_range_result(self, *, ingest: bool = False) -> dict:
         payload = {"status": "invalid_request", "engine": "duckdb", "error": "start_date must be on or before end_date"}

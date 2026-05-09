@@ -34,7 +34,7 @@ QUANT_DUCKDB_ENABLED=true
 DUCKDB_DATABASE_PATH=data/quant/wolfystock.duckdb
 ```
 
-The DuckDB dependency is imported lazily by `QuantDuckDBService`. Disabled health checks do not create or write the DuckDB file. Only explicit DuckDB service/API calls such as init, ingest, factor build, coverage, or benchmark may touch the DuckDB database.
+The DuckDB dependency is imported lazily by `QuantDuckDBService`. Disabled health checks do not create or write the DuckDB file. Only explicit DuckDB service/API calls such as init, ingest, or factor build may write the DuckDB database. Read diagnostics such as health, coverage, benchmark, factor snapshot, and factor validation return empty or unavailable diagnostics for missing/corrupt/unreadable local databases instead of creating a new database file.
 
 ## Phase 1.5 Scope
 
@@ -158,6 +158,8 @@ Example payload ingest:
   ]
 }
 ```
+
+Payload ingest is capped at 5,000 rows per request. Larger payloads return `status=invalid_request` with a sanitized error and do not ingest rows.
 
 Example bounded existing-store ingest:
 

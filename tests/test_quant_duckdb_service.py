@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -87,6 +88,105 @@ def test_missing_duckdb_import_is_reported(tmp_path, monkeypatch) -> None:
     assert health["available"] is False
     assert health["status"] == "unavailable"
     assert "duckdb" in health["error"].lower()
+
+
+def test_enabled_missing_database_read_diagnostics_do_not_create_file(tmp_path) -> None:
+    _require_duckdb()
+    db_path = tmp_path / "missing.duckdb"
+    service = QuantDuckDBService(database_path=str(db_path), enabled=True)
+
+    health = service.health()
+    coverage = service.get_coverage()
+    benchmark = service.benchmark_factor_query()
+    candidates = service.query_signal_candidates()
+
+    assert health["status"] == "empty"
+    assert health["available"] is True
+    assert health["schemaInitialized"] is False
+    assert coverage["status"] == "empty"
+    assert coverage["emptyReason"] == "DuckDB database does not exist"
+    assert benchmark["status"] == "empty"
+    assert benchmark["dataMode"] == "empty"
+    assert candidates == []
+    assert not db_path.exists()
+
+
+def test_corrupt_database_read_diagnostics_return_sanitized_unavailable(tmp_path) -> None:
+    _require_duckdb()
+    db_path = tmp_path / "corrupt.duckdb"
+    db_path.write_bytes(b"not a duckdb database")
+    service = QuantDuckDBService(database_path=str(db_path), enabled=True)
+
+    health = service.health()
+    coverage = service.get_coverage()
+    benchmark = service.benchmark_factor_query()
+    snapshot = service.get_factor_snapshot(symbols=["AAA"])
+    validation = service.validate_factor_coverage(symbols=["AAA"])
+
+    for payload in (health, coverage, benchmark, snapshot, validation):
+        assert payload["status"] == "unavailable"
+        assert payload["error"] == "DuckDB database is unavailable: corrupt_or_unreadable"
+        assert str(tmp_path) not in payload["error"]
+        assert "Traceback" not in payload["error"]
+
+
+def test_permission_denied_read_diagnostic_returns_sanitized_unavailable(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "permission.duckdb"
+    db_path.write_bytes(b"")
+    service = QuantDuckDBService(database_path=str(db_path), enabled=True)
+
+    def deny_connect(*_args, **_kwargs):
+        raise PermissionError(f"permission denied: {db_path}")
+
+    monkeypatch.setattr(service, "_connect", deny_connect)
+
+    health = service.health()
+    coverage = service.get_coverage()
+    benchmark = service.benchmark_factor_query()
+
+    for payload in (health, coverage, benchmark):
+        assert payload["status"] == "unavailable"
+        assert payload["error"] == "DuckDB database is unavailable: permission_denied"
+        assert str(tmp_path) not in payload["error"]
+
+
+def test_schema_mismatch_read_diagnostic_returns_sanitized_unavailable(tmp_path) -> None:
+    duckdb = pytest.importorskip("duckdb")
+    db_path = tmp_path / "schema-mismatch.duckdb"
+    with duckdb.connect(str(db_path)) as conn:
+        conn.execute("CREATE TABLE ohlcv_daily(symbol TEXT)")
+        conn.execute("CREATE TABLE factor_daily(symbol TEXT)")
+    service = QuantDuckDBService(database_path=str(db_path), enabled=True)
+
+    coverage = service.get_coverage()
+    benchmark = service.benchmark_factor_query()
+
+    for payload in (coverage, benchmark):
+        assert payload["status"] == "unavailable"
+        assert payload["error"] == "DuckDB database is unavailable: schema_mismatch"
+        assert str(tmp_path) not in payload["error"]
+
+
+def test_concurrent_init_build_boundary_is_documented_as_not_production_ready() -> None:
+    operator_guide = Path("docs/operations/duckdb-operator-smoke-guide.md").read_text()
+    readiness_checklist = Path("docs/operations/duckdb-production-readiness-checklist.md").read_text()
+
+    assert "Run only one DuckDB init/ingest/build action at a time during local smoke" in operator_guide
+    assert "single-flight" in readiness_checklist
+    assert "DuckDB Production Readiness Checklist" in readiness_checklist
+
+
+def test_large_payload_ingest_is_bounded_before_normalizing_or_writing_rows(tmp_path) -> None:
+    _require_duckdb()
+    service = QuantDuckDBService(database_path=str(tmp_path / "quant.duckdb"), enabled=True)
+    service.initialize_schema()
+
+    result = service.ingest_ohlcv(_sample_rows(days=QuantDuckDBService.MAX_PAYLOAD_ROWS + 1))
+
+    assert result["status"] == "invalid_request"
+    assert result["ingestedRows"] == 0
+    assert result["symbolCount"] == 0
+    assert result["error"] == "DuckDB payload ingest row limit exceeded"
 
 
 def test_initialize_schema_creates_tables(tmp_path) -> None:

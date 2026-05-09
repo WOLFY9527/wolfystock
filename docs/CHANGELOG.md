@@ -1,3 +1,7 @@
+## 2026-05-09
+
+- 🦆 **DuckDB local-RC diagnostic hardening** — Optional DuckDB quant diagnostics now avoid creating a missing DB file on enabled read-only health/coverage/benchmark checks, return sanitized unavailable reason codes for corrupt/unreadable, permission-denied, and schema-mismatched local DB files, and cap explicit payload ingest at 5,000 rows per request. DuckDB remains disabled by default and diagnostic-only; this does not connect DuckDB to scanner scoring, backtest calculations, portfolio accounting, provider routing, AI decisions, notifications, auth/RBAC, or production runtime paths.
+
 ## 2026-05-08
 
 - 🧪 **Operator evidence workflow docs** — Release documentation and

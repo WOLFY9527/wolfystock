@@ -46,6 +46,20 @@ def test_health_endpoint_returns_safe_disabled_status(tmp_path) -> None:
     assert not db_path.exists()
 
 
+def test_coverage_endpoint_returns_sanitized_unavailable_for_corrupt_database(tmp_path) -> None:
+    pytest.importorskip("duckdb")
+    db_path = tmp_path / "corrupt.duckdb"
+    db_path.write_bytes(b"not a duckdb database")
+    service = QuantDuckDBService(database_path=str(db_path), enabled=True)
+
+    payload = quant.get_duckdb_coverage(service=service, _admin=_admin_user()).model_dump(by_alias=True)
+
+    assert payload["status"] == "unavailable"
+    assert payload["error"] == "DuckDB database is unavailable: corrupt_or_unreadable"
+    assert str(tmp_path) not in payload["error"]
+    assert "Traceback" not in payload["error"]
+
+
 def test_benchmark_endpoint_returns_unavailable_when_disabled(tmp_path) -> None:
     service = QuantDuckDBService(database_path=str(tmp_path / "quant.duckdb"), enabled=False)
 
@@ -54,6 +68,36 @@ def test_benchmark_endpoint_returns_unavailable_when_disabled(tmp_path) -> None:
     assert payload["status"] == "disabled"
     assert payload["engine"] == "duckdb"
     assert payload["factorRows"] == 0
+
+
+def test_payload_ingest_endpoint_rejects_oversized_payload(tmp_path) -> None:
+    pytest.importorskip("duckdb")
+    service = QuantDuckDBService(database_path=str(tmp_path / "quant.duckdb"), enabled=True)
+    quant.initialize_duckdb_schema(request=QuantDuckDBInitRequest(), service=service, _admin=_admin_user())
+    rows = [
+        QuantOHLCVRow(
+            symbol="AAA",
+            tradeDate=f"2026-01-{(offset % 28) + 1:02d}",
+            open=10,
+            high=11,
+            low=9,
+            close=10,
+            volume=1000,
+            source="pytest",
+        )
+        for offset in range(QuantDuckDBService.MAX_PAYLOAD_ROWS + 1)
+    ]
+
+    payload = quant.ingest_duckdb_ohlcv(
+        request=QuantDuckDBIngestRequest(source="payload", rows=rows),
+        service=service,
+        _admin=_admin_user(),
+    ).model_dump(by_alias=True)
+
+    assert payload["status"] == "invalid_request"
+    assert payload["ingestedRows"] == 0
+    assert payload["symbolCount"] == 0
+    assert payload["error"] == "DuckDB payload ingest row limit exceeded"
 
 
 def test_init_endpoint_creates_schema_when_enabled(tmp_path) -> None:

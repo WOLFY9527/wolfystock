@@ -155,6 +155,8 @@ curl -sS -X POST -H "$AUTH_HEADER" \
   "$API_BASE/api/v1/quant/duckdb/ingest-ohlcv"
 ```
 
+Payload ingest is capped at 5,000 rows per request for local-RC safety. Larger payloads return `status=invalid_request` and do not ingest rows; use explicit symbol/date bounds or split manual smoke payloads if you need more coverage.
+
 Existing local `StockDaily` ingest is also supported. Keep it bounded:
 
 ```bash
@@ -256,6 +258,9 @@ These are validation and benchmark factors, not production trading signals.
 ## Troubleshooting
 
 - DuckDB disabled: confirm `QUANT_DUCKDB_ENABLED=true` is exported in the same process that starts the backend.
+- Missing local DB file: enabled read diagnostics report empty/missing state and should not create the DuckDB file. Run explicit init before ingest/build experiments.
+- Corrupt, unreadable, permission-denied, or schema-mismatched local DB: diagnostics return sanitized unavailable reason codes such as `corrupt_or_unreadable`, `permission_denied`, or `schema_mismatch`. Move the file aside and rerun with an explicit temp path for local smoke.
+- Concurrent operator actions: Run only one DuckDB init/ingest/build action at a time during local smoke. There is still no production single-flight or job-queue guard, so concurrent write behavior remains a production-readiness blocker.
 - Factor snapshot is empty: initialize the schema, ingest OHLCV rows, build factors, and check that requested symbols/date windows match `factor_daily`.
 - Factor validation is insufficient: inspect `missingSymbols`, `insufficientSymbols`, and `coverage` before comparing scanner/backtest snapshots.
 - `duckdb` Python dependency missing: health returns `status=unavailable`; install the project dependencies for the local environment before enabling the smoke path.
