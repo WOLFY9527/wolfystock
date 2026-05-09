@@ -27,6 +27,7 @@ from src.services.research_budget_profiles import (
     ResearchBudgetProfile,
     get_research_budget_profile,
 )
+from src.services.provider_usage_ledger import record_provider_usage_event
 
 logger = logging.getLogger(__name__)
 
@@ -282,6 +283,13 @@ def _skip_reason_for_budget(category: DataCategory, profile: ResearchBudgetProfi
     return None
 
 
+def _record_provider_usage_diagnostic(**kwargs: Any) -> None:
+    try:
+        record_provider_usage_event(**kwargs)
+    except Exception:
+        logger.debug("Provider usage ledger recording failed", exc_info=True)
+
+
 def apply_research_budget_profile(
     plan: AnalysisProviderPlan,
     *,
@@ -320,6 +328,17 @@ def apply_research_budget_profile(
                     "reason": skip_reason,
                 }
             )
+            _record_provider_usage_diagnostic(
+                research_mode=profile.mode.value,
+                symbol=plan.symbol,
+                market=plan.market,
+                analysis_context="analysis_provider_budget",
+                category=category.value,
+                action=skip_reason,
+                outcome="skipped",
+                reason_code=skip_reason,
+                budget_profile=profile.mode.value,
+            )
             continue
 
         category_limit = _category_budget_limit(category, profile, category_plan.max_attempts)
@@ -333,6 +352,17 @@ def apply_research_budget_profile(
                     "event": "skipped_by_budget",
                     "reason": "external_call_budget_exhausted",
                 }
+            )
+            _record_provider_usage_diagnostic(
+                research_mode=profile.mode.value,
+                symbol=plan.symbol,
+                market=plan.market,
+                analysis_context="analysis_provider_budget",
+                category=category.value,
+                action="skipped_by_budget",
+                outcome="skipped",
+                reason_code="external_call_budget_exhausted",
+                budget_profile=profile.mode.value,
             )
             continue
 
@@ -390,6 +420,7 @@ class AnalysisProviderExecutor:
         max_workers: int = 4,
         deadline_seconds: Optional[float] = None,
         required_categories: Optional[Iterable[DataCategory | str]] = None,
+        research_mode: Optional[str] = None,
     ) -> dict[DataCategory, ProviderCategoryResult]:
         results: dict[DataCategory, ProviderCategoryResult] = {}
         required = {DataCategory(category) for category in (required_categories or [])}
@@ -402,6 +433,9 @@ class AnalysisProviderExecutor:
                     symbol=symbol,
                     providers=providers_by_category.get(category, {}),
                     deadline_at=None if category in required else deadline_at,
+                    research_mode=research_mode,
+                    market=plan.market,
+                    analysis_context="analysis_provider_executor",
                 ): category
                 for category, category_plan in plan.categories.items()
                 if category in providers_by_category
@@ -411,8 +445,27 @@ class AnalysisProviderExecutor:
                 results[category] = future.result()
         return results
 
-    @staticmethod
-    def _deadline_exceeded_result(category_plan: CategoryProviderPlan) -> ProviderCategoryResult:
+    def _deadline_exceeded_result(
+        self,
+        category_plan: CategoryProviderPlan,
+        *,
+        symbol: Optional[str] = None,
+        market: Optional[str] = None,
+        research_mode: Optional[str] = None,
+        provider: Optional[str] = None,
+        analysis_context: Optional[str] = None,
+    ) -> ProviderCategoryResult:
+        _record_provider_usage_diagnostic(
+            research_mode=research_mode,
+            symbol=symbol,
+            market=market,
+            analysis_context=analysis_context or "analysis_provider_executor",
+            category=category_plan.category.value,
+            provider=provider or category_plan.primary,
+            action="deadline_exceeded",
+            outcome="partial",
+            reason_code="analysis_deadline_exceeded",
+        )
         return ProviderCategoryResult(
             category=category_plan.category,
             source_provider=None,
@@ -438,6 +491,9 @@ class AnalysisProviderExecutor:
         params: Optional[Mapping[str, Any]] = None,
         sufficient: Optional[Callable[[Any], bool]] = None,
         deadline_at: Optional[float] = None,
+        research_mode: Optional[str] = None,
+        market: Optional[str] = None,
+        analysis_context: Optional[str] = None,
     ) -> ProviderCategoryResult:
         sufficient = sufficient or self._has_sufficient_data
         warnings: list[str] = []
@@ -449,7 +505,14 @@ class AnalysisProviderExecutor:
             if deadline_at is not None:
                 remaining = deadline_at - time.monotonic()
                 if remaining <= 0:
-                    return self._deadline_exceeded_result(category_plan)
+                    return self._deadline_exceeded_result(
+                        category_plan,
+                        symbol=symbol,
+                        market=market,
+                        research_mode=research_mode,
+                        provider=provider,
+                        analysis_context=analysis_context,
+                    )
                 provider_timeout = min(provider_timeout, remaining)
             if self._is_circuit_open(provider, category_plan.category):
                 attempts.append({"provider": provider, "status": "skipped", "reason": "circuit_open"})
@@ -469,6 +532,17 @@ class AnalysisProviderExecutor:
                 )
                 continue
             started = time.monotonic()
+            _record_provider_usage_diagnostic(
+                research_mode=research_mode,
+                symbol=symbol,
+                market=market,
+                analysis_context=analysis_context or "analysis_provider_executor",
+                category=category_plan.category.value,
+                provider=provider,
+                action="attempted",
+                outcome="ok",
+                metadata={"attempt_index": index, "fallback": index > 0},
+            )
             try:
                 data, cache_hit = self._get_or_call(
                     provider=provider,
@@ -512,6 +586,19 @@ class AnalysisProviderExecutor:
                             "cache_hit": cache_hit,
                         }
                     )
+                    _record_provider_usage_diagnostic(
+                        research_mode=research_mode,
+                        symbol=symbol,
+                        market=market,
+                        analysis_context=analysis_context or "analysis_provider_executor",
+                        category=category_plan.category.value,
+                        provider=provider,
+                        action="failure",
+                        outcome="failed",
+                        reason_code="invalid_payload",
+                        elapsed_ms=duration_ms,
+                        metadata={"cache_hit": cache_hit, "attempt_index": index},
+                    )
                     logger.error(
                         "ProviderInvalidPayload category=%s provider=%s duration_ms=%s cache_hit=%s",
                         category_plan.category.value,
@@ -529,6 +616,30 @@ class AnalysisProviderExecutor:
                     )
                     continue
                 self._record_success(provider, category_plan.category)
+                if cache_hit:
+                    _record_provider_usage_diagnostic(
+                        research_mode=research_mode,
+                        symbol=symbol,
+                        market=market,
+                        analysis_context=analysis_context or "analysis_provider_executor",
+                        category=category_plan.category.value,
+                        provider=provider,
+                        action="cache_hit",
+                        outcome="ok",
+                        elapsed_ms=duration_ms,
+                    )
+                _record_provider_usage_diagnostic(
+                    research_mode=research_mode,
+                    symbol=symbol,
+                    market=market,
+                    analysis_context=analysis_context or "analysis_provider_executor",
+                    category=category_plan.category.value,
+                    provider=provider,
+                    action="success",
+                    outcome="ok",
+                    elapsed_ms=duration_ms,
+                    metadata={"cache_hit": cache_hit, "attempt_index": index, "fallback": index > 0},
+                )
                 if not cache_hit:
                     self._emit_provider_event(
                         "provider_call_completed",
@@ -583,6 +694,23 @@ class AnalysisProviderExecutor:
                     reason = "analysis_deadline_exceeded"
                 if reason != "analysis_deadline_exceeded":
                     self._record_failure(provider, category_plan.category, reason)
+                action = "deadline_exceeded" if reason == "analysis_deadline_exceeded" else (
+                    "timeout" if reason == "timeout" else "failure"
+                )
+                outcome = "partial" if reason == "analysis_deadline_exceeded" else "failed"
+                _record_provider_usage_diagnostic(
+                    research_mode=research_mode,
+                    symbol=symbol,
+                    market=market,
+                    analysis_context=analysis_context or "analysis_provider_executor",
+                    category=category_plan.category.value,
+                    provider=provider,
+                    action=action,
+                    outcome=outcome,
+                    reason_code=reason,
+                    elapsed_ms=duration_ms,
+                    metadata={"attempt_index": index, "fallback": index > 0},
+                )
                 self._emit_provider_event(
                     "provider_call_failed",
                     provider=provider,

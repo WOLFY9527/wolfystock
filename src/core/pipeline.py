@@ -1062,6 +1062,7 @@ class StockAnalysisPipeline:
             max_workers=min(4, max(1, len(categories))),
             deadline_seconds=deadline_seconds,
             required_categories=required_categories,
+            research_mode=research_mode,
         )
         payload: Dict[str, Any] = {
             "plan": {
