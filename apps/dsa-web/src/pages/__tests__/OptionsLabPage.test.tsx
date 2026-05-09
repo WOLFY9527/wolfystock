@@ -356,29 +356,36 @@ describe('OptionsLabPage', () => {
     mockHappyPath();
   });
 
-  it('renders the Chinese shell labels, assumption panel, chain tables, and visible risk copy', async () => {
+  it('renders the Chinese-first workbench sections, compact assumptions, and dense chain tables', async () => {
     renderPage();
 
-    expect(screen.getByRole('heading', { name: '期权实验室' })).toBeInTheDocument();
-    expect(screen.getByText('分析支持 / 不构成投资建议')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '期权实验室' })).not.toBeInTheDocument();
+    expect(screen.queryByText('分析支持 / 不构成投资建议')).not.toBeInTheDocument();
+    expect(screen.queryByText(/教程|如何使用|从这里开始/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('options-lab-snapshot-panel')).toHaveTextContent('标的快照');
     expect(screen.getByTestId('options-lab-bento-grid')).toHaveClass('grid', 'grid-cols-1', 'gap-6', 'xl:grid-cols-12', 'xl:items-start');
+    ['标的快照', '期权假设', '策略决策', '风险边界', '策略候选'].forEach((label) => {
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+    });
     expect(screen.getByText('期权假设')).toBeInTheDocument();
     expect(screen.getByLabelText('标的代码')).toHaveValue('TEM');
+    expect(screen.getByText('执行')).toBeInTheDocument();
+    expect(screen.getByLabelText('到期日')).toBeInTheDocument();
     expect(screen.getByText('上涨情景')).toBeInTheDocument();
     expect(screen.getByText('下跌情景')).toBeInTheDocument();
     expect(screen.getByText('区间情景')).toBeInTheDocument();
     expect(screen.getByText('波动扩张')).toBeInTheDocument();
 
     expect(await screen.findByTestId('options-lab-decision-engine')).toBeInTheDocument();
+    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toBeInTheDocument();
     expect(screen.queryByTestId('options-lab-chain-details')).not.toBeInTheDocument();
     expect(screen.queryByTestId('options-lab-strategy-details')).not.toBeInTheDocument();
-    expect(screen.getByText('Call 链')).toBeInTheDocument();
-    expect(screen.getByText('Put 链')).toBeInTheDocument();
-    expect(screen.getByText('期权可能归零，最大亏损可能达到全部权利金。')).toBeInTheDocument();
-    expect(screen.getByText('本模块不提供交易执行或收益承诺。')).toBeInTheDocument();
+    expect((await screen.findAllByText('Call 链')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Put 链').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('不可作为交易信号').length).toBeGreaterThan(0);
   });
 
-  it('renders the Phase 4 strategy comparison cards with key metrics and warnings', async () => {
+  it('renders ranked compact strategy candidates with one highlighted primary row', async () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-strategy-comparison');
@@ -389,34 +396,33 @@ describe('OptionsLabPage', () => {
       expect(within(section).getByText('牛市看涨价差')).toBeInTheDocument();
       expect(within(section).getByText('熊市看跌价差')).toBeInTheDocument();
     });
-    ['净支出', '最大亏损', '最大收益', '盈亏平衡', '目标价格收益', '风险收益比'].forEach((label) => {
+    ['状态', '最大亏损', '最大收益', '盈亏平衡', '情景收益', '核心原因'].forEach((label) => {
       expect(within(section).getAllByText(label).length).toBeGreaterThan(0);
     });
-    expect(within(section).getAllByText('至少一腿流动性偏薄').length).toBeGreaterThan(0);
-    expect(within(section).getAllByText('IV 与 Theta 会改变到期前估值').length).toBeGreaterThan(0);
-    expect(within(section).getByText(/至少一腿隐含波动率偏高/)).toBeInTheDocument();
-    expect(within(section).getAllByText('仅供情景分析，不构成交易建议').length).toBeGreaterThan(0);
+    expect(within(section).getByTestId('options-lab-primary-strategy-row')).toHaveTextContent('首选观察');
+    expect(within(section).queryByText('流动性提示')).not.toBeInTheDocument();
+    expect(within(section).queryByText('波动率 / 时间价值提示')).not.toBeInTheDocument();
+    expect(within(section).getByText('共享风险已合并至风险边界。')).toBeInTheDocument();
   });
 
   it('renders the R2 decision section with IV rank, expected move, optimizer, and synthetic guardrails', async () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-decision-engine');
-    expect(within(section).getByText('情景结论')).toBeInTheDocument();
+    expect(within(section).getByText('策略决策')).toBeInTheDocument();
     await waitFor(() => {
-      expect(within(section).getByText('Expected Move')).toBeInTheDocument();
+      expect(within(section).getAllByText('预期波动').length).toBeGreaterThan(0);
     });
-    expect(within(section).getAllByText('数据准备度').length).toBeGreaterThanOrEqual(1);
-    expect(within(section).getByText('主要风险边界')).toBeInTheDocument();
+    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('数据充分性');
+    expect(within(section).getByText('最大亏损')).toBeInTheDocument();
     expect(within(section).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
     expect(within(section).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
-    expect(within(section).getAllByText('不可用于真实交易判断').length).toBeGreaterThan(0);
-    expect(within(section).getByText('波动率 / Greeks 就绪度')).toBeInTheDocument();
+    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('不可用于真实交易判断');
+    expect(within(section).getByText('IV / Greeks')).toBeInTheDocument();
     expect(within(section).getAllByText('IV Rank 不可用').length).toBeGreaterThan(0);
-    expect(within(section).getByText('Expected Move')).toBeInTheDocument();
-    expect(within(section).getByText('$7.50')).toBeInTheDocument();
-    expect(within(section).getByText('策略优化')).toBeInTheDocument();
-    expect(within(section).getByText('推荐状态：数据不足，禁止判断')).toBeInTheDocument();
+    expect(within(section).getAllByText('$7.50').length).toBeGreaterThan(0);
+    expect(within(section).getByText('主要策略')).toBeInTheDocument();
+    expect(within(section).getByText('暂无可执行策略')).toBeInTheDocument();
     expect(within(section).getAllByText(/不交易：数据质量未达到可判断等级/).length).toBeGreaterThan(0);
     expect(within(section).getAllByText(/牛市看涨价差/).length).toBeGreaterThan(0);
     expect(document.body.textContent || '').not.toContain('有条件可交易');
@@ -434,10 +440,10 @@ describe('OptionsLabPage', () => {
 
     const assumptions = screen.getByTestId('options-lab-assumptions-panel');
     expect(decision).toContainElement(summary);
-    expect(summary).toHaveTextContent('决策摘要');
+    expect(summary).toHaveTextContent('一线结论');
     expect(summary).toHaveTextContent('数据不足，禁止判断');
-    expect(summary).toHaveTextContent('不可用于真实交易判断');
-    expect(Boolean(decision.compareDocumentPosition(assumptions) & Node.DOCUMENT_POSITION_PRECEDING)).toBe(true);
+    expect(summary).toHaveTextContent('暂无可执行策略');
+    expect(Boolean(decision.compareDocumentPosition(assumptions) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(analysisDetails).not.toHaveAttribute('open');
     expect(Boolean(decision.compareDocumentPosition(analysisDetails) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(callsTable).toBeInTheDocument();
@@ -486,10 +492,12 @@ describe('OptionsLabPage', () => {
 
     renderPage();
 
-    const optimizer = await screen.findByTestId('options-lab-strategy-optimizer');
-    expect(within(optimizer).getByText('推荐状态：不建议交易')).toBeInTheDocument();
-    expect(within(optimizer).getByText(/不交易：候选结构边际优势或风险回报不足/)).toBeInTheDocument();
-    expect(within(optimizer).getByText('暂无可排序替代结构。')).toBeInTheDocument();
+    const decision = await screen.findByTestId('options-lab-decision-engine');
+    await waitFor(() => {
+      expect(within(decision).getAllByText('暂无可执行策略').length).toBeGreaterThan(0);
+    });
+    expect(within(decision).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
+    expect(within(decision).getByText(/不交易：候选结构边际优势或风险回报不足/)).toBeInTheDocument();
   });
 
   it('renders missing Greeks and liquidity warnings in the decision section', async () => {
@@ -548,10 +556,11 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-decision-engine');
+    const riskPanel = screen.getByTestId('options-lab-risk-boundary-panel');
     await waitFor(() => {
-      expect(within(section).getAllByText('买卖价差过宽').length).toBeGreaterThan(0);
+      expect(within(riskPanel).getAllByText('买卖价差过宽').length).toBeGreaterThan(0);
     });
-    expect(within(section).getAllByText('Greeks 缺失').length).toBeGreaterThan(0);
+    expect(within(riskPanel).getAllByText('Greeks 缺失').length).toBeGreaterThan(0);
     expect(within(section).getByText('Greeks 缺失，无法评估时间价值与敏感度')).toBeInTheDocument();
   });
 
@@ -584,7 +593,7 @@ describe('OptionsLabPage', () => {
     });
     renderPage();
 
-    expect(await screen.findByText('暂无可用到期日。')).toBeInTheDocument();
+    expect(await screen.findByText('暂无可用到期日')).toBeInTheDocument();
     expect(screen.getByText('等待策略对比前提')).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText('先选择可用到期日并加载合约后，再进入策略对比。')).toBeInTheDocument();
@@ -600,7 +609,7 @@ describe('OptionsLabPage', () => {
     });
     renderPage();
 
-    expect(await screen.findByText('期权实验室')).toBeInTheDocument();
+    expect((await screen.findAllByText('标的快照')).length).toBeGreaterThan(0);
     const section = await screen.findByTestId('options-lab-strategy-comparison');
     expect(within(section).getByText('策略候选')).toBeInTheDocument();
     await waitFor(() => {
@@ -635,7 +644,7 @@ describe('OptionsLabPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('期权实验室')).toBeInTheDocument();
+    expect((await screen.findAllByText('标的快照')).length).toBeGreaterThan(0);
     const section = await screen.findByTestId('options-lab-strategy-comparison');
     await waitFor(() => {
       expect(within(section).getByText('看涨期权多头')).toBeInTheDocument();
@@ -651,7 +660,7 @@ describe('OptionsLabPage', () => {
     });
     renderPage();
 
-    expect(await screen.findByText('期权实验室')).toBeInTheDocument();
+    expect((await screen.findAllByText('标的快照')).length).toBeGreaterThan(0);
     const section = await screen.findByTestId('options-lab-strategy-comparison');
     expect(within(section).getByText('策略候选')).toBeInTheDocument();
     await waitFor(() => {
@@ -667,7 +676,7 @@ describe('OptionsLabPage', () => {
     });
     renderPage();
 
-    expect(await screen.findByText('期权实验室')).toBeInTheDocument();
+    expect((await screen.findAllByText('标的快照')).length).toBeGreaterThan(0);
     const section = await screen.findByTestId('options-lab-strategy-comparison');
     await waitFor(() => {
       expect(within(section).getByText('策略对比暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
@@ -731,7 +740,8 @@ describe('OptionsLabPage', () => {
     expect(screen.queryByTestId('options-lab-developer-details')).not.toBeInTheDocument();
     expect(screen.queryByTestId('options-lab-strategy-developer-details')).not.toBeInTheDocument();
     expect(screen.queryByTestId('options-lab-decision-developer-details')).not.toBeInTheDocument();
-    expect(screen.getByTestId('options-lab-data-readiness-note')).toHaveTextContent('数据说明');
+    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('风险边界');
+    expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('数据说明');
     expect(document.body.textContent || '').not.toMatch(/开发者|Developer|provider_validation_required|mocked_frontend_shell|fixture_frontend_phase4/i);
   });
 
@@ -801,6 +811,18 @@ describe('OptionsLabPage', () => {
       'you should sell',
       'raw schema',
       'debug schema',
+      '开发者详情',
+      'debug',
+      'raw',
+      'schema',
+      'trace',
+      'provider_timeout',
+      'not_enough_history',
+      'fundamentals_unavailable',
+      'optional_news_timeout',
+      'LLM Ledger',
+      'QUOTA PILOT',
+      'MarketCache',
       'provider.example',
     ].forEach((text) => {
       expect(domText.toLowerCase()).not.toContain(text.toLowerCase());
@@ -826,7 +848,7 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-decision-engine');
-    expect(within(section).getByText('情景结论')).toBeInTheDocument();
+    expect(within(section).getByText('策略决策')).toBeInTheDocument();
     await waitFor(() => {
       expect(within(section).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
     });
@@ -852,7 +874,7 @@ describe('OptionsLabPage', () => {
       limitations: [],
       metadata: { readOnly: true, noExternalCallsInTests: true, limitations: [] },
     }));
-    expect((await screen.findAllByText('暂无合约数据，保留假设面板与风险提示。')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('暂无数据，保留假设面板与风险提示。')).length).toBeGreaterThan(0);
 
     cleanup();
     vi.clearAllMocks();
@@ -892,8 +914,8 @@ describe('OptionsLabPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('期权实验室')).toBeInTheDocument();
-    expect(await screen.findByText('暂无可用到期日。')).toBeInTheDocument();
+    expect((await screen.findAllByText('标的快照')).length).toBeGreaterThan(0);
+    expect(await screen.findByText('暂无可用到期日')).toBeInTheDocument();
     expect(screen.getByText('先选择可用到期日并加载合约后，再进入策略对比。')).toBeInTheDocument();
     expect(vi.mocked(optionsLabApi.compareStrategies)).not.toHaveBeenCalled();
     expect(document.body.textContent || '').not.toContain('TypeError');
