@@ -140,7 +140,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(payload["freshness"], "fallback")
         self.assertNotEqual(payload["freshness"], "live")
         self.assertEqual(payload["metadata"]["noExternalCalls"], True)
-        self.assertGreaterEqual(len(payload["themes"]), 8)
+        self.assertGreaterEqual(len(payload["themes"]), 18)
         for theme in payload["themes"]:
             self.assertTrue(theme["isFallback"])
             self.assertEqual(theme["freshness"], "fallback")
@@ -152,6 +152,24 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             self.assertTrue(theme["themeDetail"]["watchlistSafe"])
             self.assertEqual(theme["proxyQuality"]["coveragePercent"], 0)
             self.assertTrue(all(proxy["quality"]["missingReason"] for proxy in theme["benchmarkProxies"].values()))
+
+    def test_non_us_market_returns_taxonomy_only_entries_without_quote_provider_calls(self) -> None:
+        provider_calls: list[list[str]] = []
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: provider_calls.append(list(symbols)) or {},
+            now_provider=lambda: datetime(2026, 5, 7, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar(market="CN")
+
+        self.assertEqual(provider_calls, [])
+        self.assertEqual(payload["market"], "CN")
+        self.assertGreaterEqual(len(payload["themes"]), 25)
+        self.assertTrue(all(theme["staticThemeOnly"] for theme in payload["themes"]))
+        self.assertTrue(all(theme["dataQuality"] in {"taxonomy_only", "local_only", "proxy_backed"} for theme in payload["themes"]))
+        self.assertTrue(all(theme["confidenceLabel"] == "待行情确认" for theme in payload["themes"]))
+        self.assertTrue(all(theme["confidence"] <= 0.25 for theme in payload["themes"]))
+        self.assertIn("AI算力", [theme["name"] for theme in payload["themes"]])
 
     def test_stale_and_missing_data_penalizes_confidence_and_blocks_clean_rotation_claims(self) -> None:
         quotes = {

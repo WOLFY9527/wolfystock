@@ -15,6 +15,8 @@ const forbiddenTradingActionPattern =
 
 const radarFixture = (): MarketRotationRadarResponse => ({
   endpoint: '/api/v1/market/rotation-radar',
+  market: 'US',
+  supportedMarkets: ['US', 'CN', 'HK', 'CRYPTO'],
   generatedAt: '2026-05-07T09:50:00Z',
   source: 'computed',
   sourceLabel: '主题篮子计算',
@@ -169,18 +171,26 @@ const radarFixture = (): MarketRotationRadarResponse => ({
 
 const themeNames = [
   'AI 应用',
-  '机器人',
   '半导体',
+  '半导体设备',
   '网络安全',
   '云软件',
   '数据中心电力',
   '液冷散热',
+  '机器人',
   '工业自动化',
-  '港股科技',
-  'A股算力',
-  'Crypto L1',
-  'ETF 代理',
+  '国防航天',
+  '医疗生物科技',
+  '金融科技',
+  '消费者互联网',
+  '能源',
 ];
+
+const marketThemeNames: Record<string, string[]> = {
+  CN: ['AI算力', 'AI基建 / 液冷散热', '光模块 / CPO', '半导体设备', '国产芯片', '机器人', '低空经济', '新能源车链', '创新药', '证券金融'],
+  HK: ['港股科技', '互联网平台', '港股生物科技', '新能源汽车', '金融保险', '能源资源', '消费服务', '高股息红利'],
+  CRYPTO: ['Layer 1', 'Layer 2', 'DeFi', 'AI Crypto', 'Exchange / Platform', 'Stablecoin Infrastructure', 'Bitcoin Ecosystem', 'DePIN'],
+};
 
 function radarUniverseFixture(): MarketRotationRadarResponse {
   const fixture = radarFixture();
@@ -188,11 +198,12 @@ function radarUniverseFixture(): MarketRotationRadarResponse {
   const themes = themeNames.map((name, index) => {
     const score = 88 - index * 4;
     const isWeak = score < 56;
+    const leaderSymbol = name === '机器人' ? 'BOTZ' : index === 0 ? 'APP' : `US${index}`;
     return {
       ...baseTheme,
       id: index === 0 ? 'ai_applications' : `theme_${index}`,
       name,
-      englishName: index === 1 ? 'Robotics' : `${name} Cluster`,
+      englishName: name === '机器人' ? 'Robotics' : `${name} Cluster`,
       rotationScore: score,
       confidence: Math.max(0.18, 0.84 - index * 0.05),
       stage: isWeak ? 'weak_or_no_signal' : index > 7 ? 'cooling_watch' : baseTheme.stage,
@@ -221,6 +232,9 @@ function radarUniverseFixture(): MarketRotationRadarResponse {
         ...baseTheme.leadership,
         leadershipConcentrationPercent: Math.min(78, 28 + index * 4),
         broadParticipationPercent: Math.max(18, 76 - index * 4),
+        topMembers: [
+          { symbol: leaderSymbol, name: leaderSymbol, changePercent: 5.1 - index * 0.2, relativeStrengthVsBenchmark: 4.3 - index * 0.2, volumeRatio: 2.2, freshness: 'delayed', isFallback: false },
+        ],
       },
       evidence: [`${name} 观察证据`, '成交额扩张迹象'],
       alertCandidates: index < 2 ? [
@@ -243,8 +257,79 @@ function radarUniverseFixture(): MarketRotationRadarResponse {
     fadingThemes: themes.slice(-3),
     watchlistSignals: [
       { themeId: 'ai_applications', themeName: 'AI 应用', symbol: 'APP', label: '关注候选', signal: 'confirmed_rotation', signalLabel: '确认轮动', confidence: 0.84, readOnly: true, deliveryEnabled: false },
-      { themeId: 'theme_1', themeName: '机器人', symbol: 'BOTZ', label: '关注候选', signal: 'confirmed_rotation', signalLabel: '确认轮动', confidence: 0.79, readOnly: true, deliveryEnabled: false },
+      { themeId: 'theme_7', themeName: '机器人', symbol: 'BOTZ', label: '关注候选', signal: 'confirmed_rotation', signalLabel: '确认轮动', confidence: 0.79, readOnly: true, deliveryEnabled: false },
     ],
+  };
+  return fixture;
+}
+
+function taxonomyMarketFixture(market: 'CN' | 'HK' | 'CRYPTO'): MarketRotationRadarResponse {
+  const fixture = radarFixture();
+  const names = marketThemeNames[market];
+  fixture.market = market;
+  fixture.source = 'local_taxonomy';
+  fixture.sourceLabel = '静态主题库';
+  fixture.freshness = 'fallback';
+  fixture.isFallback = true;
+  fixture.warning = '当前为静态主题库，本地行情覆盖后可计算轮动强度。不代表实时买卖信号。';
+  fixture.metadata = {
+    ...fixture.metadata,
+    taxonomyOnlyThemeCount: names.length,
+  };
+  const baseTheme = fixture.themes[0];
+  fixture.themes = names.map((name, index) => ({
+    ...baseTheme,
+    id: `${market}:theme_cluster:${index}`,
+    market,
+    name,
+    englishName: market === 'CRYPTO' ? `${name} Theme` : `${name} Cluster`,
+    focus: `${name} 静态主题分类观察`,
+    benchmark: `${market}_LOCAL_TAXONOMY`,
+    sectorBenchmark: null,
+    membersConfigured: market === 'CN' ? ['寒武纪', '中科曙光', '工业富联'] : market === 'HK' ? ['0700.HK', '9988.HK'] : ['BTC', 'ETH'],
+    rotationScore: 18,
+    confidence: 0.12,
+    confidenceLabel: '待行情确认',
+    dataQuality: 'taxonomy_only',
+    dataCoverage: 'taxonomy_only',
+    staticThemeOnly: true,
+    taxonomyType: 'theme_cluster',
+    stage: 'weak_or_no_signal',
+    stageExplanation: '主题库已载入，行情评分待本地数据覆盖，仅作分类观察。',
+    riskLabels: ['stale_or_incomplete_windows'],
+    riskExplanations: ['行情评分待本地数据覆盖。'],
+    newslessRotation: false,
+    alertCandidates: [],
+    relativeStrength: {},
+    benchmarkProxies: {},
+    proxyQuality: { label: '静态主题库', coveragePercent: 0, availableProxyCount: 0, totalProxyCount: 0 },
+    timeWindows: {},
+    volume: { averageRelativeVolume: null, availableMemberCount: 0, label: '待接入本地行情' },
+    breadth: { observedMembers: 0, configuredMembers: 0, coveragePercent: 0, percentUp: null, percentOutperformingBenchmark: null },
+    synchronization: { sameDirectionPercent: null, aboveVwapPercent: null, persistencePercent: null, label: '分类观察' },
+    leadership: { leadershipConcentrationPercent: null, broadParticipationPercent: null, topMembers: [] },
+    themeDetail: {
+      watchlistSafe: true,
+      safeActionLabel: '仅观察，不构成买卖建议',
+      mappedConcepts: names.slice(0, 3),
+      representativeLabels: market === 'CN' ? ['寒武纪', '中科曙光'] : market === 'HK' ? ['0700.HK', '9988.HK'] : ['BTC', 'ETH'],
+      dataStateLabel: '待接入本地行情',
+      nextStep: '本地行情覆盖后可计算轮动强度。',
+      disclosure: '仅用于观察资金轮动迹象，非买卖建议。',
+    },
+    freshness: 'fallback',
+    isFallback: true,
+    source: 'local_taxonomy',
+    sourceLabel: '静态主题库',
+    evidence: ['主题库已载入', '行情评分待本地数据覆盖', '仅作分类观察'],
+    members: [],
+  }));
+  fixture.summary = {
+    ...fixture.summary,
+    strongestThemes: [],
+    acceleratingThemes: [],
+    fadingThemes: [],
+    watchlistSignals: [],
   };
   return fixture;
 }
@@ -252,7 +337,12 @@ function radarUniverseFixture(): MarketRotationRadarResponse {
 describe('MarketRotationRadarPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValue(radarUniverseFixture());
+    vi.mocked(marketRotationApi.getRotationRadar).mockImplementation((market?: string) => {
+      if (market === 'CN' || market === 'HK' || market === 'CRYPTO') {
+        return Promise.resolve(taxonomyMarketFixture(market));
+      }
+      return Promise.resolve(radarUniverseFixture());
+    });
   });
 
   it('renders a compact top-N radar instead of a full theme card wall by default', async () => {
@@ -262,12 +352,13 @@ describe('MarketRotationRadarPage', () => {
     expect(page).toHaveTextContent('资金轮动雷达');
     expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('Top-N');
     expect(screen.getByTestId('rotation-radar-mode-controls')).toHaveTextContent('US');
+    expect(screen.getByTestId('rotation-market-tab-US')).toHaveAttribute('aria-pressed', 'true');
 
     const leaderList = screen.getByTestId('rotation-radar-leader-list');
     expect(within(leaderList).getAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(10);
     expect(within(leaderList).getByText('AI 应用')).toBeInTheDocument();
-    expect(within(leaderList).getByText('A股算力')).toBeInTheDocument();
-    expect(within(leaderList).queryByText('Crypto L1')).not.toBeInTheDocument();
+    expect(within(leaderList).queryByText('AI算力')).not.toBeInTheDocument();
+    expect(within(leaderList).queryByText('Layer 1')).not.toBeInTheDocument();
     expect(screen.queryByTestId('rotation-theme-card-ai_applications')).not.toBeInTheDocument();
     expect(screen.queryByText('下一观察：')).not.toBeInTheDocument();
 
@@ -280,13 +371,38 @@ describe('MarketRotationRadarPage', () => {
     expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
   });
 
+  it('switches market tabs to populated CN HK and Crypto taxonomy universes', async () => {
+    render(<MarketRotationRadarPage />);
+
+    await screen.findByTestId('market-rotation-radar-page');
+    fireEvent.click(screen.getByTestId('rotation-market-tab-CN'));
+
+    await waitFor(() => expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('CN'));
+    expect(screen.getByTestId('rotation-market-tab-CN')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('rotation-radar-leader-list')).toHaveTextContent('AI算力');
+    expect(screen.getByTestId('rotation-radar-leader-list')).toHaveTextContent('待行情确认');
+    expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('主题库已载入');
+    expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('待接入本地行情');
+    expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('寒武纪');
+    expect(document.body.textContent || '').not.toMatch(/\bN\/A\b/g);
+
+    fireEvent.click(screen.getByTestId('rotation-market-tab-HK'));
+    await waitFor(() => expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('HK'));
+    expect(screen.getByTestId('rotation-radar-leader-list')).toHaveTextContent('港股科技');
+
+    fireEvent.click(screen.getByTestId('rotation-market-tab-CRYPTO'));
+    await waitFor(() => expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('CRYPTO'));
+    expect(screen.getByTestId('rotation-radar-leader-list')).toHaveTextContent('Layer 1');
+    expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('DeFi');
+  });
+
   it('updates the single selected detail panel when a leader row is selected', async () => {
     render(<MarketRotationRadarPage />);
 
     await screen.findByTestId('market-rotation-radar-page');
     expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('AI 应用');
 
-    fireEvent.click(screen.getByTestId('rotation-radar-leader-row-theme_1'));
+    fireEvent.click(screen.getByTestId('rotation-radar-leader-row-theme_7'));
 
     const detail = screen.getByTestId('rotation-theme-detail-panel');
     expect(detail).toHaveTextContent('机器人');
@@ -299,12 +415,12 @@ describe('MarketRotationRadarPage', () => {
     render(<MarketRotationRadarPage />);
 
     await screen.findByTestId('market-rotation-radar-page');
-    fireEvent.change(screen.getByPlaceholderText('搜索主题、英文名或成员'), { target: { value: 'Crypto' } });
+    fireEvent.change(screen.getByPlaceholderText('搜索主题、英文名或成员'), { target: { value: '能源' } });
 
     const universe = screen.getByTestId('rotation-radar-universe-list');
-    expect(universe).toHaveTextContent('Crypto L1');
+    expect(universe).toHaveTextContent('能源');
     expect(universe).not.toHaveTextContent('半导体');
-    expect(screen.queryByTestId('rotation-theme-card-theme_10')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('rotation-theme-card-theme_11')).not.toBeInTheDocument();
   });
 
   it('marks fallback radar data as fallback instead of live', async () => {
@@ -438,6 +554,7 @@ describe('MarketRotationRadarPage', () => {
     expect(buckets).toHaveTextContent('窄幅龙头');
 
     const mechanics = screen.getByTestId('rotation-radar-mechanics-details');
-    expect(mechanics).not.toHaveAttribute('open');
+    expect(mechanics).toHaveTextContent('数据说明');
+    expect(mechanics).not.toHaveTextContent('schemaVersion');
   });
 });

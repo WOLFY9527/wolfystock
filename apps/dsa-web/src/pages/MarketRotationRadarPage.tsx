@@ -9,6 +9,12 @@ import { cn } from '../utils/cn';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 
 const TOP_THEME_LIMIT = 10;
+const MARKET_OPTIONS = [
+  { id: 'US', label: 'US' },
+  { id: 'CN', label: 'A股' },
+  { id: 'HK', label: 'HK' },
+  { id: 'CRYPTO', label: 'Crypto' },
+] as const;
 
 const STAGE_LABELS: Record<MarketRotationStage, string> = {
   early_watch: '早期观察',
@@ -25,7 +31,6 @@ const RISK_LABELS: Record<MarketRotationRiskLabel, string> = {
   stale_or_incomplete_windows: '时窗缺失/过期',
 };
 
-const MARKET_PLACEHOLDERS = ['US', 'A股', 'HK', 'Crypto'];
 const TAXONOMY_PLACEHOLDERS = ['主题', '行业', '概念', 'ETF代理'];
 
 type Bucket = {
@@ -76,6 +81,10 @@ function ratio(value?: number | null): string {
   return `${value.toFixed(2)}x`;
 }
 
+function isTaxonomyOnlyTheme(theme?: MarketRotationTheme): boolean {
+  return Boolean(theme?.staticThemeOnly || theme?.dataQuality === 'taxonomy_only');
+}
+
 function compactConfidence(value?: number | null): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return '0%';
@@ -88,6 +97,10 @@ function formatThemeStage(stage?: MarketRotationStage): string {
 }
 
 function mapDataStateLabel(theme: DataStateFields): string {
+  const candidate = theme as MarketRotationTheme;
+  if (isTaxonomyOnlyTheme(candidate)) {
+    return candidate.confidenceLabel || '待行情确认';
+  }
   if (theme.isFallback || theme.freshness === 'fallback') {
     return '备用/静态';
   }
@@ -199,6 +212,9 @@ function matchesSearch(theme: MarketRotationTheme, query: string): boolean {
     theme.benchmark,
     theme.sectorBenchmark,
     ...(theme.membersConfigured || []),
+    ...(theme.mappedConcepts || []),
+    ...(theme.representativeLabels || []),
+    ...(theme.representativeSymbols || []),
     ...(theme.leadership?.topMembers || []).map((member) => `${member.symbol} ${member.name || ''}`),
   ]
     .filter(Boolean)
@@ -256,27 +272,33 @@ const RiskChip: React.FC<{ risk: MarketRotationRiskLabel }> = ({ risk }) => (
   </span>
 );
 
-const ModeControls: React.FC = () => (
+const ModeControls: React.FC<{
+  selectedMarket: string;
+  supportedMarkets: string[];
+  onMarketChange: (market: string) => void;
+}> = ({ selectedMarket, supportedMarkets, onMarketChange }) => (
   <section data-testid="rotation-radar-mode-controls" className="mt-4 grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
     <div className="min-w-0 rounded-2xl border border-white/5 bg-white/[0.02] p-3">
       <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase text-white/38">
         <SlidersHorizontal className="h-3.5 w-3.5 text-cyan-200/70" aria-hidden="true" />
-        市场占位
+        市场
       </div>
       <div className="flex min-w-0 gap-2 overflow-x-auto no-scrollbar">
-        {MARKET_PLACEHOLDERS.map((market, index) => (
+        {MARKET_OPTIONS.filter((market) => !supportedMarkets.length || supportedMarkets.includes(market.id)).map((market) => (
           <button
-            key={market}
+            key={market.id}
             type="button"
+            data-testid={`rotation-market-tab-${market.id}`}
+            aria-pressed={selectedMarket === market.id}
             className={cn(
               'shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all',
-              index === 0
+              selectedMarket === market.id
                 ? 'border-cyan-200/24 bg-cyan-200/[0.08] text-cyan-50'
-                : 'cursor-not-allowed border-white/[0.04] bg-white/[0.015] text-white/28',
+                : 'border-white/[0.04] bg-white/[0.015] text-white/48 hover:border-white/10 hover:bg-white/[0.04] hover:text-white/75',
             )}
-            disabled={index > 0}
+            onClick={() => onMarketChange(market.id)}
           >
-            {market}
+            {market.label}
           </button>
         ))}
       </div>
@@ -284,7 +306,7 @@ const ModeControls: React.FC = () => (
     <div className="min-w-0 rounded-2xl border border-white/5 bg-white/[0.02] p-3">
       <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase text-white/38">
         <Gauge className="h-3.5 w-3.5 text-cyan-200/70" aria-hidden="true" />
-        分类占位
+        分类层级
       </div>
       <div className="flex min-w-0 gap-2 overflow-x-auto no-scrollbar">
         {TAXONOMY_PLACEHOLDERS.map((mode, index) => (
@@ -295,9 +317,9 @@ const ModeControls: React.FC = () => (
               'shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all',
               index === 0
                 ? 'border-white/10 bg-white/[0.055] text-white/75'
-                : 'cursor-not-allowed border-white/[0.04] bg-white/[0.015] text-white/28',
+                : 'border-white/[0.04] bg-white/[0.015] text-white/35',
             )}
-            disabled={index > 0}
+            disabled
           >
             {mode}
           </button>
@@ -312,7 +334,9 @@ const LeaderRow: React.FC<{
   rank: number;
   selected: boolean;
   onSelect: () => void;
-}> = ({ theme, rank, selected, onSelect }) => (
+}> = ({ theme, rank, selected, onSelect }) => {
+  const taxonomyOnly = isTaxonomyOnlyTheme(theme);
+  return (
   <button
     type="button"
     data-testid={`rotation-radar-leader-row-${theme.id}`}
@@ -328,14 +352,19 @@ const LeaderRow: React.FC<{
         <span className="truncate text-sm font-semibold text-white/84">{theme.name}</span>
         <DataFreshnessBadge freshness={theme.freshness} className="hidden px-1.5 text-[9px] sm:inline-flex" />
       </span>
-      <span className="mt-1 block truncate text-[11px] text-white/38">{formatThemeStage(theme.stage)} · {mapDataStateLabel(theme)}</span>
+      <span className="mt-1 block truncate text-[11px] text-white/38">
+        {taxonomyOnly ? '主题库已载入 · 待行情确认' : `${formatThemeStage(theme.stage)} · ${mapDataStateLabel(theme)}`}
+      </span>
     </span>
-    <span className={cn('text-right font-mono text-lg font-semibold tabular-nums', scoreTone(theme.rotationScore))}>{theme.rotationScore}</span>
-    <span className="hidden text-right font-mono text-xs text-emerald-200 tabular-nums sm:block">{signedPercent(theme.relativeStrength?.averageRelativeStrengthPercent)}</span>
-    <span className="hidden text-right font-mono text-xs text-cyan-100 tabular-nums sm:block">{ratio(theme.volume?.averageRelativeVolume)}</span>
-    <span className="text-right font-mono text-xs text-white/58 tabular-nums">{percent(theme.breadth?.percentUp, 0)}</span>
+    <span className={cn('text-right font-mono text-lg font-semibold tabular-nums', taxonomyOnly ? 'text-white/46' : scoreTone(theme.rotationScore))}>
+      {taxonomyOnly ? '主题库' : theme.rotationScore}
+    </span>
+    <span className="hidden text-right font-mono text-xs text-emerald-200 tabular-nums sm:block">{taxonomyOnly ? '待接入' : signedPercent(theme.relativeStrength?.averageRelativeStrengthPercent)}</span>
+    <span className="hidden text-right font-mono text-xs text-cyan-100 tabular-nums sm:block">{taxonomyOnly ? '分类' : ratio(theme.volume?.averageRelativeVolume)}</span>
+    <span className="text-right font-mono text-xs text-white/58 tabular-nums">{taxonomyOnly ? '观察' : percent(theme.breadth?.percentUp, 0)}</span>
   </button>
-);
+  );
+};
 
 const CompactThemeRow: React.FC<{
   theme: MarketRotationTheme;
@@ -355,8 +384,10 @@ const CompactThemeRow: React.FC<{
       <span className="block truncate font-semibold text-white/76">{theme.name}</span>
       <span className="block truncate text-[10px] text-white/35">{theme.englishName || theme.focus || theme.benchmark}</span>
     </span>
-    <span className={cn('text-right font-mono font-semibold tabular-nums', scoreTone(theme.rotationScore))}>{theme.rotationScore}</span>
-    <span className="text-right text-white/42">{formatThemeStage(theme.stage)}</span>
+    <span className={cn('text-right font-mono font-semibold tabular-nums', isTaxonomyOnlyTheme(theme) ? 'text-white/44' : scoreTone(theme.rotationScore))}>
+      {isTaxonomyOnlyTheme(theme) ? '主题库' : theme.rotationScore}
+    </span>
+    <span className="text-right text-white/42">{isTaxonomyOnlyTheme(theme) ? '分类观察' : formatThemeStage(theme.stage)}</span>
   </button>
 );
 
@@ -413,6 +444,7 @@ const ThemeDetailPanel: React.FC<{
   const detailMembers = theme.themeDetail?.leadershipMembers?.length ? theme.themeDetail.leadershipMembers : [];
   const proxyValues = Object.values(theme.benchmarkProxies || {});
   const nextWatch = alertCandidates[0];
+  const taxonomyOnly = isTaxonomyOnlyTheme(theme);
   const dataWarning = Boolean(theme.isFallback || theme.freshness === 'fallback' || isThemeStale(theme));
   const evidenceNotes = sanitizeRotationNotes(theme.evidence);
   const riskExplanationNotes = sanitizeRotationNotes(theme.riskExplanations);
@@ -430,19 +462,26 @@ const ThemeDetailPanel: React.FC<{
           <p className="mt-1 truncate text-[11px] text-white/38">{theme.englishName} · {theme.focus || theme.benchmark}</p>
         </div>
         <div className="shrink-0 text-right">
-          <p className={cn('font-mono text-4xl font-semibold leading-none tabular-nums', scoreTone(theme.rotationScore))}>{theme.rotationScore}</p>
-          <p className="mt-1 text-[10px] font-bold uppercase text-white/35">轮动强度</p>
+          <p className={cn('font-mono text-4xl font-semibold leading-none tabular-nums', taxonomyOnly ? 'text-white/44' : scoreTone(theme.rotationScore))}>
+            {taxonomyOnly ? '主题库' : theme.rotationScore}
+          </p>
+          <p className="mt-1 text-[10px] font-bold uppercase text-white/35">{taxonomyOnly ? '分类状态' : '轮动强度'}</p>
         </div>
       </div>
 
       <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
         <EvidenceBadge tone="info">{formatThemeStage(theme.stage)}</EvidenceBadge>
-        <EvidenceBadge>置信度 {compactConfidence(theme.confidence)}</EvidenceBadge>
+        <EvidenceBadge>{taxonomyOnly ? theme.confidenceLabel || '待行情确认' : `置信度 ${compactConfidence(theme.confidence)}`}</EvidenceBadge>
         <EvidenceBadge tone={dataWarning ? 'warn' : 'ok'}>{mapDataStateLabel(theme)}</EvidenceBadge>
-        <DataFreshnessBadge freshness={theme.freshness} className="px-1.5 text-[9px]" />
+        {!taxonomyOnly ? <DataFreshnessBadge freshness={theme.freshness} className="px-1.5 text-[9px]" /> : null}
       </div>
 
-      {dataWarning ? (
+      {taxonomyOnly ? (
+        <div className="mt-3 grid gap-2 rounded-xl border border-cyan-200/12 bg-cyan-200/[0.045] px-3 py-3 text-[11px] leading-5 text-cyan-50/70">
+          <p>主题库已载入，行情评分待本地数据覆盖，仅作分类观察。</p>
+          <p>{theme.themeDetail?.dataStateLabel || '待接入本地行情'} · {theme.themeDetail?.nextStep || '本地行情覆盖后可计算轮动强度。'}</p>
+        </div>
+      ) : dataWarning ? (
         <p className="mt-3 rounded-xl border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-[11px] leading-5 text-amber-100/75">
           当前主题包含备用、过期或部分数据，只能作为观察线索，不能标记为实时结论。
         </p>
@@ -452,6 +491,27 @@ const ThemeDetailPanel: React.FC<{
         {explanation}
       </p>
 
+      {taxonomyOnly ? (
+        <div className="mt-4 grid gap-3">
+          <div>
+            <p className="text-[10px] font-bold uppercase text-white/35">映射概念</p>
+            <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+              {(theme.themeDetail?.mappedConcepts || theme.mappedConcepts || []).slice(0, 8).map((concept) => (
+                <EvidenceBadge key={concept} tone="info">{concept}</EvidenceBadge>
+              ))}
+              {!(theme.themeDetail?.mappedConcepts || theme.mappedConcepts || []).length ? <EvidenceBadge>待补齐</EvidenceBadge> : null}
+            </div>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase text-white/35">代表标签 / 符号</p>
+            <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+              {(theme.themeDetail?.representativeLabels || theme.representativeLabels || theme.membersConfigured || []).slice(0, 8).map((label) => (
+                <EvidenceBadge key={label}>{label}</EvidenceBadge>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="mt-4 grid grid-cols-2 gap-2">
         <ThemeMetric label="相对强弱" value={signedPercent(theme.relativeStrength?.averageRelativeStrengthPercent)} tone={Number(theme.relativeStrength?.averageRelativeStrengthPercent) >= 0 ? 'text-emerald-200' : 'text-rose-300'} />
         <ThemeMetric label="成交扩张" value={ratio(theme.volume?.averageRelativeVolume)} tone={Number(theme.volume?.averageRelativeVolume) >= 1.1 ? 'text-cyan-200' : 'text-white/58'} />
@@ -460,8 +520,9 @@ const ThemeDetailPanel: React.FC<{
         <ThemeMetric label="同步性" value={percent(theme.synchronization?.sameDirectionPercent)} />
         <ThemeMetric label="龙头集中" value={percent(theme.leadership?.leadershipConcentrationPercent)} />
       </div>
+      )}
 
-      <div className="mt-5">
+      {!taxonomyOnly ? <div className="mt-5">
         <p className="text-[10px] font-bold uppercase text-white/35">下一观察 / 风险</p>
         <div className="mt-2 rounded-xl border border-cyan-200/10 bg-cyan-200/[0.035] px-3 py-2 text-[11px] leading-5 text-cyan-50/62">
           {nextWatch?.symbol
@@ -474,9 +535,9 @@ const ThemeDetailPanel: React.FC<{
           )}
           <EvidenceBadge>非交易指令</EvidenceBadge>
         </div>
-      </div>
+      </div> : null}
 
-      <div className="mt-5">
+      {!taxonomyOnly ? <div className="mt-5">
         <p className="text-[10px] font-bold uppercase text-white/35">代表成员 / 代理</p>
         <div className="mt-2 grid gap-2">
           {leaders.length ? leaders.slice(0, 4).map((leader) => (
@@ -493,9 +554,9 @@ const ThemeDetailPanel: React.FC<{
             <p className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 text-sm text-white/45">代表成员待快照补齐</p>
           )}
         </div>
-      </div>
+      </div> : null}
 
-      <details
+      {!taxonomyOnly ? <details
         data-testid={`rotation-theme-proxy-details-${theme.id}`}
         className="mt-5 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2"
         onToggle={(event) => onProxyToggle(event.currentTarget.open)}
@@ -551,7 +612,7 @@ const ThemeDetailPanel: React.FC<{
             ) : null}
           </div>
         ) : null}
-      </details>
+      </details> : null}
 
       <details className="mt-3 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
         <summary className="cursor-pointer list-none text-[10px] font-bold uppercase text-white/35">证据详情</summary>
@@ -578,27 +639,30 @@ const MarketRotationRadarPage: React.FC = () => {
   const [payload, setPayload] = useState<MarketRotationRadarResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
+  const [selectedMarket, setSelectedMarket] = useState('US');
   const [selectedThemeId, setSelectedThemeId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [proxyOpenThemeId, setProxyOpenThemeId] = useState<string>('');
 
-  const loadRadar = useCallback(async () => {
+  const loadRadar = useCallback(async (market = selectedMarket) => {
     setLoading(true);
     setError(null);
     try {
-      const nextPayload = await marketRotationApi.getRotationRadar();
+      const nextPayload = await marketRotationApi.getRotationRadar(market);
       setPayload(nextPayload);
-      setSelectedThemeId((current) => current || nextPayload.themes[0]?.id || '');
+      setSelectedThemeId(nextPayload.themes[0]?.id || '');
+      setProxyOpenThemeId('');
+      setSearchQuery('');
     } catch (nextError) {
       setError({ ...getParsedApiError(nextError), title: '读取资金轮动雷达失败' });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedMarket]);
 
   useEffect(() => {
-    void loadRadar();
-  }, [loadRadar]);
+    void loadRadar(selectedMarket);
+  }, [loadRadar, selectedMarket]);
 
   const rankedThemes = useMemo(() => deriveTopThemes(payload?.themes || []), [payload?.themes]);
   const filteredThemes = useMemo(
@@ -674,7 +738,11 @@ const MarketRotationRadarPage: React.FC = () => {
             <SummaryCell title="降温/弱信号" value={summaryTitle(payload.summary.fadingThemes, '暂无降温列表')} accent="text-amber-200" />
           </section>
 
-          <ModeControls />
+          <ModeControls
+            selectedMarket={selectedMarket}
+            supportedMarkets={payload.supportedMarkets || ['US', 'CN', 'HK', 'CRYPTO']}
+            onMarketChange={setSelectedMarket}
+          />
 
           <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-12 xl:items-start">
             <section className="min-w-0 space-y-4 xl:col-span-8" aria-label="今日轮动 Top-N">
@@ -757,13 +825,13 @@ const MarketRotationRadarPage: React.FC = () => {
             className="mt-4 rounded-2xl border border-white/5 bg-white/[0.02] p-4 text-sm text-white/55"
           >
             <summary className="cursor-pointer list-none text-[11px] font-bold uppercase text-white/42">
-              轮动计算与边界
+              数据说明
             </summary>
             <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-white/46">
               <Gauge className="h-4 w-4 text-cyan-200/70" aria-hidden="true" />
-              <span>展示层只基于既有响应字段排序、分桶和筛选。</span>
+              <span>当前为静态主题库，本地行情覆盖后可计算轮动强度。</span>
               <Signal className="ml-2 h-4 w-4 text-emerald-200/70" aria-hidden="true" />
-              <span>不触发交易、通知、组合或新的外部数据请求。</span>
+              <span>不代表实时买卖信号，不触发交易、通知、组合或新的外部数据请求。</span>
               <Waves className="ml-2 h-4 w-4 text-white/40" aria-hidden="true" />
               <span>{payload.noAdviceDisclosure}</span>
             </div>

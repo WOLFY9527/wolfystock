@@ -1,5 +1,15 @@
 ## 2026-05-09
 
+- 🧭 **Market rotation multi-market taxonomy radar** — Rotation Radar now uses
+  an inert local taxonomy registry for US, A股, HK, and Crypto themes. The
+  `/api/v1/market/rotation-radar` endpoint accepts an optional
+  `market=US|CN|HK|CRYPTO` query while preserving US as the default, and the
+  frontend market tabs switch the visible theme universe. Static taxonomy-only
+  markets are labeled as classification observation with local quote coverage
+  pending; no live provider calls, provider routing, scanner scoring,
+  backtest, portfolio, AI, notification, auth/RBAC, MarketCache, fallback/mock,
+  or DuckDB behavior changed.
+
 - 🧭 **Frontend information hygiene** — AI research, Scanner, and Chat default
   surfaces now translate developer diagnostics into plain user-facing Chinese
   data sufficiency and risk language, keeping raw provider/schema/reason-code

@@ -81,14 +81,26 @@ class RotationRadarThemeModel(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     id: str
+    market: Optional[str] = None
+    taxonomyType: Optional[str] = None
     name: str
     englishName: str
     focus: str
     benchmark: str
     sectorBenchmark: Optional[str] = None
     membersConfigured: List[str] = Field(default_factory=list)
+    representativeLabels: List[str] = Field(default_factory=list)
+    representativeSymbols: List[str] = Field(default_factory=list)
+    proxySymbols: List[str] = Field(default_factory=list)
+    mappedConcepts: List[str] = Field(default_factory=list)
+    aliases: List[str] = Field(default_factory=list)
     rotationScore: int = Field(ge=0, le=100)
     confidence: float = Field(ge=0, le=1)
+    confidenceLabel: Optional[str] = None
+    dataQuality: Optional[str] = None
+    dataCoverage: Optional[str] = None
+    sourceClass: Optional[str] = None
+    staticThemeOnly: bool = False
     stage: RotationStage
     stageExplanation: Optional[str] = None
     riskLabels: List[RotationRiskLabel] = Field(default_factory=list)
@@ -141,6 +153,8 @@ class RotationRadarSummaryModel(BaseModel):
 
 class MarketRotationRadarResponse(BaseModel):
     endpoint: str
+    market: str = "US"
+    supportedMarkets: List[str] = Field(default_factory=list)
     generatedAt: str
     source: str
     sourceLabel: Optional[str] = None

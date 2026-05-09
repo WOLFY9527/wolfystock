@@ -128,11 +128,23 @@ export type MarketRotationProxyStatus = {
 };
 
 export type MarketRotationTheme = MarketRotationSummaryItem & {
+  market?: string;
+  taxonomyType?: string;
   englishName: string;
   focus?: string;
   benchmark: string;
   sectorBenchmark?: string | null;
   membersConfigured: string[];
+  representativeLabels?: string[];
+  representativeSymbols?: string[];
+  proxySymbols?: string[];
+  mappedConcepts?: string[];
+  aliases?: string[];
+  confidenceLabel?: string;
+  dataQuality?: string;
+  dataCoverage?: string;
+  sourceClass?: string;
+  staticThemeOnly?: boolean;
   newslessRotation: boolean;
   newslessRotationEvidence?: string | null;
   persistenceScore?: number | null;
@@ -221,6 +233,10 @@ export type MarketRotationTheme = MarketRotationSummaryItem & {
     asOf?: string | null;
     disclosure?: string;
     notes?: string[];
+    mappedConcepts?: string[];
+    representativeLabels?: string[];
+    dataStateLabel?: string;
+    nextStep?: string;
   };
   source?: string;
   sourceLabel?: string | null;
@@ -247,6 +263,8 @@ export type MarketRotationWatchlistMember = {
 
 export type MarketRotationRadarResponse = {
   endpoint: string;
+  market?: string;
+  supportedMarkets?: string[];
   generatedAt: string;
   source: string;
   sourceLabel?: string | null;
@@ -310,8 +328,10 @@ function normalizeBenchmark(benchmark: MarketRotationBenchmark): MarketRotationB
 }
 
 export const marketRotationApi = {
-  getRotationRadar: async (): Promise<MarketRotationRadarResponse> => {
-    const response = await apiClient.get<Record<string, unknown>>('/api/v1/market/rotation-radar');
+  getRotationRadar: async (market?: string): Promise<MarketRotationRadarResponse> => {
+    const response = market
+      ? await apiClient.get<Record<string, unknown>>('/api/v1/market/rotation-radar', { params: { market } })
+      : await apiClient.get<Record<string, unknown>>('/api/v1/market/rotation-radar');
     const normalized = toCamelCase<MarketRotationRadarResponse>(response.data);
     const benchmarks = Object.entries(normalized.benchmarks || {}).reduce<Record<string, MarketRotationBenchmark>>(
       (acc, [symbol, benchmark]) => {

@@ -14,6 +14,13 @@ from datetime import datetime, timezone
 from statistics import mean
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
+from src.services.sector_rotation_taxonomy import (
+    SUPPORTED_ROTATION_MARKETS,
+    RotationTaxonomyEntry,
+    get_rotation_taxonomy_by_market,
+    normalize_rotation_market,
+)
+
 
 NO_ADVICE_DISCLOSURE = "仅用于观察资金轮动迹象，非买卖建议。"
 RADAR_ENDPOINT = "/api/v1/market/rotation-radar"
@@ -45,81 +52,44 @@ class ThemeBasket:
     sectorBenchmark: str
     members: Sequence[str]
     focus: str
+    market: str = "US"
+    taxonomyType: str = "theme_cluster"
+    aliases: Sequence[str] = ()
+    proxySymbols: Sequence[str] = ()
+    mappedConcepts: Sequence[str] = ()
+    dataCoverage: str = "quote_backed"
+    sourceClass: str = "custom"
+    riskNote: str = ""
+    operatorNote: str = ""
 
 
-THEME_BASKETS: Sequence[ThemeBasket] = (
-    ThemeBasket(
-        id="ai_applications",
-        name="AI 应用",
-        englishName="AI Applications",
-        benchmark="QQQ",
-        sectorBenchmark="IGV",
-        members=("APP", "PLTR", "CRM", "SNOW", "ADBE", "NOW", "DUOL", "MDB"),
-        focus="应用层软件、数据工作流与企业 AI 落地",
-    ),
-    ThemeBasket(
-        id="ai_infrastructure",
-        name="AI 基建",
-        englishName="AI Infrastructure",
-        benchmark="QQQ",
-        sectorBenchmark="SMH",
-        members=("NVDA", "AVGO", "AMD", "ANET", "SMCI", "DELL", "VRT", "ARM"),
-        focus="GPU、网络、服务器与 AI 数据中心硬件",
-    ),
-    ThemeBasket(
-        id="semiconductors",
-        name="半导体",
-        englishName="Semiconductors",
-        benchmark="QQQ",
-        sectorBenchmark="SMH",
-        members=("NVDA", "AMD", "AVGO", "TSM", "ASML", "MRVL", "MU", "LRCX"),
-        focus="芯片、设备、存储与先进制程链条",
-    ),
-    ThemeBasket(
-        id="cybersecurity",
-        name="网络安全",
-        englishName="Cybersecurity",
-        benchmark="QQQ",
-        sectorBenchmark="CIBR",
-        members=("CRWD", "PANW", "ZS", "NET", "FTNT", "S", "OKTA", "TENB"),
-        focus="云安全、零信任、终端防护与边缘安全",
-    ),
-    ThemeBasket(
-        id="cloud_software",
-        name="云软件",
-        englishName="Cloud Software",
-        benchmark="QQQ",
-        sectorBenchmark="CLOU",
-        members=("MSFT", "SNOW", "CRM", "NOW", "DDOG", "MDB", "TEAM", "WDAY"),
-        focus="云基础软件、SaaS 工作流与数据平台",
-    ),
-    ThemeBasket(
-        id="data_center_power",
-        name="数据中心电力",
-        englishName="Data Center Power",
-        benchmark="SPY",
-        sectorBenchmark="PAVE",
-        members=("VRT", "ETN", "PWR", "GEV", "CEG", "NRG", "SMR", "AEP"),
-        focus="电力设备、并网、发电与能源基础设施",
-    ),
-    ThemeBasket(
-        id="liquid_cooling",
-        name="液冷",
-        englishName="Liquid Cooling",
-        benchmark="QQQ",
-        sectorBenchmark="SMH",
-        members=("VRT", "MOD", "SMCI", "DELL", "HPE", "ANET", "NVDA", "ETN"),
-        focus="高密度机柜、液冷方案与数据中心热管理",
-    ),
-    ThemeBasket(
-        id="robotics",
-        name="机器人",
-        englishName="Robotics",
-        benchmark="IWM",
-        sectorBenchmark="BOTZ",
-        members=("ISRG", "TER", "SYM", "PATH", "ROK", "ABBNY", "IRBT", "ZBRA"),
-        focus="工业自动化、手术机器人、仓储机器人与机器视觉",
-    ),
+def _theme_basket_from_taxonomy(entry: RotationTaxonomyEntry) -> ThemeBasket:
+    proxy_symbols = tuple(entry.proxySymbols)
+    benchmark = "IWM" if entry.id.endswith("small_cap_growth") else "QQQ"
+    sector_benchmark = next((symbol for symbol in proxy_symbols if symbol not in MARKET_BENCHMARK_SYMBOLS), "SPY")
+    return ThemeBasket(
+        id=entry.id.rsplit(":", 1)[-1],
+        name=entry.displayName,
+        englishName=entry.englishName,
+        benchmark=benchmark,
+        sectorBenchmark=sector_benchmark,
+        members=tuple(entry.representativeSymbols or entry.representativeLabels),
+        focus="、".join(entry.mappedConcepts[:4]) if entry.mappedConcepts else entry.operatorNote,
+        market=entry.market,
+        taxonomyType=entry.taxonomyType,
+        aliases=tuple(entry.aliases),
+        proxySymbols=proxy_symbols,
+        mappedConcepts=tuple(entry.mappedConcepts),
+        dataCoverage=entry.dataCoverage,
+        sourceClass=entry.sourceClass,
+        riskNote=entry.riskNote,
+        operatorNote=entry.operatorNote,
+    )
+
+
+THEME_BASKETS: Sequence[ThemeBasket] = tuple(
+    _theme_basket_from_taxonomy(entry)
+    for entry in get_rotation_taxonomy_by_market("US")
 )
 
 FALLBACK_PRESETS: Dict[str, Dict[str, Any]] = {
@@ -149,7 +119,10 @@ class MarketRotationRadarService:
         self.quote_provider = quote_provider
         self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
 
-    def get_rotation_radar(self) -> Dict[str, Any]:
+    def get_rotation_radar(self, market: str = "US") -> Dict[str, Any]:
+        normalized_market = normalize_rotation_market(market)
+        if normalized_market != "US":
+            return self._taxonomy_rotation_radar(normalized_market)
         generated_at = self._now_iso()
         quotes, quote_warning = self._load_quotes()
         benchmarks = self._build_benchmarks(quotes, generated_at)
@@ -174,6 +147,8 @@ class MarketRotationRadarService:
             warnings = [warning for warning in warnings if "Fallback/静态篮子" not in warning]
         return {
             "endpoint": RADAR_ENDPOINT,
+            "market": "US",
+            "supportedMarkets": list(SUPPORTED_ROTATION_MARKETS),
             "generatedAt": generated_at,
             "source": "fallback" if payload_fallback else "computed",
             "sourceLabel": "备用数据" if payload_fallback else "主题篮子计算",
@@ -191,6 +166,7 @@ class MarketRotationRadarService:
                 "alertsAreReadOnlyEvidence": True,
                 "notificationDeliveryEnabled": False,
                 "basketSource": "manual_static_baskets",
+                "taxonomySource": "src.services.sector_rotation_taxonomy",
                 "themeCount": len(THEME_BASKETS),
                 "liveThemeCount": live_theme_count,
                 "fallbackThemeCount": fallback_theme_count,
@@ -206,6 +182,167 @@ class MarketRotationRadarService:
                 },
                 "newslessRotationMeaning": "未配置新闻催化证据时，价格/量能/广度/同步性同时满足阈值的保守观察标记，不代表因果确认。",
             },
+        }
+
+    def _taxonomy_rotation_radar(self, market: str) -> Dict[str, Any]:
+        generated_at = self._now_iso()
+        entries = get_rotation_taxonomy_by_market(market)
+        themes = [
+            self._taxonomy_only_theme(entry, generated_at, index)
+            for index, entry in enumerate(entries)
+        ]
+        return {
+            "endpoint": RADAR_ENDPOINT,
+            "market": market,
+            "supportedMarkets": list(SUPPORTED_ROTATION_MARKETS),
+            "generatedAt": generated_at,
+            "source": "local_taxonomy",
+            "sourceLabel": "静态主题库",
+            "freshness": "fallback",
+            "isFallback": True,
+            "isStale": False,
+            "warning": "当前为静态主题库，本地行情覆盖后可计算轮动强度。不代表实时买卖信号。",
+            "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
+            "benchmarks": {},
+            "summary": {
+                "strongestThemes": [],
+                "acceleratingThemes": [],
+                "fadingThemes": [self._summary_item(theme) for theme in themes[:3]],
+                "watchlistSignals": [],
+                "watchlistSortingExplanation": "静态主题库仅作分类观察；待本地行情覆盖后才计算轮动强度，非买卖建议。",
+                "safeWording": ["主题库已载入", "行情评分待本地数据覆盖", "仅作分类观察", "非买卖建议"],
+            },
+            "themes": themes,
+            "metadata": {
+                "schemaVersion": "market_rotation_radar_phase4_v1",
+                "noExternalCalls": True,
+                "alertsAreReadOnlyEvidence": True,
+                "notificationDeliveryEnabled": False,
+                "basketSource": "sector_rotation_taxonomy",
+                "taxonomySource": "src.services.sector_rotation_taxonomy",
+                "themeCount": len(themes),
+                "taxonomyOnlyThemeCount": sum(1 for theme in themes if theme.get("staticThemeOnly")),
+                "liveThemeCount": 0,
+                "fallbackThemeCount": len(themes),
+                "staleThemeCount": 0,
+                "scoreRange": "0-100",
+                "confidenceRange": "0-1",
+                "timeWindows": list(TIME_WINDOW_KEYS),
+                "proxyQualityRequired": False,
+            },
+        }
+
+    def _taxonomy_only_theme(self, entry: RotationTaxonomyEntry, generated_at: str, index: int) -> Dict[str, Any]:
+        representative = list(entry.representativeSymbols or entry.representativeLabels)
+        mapped_concepts = list(entry.mappedConcepts or entry.aliases)
+        score = 18 if entry.dataCoverage == "taxonomy_only" else 22
+        return {
+            "id": entry.id,
+            "market": entry.market,
+            "taxonomyType": entry.taxonomyType,
+            "name": entry.displayName,
+            "englishName": entry.englishName or entry.displayName,
+            "focus": "、".join(mapped_concepts[:4]) if mapped_concepts else entry.operatorNote,
+            "benchmark": f"{entry.market}_LOCAL_TAXONOMY",
+            "sectorBenchmark": None,
+            "membersConfigured": representative,
+            "representativeLabels": list(entry.representativeLabels),
+            "representativeSymbols": list(entry.representativeSymbols),
+            "proxySymbols": list(entry.proxySymbols),
+            "mappedConcepts": mapped_concepts,
+            "aliases": list(entry.aliases),
+            "rotationScore": score,
+            "confidence": 0.12,
+            "confidenceLabel": "待行情确认",
+            "dataQuality": entry.dataCoverage,
+            "dataCoverage": entry.dataCoverage,
+            "sourceClass": entry.sourceClass,
+            "staticThemeOnly": True,
+            "stage": "weak_or_no_signal",
+            "stageExplanation": "主题库已载入，行情评分待本地数据覆盖，仅作分类观察。",
+            "riskLabels": ["stale_or_incomplete_windows"],
+            "riskExplanations": ["行情评分待本地数据覆盖，不能确认实时轮动强度。"],
+            "newslessRotation": False,
+            "newslessRotationEvidence": None,
+            "persistenceScore": 0.0,
+            "persistenceEvidence": self._fallback_persistence_evidence(),
+            "alertCandidates": [],
+            "relativeStrength": {
+                "benchmark": f"{entry.market}_LOCAL_TAXONOMY",
+                "benchmarkChangePercent": None,
+                "averageThemeChangePercent": None,
+                "averageRelativeStrengthPercent": None,
+                "vsBenchmarks": {},
+            },
+            "proxyQuality": {
+                "label": "静态主题库",
+                "coveragePercent": 0,
+                "availableProxyCount": 0,
+                "totalProxyCount": len(entry.proxySymbols),
+                "requiredProxies": list(entry.proxySymbols),
+                "freshness": "fallback",
+                "hasMissingRequiredProxy": False,
+                "hasStaleProxy": False,
+                "missingReasons": {},
+                "explanation": "当前为静态主题库，本地行情覆盖后可计算轮动强度。",
+            },
+            "benchmarkProxies": {},
+            "timeWindows": self._empty_time_windows(),
+            "volume": {
+                "averageRelativeVolume": None,
+                "availableMemberCount": 0,
+                "label": "待接入本地行情",
+            },
+            "breadth": {
+                "observedMembers": 0,
+                "configuredMembers": len(representative),
+                "coveragePercent": 0,
+                "percentUp": None,
+                "percentOutperformingBenchmark": None,
+            },
+            "synchronization": {
+                "sameDirectionPercent": None,
+                "aboveVwapPercent": None,
+                "persistencePercent": None,
+                "persistenceScore": 0.0,
+                "label": "分类观察",
+            },
+            "leadership": {
+                "leadershipConcentrationPercent": None,
+                "broadParticipationPercent": None,
+                "topMembers": [],
+            },
+            "themeDetail": {
+                "watchlistLabel": "分类观察",
+                "watchlistSafe": True,
+                "safeActionLabel": "仅观察，不构成买卖建议",
+                "leaderSectionLabel": "代表标签",
+                "laggardSectionLabel": "待行情确认",
+                "leaderExplanation": "代表标签仅用于理解主题范围，不代表实时强弱排序。",
+                "laggardExplanation": "本地行情覆盖后才计算扩散与轮动强度。",
+                "leadershipMembers": [],
+                "laggardMembers": [],
+                "memberEvidence": [],
+                "freshnessLabel": "静态主题库",
+                "asOf": generated_at,
+                "disclosure": NO_ADVICE_DISCLOSURE,
+                "mappedConcepts": mapped_concepts,
+                "representativeLabels": representative,
+                "dataStateLabel": "待接入本地行情",
+                "nextStep": "本地行情覆盖后可计算轮动强度。",
+                "notes": [entry.riskNote, entry.operatorNote],
+            },
+            "freshness": "fallback",
+            "isFallback": True,
+            "isStale": False,
+            "source": "local_taxonomy",
+            "sourceLabel": "静态主题库",
+            "asOf": generated_at,
+            "updatedAt": generated_at,
+            "evidence": ["主题库已载入", "行情评分待本地数据覆盖", "仅作分类观察"],
+            "members": [],
+            "sortOrder": index,
+            "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
 
     def _load_quotes(self) -> tuple[Dict[str, Dict[str, Any]], Optional[str]]:
@@ -365,14 +502,26 @@ class MarketRotationRadarService:
         freshness = "stale" if source_state["isStale"] else "fallback" if source_state["fallbackUsed"] and coverage < 0.6 else "delayed"
         return {
             "id": theme.id,
+            "market": theme.market,
+            "taxonomyType": theme.taxonomyType,
             "name": theme.name,
             "englishName": theme.englishName,
             "focus": theme.focus,
             "benchmark": theme.benchmark,
             "sectorBenchmark": theme.sectorBenchmark,
             "membersConfigured": list(theme.members),
+            "representativeLabels": list(theme.members),
+            "representativeSymbols": list(theme.members),
+            "proxySymbols": list(theme.proxySymbols),
+            "mappedConcepts": list(theme.mappedConcepts),
+            "aliases": list(theme.aliases),
             "rotationScore": score,
             "confidence": confidence,
+            "confidenceLabel": "行情确认",
+            "dataQuality": theme.dataCoverage,
+            "dataCoverage": theme.dataCoverage,
+            "sourceClass": theme.sourceClass,
+            "staticThemeOnly": False,
             "stage": stage,
             "stageExplanation": self._stage_explanation(stage, confidence, source_state.get("timeWindowState", {})),
             "riskLabels": risk_labels,
@@ -467,14 +616,26 @@ class MarketRotationRadarService:
         ]
         return {
             "id": theme.id,
+            "market": theme.market,
+            "taxonomyType": theme.taxonomyType,
             "name": theme.name,
             "englishName": theme.englishName,
             "focus": theme.focus,
             "benchmark": theme.benchmark,
             "sectorBenchmark": theme.sectorBenchmark,
             "membersConfigured": list(theme.members),
+            "representativeLabels": list(theme.members),
+            "representativeSymbols": list(theme.members),
+            "proxySymbols": list(theme.proxySymbols),
+            "mappedConcepts": list(theme.mappedConcepts),
+            "aliases": list(theme.aliases),
             "rotationScore": int(preset["score"]),
             "confidence": 0.12,
+            "confidenceLabel": "待行情确认",
+            "dataQuality": "fallback_static",
+            "dataCoverage": theme.dataCoverage,
+            "sourceClass": theme.sourceClass,
+            "staticThemeOnly": True,
             "stage": "weak_or_no_signal",
             "stageExplanation": "备用篮子缺少可用行情与时窗证据，仅能标记为弱信号。",
             "riskLabels": ["stale_or_incomplete_windows", "thin_breadth"],
@@ -1366,6 +1527,10 @@ class MarketRotationRadarService:
             ),
             "asOf": max([str(item.get("asOf")) for item in observations if item.get("asOf")] or [generated_at]),
             "disclosure": NO_ADVICE_DISCLOSURE,
+            "mappedConcepts": list(theme.mappedConcepts),
+            "representativeLabels": list(theme.members),
+            "dataStateLabel": "待行情确认" if not any(item.get("observed") for item in observations) else "行情证据已接入",
+            "nextStep": "继续观察本地行情覆盖、广度和跨时窗延续。",
             "notes": [
                 f"{theme.name} 使用 {theme.benchmark}/{theme.sectorBenchmark} 作为相对强弱代理。",
                 "成员标签仅描述领先、落后、缺失或新鲜度，不输出买入/卖出动作。",

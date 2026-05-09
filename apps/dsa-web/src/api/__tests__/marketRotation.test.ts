@@ -169,4 +169,84 @@ describe('marketRotationApi', () => {
     expect(payload.themes[0].themeDetail?.watchlistSafe).toBe(true);
     expect(JSON.stringify(payload).toLowerCase()).not.toContain('raw_payload');
   });
+
+  it('passes an optional market query when loading radar taxonomy', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: {
+        endpoint: '/api/v1/market/rotation-radar',
+        market: 'CN',
+        supported_markets: ['US', 'CN', 'HK', 'CRYPTO'],
+        generated_at: '2026-05-07T09:50:00Z',
+        source: 'local_taxonomy',
+        source_label: '静态主题库',
+        freshness: 'fallback',
+        is_fallback: true,
+        is_stale: false,
+        warning: '当前为静态主题库，本地行情覆盖后可计算轮动强度。',
+        no_advice_disclosure: '仅用于观察资金轮动迹象，非买卖建议。',
+        metadata: {
+          no_external_calls: true,
+          taxonomy_only_theme_count: 1,
+        },
+        benchmarks: {},
+        summary: {
+          strongest_themes: [],
+          accelerating_themes: [],
+          fading_themes: [],
+          watchlist_signals: [],
+          safe_wording: ['分类观察', '非买卖建议'],
+        },
+        themes: [
+          {
+            id: 'CN:theme_cluster:ai_compute',
+            market: 'CN',
+            name: 'AI算力',
+            english_name: 'AI Compute',
+            focus: 'GPU供应链、算力租赁、数据中心与服务器',
+            benchmark: 'CN_LOCAL_TAXONOMY',
+            sector_benchmark: null,
+            members_configured: ['寒武纪', '中科曙光'],
+            rotation_score: 18,
+            confidence: 0.12,
+            confidence_label: '待行情确认',
+            data_quality: 'taxonomy_only',
+            static_theme_only: true,
+            stage: 'weak_or_no_signal',
+            stage_explanation: '主题库已载入，行情评分待本地数据覆盖，仅作分类观察。',
+            risk_labels: ['stale_or_incomplete_windows'],
+            risk_explanations: ['行情评分待本地数据覆盖。'],
+            newsless_rotation: false,
+            freshness: 'fallback',
+            is_fallback: true,
+            is_stale: false,
+            evidence: ['主题库已载入', '行情评分待本地数据覆盖', '仅作分类观察'],
+            relative_strength: {},
+            time_windows: {},
+            volume: {},
+            breadth: {},
+            synchronization: {},
+            leadership: {},
+            theme_detail: {
+              mapped_concepts: ['算力租赁', '服务器'],
+              representative_labels: ['寒武纪', '中科曙光'],
+              data_state_label: '待接入本地行情',
+              next_step: '本地行情覆盖后可计算轮动强度。',
+            },
+            members: [],
+            no_advice_disclosure: '仅用于观察资金轮动迹象，非买卖建议。',
+          },
+        ],
+      },
+    } as never);
+
+    const payload = await marketRotationApi.getRotationRadar('CN');
+
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/market/rotation-radar', { params: { market: 'CN' } });
+    expect(payload.market).toBe('CN');
+    expect(payload.supportedMarkets).toEqual(['US', 'CN', 'HK', 'CRYPTO']);
+    expect(payload.themes[0].staticThemeOnly).toBe(true);
+    expect(payload.themes[0].dataQuality).toBe('taxonomy_only');
+    expect(payload.themes[0].confidenceLabel).toBe('待行情确认');
+    expect(payload.themes[0].themeDetail?.mappedConcepts).toContain('算力租赁');
+  });
 });

@@ -77,3 +77,52 @@ def test_market_rotation_radar_response_is_safe_and_read_only() -> None:
             assert marker not in text
     finally:
         client.close()
+
+
+def test_market_rotation_radar_market_query_switches_theme_universe() -> None:
+    client = _client()
+    try:
+        cn_response = client.get("/api/v1/market/rotation-radar?market=CN")
+        hk_response = client.get("/api/v1/market/rotation-radar?market=HK")
+        us_response = client.get("/api/v1/market/rotation-radar")
+
+        assert cn_response.status_code == 200
+        assert hk_response.status_code == 200
+        assert us_response.status_code == 200
+
+        cn_payload = cn_response.json()
+        hk_payload = hk_response.json()
+        us_payload = us_response.json()
+
+        assert cn_payload["market"] == "CN"
+        assert hk_payload["market"] == "HK"
+        assert us_payload["market"] == "US"
+        assert len(cn_payload["themes"]) >= 25
+        assert len(hk_payload["themes"]) >= 8
+        assert len(us_payload["themes"]) >= 18
+        assert any(theme["name"] == "AI算力" for theme in cn_payload["themes"])
+        assert any(theme["name"] == "港股科技" for theme in hk_payload["themes"])
+        assert any(theme["englishName"] == "AI Applications" for theme in us_payload["themes"])
+        assert all(theme["market"] == "CN" for theme in cn_payload["themes"])
+        assert all(theme["staticThemeOnly"] is True for theme in cn_payload["themes"])
+        assert all(theme["dataQuality"] in {"taxonomy_only", "local_only", "proxy_backed"} for theme in cn_payload["themes"])
+        assert all(theme["confidenceLabel"] == "待行情确认" for theme in cn_payload["themes"])
+        assert "静态主题库" in cn_payload["warning"]
+    finally:
+        client.close()
+
+
+def test_market_rotation_radar_crypto_market_is_available_when_tab_exists() -> None:
+    client = _client()
+    try:
+        response = client.get("/api/v1/market/rotation-radar?market=CRYPTO")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["market"] == "CRYPTO"
+        assert len(payload["themes"]) >= 8
+        assert any(theme["name"] == "Layer 1" for theme in payload["themes"])
+        assert all(theme["staticThemeOnly"] is True for theme in payload["themes"])
+        assert all(theme["source"] == "local_taxonomy" for theme in payload["themes"])
+    finally:
+        client.close()

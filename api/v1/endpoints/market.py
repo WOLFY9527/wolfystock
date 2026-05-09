@@ -7,7 +7,7 @@ import asyncio
 import json
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
 from api.deps import CurrentUser, get_optional_current_user
@@ -108,8 +108,11 @@ def get_sector_rotation(current_user: Optional[CurrentUser] = Depends(get_option
 
 
 @router.get("/rotation-radar", response_model=MarketRotationRadarResponse, summary="Get theme rotation radar")
-def get_rotation_radar(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
-    return MarketRotationRadarService().get_rotation_radar()
+def get_rotation_radar(
+    market: str = Query("US", description="Rotation taxonomy market: US, CN, HK, or CRYPTO"),
+    current_user: Optional[CurrentUser] = Depends(get_optional_current_user),
+):
+    return MarketRotationRadarService().get_rotation_radar(market=market)
 
 
 @router.get("/us-breadth", summary="Get US sector ETF breadth proxy snapshot")
