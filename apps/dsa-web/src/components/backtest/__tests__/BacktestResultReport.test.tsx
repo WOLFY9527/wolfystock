@@ -250,7 +250,7 @@ describe('BacktestResultReport', () => {
 
     expect(screen.getByText('ORCL · 回测完成')).toBeInTheDocument();
     expect(screen.getAllByText('--').length).toBeGreaterThan(4);
-    expect(screen.getByText('暂无基准数据；不影响策略自身回测结果。')).toBeInTheDocument();
+    expect(screen.getAllByText('暂无基准数据；不影响策略自身回测结果。').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('--');
     expect(screen.getByTestId('backtest-diagnosis-risk')).toHaveTextContent('--');
     expect(screen.getByText('数据质量信息不足：当前结果未返回复权/分红/拆股元数据。')).toBeInTheDocument();
@@ -283,9 +283,9 @@ describe('BacktestResultReport', () => {
     const { rerender } = render(<BacktestResultReport run={makeRun()} mode="professional" />);
 
     expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('研究结论');
-    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('表现');
-    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('回撤');
-    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('交易');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('总收益');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('最大回撤');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('交易次数');
     expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('可靠性');
     expect(screen.getByTestId('backtest-report-diagnosis')).toHaveTextContent('收益质量');
     expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('跑赢基准');
@@ -492,17 +492,49 @@ describe('BacktestResultReport', () => {
     const advanced = screen.getByTestId('backtest-report-advanced-details');
 
     expect(summary).toHaveTextContent('研究结论');
-    expect(summary).toHaveTextContent('表现');
-    expect(summary).toHaveTextContent('回撤');
-    expect(summary).toHaveTextContent('交易');
+    expect(summary).toHaveTextContent('总收益');
+    expect(summary).toHaveTextContent('最大回撤');
+    expect(summary).toHaveTextContent('交易次数');
     expect(summary).toHaveTextContent('可靠性');
-    expect(Boolean(summary.compareDocumentPosition(keyMetrics) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(keyMetrics.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(summary.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(chart.compareDocumentPosition(keyMetrics) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(chart.compareDocumentPosition(tradeTable) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(tradeTable.compareDocumentPosition(evidence) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(evidence.compareDocumentPosition(dataQuality) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(dataQuality.compareDocumentPosition(assumptions) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(assumptions.compareDocumentPosition(advanced) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(screen.queryByTestId('backtest-report-ledger-table')).not.toBeInTheDocument();
+  });
+
+  it('productizes the report as summary, chart/risk, then collapsed detail tabs', () => {
+    render(<BacktestResultReport run={makeRun()} mode="professional" />);
+
+    const report = screen.getByTestId('backtest-result-report');
+    const summary = screen.getByTestId('backtest-report-summary');
+    const primaryGrid = screen.getByTestId('backtest-report-primary-grid');
+    const chart = screen.getByTestId('backtest-report-chart');
+    const sideRail = screen.getByTestId('backtest-report-risk-side-rail');
+    const detailTabs = screen.getByTestId('backtest-report-detail-tabs');
+    const tradeTable = screen.getByTestId('backtest-report-trade-table');
+
+    expect(summary).toHaveTextContent('总收益');
+    expect(summary).toHaveTextContent('最大回撤');
+    expect(summary).toHaveTextContent('胜率');
+    expect(summary).toHaveTextContent('交易次数');
+    expect(primaryGrid).toContainElement(chart);
+    expect(primaryGrid).toContainElement(sideRail);
+    expect(chart).toHaveClass('xl:col-span-8');
+    expect(sideRail).toHaveClass('xl:col-span-4');
+    expect(Boolean(summary.compareDocumentPosition(primaryGrid) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(primaryGrid.compareDocumentPosition(detailTabs) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(detailTabs.compareDocumentPosition(tradeTable) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(screen.getByRole('tab', { name: '交易明细' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '风险分析' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '参数' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '诊断' })).toBeInTheDocument();
+    expect(screen.queryByTestId('backtest-data-quality-grid')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('backtest-execution-assumptions-grid')).not.toBeInTheDocument();
+    expect(report).toHaveTextContent('数据不足');
+    expect(report).not.toHaveTextContent(/developer|debug|raw|schema|trace|provider_timeout|not_enough_history|fundamentals_unavailable|optional_news_timeout|fallback|dry run|MarketCache/i);
   });
 });

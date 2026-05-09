@@ -677,6 +677,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [activeDetailTab, setActiveDetailTab] = useState<'trades' | 'risk' | 'params' | 'diagnostics'>('trades');
   const normalized = useMemo(
     () => providedNormalized ?? normalizeDeterministicBacktestResult(run, language),
     [language, providedNormalized, run],
@@ -785,6 +786,12 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
       ]),
     );
   };
+  const detailTabs = [
+    { key: 'trades' as const, label: '交易明细' },
+    { key: 'risk' as const, label: '风险分析' },
+    { key: 'params' as const, label: '参数' },
+    { key: 'diagnostics' as const, label: '诊断' },
+  ];
 
   return (
     <section
@@ -810,26 +817,28 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                 <span className="font-mono text-xs text-white/38">{dateRange}</span>
               </div>
               <div className="mt-3 flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-xs text-white/58">
-                <span>策略收益 {renderValue(signedPct(normalized.metrics.totalReturnPct), toneFor(normalized.metrics.totalReturnPct))}</span>
+                <span>总收益 {renderValue(signedPct(normalized.metrics.totalReturnPct), toneFor(normalized.metrics.totalReturnPct))}</span>
                 <span>基准 {renderValue(signedPct(normalized.metrics.benchmarkReturnPct), toneFor(normalized.metrics.benchmarkReturnPct))}</span>
                 <span>超额 {renderValue(signedPct(normalized.metrics.excessReturnVsBenchmarkPct), toneFor(normalized.metrics.excessReturnVsBenchmarkPct))}</span>
               </div>
               <div className="mt-2 flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-xs text-white/50">
                 <span>最大回撤 {renderValue(signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), 'negative')}</span>
                 <span>夏普 {renderValue(signedNumber(normalized.metrics.sharpeRatio), toneFor(normalized.metrics.sharpeRatio))}</span>
-                <span>交易 <span className="font-mono text-white">{normalized.metrics.tradeCount}</span> 次</span>
+                <span>胜率 {renderValue(signedPct(normalized.metrics.winRatePct), toneFor(normalized.metrics.winRatePct))}</span>
+                <span>交易次数 <span className="font-mono text-white">{normalized.metrics.tradeCount}</span></span>
               </div>
             </div>
             <div className="font-mono text-xs text-white/38">{formatDateTime(run.completedAt || run.runAt)}</div>
           </div>
           <div data-testid="backtest-report-result-summary" className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <MetricCard item={{ key: 'summary-return', label: '表现', value: signedPct(normalized.metrics.totalReturnPct), tone: toneFor(normalized.metrics.totalReturnPct) }} />
-            <MetricCard item={{ key: 'summary-risk', label: '回撤', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
-            <MetricCard item={{ key: 'summary-trades', label: '交易', value: `${normalized.metrics.tradeCount ?? 0} 次`, tone: 'neutral' }} />
+            <MetricCard item={{ key: 'summary-return', label: '总收益', value: signedPct(normalized.metrics.totalReturnPct), tone: toneFor(normalized.metrics.totalReturnPct) }} />
+            <MetricCard item={{ key: 'summary-risk', label: '最大回撤', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
+            <MetricCard item={{ key: 'summary-win-rate', label: '胜率', value: signedPct(normalized.metrics.winRatePct), tone: toneFor(normalized.metrics.winRatePct) }} />
+            <MetricCard item={{ key: 'summary-trades', label: '交易次数', value: `${normalized.metrics.tradeCount ?? 0} 次`, tone: 'neutral' }} />
             <MetricCard item={{ key: 'summary-data', label: '可靠性', value: dataQuality.length ? `${dataQuality.length} 项` : '待补充', tone: dataQuality.length ? 'positive' : 'neutral' }} />
             <div className="col-span-2 rounded-xl border border-white/5 bg-black/20 p-3 text-xs leading-5 text-white/50 lg:col-span-4">
               <span className={LABEL_CLASS}>研究结论</span>
-              <span className="ml-2">先读表现、回撤、交易次数与可靠性；曲线和风险解释跟随结论，导出、执行假设、账本和执行明细默认进入证据区。</span>
+              <span className="ml-2">先读总收益、最大回撤、胜率、交易次数与可靠性；曲线和风险解释跟随结论，导出、执行假设、账本和执行明细默认进入证据区。</span>
             </div>
           </div>
           <div className="mt-4" data-testid="backtest-report-diagnosis">
@@ -841,6 +850,71 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
               {diagnosisItems.map((item) => <DiagnosisCard key={item.key} item={item} />)}
             </div>
           </div>
+        </div>
+
+        <div data-testid="backtest-report-primary-grid" className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+          <div id="backtest-report-曲线" data-testid="backtest-report-chart" className={`${GHOST_SECTION_CLASS} xl:col-span-8`}>
+            <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className={LABEL_CLASS}>收益 / 回撤图</p>
+                <h3 className="mt-1 text-sm font-semibold text-white">策略对比基准</h3>
+              </div>
+              <div className="flex flex-wrap gap-2 text-[11px] text-white/45">
+                <span>策略</span>
+                <span>基准</span>
+                <span>每日盈亏</span>
+              </div>
+            </div>
+            {chartNode ?? <DeterministicBacktestResultView run={run} normalized={normalized} densityConfig={densityConfig} />}
+          </div>
+
+          <aside data-testid="backtest-report-risk-side-rail" className="xl:col-span-4 flex min-w-0 flex-col gap-4">
+            <div className={GHOST_SECTION_CLASS}>
+              <p className={LABEL_CLASS}>风险摘要</p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <MetricCard item={{ key: 'side-drawdown', label: 'Max DD', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
+                <MetricCard item={{ key: 'side-sharpe', label: 'Sharpe', value: signedNumber(normalized.metrics.sharpeRatio), tone: toneFor(normalized.metrics.sharpeRatio) }} />
+                <MetricCard item={{ key: 'side-win-rate', label: '胜率', value: signedPct(normalized.metrics.winRatePct), tone: toneFor(normalized.metrics.winRatePct) }} />
+                <MetricCard item={{ key: 'side-trades', label: '交易次数', value: String(normalized.metrics.tradeCount ?? 0), tone: 'neutral' }} />
+              </div>
+              <p className="mt-3 text-xs leading-5 text-white/45">回撤、波动和交易胜率只说明历史检验压力，不代表真实成交或未来表现。</p>
+            </div>
+
+            <div id="backtest-report-benchmark" data-testid="backtest-report-benchmark" className={GHOST_SECTION_CLASS}>
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className={LABEL_CLASS}>基准对比</p>
+                  <h3 className={`mt-1 text-sm font-semibold ${valueToneClass(benchmarkVerdict.tone)}`}>{benchmarkVerdict.label}</h3>
+                </div>
+                {benchmarkVerdict.label === '基准缺失' ? (
+                  <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-white/50">不影响策略自身回测结果</span>
+                ) : null}
+              </div>
+              <p className="mt-2 text-sm text-white/78">{getBenchmarkSentence(normalized)}</p>
+            </div>
+
+            <div className={GHOST_SECTION_CLASS}>
+              <p className={LABEL_CLASS}>数据质量</p>
+              <p className="mt-2 text-xs leading-5 text-white/48">
+                {dataQualityWarnings.length ? `数据不足或需复核：${dataQualityWarnings[0]}` : '数据质量明细默认折叠，必要时在诊断中展开。'}
+              </p>
+            </div>
+          </aside>
+        </div>
+
+        <div data-testid="backtest-report-detail-tabs" role="tablist" aria-label="Backtest report details" className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto rounded-xl border border-white/5 bg-white/[0.02] p-1 [scrollbar-width:none]">
+          {detailTabs.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={activeDetailTab === tab.key}
+              className={`min-h-[34px] shrink-0 rounded-lg px-3 text-xs transition-all ${activeDetailTab === tab.key ? 'bg-white/10 text-white' : 'bg-transparent text-white/45 hover:bg-white/[0.05] hover:text-white/70'}`}
+              onClick={() => setActiveDetailTab(tab.key)}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         <div id="backtest-report-key-metrics" data-testid="backtest-report-key-metrics" className={GHOST_SECTION_CLASS}>
@@ -858,40 +932,6 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
               {moreMetrics.map((item) => <MetricCard key={item.key} item={item} />)}
             </div>
           ) : null}
-        </div>
-
-        <div id="backtest-report-曲线" data-testid="backtest-report-chart" className={GHOST_SECTION_CLASS}>
-          <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className={LABEL_CLASS}>收益 / 回撤图</p>
-              <h3 className="mt-1 text-sm font-semibold text-white">策略对比基准</h3>
-            </div>
-            <div className="flex flex-wrap gap-2 text-[11px] text-white/45">
-              <span>策略</span>
-              <span>基准</span>
-              <span>每日盈亏</span>
-            </div>
-          </div>
-          {chartNode ?? <DeterministicBacktestResultView run={run} normalized={normalized} densityConfig={densityConfig} />}
-        </div>
-
-        <div id="backtest-report-benchmark" data-testid="backtest-report-benchmark" className={GHOST_SECTION_CLASS}>
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className={LABEL_CLASS}>基准对比</p>
-              <h3 className={`mt-1 text-sm font-semibold ${valueToneClass(benchmarkVerdict.tone)}`}>{benchmarkVerdict.label}</h3>
-            </div>
-            {benchmarkVerdict.label === '基准缺失' ? (
-              <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-white/50">不影响策略自身回测结果</span>
-            ) : null}
-          </div>
-          <p className="mt-2 text-sm text-white/78">{getBenchmarkSentence(normalized)}</p>
-          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <MetricCard item={{ key: 'strategy', label: '策略收益', value: signedPct(normalized.metrics.totalReturnPct), tone: toneFor(normalized.metrics.totalReturnPct) }} />
-            <MetricCard item={{ key: 'bench', label: normalized.benchmarkMeta.benchmarkLabel || '基准收益', value: signedPct(normalized.metrics.benchmarkReturnPct), tone: toneFor(normalized.metrics.benchmarkReturnPct) }} />
-            <MetricCard item={{ key: 'excess', label: '超额收益', value: signedPct(normalized.metrics.excessReturnVsBenchmarkPct), tone: toneFor(normalized.metrics.excessReturnVsBenchmarkPct) }} />
-            <MetricCard item={{ key: 'dd', label: '策略回撤', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
-          </div>
         </div>
 
         <div id="backtest-report-交易" data-testid="backtest-report-trade-summary" className={GHOST_SECTION_CLASS}>

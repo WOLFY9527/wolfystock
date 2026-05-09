@@ -483,31 +483,28 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const workspace = screen.getByTestId('portfolio-workspace-grid');
-    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1680px]', 'mx-auto', 'px-0', 'flex', 'flex-col', 'gap-5');
+    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6');
     expect(workspace).toHaveClass('flex', 'flex-col', 'gap-5');
     expect(screen.getByTestId('portfolio-bento-page')).toHaveAttribute('data-bento-surface', 'true');
     expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-5', 'min-h-0');
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('max-w-[1920px]', 'mx-auto', 'px-4', 'py-2');
     expect(screen.queryByTestId('portfolio-bento-hero')).not.toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-total-assets-card')).toHaveClass('grid', 'shrink-0');
-    expect(screen.getByTestId('portfolio-launch-priority-panel')).toHaveClass('xl:col-span-8');
-    expect(screen.getByTestId('portfolio-secondary-zone')).toHaveClass('xl:col-span-4');
-    expect(screen.getByTestId('portfolio-launch-priority-panel')).toHaveTextContent('资产台账总览');
-    expect(screen.getByTestId('portfolio-first-fold-primary-grid')).toHaveTextContent('持仓状态');
-    expect(screen.getByTestId('portfolio-first-fold-primary-grid')).toHaveTextContent('现金状态');
-    expect(screen.getByTestId('portfolio-first-fold-primary-grid')).toHaveTextContent('敞口状态');
-    expect(screen.getByTestId('portfolio-launch-priority-panel')).toHaveTextContent('关注与风险摘要');
-    expect(screen.getByTestId('portfolio-manual-secondary-callout')).toHaveTextContent('次级：手工记账');
+    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('xl:col-span-12');
+    expect(screen.getByTestId('portfolio-total-assets-card')).toHaveClass('min-w-0');
+    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveTextContent('暂无持仓。添加持仓或导入交易后显示组合状态。');
+    expect(screen.getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '导入交易' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '手工记账' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /总资产|Total Assets/ })).toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-total-assets-value')).toHaveStyle({ textShadow: '0 0 30px rgba(52, 211, 153, 0.4)' });
+    expect(screen.getByTestId('portfolio-total-assets-value')).toHaveClass('text-white');
     expect(within(screen.getByTestId('portfolio-total-assets-card')).queryByLabelText('DISPLAY CURRENCY')).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-display-currency-status')).toHaveTextContent('显示货币 CNY');
     expect(screen.getByRole('link', { name: /在设置中修改/ })).toHaveAttribute('href', '/zh/settings');
     expect(screen.getByTestId('portfolio-currency-breakdown')).toHaveTextContent('按币种：暂无资产');
-    expect(within(screen.getByTestId('portfolio-total-assets-card')).getByText(translate('zh', 'portfolio.totalCash'))).toBeInTheDocument();
-    expect(within(screen.getByTestId('portfolio-total-assets-card')).getByText(translate('zh', 'portfolio.totalMarketValue'))).toBeInTheDocument();
-    expect(within(screen.getByTestId('portfolio-total-assets-card')).getByText(translate('zh', 'portfolio.positionUnrealized'))).toBeInTheDocument();
+    expect(within(screen.getByTestId('portfolio-account-status-strip')).getByText(translate('zh', 'portfolio.totalCash'))).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveTextContent('持仓数');
+    expect(within(screen.getByTestId('portfolio-account-status-strip')).getByText(translate('zh', 'portfolio.positionUnrealized'))).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('已实现盈亏');
     expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('未实现盈亏');
     expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('总盈亏');
@@ -607,7 +604,7 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    expect(screen.queryByTestId('portfolio-current-holdings-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-current-holdings-panel')).toBeInTheDocument();
     expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
     expect(screen.queryByTestId('portfolio-history-panel')).not.toBeInTheDocument();
     const workflowColumn = screen.getByTestId('portfolio-empty-workflow-column');
@@ -615,15 +612,14 @@ describe('PortfolioPage FX refresh', () => {
     const recentActivity = screen.getByTestId('portfolio-recent-activity');
     expect(workflowColumn).toContainElement(startCard);
     expect(workflowColumn).not.toContainElement(recentActivity);
-    expect(workflowColumn).toHaveClass('space-y-4');
+    expect(workflowColumn).toHaveClass('min-w-0');
     expect(startCard).not.toHaveClass('xl:min-h-[300px]', 'min-h-[520px]');
-    expect(within(startCard).getByText('当前无持仓')).toBeInTheDocument();
-    expect(within(startCard).getByText('保存第一笔持仓流水后自动生成持仓')).toBeInTheDocument();
+    expect(within(startCard).getByText('暂无持仓')).toBeInTheDocument();
+    expect(within(startCard).getByText('暂无持仓。添加持仓或导入交易后显示组合状态。')).toBeInTheDocument();
     expect(within(startCard).getByText('历史记录存在，当前无持仓')).toBeInTheDocument();
-    expect(within(startCard).getByText('活跃账户')).toBeInTheDocument();
-    expect(within(startCard).getByText('可写账户')).toBeInTheDocument();
+    expect(within(startCard).queryByText('活跃账户')).not.toBeInTheDocument();
+    expect(within(startCard).queryByText('可写账户')).not.toBeInTheDocument();
     expect(within(startCard).queryByText(/active accounts|writable accounts/i)).not.toBeInTheDocument();
-    expect(within(startCard).getByText(/Main/)).toBeInTheDocument();
     expect(within(recentActivity).getByText('历史记录存在，当前无持仓')).toBeInTheDocument();
     expect(within(recentActivity).getByText('AAPL')).toBeInTheDocument();
     expect(within(recentActivity).getByText(/2026-03-18/)).toBeInTheDocument();
@@ -644,6 +640,33 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(recentActivity).getByText('暂无历史记录')).toBeInTheDocument();
     expect(recentActivity).not.toHaveClass('min-h-[300px]', 'min-h-[520px]');
     expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
+  });
+
+  it('renders a compact account strip, compact empty holdings, and primary portfolio actions', async () => {
+    const { container } = render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const workspace = screen.getByTestId('portfolio-workspace-grid');
+    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8');
+    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('xl:col-span-12');
+    expect(screen.getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '导入交易' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '手工记账' })).toBeInTheDocument();
+
+    const startCard = screen.getByTestId('portfolio-start-card');
+    expect(startCard).toHaveClass('min-h-[88px]');
+    expect(startCard).toHaveTextContent('暂无持仓。添加持仓或导入交易后显示组合状态。');
+    expect(startCard).not.toHaveClass('min-h-[300px]', 'min-h-[520px]', 'xl:min-h-[300px]');
+    expect(within(startCard).queryByText('活跃账户')).not.toBeInTheDocument();
+    expect(within(startCard).queryByText('可写账户')).not.toBeInTheDocument();
+    expect(within(startCard).queryByText('当前记账账户')).not.toBeInTheDocument();
+
+    const manualDisclosure = screen.getByTestId('portfolio-manual-record-disclosure');
+    expect(manualDisclosure).not.toHaveAttribute('open');
+    expect(container).not.toHaveTextContent(/developer|debug|raw|schema|trace|provider_timeout|not_enough_history|fallback|MarketCache/i);
+    expect(screen.getByTestId('portfolio-summary-and-holdings-row')).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-current-holdings-panel')).toBeInTheDocument();
   });
 
   it('renders pnl, holding unrealized percent, exposure tabs, and risk summary for active holdings', async () => {
@@ -922,7 +945,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(screen.getAllByText('USD 1,600.00').length).toBeGreaterThan(0);
-    expect(within(screen.getByTestId('portfolio-total-assets-card')).getAllByText('折算不可用').length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId('portfolio-account-status-strip')).getAllByText('折算不可用').length).toBeGreaterThan(0);
     expect(screen.queryByText(/≈ CNY/)).not.toBeInTheDocument();
   });
 
@@ -1547,9 +1570,9 @@ describe('PortfolioPage FX refresh', () => {
     expect(getLeftTabButton('Ledger')).toBeInTheDocument();
     expect(getLeftTabButton('Account')).toBeInTheDocument();
     expect(getLeftTabButton('Sync')).toBeInTheDocument();
-    expect(screen.queryByTestId('portfolio-current-holdings-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-current-holdings-panel')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'History ↗' })).not.toBeInTheDocument();
-    expect(screen.getByText('No current holdings')).toBeInTheDocument();
+    expect(within(screen.getByTestId('portfolio-start-card')).getByText('No holdings')).toBeInTheDocument();
     expect(openFxPanel('en')).toBeInTheDocument();
 
     fireEvent.click(getLeftTabButton('Sync'));
@@ -1690,7 +1713,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.queryByRole('heading', { name: /Current Holdings/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-start-card')).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
-    expect(screen.getByText('当前无持仓')).toBeInTheDocument();
+    expect(within(screen.getByTestId('portfolio-start-card')).getByText('暂无持仓')).toBeInTheDocument();
   });
 
   it('frames the default portfolio editor as a manual ledger without trade or order wording', async () => {
@@ -1734,9 +1757,9 @@ describe('PortfolioPage FX refresh', () => {
     expect(scrollContainer.className).toContain('pt-4');
 
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
-    expect(totalAssetsCard.className).toContain('shrink-0');
-    expect(totalAssetsCard.className).toContain('rounded-xl');
-    expect(totalAssetsCard.className).toContain('border-white/5');
+    expect(totalAssetsCard.className).toContain('min-w-0');
+    expect(screen.getByTestId('portfolio-account-status-strip').className).toContain('rounded-xl');
+    expect(screen.getByTestId('portfolio-account-status-strip').className).toContain('border-white/5');
 
     const summaryBlock = screen.getByTestId('portfolio-trade-station-summary');
     expect(summaryBlock.className).toContain('flex');

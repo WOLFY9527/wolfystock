@@ -587,6 +587,7 @@ const PortfolioPage: React.FC = () => {
   const [cashEvents, setCashEvents] = useState<PortfolioCashLedgerListItem[]>([]);
   const [corporateEvents, setCorporateEvents] = useState<PortfolioCorporateActionListItem[]>([]);
   const [showEmptyFullHistory, setShowEmptyFullHistory] = useState(false);
+  const [manualLedgerOpen, setManualLedgerOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingTrade, setEditingTrade] = useState<EditingTrade | null>(null);
@@ -1733,6 +1734,19 @@ const PortfolioPage: React.FC = () => {
         : (language === 'zh' ? '汇率状态可用于当前资产展示。' : 'FX state is usable for the current asset view.'),
     },
   ];
+  const compactNoHoldingText = language === 'zh'
+    ? '暂无持仓。添加持仓或导入交易后显示组合状态。'
+    : 'No holdings yet. Add holdings or import transactions to show portfolio state.';
+  const addHoldingActionLabel = language === 'zh' ? '添加持仓' : 'Add holding';
+  const importTradesActionLabel = language === 'zh' ? '导入交易' : 'Import transactions';
+  const manualLedgerActionLabel = language === 'zh' ? '手工记账' : 'Manual ledger';
+  const openManualLedger = (nextLeftTab: 'trade' | 'account' | 'sync' | 'fx', nextTradeType?: TradeFormType) => {
+    setLeftTab(nextLeftTab);
+    if (nextTradeType) {
+      setTradeType(nextTradeType);
+    }
+    setManualLedgerOpen(true);
+  };
   const renderMiniExposureRow = (
     row: PortfolioExposureItem,
     options: { testIdPrefix: string; label?: string; showNative?: boolean },
@@ -2040,9 +2054,69 @@ const PortfolioPage: React.FC = () => {
           'w-full flex-1 flex flex-col gap-5 min-h-0 min-w-0 bg-transparent text-white/72',
         )}
       >
-        <section className="w-full max-w-[1680px] mx-auto px-0 flex flex-col gap-5">
+        <section className="w-full max-w-[1600px] mx-auto px-4 xl:px-8 flex flex-col gap-6">
           <div data-testid="portfolio-workspace-grid" className="flex flex-col gap-5">
-            <div data-testid="portfolio-row-macro" className="grid grid-cols-1 gap-4 xl:grid-cols-12 2xl:gap-5 items-start">
+            <div data-testid="portfolio-row-status" className="order-1 grid grid-cols-1 gap-4 xl:grid-cols-12">
+              <section
+                data-testid="portfolio-account-status-strip"
+                className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-12 grid gap-4 p-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.5fr)_auto] md:items-center`}
+              >
+                <div data-testid="portfolio-total-assets-card" className="min-w-0">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <h1 className="text-[10px] font-bold uppercase tracking-widest text-white/40">{totalAssetsTitle}</h1>
+                    <span className="rounded-md border border-white/5 bg-black/20 px-2 py-1 text-[10px] font-semibold text-white/35">
+                      {selectedAccount === 'all' ? copy.allAccounts : scopedAccount?.name || copy.allAccounts}
+                    </span>
+                    {hasFxUnavailable ? <PillBadge variant="warning" className="text-amber-200">{fxUnavailableLabel}</PillBadge> : null}
+                  </div>
+                  <div
+                    data-testid="portfolio-total-assets-value"
+                    className="mt-2 font-mono text-2xl font-semibold leading-none text-white tabular-nums md:text-3xl"
+                    style={{ textShadow: hasHoldings ? HERO_PNL_POSITIVE_GLOW : undefined }}
+                  >
+                    {formatDisplayMoney(totalEquity, totalEquityDisplay, snapshotCurrency)}
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-white/35">
+                    {hasHoldings ? `${holdingsPrimaryValue} · ${accountStateSummary}` : compactNoHoldingText}
+                  </p>
+                </div>
+
+                <div className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-4">
+                  <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">{copy.totalCash}</div>
+                    <div className="mt-1 truncate font-mono text-xs text-white">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</div>
+                  </div>
+                  <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">{copy.positionUnrealized}</div>
+                    <div className={`mt-1 truncate font-mono text-xs ${totalUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {totalUnrealizedDisplay ? formatSignedMoney(totalUnrealizedDisplay.value, displayCurrency) : formatSignedMoney(0, displayCurrency)}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">{language === 'zh' ? '持仓数' : 'Holdings'}</div>
+                    <div className="mt-1 font-mono text-xs text-white">{positionRows.length}</div>
+                  </div>
+                  <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">{language === 'zh' ? '账户状态' : 'Account'}</div>
+                    <div className="mt-1 truncate text-xs text-white">{accountStateSummary}</div>
+                  </div>
+                </div>
+
+                <div className="flex min-w-0 flex-wrap gap-2 md:justify-end">
+                  <Button type="button" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} h-9 px-3`} onClick={() => openManualLedger('trade', 'stock')}>
+                    {addHoldingActionLabel}
+                  </Button>
+                  <Button type="button" variant="secondary" className={PORTFOLIO_SECONDARY_BUTTON_CLASS} onClick={() => openManualLedger('sync')}>
+                    {importTradesActionLabel}
+                  </Button>
+                  <Button type="button" variant="ghost" className={PORTFOLIO_SECONDARY_BUTTON_CLASS} onClick={() => openManualLedger('trade')}>
+                    {manualLedgerActionLabel}
+                  </Button>
+                </div>
+              </section>
+            </div>
+
+            <div data-testid="portfolio-row-macro" className="hidden">
               <section
                 data-testid="portfolio-launch-priority-panel"
                 className="xl:col-span-8 flex min-w-0 flex-col gap-4"
@@ -2060,12 +2134,12 @@ const PortfolioPage: React.FC = () => {
                 />
 
                 <div
-                  data-testid="portfolio-total-assets-card"
+                  data-testid="portfolio-total-assets-card-legacy"
                   className={`${PORTFOLIO_GLASS_CARD_CLASS} grid shrink-0 gap-4 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:items-center`}
                 >
                   <div className="min-w-0">
                     <div className="mb-3 flex min-w-0 flex-wrap items-center gap-3">
-                      <h1 className="text-xs uppercase tracking-widest text-muted-text">{totalAssetsTitle}</h1>
+                      <div className="text-xs uppercase tracking-widest text-muted-text">{totalAssetsTitle}</div>
                       {selectedAccount === 'all' ? (
                         <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">{copy.allAccounts}</span>
                       ) : scopedAccount ? (
@@ -2079,7 +2153,7 @@ const PortfolioPage: React.FC = () => {
                       ) : null}
                     </div>
                     <div
-                      data-testid="portfolio-total-assets-value"
+                      data-testid="portfolio-total-assets-value-legacy"
                       className="font-mono text-[2rem] font-bold leading-none text-foreground tabular-nums md:text-[2.8rem]"
                       style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
                     >
@@ -2278,7 +2352,7 @@ const PortfolioPage: React.FC = () => {
               </aside>
             </div>
 
-            <div data-testid="portfolio-row-routing" className="grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
+            <div data-testid="portfolio-row-routing" className="order-3 grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
 	            <section
 	              data-testid="portfolio-pnl-summary"
 	              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-4 grid gap-2 sm:grid-cols-3`}
@@ -2471,107 +2545,86 @@ const PortfolioPage: React.FC = () => {
 	            </section>
             </div>
 
-            <div data-testid="portfolio-row-execution" className="grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
-	            {hasHoldings ? (
-	              <div
-	                data-testid="portfolio-current-holdings-panel"
-	                className={`${PORTFOLIO_GLASS_CARD_CLASS} order-1 col-span-12 flex flex-col overflow-visible`}
-	              >
-	                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 pb-4">
-	                  <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
-		                    {language === 'zh' ? `当前持仓（共 ${positionRows.length} 项）` : `Current Holdings (${positionRows.length})`}
-	                  </h2>
-	                </div>
+            <div data-testid="portfolio-summary-and-holdings-row" className="order-2 grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
+		              <div
+		                data-testid="portfolio-current-holdings-panel"
+		                className={`${PORTFOLIO_GLASS_CARD_CLASS} order-1 col-span-12 flex flex-col overflow-visible xl:col-span-8`}
+		              >
+		                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 pb-4">
+		                  <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
+			                    {hasHoldings
+                          ? (language === 'zh' ? `当前持仓（共 ${positionRows.length} 项）` : `Current Holdings (${positionRows.length})`)
+                          : (language === 'zh' ? '当前持仓' : 'Current holdings')}
+		                  </h2>
+                      {!hasHoldings ? (
+                        <span className="text-xs text-white/35">{language === 'zh' ? '等待流水' : 'Awaiting records'}</span>
+                      ) : null}
+		                </div>
 
-	                <div className="pt-3 lg:max-h-[420px] lg:min-h-0 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
-	                  <div className="flex flex-col">
-	                    {positionRows.map((row) => (
-	                      <div
-	                        key={`${row.accountId}-${row.symbol}-${row.market}`}
-		                        className="flex flex-col gap-3 rounded-xl border-b border-white/5 px-3 py-3 transition-colors hover:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between"
-	                      >
-	                        <div className="min-w-0">
-	                          <div className="truncate text-lg font-medium text-foreground">{row.symbol}</div>
-	                          <div className="truncate text-xs text-muted-text">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</div>
-	                        </div>
-	                        <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 sm:justify-end">
-	                          <div className="text-right">
-	                            <div className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{copy.positionMarketValue}</div>
-	                            <div className="font-mono text-foreground tabular-nums">{formatMoney(row.marketValueBase, row.valuationCurrency)}</div>
-	                            {row.valuationCurrency !== displayCurrency ? (
-	                              <div className="mt-1 font-mono text-xs text-white/40">
-	                                {renderConvertedDisplay(row.marketValueBase, row.valuationCurrency)}
-	                              </div>
-	                            ) : null}
-	                          </div>
-	                          <div className="text-right">
-	                            <div className={`font-mono text-lg tabular-nums ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-	                              {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
-	                            </div>
-	                            <div className="mt-1 font-mono text-xs text-white/40">
-	                              {formatPercent(row.unrealizedPnlPct)}
-	                            </div>
-	                            {row.valuationCurrency !== displayCurrency ? (
-	                              <div className="mt-1 font-mono text-xs text-white/40">
-	                                {renderConvertedDisplay(row.unrealizedPnlBase, row.valuationCurrency)}
-	                              </div>
-	                            ) : null}
-	                          </div>
-	                        </div>
-	                      </div>
-	                    ))}
-	                  </div>
-	                </div>
-	              </div>
-	            ) : (
-	              <div
-	                data-testid="portfolio-empty-workflow-column"
-	                className="order-1 col-span-12 space-y-4"
-	              >
-	                <div
-	                  data-testid="portfolio-start-card"
-	                  className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col gap-4`}
-	                >
-	                  <div className="flex flex-wrap items-start justify-between gap-3">
-	                    <div>
-	                      <h2 className="text-sm font-semibold text-white">{language === 'zh' ? '当前无持仓' : 'No current holdings'}</h2>
-	                      <p className="mt-1 text-sm text-white/45">{language === 'zh' ? '保存第一笔持仓流水后自动生成持仓' : 'Save the first holding record to generate holdings automatically.'}</p>
-	                    </div>
-	                    {hasHistory ? (
-	                      <PillBadge variant="warning" className="text-amber-200">{noHoldingsHistoryNote}</PillBadge>
-	                    ) : null}
-	                  </div>
-	                  <div className="grid gap-2 sm:grid-cols-3">
-	                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-		                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">活跃账户</div>
-	                      <div className="mt-1 font-mono text-lg text-white">{activeAccounts.length}</div>
-	                    </div>
-	                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-		                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">可写账户</div>
-	                      <div className="mt-1 font-mono text-lg text-white">{writableAccounts.length}</div>
-	                    </div>
-	                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-		                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">当前记账账户</div>
-	                      <div className="mt-1 truncate text-sm text-white">{writableAccount?.name || copy.allAccounts}</div>
-	                    </div>
-	                  </div>
-	                  <div className="grid gap-2 text-xs text-white/45 sm:grid-cols-3">
-	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '1. 选择账户' : '1. Select account'}</div>
-	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '2. 输入标的' : '2. Enter symbol'}</div>
-	                    <div className="rounded-lg bg-white/[0.025] px-3 py-2">{language === 'zh' ? '3. 保存记录' : '3. Save record'}</div>
-	                  </div>
-	                  {!hasWritableAccounts ? (
-	                    <div className="rounded-lg border border-amber-300/15 bg-amber-300/10 px-3 py-2 text-xs text-amber-200">
-	                      {hasActiveAccounts
-	                        ? (language === 'zh' ? '当前账户不可写，请选择具体可写账户。' : 'Current accounts are not writable. Select a writable account.')
-	                        : (language === 'zh' ? '暂无可写账户，请先创建账户。' : 'No writable account yet. Create an account first.')}
-	                    </div>
-	                  ) : null}
-	                </div>
-	              </div>
-	            )}
-	
-		          <section data-testid="portfolio-trade-station-card" data-execution-surface="manual-record-entry" className={`${PORTFOLIO_GLASS_CARD_CLASS} order-5 col-span-12 flex flex-col gap-4 overflow-visible xl:min-h-0`}>
+		                <div className="pt-3 lg:max-h-[420px] lg:min-h-0 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
+                      {hasHoldings ? (
+                        <div className="no-scrollbar overflow-x-auto [scrollbar-width:none]">
+                          <table className="min-w-[760px] w-full text-left text-xs">
+                            <thead className="text-white/35">
+                              <tr className="border-b border-white/5">
+                                {['标的', '数量', '成本', '市值', '盈亏', '风险/状态', '操作'].map((label) => (
+                                  <th key={label} className="px-3 py-2 font-semibold">{language === 'zh' ? label : label}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {positionRows.map((row) => (
+                                <tr key={`${row.accountId}-${row.symbol}-${row.market}`} className="border-b border-white/5 text-white/62 transition-colors hover:bg-white/[0.03]">
+                                  <td className="px-3 py-2">
+                                    <div className="truncate font-mono text-sm text-white">{row.symbol}</div>
+                                    <div className="truncate text-[11px] text-white/35">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</div>
+                                  </td>
+                                  <td className="px-3 py-2 font-mono">{Number(row.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
+                                  <td className="px-3 py-2 font-mono">{formatMoney(row.totalCost, row.currency)}</td>
+                                  <td className="px-3 py-2 font-mono">
+                                    {formatMoney(row.marketValueBase, row.valuationCurrency)}
+                                    {row.valuationCurrency !== displayCurrency ? <div className="mt-1 text-[11px] text-white/35">{renderConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</div> : null}
+                                  </td>
+                                  <td className={`px-3 py-2 font-mono ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
+                                    <div className="mt-1 text-[11px] text-white/40">{formatPercent(row.unrealizedPnlPct)}</div>
+                                  </td>
+                                  <td className="px-3 py-2 text-white/45">{topPosition?.key === row.symbol && topPositionPercent >= 35 ? (language === 'zh' ? '集中' : 'Concentrated') : (language === 'zh' ? '观察' : 'Observe')}</td>
+                                  <td className="px-3 py-2">
+                                    <Button type="button" variant="ghost" className={PORTFOLIO_TEXT_BUTTON_CLASS} onClick={() => openManualLedger('trade', 'stock')}>
+                                      {manualLedgerActionLabel}
+                                    </Button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div data-testid="portfolio-empty-workflow-column" className="min-w-0">
+                          <div
+                            data-testid="portfolio-start-card"
+                            className="flex min-h-[88px] items-center justify-between gap-3 rounded-xl border border-white/[0.02] bg-black/20 px-4 py-3"
+                          >
+                            <div className="min-w-0">
+                              <h2 className="text-sm font-semibold text-white/78">{language === 'zh' ? '暂无持仓' : 'No holdings'}</h2>
+                              <p className="mt-1 text-xs leading-5 text-white/35">{compactNoHoldingText}</p>
+                            </div>
+                            {hasHistory ? <PillBadge variant="warning" className="shrink-0 text-amber-200">{noHoldingsHistoryNote}</PillBadge> : null}
+                          </div>
+                          {!hasWritableAccounts ? (
+                            <div className="mt-3 rounded-lg border border-amber-300/15 bg-white/[0.02] px-3 py-2 text-xs text-amber-200">
+                              {hasActiveAccounts
+                                ? (language === 'zh' ? '当前账户不可写，请选择具体可写账户。' : 'Current accounts are not writable. Select a writable account.')
+                                : (language === 'zh' ? '暂无可写账户，请先创建账户。' : 'No writable account yet. Create an account first.')}
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+		                </div>
+		              </div>
+
+			          <section data-testid="portfolio-trade-station-card" data-execution-surface="manual-record-entry" className={`${PORTFOLIO_GLASS_CARD_CLASS} order-2 col-span-12 flex flex-col gap-4 overflow-visible xl:col-span-4 xl:min-h-0`}>
             <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -2583,6 +2636,8 @@ const PortfolioPage: React.FC = () => {
               </div>
               <details
                 data-testid="portfolio-manual-record-disclosure"
+                open={manualLedgerOpen}
+                onToggle={(event) => setManualLedgerOpen(event.currentTarget.open)}
                 className="group mt-4 rounded-[16px] border border-white/[0.05] bg-black/20 open:bg-white/[0.02]"
               >
                 <summary className="flex min-h-[56px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 [&::-webkit-details-marker]:hidden">
