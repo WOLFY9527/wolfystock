@@ -460,6 +460,9 @@ def _handle_async_analysis_batch(
         "report_type": request.report_type,
         "force_refresh": request.force_refresh,
     }
+    research_mode = getattr(request, "research_mode", None)
+    if research_mode is not None:
+        submit_kwargs["research_mode"] = getattr(research_mode, "value", research_mode)
     if owner_id:
         submit_kwargs["owner_id"] = owner_id
 
@@ -543,6 +546,9 @@ def _handle_sync_analysis(
         "force_refresh": request.force_refresh,
         "query_id": query_id,
     }
+    research_mode = getattr(request, "research_mode", None)
+    if research_mode is not None:
+        analyze_kwargs["research_mode"] = getattr(research_mode, "value", research_mode)
     if owner_id:
         analyze_kwargs["owner_id"] = owner_id
     execution_logs = ExecutionLogService()

@@ -99,6 +99,27 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             pipeline_instance.process_single_stock.call_args.kwargs["force_refresh"]
         )
 
+    def test_analyze_stock_forwards_explicit_research_mode_to_pipeline(self) -> None:
+        service = object.__new__(AnalysisService)
+        pipeline_instance = MagicMock()
+        pipeline_instance.process_single_stock.return_value = None
+
+        with patch("src.config.get_config", return_value=SimpleNamespace()), \
+             patch("src.core.pipeline.StockAnalysisPipeline", return_value=pipeline_instance):
+            AnalysisService.analyze_stock(
+                service,
+                "AAPL",
+                report_type="detailed",
+                query_id="q-research-mode",
+                send_notification=False,
+                research_mode="quick",
+            )
+
+        self.assertEqual(
+            pipeline_instance.process_single_stock.call_args.kwargs["research_mode"],
+            "quick",
+        )
+
     def test_get_task_progress_returns_module_payload(self) -> None:
         if get_task_progress is None:
             self.skipTest("analysis endpoint import unavailable")
@@ -947,6 +968,40 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             selection_source="manual",
             report_type="detailed",
             force_refresh=False,
+        )
+
+    def test_trigger_analysis_passes_explicit_research_mode_to_async_queue(self) -> None:
+        if trigger_analysis is None:
+            self.skipTest("fastapi is not installed in this test environment")
+
+        queue = MagicMock()
+        queue.submit_tasks_batch.return_value = ([], [])
+
+        with patch("api.v1.endpoints.analysis.get_task_queue", return_value=queue):
+            response = trigger_analysis(
+                request=SimpleNamespace(
+                    stock_code="AAPL",
+                    stock_codes=None,
+                    stock_name=None,
+                    original_query="AAPL",
+                    selection_source="manual",
+                    report_type="detailed",
+                    force_refresh=False,
+                    async_mode=True,
+                    research_mode="quick",
+                ),
+                config=SimpleNamespace(),
+            )
+
+        self.assertEqual(response.status_code, 202)
+        queue.submit_tasks_batch.assert_called_once_with(
+            stock_codes=["AAPL"],
+            stock_name=None,
+            original_query="AAPL",
+            selection_source="manual",
+            report_type="detailed",
+            force_refresh=False,
+            research_mode="quick",
         )
 
     def test_trigger_analysis_preserves_batch_metadata(self) -> None:

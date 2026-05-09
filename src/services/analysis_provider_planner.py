@@ -23,6 +23,10 @@ from typing import Any, Callable, Dict, Iterable, Mapping, Optional
 
 from data_provider.us_index_mapping import is_us_index_code, is_us_stock_code
 from src.services.llm_instrumentation import emit_provider_event, hash_label_value
+from src.services.research_budget_profiles import (
+    ResearchBudgetProfile,
+    get_research_budget_profile,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -250,6 +254,113 @@ def build_fast_decision_provider_plan(
         for category, category_plan in plan.categories.items()
     }
     return AnalysisProviderPlan(symbol=plan.symbol, market=plan.market, categories=categories_with_fast_budget)
+
+
+_FUNDAMENTAL_BUDGET_CATEGORIES = {
+    DataCategory.FUNDAMENTALS,
+    DataCategory.EARNINGS,
+}
+
+
+def _category_budget_limit(category: DataCategory, profile: ResearchBudgetProfile, current_limit: int) -> int:
+    if category is DataCategory.NEWS:
+        return min(current_limit, profile.max_news_calls)
+    if category is DataCategory.SENTIMENT:
+        return min(current_limit, profile.max_sentiment_calls)
+    if category in _FUNDAMENTAL_BUDGET_CATEGORIES:
+        return min(current_limit, profile.max_fundamental_calls)
+    return current_limit
+
+
+def _skip_reason_for_budget(category: DataCategory, profile: ResearchBudgetProfile) -> Optional[str]:
+    if category is DataCategory.NEWS and profile.max_news_calls <= 0:
+        return "skipped_by_budget"
+    if category is DataCategory.SENTIMENT and (
+        profile.max_sentiment_calls <= 0 or not profile.allow_social_sentiment
+    ):
+        return "skipped_by_mode"
+    return None
+
+
+def apply_research_budget_profile(
+    plan: AnalysisProviderPlan,
+    *,
+    research_mode: Any = None,
+    required_categories: Optional[Iterable[DataCategory | str]] = None,
+) -> tuple[AnalysisProviderPlan, dict[str, Any]]:
+    """Apply an explicit research-mode budget to optional categories.
+
+    ``research_mode=None`` is intentionally a no-op to preserve legacy
+    analysis behavior. Required categories are excluded from optional budgets.
+    """
+
+    if research_mode is None:
+        return plan, {}
+
+    profile = get_research_budget_profile(research_mode)
+    required = {DataCategory(category) for category in (required_categories or [])}
+    budgeted_categories: dict[DataCategory, CategoryProviderPlan] = {}
+    skipped: list[dict[str, Any]] = []
+    usage_events: list[dict[str, Any]] = []
+    remaining_external_calls = max(0, int(profile.max_external_provider_calls))
+
+    for category, category_plan in plan.categories.items():
+        if category in required:
+            budgeted_categories[category] = category_plan
+            continue
+
+        skip_reason = _skip_reason_for_budget(category, profile)
+        if skip_reason:
+            skipped.append({"category": category.value, "reason": skip_reason})
+            usage_events.append(
+                {
+                    "category": category.value,
+                    "mode": profile.mode.value,
+                    "event": skip_reason,
+                    "reason": skip_reason,
+                }
+            )
+            continue
+
+        category_limit = _category_budget_limit(category, profile, category_plan.max_attempts)
+        allowed_attempts = min(category_limit, remaining_external_calls)
+        if allowed_attempts <= 0:
+            skipped.append({"category": category.value, "reason": "external_call_budget_exhausted"})
+            usage_events.append(
+                {
+                    "category": category.value,
+                    "mode": profile.mode.value,
+                    "event": "skipped_by_budget",
+                    "reason": "external_call_budget_exhausted",
+                }
+            )
+            continue
+
+        remaining_external_calls -= allowed_attempts
+        budgeted_categories[category] = CategoryProviderPlan(
+            category=category_plan.category,
+            providers=list(category_plan.providers),
+            timeout_seconds=min(category_plan.timeout_seconds, profile.optional_deadline_seconds),
+            cache_ttl_seconds=category_plan.cache_ttl_seconds,
+            max_attempts=allowed_attempts,
+            required_fields=category_plan.required_fields,
+        )
+
+    metadata = {
+        "researchMode": profile.mode.value,
+        "optionalDeadlineSeconds": profile.optional_deadline_seconds,
+        "cacheFirstRequired": profile.cache_first_required,
+        "staleCacheAllowed": profile.stale_cache_allowed,
+        "skippedByBudget": skipped,
+        "budgetSkippedCategories": [item["category"] for item in skipped],
+        "externalCallBudget": {
+            "max": profile.max_external_provider_calls,
+            "remainingAfterPlan": remaining_external_calls,
+            "requiredCategoriesExcluded": sorted(category.value for category in required),
+        },
+        "usageLedgerHints": usage_events,
+    }
+    return AnalysisProviderPlan(symbol=plan.symbol, market=plan.market, categories=budgeted_categories), metadata
 
 
 class AnalysisProviderExecutor:
@@ -844,6 +955,7 @@ __all__ = [
     "ProviderInvalidPayload",
     "ProviderQuotaExceeded",
     "ProviderTimeout",
+    "apply_research_budget_profile",
     "build_analysis_provider_plan",
     "build_fast_decision_provider_plan",
     "get_analysis_provider_executor",

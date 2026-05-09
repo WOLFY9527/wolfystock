@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 from data_provider.base import canonical_stock_code, normalize_stock_code
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.services.execution_log_service import ExecutionLogService
+from src.services.research_budget_profiles import normalize_research_mode
 from src.utils.analysis_metadata import SELECTION_SOURCES
 
 logger = logging.getLogger(__name__)
@@ -268,6 +269,7 @@ class TaskInfo:
     execution: Optional[Dict[str, Any]] = None
     execution_session_id: Optional[str] = None
     owner_id: Optional[str] = None
+    research_mode: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert task info into an API-friendly dictionary."""
@@ -289,6 +291,7 @@ class TaskInfo:
             "result": self.result,
             "execution_session_id": self.execution_session_id,
             "owner_id": self.owner_id,
+            "research_mode": self.research_mode,
         }
     
     def copy(self) -> 'TaskInfo':
@@ -311,6 +314,7 @@ class TaskInfo:
             execution=self.execution,
             execution_session_id=self.execution_session_id,
             owner_id=self.owner_id,
+            research_mode=self.research_mode,
         )
 
 
@@ -499,6 +503,7 @@ class AnalysisTaskQueue:
             "stock_name": task.stock_name,
             "report_type": task.report_type,
             "selection_source": task.selection_source,
+            "research_mode": task.research_mode,
         }
         if force_refresh is not None:
             metadata["force_refresh"] = bool(force_refresh)
@@ -614,6 +619,7 @@ class AnalysisTaskQueue:
         report_type: str = "detailed",
         force_refresh: bool = False,
         owner_id: Optional[str] = None,
+        research_mode: Optional[str] = None,
     ) -> TaskInfo:
         """
         Submit a single analysis task.
@@ -644,6 +650,7 @@ class AnalysisTaskQueue:
             report_type=report_type,
             force_refresh=force_refresh,
             owner_id=owner_id,
+            research_mode=research_mode,
         )
         if duplicates:
             raise duplicates[0]
@@ -658,6 +665,7 @@ class AnalysisTaskQueue:
         report_type: str = "detailed",
         force_refresh: bool = False,
         owner_id: Optional[str] = None,
+        research_mode: Optional[str] = None,
     ) -> Tuple[List[TaskInfo], List[DuplicateTaskError]]:
         """
         Submit analysis tasks in batch.
@@ -678,6 +686,11 @@ class AnalysisTaskQueue:
             normalized for normalized in (canonical_stock_code(code) for code in stock_codes)
             if normalized
         ]
+        normalized_research_mode = (
+            normalize_research_mode(research_mode, strict=True).value
+            if research_mode is not None
+            else None
+        )
 
         with self._data_lock:
             for stock_code in canonical_codes:
@@ -698,6 +711,7 @@ class AnalysisTaskQueue:
                     original_query=original_query,
                     selection_source=selection_source,
                     owner_id=owner_id,
+                    research_mode=normalized_research_mode,
                 )
                 self._tasks[task_id] = task_info
                 self._analyzing_stocks[dedupe_key] = task_id
@@ -711,6 +725,7 @@ class AnalysisTaskQueue:
                         report_type,
                         force_refresh,
                         owner_id,
+                        normalized_research_mode,
                     )
                 except Exception:
                     # Roll back the current batch to avoid partial submission.
@@ -953,6 +968,7 @@ class AnalysisTaskQueue:
         report_type: str,
         force_refresh: bool,
         owner_id: Optional[str] = None,
+        research_mode: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         执行分析任务（在线程池中运行）
@@ -993,6 +1009,7 @@ class AnalysisTaskQueue:
                 query_id=task_id,
                 progress_callback=progress_callback,
                 owner_id=owner_id,
+                research_mode=research_mode,
             )
             
             if result:

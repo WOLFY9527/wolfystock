@@ -15,6 +15,7 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 from src.utils.analysis_metadata import SELECTION_SOURCE_PATTERN
+from src.services.research_budget_profiles import ResearchMode
 from api.v1.schemas.history import AnalysisReport
 
 
@@ -30,6 +31,7 @@ class AnalyzeRequest(BaseModel):
     """Analysis request parameters"""
 
     model_config = ConfigDict(
+        populate_by_name=True,
         json_schema_extra={
             "example": {
                 "stock_code": "600519",
@@ -39,6 +41,7 @@ class AnalyzeRequest(BaseModel):
                 "stock_name": "贵州茅台",
                 "original_query": "茅台",
                 "selection_source": "autocomplete",
+                "researchMode": "standard",
             }
         }
     )
@@ -81,6 +84,12 @@ class AnalyzeRequest(BaseModel):
         description="股票选择来源：manual(手动输入) | autocomplete(自动补全) | import(导入) | image(图片识别)",
         pattern=SELECTION_SOURCE_PATTERN,
         json_schema_extra={"example": "autocomplete"},
+    )
+    research_mode: Optional[ResearchMode] = Field(
+        None,
+        alias="researchMode",
+        description="研究预算模式：quick / standard / deep。未提供时保持既有分析预算行为。",
+        json_schema_extra={"example": "standard"},
     )
 
 

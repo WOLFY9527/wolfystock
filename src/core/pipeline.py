@@ -45,10 +45,12 @@ from src.services.analysis_provider_planner import (
     DataCategory,
     FAST_DECISION_PLAN_DEADLINE_SECONDS,
     ProviderCategoryResult,
+    apply_research_budget_profile,
     build_fast_decision_provider_plan,
     get_analysis_provider_executor,
 )
 from src.services.data_criticality import build_data_quality_report
+from src.services.research_budget_profiles import ResearchBudgetProfile, get_research_budget_profile
 from src.enums import ReportType
 from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from src.core.trading_calendar import get_market_for_stock, is_market_open
@@ -365,6 +367,7 @@ class StockAnalysisPipeline:
         report_type: ReportType,
         query_id: str,
         progress_callback: Optional[Callable[[str, int, str], None]] = None,
+        research_mode: Optional[str] = None,
     ) -> Optional[AnalysisResult]:
         """
         分析单只股票（增强版：含量比、换手率、筹码分析、多维度情报）
@@ -409,6 +412,16 @@ class StockAnalysisPipeline:
                 "ai_attempt_chain": [],
                 "failure_reasons": [],
             }
+            budget_profile: Optional[ResearchBudgetProfile] = (
+                get_research_budget_profile(research_mode) if research_mode is not None else None
+            )
+            optional_enrichment_timeout_seconds = (
+                budget_profile.optional_deadline_seconds
+                if budget_profile is not None
+                else OPTIONAL_ENRICHMENT_TIMEOUT_SECONDS
+            )
+            if budget_profile is not None:
+                diagnostics["research_budget"] = budget_profile.to_public_dict()
 
             self._emit_progress(
                 progress_callback,
@@ -556,7 +569,10 @@ class StockAnalysisPipeline:
             news_items: List[Dict[str, Any]] = []
             social_context = None
             optional_enrichment_pending = False
-            if self.search_service.is_available:
+            if (
+                self.search_service.is_available
+                and not (budget_profile is not None and budget_profile.max_news_calls <= 0)
+            ):
                 self._emit_progress(
                     progress_callback,
                     "loading_news",
@@ -573,7 +589,7 @@ class StockAnalysisPipeline:
                 )
                 intel_results, timed_out, failed_reason = _resolve_optional_enrichment(
                     intel_future,
-                    OPTIONAL_ENRICHMENT_TIMEOUT_SECONDS,
+                    optional_enrichment_timeout_seconds,
                 )
                 if timed_out:
                     optional_enrichment_pending = True
@@ -582,7 +598,7 @@ class StockAnalysisPipeline:
                     logger.warning(
                         "OptionalNewsTimedOut symbol=%s timeout_seconds=%s",
                         code,
-                        OPTIONAL_ENRICHMENT_TIMEOUT_SECONDS,
+                        optional_enrichment_timeout_seconds,
                     )
                 elif failed_reason:
                     diagnostics["news_status"] = "failed"
@@ -636,12 +652,27 @@ class StockAnalysisPipeline:
                                 )
                     except Exception as e:
                         logger.warning(f"{stock_name}({code}) 保存新闻情报失败: {e}")
+            elif self.search_service.is_available:
+                diagnostics["news_status"] = "skipped"
+                diagnostics["news_budget_status"] = "skipped_by_budget"
+                diagnostics["failure_reasons"].append("optional_news_skipped_by_budget")
+                logger.info("%s(%s) 研究预算跳过可选新闻增强", stock_name, code)
             else:
                 diagnostics["news_status"] = "not_configured"
                 logger.info(f"{stock_name}({code}) 搜索服务不可用，跳过情报搜索")
 
             # Step 4.5: Social sentiment intelligence (US stocks only)
-            if self.social_sentiment_service.is_available and is_us_stock_code(code):
+            if (
+                self.social_sentiment_service.is_available
+                and is_us_stock_code(code)
+                and not (
+                    budget_profile is not None
+                    and (
+                        budget_profile.max_sentiment_calls <= 0
+                        or not budget_profile.allow_social_sentiment
+                    )
+                )
+            ):
                 try:
                     social_future = _OPTIONAL_ENRICHMENT_POOL.submit(
                         self.social_sentiment_service.get_social_context,
@@ -649,7 +680,7 @@ class StockAnalysisPipeline:
                     )
                     social_context, timed_out, failed_reason = _resolve_optional_enrichment(
                         social_future,
-                        OPTIONAL_ENRICHMENT_TIMEOUT_SECONDS,
+                        optional_enrichment_timeout_seconds,
                     )
                     if timed_out:
                         optional_enrichment_pending = True
@@ -659,7 +690,7 @@ class StockAnalysisPipeline:
                         logger.warning(
                             "OptionalSentimentTimedOut symbol=%s timeout_seconds=%s",
                             code,
-                            OPTIONAL_ENRICHMENT_TIMEOUT_SECONDS,
+                            optional_enrichment_timeout_seconds,
                         )
                     elif failed_reason:
                         diagnostics["sentiment_status"] = "failed"
@@ -674,6 +705,10 @@ class StockAnalysisPipeline:
                             news_context = social_context
                 except Exception as e:
                     logger.warning(f"{stock_name}({code}) Social sentiment fetch failed: {e}")
+            elif self.social_sentiment_service.is_available and is_us_stock_code(code):
+                diagnostics["sentiment_status"] = "skipped"
+                diagnostics["sentiment_reason"] = "optional_sentiment_skipped_by_budget"
+                diagnostics["failure_reasons"].append("optional_sentiment_skipped_by_budget")
             if not diagnostics.get("sentiment_provider"):
                 diagnostics["sentiment_provider"] = diagnostics.get("news_provider")
 
@@ -728,9 +763,12 @@ class StockAnalysisPipeline:
                     include_quote=not (
                         realtime_quote and getattr(realtime_quote, "has_basic_data", lambda: False)()
                     ),
+                    research_mode=research_mode,
                 )
                 diagnostics["provider_plan"] = supplemental.get("plan", {})
                 diagnostics["provider_results"] = supplemental.get("metadata", {})
+                if supplemental.get("budget"):
+                    diagnostics["research_budget"] = supplemental["budget"]
                 for reason in supplemental.get("failure_reasons", []):
                     diagnostics["failure_reasons"].append(reason)
                 if supplemental.get("partial"):
@@ -967,6 +1005,7 @@ class StockAnalysisPipeline:
         code: str,
         market: str,
         include_quote: bool,
+        research_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         categories = [
             DataCategory.FUNDAMENTALS,
@@ -977,6 +1016,17 @@ class StockAnalysisPipeline:
         if include_quote:
             categories.append(DataCategory.QUOTE)
         plan = build_fast_decision_provider_plan(code, market=market, categories=categories)
+        required_categories = {DataCategory.QUOTE} if include_quote else set()
+        plan, budget_metadata = apply_research_budget_profile(
+            plan,
+            research_mode=research_mode,
+            required_categories=required_categories,
+        )
+        deadline_seconds = (
+            budget_metadata.get("optionalDeadlineSeconds")
+            if budget_metadata
+            else FAST_DECISION_PLAN_DEADLINE_SECONDS
+        )
         providers_by_category = {
             DataCategory.QUOTE: {
                 "finnhub": lambda: get_finnhub_quote(code),
@@ -1010,8 +1060,8 @@ class StockAnalysisPipeline:
             symbol=code,
             providers_by_category=providers_by_category,
             max_workers=min(4, max(1, len(categories))),
-            deadline_seconds=FAST_DECISION_PLAN_DEADLINE_SECONDS,
-            required_categories={DataCategory.QUOTE} if include_quote else set(),
+            deadline_seconds=deadline_seconds,
+            required_categories=required_categories,
         )
         payload: Dict[str, Any] = {
             "plan": {
@@ -1027,6 +1077,8 @@ class StockAnalysisPipeline:
             "partial_categories": [],
             "partial": False,
         }
+        if budget_metadata:
+            payload["budget"] = budget_metadata
         for category, result in raw_results.items():
             category_key = category.value
             payload["metadata"][category_key] = result.metadata()
@@ -4203,6 +4255,7 @@ class StockAnalysisPipeline:
         force_refresh: bool = False,
         analysis_query_id: Optional[str] = None,
         progress_callback: Optional[Callable[[str, int, str], None]] = None,
+        research_mode: Optional[str] = None,
     ) -> Optional[AnalysisResult]:
         """
         处理单只股票的完整流程
@@ -4253,6 +4306,7 @@ class StockAnalysisPipeline:
                 report_type,
                 query_id=effective_query_id,
                 progress_callback=progress_callback,
+                research_mode=research_mode,
             )
             
             if result:

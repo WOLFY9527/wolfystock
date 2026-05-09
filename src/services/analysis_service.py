@@ -134,6 +134,7 @@ class AnalysisService:
         owner_id: Optional[str] = None,
         guest_bucket_hash: Optional[str] = None,
         persist_history: bool = True,
+        research_mode: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         执行股票分析
@@ -187,6 +188,7 @@ class AnalysisService:
                 force_refresh=force_refresh,
                 analysis_query_id=query_id,
                 progress_callback=progress_callback,
+                research_mode=research_mode,
             )
             
             if result is None:
