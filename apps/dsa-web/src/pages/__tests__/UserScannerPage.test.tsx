@@ -922,7 +922,7 @@ describe('UserScannerPage', () => {
 
     const diagnostics = screen.getByTestId('scanner-diagnostics-disclosure');
     expect(diagnostics).not.toHaveAttribute('open');
-    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*诊断详情|Expand.*Diagnostic details/i }));
+    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*数据说明|Expand.*Data notes/i }));
     expect(await screen.findByTestId('scanner-diagnostics-panel')).toBeInTheDocument();
   });
 
@@ -933,7 +933,7 @@ describe('UserScannerPage', () => {
     expect(screen.queryByTestId('scanner-rejection-aggregate')).not.toBeInTheDocument();
 
     const diagnostics = await screen.findByTestId('scanner-diagnostics-disclosure');
-    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*诊断详情|Expand.*Diagnostic details/i }));
+    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*数据说明|Expand.*Data notes/i }));
     const summary = await screen.findByTestId('scanner-diagnostics-summary');
     fireEvent.click(within(summary).getByRole('button', { name: /查看淘汰原因|View rejection reasons/i }));
     expect(await screen.findByTestId('scanner-rejection-aggregate')).toBeInTheDocument();
@@ -1296,7 +1296,7 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/11/);
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/已评估|Evaluated/);
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/9/);
-    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/数据不足|Data thin/);
+    expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/历史数据不足|Historical data insufficient|数据不足|Data thin/);
     expect(screen.getByTestId('scanner-diagnostic-summary')).toHaveTextContent(/暂未处理|Not processed/);
     expect(screen.getByTestId('scanner-summary-counters')).toHaveTextContent(/入选|Selected/);
     expect(screen.getByTestId('scanner-summary-counters')).toHaveTextContent(/未入选|Not selected/);
@@ -1316,7 +1316,7 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-candidate-row-WULF')).toHaveTextContent(/已验证|Verified/);
     expect(screen.getByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/流动性不足|Liquidity weak/);
     expect(screen.getByTestId('scanner-candidate-row-RIOT')).toHaveTextContent(/价格低于阈值|Price below threshold/);
-    expect(screen.getByTestId('scanner-candidate-row-CIFR')).toHaveTextContent(/数据不足|Data thin/);
+    expect(screen.getByTestId('scanner-candidate-row-CIFR')).toHaveTextContent(/历史数据不足|Historical data insufficient|数据不足/);
   });
 
   it('keeps advanced scanner actions out of the default top toolbar and available in disclosure', async () => {
@@ -1746,8 +1746,8 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const summary = await screen.findByTestId('scanner-launch-evidence-summary');
-    expect(summary).toHaveTextContent(/失败|Failed/);
-    expect(summary).toHaveTextContent(/数据源异常|Provider issue/);
+    await waitFor(() => expect(summary).toHaveTextContent(/失败|Failed/));
+    expect(summary).toHaveTextContent(/部分外部数据暂不可用|External data unavailable/);
     expect(summary).toHaveTextContent(/部分数据缺失|Partial data missing/);
     expect(summary).not.toHaveTextContent(/20\/20/);
     expect(summary).not.toHaveTextContent('provider_down');
@@ -1851,7 +1851,7 @@ describe('UserScannerPage', () => {
     expect(selectedInspector).toHaveTextContent('WULF');
     expect(selectedInspector).toHaveTextContent(/入选|Selected/);
     expect(selectedInspector).toHaveTextContent('60/100');
-    expect(selectedInspector).toHaveTextContent(/Alpaca/);
+    expect(selectedInspector).toHaveTextContent(/外部数据可用|External data available/);
     expect(selectedInspector).toHaveTextContent(/为什么入选|Why selected/);
     expect(selectedInspector).toHaveTextContent(/通过当前筛选条件|Passed current screening/);
     expect(selectedInspector).not.toHaveTextContent(/^passed$/);
@@ -1873,24 +1873,25 @@ describe('UserScannerPage', () => {
 
     expect(await screen.findByTestId('scanner-candidate-inspector')).toHaveTextContent('CIFR');
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent(/数据失败|Data failed/);
-    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent(/数据不足|Data thin/);
+    expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent(/历史数据不足|Historical data insufficient|数据不足/);
     expect(screen.getByTestId('scanner-mobile-candidate-inspector')).toBeInTheDocument();
   });
 
-  it('keeps inspector secondary diagnostics collapsed and expandable', async () => {
+  it('keeps inspector secondary data notes collapsed without developer fields', async () => {
     const themedRun = makeCryptoDiagnosticsRun();
     getRun.mockResolvedValue(themedRun);
     renderUserScannerPage();
 
     const inspector = await screen.findByTestId('scanner-candidate-inspector');
-    expect(within(inspector).getByRole('button', { name: /展开.*规则诊断|Expand.*Rule diagnostics/i })).toBeInTheDocument();
+    expect(within(inspector).getByRole('button', { name: /展开.*依据说明|Expand.*Basis notes/i })).toBeInTheDocument();
     expect(within(inspector).getByRole('button', { name: /展开.*数据质量|Expand.*Data quality/i })).toBeInTheDocument();
-    expect(within(inspector).getByRole('button', { name: /展开.*开发者字段|Expand.*Developer fields/i })).toBeInTheDocument();
+    expect(within(inspector).queryByRole('button', { name: /开发者字段|Developer fields/i })).not.toBeInTheDocument();
+    expect(inspector).not.toHaveTextContent(/开发者|Developer|raw metrics|原始指标/i);
 
-    fireEvent.click(within(inspector).getByRole('button', { name: /展开.*规则诊断|Expand.*Rule diagnostics/i }));
+    fireEvent.click(within(inspector).getByRole('button', { name: /展开.*依据说明|Expand.*Basis notes/i }));
     expect(within(inspector).getAllByText(/passed/i).length).toBeGreaterThan(0);
     fireEvent.click(within(inspector).getByRole('button', { name: /展开.*数据质量|Expand.*Data quality/i }));
-    expect(within(inspector).getAllByText(/Alpaca/).length).toBeGreaterThan(0);
+    expect(within(inspector).getAllByText(/外部数据可用|External data available/).length).toBeGreaterThan(0);
   });
 
   it('filters scanner diagnostics by rejected and data-failed candidates', async () => {
@@ -1908,12 +1909,12 @@ describe('UserScannerPage', () => {
     expect(screen.queryByTestId('scanner-candidate-row-CIFR')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /数据失败|Data failed/i }));
-    expect(await screen.findByTestId('scanner-candidate-row-CIFR')).toHaveTextContent(/数据不足|Data thin/);
-    expect(screen.getByTestId('scanner-candidate-row-HIVE')).toHaveTextContent(/实时缺失|Realtime missing/);
+    expect(await screen.findByTestId('scanner-candidate-row-CIFR')).toHaveTextContent(/历史数据不足|Historical data insufficient|数据不足/);
+    expect(screen.getByTestId('scanner-candidate-row-HIVE')).toHaveTextContent(/数据不足，结论仅供观察|Data insufficient, observe only|实时缺失|Realtime missing/);
     expect(screen.queryByTestId('scanner-candidate-row-MARA')).not.toBeInTheDocument();
   });
 
-  it('expands candidate diagnostics details with failed rules, missing fields, provider, and metrics', async () => {
+  it('expands candidate data notes without raw failed-rule codes or provider fields', async () => {
     const themedRun = makeCryptoDiagnosticsRun();
     getRun.mockResolvedValue(themedRun);
     renderUserScannerPage();
@@ -1923,9 +1924,10 @@ describe('UserScannerPage', () => {
     fireEvent.click(within(cifrRow).getByText('CIFR'));
 
     const detail = await screen.findByTestId('scanner-candidate-detail-CIFR');
-    expect(within(detail).getByText('not_enough_history')).toBeInTheDocument();
-    expect(within(detail).getByText('history')).toBeInTheDocument();
-    expect(within(detail).getByText(/来源|Provider/)).toBeInTheDocument();
+    expect(within(detail).getAllByText(/历史数据不足|Historical data insufficient|数据不足/).length).toBeGreaterThan(0);
+    expect(detail).not.toHaveTextContent('not_enough_history');
+    expect(detail).not.toHaveTextContent(/^history$/);
+    expect(detail).not.toHaveTextContent(/Provider|开发者|raw metrics|原始指标/i);
   });
 
   it('keeps old scanner responses on the selected-card workflow without diagnostics tabs', async () => {
@@ -2074,8 +2076,8 @@ describe('UserScannerPage', () => {
 
     expect(await screen.findByTestId('scanner-page-error-summary')).toHaveTextContent(/数据不足|Insufficient data/);
     expect(screen.queryByText('A 股全市场快照不可用。')).not.toBeInTheDocument();
-    fireEvent.click(within(screen.getByTestId('scanner-page-error-summary')).getByRole('button', { name: /展开.*开发者细节|Expand.*Developer details/i }));
-    expect(await screen.findByText('A 股全市场快照不可用。')).toBeInTheDocument();
+    expect(within(screen.getByTestId('scanner-page-error-summary')).queryByRole('button', { name: /开发者细节|Developer details/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId('scanner-page-error-summary')).toHaveTextContent(/数据不足|Insufficient data/);
     expect(screen.queryByText('Tesla')).not.toBeInTheDocument();
     expect(screen.queryByText('Meta')).not.toBeInTheDocument();
     expect(screen.queryByText('Apple')).not.toBeInTheDocument();

@@ -724,16 +724,15 @@ describe('OptionsLabPage', () => {
     expect(domText).not.toContain('Traceback');
   });
 
-  it('keeps freshness and developer details collapsed by default', async () => {
+  it('keeps data readiness user-facing without developer details', async () => {
     renderPage();
 
     expect(await screen.findByText('TEM260619C00055000')).toBeInTheDocument();
-    const details = screen.getByTestId('options-lab-developer-details');
-    expect(details).not.toHaveAttribute('open');
-    const strategyDetails = screen.getByTestId('options-lab-strategy-developer-details');
-    expect(strategyDetails).not.toHaveAttribute('open');
-    const decisionDetails = await screen.findByTestId('options-lab-decision-developer-details');
-    expect(decisionDetails).not.toHaveAttribute('open');
+    expect(screen.queryByTestId('options-lab-developer-details')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('options-lab-strategy-developer-details')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('options-lab-decision-developer-details')).not.toBeInTheDocument();
+    expect(screen.getByTestId('options-lab-data-readiness-note')).toHaveTextContent('数据说明');
+    expect(document.body.textContent || '').not.toMatch(/开发者|Developer|provider_validation_required|mocked_frontend_shell|fixture_frontend_phase4/i);
   });
 
   it('renders the Options-only crash fallback with collapsed sanitized details', () => {
@@ -750,10 +749,9 @@ describe('OptionsLabPage', () => {
     );
 
     expect(screen.getByText('期权实验室暂时无法加载，请刷新或稍后重试。')).toBeInTheDocument();
-    const details = screen.getByTestId('options-lab-crash-developer-details');
-    expect(details).not.toHaveAttribute('open');
+    expect(screen.queryByTestId('options-lab-crash-developer-details')).not.toBeInTheDocument();
     const domText = document.body.textContent || '';
-    expect(domText).toContain('TypeError');
+    expect(domText).not.toContain('TypeError');
     expect(domText).not.toContain('provider exploded');
     expect(domText).not.toContain('token=abc');
     expect(domText).not.toContain('stack trace');

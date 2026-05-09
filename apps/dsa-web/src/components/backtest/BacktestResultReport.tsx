@@ -829,7 +829,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <MetricCard item={{ key: 'summary-data', label: '可靠性', value: dataQuality.length ? `${dataQuality.length} 项` : '待补充', tone: dataQuality.length ? 'positive' : 'neutral' }} />
             <div className="col-span-2 rounded-xl border border-white/5 bg-black/20 p-3 text-xs leading-5 text-white/50 lg:col-span-4">
               <span className={LABEL_CLASS}>研究结论</span>
-              <span className="ml-2">先读表现、回撤、交易次数与可靠性；曲线和风险解释跟随结论，导出、执行假设、账本和 Trace 默认进入证据区。</span>
+              <span className="ml-2">先读表现、回撤、交易次数与可靠性；曲线和风险解释跟随结论，导出、执行假设、账本和执行明细默认进入证据区。</span>
             </div>
           </div>
           <div className="mt-4" data-testid="backtest-report-diagnosis">
@@ -1037,13 +1037,13 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         <details id="backtest-report-证据" data-testid="backtest-report-evidence-details" className={GHOST_SECTION_CLASS}>
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-left">
             <span>
-              <span className={LABEL_CLASS}>证据与原始明细</span>
-              <span className="ml-2 text-xs text-white/42">数据质量 · 执行假设 · 每日账本 · Trace</span>
+              <span className={LABEL_CLASS}>证据与明细</span>
+              <span className="ml-2 text-xs text-white/42">数据质量 · 执行假设 · 每日账本 · 执行明细</span>
             </span>
             <span className="text-xs text-white/45">展开</span>
           </summary>
           <p className="mt-3 text-xs leading-5 text-white/50">
-            导出、执行假设、每日账本和原始 Trace 默认折叠，只在需要复核研究证据时展开。
+            导出、执行假设、每日账本和执行明细默认折叠，只在需要复核研究证据时展开。
           </p>
         </details>
 
@@ -1121,8 +1121,8 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         <div id="backtest-report-账本" data-testid="backtest-report-advanced-details" className={GHOST_SECTION_CLASS}>
           <button type="button" className="flex min-h-[36px] w-full items-center justify-between gap-3 text-left" onClick={() => setAdvancedOpen((value) => !value)}>
             <span>
-              <span className={LABEL_CLASS}>开发者细节</span>
-              <span className="ml-2 text-xs text-white/42">完整指标 · 每日账本 · 原始执行轨迹</span>
+              <span className={LABEL_CLASS}>账本与导出</span>
+              <span className="ml-2 text-xs text-white/42">完整指标 · 每日账本 · 执行明细</span>
             </span>
             <span className="text-xs text-white/45">{advancedOpen ? '收起' : '展开'}</span>
           </button>
@@ -1138,15 +1138,15 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                 导出账本CSV
               </button>
               <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => downloadExecutionTraceCsv(run)} disabled={!hasExecutionTraceRows(run)}>
-                导出执行Trace CSV
+                导出执行明细 CSV
               </button>
               <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => downloadExecutionTraceJson(run)} disabled={!hasExecutionTraceRows(run)}>
-                导出执行Trace JSON
+                导出执行明细 JSON
               </button>
             </div>
             {advancedOpen ? (
               <div className="rounded-xl border border-white/5 bg-black/20 p-3 text-xs text-white/48">
-                扩展指标在上方折叠区展示；原始执行轨迹仅提供导出，不默认渲染全部存储行。
+                扩展指标在上方折叠区展示；执行明细仅提供导出，不默认渲染全部存储行。
               </div>
             ) : null}
               {ledgerOpen ? (

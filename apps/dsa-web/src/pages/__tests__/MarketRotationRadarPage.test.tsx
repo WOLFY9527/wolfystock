@@ -345,10 +345,18 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.getByTestId('rotation-radar-leader-row-ai_applications')).not.toHaveTextContent('实时');
   });
 
-  it('keeps proxy and developer diagnostics collapsed by default', async () => {
+  it('keeps proxy diagnostics user-facing and omits developer diagnostics by default', async () => {
     const fixture = radarFixture();
+    fixture.warning = 'provider_timeout';
+    fixture.metadata = {
+      ...fixture.metadata,
+      raw_payload: { provider_payload: true, debug: true },
+    };
     fixture.themes[0] = {
       ...fixture.themes[0],
+      stageExplanation: 'not_enough_history',
+      evidence: ['technical_indicators_unavailable'],
+      riskExplanations: ['fundamentals_unavailable'],
       proxyQuality: {
         ...fixture.themes[0].proxyQuality,
         label: 'ETF 代理部分可用',
@@ -410,12 +418,13 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.queryByText('/api/v1/market/rotation-radar')).not.toBeInTheDocument();
     expect(screen.queryByText('proxy_quote_missing')).not.toBeInTheDocument();
     expect(screen.queryByText('proxy_stale')).not.toBeInTheDocument();
+    expect(screen.getByText('部分外部数据暂不可用')).toBeInTheDocument();
+    expect(document.body.textContent || '').toMatch(/历史数据不足|技术指标数据不足|基本面数据缺失/);
 
     const proxyDetails = within(detail).getByTestId('rotation-theme-proxy-details-ai_applications');
     expect(proxyDetails).not.toHaveAttribute('open');
-    const developerDetails = screen.getByTestId('rotation-radar-developer-details');
-    expect(developerDetails.tagName.toLowerCase()).toBe('details');
-    expect(developerDetails).not.toHaveAttribute('open');
+    expect(screen.queryByTestId('rotation-radar-developer-details')).not.toBeInTheDocument();
+    expect(document.body.textContent || '').not.toMatch(/开发者|Developer|schemaVersion|provider_payload|raw_payload|debug|trace/i);
   });
 
   it('renders derived rotation buckets and collapsed page mechanics', async () => {

@@ -202,12 +202,8 @@ export function buildInstitutionalReportMarkdown(
   };
   const generatedAt = override?.generatedAt || report?.meta.reportGeneratedAt || report?.meta.createdAt;
   const dataSources = report?.decisionTrace?.dataSources || [];
-  const providers = uniqueText(dataSources.map((source) => source.provider || source.name)).join(', ') || EMPTY_DISPLAY_VALUE;
   const dataStatus = [
-    ...new Set([
-      ...dataSources.map((source) => source.status).filter(Boolean),
-      report?.decisionTrace?.llm?.schemaValidated ? 'schema ok' : 'schema unverified',
-    ]),
+    ...new Set(dataSources.map((source) => source.status).filter(Boolean)),
   ].join(' / ') || EMPTY_DISPLAY_VALUE;
   const alphaVantage = readObjectField(report, ['details', 'rawResult', 'dashboard', 'data_perspective', 'alpha_vantage']);
   const alphaEntries = alphaVantage && typeof alphaVantage === 'object'
@@ -229,7 +225,6 @@ export function buildInstitutionalReportMarkdown(
     `- Report generated: ${formatReportDateTime(generatedAt)}`,
     `- Market: ${safeReportValue(report?.decisionTrace?.market)}`,
     `- Currency: ${safeReportValue(readObjectField(standardReport, ['summaryPanel', 'currency']) || readObjectField(standardReport, ['market', 'currency']))}`,
-    `- Data providers: ${providers}`,
     `- Data status: ${dataStatus}`,
     `- Time horizon: ${safeReportValue(summaryPanel?.timeSensitivity || decisionPanel?.marketStructure)}`,
     '',

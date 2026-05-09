@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { ArrowUp, ChevronDown, Download, Lightbulb, PanelRightOpen, SendHorizontal } from 'lucide-react';
+import { ArrowUp, Download, Lightbulb, PanelRightOpen, SendHorizontal } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { agentApi, type AgentProviderHealthResponse, type AgentProviderHealthStatus, type AgentStockEvidenceItem } from '../api/agent';
+import { agentApi, type AgentProviderHealthResponse, type AgentStockEvidenceItem } from '../api/agent';
 import { watchlistApi } from '../api/watchlist';
 import { portfolioApi } from '../api/portfolio';
 import { scannerApi } from '../api/scanner';
@@ -277,14 +277,6 @@ const toMarketParam = (market: StockMarket): 'cn' | 'us' | 'hk' => {
   return 'us';
 };
 
-const providerStatusLabel: Record<AgentProviderHealthStatus, string> = {
-  available: '可用',
-  not_configured: '未配置',
-  disabled: '停用',
-  offline: '离线',
-  unknown: '未知',
-};
-
 const DATA_EVIDENCE_STATUS_LABEL: Record<string, string> = {
   available: '可用',
   used: '可用',
@@ -533,7 +525,6 @@ const ChatPage: React.FC = () => {
   const [showSkillDesc, setShowSkillDesc] = useState<string | null>(null);
   const [watchlistAction, setWatchlistAction] = useState<{ symbol: string; type: 'success' | 'error'; message: string } | null>(null);
   const [expandedThinking, setExpandedThinking] = useState<Set<string>>(new Set());
-  const [engineDetailsOpen, setEngineDetailsOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [isFollowUpContextLoading, setIsFollowUpContextLoading] = useState(false);
@@ -1144,7 +1135,7 @@ const ChatPage: React.FC = () => {
           本次使用
         </summary>
         <div className="mt-2 space-y-1">
-          <p>LLM: <span className="font-mono text-white/72">{footer.provider || '自动/未知'} {footer.model || ''}</span></p>
+          <p>分析方式: <span className="font-mono text-white/72">自动研究引擎</span></p>
           <p>视角: {(footer.lenses || []).join(' / ') || '综合观察'}</p>
           <p>数据: {dataText || '未知'}</p>
         </div>
@@ -1376,7 +1367,7 @@ const ChatPage: React.FC = () => {
                 {formatDataEvidenceStatus(item.status)}
               </span>
             </div>
-            <p className="mt-1 truncate text-[10px] text-white/30">{item.summary || item.source || '未知'}</p>
+            <p className="mt-1 truncate text-[10px] text-white/30">{item.summary || (language === 'en' ? 'Data readiness noted' : '数据状态已标注')}</p>
           </div>
         ))}
       </div>
@@ -1618,50 +1609,10 @@ const ChatPage: React.FC = () => {
                 {language === 'en' ? 'Automatically select an available research engine' : '自动选择可用研究引擎'}
               </p>
               <p className="truncate text-[10px] text-white/36">
-                {language === 'en' ? 'Provider health stays in diagnostics.' : '供应商状态保留在诊断详情中。'}
+                {language === 'en' ? 'Unavailable engines are skipped automatically.' : '不可用引擎会自动避开。'}
               </p>
             </div>
           </div>
-          <details
-            className="group mt-2 rounded-[16px] border border-white/5 bg-white/[0.02] transition-colors open:border-cyan-200/15 open:bg-white/[0.03]"
-            open={engineDetailsOpen}
-          >
-            <summary
-              className="flex min-h-[48px] cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 [&::-webkit-details-marker]:hidden"
-              onClick={(event) => {
-                event.preventDefault();
-                setEngineDetailsOpen((value) => !value);
-              }}
-            >
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-white">{language === 'en' ? 'Provider detail' : '引擎明细'}</span>
-                <span className="mt-1 block text-xs leading-5 text-white/48">
-                  {language === 'en' ? 'Routing and provider health are secondary diagnostics.' : '路由和供应商健康状态属于辅助诊断。'}
-                </span>
-              </span>
-              <ChevronDown className="h-4 w-4 shrink-0 text-white/45 transition-transform group-open:rotate-180" aria-hidden="true" />
-            </summary>
-            {engineDetailsOpen ? (
-              <div className="grid gap-1.5 border-t border-white/[0.04] px-3 pb-3 pt-2">
-                {(providerHealth?.providers || []).map((provider) => (
-                  <div key={provider.id} className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-white/5 bg-black/20 px-2 py-1.5">
-                    <span className={`truncate text-xs ${provider.selected ? 'text-white' : 'text-white/58'}`}>
-                      {provider.label} {providerStatusLabel[provider.status] || provider.status}
-                    </span>
-                    <span className={`font-mono text-[10px] uppercase ${
-                      provider.status === 'available'
-                        ? 'text-emerald-400'
-                        : provider.status === 'not_configured' || provider.status === 'offline' || provider.status === 'disabled'
-                          ? 'text-rose-400'
-                          : 'text-white/36'
-                    }`}>
-                      {providerStatusLabel[provider.status] || provider.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </details>
         </section>
 
         <section data-testid="chat-lens-section" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">

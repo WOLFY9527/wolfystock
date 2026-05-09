@@ -3,11 +3,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReportDetails as ReportDetailsType, ReportLanguage } from '../../types/analysis';
 import { Card } from '../common';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
+import { isDeveloperDiagnosticAllowed, type DiagnosticAudience } from '../../utils/userFacingDataIssues';
 
 interface ReportDetailsProps {
   details?: ReportDetailsType;
   recordId?: number;  // 分析历史记录主键 ID
   language?: ReportLanguage;
+  audience?: DiagnosticAudience;
 }
 
 /**
@@ -17,13 +19,19 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
   details,
   recordId,
   language = 'zh',
+  audience = 'user',
 }) => {
   type JsonPanel = 'raw' | 'snapshot';
   type CopiedPanelState = Record<JsonPanel, boolean>;
 
   const reportLanguage = normalizeReportLanguage(language);
   const text = getReportText(reportLanguage);
-  const contextualNote = text.traceabilityNote;
+  const allowDiagnostics = isDeveloperDiagnosticAllowed(audience);
+  const contextualNote = allowDiagnostics
+    ? text.traceabilityNote
+    : (reportLanguage === 'en'
+      ? 'Data notes are summarized for this page; detailed operational diagnostics remain in admin surfaces.'
+      : '本页仅展示数据说明摘要；详细运维诊断保留在管理页面。');
   const [showRaw, setShowRaw] = useState(false);
   const [showSnapshot, setShowSnapshot] = useState(false);
   const [copiedPanels, setCopiedPanels] = useState<CopiedPanelState>({
@@ -106,8 +114,14 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
         </div>
       )}
 
+      {!allowDiagnostics ? (
+        <div className="theme-panel-subtle rounded-[var(--cohere-radius-medium)] p-3 text-sm text-secondary-text">
+          {reportLanguage === 'en' ? 'Detailed diagnostics are hidden on user pages.' : '普通用户页面已隐藏详细诊断。'}
+        </div>
+      ) : null}
+
       {/* 折叠区域 */}
-      <div className="space-y-2">
+      {allowDiagnostics ? <div className="space-y-2">
         {/* 原始分析结果 */}
         {details?.rawResult && (
           <div>
@@ -159,7 +173,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
             )}
           </div>
         )}
-      </div>
+      </div> : null}
     </Card>
   );
 };

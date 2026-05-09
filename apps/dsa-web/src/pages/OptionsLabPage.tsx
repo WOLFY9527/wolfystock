@@ -528,22 +528,12 @@ const StrategyComparisonPanel: React.FC<{
           ))}
         </div>
       ) : null}
-      <details data-testid="options-lab-strategy-developer-details" className="mt-5 rounded-2xl border border-white/5 bg-black/20 p-4 text-sm text-white/55">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/68">
-          <span className="inline-flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-cyan-200" aria-hidden="true" />
-            开发者字段 / 新鲜度
-          </span>
-          <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
-        </summary>
-        <div className="mt-4 grid gap-2 text-xs leading-5 text-white/45">
-          <p>策略引擎：{comparisonMetadata.strategyEngine || '--'}</p>
-          <p>本地数据：{comparisonMetadata.fixtureBacked === false ? '未确认' : '是'}</p>
-          <p>忽略强制刷新：{comparisonMetadata.forceRefreshIgnored ? '是' : '否'}</p>
-          <p>假设：{comparison ? JSON.stringify(comparison.assumptions ?? {}) : '--'}</p>
-          <p>限制：{limitations.map(limitationLabel).join(' · ') || '--'}</p>
-        </div>
-      </details>
+      <div className="mt-5 rounded-2xl border border-white/5 bg-black/20 p-4 text-sm leading-6 text-white/58">
+        <span className={labelClass}>数据说明</span>
+        <p className="mt-2">
+          {limitations.length ? limitations.map(limitationLabel).join(' · ') : '当前数据可用于情景比较'}
+        </p>
+      </div>
     </section>
   );
 };
@@ -736,23 +726,12 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
               </p>
             </div>
           </div>
-          <details data-testid="options-lab-decision-developer-details" className="rounded-2xl border border-white/5 bg-black/20 p-4 text-sm text-white/55">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/68">
-              <span className="inline-flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-cyan-200" aria-hidden="true" />
-                决策字段 / 新鲜度
-              </span>
-              <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
-            </summary>
-            <div className="mt-4 grid gap-2 text-xs leading-5 text-white/45">
-              <p>Source: {decision?.freshness?.source || '--'}</p>
-              <p>Freshness: {freshnessLabel(decision?.freshness?.freshness)}</p>
-              <p>IV Rank: {ivRankStatus === 'available' ? `${number(ivRank, 2)} / ${number(ivPercentile, 2)}` : 'IV Rank 不可用'}</p>
-              <p>Expected Move Source: {expectedMoveSourceLabel(expectedMove?.expectedMoveSource)}</p>
-              <p>Optimizer: {optimizer?.optimizerLabel || '--'}</p>
-              <p>Disclosure: {decision?.noAdviceDisclosure || '--'}</p>
-            </div>
-          </details>
+          <div className="rounded-2xl border border-white/5 bg-black/20 p-4 text-sm leading-6 text-white/58">
+            <span className={labelClass}>依据说明</span>
+            <p className="mt-2">
+              {freshnessLabel(decision?.freshness?.freshness)}；{ivRankStatus === 'available' ? 'IV Rank 可用于观察' : 'IV Rank 不可用'}；{decision?.noAdviceDisclosure || '仅供情景分析，不构成交易建议'}
+            </p>
+          </div>
         </div>
       ) : null}
     </section>
@@ -787,23 +766,16 @@ const RiskWarnings: React.FC = () => (
   </section>
 );
 
-const DeveloperDetails: React.FC<{ state: LoadState }> = ({ state }) => (
-  <details data-testid="options-lab-developer-details" className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 text-sm text-white/55">
-    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/68">
-      <span className="inline-flex items-center gap-2">
-        <ShieldCheck className="h-4 w-4 text-cyan-200" aria-hidden="true" />
-        数据准备度 / 开发者细节
-      </span>
-      <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
-    </summary>
-    <div className="mt-4 grid gap-2 text-xs leading-5 text-white/45">
-      <p>Source: {state.chain?.source || state.summary?.underlying?.source || '--'}</p>
-      <p>Chain as of: {state.chain?.chainAsOf || '--'}</p>
-      <p>Read only: {state.chain?.metadata?.readOnly === false ? 'unconfirmed' : 'true'}</p>
-      <p>No external calls in tests: {state.chain?.metadata?.noExternalCallsInTests === false ? 'unconfirmed' : 'true'}</p>
-      <p>Limitations: {[...asArray(state.chain?.limitations), ...asArray(state.chain?.metadata?.limitations)].map(limitationLabel).join(' · ') || '--'}</p>
+const DataReadinessNote: React.FC<{ state: LoadState }> = ({ state }) => (
+  <section data-testid="options-lab-data-readiness-note" className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 text-sm leading-6 text-white/55">
+    <div className="inline-flex items-center gap-2">
+      <ShieldCheck className="h-4 w-4 text-cyan-200" aria-hidden="true" />
+      <span className={labelClass}>数据说明</span>
     </div>
-  </details>
+    <p className="mt-3">
+      {[...asArray(state.chain?.limitations), ...asArray(state.chain?.metadata?.limitations)].map(limitationLabel).join(' · ') || '当前数据可用于情景观察'}
+    </p>
+  </section>
 );
 
 type OptionsLabErrorBoundaryState = {
@@ -840,18 +812,9 @@ export class OptionsLabErrorBoundary extends React.Component<{ children: React.R
               <p className="mt-3 text-sm leading-6 text-white/58">基础工作区仍保持只读。此处仅显示已清理的错误类别，不展示堆栈或供应商载荷。</p>
             </div>
           </div>
-          <details data-testid="options-lab-crash-developer-details" className="rounded-2xl border border-white/5 bg-black/20 p-4 text-sm text-white/55">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/68">
-              <span className="inline-flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-cyan-200" aria-hidden="true" />
-                开发者字段 / 已清理
-              </span>
-              <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
-            </summary>
-            <div className="mt-4 grid gap-2 text-xs leading-5 text-white/45">
-              <p>Error class: {this.state.errorName || 'RenderError'}</p>
-            </div>
-          </details>
+          <div className="rounded-2xl border border-white/5 bg-black/20 p-4 text-sm text-white/55">
+            数据说明：暂时无法完成渲染，页面已隐藏内部错误详情。
+          </div>
         </section>
       </main>
     );
@@ -1227,7 +1190,7 @@ const OptionsLabPageContent: React.FC = () => {
           </div>
         </details>
 
-        <DeveloperDetails state={state} />
+        <DataReadinessNote state={state} />
       </div>
     </main>
   );

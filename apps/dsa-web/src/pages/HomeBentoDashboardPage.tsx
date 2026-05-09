@@ -37,6 +37,7 @@ import {
   readObjectField,
 } from '../utils/homeReportIdentity';
 import { createPublicAnalysisFallbackPreview } from '../utils/publicAnalysisFallback';
+import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 
 type DrawerMetric = {
   label: string;
@@ -309,15 +310,20 @@ function traceStatusLabel(status?: string | null): string {
 function traceSourceLabel(source?: string | null, locale: DashboardLocale = 'zh'): string {
   const normalized = String(source || '').trim().toLowerCase();
   if (locale === 'en') {
-    return source || 'unknown';
+    if (normalized === 'llm') return 'AI summary';
+    if (normalized === 'rule' || normalized === 'technical_rule') return 'System basis';
+    if (normalized === 'frontend') return 'Workspace';
+    if (normalized === 'blended') return 'Blended';
+    if (normalized === 'fallback') return 'Fallback';
+    return normalized ? 'Data basis' : 'Unknown';
   }
-  if (normalized === 'llm') return 'LLM';
-  if (normalized === 'rule' || normalized === 'technical_rule') return '规则';
+  if (normalized === 'llm') return 'AI 整理';
+  if (normalized === 'rule' || normalized === 'technical_rule') return '系统依据';
   if (normalized === 'frontend') return '前端';
   if (normalized === 'blended') return '综合';
   if (normalized === 'fallback') return '备用';
   if (normalized === 'unknown' || !normalized) return '未知';
-  return source || '未知';
+  return '数据依据';
 }
 
 function traceFieldLabel(name: string, locale: DashboardLocale): string {
@@ -373,10 +379,10 @@ function localizeTraceLimitation(value: string, locale: DashboardLocale): string
     return text;
   }
   if (/fundamental.*partial/i.test(text)) {
-    return '基本面数据部分可用';
+    return '基本面数据缺失';
   }
   if (/fundamental.*incomplete/i.test(text)) {
-    return '基本面数据不完整';
+    return '基本面数据缺失';
   }
   if (/not investment advice/i.test(text)) {
     return 'AI 洞察仅供参考，不构成投资建议。';
@@ -508,7 +514,9 @@ function buildReportIdentity(report: AnalysisReport | null, dashboard?: Dashboar
     })
     .join(', ');
   const statuses = dataSources.map((source) => source.status).filter(Boolean);
-  const schemaStatus = report?.decisionTrace?.llm?.schemaValidated ? 'schema ok' : 'schema unverified';
+  const sourceStatus = statuses.length
+    ? statuses.map((status) => traceStatusLabel(status)).join(' / ')
+    : '数据覆盖未确认';
 
   return {
     companyName,
@@ -519,7 +527,7 @@ function buildReportIdentity(report: AnalysisReport | null, dashboard?: Dashboar
     currency: override?.currency || safeReportValue(readObjectField(report, ['details', 'standardReport', 'summaryPanel', 'currency']) || readObjectField(report, ['details', 'standardReport', 'market', 'currency'])),
     providers: override?.providers || providers || '--',
     horizon: override?.horizon || safeReportValue(report?.details?.standardReport?.summaryPanel?.timeSensitivity || report?.details?.standardReport?.decisionPanel?.marketStructure || '短线 / 中短线'),
-    dataStatus: override?.dataStatus || [...new Set([...statuses, schemaStatus])].join(' / ') || '--',
+    dataStatus: override?.dataStatus || sourceStatus || '--',
   };
 }
 
@@ -832,7 +840,7 @@ function FullDecisionReportDrawer({
           <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3 text-xs text-white/56 md:grid-cols-4">
             <span>市场：{identity.market}</span>
             <span>币种：{identity.currency}</span>
-            <span className="min-w-0 truncate">数据源：{identity.providers}</span>
+            <span className="min-w-0 truncate">数据说明：{identity.dataStatus}</span>
             <span>周期：{identity.horizon}</span>
           </div>
           <p className="mt-4 rounded-xl border border-amber-300/18 bg-amber-300/8 px-3 py-2 text-sm text-amber-50/82">
@@ -896,9 +904,9 @@ function FullDecisionReportDrawer({
           data-testid="home-bento-full-report-technical-details"
         >
           <summary className="cursor-pointer list-none text-sm font-semibold tracking-[0] text-white">
-            技术指标、基本面、来源与诊断
+            技术指标、基本面与数据说明
           </summary>
-          <p className="mt-2 text-sm leading-6 text-white/52">原始字段与技术表格默认折叠，避免淹没结论与风险边界。</p>
+          <p className="mt-2 text-sm leading-6 text-white/52">详细表格默认折叠，避免淹没结论与风险边界。</p>
           <div className="mt-4 grid min-w-0 grid-cols-1 gap-4">
             {technicalSections.map((section) => (
               <section key={section.id} className="min-w-0 rounded-2xl border border-white/[0.07] bg-black/16 p-4" data-testid={`home-bento-full-report-section-${section.id}`}>
@@ -1051,17 +1059,14 @@ function DecisionTracePanel({ trace, locale, quality }: { trace?: DecisionTrace;
           当前分析未包含决策溯源
         </div>
         {quality ? (
-          <details
-            className="group rounded-2xl border border-white/8 bg-white/[0.025] p-4"
-            data-testid="home-bento-decision-trace-developer"
+          <div
+            className="rounded-2xl border border-amber-300/15 bg-amber-300/8 p-4 text-sm text-amber-50/80"
+            data-testid="home-bento-decision-trace-data-note"
           >
-            <summary className="cursor-pointer text-[11px] font-semibold tracking-[0] text-white/62 transition-colors hover:text-white">
-              开发者细节
-            </summary>
-            <p className="mt-3 text-sm text-white/54">
-              缺失字段：{quality.missingFields.length ? quality.missingFields.join('、') : '暂无明确缺失字段'}
-            </p>
-          </details>
+            {quality.missingFields.length
+              ? quality.missingFields.map((item) => sanitizeUserFacingDataIssue(item, locale)).join('、')
+              : '数据不足，结论仅供观察'}
+          </div>
         ) : null}
       </div>
     );
@@ -1069,10 +1074,8 @@ function DecisionTracePanel({ trace, locale, quality }: { trace?: DecisionTrace;
 
   const decisionFields = Object.entries(trace.decisionFields || {});
   const dataSources = trace.dataSources || [];
-  const signals = trace.signals || [];
   const conflicts = trace.conflicts || [];
   const limitations = trace.limitations || [];
-  const llm = trace.llm || {};
   const sectionTitleClass = 'text-[11px] font-semibold tracking-[0] text-white/70';
   const isEnglish = locale === 'en';
 
@@ -1102,7 +1105,6 @@ function DecisionTracePanel({ trace, locale, quality }: { trace?: DecisionTrace;
               <span className="truncate text-xs font-semibold text-white/72">{traceDataSourceLabel(source.name, locale)}</span>
               <div className="flex min-w-0 flex-wrap justify-end gap-2">
                 <TraceBadge tone={traceStatusTone(source.status)}>{traceStatusLabel(source.status)}</TraceBadge>
-                {source.provider ? <TraceBadge>{source.provider}</TraceBadge> : null}
               </div>
             </div>
           )) : <p className="text-sm text-white/48">{isEnglish ? 'No source metadata available.' : '暂无数据源元信息。'}</p>}
@@ -1122,51 +1124,6 @@ function DecisionTracePanel({ trace, locale, quality }: { trace?: DecisionTrace;
           ))}
         </div>
       </div>
-
-      <details
-        className="group rounded-2xl border border-white/8 bg-white/[0.025] p-4"
-        data-testid="home-bento-decision-trace-developer"
-      >
-        <summary className="cursor-pointer text-[11px] font-semibold tracking-[0] text-white/62 transition-colors hover:text-white">
-          {isEnglish ? 'Developer Details' : '开发者细节'}
-        </summary>
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {[
-            ['provider', llm.provider],
-            ['model', llm.model],
-            ['template', llm.template],
-            ['schema_validated', llm.schemaValidated],
-            ['prompt_exposed', llm.promptExposed],
-            ['engine_version', trace.engineVersion],
-            ['endpoint', trace.endpoint],
-            ['mode', trace.mode],
-          ].map(([label, value]) => (
-            <div key={String(label)} className="min-w-0 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">{label}</p>
-              <p className="mt-1 break-words text-sm text-white/76">{formatTraceValue(value)}</p>
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">signal_inputs</p>
-          <div className="mt-2 flex flex-col gap-2">
-            {signals.length ? signals.slice(0, 8).map((signal, index) => (
-              <div key={`${signal.name}-${index}`} className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm">
-                <span className="truncate text-white/72">{signal.name || 'signal'}</span>
-                <span className="break-words text-white/48">{formatTraceValue(signal.value)} · {traceSourceLabel(signal.source, locale)}</span>
-              </div>
-            )) : <p className="text-sm text-white/48">{isEnglish ? 'No signal list available.' : '暂无信号输入列表。'}</p>}
-          </div>
-        </div>
-        {quality ? (
-          <div className="mt-4 rounded-xl border border-white/6 bg-black/10 px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/38">missing_fields</p>
-            <p className="mt-1 break-words text-sm text-white/76">
-              {quality.missingFields.length ? quality.missingFields.join('、') : '暂无明确缺失字段'}
-            </p>
-          </div>
-        ) : null}
-      </details>
     </div>
   );
 }
@@ -1227,27 +1184,13 @@ function summarizeEnrichmentGaps(report: DataQualityReport): string[] {
 function dataQualityFieldLabel(value: string, locale: DashboardLocale): string {
   const normalized = String(value || '').trim().toLowerCase();
   if (!normalized) return locale === 'en' ? 'Unconfirmed data gap' : '数据缺口未确认';
-  if (normalized.includes('fundamental')) return locale === 'en' ? 'Fundamental data missing' : '基本面数据不完整';
-  if (normalized.includes('earning')) return locale === 'en' ? 'Earnings data missing' : '财报数据暂缺';
-  if (normalized.includes('news')) return locale === 'en' ? 'News data missing' : '新闻数据暂缺';
-  if (normalized.includes('sentiment')) return locale === 'en' ? 'Sentiment data missing' : '情绪数据暂缺';
-  if (normalized.includes('technical')) return locale === 'en' ? 'Technical data missing' : '技术指标暂不可用';
-  if (normalized.includes('optional')) return locale === 'en' ? 'Optional enrichment pending' : '部分增强数据待补充';
-  return value.replace(/[_-]+/g, ' ');
+  return sanitizeUserFacingDataIssue(normalized, locale);
 }
 
 function dataQualityReasonLabel(value: string, locale: DashboardLocale): string {
   const normalized = String(value || '').trim().toLowerCase();
   if (!normalized) return locale === 'en' ? 'Reason unconfirmed' : '原因未确认';
-  if (normalized.includes('optional_news_timeout') || normalized.includes('news')) return locale === 'en' ? 'News data temporarily unavailable' : '新闻数据暂缺';
-  if (normalized.includes('fundamentals_unavailable') || normalized.includes('fundamental')) return locale === 'en' ? 'Fundamental data missing' : '基本面数据缺失';
-  if (normalized.includes('earnings_unavailable') || normalized.includes('earning')) return locale === 'en' ? 'Earnings data temporarily unavailable' : '财报数据暂缺';
-  if (normalized.includes('technical_indicators_unavailable') || normalized.includes('technical')) return locale === 'en' ? 'Technical indicators temporarily unavailable' : '技术指标暂不可用';
-  if (normalized.includes('provider_timeout') || normalized.includes('timeout') || normalized.includes('provider')) {
-    return locale === 'en' ? 'Some external data is temporarily unavailable' : '部分外部数据暂不可用';
-  }
-  if (normalized.includes('unavailable') || normalized.includes('missing')) return locale === 'en' ? 'Some data is missing' : '部分数据缺失';
-  return value.replace(/[_-]+/g, ' ');
+  return sanitizeUserFacingDataIssue(normalized, locale);
 }
 
 function summarizeEnrichmentReasons(report: DataQualityReport): string[] {
@@ -1257,7 +1200,6 @@ function summarizeEnrichmentReasons(report: DataQualityReport): string[] {
 }
 
 function DataQualityCompactPanel({ report, locale }: { report: DataQualityReport | undefined; locale: DashboardLocale }) {
-  const [developerOpen, setDeveloperOpen] = useState(false);
   if (!report) return null;
   const isEnglish = locale === 'en';
   const quickDecisionText = report.requiredAvailable === false
@@ -1280,7 +1222,6 @@ function DataQualityCompactPanel({ report, locale }: { report: DataQualityReport
       ? (isEnglish ? 'Some external data is temporarily unavailable' : '部分外部数据暂不可用')
       : null,
   ].filter(Boolean).join(' · ');
-  const providerLabels = [...(report.providerTimeouts || []), ...(report.providerCooldowns || [])].slice(0, 4);
 
   return (
     <section
@@ -1315,21 +1256,6 @@ function DataQualityCompactPanel({ report, locale }: { report: DataQualityReport
           <p className="mt-1 break-words text-sm text-white/72">{optionalText}</p>
         </div>
       </div>
-      <details
-        className="mt-3 rounded-xl border border-white/6 bg-black/10 px-3 py-2"
-        data-testid="home-bento-data-quality-developer"
-        onToggle={(event) => setDeveloperOpen(event.currentTarget.open)}
-      >
-        <summary className="cursor-pointer text-[11px] font-semibold tracking-[0] text-white/58">
-          {isEnglish ? 'Developer Details' : '开发者细节'}
-        </summary>
-        {developerOpen ? (
-          <div className="mt-2 space-y-2 break-words text-xs text-white/50">
-            <p>{(report.reasonCodes || []).join('、') || (isEnglish ? 'No reason codes.' : '暂无原因码。')}</p>
-            {providerLabels.length ? <p>{providerLabels.join('、')}</p> : null}
-          </div>
-        ) : null}
-      </details>
     </section>
   );
 }

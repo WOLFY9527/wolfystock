@@ -422,7 +422,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('最近没有基本面特征')).not.toBeInTheDocument();
   });
 
-  it('renders data quality compact panel without leaking raw provider details', async () => {
+  it('renders data quality compact panel without developer diagnostics', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
     await screen.findByText('Oracle Corporation');
@@ -431,16 +431,17 @@ describe('HomeSurfacePage', () => {
     expect(panel).toHaveTextContent('数据等级: 分析级');
     expect(panel).toHaveTextContent('置信度上限 70');
     expect(panel).toHaveTextContent('快速判断已完成');
-    expect(panel).toHaveTextContent('基本面数据不完整');
+    expect(panel).toHaveTextContent('基本面数据缺失');
     expect(panel).toHaveTextContent('增强数据补充中');
-    expect(panel).toHaveTextContent('缺失项：新闻数据暂缺、基本面数据不完整');
+    expect(panel).toHaveTextContent('缺失项：新闻数据暂缺、基本面数据缺失');
     expect(panel).toHaveTextContent('新闻数据暂缺');
     expect(panel).toHaveTextContent('部分外部数据暂不可用');
     expect(panel).not.toHaveTextContent('fundamentals.eps');
     expect(panel).not.toHaveTextContent('optional_news_timeout');
     expect(panel).not.toHaveTextContent('gnews:news');
     expect(panel).not.toHaveTextContent('fmp:fundamentals');
-    expect(screen.getByTestId('home-bento-data-quality-developer')).not.toHaveAttribute('open');
+    expect(screen.queryByTestId('home-bento-data-quality-developer')).not.toBeInTheDocument();
+    expect(panel).not.toHaveTextContent(/开发者|Developer|reason codes|原因码/i);
     expect(panel).not.toHaveTextContent(/api[_-]?key|token|secret|stack trace|sk-/i);
   });
 
@@ -534,7 +535,8 @@ describe('HomeSurfacePage', () => {
     expect(markdown).toContain('## 数据透视 / Data Lens');
     expect(markdown).toContain('## 观察计划 / Observation Plan');
     expect(markdown).toContain('## 数据说明 / Data Notes');
-    expect(markdown).toContain('- Data providers: Yahoo Finance, FMP, news, Finnhub');
+    expect(markdown).toContain('- Data status: used / fallback / missing');
+    expect(markdown).not.toContain('- Data providers:');
     expect(markdown).not.toContain('Finnhub, Finnhub');
   });
 
@@ -546,7 +548,7 @@ describe('HomeSurfacePage', () => {
     expect(getCompanyWithTicker({ companyName: 'Tempus AI', symbol: 'TEM' })).toBe('Tempus AI (TEM)');
   });
 
-  it('opens the compact decision trace drawer with collapsed developer details', async () => {
+  it('opens the compact decision source drawer without developer details', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     renderSurface();
     await screen.findByText('Oracle Corporation');
@@ -563,19 +565,16 @@ describe('HomeSurfacePage', () => {
     expect(within(panel).getByText('观察区')).toBeInTheDocument();
     expect(within(panel).getByText('上方观察')).toBeInTheDocument();
     expect(within(panel).getByText('风险线')).toBeInTheDocument();
-    expect(within(panel).getAllByText('规则').length).toBeGreaterThan(0);
+    expect(within(panel).getAllByText('系统依据').length).toBeGreaterThan(0);
     expect(within(panel).getByText('使用的数据')).toBeInTheDocument();
     expect(within(panel).getByText('报价')).toBeInTheDocument();
     expect(within(panel).getByText('备用')).toBeInTheDocument();
     expect(within(panel).getByText('冲突与限制')).toBeInTheDocument();
     expect(within(panel).getByText('分析状态与后续计划存在不一致，已在决策来源中标注。')).toBeInTheDocument();
-    const developerDetails = within(panel).getByTestId('home-bento-decision-trace-developer');
-    expect(developerDetails).not.toHaveAttribute('open');
-    expect(developerDetails).toHaveTextContent('开发者细节');
-    fireEvent.click(within(developerDetails).getByText('开发者细节'));
-    expect(within(developerDetails).getByText('openai')).toBeInTheDocument();
-    expect(within(developerDetails).getByText('openai/gpt-4.1-mini')).toBeInTheDocument();
-    expect(within(developerDetails).getByText('decision_dashboard_v2')).toBeInTheDocument();
+    expect(within(panel).queryByTestId('home-bento-decision-trace-developer')).not.toBeInTheDocument();
+    expect(panel).not.toHaveTextContent(/开发者|Developer|provider|schema_validated|engine_version|endpoint|decision_dashboard_v2|规则 \+ LLM|结构确认|溯源完整|摘要完整/i);
+    expect(panel).not.toHaveTextContent('openai');
+    expect(panel).not.toHaveTextContent('openai/gpt-4.1-mini');
     expect(panel).not.toHaveTextContent('sk-');
     expect(panel).not.toHaveTextContent('SYSTEM_PROMPT');
     expect(panel).not.toHaveTextContent('raw_prompt');
@@ -812,8 +811,7 @@ describe('HomeSurfacePage', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: '决策来源' }));
     const panel = await screen.findByTestId('home-bento-decision-trace-panel');
-    const developerDetails = within(panel).getByTestId('home-bento-decision-trace-developer');
-    expect(developerDetails).not.toHaveAttribute('open');
+    expect(within(panel).queryByTestId('home-bento-decision-trace-developer')).not.toBeInTheDocument();
     const sourceSummary = screen.getByTestId('home-bento-decision-source-summary');
     expect(sourceSummary).toHaveTextContent('依据需复核');
     expect(sourceSummary).not.toHaveTextContent('结构未确认');
@@ -857,19 +855,17 @@ describe('HomeSurfacePage', () => {
     const panel = await screen.findByTestId('home-bento-decision-trace-panel');
     expect(within(panel).getByText('决策字段')).toBeInTheDocument();
     expect(within(panel).getByText('wait_pullback')).toBeInTheDocument();
-    expect(within(panel).getAllByText('规则').length).toBeGreaterThan(0);
+    expect(within(panel).getAllByText('系统依据').length).toBeGreaterThan(0);
     expect(within(panel).getByText('使用的数据')).toBeInTheDocument();
     expect(within(panel).getByText('可用')).toBeInTheDocument();
     expect(within(panel).getByText('缺失')).toBeInTheDocument();
     expect(within(panel).getByText('未知')).toBeInTheDocument();
-    const developerDetails = within(panel).getByTestId('home-bento-decision-trace-developer');
-    expect(developerDetails).not.toHaveAttribute('open');
-    fireEvent.click(within(developerDetails).getByText('开发者细节'));
-    expect(within(developerDetails).getByText('fixture-provider')).toBeInTheDocument();
-    expect(within(developerDetails).getByText('fixture-model')).toBeInTheDocument();
-    expect(within(developerDetails).getByText('stock_analysis_trace_fixture_v1')).toBeInTheDocument();
+    expect(within(panel).queryByTestId('home-bento-decision-trace-developer')).not.toBeInTheDocument();
+    expect(panel).not.toHaveTextContent('fixture-provider');
+    expect(panel).not.toHaveTextContent('fixture-model');
+    expect(panel).not.toHaveTextContent('stock_analysis_trace_fixture_v1');
     expect(within(panel).getByText('分析状态与后续计划存在不一致，已在决策来源中标注。')).toBeInTheDocument();
-    expect(within(panel).getByText('基本面数据不完整')).toBeInTheDocument();
+    expect(within(panel).getByText('基本面数据缺失')).toBeInTheDocument();
     expect(panel).not.toHaveTextContent('当前分析未包含决策溯源');
     expect(document.body.textContent).not.toContain('raw_prompt');
     expect(document.body.textContent).not.toContain('SYSTEM_PROMPT');
@@ -935,8 +931,7 @@ describe('HomeSurfacePage', () => {
     const panel = await screen.findByTestId('home-bento-decision-trace-panel');
     expect(panel).not.toHaveTextContent('当前分析未包含决策溯源');
     expect(within(panel).getByText('报价')).toBeInTheDocument();
-    const developerDetails = within(panel).getByTestId('home-bento-decision-trace-developer');
-    expect(developerDetails).not.toHaveAttribute('open');
+    expect(within(panel).queryByTestId('home-bento-decision-trace-developer')).not.toBeInTheDocument();
   });
 
   it('opens the decision trace fixture drawer in a narrow viewport', async () => {
@@ -977,9 +972,8 @@ describe('HomeSurfacePage', () => {
 
     const panel = await screen.findByTestId('home-bento-decision-trace-panel');
     expect(screen.getByRole('dialog')).toHaveTextContent('决策来源');
-    const developerDetails = within(panel).getByTestId('home-bento-decision-trace-developer');
-    fireEvent.click(within(developerDetails).getByText('开发者细节'));
-    expect(within(developerDetails).getByText('fixture-provider')).toBeInTheDocument();
+    expect(within(panel).queryByTestId('home-bento-decision-trace-developer')).not.toBeInTheDocument();
+    expect(panel).not.toHaveTextContent('fixture-provider');
     expect(within(panel).getByText('AI 洞察仅供参考，不构成投资建议。')).toBeInTheDocument();
   });
 
@@ -1037,7 +1031,7 @@ describe('HomeSurfacePage', () => {
 
     expect(await screen.findByTestId('home-bento-decision-trace-panel')).toHaveTextContent('当前分析未包含决策溯源');
     expect(screen.getByTestId('home-bento-decision-source-summary')).toHaveTextContent('缺少决策依据');
-    expect(screen.getByTestId('home-bento-decision-trace-developer')).not.toHaveAttribute('open');
+    expect(screen.queryByTestId('home-bento-decision-trace-developer')).not.toBeInTheDocument();
   });
 
   it('shows compact report quality chips for complete, usable, legacy, and failed history records', async () => {
@@ -1217,7 +1211,8 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '决策来源' }));
     const panel = await screen.findByTestId('home-bento-decision-trace-panel');
     expect(panel).toHaveTextContent('当前分析未包含决策溯源');
-    expect(within(panel).getByTestId('home-bento-decision-trace-developer')).not.toHaveAttribute('open');
+    expect(within(panel).queryByTestId('home-bento-decision-trace-developer')).not.toBeInTheDocument();
+    expect(panel).toHaveTextContent('数据不足');
   });
 
   it('disables safe re-analysis when the selected report has no symbol', async () => {

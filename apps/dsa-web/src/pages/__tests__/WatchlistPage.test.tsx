@@ -567,7 +567,8 @@ describe('WatchlistPage', () => {
     await waitFor(() => expect(screen.getByTestId('watchlist-batch-progress')).toHaveTextContent('失败 1'));
     const row = screen.getByTestId('watchlist-row-NVDA');
     expect(within(row).getByText('服务暂不可用')).toBeInTheDocument();
-    expect(within(row).getByText('开发者细节')).toBeInTheDocument();
+    expect(within(row).queryByText('开发者细节')).not.toBeInTheDocument();
+    expect(row).toHaveTextContent('错误详情已隐藏');
     expect(row).not.toHaveTextContent(/provider_error|critical|stack/i);
   });
 

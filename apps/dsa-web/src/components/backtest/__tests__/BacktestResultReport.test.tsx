@@ -460,21 +460,22 @@ describe('BacktestResultReport', () => {
     expect(within(risk).getByText('最大回撤区间')).toBeInTheDocument();
   });
 
-  it('keeps developer details collapsed by default and hides raw enum copy in the default report', () => {
+  it('keeps secondary backtest details user-facing and hides raw enum copy in the default report', () => {
     render(<BacktestResultReport run={makeRun()} mode="professional" />);
 
     const report = screen.getByTestId('backtest-result-report');
     const evidence = screen.getByTestId('backtest-report-evidence-details');
     expect(evidence).not.toHaveAttribute('open');
-    expect(evidence).toHaveTextContent('证据与原始明细');
-    expect(evidence).toHaveTextContent('导出、执行假设、每日账本和原始 Trace 默认折叠');
+    expect(evidence).toHaveTextContent('证据与明细');
+    expect(evidence).toHaveTextContent('导出、执行假设、每日账本和执行明细默认折叠');
     expect(report).toHaveTextContent('研究结论');
     expect(report).not.toHaveTextContent('signal_exit');
     expect(report).not.toHaveTextContent('stop_loss');
     expect(report).not.toHaveTextContent('Full metrics');
     expect(screen.queryByText(/扩展指标在上方折叠区展示/)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /开发者细节/ }));
+    expect(report).not.toHaveTextContent(/开发者|Developer|Trace/);
+    fireEvent.click(screen.getByRole('button', { name: /账本与导出/ }));
     expect(screen.getByText(/扩展指标在上方折叠区展示/)).toBeInTheDocument();
   });
 

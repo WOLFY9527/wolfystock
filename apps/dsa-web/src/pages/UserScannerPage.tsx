@@ -54,6 +54,7 @@ import type {
 import type { RuleBacktestRunResponse } from '../types/backtest';
 import type { WatchlistItem } from '../types/watchlist';
 import { buildLocalizedPath } from '../utils/localeRouting';
+import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import {
   getScannerDetailOptions,
   getScannerProfileOptions,
@@ -274,7 +275,7 @@ function compactScannerStateLabel(value?: string | null, language: 'zh' | 'en' =
   if (normalized === 'timeout' || normalized === 'timed_out' || normalized.includes('timeout')) return language === 'en' ? 'Timeout' : '超时';
   if (['empty', 'no_candidates', 'no_candidate', 'no_shortlist'].includes(normalized)) return language === 'en' ? 'No candidates' : '无候选';
   if (['insufficient_data', 'data_insufficient', 'not_enough_history', 'missing_history'].includes(normalized)) return language === 'en' ? 'Insufficient data' : '数据不足';
-  if (['provider_down', 'provider_error', 'provider_failed', 'data_source_error'].includes(normalized)) return language === 'en' ? 'Provider issue' : '数据源异常';
+  if (['provider_down', 'provider_error', 'provider_failed', 'data_source_error'].includes(normalized)) return language === 'en' ? 'External data unavailable' : '部分外部数据暂不可用';
   if (['local_data', 'local', 'local_cache', 'local_snapshot'].includes(normalized)) return language === 'en' ? 'Local data' : '本地数据';
   if (['fallback', 'fallback_data', 'degraded'].includes(normalized)) return language === 'en' ? 'Fallback data' : '备用数据';
   if (['partial', 'partial_data', 'partial_success'].includes(normalized)) return language === 'en' ? 'Partial data' : '部分数据';
@@ -287,7 +288,7 @@ function sanitizeScannerErrorSummary(value?: string | null, language: 'zh' | 'en
   if (!normalized) return null;
   if (normalized.includes('timeout')) return language === 'en' ? 'Timeout' : '超时';
   if (String(value || '').includes('超时')) return language === 'en' ? 'Timeout' : '超时';
-  if (normalized.includes('provider')) return language === 'en' ? 'Provider issue' : '数据源异常';
+  if (normalized.includes('provider')) return language === 'en' ? 'External data unavailable' : '部分外部数据暂不可用';
   if (normalized.includes('history') || normalized.includes('missing') || normalized.includes('insufficient') || normalized.includes('not_enough')) {
     return language === 'en' ? 'Insufficient data' : '数据不足';
   }
@@ -349,16 +350,56 @@ function getRiskScore(candidate: ScannerCandidate): number | null {
   return parseFirstNumericValue(riskValue);
 }
 
+function isInternalScannerIssue(value?: string | null): boolean {
+  const normalized = normalizeRunState(value);
+  if (!normalized) return false;
+  return /provider|timeout|schema|debug|raw|trace|cache|not_enough|unavailable|missing|insufficient|data_failed|technical_indicators|fundamentals|earnings|optional_news/.test(normalized);
+}
+
+function sanitizeScannerUserText(value: string | null | undefined, language: 'zh' | 'en', fallback: string): string {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  return isInternalScannerIssue(text) ? sanitizeUserFacingDataIssue(text, language) : text;
+}
+
+function sanitizeScannerNotes(notes: Array<string | null | undefined>, language: 'zh' | 'en'): string[] {
+  return notes
+    .filter((item): item is string => Boolean(String(item || '').trim()))
+    .map((item) => sanitizeScannerUserText(item, language, ''))
+    .filter((item, index, array) => Boolean(item) && array.indexOf(item) === index);
+}
+
+function sanitizeScannerLabeledValues(items: ScannerLabeledValue[] | undefined, language: 'zh' | 'en'): ScannerLabeledValue[] {
+  return (items || []).map((item) => {
+    const labelHasInternalDetail = isInternalScannerIssue(item.label);
+    const valueHasInternalDetail = isInternalScannerIssue(item.value);
+    if (!labelHasInternalDetail && !valueHasInternalDetail) {
+      return item;
+    }
+    return {
+      label: language === 'en' ? 'Data note' : '数据说明',
+      value: sanitizeUserFacingDataIssue(`${item.label} ${item.value}`, language),
+    };
+  });
+}
+
 function getRiskSummary(candidate: ScannerCandidate, language: 'zh' | 'en'): string {
-  return candidate.riskNotes?.[0] || candidate.aiInterpretation?.riskInterpretation || (language === 'en' ? 'No risk note provided' : '未提供风险说明');
+  return sanitizeScannerUserText(
+    candidate.riskNotes?.[0] || candidate.aiInterpretation?.riskInterpretation,
+    language,
+    language === 'en' ? 'No risk note provided' : '未提供风险说明',
+  );
 }
 
 function getKeyReason(candidate: ScannerCandidate, runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): string {
-  return candidate.reasonSummary
+  return sanitizeScannerUserText(
+    candidate.reasonSummary
     || candidate.reasons?.[0]
     || candidate.featureSignals?.[0]?.value
-    || runDetail?.scoringNotes?.[0]
-    || (language === 'en' ? 'No selection note provided' : '未提供入选说明');
+    || runDetail?.scoringNotes?.[0],
+    language,
+    language === 'en' ? 'No selection note provided' : '未提供入选说明',
+  );
 }
 
 function getSourceBadge(candidate: ScannerCandidate, runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): string | null {
@@ -369,7 +410,7 @@ function getSourceBadge(candidate: ScannerCandidate, runDetail: ScannerRunDetail
     || getRunProviderDiagnostics(runDetail)?.snapshotSourceUsed
     || getRunProviderDiagnostics(runDetail)?.historySourceUsed : null;
   const friendly = formatFriendlyProvider(candidateProvider || runProvider || runDetail?.sourceSummary || null, language);
-  return friendly === '--' ? (language === 'en' ? 'scanner payload' : '扫描载荷') : friendly;
+  return friendly === '--' ? (language === 'en' ? 'Data ready for observation' : '数据可用于观察') : friendly;
 }
 
 function getRunCoverageSummary(runDetail: ScannerRunDetail): ScannerCoverageSummary | null {
@@ -497,8 +538,7 @@ function formatFriendlyProvider(value?: string | null, language: 'zh' | 'en' = '
   if (normalized === 'unknown') return compactScannerStateLabel('unknown', language);
   if (normalized.includes('fallback')) return compactScannerStateLabel('fallback', language);
   if (normalized.includes('local db') || normalized.includes('local')) return language === 'en' ? 'Local data' : '本地数据';
-  if (normalized.includes('alpaca')) return 'Alpaca';
-  return String(value || '').trim();
+  return language === 'en' ? 'External data available' : '外部数据可用';
 }
 
 function formatFriendlyDiagnosticReason(candidate: ScannerCandidateDiagnostic, language: 'zh' | 'en'): string {
@@ -512,15 +552,15 @@ function formatFriendlyDiagnosticReason(candidate: ScannerCandidateDiagnostic, l
   if (normalizeDiagnosticStatus(candidate.status) === 'selected') {
     return language === 'en' ? 'Passed screening' : '通过筛选';
   }
-  if (candidate.status === 'data_failed' || candidate.status === 'error') return language === 'en' ? 'Data thin' : '数据不足';
-  if (/missing|history|quote|data|field|not enough|unavailable/.test(text)) return language === 'en' ? 'Data thin' : '数据不足';
+  if (candidate.status === 'data_failed' || candidate.status === 'error') return sanitizeUserFacingDataIssue(text || rawReason, language);
+  if (/provider|timeout|missing|history|quote|data|field|not enough|unavailable/.test(text)) return sanitizeUserFacingDataIssue(text || rawReason, language);
   if (/liquidity|volume|turnover|amount/.test(text)) return language === 'en' ? 'Liquidity weak' : '流动性不足';
   if (/price/.test(text)) return language === 'en' ? 'Price below threshold' : '价格低于阈值';
   if (/momentum|relative strength|strength|return/.test(text)) return language === 'en' ? 'Momentum weak' : '动量不足';
   if (/trend|moving average|breakout|\bma\b/.test(text)) return language === 'en' ? 'Trend weak' : '趋势不足';
   if (/score|threshold|rank/.test(text)) return language === 'en' ? 'Score below threshold' : '分数低于阈值';
   if (/passed/.test(normalizeDiagnosticText(rawReason))) return language === 'en' ? 'Passed screening' : '通过筛选';
-  return rawReason;
+  return language === 'en' ? 'Screening condition not met' : '未达到筛选条件';
 }
 
 function formatCandidateDataQuality(candidate: ScannerCandidateDiagnostic, language: 'zh' | 'en'): string {
@@ -530,9 +570,9 @@ function formatCandidateDataQuality(candidate: ScannerCandidateDiagnostic, langu
     ...(candidate.failedRules || []),
     ...(candidate.missingFields || []),
   ].map(normalizeDiagnosticText).join(' ');
-  if (/quote|realtime|snapshot/.test(text)) return language === 'en' ? 'Realtime missing' : '实时缺失';
-  if (status === 'data_failed' || status === 'error' || /missing|history|data|field|not enough|unavailable/.test(text)) {
-    return language === 'en' ? 'Data thin' : '数据不足';
+  if (/quote|realtime|snapshot/.test(text)) return sanitizeUserFacingDataIssue(text || 'data_missing', language);
+  if (status === 'data_failed' || status === 'error' || /provider|timeout|missing|history|data|field|not enough|unavailable/.test(text)) {
+    return sanitizeUserFacingDataIssue(text || candidate.reason, language);
   }
   const provider = formatFriendlyProvider(candidate.provider, language);
   if (provider === (language === 'en' ? 'Local data' : '本地数据')) return provider;
@@ -875,7 +915,7 @@ function buildInspectorRiskNotes(
     runDetail?.summary?.selectedCount === 1
       ? (language === 'en' ? 'Only one selected candidate; sample is narrow' : '本次只有 1 个候选，样本偏窄')
       : null,
-    source !== '--' ? (language === 'en' ? `Data source includes ${source}; verify freshness` : `数据源包含 ${source}，需确认实时性`) : null,
+    source !== '--' ? (language === 'en' ? `${source}; verify freshness` : `${source}，需确认实时性`) : null,
   ].filter((item, index, array): item is string => Boolean(item) && array.indexOf(item) === index);
   return notes.slice(0, 4);
 }
@@ -1015,25 +1055,15 @@ function findPreviousComparableRunId(
 
 function formatProviderDiagnostics(provider: ScannerProviderDiagnostics | null, language: 'zh' | 'en'): string | null {
   if (!provider) return null;
-  const sources = [
-    provider.quoteSourceUsed,
-    provider.snapshotSourceUsed,
-    provider.historySourceUsed,
-    ...(provider.providersUsed || []),
-  ]
-    .map((item) => formatFriendlyProvider(item, language))
-    .filter((item): item is string => Boolean(item) && item !== '--');
-  const sourceCopy = Array.from(new Set(sources)).slice(0, 3).join(' / ');
-  const fallbackCopy = provider.fallbackOccurred
-    ? (language === 'en' ? `fallback ${provider.fallbackCount}` : `降级 ${provider.fallbackCount}`)
-    : (language === 'en' ? 'no fallback' : '未降级');
-  const warningCopy = provider.providerWarnings?.length
-    ? String(provider.providerWarnings.length)
-    : null;
+  const hasExternalIssue = Boolean(provider.providerFailureCount || provider.providerWarnings?.length);
+  const hasMissingData = Boolean(provider.missingDataSymbolCount);
   return [
-    sourceCopy || provider.configuredPrimaryProvider,
-    fallbackCopy,
-    warningCopy ? (language === 'en' ? `${warningCopy} warnings` : `${warningCopy} 条警告`) : null,
+    hasExternalIssue ? sanitizeUserFacingDataIssue('provider_timeout', language) : null,
+    hasMissingData ? sanitizeUserFacingDataIssue('missing_data', language) : null,
+    provider.fallbackOccurred ? compactScannerStateLabel('fallback', language) : null,
+    !hasExternalIssue && !hasMissingData && !provider.fallbackOccurred
+      ? (language === 'en' ? 'Data ready for observation' : '数据可用于观察')
+      : null,
   ].filter(Boolean).join(' · ');
 }
 
@@ -1708,13 +1738,13 @@ function CandidateDetailPanel({
         <ScannerBacktestResultStrip item={backtestItem} language={language} />
       </div>
       <DetailSection title={language === 'en' ? 'Key metrics' : '关键指标'}>
-        <LabeledValueGrid items={candidate.keyMetrics || []} empty={language === 'en' ? 'No key metrics provided' : '未提供关键指标'} />
+        <LabeledValueGrid items={sanitizeScannerLabeledValues(candidate.keyMetrics, language)} empty={language === 'en' ? 'No key metrics provided' : '未提供关键指标'} />
       </DetailSection>
       <DetailSection title={language === 'en' ? 'Feature signals' : '特征信号'}>
-        <LabeledValueGrid items={candidate.featureSignals || []} empty={language === 'en' ? 'No feature signals provided' : '未提供特征信号'} />
+        <LabeledValueGrid items={sanitizeScannerLabeledValues(candidate.featureSignals, language)} empty={language === 'en' ? 'No feature signals provided' : '未提供特征信号'} />
       </DetailSection>
       <DetailSection title={language === 'en' ? 'Risk notes' : '风险说明'}>
-        <NotesList notes={candidate.riskNotes || []} empty={language === 'en' ? 'No risk notes provided' : '未提供风险说明'} />
+        <NotesList notes={sanitizeScannerNotes(candidate.riskNotes || [], language)} empty={language === 'en' ? 'No risk notes provided' : '未提供风险说明'} />
       </DetailSection>
       <DetailSection title={language === 'en' ? 'Observation fields' : '观察字段'}>
         <div className="flex flex-wrap gap-2">
@@ -1728,11 +1758,11 @@ function CandidateDetailPanel({
       </DetailSection>
       <DetailSection title={language === 'en' ? 'Why selected' : '入选依据'}>
         <NotesList
-          notes={[
+          notes={sanitizeScannerNotes([
             candidate.reasonSummary,
             ...(candidate.reasons || []),
             ...(runDetail.scoringNotes || []),
-          ].filter((item): item is string => Boolean(item))}
+          ], language)}
           empty={language === 'en' ? 'No selection notes provided' : '未提供入选说明'}
         />
       </DetailSection>
@@ -1745,7 +1775,9 @@ function CandidateDetailPanel({
             {!ai.summary && !ai.watchPlan && !ai.riskInterpretation ? <p>{ai.status}</p> : null}
           </div>
         ) : (
-          <p className="text-xs text-white/32">{ai?.status || (language === 'en' ? 'AI interpretation not available' : 'AI 解读不可用')}</p>
+          <p className="text-xs text-white/32">
+            {sanitizeScannerUserText(ai?.status, language, language === 'en' ? 'AI interpretation not available' : 'AI 解读不可用')}
+          </p>
         )}
       </DetailSection>
       {hasOutcome(candidate.realizedOutcome) ? (
@@ -1763,7 +1795,7 @@ function CandidateDetailPanel({
         </DetailSection>
       ) : null}
       {candidateProvider ? (
-        <DetailSection title={language === 'en' ? 'Candidate provenance' : '候选来源'}>
+        <DetailSection title={language === 'en' ? 'Data notes' : '数据说明'}>
           <p className="text-xs leading-relaxed text-white/64">{formatProviderDiagnostics(candidateProvider, language)}</p>
         </DetailSection>
       ) : null}
@@ -1803,16 +1835,15 @@ function CandidateInspector({
   testId?: string;
 }) {
   const actionCandidate = diagnosticToCandidate(candidate);
-  const rawMetrics = Object.entries(candidate.metrics || {}).slice(0, 8);
   const status = normalizeDiagnosticStatus(candidate.status);
   const missingCount = candidate.missingFields?.length || 0;
   const previewSelected = isPreviewSelected(candidate, previewThreshold);
   const delta = formatScoreDelta(comparison?.scoreDelta ?? null);
   const whySelected = buildInspectorWhySelected(candidate, language);
   const riskNotes = buildInspectorRiskNotes(candidate, runDetail, language);
-  const providerLabel = formatFriendlyProvider(candidate.provider, language);
   const dataQualityLabel = formatCandidateDataQuality(candidate, language);
-  const [showDeveloperFields, setShowDeveloperFields] = useState(false);
+  const sanitizedFailedRules = Array.from(new Set((candidate.failedRules || []).map((item) => sanitizeUserFacingDataIssue(item, language))));
+  const sanitizedMissingFields = Array.from(new Set((candidate.missingFields || []).map((item) => sanitizeUserFacingDataIssue(item, language))));
   const officialStatusCopy = isOfficialSelected(candidate)
     ? (language === 'en' ? 'Official selected' : '官方入选')
     : (language === 'en' ? 'Official rejected' : '官方淘汰');
@@ -1847,7 +1878,6 @@ function CandidateInspector({
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           <FieldChip label={language === 'en' ? 'Status' : '状态'} value={diagnosticStatusLabel(status, language)} />
-          <FieldChip label={language === 'en' ? 'Source' : '来源'} value={providerLabel} />
           <FieldChip label={language === 'en' ? 'Quality' : '质量'} value={dataQualityLabel} />
           <FieldChip label={language === 'en' ? 'Preview' : '预览'} value={previewStatusCopy} />
           <FieldChip label={language === 'en' ? 'Missing' : '缺失'} value={String(missingCount)} />
@@ -1874,9 +1904,14 @@ function CandidateInspector({
         <DetailSection title={language === 'en' ? 'Next observation' : '下一步观察'}>
           <div className="grid grid-cols-2 gap-1.5">
             <ActionButton
-              label={language === 'en' ? 'View evidence' : '查看证据'}
-              icon={<Info className="h-3.5 w-3.5" />}
-              onClick={() => setShowDeveloperFields((current) => !current)}
+              label={isCopied ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy symbol' : '复制代码')}
+              icon={<Copy className="h-3.5 w-3.5" />}
+              onClick={() => onCopy(actionCandidate)}
+            />
+            <ActionButton
+              label={language === 'en' ? 'Export' : '导出'}
+              icon={<Download className="h-3.5 w-3.5" />}
+              onClick={() => onExport(actionCandidate)}
             />
             <ActionButton
               label={getWatchlistActionLabel(isTracked, isTrackPending, isWatchlistAuthBlocked, language)}
@@ -1891,63 +1926,26 @@ function CandidateInspector({
 
         <AdvancedDisclosure
           testId={`${testId}-rules-disclosure`}
-          title={language === 'en' ? 'Rule diagnostics' : '规则诊断'}
+          title={language === 'en' ? 'Basis notes' : '依据说明'}
           summary={formatFriendlyDiagnosticReason(candidate, language)}
           icon="info"
         >
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-            <NotesList notes={candidate.failedRules || []} empty={language === 'en' ? 'No failed rules' : '无失败规则'} />
-            <NotesList notes={candidate.missingFields || []} empty={language === 'en' ? 'No missing fields' : '无缺失字段'} />
+            <NotesList notes={sanitizedFailedRules} empty={language === 'en' ? 'No additional notes' : '暂无额外说明'} />
+            <NotesList notes={sanitizedMissingFields} empty={language === 'en' ? 'No missing data notes' : '暂无缺失数据说明'} />
           </div>
         </AdvancedDisclosure>
 
         <AdvancedDisclosure
           testId={`${testId}-quality-disclosure`}
           title={language === 'en' ? 'Data quality' : '数据质量'}
-          summary={language === 'en' ? `${dataQualityLabel} · ${providerLabel}` : `${dataQualityLabel} · ${providerLabel}`}
+          summary={dataQualityLabel}
           icon="history"
         >
           <div className="flex flex-wrap gap-1.5">
-            <FieldChip label={language === 'en' ? 'Provider' : '来源'} value={providerLabel} />
             <FieldChip label={language === 'en' ? 'Status' : '状态'} value={diagnosticStatusLabel(status, language)} />
             <FieldChip label={language === 'en' ? 'Quality' : '质量'} value={dataQualityLabel} />
             <FieldChip label={language === 'en' ? 'Missing' : '缺失'} value={String(missingCount)} />
-            {rawMetrics.length
-              ? rawMetrics.map(([key, value]) => (
-                <FieldChip key={`${candidate.symbol}-${key}`} label={key} value={String(value ?? '--')} />
-              ))
-              : null}
-          </div>
-        </AdvancedDisclosure>
-
-        <AdvancedDisclosure
-          testId={`${testId}-developer-disclosure`}
-          title={language === 'en' ? 'Developer fields' : '开发者字段'}
-          summary={language === 'en' ? 'Raw metrics, copy, and export tools' : '原始指标、复制与导出工具'}
-          icon="more"
-          open={showDeveloperFields}
-          onToggle={setShowDeveloperFields}
-        >
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-1.5">
-              <ActionButton
-                label={isCopied ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
-                icon={<Copy className="h-3.5 w-3.5" />}
-                onClick={() => onCopy(actionCandidate)}
-              />
-              <ActionButton
-                label={language === 'en' ? 'Export' : '导出'}
-                icon={<Download className="h-3.5 w-3.5" />}
-                onClick={() => onExport(actionCandidate)}
-              />
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {rawMetrics.length
-                ? rawMetrics.map(([key, value]) => (
-                  <FieldChip key={`${candidate.symbol}-${key}`} label={key} value={String(value ?? '--')} />
-                ))
-                : <p className="text-xs text-white/32">{language === 'en' ? 'No raw metrics' : '无原始指标'}</p>}
-            </div>
           </div>
         </AdvancedDisclosure>
       </div>
@@ -2308,7 +2306,7 @@ function DiagnosticsPanel({
   return (
     <section data-testid="scanner-diagnostics-panel" className="mt-3 rounded-xl border border-white/5 bg-white/[0.015] p-3">
       <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-        {language === 'en' ? 'Diagnostics and replay notes' : '诊断与复盘说明'}
+        {language === 'en' ? 'Data notes and replay summary' : '数据说明与复盘摘要'}
       </h3>
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         {coverage ? (
@@ -2326,9 +2324,8 @@ function DiagnosticsPanel({
           </DetailSection>
         ) : null}
         {provider ? (
-          <DetailSection title={language === 'en' ? 'Provider diagnostics' : '供应商诊断'}>
+          <DetailSection title={language === 'en' ? 'External data notes' : '外部数据说明'}>
             <p className="text-xs leading-relaxed text-white/64">{formatProviderDiagnostics(provider, language)}</p>
-            {provider.providerWarnings?.length ? <NotesList notes={provider.providerWarnings} empty="" /> : null}
           </DetailSection>
         ) : null}
         {runDetail.universeNotes.length ? (
@@ -2414,7 +2411,7 @@ const UserScannerPage: React.FC = () => {
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
   const [rowMoreSymbol, setRowMoreSymbol] = useState<string | null>(null);
   const [isRejectionSummaryOpen, setIsRejectionSummaryOpen] = useState(false);
-  const [isDeveloperDiagnosticsOpen, setIsDeveloperDiagnosticsOpen] = useState(false);
+  const [isDataNotesOpen, setIsDataNotesOpen] = useState(false);
   const [previousRunDetail, setPreviousRunDetail] = useState<ScannerRunDetail | null>(null);
   const [previewThreshold, setPreviewThreshold] = useState(50);
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
@@ -3225,14 +3222,9 @@ const UserScannerPage: React.FC = () => {
 	                <span className="font-medium">{language === 'en' ? 'Scan did not complete' : '扫描未完成'}</span>
 	                <span className="rounded border border-rose-300/20 bg-black/20 px-1.5 py-0.5 text-[11px]">{pageErrorSummary}</span>
 	              </div>
-	              <AdvancedDisclosure
-	                testId="scanner-page-error-developer-details"
-	                title={language === 'en' ? 'Developer details' : '开发者细节'}
-	                summary={language === 'en' ? 'Raw failure message is collapsed' : '原始失败信息已折叠'}
-	                icon="more"
-	              >
-	                <ApiErrorAlert error={pageError} />
-	              </AdvancedDisclosure>
+	              <p className="mt-2 text-xs text-rose-50/70">
+	                {language === 'en' ? 'Internal error details are hidden on this page.' : '内部错误详情已隐藏。'}
+	              </p>
 	            </div>
 	          ) : null}
           {actionNotice ? (
@@ -3735,7 +3727,6 @@ const UserScannerPage: React.FC = () => {
                         const isTrackPending = pendingWatchlistIdentity === candidateIdentity;
                         const backtestItem = backtestItemsBySymbol[normalizeCandidateSymbol(candidate.symbol) || ''];
                         const isExpanded = expandedSymbol === candidate.symbol;
-                        const metricItems = Object.entries(candidate.metrics || {}).slice(0, 8);
                         const comparison = comparisonState.bySymbol.get(normalizeCandidateSymbol(candidate.symbol) || '');
                         const scoreDelta = formatScoreDelta(comparison?.scoreDelta ?? null);
 	                        const isInspectorActive = normalizeCandidateSymbol(inspectorCandidate?.symbol) === normalizeCandidateSymbol(candidate.symbol);
@@ -3771,12 +3762,12 @@ const UserScannerPage: React.FC = () => {
 	                                {comparison?.label ? <span className="ml-1 rounded border border-white/8 bg-white/[0.035] px-1 py-0.5 font-sans text-[10px] font-medium text-white/58">{comparison.label}</span> : null}
 	                              </div>
                               <div className="min-w-0">
-                                <p className="truncate text-xs text-white/68" title={getDiagnosticReason(candidate, language)}>
+                                <p className="truncate text-xs text-white/68" title={friendlyReason}>
                                   {friendlyReason}
                                 </p>
                               </div>
                               <div className="min-w-0">
-                                <p className="truncate text-[11px] text-white/58" title={candidate.provider || '--'}>
+                                <p className="truncate text-[11px] text-white/58" title={dataQuality}>
                                   {dataQuality}
                                 </p>
                                 <p className="truncate text-[10px] text-white/32">
@@ -3835,24 +3826,24 @@ const UserScannerPage: React.FC = () => {
                               <div data-testid={`scanner-candidate-detail-${candidate.symbol}`} className="mt-2 grid gap-2 border-t border-white/5 pt-2 text-xs text-white/58 md:grid-cols-3">
                                 <DetailSection title={language === 'en' ? 'Rule result' : '规则结果'}>
                                   <NotesList
-                                    notes={[
+                                    notes={Array.from(new Set([
                                       friendlyReason,
-                                      ...(candidate.failedRules || []),
-                                    ]}
-                                    empty={language === 'en' ? 'No failed rules' : '无失败规则'}
+                                      ...(candidate.failedRules || []).map((item) => sanitizeUserFacingDataIssue(item, language)),
+                                    ]))}
+                                    empty={language === 'en' ? 'No additional notes' : '暂无额外说明'}
                                   />
                                 </DetailSection>
                                 <DetailSection title={language === 'en' ? 'Missing fields' : '缺失字段'}>
-                                  <NotesList notes={candidate.missingFields || []} empty={language === 'en' ? 'No missing fields' : '无缺失字段'} />
+                                  <NotesList
+                                    notes={Array.from(new Set((candidate.missingFields || []).map((item) => sanitizeUserFacingDataIssue(item, language))))}
+                                    empty={language === 'en' ? 'No missing data notes' : '暂无缺失数据说明'}
+                                  />
                                 </DetailSection>
-                                <DetailSection title={language === 'en' ? 'Diagnostics' : '诊断数据'}>
+                                <DetailSection title={language === 'en' ? 'Data notes' : '数据说明'}>
                                   <div className="flex flex-wrap gap-1.5">
-                                    <FieldChip label={language === 'en' ? 'Provider' : '来源'} value={candidate.provider || '--'} />
-                                    {metricItems.length
-                                      ? metricItems.map(([key, value]) => (
-                                        <FieldChip key={`${candidate.symbol}-${key}`} label={key} value={String(value ?? '--')} />
-                                      ))
-                                      : <span className="text-xs text-white/32">{language === 'en' ? 'No metrics' : '无指标'}</span>}
+                                    <FieldChip label={language === 'en' ? 'Quality' : '质量'} value={dataQuality} />
+                                    <FieldChip label={language === 'en' ? 'Status' : '状态'} value={diagnosticStatusLabel(candidate.status, language)} />
+                                    <FieldChip label={language === 'en' ? 'Missing' : '缺失'} value={String(candidate.missingFields?.length || 0)} />
                                   </div>
                                 </DetailSection>
                               </div>
@@ -3965,7 +3956,7 @@ const UserScannerPage: React.FC = () => {
 
                             {candidate.keyMetrics?.length ? (
                               <section>
-                                <LabeledValueGrid items={candidate.keyMetrics.slice(0, 3)} empty="" />
+                                <LabeledValueGrid items={sanitizeScannerLabeledValues(candidate.keyMetrics.slice(0, 3), language)} empty="" />
                               </section>
                             ) : null}
 
@@ -4263,13 +4254,13 @@ const UserScannerPage: React.FC = () => {
                     {rejectionBuckets.length || hasRunDiagnosticsContent(runDetail) ? (
                       <AdvancedDisclosure
                         testId="scanner-diagnostics-disclosure"
-                        title={language === 'en' ? 'Diagnostic details' : '诊断详情'}
+                        title={language === 'en' ? 'Data notes' : '数据说明'}
                         summary={language === 'en'
                           ? `Evaluated ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize}, selected ${runDetail.summary?.selectedCount ?? shortlistCount}, main rejection: ${rejectionBuckets[0]?.label || 'n/a'}`
                           : `本次共评估 ${runDetail.summary?.evaluatedCount ?? runDetail.evaluatedSize}，只入选 ${runDetail.summary?.selectedCount ?? shortlistCount}，主要淘汰原因：${rejectionBuckets[0]?.label || '暂无'}`}
                         icon="info"
-                        open={isDeveloperDiagnosticsOpen}
-                        onToggle={setIsDeveloperDiagnosticsOpen}
+                        open={isDataNotesOpen}
+                        onToggle={setIsDataNotesOpen}
                       >
                         <div data-testid="scanner-diagnostics-summary" className="mb-3 rounded-xl border border-white/5 bg-black/20 px-3 py-2 text-xs">
                           <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">

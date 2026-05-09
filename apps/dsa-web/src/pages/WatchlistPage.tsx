@@ -25,6 +25,7 @@ import type { WatchlistItem } from '../types/watchlist';
 import type { RuleBacktestRunResponse } from '../types/backtest';
 import { describeBooleanEnabled, describeDisplayStatus, type DisplayStatusTone } from '../utils/displayStatus';
 import { buildLocalizedPath } from '../utils/localeRouting';
+import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 
 type SortKey = 'newest' | 'scannerScore' | 'backtestReturn' | 'historicalHitRate' | 'recentlyScored' | 'recentlyBacktested' | 'symbol' | 'market';
 type EvidenceFilter = 'all' | 'hasScanner' | 'hasBacktest' | 'scannerSelected' | 'staleIntelligence';
@@ -197,6 +198,22 @@ function formatScannerStatus(item: WatchlistItem): string {
   if (simulationStatus === 'insufficient_history' || status === 'insufficient_history') return '数据不足';
   if (!hasScannerEvidence(item)) return '未扫描';
   return '通过筛选';
+}
+
+function formatScannerReason(reason?: string | null, language: 'zh' | 'en' = 'zh'): string | null {
+  const raw = String(reason || '').trim();
+  if (!raw) return null;
+  const normalized = raw.toLowerCase();
+  if (normalized === 'unknown' || normalized.includes('debug') || normalized.includes('critical')) {
+    return null;
+  }
+  if (/provider|timeout|history|missing|insufficient|not_enough|unavailable|data_failed/.test(normalized)) {
+    return sanitizeUserFacingDataIssue(raw, language);
+  }
+  if (/^[a-z0-9_:-]+$/.test(raw)) {
+    return null;
+  }
+  return raw;
 }
 
 function formatBacktestStatus(item: WatchlistItem, failure?: BatchFailure): string {
@@ -1123,6 +1140,7 @@ const WatchlistPage: React.FC = () => {
                   const scannerFailure = item.scoreError || scanner?.reason
                     ? sanitizeFailureReason(item.scoreError || scanner?.reason || '', '扫描失败')
                     : null;
+                  const scannerReasonLabel = formatScannerReason(scanner?.reason, language);
                   const latestTime = getLatestIntelligenceTime(item);
                     const scannerStatusLabel = formatScannerStatus(item);
                     const backtestStatusLabel = formatBacktestStatus(item, batchFailure);
@@ -1217,8 +1235,8 @@ const WatchlistPage: React.FC = () => {
                             <Badge variant="info" className="font-mono text-sky-100">{language === 'zh' ? '分数' : 'SCORE'} {formatScore(score)}</Badge>
                           ) : null}
                           {(scanner?.lastRank ?? item.scannerRank) ? <Badge variant="default" className={WATCHLIST_BADGE_CLASS}>{language === 'zh' ? '排名' : 'Rank'} #{scanner?.lastRank ?? item.scannerRank}</Badge> : null}
-                          {scanner?.reason && !['provider_down', 'provider_error', 'critical', 'debug', 'unknown'].some((token) => scanner.reason?.toLowerCase().includes(token)) ? (
-                            <Badge variant="default" className="max-w-[180px] justify-start truncate border-white/10 bg-white/[0.04] text-white/55">{scanner.reason}</Badge>
+                          {scannerReasonLabel ? (
+                            <Badge variant="default" className="max-w-[180px] justify-start truncate border-white/10 bg-white/[0.04] text-white/55">{scannerReasonLabel}</Badge>
                           ) : null}
                           <Badge variant="default" className={WATCHLIST_BADGE_CLASS}>{formatFreshness(latestTime)}</Badge>
                           {typeof avgForward === 'number' || typeof hitRate === 'number' ? (
@@ -1248,10 +1266,9 @@ const WatchlistPage: React.FC = () => {
                             </>
                           ) : null}
                           {batchFailure?.detail ? (
-                            <details className="max-w-[180px] rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-white/45">
-                              <summary className="cursor-pointer list-none">{language === 'zh' ? '开发者细节' : 'Developer details'}</summary>
-                              <p className="mt-1 truncate text-[10px] text-white/35">{language === 'zh' ? '原始错误已隐藏' : 'Raw error hidden'}</p>
-                            </details>
+                            <Badge variant="warning" className="max-w-[180px] truncate border-amber-300/15 bg-amber-300/10 text-amber-100/75">
+                              {language === 'zh' ? '错误详情已隐藏' : 'Error details hidden'}
+                            </Badge>
                           ) : null}
                           {batchDisplayStatus ? (
                             <Badge variant={displayBadgeVariant(batchDisplayStatus.tone)} className="font-mono">

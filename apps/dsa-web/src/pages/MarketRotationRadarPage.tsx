@@ -6,6 +6,7 @@ import { DataFreshnessBadge } from '../components/market-overview/marketOverview
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { marketRotationApi, type MarketRotationRadarResponse, type MarketRotationRiskLabel, type MarketRotationStage, type MarketRotationSummaryItem, type MarketRotationTheme, type MarketRotationTimeWindow } from '../api/marketRotation';
 import { cn } from '../utils/cn';
+import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 
 const TOP_THEME_LIMIT = 10;
 
@@ -109,6 +110,23 @@ function proxyMissingReasonLabel(reason?: string | null): string {
     proxy_windows_missing: '代理时窗待补齐',
   };
   return reason ? labels[reason] || '代理证据待复核' : '代理可用';
+}
+
+function isInternalRotationIssue(value?: string | null): boolean {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return /provider|timeout|schema|debug|raw|trace|cache|not_enough|unavailable|missing|insufficient|technical_indicators|fundamentals|earnings|optional_news/.test(normalized);
+}
+
+function sanitizeRotationText(value?: string | null, fallback = '数据不足，结论仅供观察'): string {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  return isInternalRotationIssue(text) ? sanitizeUserFacingDataIssue(text, 'zh') : text;
+}
+
+function sanitizeRotationNotes(notes?: string[]): string[] {
+  return (notes || [])
+    .map((note) => sanitizeRotationText(note, ''))
+    .filter((note, index, array) => Boolean(note) && array.indexOf(note) === index);
 }
 
 function proxyQualityState(theme: MarketRotationTheme): string {
@@ -396,7 +414,12 @@ const ThemeDetailPanel: React.FC<{
   const proxyValues = Object.values(theme.benchmarkProxies || {});
   const nextWatch = alertCandidates[0];
   const dataWarning = Boolean(theme.isFallback || theme.freshness === 'fallback' || isThemeStale(theme));
-  const explanation = theme.stageExplanation || `${theme.name} 当前以轮动强度、相对强弱、成交额扩张、广度和同步性作为观察依据。`;
+  const evidenceNotes = sanitizeRotationNotes(theme.evidence);
+  const riskExplanationNotes = sanitizeRotationNotes(theme.riskExplanations);
+  const explanation = sanitizeRotationText(
+    theme.stageExplanation,
+    `${theme.name} 当前以轮动强度、相对强弱、成交额扩张、广度和同步性作为观察依据。`,
+  );
 
   return (
     <GlassCard as="aside" data-testid="rotation-theme-detail-panel" className="p-4 md:p-5 xl:sticky xl:top-4">
@@ -494,7 +517,7 @@ const ThemeDetailPanel: React.FC<{
         </summary>
         {isProxyOpen ? (
           <div className="mt-3 grid gap-2 text-[11px] text-white/48">
-            {theme.proxyQuality?.explanation ? <p className="leading-5">{theme.proxyQuality.explanation}</p> : null}
+            {theme.proxyQuality?.explanation ? <p className="leading-5">{sanitizeRotationText(theme.proxyQuality.explanation)}</p> : null}
             {proxyValues.map((proxy) => (
               <div
                 key={proxy.symbol}
@@ -533,9 +556,9 @@ const ThemeDetailPanel: React.FC<{
       <details className="mt-3 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
         <summary className="cursor-pointer list-none text-[10px] font-bold uppercase text-white/35">证据详情</summary>
         <div className="mt-2 grid gap-1 text-[11px] leading-5 text-white/48">
-          {(theme.evidence || []).slice(0, 5).map((item) => <p key={item} className="truncate">· {item}</p>)}
-          {theme.riskExplanations?.slice(0, 3).map((item) => <p key={item} className="truncate">· {item}</p>)}
-          {!theme.evidence.length && !theme.riskExplanations?.length ? <p>暂无额外证据。</p> : null}
+          {evidenceNotes.slice(0, 5).map((item) => <p key={item} className="truncate">· {item}</p>)}
+          {riskExplanationNotes.slice(0, 3).map((item) => <p key={item} className="truncate">· {item}</p>)}
+          {!evidenceNotes.length && !riskExplanationNotes.length ? <p>暂无额外证据。</p> : null}
         </div>
       </details>
     </GlassCard>
@@ -557,7 +580,6 @@ const MarketRotationRadarPage: React.FC = () => {
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [selectedThemeId, setSelectedThemeId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [developerOpen, setDeveloperOpen] = useState(false);
   const [proxyOpenThemeId, setProxyOpenThemeId] = useState<string>('');
 
   const loadRadar = useCallback(async () => {
@@ -590,21 +612,6 @@ const MarketRotationRadarPage: React.FC = () => {
     [payload, selectedThemeId],
   );
 
-  const developerSnapshot = useMemo(() => {
-    if (!payload || !developerOpen) {
-      return '';
-    }
-    return JSON.stringify({
-      endpoint: payload.endpoint,
-      generatedAt: payload.generatedAt,
-      source: payload.source,
-      freshness: payload.freshness,
-      metadata: payload.metadata,
-      themeIds: payload.themes.map((theme) => theme.id),
-      noAdviceDisclosure: payload.noAdviceDisclosure,
-    }, null, 2);
-  }, [developerOpen, payload]);
-
   return (
     <div
       data-testid="market-rotation-radar-page"
@@ -616,7 +623,7 @@ const MarketRotationRadarPage: React.FC = () => {
             <p className="text-[10px] font-bold uppercase text-cyan-200/55">Market Rotation Radar</p>
             <h1 className="mt-2 text-2xl font-semibold text-white md:text-3xl">资金轮动雷达</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-white/50">
-              紧凑 Top-N 观察台。当前仅重排既有主题篮子数据，不新增行情、新闻或供应商调用。
+              紧凑 Top-N 观察台。当前仅重排既有主题篮子数据，不新增行情或新闻请求。
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -654,7 +661,7 @@ const MarketRotationRadarPage: React.FC = () => {
           {payload.warning ? (
             <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-300/15 bg-amber-300/10 px-4 py-3 text-sm leading-6 text-amber-100/80">
               <AlertTriangle className="mt-1 h-4 w-4 shrink-0" aria-hidden="true" />
-              <span>{payload.warning}</span>
+              <span>{sanitizeRotationText(payload.warning)}</span>
             </div>
           ) : null}
 
@@ -756,25 +763,10 @@ const MarketRotationRadarPage: React.FC = () => {
               <Gauge className="h-4 w-4 text-cyan-200/70" aria-hidden="true" />
               <span>展示层只基于既有响应字段排序、分桶和筛选。</span>
               <Signal className="ml-2 h-4 w-4 text-emerald-200/70" aria-hidden="true" />
-              <span>不触发交易、通知、组合或新供应商调用。</span>
+              <span>不触发交易、通知、组合或新的外部数据请求。</span>
               <Waves className="ml-2 h-4 w-4 text-white/40" aria-hidden="true" />
               <span>{payload.noAdviceDisclosure}</span>
             </div>
-          </details>
-
-          <details
-            data-testid="rotation-radar-developer-details"
-            className="mt-4 rounded-2xl border border-white/5 bg-white/[0.02] p-4 text-sm text-white/55"
-            onToggle={(event) => setDeveloperOpen(event.currentTarget.open)}
-          >
-            <summary className="cursor-pointer list-none text-[11px] font-bold uppercase text-white/42">
-              开发者详情
-            </summary>
-            {developerOpen ? (
-              <pre className="mt-3 max-h-72 overflow-y-auto no-scrollbar whitespace-pre-wrap break-words rounded-xl border border-white/[0.04] bg-black/20 p-3 text-[11px] leading-5 text-white/45">
-                {developerSnapshot}
-              </pre>
-            ) : null}
           </details>
         </>
       ) : null}

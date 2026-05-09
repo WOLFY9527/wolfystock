@@ -34,7 +34,7 @@ describe('ReportDetails', () => {
       contextSnapshot: { source: 'cache' },
     };
 
-    render(<ReportDetails details={details} />);
+    render(<ReportDetails details={details} audience="admin" />);
 
     fireEvent.click(screen.getByRole('button', { name: '原始分析结果' }));
     fireEvent.click(screen.getByRole('button', { name: '分析快照' }));
@@ -63,5 +63,19 @@ describe('ReportDetails', () => {
     });
 
     expect(screen.getAllByRole('button', { name: '复制' })).toHaveLength(2);
+  });
+
+  it('defaults to a user-safe summary without raw diagnostic panels', () => {
+    const details = {
+      rawResult: { provider: 'fixture-provider', schema: 'debug' },
+      contextSnapshot: { source: 'cache' },
+    };
+
+    render(<ReportDetails details={details} recordId={42} />);
+
+    expect(screen.getByText('普通用户页面已隐藏详细诊断。')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '原始分析结果' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '分析快照' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/fixture-provider|schema|debug|cache/)).not.toBeInTheDocument();
   });
 });

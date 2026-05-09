@@ -392,11 +392,12 @@ describe('ChatPage', () => {
     expect(engineSection).toHaveTextContent('自动选择可用研究引擎');
     expect(engineSection).not.toHaveTextContent('AUTO → DeepSeek');
     expect(engineSection).not.toHaveTextContent('DeepSeek 可用');
-    fireEvent.click(within(engineSection).getByText(/引擎明细|Provider detail/i));
-    expect(engineSection).toHaveTextContent('DeepSeek 可用');
-    expect(engineSection).toHaveTextContent('OpenAI 未配置');
-    expect(engineSection).toHaveTextContent('Gemini 离线');
-    expect(engineSection).toHaveTextContent('Local 未知');
+    expect(within(engineSection).queryByText(/引擎明细|Provider detail/i)).not.toBeInTheDocument();
+    expect(engineSection).not.toHaveTextContent('DeepSeek 可用');
+    expect(engineSection).not.toHaveTextContent('OpenAI 未配置');
+    expect(engineSection).not.toHaveTextContent('Gemini 离线');
+    expect(engineSection).not.toHaveTextContent('Local 未知');
+    expect(engineSection).not.toHaveTextContent(/供应商状态|provider health|diagnostics/i);
     expect(engineSection.textContent).not.toMatch(/api[_-]?key|secret|sk-/i);
   });
 
@@ -549,7 +550,8 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByTestId('chat-answer-evidence-footer-assistant-evidence')).toHaveTextContent('LLM: DeepSeek deepseek-chat');
+    expect(await screen.findByTestId('chat-answer-evidence-footer-assistant-evidence')).toHaveTextContent('分析方式: 自动研究引擎');
+    expect(screen.getByTestId('chat-answer-evidence-footer-assistant-evidence')).not.toHaveTextContent(/LLM|DeepSeek|deepseek-chat/);
     expect(screen.getByTestId('chat-answer-evidence-footer-assistant-evidence')).toHaveTextContent('数据: 行情 未知 · 技术 可用 · 基本面 部分 · 持仓 无 · 观察列表 已加入 · Scanner 最近入选 · 回测 有');
     expect(screen.getByTestId('chat-answer-evidence-footer-assistant-evidence')).not.toHaveTextContent('UNKNOWN');
 
