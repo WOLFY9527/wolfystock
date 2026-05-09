@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import tempfile
+import threading
+import time
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -489,6 +491,38 @@ class FakeHkScannerDataManager(FakeScannerDataManager):
         return list(self._last_realtime_quote_trace)
 
 
+class SlowFaultyScannerDataManager(FakeScannerDataManager):
+    def __init__(self, *, delay_seconds: float = 0.05) -> None:
+        super().__init__()
+        self.delay_seconds = delay_seconds
+        self.histories.pop("600003", None)
+        self._lock = threading.Lock()
+        self._active_history_calls = 0
+        self.max_active_history_calls = 0
+
+    def get_daily_data(self, code: str, days: int = 140):
+        with self._lock:
+            self._active_history_calls += 1
+            self.max_active_history_calls = max(self.max_active_history_calls, self._active_history_calls)
+        try:
+            time.sleep(self.delay_seconds)
+            return super().get_daily_data(code, days=days)
+        finally:
+            with self._lock:
+                self._active_history_calls -= 1
+
+
+class SlowMissingQuoteDataManager(FakeUsScannerDataManager):
+    def __init__(self, *, delay_seconds: float = 0.01) -> None:
+        super().__init__()
+        self.delay_seconds = delay_seconds
+        self.us_quotes.pop("PLTR", None)
+
+    def get_realtime_quote(self, symbol: str):
+        time.sleep(self.delay_seconds)
+        return super().get_realtime_quote(symbol)
+
+
 def seed_us_local_history(stock_repo: StockRepository) -> None:
     fixtures = {
         "SPY": _make_history(start_price=485.0, slope=0.35, amount_base=3.4e10, volume_base=78_000_000, bars=130),
@@ -843,6 +877,71 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         detail = service.get_run_detail(result["id"])
         assert detail is not None
         self.assertIn("review_commentary", detail["shortlist"][0]["ai_interpretation"])
+
+    def test_run_scan_parallelizes_cn_remote_history_without_drifting_results(self) -> None:
+        data_manager = SlowFaultyScannerDataManager()
+        service = MarketScannerService(self.db, data_manager=data_manager)
+
+        result = service.run_scan(
+            market="cn",
+            shortlist_size=3,
+            universe_limit=50,
+            detail_limit=10,
+        )
+
+        self.assertGreaterEqual(data_manager.max_active_history_calls, 2)
+        self.assertEqual(
+            [(item["symbol"], item["rank"], item["score"]) for item in result["shortlist"]],
+            [("600001", 1, 87.7), ("300123", 2, 80.8), ("600002", 3, 78.1)],
+        )
+        self.assertEqual(
+            result["diagnostics"]["history_stats"],
+            {
+                "local_hits": 1,
+                "network_fetches": 3,
+                "network_failures": 1,
+                "partial_local_fallbacks": 0,
+                "skipped_for_history": 1,
+            },
+        )
+        provider_diagnostics = result["diagnostics"]["provider_diagnostics"]
+        self.assertEqual(provider_diagnostics["history_source_used"], "FakeDailySource")
+        self.assertIn("unavailable", provider_diagnostics["providers_used"])
+        self.assertFalse(provider_diagnostics["fallback_occurred"])
+        self.assertEqual(provider_diagnostics["missing_data_symbol_count"], 1)
+
+    def test_us_quote_failure_stays_visible_and_history_only_not_live(self) -> None:
+        seed_us_local_history(self.stock_repo)
+        data_manager = SlowMissingQuoteDataManager()
+        service = MarketScannerService(
+            self.db,
+            data_manager=data_manager,
+        )
+
+        result = service.run_scan(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=3,
+            universe_limit=50,
+            detail_limit=10,
+            universe_type="symbols",
+            symbols=["NVDA", "AAPL", "PLTR"],
+        )
+
+        self.assertEqual(
+            [(item["symbol"], item["rank"], item["score"]) for item in result["shortlist"]],
+            [("PLTR", 1, 81.6), ("NVDA", 2, 65.8), ("AAPL", 3, 62.8)],
+        )
+        self.assertEqual(result["diagnostics"]["live_quote_stats"]["attempted_candidates"], 3)
+        self.assertEqual(result["diagnostics"]["live_quote_stats"]["available_candidates"], 2)
+        self.assertEqual(result["diagnostics"]["live_quote_stats"]["unavailable_candidates"], 1)
+        self.assertEqual(result["diagnostics"]["provider_diagnostics"]["provider_failure_count"], 1)
+        self.assertFalse(result["diagnostics"]["provider_diagnostics"]["fallback_occurred"])
+        candidate_map = {item["symbol"]: item for item in result["candidates"]}
+        self.assertEqual(candidate_map["PLTR"]["provider"], "history_only_us_scan")
+        pltr = next(item for item in result["shortlist"] if item["symbol"] == "PLTR")
+        self.assertFalse(pltr["diagnostics"]["quote_context"]["available"])
+        self.assertIsNone(pltr["diagnostics"]["quote_context"]["source"])
 
     def test_run_scan_supports_us_preopen_profile_and_preserves_market_context(self) -> None:
         seed_us_local_history(self.stock_repo)

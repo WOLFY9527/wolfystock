@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -46,6 +47,7 @@ DEFAULT_HK_SCANNER_BENCHMARK_CODE = "HK02800"
 MIN_US_SCANNER_SEED_TARGET = 24
 MAX_US_SCANNER_SUPPLEMENT_TARGET = 80
 MAX_HK_SCANNER_SUPPLEMENT_TARGET = 60
+SCANNER_DETAIL_HISTORY_MAX_WORKERS = 4
 CURATED_US_LIQUID_SEED_SYMBOLS: Tuple[str, ...] = (
     "NVDA",
     "AAPL",
@@ -723,11 +725,10 @@ class MarketScannerService:
         history_source_counts: Dict[str, int] = {}
 
         evaluated_candidates: List[Dict[str, Any]] = []
-        for row in preselected_df.to_dict("records"):
-            history_df, history_diag = self._load_history_local_first(
-                code=str(row["code"]),
-                profile=profile_config,
-            )
+        for row, history_df, history_diag in self._load_detail_histories_ordered(
+            preselected_rows=preselected_df.to_dict("records"),
+            profile=profile_config,
+        ):
             history_source = str(history_diag.get("source") or "")
             if history_source:
                 history_source_counts[history_source] = history_source_counts.get(history_source, 0) + 1
@@ -4649,6 +4650,67 @@ class MarketScannerService:
             ascending=[False, False, False, False],
         )
 
+    def _load_detail_histories_ordered(
+        self,
+        *,
+        preselected_rows: Sequence[Dict[str, Any]],
+        profile: ScannerMarketProfile,
+    ) -> List[Tuple[Dict[str, Any], pd.DataFrame, Dict[str, Any]]]:
+        rows = list(preselected_rows or [])
+        results: List[Optional[Tuple[Dict[str, Any], pd.DataFrame, Dict[str, Any]]]] = [None] * len(rows)
+        remote_tasks: List[Tuple[int, Dict[str, Any], str, pd.DataFrame]] = []
+
+        for index, row in enumerate(rows):
+            normalized_code = normalize_stock_code(str(row["code"]))
+            local_df = self._load_local_history(normalized_code, history_days=profile.history_days)
+            if self._is_history_sufficient(local_df, profile=profile):
+                latest_trade_date = (
+                    pd.to_datetime(local_df["date"]).max().date().isoformat()
+                    if not local_df.empty and "date" in local_df.columns
+                    else None
+                )
+                results[index] = (
+                    row,
+                    local_df,
+                    {
+                        "source": "local_db",
+                        "rows": int(len(local_df)),
+                        "latest_trade_date": latest_trade_date,
+                        "network_used": False,
+                        "network_failed": False,
+                        "partial_local_fallback": False,
+                    },
+                )
+                continue
+            remote_tasks.append((index, row, normalized_code, local_df))
+
+        if remote_tasks:
+            max_workers = min(SCANNER_DETAIL_HISTORY_MAX_WORKERS, len(remote_tasks))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_map = {
+                    executor.submit(
+                        self._load_history_remote_after_local,
+                        code=normalized_code,
+                        profile=profile,
+                        local_df=local_df,
+                        persist_remote=False,
+                    ): (index, row, normalized_code)
+                    for index, row, normalized_code, local_df in remote_tasks
+                }
+                for future in as_completed(future_map):
+                    index, row, normalized_code = future_map[future]
+                    history_df, history_diag = future.result()
+                    history_source = str(history_diag.get("source") or "")
+                    if (
+                        not history_df.empty
+                        and history_source
+                        and history_source not in {"local_db", "local_partial_fallback", "unavailable"}
+                    ):
+                        self.stock_repo.save_dataframe(history_df, normalized_code, history_source)
+                    results[index] = (row, history_df, history_diag)
+
+        return [item for item in results if item is not None]
+
     def _load_history_local_first(
         self,
         *,
@@ -4672,6 +4734,22 @@ class MarketScannerService:
                 "partial_local_fallback": False,
             }
 
+        return self._load_history_remote_after_local(
+            code=normalized_code,
+            profile=profile,
+            local_df=local_df,
+            persist_remote=True,
+        )
+
+    def _load_history_remote_after_local(
+        self,
+        *,
+        code: str,
+        profile: ScannerMarketProfile,
+        local_df: pd.DataFrame,
+        persist_remote: bool,
+    ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+        normalized_code = normalize_stock_code(code)
         if profile.market == "us":
             try:
                 remote_df, remote_source = fetch_daily_history_with_local_us_fallback(
@@ -4682,7 +4760,8 @@ class MarketScannerService:
                 )
                 normalized_remote_df = self._normalize_history_frame(remote_df)
                 if not normalized_remote_df.empty:
-                    self.stock_repo.save_dataframe(normalized_remote_df, normalized_code, remote_source)
+                    if persist_remote:
+                        self.stock_repo.save_dataframe(normalized_remote_df, normalized_code, remote_source)
                     latest_trade_date = (
                         pd.to_datetime(normalized_remote_df["date"]).max().date().isoformat()
                         if "date" in normalized_remote_df.columns
@@ -4729,7 +4808,8 @@ class MarketScannerService:
             )
             normalized_remote_df = self._normalize_history_frame(remote_df)
             if not normalized_remote_df.empty:
-                self.stock_repo.save_dataframe(normalized_remote_df, normalized_code, remote_source)
+                if persist_remote:
+                    self.stock_repo.save_dataframe(normalized_remote_df, normalized_code, remote_source)
                 latest_trade_date = (
                     pd.to_datetime(normalized_remote_df["date"]).max().date().isoformat()
                     if "date" in normalized_remote_df.columns
