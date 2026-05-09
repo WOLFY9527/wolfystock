@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { ArrowUp, Download, Lightbulb, PanelRightOpen, SendHorizontal } from 'lucide-react';
+import { ArrowUp, Download, PanelRightOpen, SendHorizontal } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -8,8 +8,8 @@ import { watchlistApi } from '../api/watchlist';
 import { portfolioApi } from '../api/portfolio';
 import { scannerApi } from '../api/scanner';
 import { backtestApi } from '../api/backtest';
-import { ApiErrorAlert, ConfirmDialog, Drawer, GlassCard, TypewriterText } from '../components/common';
-import { DensityRail, GuidedDisclosure, InsightStack, SectionIntro } from '../components/guidance';
+import { ApiErrorAlert, ConfirmDialog, Drawer, TypewriterText } from '../components/common';
+import { GuidedDisclosure } from '../components/guidance';
 import { CARD_BUTTON_CLASS } from '../components/home-bento';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import type { SkillInfo } from '../api/agent';
@@ -69,11 +69,6 @@ const assistantMarkdownComponents = {
   td: ({ children }: React.PropsWithChildren) => <td className="border border-white/10 px-3 py-1.5 align-top">{children}</td>,
   hr: () => <hr className="my-4 border-white/10" />,
 } satisfies React.ComponentProps<typeof Markdown>['components'];
-
-type StarterPromptCard = {
-  id: string;
-  skill: string;
-};
 
 type QuickQuestion = {
   id: string;
@@ -185,12 +180,6 @@ type AnalysisLens = {
   advanced?: boolean;
 };
 
-const STARTER_PROMPT_CARDS: StarterPromptCard[] = [
-  { id: 'entryDecision', skill: 'bull_trend' },
-  { id: 'positionReview', skill: 'bull_trend' },
-  { id: 'eventFollowUp', skill: 'bull_trend' },
-];
-
 const QUICK_QUESTIONS: QuickQuestion[] = [
   { id: 'q1', skill: 'chan_theory' },
   { id: 'q2', skill: 'wave_theory' },
@@ -260,7 +249,7 @@ const SKILL_TEXT_ALIAS_TO_ID: Record<string, string> = CANONICAL_SKILL_IDS.reduc
 const ASSISTANT_MESSAGE_SURFACE_CLASS = 'w-full markdown-body text-[15px] leading-[1.6] text-white/90 break-words [&>p]:mb-3 [&>ul]:my-2 [&>ul]:pl-5 [&>li]:mb-1 [&>h3]:text-base [&>h3]:font-bold [&>h3]:mt-4 [&>h3]:mb-2';
 const STREAMING_ASSISTANT_MESSAGE_SURFACE_CLASS = `${ASSISTANT_MESSAGE_SURFACE_CLASS} whitespace-pre-wrap`;
 const CHAT_CONSOLE_TOGGLE_OPTIONS: Array<{ value: ChatConsoleMode; label: { zh: string; en: string } }> = [
-  { value: 'engines', label: { zh: '控制台', en: 'Console' } },
+  { value: 'engines', label: { zh: '上下文', en: 'Context' } },
   { value: 'history', label: { zh: '历史记录', en: 'History' } },
 ];
 
@@ -535,7 +524,6 @@ const ChatPage: React.FC = () => {
   const [skillsLoadError, setSkillsLoadError] = useState<ParsedApiError | null>(null);
   const [consoleMode, setConsoleMode] = useState<ChatConsoleMode>('engines');
   const [isMobileConsoleOpen, setIsMobileConsoleOpen] = useState(false);
-  const [mobileTemplatesOpen, setMobileTemplatesOpen] = useState(false);
   const [evidenceItems, setEvidenceItems] = useState<DataEvidenceItem[]>(buildInitialEvidenceItems(false));
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [animatedAssistantMessageId, setAnimatedAssistantMessageId] = useState<string | null>(null);
@@ -614,9 +602,6 @@ const ChatPage: React.FC = () => {
   }, []);
 
   const availableSkillIds = new Set(skills.map((skill) => skill.id));
-  const starterPromptCards = STARTER_PROMPT_CARDS.filter(
-    (card) => availableSkillIds.size === 0 || availableSkillIds.has(card.skill),
-  );
   const quickQuestions = QUICK_QUESTIONS.filter(
     (question) => availableSkillIds.size === 0 || availableSkillIds.has(question.skill),
   );
@@ -777,12 +762,12 @@ const ChatPage: React.FC = () => {
       window.clearTimeout(timer);
     };
   }, [evidenceSymbolKey, smartRoute.market]);
-  const engineSwitcherLabel = language === 'en' ? 'Engine, lenses, data' : '引擎、视角与数据';
+  const engineSwitcherLabel = language === 'en' ? 'Research context' : '研究上下文';
   const composerDisclaimer = language === 'en'
-    ? 'AI insights are for research only and are not investment advice. Review risk tolerance independently.'
-    : 'AI 洞察仅供研究参考，不构成投资建议。请自行评估风险承受能力。';
-  const chatConsoleTitle = language === 'en' ? 'Research console' : '综合控制台';
-  const mobileConsoleTitle = language === 'en' ? 'Research console' : '研究控制台';
+    ? 'For research only. Not investment advice.'
+    : '仅供研究参考，不构成投资建议。';
+  const chatConsoleTitle = language === 'en' ? 'Research context' : '研究上下文';
+  const mobileConsoleTitle = language === 'en' ? 'Research context' : '研究上下文';
   const hasMessages = messages.length > 0;
   const showEmptyState = !hasMessages && !loading;
 
@@ -1454,96 +1439,33 @@ const ChatPage: React.FC = () => {
     return (
       <section
         data-testid={testId}
-        className="text-left"
+        className="rounded-2xl border border-white/8 bg-white/[0.025] p-3 text-left"
       >
-        <DensityRail
-          title={language === 'en' ? 'Research context' : '研究上下文'}
-          className="md:max-w-none"
-          items={[
+        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+          {language === 'en' ? 'Research context' : '研究上下文'}
+        </p>
+        <div className="mt-3 grid gap-2">
+          {[
+            { label: language === 'en' ? 'Question' : '问题', value: smartRoute.symbols.length ? routeText : (language === 'en' ? 'Waiting for question' : '等待问题') },
+            { label: language === 'en' ? 'Context' : '上下文', value: smartRoute.symbols.length ? lensText : (language === 'en' ? 'No context yet' : '暂无上下文') },
             {
-              id: 'evidence',
-              label: language === 'en' ? 'Evidence mode' : '只读证据',
-              value: language === 'en' ? 'Analysis only' : '仅分析',
-              helper: language === 'en'
-                ? 'The workspace organizes research questions and avoids account actions.'
-                : '该入口只组织研究问题，不触发账户动作。',
-              tone: 'info',
+              label: language === 'en' ? 'Data check' : '数据检查',
+              value: smartRoute.symbols.length
+                ? (language === 'en'
+                  ? `${availableCount} ready · ${partialCount} partial · ${missingCount} missing`
+                  : `${availableCount} 可用 · ${partialCount} 部分 · ${missingCount} 缺失`)
+                : (language === 'en' ? 'Checks data during analysis' : '分析时检查数据'),
             },
-            {
-              id: 'route',
-              label: language === 'en' ? 'Question route' : '问题路径',
-              value: routeText,
-              helper: language === 'en' ? 'Generated after a symbol or scenario appears.' : '输入标的或情景后生成。',
-            },
-            {
-              id: 'lens',
-              label: language === 'en' ? 'Observation lens' : '观察条件',
-              value: lensText,
-              helper: language === 'en' ? 'You can refine this before sending.' : '发送前可继续细化视角。',
-              tone: 'neutral',
-            },
-            {
-              id: 'state',
-              label: language === 'en' ? 'Evidence state' : '证据状态',
-              value: language === 'en'
-                ? `${availableCount} ready · ${partialCount} partial · ${missingCount} missing`
-                : `${availableCount} 可用 · ${partialCount} 部分 · ${missingCount} 缺失`,
-              helper: language === 'en' ? 'Missing context is called out in the answer.' : '缺失上下文会在回答中显式说明。',
-              tone: missingCount > 0 ? 'caution' : 'info',
-            },
-          ]}
-        />
+          ].map((item) => (
+            <div key={item.label} className="rounded-xl border border-white/5 bg-black/20 px-3 py-2">
+              <p className="text-[10px] text-white/34">{item.label}</p>
+              <p className="mt-1 truncate text-sm font-medium text-white/72">{item.value}</p>
+            </div>
+          ))}
+        </div>
       </section>
     );
   };
-
-  const renderResearchTaskStack = () => (
-    <div data-testid="chat-research-task-stack" className="grid gap-4 text-left">
-      <SectionIntro
-        purpose={language === 'en' ? 'Research workflow' : '研究任务栈'}
-        summary={language === 'en' ? 'Start with a precise question, then let evidence, gaps, and risk boundaries shape the answer.' : '先提出一个清晰研究问题，再让证据、缺口和风险边界决定答案范围。'}
-        nextStep={language === 'en' ? 'Enter a symbol, event, or portfolio context; keep the request framed as observation and validation.' : '输入标的、事件或持仓背景；默认聚焦观察、验证和风险复核。'}
-        status={{ label: language === 'en' ? 'analysis only' : '仅分析', tone: 'neutral' }}
-      />
-      <InsightStack
-        title={language === 'en' ? 'Empty-state research flow' : '空状态研究流程'}
-        insights={[
-          {
-            id: 'ask',
-            severity: 'info',
-            title: language === 'en' ? 'What can I ask?' : '我能问什么',
-            explanation: language === 'en'
-              ? 'Ask for observation conditions, risk boundaries, catalysts, data confidence, or scenario comparisons.'
-              : '可以询问观察条件、风险边界、催化因素、数据可信度或情景对比。',
-          },
-          {
-            id: 'evidence',
-            severity: 'success',
-            title: language === 'en' ? 'What evidence is available?' : '可用证据',
-            explanation: language === 'en'
-              ? 'The desk can attach quote, technical, fundamentals, watchlist, portfolio, scanner, backtest, and news context when available.'
-              : '研究台会在可用时附带行情、技术、基本面、观察列表、组合、扫描器、回测和新闻上下文。',
-          },
-          {
-            id: 'missing',
-            severity: 'warning',
-            title: language === 'en' ? 'What context is missing?' : '缺失上下文',
-            explanation: language === 'en'
-              ? 'If no symbol, timeframe, position background, or event is supplied, the answer should mark those gaps instead of pretending certainty.'
-              : '如果缺少标的、时间窗口、持仓背景或事件，回答应标明缺口，而不是伪装成确定结论。',
-          },
-          {
-            id: 'safe-next',
-            severity: 'info',
-            title: language === 'en' ? 'What is the safe next step?' : '安全下一步',
-            explanation: language === 'en'
-              ? 'Use the first answer to refine assumptions, inspect evidence, or prepare a report-quality observation plan.'
-              : '用第一轮回答继续细化假设、核验证据，或整理成报告级观察计划。',
-          },
-        ]}
-      />
-    </div>
-  );
 
   const quoteEvidence = evidenceItems.find((item) => item.key === 'quote');
   const renderSmartRouteStrip = () => (
@@ -1596,25 +1518,6 @@ const ChatPage: React.FC = () => {
     const secondaryLenses = [...PRIMARY_ANALYSIS_LENSES.slice(4), ...ADVANCED_ANALYSIS_LENSES];
     return (
       <div data-testid={testId} className="flex flex-col gap-3">
-        <section data-testid="chat-engine-section" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">AI 引擎</p>
-            <span className="rounded-full border border-white/8 bg-white/[0.03] px-2 py-0.5 font-mono text-[10px] uppercase text-white/36">
-              {language === 'en' ? 'auto' : '自动'}
-            </span>
-          </div>
-          <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-white/6 bg-black/25 px-3 py-2">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">
-                {language === 'en' ? 'Automatically select an available research engine' : '自动选择可用研究引擎'}
-              </p>
-              <p className="truncate text-[10px] text-white/36">
-                {language === 'en' ? 'Unavailable engines are skipped automatically.' : '不可用引擎会自动避开。'}
-              </p>
-            </div>
-          </div>
-        </section>
-
         <section data-testid="chat-lens-section" className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">分析视角</p>
@@ -1681,13 +1584,13 @@ const ChatPage: React.FC = () => {
         type="button"
         onClick={openConsoleButton.onClick}
         onPointerUp={openConsoleButton.onPointerUp}
-        aria-label={language === 'en' ? 'Open research console' : '打开研究控制台'}
+        aria-label={language === 'en' ? 'Open research context' : '打开研究上下文'}
         data-testid="chat-bento-brief-trigger"
         className={CARD_BUTTON_CLASS}
-        title={language === 'en' ? 'Open console' : '打开控制台'}
+        title={language === 'en' ? 'Open context' : '打开研究上下文'}
       >
         <PanelRightOpen className="h-4 w-4" />
-        <span>{language === 'en' ? 'Console' : '控制台'}</span>
+        <span>{language === 'en' ? 'Context' : '上下文'}</span>
       </button>
     </div>
   );
@@ -1767,6 +1670,18 @@ const ChatPage: React.FC = () => {
         <p className="mt-3 text-center text-[10px] text-white/30">
           {composerDisclaimer}
         </p>
+        {quickQuestions.length > 0 ? (
+          <div
+            data-testid="chat-quick-question-cloud"
+            className="mt-3 flex flex-wrap justify-center gap-2"
+          >
+            {quickQuestions.slice(0, 5).map((q) => (
+              <button className="inline-flex max-w-full items-center justify-center rounded-full border border-white/6 bg-white/[0.025] px-3 py-1.5 text-xs text-white/58 transition-all hover:border-white/12 hover:bg-white/[0.05] hover:text-white/78" key={q.id} type="button" onClick={() => handleQuickQuestion(q)}>
+                <span className="truncate">{chat(`quickQuestions.${q.id}`)}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
         {showMobileActions ? renderMobileComposerActions() : null}
       </div>
 
@@ -1817,7 +1732,7 @@ const ChatPage: React.FC = () => {
                   data-testid="chat-empty-state"
                   className="flex flex-1 flex-col items-center justify-start overflow-y-auto no-scrollbar"
                 >
-                  <div className="flex w-full max-w-7xl flex-col items-stretch gap-4 px-4 pb-6 pt-4 text-left sm:gap-5 md:px-6 xl:px-8">
+                  <div className="flex min-h-0 w-full max-w-6xl flex-1 flex-col items-stretch gap-4 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 text-left sm:gap-5 md:px-6 xl:px-8">
                     {skillsLoadError ? (
                       <ApiErrorAlert
                         error={skillsLoadError}
@@ -1828,22 +1743,35 @@ const ChatPage: React.FC = () => {
                       />
                     ) : null}
 
-                    <div className="flex w-full flex-col items-start">
-                      <div className="mb-2 flex items-center justify-start gap-3">
-                        <Lightbulb className="h-5 w-5 text-white/80 sm:h-6 sm:w-6" aria-hidden="true" />
-                        <h1 className="text-xl font-bold text-white sm:text-3xl">{chat('title')}</h1>
+                    <div className="flex w-full items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">
+                          {language === 'en' ? 'AI research' : 'AI 研究'}
+                        </p>
+                        <h1 className="mt-1 truncate text-lg font-semibold text-white sm:text-xl">{chat('title')}</h1>
                       </div>
-                      <p className="mt-1 max-w-3xl text-xs leading-relaxed text-white/62 sm:text-sm">
-                        {chat('description')}
-                      </p>
-                      <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-white/40">{chat('emptyTitle')}</p>
+                      <div className="hidden sm:block">
+                        {renderConsoleActions(true)}
+                      </div>
                     </div>
 
                     <div
                       data-testid="chat-research-entry-grid"
-                      className="grid w-full grid-cols-1 gap-4 lg:items-start"
+                      className="flex min-h-0 flex-1 flex-col justify-between gap-4 lg:items-stretch"
                     >
-                      <div data-testid="chat-input-shell" className="w-full shrink-0 min-w-0 lg:col-start-1 lg:row-start-1">
+                      <div
+                        data-testid="chat-empty-research-stream"
+                        className="flex min-h-[180px] flex-1 flex-col items-center justify-center rounded-2xl border border-white/5 bg-white/[0.015] px-4 py-6 text-center"
+                      >
+                        <p className="text-sm font-medium text-white/70">
+                          {language === 'en' ? 'Waiting for a research question' : '等待问题'}
+                        </p>
+                        <p className="mt-2 text-xs text-white/38">
+                          {language === 'en' ? 'No context yet. Data is checked during analysis.' : '暂无上下文。分析时检查数据。'}
+                        </p>
+                      </div>
+
+                      <div data-testid="chat-input-shell" className="sticky bottom-0 w-full shrink-0 min-w-0 pt-2">
                         <div data-testid="chat-input-gradient" className="w-full shrink-0">
                           <div
                             data-testid="chat-console-inner"
@@ -1853,81 +1781,6 @@ const ChatPage: React.FC = () => {
                           </div>
                         </div>
                       </div>
-
-                      <div className="lg:col-start-1 lg:row-start-2">
-                        {renderResearchTaskStack()}
-                      </div>
-
-                      <div data-testid="chat-starter-grid" className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:col-start-1 lg:row-start-3 lg:grid-cols-3 lg:gap-4">
-                      {starterPromptCards.slice(0, 2).map((card, index) => (
-                        <GlassCard
-                          key={card.id}
-                          as="button"
-                          data-testid={`chat-starter-card-${card.id}`}
-                          onClick={() => {
-                            void handleSend(chat(`starterCards.${card.id}.prompt`), card.skill);
-                          }}
-                          className={`${index > 0 ? 'hidden sm:flex' : 'flex'} min-w-0 flex-col items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-center transition-colors duration-150 hover:bg-white/[0.05] sm:px-8 sm:py-6`}
-                        >
-                          <div className="flex flex-col items-center justify-center gap-3">
-                            <p className="break-words whitespace-normal text-sm font-bold text-white">{chat(`starterCards.${card.id}.title`)}</p>
-                            <p className="break-words whitespace-normal text-xs leading-relaxed text-white/60">
-                              {chat(`starterCards.${card.id}.description`)}
-                            </p>
-                            <p className="break-words whitespace-normal text-xs leading-relaxed text-white/38">
-                              {chat(`starterCards.${card.id}.prompt`)}
-                            </p>
-                          </div>
-                        </GlassCard>
-                      ))}
-                      </div>
-
-                      {starterPromptCards.length > 2 ? (
-                      <details
-                        data-testid="chat-more-templates"
-                        open={mobileTemplatesOpen}
-                        onToggle={(event) => setMobileTemplatesOpen((event.currentTarget as HTMLDetailsElement).open)}
-                        className="w-full text-left sm:hidden"
-                      >
-                        <summary className="cursor-pointer list-none text-center text-[10px] font-bold uppercase tracking-widest text-white/40">
-                          更多模板
-                        </summary>
-                        <div className="mt-2 grid grid-cols-1 gap-2">
-                          {starterPromptCards.slice(1).map((card) => (
-                            <button
-                              key={card.id}
-                              type="button"
-                              data-testid={`chat-mobile-template-${card.id}`}
-                              className="rounded-xl border border-white/6 bg-white/[0.025] px-3 py-2 text-left text-xs text-white/64 transition-all hover:bg-white/[0.05] hover:text-white/80"
-                              onClick={() => {
-                                void handleSend(chat(`starterCards.${card.id}.prompt`), card.skill);
-                              }}
-                            >
-                              <span className="block font-bold text-white/80">{chat(`starterCards.${card.id}.title`)}</span>
-                              <span className="mt-1 block line-clamp-1 text-white/40">{chat(`starterCards.${card.id}.prompt`)}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </details>
-                      ) : null}
-
-                      {quickQuestions.length > 0 ? (
-                      <div
-                        data-testid="chat-quick-question-cloud"
-                        className="hidden flex-wrap justify-center gap-2 sm:flex sm:gap-3 lg:col-start-1 lg:row-start-4"
-                      >
-                        {quickQuestions.map((q) => (
-                          <button
-                            key={q.id}
-                            type="button"
-                            className="inline-flex items-center justify-center whitespace-nowrap rounded-xl border border-white/5 bg-white/[0.02] px-5 py-2.5 text-xs text-white/60 transition-all hover:bg-white/[0.05] hover:text-white"
-                            onClick={() => handleQuickQuestion(q)}
-                          >
-                            {chat(`quickQuestions.${q.id}`)}
-                          </button>
-                        ))}
-                      </div>
-                      ) : null}
 
                       <div className="lg:hidden">
                         {renderMobileComposerActions()}

@@ -361,7 +361,8 @@ describe('OptionsLabPage', () => {
 
     expect(screen.getByRole('heading', { name: '期权实验室' })).toBeInTheDocument();
     expect(screen.getByText('分析支持 / 不构成投资建议')).toBeInTheDocument();
-    expect(screen.getByText('情景假设')).toBeInTheDocument();
+    expect(screen.getByTestId('options-lab-bento-grid')).toHaveClass('grid', 'grid-cols-1', 'gap-6', 'xl:grid-cols-12', 'xl:items-start');
+    expect(screen.getByText('期权假设')).toBeInTheDocument();
     expect(screen.getByLabelText('标的代码')).toHaveValue('TEM');
     expect(screen.getByText('上涨情景')).toBeInTheDocument();
     expect(screen.getByText('下跌情景')).toBeInTheDocument();
@@ -369,10 +370,10 @@ describe('OptionsLabPage', () => {
     expect(screen.getByText('波动扩张')).toBeInTheDocument();
 
     expect(await screen.findByTestId('options-lab-decision-engine')).toBeInTheDocument();
-    expect(screen.getByTestId('options-lab-chain-details')).not.toHaveAttribute('open');
-    expect(screen.getByTestId('options-lab-strategy-details')).not.toHaveAttribute('open');
-    expect(screen.getByText('合约链明细')).toBeInTheDocument();
-    expect(screen.getByText('策略对比明细')).toBeInTheDocument();
+    expect(screen.queryByTestId('options-lab-chain-details')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('options-lab-strategy-details')).not.toBeInTheDocument();
+    expect(screen.getByText('Call 链')).toBeInTheDocument();
+    expect(screen.getByText('Put 链')).toBeInTheDocument();
     expect(screen.getByText('期权可能归零，最大亏损可能达到全部权利金。')).toBeInTheDocument();
     expect(screen.getByText('本模块不提供交易执行或收益承诺。')).toBeInTheDocument();
   });
@@ -381,7 +382,7 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-strategy-comparison');
-    expect(within(section).getByText('策略对比')).toBeInTheDocument();
+    expect(within(section).getByText('策略候选')).toBeInTheDocument();
     await waitFor(() => {
       expect(within(section).getByText('看涨期权多头')).toBeInTheDocument();
       expect(within(section).getByText('看跌期权多头')).toBeInTheDocument();
@@ -427,22 +428,21 @@ describe('OptionsLabPage', () => {
     const decision = await screen.findByTestId('options-lab-decision-engine');
     const summary = await screen.findByTestId('options-lab-decision-summary');
     const analysisDetails = await screen.findByTestId('options-lab-analysis-details');
-    const chainDetails = await screen.findByTestId('options-lab-chain-details');
-    const strategyDetails = await screen.findByTestId('options-lab-strategy-details');
+    const callsTable = await screen.findByTestId('options-lab-calls-table');
+    const putsTable = await screen.findByTestId('options-lab-puts-table');
+    const strategyDetails = await screen.findByTestId('options-lab-strategy-comparison');
 
-    const assumptions = screen.getByTestId('options-lab-assumptions-row');
+    const assumptions = screen.getByTestId('options-lab-assumptions-panel');
     expect(decision).toContainElement(summary);
     expect(summary).toHaveTextContent('决策摘要');
     expect(summary).toHaveTextContent('数据不足，禁止判断');
     expect(summary).toHaveTextContent('不可用于真实交易判断');
-    expect(Boolean(decision.compareDocumentPosition(assumptions) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(decision.compareDocumentPosition(assumptions) & Node.DOCUMENT_POSITION_PRECEDING)).toBe(true);
     expect(analysisDetails).not.toHaveAttribute('open');
-    expect(chainDetails).not.toHaveAttribute('open');
-    expect(strategyDetails).not.toHaveAttribute('open');
     expect(Boolean(decision.compareDocumentPosition(analysisDetails) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(within(chainDetails).getByTestId('options-lab-calls-table')).toBeInTheDocument();
-    expect(within(chainDetails).getByTestId('options-lab-puts-table')).toBeInTheDocument();
-    expect(within(strategyDetails).getByTestId('options-lab-strategy-comparison')).toBeInTheDocument();
+    expect(callsTable).toBeInTheDocument();
+    expect(putsTable).toBeInTheDocument();
+    expect(strategyDetails).toHaveTextContent('策略候选');
   });
 
   it('renders no-trade optimizer state without black-screening', async () => {
@@ -602,7 +602,7 @@ describe('OptionsLabPage', () => {
 
     expect(await screen.findByText('期权实验室')).toBeInTheDocument();
     const section = await screen.findByTestId('options-lab-strategy-comparison');
-    expect(within(section).getByText('策略对比')).toBeInTheDocument();
+    expect(within(section).getByText('策略候选')).toBeInTheDocument();
     await waitFor(() => {
       expect(within(section).getByText('策略对比暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
     });
@@ -653,7 +653,7 @@ describe('OptionsLabPage', () => {
 
     expect(await screen.findByText('期权实验室')).toBeInTheDocument();
     const section = await screen.findByTestId('options-lab-strategy-comparison');
-    expect(within(section).getByText('策略对比')).toBeInTheDocument();
+    expect(within(section).getByText('策略候选')).toBeInTheDocument();
     await waitFor(() => {
       expect(within(section).getByText('策略对比暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
     });

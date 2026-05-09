@@ -62,9 +62,9 @@ const BUCKET_OPTIONS: Array<{ value: AdminCostBucket; label: string }> = [
 
 const AREA_OPTIONS: Array<{ value: AdminCostArea; label: string }> = [
   { value: 'all', label: '全部' },
-  { value: 'llm', label: 'LLM' },
-  { value: 'provider', label: 'Provider' },
-  { value: 'market-cache', label: 'MarketCache' },
+  { value: 'llm', label: 'AI 调用' },
+  { value: 'provider', label: '数据源状态' },
+  { value: 'market-cache', label: '市场缓存' },
   { value: 'scanner-ai', label: 'Scanner AI' },
 ];
 
@@ -75,7 +75,7 @@ const ROUTE_FAMILY_OPTIONS = [
   { value: 'guest_preview', label: '游客预览' },
   { value: 'scanner_ai', label: 'Scanner AI' },
   { value: 'agent_chat', label: 'Agent Chat' },
-  { value: 'provider_market_data', label: 'Provider 数据' },
+  { value: 'provider_market_data', label: '数据源数据' },
 ];
 
 const QUOTA_OPERATION_OPTIONS: Array<{ value: QuotaDryRunOperation; label: string }> = [
@@ -150,7 +150,7 @@ function safeDimensionText(dimensions?: Record<string, string>): string {
   const labelForKey = (key: string) => {
     if (key === 'owner_user_id' || key === 'ownerUserId') return '用户';
     if (key === 'route_family' || key === 'routeFamily') return '功能';
-    if (key === 'provider') return 'Provider';
+    if (key === 'provider') return '数据源';
     if (key === 'model') return '模型';
     if (key === 'call_type' || key === 'callType') return '调用';
     return safeVisibleText(key.replace(/_/g, ' '));
@@ -187,12 +187,12 @@ function sanitizedLedgerError(error: unknown): ParsedApiError {
   const parsed = getParsedApiError(error);
   return {
     ...parsed,
-    title: '读取 LLM 成本账本失败',
+    title: '读取 AI 调用账本失败',
     message: parsed.status === 403
       ? '当前账号没有成本观测权限。'
       : parsed.isTimeoutError
-      ? 'LLM 成本账本请求超时，请稍后重试。'
-      : parsed.message || 'LLM 成本账本暂不可用。',
+      ? 'AI 调用账本请求超时，请稍后重试。'
+      : parsed.message || 'AI 调用账本暂不可用。',
     rawMessage: '',
     details: undefined,
   };
@@ -357,7 +357,7 @@ const RollupList: React.FC<{
 
 const CacheEfficiencyList: React.FC<{ items: AdminCostCacheEfficiency[] }> = ({ items }) => {
   if (items.length === 0) {
-    return <p className="rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/45">暂无 Provider cache 计数</p>;
+    return <p className="rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/45">暂无数据源缓存计数</p>;
   }
   return (
     <div className="grid gap-3">
@@ -554,8 +554,8 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
         <div className="flex min-w-0 items-start gap-3">
           <Coins className="mt-1 h-4 w-4 shrink-0 text-cyan-200" aria-hidden="true" />
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">LLM Ledger</p>
-            <h2 className="mt-1 text-lg font-semibold text-white">LLM 成本账本</h2>
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">AI 调用账本</p>
+            <h2 className="mt-1 text-lg font-semibold text-white">AI 调用账本</h2>
           </div>
         </div>
         <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">
@@ -579,11 +579,11 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
       ) : null}
 
       {state.loading ? (
-        <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/50">正在读取 LLM 成本账本</p>
+        <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/50">正在读取 AI 调用账本</p>
       ) : null}
       {state.error ? <div className="mt-4"><ApiErrorAlert error={state.error} /></div> : null}
       {empty ? (
-        <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/45">当前窗口暂无 LLM 成本账本记录</p>
+        <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/45">当前窗口暂无 AI 调用账本记录</p>
       ) : null}
 
       {data ? (
@@ -927,7 +927,7 @@ const QuotaDryRunPanel: React.FC = () => {
             className="h-10 w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 font-mono text-sm text-white outline-none transition focus:border-emerald-500/50"
             value={reservationId}
             onChange={(event) => setReservationId(event.target.value.slice(0, 128))}
-            placeholder="dry-run reservation id"
+            placeholder="试运行 reservation id"
           />
         </label>
       ) : null}
@@ -942,13 +942,13 @@ const QuotaDryRunPanel: React.FC = () => {
           onClick={runDiagnostic}
           disabled={state.loading || !canSubmit}
         >
-          {state.loading ? '诊断中' : '运行 dry-run'}
+          {state.loading ? '诊断中' : '运行试运行'}
         </button>
       </div>
 
       {data?.wouldBlock ? (
         <div className="mt-4 rounded-2xl border border-amber-300/18 bg-amber-400/8 px-4 py-3 text-sm text-amber-100" role="status">
-          dry-run 结果显示该策略会阻断；真实请求未被阻断。
+          试运行结果显示该策略会阻断；真实请求未被阻断。
         </div>
       ) : null}
       {state.error ? <div className="mt-4"><ApiErrorAlert error={state.error} /></div> : null}
@@ -1012,7 +1012,7 @@ const AdminCostObservabilityPage: React.FC = () => {
   const data = state.data;
   const emptyCounters = useMemo(() => data ? !hasCounters(data) : false, [data]);
   const operatorState = data
-    ? `${compactNumber(data.summary.llmCalls)} 次 LLM / ${compactNumber(data.summary.providerCalls)} 次 Provider`
+    ? `${compactNumber(data.summary.llmCalls)} 次 AI / ${compactNumber(data.summary.providerCalls)} 次数据源`
     : state.loading
     ? '读取中'
     : '等待快照';
@@ -1033,15 +1033,15 @@ const AdminCostObservabilityPage: React.FC = () => {
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-100/55">成本压力台</p>
               <h1 className="mt-2 text-2xl font-semibold text-white md:text-3xl">成本观测</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">先判断预算压力、异常归属和下一步处理；模型、供应商、缓存细节默认放在二级区。</p>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">先判断预算压力、异常归属和下一步处理；模型、数据源、缓存细节默认放在二级区。</p>
             </div>
             <ReadOnlyBadges data={data} />
           </div>
           <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <SummaryTile label="页面用途" value="评估成本与配额风险" note={`窗口 ${data?.window?.key || filters.window} · ${data?.window?.bucket || filters.bucket}`} tone="info" />
             <SummaryTile label="当前状态" value={operatorState} note={`生成 ${formatDate(data?.generatedAt)} · ${exactnessLabel(data?.metadata.exactness)}`} tone={emptyCounters ? 'warn' : 'neutral'} />
-            <SummaryTile label="需关注" value={attentionLabel} note="重复候选、fallback、integrity retry 汇总" tone={emptyCounters || needsAttentionCount ? 'warn' : 'good'} />
-            <SummaryTile label="下一步" value={needsAttentionCount ? '先做配额 dry-run，再定位归属' : '保持观测，按需切换窗口'} note={`生成 ${formatDate(data?.generatedAt)} · ${exactnessLabel(data?.metadata.exactness)}`} tone={needsAttentionCount ? 'warn' : 'neutral'} />
+            <SummaryTile label="需关注" value={attentionLabel} note="重复候选、备用链路、完整性重试汇总" tone={emptyCounters || needsAttentionCount ? 'warn' : 'good'} />
+            <SummaryTile label="下一步" value={needsAttentionCount ? '先做配额试运行，再定位归属' : '保持观测，按需切换窗口'} note={`生成 ${formatDate(data?.generatedAt)} · ${exactnessLabel(data?.metadata.exactness)}`} tone={needsAttentionCount ? 'warn' : 'neutral'} />
           </div>
         </GlassCard>
 
@@ -1070,18 +1070,18 @@ const AdminCostObservabilityPage: React.FC = () => {
                     <SummaryTile
                       label="成本压力"
                       value={`${compactNumber(data.summary.estimatedDuplicateCandidates)} 重复候选`}
-                      note={`${compactNumber(data.summary.fallbackAttempts)} fallback · ${compactNumber(data.summary.integrityRetries)} integrity retry`}
+                      note={`${compactNumber(data.summary.fallbackAttempts)} 备用链路 · ${compactNumber(data.summary.integrityRetries)} 完整性重试`}
                       tone={data.summary.estimatedDuplicateCandidates || data.summary.fallbackAttempts || data.summary.integrityRetries ? 'warn' : 'good'}
                     />
                     <SummaryTile
                       label="缓存效率"
-                      value={`${percent(data.summary.providerCacheHitRate)} Provider`}
-                      note={`${percent(data.summary.marketCacheHitRate)} MarketCache`}
+                      value={`${percent(data.summary.providerCacheHitRate)} 数据源`}
+                      note={`${percent(data.summary.marketCacheHitRate)} 市场缓存`}
                       tone="good"
                     />
                     <SummaryTile
                       label="模型归属"
-                      value={`${compactNumber(data.summary.llmCalls)} LLM 调用`}
+                      value={`${compactNumber(data.summary.llmCalls)} AI 调用`}
                       note={`${compactNumber(data.summary.llmUsageTokens)} tokens · ${compactNumber(data.summary.llmUsageCalls)} usage rows`}
                       tone="info"
                     />
@@ -1102,7 +1102,7 @@ const AdminCostObservabilityPage: React.FC = () => {
               className="rounded-[20px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden"
             >
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
-                <span>二级细节：窗口筛选、账本、价格、Provider / 缓存</span>
+                <span>二级细节：窗口筛选、账本、价格、数据源 / 缓存</span>
                 <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">默认折叠</span>
               </summary>
               <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-12">
@@ -1119,14 +1119,14 @@ const AdminCostObservabilityPage: React.FC = () => {
                     <SectionCard icon={<BarChart3 className="h-4 w-4" />} eyebrow="Duplicate" title="Guest Preview / Report duplicate candidates">
                       <RollupList items={[...data.llm.duplicateCandidates, ...data.providers.duplicateCandidates, ...data.scannerAi.duplicateCandidates]} empty="暂无重复候选" />
                     </SectionCard>
-                    <SectionCard icon={<DatabaseZap className="h-4 w-4" />} eyebrow="Provider" title="Provider / 数据源 fallback">
+                    <SectionCard icon={<DatabaseZap className="h-4 w-4" />} eyebrow="数据源状态" title="数据源状态 / 备用链路">
                       <div className="grid gap-3">
-                        <RollupList items={[...data.providers.byCategory, ...data.providers.fallbackDepth, ...data.llm.fallbacks]} empty="暂无 Provider fallback 计数" />
+                        <RollupList items={[...data.providers.byCategory, ...data.providers.fallbackDepth, ...data.llm.fallbacks]} empty="暂无数据源备用计数" />
                         <CacheEfficiencyList items={data.providers.cacheEfficiency} />
                       </div>
                     </SectionCard>
-                    <SectionCard icon={<DatabaseZap className="h-4 w-4" />} eyebrow="MarketCache" title="MarketCache 命中 / 过期 / 缺失">
-                      <RollupList items={[...data.marketCache.byPanelKey, ...data.marketCache.staleServed, ...data.marketCache.coldFallbacks, ...data.marketCache.refreshes]} empty="暂无 MarketCache 计数" />
+                    <SectionCard icon={<DatabaseZap className="h-4 w-4" />} eyebrow="市场缓存" title="市场缓存命中 / 过期 / 缺失">
+                      <RollupList items={[...data.marketCache.byPanelKey, ...data.marketCache.staleServed, ...data.marketCache.coldFallbacks, ...data.marketCache.refreshes]} empty="暂无市场缓存计数" />
                     </SectionCard>
                     <SectionCard icon={<Radar className="h-4 w-4" />} eyebrow="Scanner AI" title="Scanner AI 解释">
                       <RollupList items={[...data.scannerAi.interpretations, ...data.scannerAi.skips]} empty="暂无 Scanner AI 计数" />

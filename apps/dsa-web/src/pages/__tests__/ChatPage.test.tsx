@@ -309,7 +309,7 @@ beforeEach(() => {
 });
 
 describe('ChatPage', () => {
-  it('separates AI engine, analysis lens, and data context in the console', async () => {
+  it('keeps research context, analysis lens, and data context without engine diagnostics', async () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>
         <ShellRailHarness>
@@ -318,15 +318,18 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByTestId('chat-engine-section')).toBeInTheDocument();
+    const contextRail = await screen.findByTestId('chat-context-brief-rail');
     expect(screen.getByTestId('chat-lens-section')).toBeInTheDocument();
     expect(screen.getByTestId('chat-data-context-section')).toBeInTheDocument();
-    expect(screen.getByText('AI 引擎')).toBeInTheDocument();
+    expect(contextRail).toHaveTextContent('研究上下文');
+    expect(contextRail).toHaveTextContent('等待问题');
+    expect(contextRail).toHaveTextContent('暂无上下文');
+    expect(contextRail).toHaveTextContent('分析时检查数据');
     expect(screen.getByText('分析视角')).toBeInTheDocument();
     expect(screen.getByText('数据上下文')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-engine-section')).toHaveTextContent('自动选择可用研究引擎');
-    expect(screen.getByTestId('chat-engine-section')).not.toHaveTextContent('AUTO → DeepSeek');
-    expect(screen.getByTestId('chat-engine-section')).not.toHaveTextContent('deepseek-chat');
+    expect(screen.queryByTestId('chat-engine-section')).not.toBeInTheDocument();
+    expect(screen.queryByText('AI 引擎')).not.toBeInTheDocument();
+    expect(screen.getByTestId('chat-workspace')).not.toHaveTextContent(/provider|DeepSeek|deepseek-chat|AUTO/i);
     expect(screen.queryByRole('button', { name: '引擎视角' })).not.toBeInTheDocument();
   });
 
@@ -375,11 +378,13 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'WOLFY AI 研究台' })).toBeInTheDocument();
-    expect(screen.getByText('用自然语言调用只读证据，形成分析观察与风险边界')).toBeInTheDocument();
+    expect(screen.getByTestId('chat-empty-research-stream')).toHaveTextContent('等待问题');
+    expect(screen.getByTestId('chat-empty-research-stream')).toHaveTextContent('暂无上下文。分析时检查数据。');
+    expect(screen.queryByText('用自然语言调用只读证据，形成分析观察与风险边界')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '问股' })).not.toBeInTheDocument();
   });
 
-  it('renders provider health states without exposing secrets', async () => {
+  it('hides provider health states and secrets from the user workspace', async () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>
         <ShellRailHarness>
@@ -388,17 +393,15 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    const engineSection = await screen.findByTestId('chat-engine-section');
-    expect(engineSection).toHaveTextContent('自动选择可用研究引擎');
-    expect(engineSection).not.toHaveTextContent('AUTO → DeepSeek');
-    expect(engineSection).not.toHaveTextContent('DeepSeek 可用');
-    expect(within(engineSection).queryByText(/引擎明细|Provider detail/i)).not.toBeInTheDocument();
-    expect(engineSection).not.toHaveTextContent('DeepSeek 可用');
-    expect(engineSection).not.toHaveTextContent('OpenAI 未配置');
-    expect(engineSection).not.toHaveTextContent('Gemini 离线');
-    expect(engineSection).not.toHaveTextContent('Local 未知');
-    expect(engineSection).not.toHaveTextContent(/供应商状态|provider health|diagnostics/i);
-    expect(engineSection.textContent).not.toMatch(/api[_-]?key|secret|sk-/i);
+    const workspace = await screen.findByTestId('chat-workspace');
+    expect(screen.queryByTestId('chat-engine-section')).not.toBeInTheDocument();
+    expect(workspace).not.toHaveTextContent('AUTO → DeepSeek');
+    expect(workspace).not.toHaveTextContent('DeepSeek 可用');
+    expect(workspace).not.toHaveTextContent('OpenAI 未配置');
+    expect(workspace).not.toHaveTextContent('Gemini 离线');
+    expect(workspace).not.toHaveTextContent('Local 未知');
+    expect(workspace).not.toHaveTextContent(/供应商状态|provider health|diagnostics|Provider detail/i);
+    expect(workspace.textContent).not.toMatch(/api[_-]?key|secret|sk-/i);
   });
 
   it('looks up real read-only evidence for detected symbols and keeps unchecked categories unknown', async () => {
@@ -637,7 +640,8 @@ describe('ChatPage', () => {
     fireEvent.click(await screen.findByTestId('chat-bento-brief-trigger'));
 
     expect(await screen.findByTestId('chat-bento-drawer')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-drawer-control-panel')).toHaveTextContent('AI 引擎');
+    expect(screen.getByRole('dialog', { name: '研究上下文' })).toBeInTheDocument();
+    expect(screen.getByTestId('chat-drawer-control-panel')).not.toHaveTextContent('AI 引擎');
     expect(screen.getByTestId('chat-drawer-control-panel')).toHaveTextContent('分析视角');
     expect(screen.getByTestId('chat-drawer-control-panel')).toHaveTextContent('数据上下文');
   });
@@ -717,7 +721,7 @@ describe('ChatPage', () => {
       'p-2',
       'shadow-2xl',
     );
-    expect(screen.getByText('AI 洞察仅供研究参考，不构成投资建议。请自行评估风险承受能力。')).toHaveClass('mt-3', 'text-[10px]', 'text-center', 'text-white/30');
+    expect(screen.getByText('仅供研究参考，不构成投资建议。')).toHaveClass('mt-3', 'text-center', 'text-[10px]', 'text-white/30');
     expect(screen.queryByTestId('chat-skill-toolbar')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-strategy-panel')).toHaveClass('hidden', 'lg:flex', 'h-full', 'min-h-0', 'w-full', 'shrink-0', 'flex-col', 'gap-3', 'overflow-y-auto', 'border-l', 'border-white/5', 'bg-gradient-to-b', 'from-white/[0.01]', 'to-transparent', 'p-3', 'lg:w-[280px]', 'xl:w-[304px]');
     expect(screen.getByTestId('chat-console-mode-toggle')).toBeInTheDocument();
@@ -727,7 +731,7 @@ describe('ChatPage', () => {
 
     fireEvent.click(screen.getByTestId('chat-bento-brief-trigger'));
     expect(await screen.findByTestId('chat-bento-drawer')).toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: '研究控制台' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '研究上下文' })).toBeInTheDocument();
   });
 
   it('switches the right-side console between engines and history', async () => {
@@ -788,11 +792,11 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(translate('zh', 'chat.emptyTitle'))).toBeInTheDocument();
+    expect(await screen.findByTestId('chat-empty-research-stream')).toHaveTextContent('等待问题');
     expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
   });
 
-  it('shows research-focused starter cards in the empty state', async () => {
+  it('shows compact research stream and prompt chips instead of tutorial cards', async () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>
         <ShellRailHarness>
@@ -801,34 +805,31 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(translate('zh', 'chat.emptyTitle'))).toBeInTheDocument();
+    expect(await screen.findByTestId('chat-empty-research-stream')).toBeInTheDocument();
     expect(screen.getByTestId('chat-empty-state')).toHaveClass('flex-1', 'overflow-y-auto', 'flex', 'flex-col', 'items-center', 'justify-start');
-    expect(screen.getByRole('heading', { name: 'WOLFY AI 研究台' })).toHaveClass('text-xl', 'font-bold', 'text-white');
-    const entryDecisionCard = screen.getByTestId('chat-starter-card-entryDecision');
-    expect(entryDecisionCard).toHaveClass('flex', 'flex-col', 'items-center', 'justify-center', 'rounded-2xl', 'border', 'border-white/5', 'bg-white/[0.02]', 'px-4', 'py-3', 'text-center', 'hover:bg-white/[0.05]');
-    expect(screen.getAllByText('观察条件检查').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('持仓风险复盘').length).toBeGreaterThan(0);
-    expect(screen.getByTestId('chat-mobile-template-eventFollowUp')).toBeInTheDocument();
-    expect(screen.getByText('用自然语言调用只读证据，形成分析观察与风险边界')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-quick-question-cloud')).toHaveClass('hidden', 'flex-wrap', 'justify-center');
-    expect(screen.getByText(translate('zh', 'chat.quickQuestions.q3'))).toHaveClass(
+    expect(screen.getByRole('heading', { name: 'WOLFY AI 研究台' })).toHaveClass('truncate', 'text-lg', 'font-semibold', 'text-white', 'sm:text-xl');
+    expect(screen.queryByTestId('chat-starter-grid')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('chat-starter-card-entryDecision')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('chat-mobile-template-eventFollowUp')).not.toBeInTheDocument();
+    expect(screen.queryByText('用自然语言调用只读证据，形成分析观察与风险边界')).not.toBeInTheDocument();
+    expect(screen.getByTestId('chat-quick-question-cloud')).toHaveClass('mt-3', 'flex', 'flex-wrap', 'justify-center', 'gap-2');
+    expect(within(screen.getByTestId('chat-quick-question-cloud')).getByText(translate('zh', 'chat.quickQuestions.q3')).closest('button')).toHaveClass(
       'inline-flex',
       'items-center',
       'justify-center',
-      'px-5',
-      'py-2.5',
-      'rounded-xl',
-      'bg-white/[0.02]',
-      'border-white/5',
+      'px-3',
+      'py-1.5',
+      'rounded-full',
+      'bg-white/[0.025]',
+      'border-white/6',
       'text-xs',
-      'text-white/60',
-      'whitespace-nowrap',
+      'text-white/58',
     );
     expect(screen.queryByTestId('chat-footer-starter-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('chat-footer-quick-questions')).not.toBeInTheDocument();
   });
 
-  it('puts the research composer ahead of templates and keeps context compact', async () => {
+  it('puts the research composer after the compact stream and keeps context clean', async () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>
         <ShellRailHarness>
@@ -839,19 +840,20 @@ describe('ChatPage', () => {
 
     expect(await screen.findByTestId('chat-research-entry-grid')).toBeInTheDocument();
     const composer = screen.getByTestId('chat-composer-omnibar');
-    const starterGrid = screen.getByTestId('chat-starter-grid');
+    const stream = screen.getByTestId('chat-empty-research-stream');
     const contextRail = screen.getByTestId('chat-context-brief-rail');
 
-    expect(composer.compareDocumentPosition(starterGrid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(contextRail).toHaveTextContent('只读证据');
-    expect(contextRail).toHaveTextContent('观察条件');
+    expect(stream.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(contextRail).toHaveTextContent('研究上下文');
+    expect(contextRail).toHaveTextContent('等待问题');
+    expect(contextRail).toHaveTextContent('暂无上下文');
     expect(contextRail).not.toHaveTextContent('DeepSeek');
     expect(contextRail).not.toHaveTextContent('provider');
     expect(screen.getByTestId('chat-empty-state')).toHaveClass('justify-start');
     expect(screen.getByTestId('chat-quick-question-cloud').textContent).not.toMatch(/买|卖|下单|开仓/);
   });
 
-  it('renders a guided research flow before secondary context', async () => {
+  it('removes guided tutorial flow before secondary context', async () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>
         <ShellRailHarness>
@@ -860,19 +862,20 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByTestId('chat-research-task-stack')).toBeInTheDocument();
-    expect(screen.getByTestId('chat-research-task-stack')).toHaveTextContent('我能问什么');
-    expect(screen.getByTestId('chat-research-task-stack')).toHaveTextContent('可用证据');
-    expect(screen.getByTestId('chat-research-task-stack')).toHaveTextContent('缺失上下文');
-    expect(screen.getByTestId('chat-research-task-stack')).toHaveTextContent('安全下一步');
+    expect(await screen.findByTestId('chat-empty-research-stream')).toBeInTheDocument();
+    expect(screen.queryByTestId('chat-research-task-stack')).not.toBeInTheDocument();
+    expect(screen.queryByText('我能问什么')).not.toBeInTheDocument();
+    expect(screen.queryByText('可用证据')).not.toBeInTheDocument();
+    expect(screen.queryByText('缺失上下文')).not.toBeInTheDocument();
+    expect(screen.queryByText('安全下一步')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat-secondary-context-disclosure')).not.toHaveAttribute('open');
 
     const composer = screen.getByTestId('chat-composer-omnibar');
-    const flow = screen.getByTestId('chat-research-task-stack');
+    const stream = screen.getByTestId('chat-empty-research-stream');
     const context = screen.getByTestId('chat-context-brief-rail');
 
-    expect(composer.compareDocumentPosition(flow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(flow.compareDocumentPosition(context) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(stream.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(composer.compareDocumentPosition(context) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('animates only the latest assistant reply while generation is active', async () => {
@@ -1375,7 +1378,7 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByTestId('chat-workspace')).toBeInTheDocument();
-    expect(screen.getByText('Start with a concrete question')).toBeInTheDocument();
+    expect(screen.getByText('Waiting for a research question')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Example: What are the current observation conditions for 600519 / Kweichow Moutai? (Enter to send, Shift+Enter for newline)')).toBeInTheDocument();
   });
 

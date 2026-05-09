@@ -300,7 +300,7 @@ function getCopy(language: 'zh' | 'en') {
   if (language === 'en') {
     return {
       title: 'Watchlist',
-      subtitle: 'Manage scanner-candidate evidence and separate missing, verified, and backtested records.',
+    subtitle: 'Compact evidence queue for scanner candidates.',
       totalTracked: 'Total tracked',
       marketsRepresented: 'Markets represented',
       scannerSourced: 'Scanner-sourced',
@@ -373,7 +373,7 @@ function getCopy(language: 'zh' | 'en') {
       emptyBody: 'No watched symbols yet. Add candidates from Scanner, or adjust filters to review existing evidence.',
       openScanner: 'Open Scanner',
       tableTitle: 'Tracked candidates',
-      tableDescription: 'Each candidate keeps scanner, simulation, and backtest evidence; missing evidence is marked explicitly.',
+    tableDescription: 'Scanner, simulation, and backtest evidence stay explicit.',
       loading: 'Loading watchlist...',
       removed: 'Removed from watchlist.',
       copyFailed: 'Copy failed.',
@@ -387,7 +387,7 @@ function getCopy(language: 'zh' | 'en') {
   }
   return {
     title: '观察列表',
-    subtitle: '管理扫描候选的证据状态，区分待补齐、已验证与历史回测记录',
+    subtitle: '扫描候选的紧凑证据队列',
     totalTracked: '追踪总数',
     marketsRepresented: '覆盖市场',
     scannerSourced: '扫描来源',
@@ -460,7 +460,7 @@ function getCopy(language: 'zh' | 'en') {
     emptyBody: '当前没有观察标的。可以先从扫描器加入候选，或调整筛选条件查看已有证据。',
     openScanner: '打开扫描器',
     tableTitle: '追踪候选',
-    tableDescription: '每个候选保留扫描、历史模拟和回测证据；缺失证据会明确标记，避免误读。',
+    tableDescription: '扫描、历史模拟和回测证据保持显式标记。',
     loading: '正在加载观察列表...',
     removed: '已从观察列表移除。',
     copyFailed: '复制失败。',
@@ -921,11 +921,11 @@ const WatchlistPage: React.FC = () => {
   return (
     <main className="w-full flex-1 px-4 py-6 xl:px-8" data-testid="watchlist-page">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
-        <header className="flex flex-col gap-3 rounded-[24px] border border-white/5 bg-white/[0.02] px-5 py-5 backdrop-blur-sm md:flex-row md:items-end md:justify-between">
+        <header className="flex flex-col gap-3 rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-4 backdrop-blur-sm md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-bold tracking-[0.24em] text-white/35">{language === 'zh' ? '扫描候选' : 'Scanner candidates'}</p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-normal text-white md:text-3xl">{copy.title}</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/50">{copy.subtitle}</p>
+            <p className="text-[10px] font-bold tracking-[0.24em] text-white/35">{language === 'zh' ? '扫描候选' : 'Scanner candidates'}</p>
+            <h1 className="mt-1 text-xl font-semibold tracking-normal text-white md:text-2xl">{copy.title}</h1>
+            <p className="mt-1 text-xs text-white/45">{copy.subtitle}</p>
           </div>
           <Link
             to={buildLocalizedPath('/scanner', language)}
@@ -962,7 +962,7 @@ const WatchlistPage: React.FC = () => {
 
         <SectionShell
           title={copy.tableTitle}
-          description={copy.tableDescription}
+          description={filteredItems.length > 0 ? copy.tableDescription : undefined}
           contentClassName="flex flex-col gap-4"
         >
           <div data-testid="watchlist-secondary-controls" className="order-2 flex min-w-0 flex-col gap-3">
@@ -1106,6 +1106,7 @@ const WatchlistPage: React.FC = () => {
           </div>
           </div>
 
+          {filteredItems.length > 0 ? (
           <div data-testid="watchlist-candidate-list" className="order-1 overflow-hidden rounded-2xl border border-white/5">
             <table className="w-full table-fixed text-left text-sm">
               <thead className="bg-white/[0.03] text-[11px] uppercase tracking-[0.16em] text-white/35">
@@ -1333,6 +1334,7 @@ const WatchlistPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+          ) : null}
 
           {isLoading ? (
             <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-8 text-center text-sm text-white/45">
@@ -1341,10 +1343,10 @@ const WatchlistPage: React.FC = () => {
           ) : null}
 
           {!isLoading && filteredItems.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-5 py-6 text-left sm:flex sm:items-center sm:justify-between sm:gap-4">
+            <div data-testid="watchlist-compact-empty-state" className="min-h-[84px] rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-4 text-left sm:flex sm:items-center sm:justify-between sm:gap-4">
               <div className="min-w-0">
-                <p className="text-base font-semibold text-white">{copy.emptyTitle}</p>
-                <p className="mt-2 text-sm text-white/45">{copy.emptyBody}</p>
+                <p className="text-sm font-semibold text-white/76">{copy.emptyTitle}</p>
+                <p className="mt-1 text-xs text-white/42">{copy.emptyBody}</p>
               </div>
               <Link
                 to={buildLocalizedPath('/scanner', language)}

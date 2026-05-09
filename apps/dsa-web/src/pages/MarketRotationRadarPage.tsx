@@ -62,21 +62,21 @@ function scoreTone(score: number): string {
 
 function percent(value?: number | null, digits = 1): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
-    return 'N/A';
+    return '待确认';
   }
   return `${value.toFixed(digits)}%`;
 }
 
 function signedPercent(value?: number | null, digits = 2): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
-    return 'N/A';
+    return '待确认';
   }
   return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}%`;
 }
 
 function ratio(value?: number | null): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
-    return 'N/A';
+    return '待确认';
   }
   return `${value.toFixed(2)}x`;
 }
@@ -681,14 +681,11 @@ const MarketRotationRadarPage: React.FC = () => {
       data-testid="market-rotation-radar-page"
       className="bento-surface-root flex min-h-0 w-full flex-1 flex-col overflow-y-auto overflow-x-hidden no-scrollbar bg-[#050505] px-4 py-5 text-white md:px-6 xl:px-8"
     >
-      <GlassCard as="section" className="relative shrink-0 overflow-hidden p-5 md:p-6">
-        <div className="relative z-10 flex min-w-0 flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <GlassCard as="section" className="relative shrink-0 overflow-hidden p-4">
+        <div className="relative z-10 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase text-cyan-200/55">Market Rotation Radar</p>
-            <h1 className="mt-2 text-2xl font-semibold text-white md:text-3xl">资金轮动雷达</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/50">
-              紧凑 Top-N 观察台。当前仅重排既有主题篮子数据，不新增行情或新闻请求。
-            </p>
+            <p className="text-[10px] font-bold uppercase text-cyan-200/55">资金轮动 / Rotation Radar</p>
+            <h1 className="mt-1 text-xl font-semibold text-white md:text-2xl">资金轮动雷达</h1>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <div data-testid="rotation-radar-freshness" className="inline-flex items-center gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2">
@@ -749,7 +746,7 @@ const MarketRotationRadarPage: React.FC = () => {
               <GlassCard as="section" className="p-4">
                 <div className="flex min-w-0 items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[10px] font-bold uppercase text-white/35">Top-N Radar</p>
+                    <p className="text-[10px] font-bold uppercase text-white/35">轮动 Top-N</p>
                     <h2 className="mt-1 truncate text-base font-semibold text-white">轮动领导榜</h2>
                   </div>
                   <div className="hidden min-w-0 grid-cols-[5rem_5rem_5rem] gap-2 text-right text-[10px] font-semibold uppercase text-white/32 sm:grid">

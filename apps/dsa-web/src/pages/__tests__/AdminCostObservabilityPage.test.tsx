@@ -338,22 +338,22 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('当前状态')).toBeInTheDocument();
     expect(screen.getByText('下一步')).toBeInTheDocument();
     expect(screen.getByText('评估成本与配额风险')).toBeInTheDocument();
-    expect(await screen.findByText('12 次 LLM / 18 次 Provider')).toBeInTheDocument();
-    expect(screen.getByText('先做配额 dry-run，再定位归属')).toBeInTheDocument();
+    expect(await screen.findByText('12 次 AI / 18 次数据源')).toBeInTheDocument();
+    expect(screen.getByText('先做配额试运行，再定位归属')).toBeInTheDocument();
     expect(screen.getByText('成本压力')).toBeInTheDocument();
     expect(screen.getByText('缓存效率')).toBeInTheDocument();
     expect(screen.getByText('只读')).toBeInTheDocument();
     expect(screen.getByText('外部调用关闭')).toBeInTheDocument();
     expect(screen.getAllByText('观测值非账单').length).toBeGreaterThan(0);
     expect(screen.getAllByText('LLM 调用').length).toBeGreaterThan(0);
-    expect(screen.getByText('Provider / 数据源 fallback')).toBeInTheDocument();
-    expect(screen.getByText('MarketCache 命中 / 过期 / 缺失')).toBeInTheDocument();
+    expect(screen.getByText('数据源状态 / 备用链路')).toBeInTheDocument();
+    expect(screen.getByText('市场缓存命中 / 过期 / 缺失')).toBeInTheDocument();
     expect(screen.getByText('Scanner AI 解释')).toBeInTheDocument();
     expect(screen.getByText('Guest Preview / Report duplicate candidates')).toBeInTheDocument();
     expect(screen.getByText('限制与数据质量')).toBeInTheDocument();
     expect(screen.getByText('计数器快照不含历史时间戳')).toBeInTheDocument();
     expect(screen.getByText('配额试运行诊断')).toBeInTheDocument();
-    expect(screen.getByText('LLM 成本账本')).toBeInTheDocument();
+    expect(screen.getAllByText('AI 调用账本').length).toBeGreaterThan(0);
     expect(screen.getByText('模型价格策略')).toBeInTheDocument();
   });
 
@@ -444,7 +444,7 @@ describe('AdminCostObservabilityPage', () => {
     render(<AdminCostObservabilityPage />);
     await screen.findByRole('heading', { name: '成本观测' });
 
-    fireEvent.click(screen.getByText('二级细节：窗口筛选、账本、价格、Provider / 缓存'));
+    fireEvent.click(screen.getByText('二级细节：窗口筛选、账本、价格、数据源 / 缓存'));
 
     fireEvent.change(screen.getByLabelText('窗口'), { target: { value: '7d' } });
     fireEvent.change(screen.getByLabelText('粒度'), { target: { value: 'day' } });
@@ -530,7 +530,7 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
-    expect(await screen.findByText('当前窗口暂无 LLM 成本账本记录')).toBeInTheDocument();
+    expect(await screen.findByText('当前窗口暂无 AI 调用账本记录')).toBeInTheDocument();
     expect(screen.getByText('暂无用户成本记录')).toBeInTheDocument();
     expect(screen.getByText('暂无模型成本记录')).toBeInTheDocument();
     expect(screen.getByText('暂无功能成本记录')).toBeInTheDocument();
@@ -632,7 +632,7 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.queryByText(/token=secret/)).not.toBeInTheDocument();
 
     runQuotaDryRun.mockRejectedValueOnce({ response: { status: 500, data: { detail: { message: 'stack trace apiKey=secret' } } } });
-    fireEvent.click(screen.getByRole('button', { name: '运行 dry-run' }));
+    fireEvent.click(screen.getByRole('button', { name: '运行试运行' }));
 
     await waitFor(() => expect(screen.getAllByText('读取配额诊断失败').length).toBeGreaterThan(0));
     expect(screen.getByText('服务器暂时不可用，请稍后重试。')).toBeInTheDocument();
@@ -645,7 +645,7 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
-    expect(await screen.findByText('读取 LLM 成本账本失败')).toBeInTheDocument();
+    expect(await screen.findByText('读取 AI 调用账本失败')).toBeInTheDocument();
     expect(screen.getByText('当前账号没有成本观测权限。')).toBeInTheDocument();
     expect(screen.getByText('配额试运行诊断')).toBeInTheDocument();
     expect(screen.queryByText(/token=secret/)).not.toBeInTheDocument();
@@ -653,7 +653,7 @@ describe('AdminCostObservabilityPage', () => {
     getLlmLedgerSummary.mockRejectedValueOnce({ response: { status: 500, data: { detail: { message: 'stack trace apiKey=secret' } } } });
     fireEvent.change(screen.getByLabelText('窗口'), { target: { value: '7d' } });
 
-    await waitFor(() => expect(screen.getAllByText('读取 LLM 成本账本失败').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText('读取 AI 调用账本失败').length).toBeGreaterThan(0));
     expect(screen.getByText('服务器暂时不可用，请稍后重试。')).toBeInTheDocument();
     expect(screen.queryByText('apiKey=secret')).not.toBeInTheDocument();
   });

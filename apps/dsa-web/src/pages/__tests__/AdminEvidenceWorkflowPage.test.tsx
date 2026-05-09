@@ -67,7 +67,7 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(within(page).getByText('下一步')).toBeInTheDocument();
     expect(within(page).getByText('复核脱敏证据路径')).toBeInTheDocument();
     expect(within(page).getByText('等待人工复核')).toBeInTheDocument();
-    expect(within(page).getByText('按本地 runbook 生成复核材料')).toBeInTheDocument();
+    expect(within(page).getByText('按本地操作手册生成复核材料')).toBeInTheDocument();
   });
 
   it('renders the preflight and manual review sequence in order', () => {
@@ -145,7 +145,7 @@ describe('AdminEvidenceWorkflowPage', () => {
     render(<AdminEvidenceWorkflowPage />);
 
     const referencePanel = screen.getByTestId('admin-evidence-schema-reference');
-    expect(within(referencePanel).getByRole('heading', { name: '离线证据 Schema 参考' })).toBeInTheDocument();
+    expect(within(referencePanel).getByRole('heading', { name: '离线证据数据结构参考' })).toBeInTheDocument();
     expect(within(referencePanel).getByText('人工复核必需')).toBeInTheDocument();
     expect(within(referencePanel).getAllByText('manual review required')).toHaveLength(schemaReferenceGroups.length);
     expect(within(referencePanel).getAllByText('releaseApproved=false')).toHaveLength(schemaReferenceGroups.length);
@@ -202,7 +202,7 @@ describe('AdminEvidenceWorkflowPage', () => {
     });
 
     const disclosure = screen.getByTestId('admin-evidence-raw-disclosure');
-    const summary = within(disclosure).getByText('原始/Schema/Provider/Debug 字段').closest('summary');
+    const summary = within(disclosure).getByText('原始 / 数据结构 / 数据源 / 调试字段').closest('summary');
     expect(summary).not.toBeNull();
     summary?.focus();
     expect(summary).toHaveFocus();
@@ -232,7 +232,7 @@ describe('AdminEvidenceWorkflowPage', () => {
 
     const disclosure = screen.getByTestId('admin-evidence-raw-disclosure');
     expect(disclosure).not.toHaveAttribute('open');
-    expect(within(disclosure).getByText('原始/Schema/Provider/Debug 字段')).toBeInTheDocument();
+    expect(within(disclosure).getByText('原始 / 数据结构 / 数据源 / 调试字段')).toBeInTheDocument();
 
     const schemaNotes = screen.getByTestId('admin-evidence-schema-notes');
     expect(schemaNotes).not.toHaveAttribute('open');

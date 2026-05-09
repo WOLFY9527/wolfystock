@@ -270,8 +270,8 @@ const AssumptionPanel: React.FC<{
   onTargetDateChange,
   onRiskBudgetChange,
 }) => (
-  <section className={cn(panelClass, 'xl:col-span-4')}>
-    <SectionHeader eyebrow="Assumptions" title="情景假设" icon={Search} />
+  <section className={cn(panelClass, 'xl:col-span-4')} data-testid="options-lab-assumptions-panel">
+    <SectionHeader eyebrow="假设 / Assumptions" title="期权假设" icon={Search} />
     <div className="mt-5 grid gap-4">
       <label className="grid gap-2">
         <span className={labelClass}>标的代码</span>
@@ -321,36 +321,32 @@ const AssumptionPanel: React.FC<{
 const SnapshotPanel: React.FC<{ summary: OptionsUnderlyingSummaryResponse | null; chain: OptionsChainResponse | null }> = ({ summary, chain }) => {
   const underlying = summary?.underlying || chain?.underlying;
   return (
-    <section className={cn(panelClass, 'xl:col-span-8')}>
-      <SectionHeader eyebrow="Underlying" title="标的快照" icon={LineChart}>
+    <section className={cn(panelClass, 'xl:col-span-12')}>
+      <SectionHeader eyebrow="标的 / Underlying" title="标的快照" icon={LineChart}>
         <div className="flex flex-wrap justify-end gap-2">
           <Pill tone="good">只读</Pill>
           <Pill tone="info">不接入交易</Pill>
-          <Pill tone="warn">分析支持</Pill>
         </div>
       </SectionHeader>
       <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
         <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
-          <p className={labelClass}>Symbol</p>
+          <p className={labelClass}>标的代码</p>
           <p className="mt-2 font-mono text-2xl font-semibold text-white">{summary?.symbol || chain?.symbol || '--'}</p>
         </div>
         <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
-          <p className={labelClass}>Last</p>
+          <p className={labelClass}>最新价</p>
           <p className="mt-2 font-mono text-2xl font-semibold text-white">{money(underlying?.price)}</p>
         </div>
         <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
-          <p className={labelClass}>Change</p>
+          <p className={labelClass}>涨跌幅</p>
           <p className="mt-2 font-mono text-2xl font-semibold text-emerald-300">{ratio(underlying?.changePct)}</p>
         </div>
         <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
-          <p className={labelClass}>Freshness</p>
+          <p className={labelClass}>数据状态</p>
           <p className="mt-2 font-mono text-base font-semibold text-cyan-100">{freshnessLabel(underlying?.freshness)}</p>
           <p className="mt-1 truncate text-xs text-white/35">{underlying?.asOf || '--'}</p>
         </div>
       </div>
-      <p className="mt-4 rounded-2xl border border-cyan-300/10 bg-cyan-400/8 px-4 py-3 text-sm leading-6 text-cyan-100/78">
-        分析支持 / 不构成投资建议。所有排序与对比只表示当前情景假设下的风险收益结构。
-      </p>
     </section>
   );
 };
@@ -361,7 +357,7 @@ const ExpirationPanel: React.FC<{
   onSelect: (value: string) => void;
 }> = ({ expirations, selectedExpiration, onSelect }) => (
   <section className={cn(panelClass, 'xl:col-span-12')}>
-    <SectionHeader eyebrow="Expiration Filters" title="到期日过滤" icon={Layers3} />
+    <SectionHeader eyebrow="到期日 / Expiration" title="到期日过滤" icon={Layers3} />
     <div className="mt-4 flex gap-2 overflow-x-auto no-scrollbar">
       {expirations.length === 0 ? (
         <p className="rounded-2xl border border-white/5 bg-black/20 px-4 py-3 text-sm text-white/45">暂无可用到期日。</p>
@@ -385,9 +381,9 @@ const ExpirationPanel: React.FC<{
   </section>
 );
 
-const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId: string }> = ({ title, contracts, testId }) => (
-  <section className={cn(panelClass, 'min-h-[360px]')}>
-    <SectionHeader eyebrow="Option Chain" title={title} icon={BarChart3} />
+const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId: string; className?: string }> = ({ title, contracts, testId, className }) => (
+  <section className={cn(panelClass, 'min-h-[360px]', className)}>
+    <SectionHeader eyebrow="合约链 / Option Chain" title={title} icon={BarChart3} />
     {contracts.length === 0 ? (
       <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/45">暂无合约数据，保留假设面板与风险提示。</p>
     ) : (
@@ -489,23 +485,21 @@ const StrategyComparisonPanel: React.FC<{
   loading: boolean;
   emptyMessage: string | null;
   chain: OptionsChainResponse | null;
-}> = ({ comparisonState, loading, emptyMessage, chain }) => {
+  className?: string;
+}> = ({ comparisonState, loading, emptyMessage, chain, className }) => {
   const comparison = comparisonState.comparison;
   const comparisonMetadata = comparison?.metadata ?? {};
   const strategies = asArray(comparison?.strategies);
   const limitations = asArray(comparison?.limitations);
   const freshness = chain?.underlying?.freshness || (comparisonMetadata.fixtureBacked ? 'fixture' : null);
   return (
-    <section className={cn(panelClass, 'xl:col-span-12')} data-testid="options-lab-strategy-comparison">
-      <SectionHeader eyebrow="Phase 4" title="策略对比" icon={Layers3}>
+    <section className={cn(panelClass, className)} data-testid="options-lab-strategy-comparison">
+      <SectionHeader eyebrow="候选 / Strategy" title="策略候选" icon={Layers3}>
         <div className="flex flex-wrap justify-end gap-2">
           <Pill tone="info">{freshness ? `数据状态：${limitationLabel(String(freshness))}` : '数据状态：等待快照'}</Pill>
           <Pill tone="warn">仅供情景分析，不构成交易建议</Pill>
         </div>
       </SectionHeader>
-      <p className="mt-4 rounded-2xl border border-cyan-300/10 bg-cyan-400/8 px-4 py-3 text-sm leading-6 text-cyan-100/78">
-        仅供情景分析，不构成交易建议。对比使用当前标的、到期日与目标价格假设，展示定义风险结构下的权利金、盈亏边界与风险收益关系。
-      </p>
       {emptyMessage ? (
         <div className="mt-5 rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-4 text-sm leading-6 text-white/55">
           <p className="text-sm font-semibold text-white/78">等待策略对比前提</p>
@@ -545,7 +539,7 @@ const DecisionMetric: React.FC<{ label: string; value: string; tone?: string }> 
   </div>
 );
 
-const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: string | null }> = ({ decisionState, emptyMessage }) => {
+const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: string | null; className?: string }> = ({ decisionState, emptyMessage, className }) => {
   const decision = decisionState.decision;
   const label = decision?.decisionLabel || '数据不足，禁止判断';
   const reasons = asArray(decision?.primaryReasons);
@@ -568,8 +562,8 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
       ? 'text-cyan-100'
       : 'text-amber-100';
   return (
-    <section className={cn(panelClass, 'xl:col-span-12')} data-testid="options-lab-decision-engine">
-      <SectionHeader eyebrow="Decision Engine R2" title="情景结论" icon={ShieldCheck}>
+    <section className={cn(panelClass, className)} data-testid="options-lab-decision-engine">
+      <SectionHeader eyebrow="结论 / Decision" title="情景结论" icon={ShieldCheck}>
         <div className="flex flex-wrap justify-end gap-2">
           <Pill tone="warn">{label}</Pill>
           <Pill tone="info">{dataTierLabel(decision?.dataQuality?.dataQualityTier)}</Pill>
@@ -1080,24 +1074,19 @@ const OptionsLabPageContent: React.FC = () => {
   return (
     <main className="min-h-screen w-full bg-[#050505] px-4 py-5 text-white md:px-8 xl:px-10">
       <div className="mx-auto flex w-full max-w-[1720px] flex-col gap-5">
-        <header className="flex flex-col gap-4 rounded-[24px] border border-white/5 bg-white/[0.02] p-5 backdrop-blur-md md:flex-row md:items-end md:justify-between md:p-6">
+        <header className="flex flex-col gap-3 rounded-2xl border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-cyan-200/70">Options Lab Phase 4</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-normal text-white md:text-5xl">期权实验室</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-white/58">
-              前端只读实验台：用模拟期权链展示情景假设、合约表、策略对比与风险披露，不接入交易或实时供应商调用。
-            </p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200/62">期权工作台 / Options Lab</p>
+            <h1 className="mt-1 text-xl font-semibold tracking-normal text-white md:text-2xl">期权实验室</h1>
           </div>
           <div className="flex flex-wrap gap-2">
             <Pill tone="good">只读分析</Pill>
-            <Pill tone="info">本地情景链</Pill>
             <Pill tone="warn">分析支持 / 不构成投资建议</Pill>
           </div>
         </header>
 
-        <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} />
-
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-12" data-testid="options-lab-assumptions-row">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-12 xl:items-start" data-testid="options-lab-bento-grid">
+          <SnapshotPanel summary={state.summary} chain={state.chain} />
           <AssumptionPanel
             symbol={symbolInput}
             direction={direction}
@@ -1113,26 +1102,41 @@ const OptionsLabPageContent: React.FC = () => {
             onTargetDateChange={setTargetDate}
             onRiskBudgetChange={setRiskBudget}
           />
-          <SnapshotPanel summary={state.summary} chain={state.chain} />
+          <div className="grid min-w-0 gap-6 xl:col-span-8">
+            <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} />
+            <StrategyComparisonPanel comparisonState={comparisonState} loading={comparisonState.loading} emptyMessage={comparisonEmptyMessage} chain={state.chain} />
+          </div>
           <ExpirationPanel expirations={expirations} selectedExpiration={selectedExpiration} onSelect={handleExpirationSelect} />
-        </div>
 
-        {state.loading ? (
-          <section className={panelClass}>
+          {state.loading ? (
+          <section className={cn(panelClass, 'xl:col-span-12')}>
             <p className="font-mono text-sm text-cyan-100">正在加载期权链快照...</p>
           </section>
-        ) : null}
-        {state.error ? (
-          <section className="rounded-2xl border border-rose-300/20 bg-rose-500/10 p-4 text-sm text-rose-100">
+          ) : null}
+          {state.error ? (
+          <section className="rounded-2xl border border-rose-300/20 bg-rose-500/10 p-4 text-sm text-rose-100 xl:col-span-12">
             {state.error}
           </section>
-        ) : null}
+          ) : null}
 
-        <details data-testid="options-lab-analysis-details" className={panelClass}>
+          {!state.loading && !state.error ? (
+            <>
+              <ChainTable title="Call 链" contracts={calls} testId="options-lab-calls-table" className="xl:col-span-6" />
+              <ChainTable title="Put 链" contracts={puts} testId="options-lab-puts-table" className="xl:col-span-6" />
+            </>
+          ) : null}
+
+          {!state.loading && !state.error && !hasChainRows ? (
+            <section className={cn(panelClass, 'xl:col-span-12')}>
+              <p className="text-sm text-white/50">暂无合约数据，保留假设面板与风险提示。</p>
+            </section>
+          ) : null}
+
+        <details data-testid="options-lab-analysis-details" className={cn(panelClass, 'xl:col-span-12')}>
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/75">
             <span className="inline-flex items-center gap-2 text-sm font-semibold">
               <BarChart3 className="h-4 w-4 text-cyan-200" aria-hidden="true" />
-              情景细节 / 风险控件
+              风险边界
             </span>
             <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
           </summary>
@@ -1154,43 +1158,10 @@ const OptionsLabPageContent: React.FC = () => {
             <RiskWarnings />
           </div>
         </details>
-
-        {!state.loading && !state.error ? (
-          <details data-testid="options-lab-chain-details" className={panelClass}>
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/75">
-              <span className="inline-flex items-center gap-2 text-sm font-semibold">
-                <Layers3 className="h-4 w-4 text-cyan-200" aria-hidden="true" />
-                合约链明细
-              </span>
-              <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
-            </summary>
-            <div className="mt-5 grid grid-cols-1 gap-5 2xl:grid-cols-2">
-              <ChainTable title="Calls 链表" contracts={calls} testId="options-lab-calls-table" />
-              <ChainTable title="Puts 链表" contracts={puts} testId="options-lab-puts-table" />
-            </div>
-          </details>
-        ) : null}
-
-        {!state.loading && !state.error && !hasChainRows ? (
-          <section className={panelClass}>
-            <p className="text-sm text-white/50">暂无合约数据，保留假设面板与风险提示。</p>
-          </section>
-        ) : null}
-
-        <details data-testid="options-lab-strategy-details" className={panelClass}>
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-white/75">
-            <span className="inline-flex items-center gap-2 text-sm font-semibold">
-              <ShieldCheck className="h-4 w-4 text-cyan-200" aria-hidden="true" />
-              策略对比明细
-            </span>
-            <ChevronDown className="h-4 w-4 text-white/35" aria-hidden="true" />
-          </summary>
-          <div className="mt-5">
-            <StrategyComparisonPanel comparisonState={comparisonState} loading={comparisonState.loading} emptyMessage={comparisonEmptyMessage} chain={state.chain} />
-          </div>
-        </details>
-
-        <DataReadinessNote state={state} />
+        <div className="xl:col-span-12">
+          <DataReadinessNote state={state} />
+        </div>
+        </div>
       </div>
     </main>
   );

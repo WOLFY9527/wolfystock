@@ -283,7 +283,7 @@ describe('WatchlistPage', () => {
 
     expect(await screen.findByTestId('watchlist-row-NVDA')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '观察列表' })).toBeInTheDocument();
-    expect(screen.getByText('管理扫描候选的证据状态，区分待补齐、已验证与历史回测记录')).toBeInTheDocument();
+    expect(screen.getByText('扫描候选的紧凑证据队列')).toBeInTheDocument();
     expect(screen.queryByText(/Track scanner candidates/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-TSM')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-row-600519')).toBeInTheDocument();

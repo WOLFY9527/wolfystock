@@ -178,7 +178,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           {[
             ['页面用途', '复核脱敏证据路径', '模板、校验、归档、人工复核'],
             ['当前状态', '等待人工复核', '缺证据时保持 NO-GO'],
-            ['下一步', '按本地 runbook 生成复核材料', '先确认交接状态；命令、Schema、参考文档默认折叠'],
+            ['下一步', '按本地操作手册生成复核材料', '先确认交接状态；命令、数据结构、参考文档默认折叠'],
           ].map(([label, value, note]) => (
             <div key={label} className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">{label}</p>
@@ -226,7 +226,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
             </div>
             <div className="mt-5 space-y-3 text-sm leading-6 text-white/58">
               <p>不提供上传入口，不调用后端写接口，不变更运行时配置。</p>
-              <p>不读取原始 artifact 内容，不展示 provider 载荷、schema 细节或调试字段。</p>
+              <p>不读取原始证据文件内容，不展示数据源载荷、数据结构细节或调试字段。</p>
             </div>
           </GlassCard>
 
@@ -279,7 +279,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
 
       <details className="rounded-[20px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
-          <span>二级细节：Runbook 参考</span>
+          <span>二级细节：操作手册参考</span>
           <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">默认折叠</span>
         </summary>
       <GlassCard
@@ -291,7 +291,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           <div className="flex min-w-0 items-start gap-3">
             <BookOpenCheck className="mt-1 h-4 w-4 shrink-0 text-cyan-200" aria-hidden="true" />
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">本地 Runbook</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">本地操作手册</p>
               <h2 className="mt-1 text-lg font-semibold text-white">操作员工作流参考</h2>
             </div>
           </div>
@@ -328,7 +328,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
 
       <details className="rounded-[20px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
-          <span>二级细节：Schema 与字段参考</span>
+          <span>二级细节：数据结构与字段参考</span>
           <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">默认折叠</span>
         </summary>
       <GlassCard
@@ -341,7 +341,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
             <FileCheck2 className="mt-1 h-4 w-4 shrink-0 text-cyan-200" aria-hidden="true" />
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">本地参考</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">离线证据 Schema 参考</h2>
+              <h2 className="mt-1 text-lg font-semibold text-white">离线证据数据结构参考</h2>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -368,7 +368,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
               </div>
               <dl className="mt-4 space-y-3 text-xs leading-5">
                 <div>
-                  <dt className="text-white/34">预期 artifact</dt>
+                  <dt className="text-white/34">预期证据文件</dt>
                   <dd className="mt-1 break-all font-mono text-white/74">{group.artifact}</dd>
                 </div>
                 <div>
@@ -399,7 +399,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
             </span>
           </summary>
           <p className="mt-3 text-xs leading-6 text-white/48">
-            仅展示类别、文件名、校验脚本和复核姿态；字段清单、原始 schema、provider 载荷和 debug 细节不在页面默认展开。
+            仅展示类别、文件名、校验脚本和复核姿态；字段清单、原始数据结构、数据源载荷和调试细节不在页面默认展开。
           </p>
         </details>
       </GlassCard>
@@ -465,13 +465,13 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
         className="rounded-[20px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden"
       >
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
-          <span>原始/Schema/Provider/Debug 字段</span>
+          <span>原始 / 数据结构 / 数据源 / 调试字段</span>
           <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">
             默认折叠
           </span>
         </summary>
         <div className="mt-3 rounded-2xl border border-white/[0.04] bg-black/20 p-3 text-xs leading-6 text-white/48">
-          原始诊断、provider 载荷、schema 字段和 debug 内容不在本视图展开。复核材料只以脱敏状态码和人工检查结论进入页面。
+          原始诊断、数据源载荷、数据结构字段和调试内容不在本视图展开。复核材料只以脱敏状态码和人工检查结论进入页面。
         </div>
       </details>
     </div>
