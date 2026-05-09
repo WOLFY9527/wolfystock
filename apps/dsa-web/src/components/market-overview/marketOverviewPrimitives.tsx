@@ -281,7 +281,8 @@ export const MarketDataRow: React.FC<{
   neutralLabel: string;
   valueClassName?: string;
   valueDigitsBelowHundred?: number;
-}> = ({ item, neutralLabel, valueClassName, valueDigitsBelowHundred = 2 }) => {
+  suppressFreshnessBadge?: boolean;
+}> = ({ item, neutralLabel, valueClassName, valueDigitsBelowHundred = 2, suppressFreshnessBadge = false }) => {
   const { language } = useI18n();
   const direction = item.riskDirection || 'neutral';
   const tone = getDirectionTone(direction);
@@ -312,14 +313,14 @@ export const MarketDataRow: React.FC<{
           ) : null}
         </div>
       </div>
-      {(item.freshness || item.sourceLabel || item.warning || item.hoverDetails?.length) ? (
+      {((!suppressFreshnessBadge && item.freshness) || compactDetails || item.hoverDetails?.length) ? (
         <div
           data-testid="market-overview-quote-metadata"
           data-metadata-position="middle-left"
           title={metadataTitle(itemDetails, item.warning, item.hoverDetails)}
           className="col-start-2 flex min-w-0 max-w-full items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-[9px] text-white/32 max-[640px]:col-start-1 max-[640px]:row-start-2 max-[640px]:pl-3.5"
         >
-          <DataFreshnessBadge status={freshness} className="shrink-0 px-1.5 text-[9px]" />
+          {!suppressFreshnessBadge ? <DataFreshnessBadge status={freshness} className="shrink-0 px-1.5 text-[9px]" /> : null}
           {compactDetails ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{compactDetails}</span> : null}
           {item.hoverDetails?.map((detail, index) => (
             <span key={`${detail}-${index}`} className="shrink-0 leading-4 text-white/28">{detail}</span>
@@ -351,7 +352,8 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
   item: MarketOverviewItem;
   neutralLabel: string;
   valueDigitsBelowHundred?: number;
-}> = ({ item, neutralLabel, valueDigitsBelowHundred = 2 }) => {
+  suppressFreshnessBadge?: boolean;
+}> = ({ item, neutralLabel, valueDigitsBelowHundred = 2, suppressFreshnessBadge = false }) => {
   const { language } = useI18n();
   const direction = item.riskDirection || 'neutral';
   const tone = getDirectionTone(direction);
@@ -387,7 +389,7 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
         title={metadataTitle(itemDetails, item.warning, item.hoverDetails)}
         className="col-start-2 flex min-w-0 max-w-full items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-[9px] text-white/32 max-[720px]:col-start-1 max-[720px]:row-start-2 max-[720px]:pl-3.5"
       >
-        <DataFreshnessBadge status={freshness} className="shrink-0 px-1.5 text-[9px]" />
+        {!suppressFreshnessBadge ? <DataFreshnessBadge status={freshness} className="shrink-0 px-1.5 text-[9px]" /> : null}
         {compactDetails ? <span className="min-w-0 overflow-hidden text-ellipsis leading-4">{compactDetails}</span> : null}
         {item.hoverDetails?.map((detail, index) => (
           <span key={`${detail}-${index}`} className="shrink-0 leading-4 text-white/28">{detail}</span>

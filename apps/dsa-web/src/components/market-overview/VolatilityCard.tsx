@@ -1,6 +1,7 @@
 import type React from 'react';
 import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
 import { useI18n } from '../../contexts/UiLanguageContext';
+import { TerminalChip } from '../terminal';
 import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
 import {
   MarketOverviewCardFrame,
@@ -46,9 +47,13 @@ export const VolatilityCard: React.FC<{
 
         {panel?.errorMessage ? (
           <div className="flex min-w-0 items-center gap-2" title={panel.errorMessage}>
-            <span data-testid="market-overview-compact-error-badge" className="rounded-md border border-amber-300/20 bg-amber-400/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-100/78">
-              {panel.isStale || panel.isFromSnapshot ? '过期' : '数据异常'}
-            </span>
+            <TerminalChip
+              data-testid="market-overview-compact-error-badge"
+              variant={panel.isStale || panel.isFromSnapshot ? 'neutral' : 'caution'}
+              className="px-2 py-1 text-[10px] font-semibold tracking-widest"
+            >
+              {panel.isStale || panel.isFromSnapshot ? '最近快照' : '待刷新'}
+            </TerminalChip>
             <span className="min-w-0 truncate text-[10px] text-white/38">刷新失败，保留最近快照</span>
           </div>
         ) : null}

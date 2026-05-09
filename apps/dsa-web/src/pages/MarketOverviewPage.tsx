@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { MarketOverviewItem, MarketOverviewPanel } from '../api/marketOverview';
+import type { MarketDataMeta, MarketOverviewItem, MarketOverviewPanel, MarketProviderHealthStatus } from '../api/marketOverview';
 import { marketOverviewApi } from '../api/marketOverview';
 import type {
   CnShortSentimentResponse,
@@ -30,7 +30,16 @@ import {
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
 } from '../components/market-overview/marketOverviewPrimitives';
-import { TerminalPageHeading } from '../components/terminal';
+import {
+  TerminalChip,
+  TerminalDenseList,
+  TerminalGrid,
+  TerminalNotice,
+  TerminalPageHeading,
+  TerminalPageShell,
+  TerminalPanel,
+  TerminalSectionHeader,
+} from '../components/terminal';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { GlassCard } from '../components/common';
 import { cn } from '../utils/cn';
@@ -1194,20 +1203,19 @@ const CompactStatusTile: React.FC<{
   meta: React.ReactNode;
   tone?: string;
 }> = ({ testId, eyebrow, title, value, meta, tone = 'text-white' }) => (
-  <GlassCard
+  <TerminalPanel
     as="section"
+    dense
     data-testid={testId}
-    className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'min-w-0 p-3')}
+    className="min-w-0"
   >
-    <div className="flex min-w-0 items-start justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/38">{eyebrow}</p>
-        <p className="mt-1 truncate text-sm font-semibold text-white/78">{title}</p>
-      </div>
-      <p className={cn('shrink-0 text-right font-mono text-lg font-semibold leading-none tabular-nums', tone)}>{value}</p>
-    </div>
+    <TerminalSectionHeader
+      eyebrow={eyebrow}
+      title={title}
+      action={<p className={cn('shrink-0 text-right font-mono text-lg font-semibold leading-none tabular-nums', tone)}>{value}</p>}
+    />
     <div className="mt-2 min-w-0 text-xs leading-5 text-white/45">{meta}</div>
-  </GlassCard>
+  </TerminalPanel>
 );
 
 const MarketTemperatureCompactSummary: React.FC<{ data: MarketTemperatureResponse }> = ({ data }) => {
@@ -1232,22 +1240,6 @@ const MarketTemperatureCompactSummary: React.FC<{ data: MarketTemperatureRespons
   );
 };
 
-const DataQualityCompactSummary: React.FC<{ summary: DataQualitySummary }> = ({ summary }) => (
-  <CompactStatusTile
-    testId="market-overview-data-quality-summary"
-    eyebrow="质量"
-    title={`数据质量：${summary.status}`}
-    value={`${summary.counts.live + summary.counts.delayed + summary.counts.cached}`}
-    tone={summary.hasConcern ? 'text-amber-200' : 'text-emerald-300'}
-    meta={(
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span>可用快照</span>
-        <span className="font-mono tabular-nums">备用 {summary.counts.fallback} · 过期 {summary.counts.stale} · 异常 {summary.counts.error}</span>
-      </div>
-    )}
-  />
-);
-
 const MarketBriefingCompactSummary: React.FC<{ data: MarketBriefingResponse }> = ({ data }) => {
   const lead = data.items[0];
   return (
@@ -1269,83 +1261,141 @@ const MarketBriefingCompactSummary: React.FC<{ data: MarketBriefingResponse }> =
 
 const MarketOverviewStatusStrip: React.FC<{
   temperature: React.ReactNode;
-  dataQuality: React.ReactNode;
   briefing: React.ReactNode;
-}> = ({ temperature, dataQuality, briefing }) => (
+}> = ({ temperature, briefing }) => (
   <section
     data-testid="market-overview-status-strip"
-    className="grid w-full grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-[1.15fr_1fr_1.35fr]"
+    className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[1fr_1.35fr]"
   >
     {temperature}
-    {dataQuality}
     {briefing}
   </section>
 );
 
-const MarketOverviewCacheStatus: React.FC<{
-  hasLocalSnapshot: boolean;
+function resolveProviderStatus(meta?: Partial<MarketDataMeta>): MarketProviderHealthStatus {
+  if (meta?.providerHealth?.status) {
+    return meta.providerHealth.status;
+  }
+  if (meta?.isRefreshing) {
+    return 'refreshing';
+  }
+  if (meta?.source === 'unavailable') {
+    return 'unavailable';
+  }
+  if (meta?.freshness === 'error') {
+    return 'error';
+  }
+  if (meta?.isFallback || meta?.source === 'fallback' || meta?.freshness === 'fallback' || meta?.freshness === 'mock') {
+    return 'fallback';
+  }
+  if (meta?.isStale || meta?.freshness === 'stale') {
+    return 'stale';
+  }
+  if (meta?.freshness === 'live') {
+    return 'live';
+  }
+  return 'cache';
+}
+
+function collectDataStateMeta(panels: PanelState): Array<Partial<MarketDataMeta>> {
+  const panelKeys: CardKey[] = ['indices', 'volatility', 'crypto', 'sentiment', 'fundsFlow', 'macro', 'cnIndices', 'cnBreadth', 'cnFlows', 'sectorRotation', 'usBreadth', 'rates', 'fxCommodities'];
+  const entries: Array<Partial<MarketDataMeta>> = [];
+  panelKeys.forEach((key) => {
+    const panel = panels[key] as MarketOverviewPanel | undefined;
+    if (panel) {
+      entries.push(panel);
+    }
+  });
+  entries.push(panels.temperature, panels.briefing, panels.futures, panels.cnShortSentiment);
+  return entries;
+}
+
+function shouldSuppressRepeatedItemStatus(panel: MarketOverviewPanel, item: MarketOverviewItem): boolean {
+  const panelStatus = resolveProviderStatus(panel);
+  if (!['fallback', 'stale', 'refreshing', 'error', 'unavailable', 'partial'].includes(panelStatus)) {
+    return false;
+  }
+  return resolveProviderStatus(item) === panelStatus;
+}
+
+const MarketOverviewDataStateStrip: React.FC<{
   localSnapshotSavedAt?: string;
   loading: boolean;
   refreshingPanel: PanelKey | null;
   refreshErrorCount: number;
   dataQuality: DataQualitySummary;
-}> = ({ hasLocalSnapshot, localSnapshotSavedAt, loading, refreshingPanel, refreshErrorCount, dataQuality }) => {
-  const statusLabel = refreshErrorCount > 0
-    ? '刷新失败'
-    : loading && hasLocalSnapshot
-      ? '本地缓存'
-      : dataQuality.counts.stale > 0
-        ? '过期'
-        : dataQuality.counts.fallback > 0
-          ? '缓存'
-          : '实时';
-  const message = refreshErrorCount > 0
-    ? '部分数据源刷新失败，当前显示最近成功快照'
-    : loading && hasLocalSnapshot
-      ? '正在刷新，当前显示本地缓存'
-      : dataQuality.hasConcern
-        ? '部分面板使用缓存或备用快照'
-        : '实时数据已更新';
+  panels: PanelState;
+}> = ({ localSnapshotSavedAt, loading, refreshingPanel, refreshErrorCount, dataQuality, panels }) => {
+  const statuses = collectDataStateMeta(panels).map(resolveProviderStatus);
+  const hasFallback = dataQuality.counts.fallback + dataQuality.counts.mock > 0;
+  const unavailableCount = statuses.filter((status) => status === 'partial' || status === 'unavailable' || status === 'error').length + refreshErrorCount;
+  const hasUnavailable = unavailableCount > 0;
+  const needsRefresh = dataQuality.counts.stale > 0 || refreshErrorCount > 0 || !localSnapshotSavedAt;
+  const isRefreshing = loading || refreshingPanel !== null;
+  const summaryVariant = hasUnavailable || dataQuality.hasConcern
+    ? 'caution'
+    : isRefreshing
+      ? 'info'
+      : 'neutral';
   const timestamp = formatMarketOverviewTimestamp(localSnapshotSavedAt) || '';
   return (
-    <details
+    <TerminalNotice
+      variant={summaryVariant}
       data-testid="market-overview-cache-status"
       data-market-research-flow="cache"
       data-mobile-order="cache-status"
-      className={cn(
-        'group min-w-0 rounded-xl border px-3 py-2 text-xs',
-        refreshErrorCount > 0 || dataQuality.hasConcern
-          ? 'border-amber-300/18 bg-amber-400/[0.055] text-amber-100/82'
-          : 'border-emerald-300/16 bg-emerald-400/[0.045] text-emerald-100/78',
-      )}
+      className="min-w-0"
     >
-      <summary className="flex cursor-pointer list-none flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <span className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="shrink-0 rounded-md border border-current/20 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest">
-            {statusLabel}
-          </span>
-          <span className="min-w-0 truncate">{message}</span>
-        </span>
-        <span className="shrink-0 text-[10px] font-semibold text-white/42 group-open:text-white/62">
-          {dataQuality.hasConcern || refreshErrorCount > 0 ? '查看数据状态' : '状态详情'}
-        </span>
-      </summary>
-      <div className="mt-2 flex min-w-0 flex-col gap-2 border-t border-white/[0.05] pt-2 md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="shrink-0 rounded-md border border-current/20 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-widest">
-            {statusLabel}
-          </span>
-          {refreshingPanel ? <span className="font-mono text-[10px] text-white/45">刷新 {String(refreshingPanel)}</span> : null}
-          <span className="font-mono text-[10px] text-white/45">
-            可用 {dataQuality.counts.live + dataQuality.counts.delayed + dataQuality.counts.cached} · 备用 {dataQuality.counts.fallback} · 过期 {dataQuality.counts.stale}
-          </span>
+      <div
+        data-testid="market-overview-data-state-strip"
+        className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between"
+      >
+        <div className="min-w-0 flex-1">
+          <TerminalSectionHeader eyebrow="状态" title="数据状态" />
+          <TerminalDenseList
+            data-testid="market-overview-data-state-summary"
+            className="mt-2 min-w-0 text-[11px] leading-4 text-white/45"
+          >
+            <span className="truncate font-mono">
+              可用 {dataQuality.counts.live + dataQuality.counts.delayed + dataQuality.counts.cached} · 备用 {dataQuality.counts.fallback + dataQuality.counts.mock} · 过期 {dataQuality.counts.stale}
+              {hasUnavailable ? ` · 缺口 ${unavailableCount}` : ''}
+            </span>
+          </TerminalDenseList>
         </div>
-        <div className="flex shrink-0 items-center gap-2 font-mono text-[10px] tracking-widest text-white/42">
-          {timestamp ? <span>本地 {timestamp}</span> : null}
-          <span data-testid="market-overview-refresh-error-count">错误 {refreshErrorCount}</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 xl:max-w-[60%] xl:justify-end">
+          {isRefreshing || needsRefresh ? (
+            <TerminalChip
+              data-testid="market-overview-data-state-refresh-chip"
+              variant={isRefreshing ? 'info' : 'caution'}
+            >
+              {isRefreshing ? '刷新中' : '待刷新'}
+            </TerminalChip>
+          ) : null}
+          {hasFallback ? (
+            <TerminalChip
+              data-testid="market-overview-data-state-fallback-chip"
+              variant="caution"
+            >
+              备用数据
+            </TerminalChip>
+          ) : null}
+          {hasUnavailable ? (
+            <TerminalChip
+              data-testid="market-overview-data-state-unavailable-chip"
+              variant="caution"
+            >
+              部分外部数据暂不可用
+            </TerminalChip>
+          ) : null}
+          <TerminalChip
+            data-testid="market-overview-data-state-updated-chip"
+            variant={timestamp ? 'neutral' : 'info'}
+          >
+            {timestamp ? <>更新时间 <span className="font-mono">{timestamp}</span></> : '待刷新'}
+          </TerminalChip>
         </div>
       </div>
-    </details>
+    </TerminalNotice>
   );
 };
 
@@ -1590,6 +1640,7 @@ const ContextMetricModuleCard: React.FC<{
               key={`${moduleId}-${item.symbol}`}
               item={item}
               neutralLabel={t('marketOverviewPage.direction.neutral')}
+              suppressFreshnessBadge={shouldSuppressRepeatedItemStatus(panel, item)}
             />
           ))}
         </div>
@@ -1842,7 +1893,6 @@ const MarketOverviewPage: React.FC = () => {
   const initialLocalSnapshot = useMemo(() => buildInitialPanelsFromLocalSnapshot(), []);
   const [panels, setPanels] = useState<PanelState>(initialLocalSnapshot.panels);
   const [loading, setLoading] = useState(initialLocalSnapshot.source !== 'local');
-  const [hasLocalSnapshot, setHasLocalSnapshot] = useState(initialLocalSnapshot.source === 'local');
   const [localSnapshotSavedAt, setLocalSnapshotSavedAt] = useState<string | undefined>(initialLocalSnapshot.savedAt);
   const [refreshErrors, setRefreshErrors] = useState<Record<string, string>>({});
   const [refreshingPanel, setRefreshingPanel] = useState<PanelKey | null>(null);
@@ -1969,7 +2019,6 @@ const MarketOverviewPage: React.FC = () => {
 
   useEffect(() => {
     writeLocalMarketOverviewSnapshot(panels);
-    setHasLocalSnapshot(true);
     setLocalSnapshotSavedAt(new Date().toISOString());
   }, [panels]);
 
@@ -2482,7 +2531,7 @@ const MarketOverviewPage: React.FC = () => {
   }, [exportSummaryText, language]);
 
   const renderDeterministicGrid = () => (
-    <main data-testid="market-overview-main-grid" data-workbench-split="9:3" className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
+    <TerminalGrid data-testid="market-overview-main-grid" data-workbench-split="9:3" className="gap-4">
       <section
         data-testid="market-overview-primary-rail"
         data-mobile-order="main"
@@ -2517,7 +2566,7 @@ const MarketOverviewPage: React.FC = () => {
           {activeCategory === 'all' ? <ExecutiveSecondaryGroups panels={panels} /> : null}
         </section>
       ) : null}
-    </main>
+    </TerminalGrid>
   );
 
   return (
@@ -2526,80 +2575,78 @@ const MarketOverviewPage: React.FC = () => {
       data-bento-surface="true"
       className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 bg-[#030303] text-white"
     >
-      <div data-testid="market-overview-workbench" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6">
+      <TerminalPageShell data-testid="market-overview-workbench" className="flex min-h-0 flex-1">
         <section data-testid="market-overview-pulse-header" className="flex w-full min-w-0 flex-col gap-4">
           <TerminalPageHeading
             data-testid="market-overview-page-heading"
-            className="px-4 xl:px-8"
             title={language === 'en' ? 'Market Overview' : '市场总览'}
           />
           <div data-testid="market-overview-top-stack" className="flex w-full min-w-0 flex-col gap-4">
-          <MarketDecisionStrip activeCategory={activeCategory} panels={panels} dataQuality={dataQuality} />
-          <section data-testid="market-overview-summary-band" data-mobile-order="summary" data-market-research-flow="trust" className="min-w-0">
-            <MarketOverviewStatusStrip
-              temperature={<MarketTemperatureCompactSummary data={panels.temperature} />}
-              dataQuality={<DataQualityCompactSummary summary={dataQuality} />}
-              briefing={<MarketBriefingCompactSummary data={panels.briefing} />}
+            <MarketDecisionStrip activeCategory={activeCategory} panels={panels} dataQuality={dataQuality} />
+            <MarketOverviewDataStateStrip
+              localSnapshotSavedAt={localSnapshotSavedAt}
+              loading={loading}
+              refreshingPanel={refreshingPanel}
+              refreshErrorCount={refreshErrorCount}
+              dataQuality={dataQuality}
+              panels={panels}
             />
-          </section>
-          <div data-market-research-flow="controls">
-            <div
-              data-testid="market-overview-category-tabs"
-              data-selector-position="static-safe"
-              data-mobile-order="controls"
-              className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-white/8 bg-white/[0.02] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[10px] font-semibold text-white/42">
-                  筛选
-                </span>
-                <div className="ui-scroll-x-quiet min-w-0">
-                  <div className="flex w-max gap-2">
-                    {categoryTabs.map((tab) => (
-                      <button
-                        key={tab.key}
-                        type="button"
-                        aria-pressed={activeCategory === tab.key}
-                        className={`ui-truncate shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
-                          activeCategory === tab.key
-                            ? 'bg-white/10 text-white shadow-sm'
-                            : 'bg-transparent text-white/45 hover:text-white/75'
-                        }`}
-                        onClick={() => setActiveCategory(tab.key)}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
+            <section data-testid="market-overview-summary-band" data-mobile-order="summary" data-market-research-flow="trust" className="min-w-0">
+              <MarketOverviewStatusStrip
+                temperature={<MarketTemperatureCompactSummary data={panels.temperature} />}
+                briefing={<MarketBriefingCompactSummary data={panels.briefing} />}
+              />
+            </section>
+            <div data-market-research-flow="controls">
+              <div
+                data-testid="market-overview-category-tabs"
+                data-selector-position="static-safe"
+                data-mobile-order="controls"
+                className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-white/8 bg-white/[0.02] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[10px] font-semibold text-white/42">
+                    筛选
+                  </span>
+                  <div className="ui-scroll-x-quiet min-w-0">
+                    <div className="flex w-max gap-2">
+                      {categoryTabs.map((tab) => (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          aria-pressed={activeCategory === tab.key}
+                          className={`ui-truncate shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
+                            activeCategory === tab.key
+                              ? 'bg-white/10 text-white shadow-sm'
+                              : 'bg-transparent text-white/45 hover:text-white/75'
+                          }`}
+                          onClick={() => setActiveCategory(tab.key)}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  data-testid="market-overview-export-summary"
+                  className="w-fit rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition hover:bg-white/[0.06] hover:text-white"
+                  onClick={() => {
+                    void handleExportSummary();
+                  }}
+                >
+                  {exportSummaryFeedback || (language === 'en' ? 'Export' : '复制摘要')}
+                </button>
               </div>
-              <button
-                type="button"
-                data-testid="market-overview-export-summary"
-                className="w-fit rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition hover:bg-white/[0.06] hover:text-white"
-                onClick={() => {
-                  void handleExportSummary();
-                }}
-              >
-                {exportSummaryFeedback || (language === 'en' ? 'Export' : '复制摘要')}
-              </button>
             </div>
-          </div>
-          <MarketOverviewCacheStatus
-            hasLocalSnapshot={hasLocalSnapshot}
-            localSnapshotSavedAt={localSnapshotSavedAt}
-            loading={loading}
-            refreshingPanel={refreshingPanel}
-            refreshErrorCount={refreshErrorCount}
-            dataQuality={dataQuality}
-          />
-          <div data-market-research-flow="pulse">
-            <CrossAssetHeroRibbon anchors={heroAnchors} />
-          </div>
+            <div data-market-research-flow="pulse">
+              <CrossAssetHeroRibbon anchors={heroAnchors} />
+            </div>
           </div>
         </section>
         {renderDeterministicGrid()}
-      </div>
+      </TerminalPageShell>
     </div>
   );
 };

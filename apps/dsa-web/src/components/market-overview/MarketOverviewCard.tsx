@@ -2,6 +2,7 @@ import type React from 'react';
 import type { MarketOverviewPanel } from '../../api/marketOverview';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
+import { TerminalChip } from '../terminal';
 import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
 import {
   MarketOverviewCardFrame,
@@ -20,6 +21,39 @@ function isFallbackOnlyPanel(panel?: MarketOverviewPanel): boolean {
   return Boolean(panelFallback && items.length > 0 && items.every((item) => (
     item.isFallback || item.freshness === 'fallback' || item.source === 'fallback'
   )));
+}
+
+function resolveMetaStatus(meta?: Pick<MarketOverviewPanel, 'providerHealth' | 'isRefreshing' | 'source' | 'freshness' | 'isFallback' | 'isStale'>): string {
+  if (meta?.providerHealth?.status) {
+    return meta.providerHealth.status;
+  }
+  if (meta?.isRefreshing) {
+    return 'refreshing';
+  }
+  if (meta?.source === 'unavailable') {
+    return 'unavailable';
+  }
+  if (meta?.freshness === 'error') {
+    return 'error';
+  }
+  if (meta?.isFallback || meta?.source === 'fallback' || meta?.freshness === 'fallback' || meta?.freshness === 'mock') {
+    return 'fallback';
+  }
+  if (meta?.isStale || meta?.freshness === 'stale') {
+    return 'stale';
+  }
+  if (meta?.freshness === 'live') {
+    return 'live';
+  }
+  return 'cache';
+}
+
+function shouldSuppressRepeatedItemState(panel: MarketOverviewPanel | undefined, item: MarketOverviewPanel['items'][number]): boolean {
+  const panelStatus = resolveMetaStatus(panel);
+  if (!['fallback', 'stale', 'refreshing', 'error', 'unavailable', 'partial'].includes(panelStatus)) {
+    return false;
+  }
+  return resolveMetaStatus(item) === panelStatus;
 }
 
 type MarketOverviewCardProps = {
@@ -76,9 +110,13 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
 
         {panel?.errorMessage ? (
           <div className="flex min-w-0 items-center gap-2" title={panel.errorMessage}>
-            <span data-testid="market-overview-compact-error-badge" className="rounded-md border border-amber-300/20 bg-amber-400/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-100/78">
-              {panel.isStale || panel.isFromSnapshot ? '过期' : '数据异常'}
-            </span>
+            <TerminalChip
+              data-testid="market-overview-compact-error-badge"
+              variant={panel.isStale || panel.isFromSnapshot ? 'neutral' : 'caution'}
+              className="px-2 py-1 text-[10px] font-semibold tracking-widest"
+            >
+              {panel.isStale || panel.isFromSnapshot ? '最近快照' : '待刷新'}
+            </TerminalChip>
             <span className="min-w-0 truncate text-[10px] text-white/38">刷新失败，保留最近快照</span>
           </div>
         ) : null}
@@ -93,6 +131,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
                 key={item.symbol}
                 item={item}
                 neutralLabel={t('marketOverviewPage.direction.neutral')}
+                suppressFreshnessBadge={shouldSuppressRepeatedItemState(panel, item)}
               />
             ))}
           </div>
@@ -103,6 +142,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewCardProps> = ({
                 key={item.symbol}
                 item={item}
                 neutralLabel={t('marketOverviewPage.direction.neutral')}
+                suppressFreshnessBadge={shouldSuppressRepeatedItemState(panel, item)}
               />
             ))}
           </div>

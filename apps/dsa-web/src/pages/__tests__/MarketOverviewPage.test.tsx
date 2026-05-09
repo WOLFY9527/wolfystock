@@ -791,7 +791,7 @@ describe('MarketOverviewPage', () => {
     const heading = await screen.findByRole('heading', { level: 1, name: '市场总览' });
     expect(heading).toHaveClass('text-xl', 'md:text-2xl');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(screen.queryByText(/provider_timeout|MarketCache|generatedCandidates|failedCandidates/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/开发者详情|debug|raw|schema|trace|provider_timeout|not_enough_history|MarketCache|generatedCandidates|failedCandidates|LLM Ledger|QUOTA PILOT/i)).not.toBeInTheDocument();
   });
 
   it('exposes a distinct tab composition registry for market overview tabs', () => {
@@ -964,8 +964,8 @@ describe('MarketOverviewPage', () => {
     expect(shell.className).not.toContain('max-w-[1280px]');
     expect(shell.className).not.toContain('max-w-[1600px]');
     expect(shell.className).not.toContain('max-w-[1800px]');
-    expect(workbench).toHaveClass('flex', 'w-full', 'flex-1', 'min-h-0', 'min-w-0', 'flex-col', 'gap-6');
-    expect(workbench).not.toHaveClass('mx-auto', 'max-w-[1280px]', 'max-w-[1600px]', 'max-w-[1800px]');
+    expect(workbench).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(workbench).toHaveClass('flex', 'w-full', 'flex-1', 'min-h-0', 'flex-col', 'gap-6', 'mx-auto', 'max-w-[1600px]', 'px-4', 'xl:px-8');
     expect(shell.className).not.toContain('max-w-5xl');
     expect(shell.className).not.toContain('max-w-6xl');
     expect(screen.getByTestId('market-overview-category-tabs')).toHaveClass('w-full', 'flex', 'bg-white/[0.02]', 'backdrop-blur-md');
@@ -978,8 +978,9 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-category-tabs').querySelector('.ui-scroll-x-quiet')).not.toBeNull();
     expect(shell).toContainElement(screen.getByTestId('market-overview-category-tabs'));
     expect(shell).toContainElement(screen.getByTestId('market-overview-workbench'));
+    expect(screen.getByTestId('market-overview-top-stack')).toContainElement(screen.getByTestId('market-overview-data-state-strip'));
     expect(screen.getByTestId('market-overview-status-strip')).toContainElement(screen.getByTestId('market-overview-temperature-summary'));
-    expect(screen.getByTestId('market-overview-status-strip')).toContainElement(screen.getByTestId('market-overview-data-quality-summary'));
+    expect(screen.getByTestId('market-overview-cache-status')).toContainElement(screen.getByTestId('market-overview-data-state-fallback-chip'));
     expect(shell).toContainElement(screen.getByTestId('market-overview-hero-ribbon'));
     expect(shell).toContainElement(screen.getByTestId('market-temperature-strip'));
     expect(shell).toContainElement(screen.getByTestId('market-data-quality'));
@@ -1011,6 +1012,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryAllByTestId('market-overview-fallback-only-notice')).toHaveLength(0);
     expect(screen.getByTestId('market-data-quality')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-rail-quality')).toHaveTextContent(/数据质量：部分备用/i);
+    expect(screen.queryAllByTestId('market-overview-compact-error-badge').length).toBeLessThanOrEqual(2);
     expect(screen.getAllByTestId('data-freshness-badge-fallback').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('data-freshness-badge-cache').length).toBeGreaterThan(0);
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
@@ -1023,9 +1025,9 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     expect((await screen.findAllByText('5,111.11')).length).toBeGreaterThan(0);
-    expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/本地缓存/i);
+    expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/刷新中/i);
     expect(screen.getByTestId('market-overview-cache-status')).not.toHaveTextContent(/LOCAL CACHE/i);
-    expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/正在刷新|缓存/i);
+    expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/更新时间/i);
     expect(screen.queryByText(/indices request timed out/i)).not.toBeInTheDocument();
   });
 
@@ -1054,12 +1056,12 @@ describe('MarketOverviewPage', () => {
     render(<MarketOverviewPage />);
 
     expect((await screen.findAllByText('5,111.11')).length).toBeGreaterThan(0);
-    await waitFor(() => expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/刷新失败|缓存|陈旧/i));
-    expect(screen.getByTestId('market-overview-cache-status')).not.toHaveTextContent(/REFRESH FAILED|CACHE|STALE/i);
+    await waitFor(() => expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/待刷新|部分外部数据暂不可用|备用数据/i));
+    expect(screen.getByTestId('market-overview-cache-status')).not.toHaveTextContent(/REFRESH FAILED|CACHE|STALE|ERROR/i);
     expect(screen.getAllByText('标普500').length).toBeGreaterThan(0);
     expect(screen.queryByText(/更新失败：indices request timed out/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/provider_down|provider_error|UNKNOWN/i)).not.toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-refresh-error-count')).toHaveTextContent(/[1-9]/);
+    expect(screen.getByTestId('market-overview-data-state-unavailable-chip')).toHaveTextContent(/部分外部数据暂不可用/);
   });
 
   it('stages noncritical market overview panels after the primary route data starts loading', async () => {
@@ -1182,27 +1184,26 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByTestId('market-overview-fallback-section')).not.toBeInTheDocument();
   });
 
-  it('keeps mobile DOM order as controls, pulse, summary, decision, main, rail, then deep panels when present', async () => {
+  it('keeps mobile DOM order with data state ahead of the overview summary', async () => {
     render(<MarketOverviewPage />);
 
     const workbench = await screen.findByTestId('market-overview-workbench');
     const orderedNodes = Array.from(workbench.querySelectorAll('[data-mobile-order]'))
       .map((node) => node.getAttribute('data-mobile-order'));
 
-    expect(orderedNodes).toEqual(['decision', 'summary', 'controls', 'cache-status', 'pulse', 'main', 'rail', 'deep']);
+    expect(orderedNodes).toEqual(['decision', 'cache-status', 'summary', 'controls', 'pulse', 'main', 'rail', 'deep']);
     expect(screen.getByTestId('market-decision-strip')).toHaveAttribute('data-mobile-order', 'decision');
   });
 
-  it('puts market state, trust, and observation hint before controls and panel sprawl', async () => {
+  it('puts market state and compact data status ahead of controls and panel sprawl', async () => {
     render(<MarketOverviewPage />);
 
     const topStack = await screen.findByTestId('market-overview-top-stack');
     const orderedNodes = Array.from(topStack.querySelectorAll('[data-market-research-flow]'))
       .map((node) => node.getAttribute('data-market-research-flow'));
 
-    expect(orderedNodes).toEqual(['state', 'trust', 'controls', 'cache', 'pulse']);
+    expect(orderedNodes).toEqual(['state', 'cache', 'trust', 'controls', 'pulse']);
     expect(topStack.firstElementChild).toBe(screen.getByTestId('market-decision-strip'));
-    expect(screen.getByTestId('market-overview-cache-status')).not.toHaveAttribute('open');
     expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-decision-strip'))).toBe(Node.DOCUMENT_POSITION_PRECEDING);
   });
 
@@ -1596,18 +1597,19 @@ describe('MarketOverviewPage', () => {
     expect(sideRail.className).not.toContain('overflow-y-auto');
   });
 
-  it('compresses the top status row into temperature, data quality, and briefing summaries', async () => {
+  it('keeps temperature and briefing summaries compact while moving data quality into the data-state strip', async () => {
     render(<MarketOverviewPage />);
 
     const statusStrip = screen.getByTestId('market-overview-status-strip');
-    expect(statusStrip).toHaveClass('grid', 'grid-cols-1', 'md:grid-cols-3', 'gap-3');
+    expect(statusStrip).toHaveClass('grid', 'grid-cols-1', 'gap-3');
     expect(statusStrip).toContainElement(screen.getByTestId('market-overview-temperature-summary'));
-    expect(statusStrip).toContainElement(screen.getByTestId('market-overview-data-quality-summary'));
     expect(statusStrip).toContainElement(screen.getByTestId('market-overview-briefing-summary'));
     expect(screen.getByTestId('market-temperature-strip')).toBeInTheDocument();
     expect(statusStrip).toContainElement(await screen.findByTestId('market-temperature-strip'));
     expect(statusStrip).not.toContainElement(screen.getByTestId('market-data-quality'));
     expect(statusStrip).toContainElement(screen.getByTestId('market-briefing-card'));
+    expect(screen.getByTestId('market-overview-data-state-strip')).toHaveTextContent(/数据状态/);
+    expect(screen.getByTestId('market-overview-data-state-strip')).toHaveTextContent(/备用数据/);
   });
 
   it('keeps VIX risk module high priority in US and global views', async () => {
@@ -1960,7 +1962,7 @@ describe('MarketOverviewPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
     expandPendingDataSourceSection();
-    await waitFor(() => expect(screen.getAllByText('过期').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByTestId('market-overview-cache-status')).toHaveTextContent(/待刷新/i));
     expect(screen.getAllByText(/数据可能已过期/i).length).toBeGreaterThan(0);
   });
 
