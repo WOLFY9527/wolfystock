@@ -8,6 +8,16 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_manifest_check.py"
+EXPECTED_MANIFEST_CATEGORIES = {
+    "provider",
+    "restore-pitr",
+    "security",
+    "quota-budget",
+    "staging-ingress",
+    "ws2-sse",
+    "config-snapshot",
+    "manual-release-approval",
+}
 
 
 def _write_artifact_dir(tmp_path: Path, *, unsafe_value: str = "raw-body-value-never-output") -> Path:
@@ -44,6 +54,21 @@ def _write_artifact_dir(tmp_path: Path, *, unsafe_value: str = "raw-body-value-n
             "artifactVersion": "wolfystock_staging_ingress_operator_evidence_v1",
             "outcome": "accepted",
             "evidenceRedactionVersion": "staging_ingress_operator_redaction_v1",
+        },
+        "ws2_sse_operator_decision_evidence.json": {
+            "artifactVersion": "wolfystock_ws2_sse_operator_decision_evidence_v1",
+            "outcome": "accepted",
+            "evidenceRedactionVersion": "ws2_sse_operator_decision_redaction_v1",
+        },
+        "config_snapshot_evidence.json": {
+            "artifactVersion": "wolfystock_config_snapshot_evidence_v1",
+            "outcome": "accepted",
+            "evidenceRedactionVersion": "config_snapshot_redaction_v1",
+        },
+        "manual_release_approval_review_record.json": {
+            "artifactVersion": "wolfystock_manual_release_approval_review_record_v1",
+            "goNoGoDecision": "approved-for-manual-release-review",
+            "evidenceRedactionVersion": "manual-release-review-redaction-v1",
         },
     }
     for filename, payload in artifacts.items():
@@ -83,14 +108,8 @@ def test_create_manifest_for_sanitized_fixture_directory(tmp_path: Path) -> None
     payload = _read_manifest(manifest)
     entries = payload["entries"]
     assert isinstance(entries, list)
-    assert len(entries) == 5
-    assert {entry["category"] for entry in entries} == {
-        "provider",
-        "restore-pitr",
-        "security",
-        "quota-budget",
-        "staging-ingress",
-    }
+    assert len(entries) == 8
+    assert {entry["category"] for entry in entries} == EXPECTED_MANIFEST_CATEGORIES
     assert all(Path(entry["fileLabel"]).name == entry["fileLabel"] for entry in entries)
     assert all(set(entry) <= {"category", "fileLabel", "sha256", "byteSize", "generatedAt", "validatorName", "redactionVersion"} for entry in entries)
     assert all(entry["sha256"] for entry in entries)

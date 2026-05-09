@@ -65,7 +65,7 @@ def test_operator_evidence_workflow_smoke_uses_synthetic_fixture_pack(tmp_path: 
     bundle = _read_json(output_dir / "bundle-summary.json")
     report = (output_dir / "release-review-report.md").read_text(encoding="utf-8")
     assert manifest["artifactDirectoryLabel"] == "sanitized_complete"
-    assert len(manifest["entries"]) == 5
+    assert len(manifest["entries"]) == 8
     assert bundle["bundleStatus"] == "complete-review-required"
     assert bundle["runtimeBehaviorChanged"] is False
     assert bundle["networkCallsExecutedByValidator"] is False

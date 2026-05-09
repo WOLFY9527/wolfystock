@@ -73,6 +73,7 @@ SECRET_MARKERS = (
 )
 
 ENRICHMENT_SOURCES = ("news", "sentiment", "detailed_fundamentals")
+NON_LIVE_SOURCE_MARKERS = ("synthetic", "mock", "fixture", "fallback")
 
 
 @dataclass(frozen=True)
@@ -328,6 +329,17 @@ def _is_stale(context: Mapping[str, Any]) -> bool:
     return datetime.now(timezone.utc) - parsed.astimezone(timezone.utc) > timedelta(days=3)
 
 
+def _has_non_live_required_source(context: Mapping[str, Any]) -> bool:
+    realtime = context.get("realtime") if isinstance(context.get("realtime"), dict) else {}
+    today = context.get("today") if isinstance(context.get("today"), dict) else {}
+    source_text = " ".join(
+        str(value or "").strip().lower()
+        for value in (realtime.get("source"), today.get("data_source"))
+        if value
+    )
+    return any(marker in source_text for marker in NON_LIVE_SOURCE_MARKERS)
+
+
 def build_data_quality_report(
     *,
     context: Mapping[str, Any],
@@ -366,6 +378,7 @@ def build_data_quality_report(
     stale_sources: List[str] = []
     if _is_stale(context):
         stale_sources.append("quote")
+    non_live_required_source = _has_non_live_required_source(context)
 
     confidence_cap = 100
     score = 100
@@ -382,6 +395,10 @@ def build_data_quality_report(
         confidence_cap = min(confidence_cap, 75)
         score = min(score, 75)
         reason_codes.append("stale_required_source")
+    if non_live_required_source:
+        confidence_cap = min(confidence_cap, 75)
+        score = min(score, 75)
+        reason_codes.append("non_live_required_source")
     if optional_missing:
         score = max(0, score - min(8, 2 * len(set(optional_missing))))
         reason_codes.append("optional_enrichment_missing")
@@ -394,7 +411,7 @@ def build_data_quality_report(
 
     if not required_available:
         tier = "insufficient"
-    elif not important_missing and not stale_sources:
+    elif not important_missing and not stale_sources and not non_live_required_source:
         tier = "decision_grade"
     elif len(important_missing) <= 3:
         tier = "analysis_grade"

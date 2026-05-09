@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 from src.core.pipeline import _resolve_optional_enrichment
 from src.services.analysis_provider_planner import (
@@ -14,6 +15,7 @@ from src.services.data_criticality import build_data_quality_report, sanitize_re
 
 
 def _quality_context(**overrides):
+    market_timestamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     base = {
         "realtime": {
             "price": 101.0,
@@ -21,14 +23,14 @@ def _quality_context(**overrides):
             "open_price": 100.5,
             "high": 102.0,
             "low": 99.5,
-            "source": "fixture_quote",
-            "market_timestamp": "2026-05-05T16:00:00-04:00",
+            "source": "polygon_quote",
+            "market_timestamp": market_timestamp,
         },
-        "today": {"open": 100.5, "high": 102.0, "low": 99.5, "close": 101.0, "data_source": "fixture_history"},
+        "today": {"open": 100.5, "high": 102.0, "low": 99.5, "close": 101.0, "data_source": "yfinance_history"},
         "yesterday": {"close": 100.0},
-        "market_timestamp": "2026-05-05T16:00:00-04:00",
-        "market_session_date": "2026-05-05",
-        "report_generated_at": "2026-05-06T01:00:00+00:00",
+        "market_timestamp": market_timestamp,
+        "market_session_date": market_timestamp[:10],
+        "report_generated_at": market_timestamp,
         "session_type": "intraday_snapshot",
         "market_timezone": "America/New_York",
     }
@@ -46,6 +48,36 @@ def test_required_quote_and_candles_present_allows_decision_grade():
     assert report["requiredAvailable"] is True
     assert report["dataQualityTier"] == "decision_grade"
     assert report["confidenceCap"] == 100
+
+
+def test_synthetic_or_fallback_required_source_is_not_decision_grade():
+    market_timestamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    context = _quality_context(
+        realtime={
+            "price": 101.0,
+            "pre_close": 100.0,
+            "open_price": 100.5,
+            "high": 102.0,
+            "low": 99.5,
+            "source": "synthetic_quote",
+            "market_timestamp": market_timestamp,
+        },
+        today={"open": 100.5, "high": 102.0, "low": 99.5, "close": 101.0, "data_source": "fallback_history"},
+        market_timestamp=market_timestamp,
+        market_session_date=market_timestamp[:10],
+        report_generated_at=market_timestamp,
+    )
+
+    report = build_data_quality_report(
+        context=context,
+        data_quality={"missing_fields": [], "sentiment_status": "ok"},
+        diagnostics={"news_status": "ok", "failure_reasons": []},
+    ).to_api_dict()
+
+    assert report["requiredAvailable"] is True
+    assert report["dataQualityTier"] == "analysis_grade"
+    assert report["confidenceCap"] <= 75
+    assert "non_live_required_source" in report["reasonCodes"]
 
 
 def test_required_data_missing_caps_insufficient_to_40():
