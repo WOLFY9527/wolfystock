@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, DatabaseZap, ExternalLink, LockKeyhole, Radar, ServerCog } from 'lucide-react';
+import { Activity, ExternalLink, ServerCog } from 'lucide-react';
 import {
   marketProviderOperationsApi,
   type AdminLogDrillThrough,
@@ -8,10 +8,25 @@ import {
   type MarketProviderEventRollup,
   type MarketProviderOperationItem,
   type MarketProviderOperationsResponse,
+  type MarketProviderOperationsSummary,
 } from '../api/marketProviderOperations';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Badge, Disclosure, GlassCard } from '../components/common';
+import { ApiErrorAlert } from '../components/common';
 import { DataFreshnessBadge } from '../components/market-overview/marketOverviewPrimitives';
+import {
+  TerminalButton,
+  TerminalChip,
+  TerminalDenseList,
+  TerminalDenseTable,
+  TerminalDisclosure,
+  TerminalEmptyState,
+  TerminalGrid,
+  TerminalMetric,
+  TerminalNotice,
+  TerminalPageShell,
+  TerminalPanel,
+  TerminalSectionHeader,
+} from '../components/terminal';
 import type { MarketProviderHealthStatus } from '../api/marketOverview';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { cn } from '../utils/cn';
@@ -20,24 +35,109 @@ import { formatDateTime, formatNumber, formatPercent } from '../utils/format';
 type StatusTone = 'live' | 'cache' | 'stale' | 'fallback' | 'partial' | 'unavailable' | 'error' | 'refreshing';
 
 const STATUS_SET = new Set<StatusTone>(['live', 'cache', 'stale', 'fallback', 'partial', 'unavailable', 'error', 'refreshing']);
+const SENSITIVE_FRAGMENT_PATTERN = /((?:token|secret|cookie|session|password|authorization|bearer|api[_-]?key|set-cookie|x-api-key)\s*[:=]?\s*)([^,\s]+)/gi;
+const SENSITIVE_KEYWORD_PATTERN = /(token|secret|cookie|session|password|authorization|bearer|api[_-]?key|set-cookie|x-api-key)/i;
+const SUMMARY_DEFAULTS: MarketProviderOperationsSummary = {
+  totalItems: 0,
+  liveCount: 0,
+  cacheCount: 0,
+  staleCount: 0,
+  fallbackCount: 0,
+  partialCount: 0,
+  unavailableCount: 0,
+  errorCount: 0,
+  refreshingCount: 0,
+  eventCount: 0,
+  failureCount: 0,
+  fallbackEventCount: 0,
+  staleEventCount: 0,
+  slowEventCount: 0,
+};
+
+function safeFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function safeCount(value: unknown): number {
+  return safeFiniteNumber(value) ?? 0;
+}
+
+function normalizeSummary(summary?: Partial<MarketProviderOperationsSummary> | null): MarketProviderOperationsSummary {
+  return {
+    totalItems: safeCount(summary?.totalItems),
+    liveCount: safeCount(summary?.liveCount),
+    cacheCount: safeCount(summary?.cacheCount),
+    staleCount: safeCount(summary?.staleCount),
+    fallbackCount: safeCount(summary?.fallbackCount),
+    partialCount: safeCount(summary?.partialCount),
+    unavailableCount: safeCount(summary?.unavailableCount),
+    errorCount: safeCount(summary?.errorCount),
+    refreshingCount: safeCount(summary?.refreshingCount),
+    eventCount: safeCount(summary?.eventCount),
+    failureCount: safeCount(summary?.failureCount),
+    fallbackEventCount: safeCount(summary?.fallbackEventCount),
+    staleEventCount: safeCount(summary?.staleEventCount),
+    slowEventCount: safeCount(summary?.slowEventCount),
+  };
+}
 
 function normalizeStatus(value: unknown): StatusTone {
   const normalized = String(value || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
   return STATUS_SET.has(normalized as StatusTone) ? normalized as StatusTone : 'unavailable';
 }
 
-function formatDate(value?: string | null): string {
-  if (!value) return '--';
-  return formatDateTime(value);
+function formatDisplayDate(value?: string | null, fallback = '暂无数据'): string {
+  const formatted = formatDateTime(value);
+  return formatted === '--' ? fallback : formatted;
 }
 
-function compactNumber(value?: number | null, digits = 0): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
-  return formatNumber(value, digits);
+function formatLatency(value?: number | null): string {
+  const numeric = safeFiniteNumber(value);
+  return numeric == null ? '—' : `${formatNumber(numeric, 0)} ms`;
+}
+
+function formatAgeMinutes(value?: number | null, fallback = '待统计'): string {
+  const numeric = safeFiniteNumber(value);
+  return numeric == null ? fallback : `${formatNumber(numeric, 0)} 分钟`;
+}
+
+function formatCountLabel(value?: unknown, fallback = '待统计'): string {
+  const numeric = safeFiniteNumber(value);
+  return numeric == null ? fallback : formatNumber(numeric, 0);
+}
+
+function safePercent(value?: unknown, fallback = '待统计'): string {
+  const numeric = safeFiniteNumber(value);
+  return numeric == null ? fallback : formatPercent(numeric, { mode: 'ratio' });
+}
+
+function safeRatio(numerator?: unknown, denominator?: unknown, fallback = '待统计'): string {
+  const top = safeFiniteNumber(numerator);
+  const bottom = safeFiniteNumber(denominator);
+  if (top == null || bottom == null || bottom <= 0) return fallback;
+  return formatPercent(top / bottom, { mode: 'ratio' });
 }
 
 function providerLabel(item: Pick<MarketProviderOperationItem, 'provider' | 'sourceLabel'>): string {
   return item.sourceLabel || item.provider || 'unknown';
+}
+
+function providerKey(item: Pick<MarketProviderOperationItem, 'provider' | 'cacheKey' | 'endpoint'>): string {
+  return `${item.provider}::${item.cacheKey}::${item.endpoint}`;
+}
+
+function sanitizeOperatorText(value?: string | number | null, fallback = '暂无数据'): string {
+  if (value === null || value === undefined || value === '') return fallback;
+  const text = String(value).trim();
+  if (!text) return fallback;
+  const redacted = text.replace(SENSITIVE_FRAGMENT_PATTERN, '$1[已脱敏]');
+  if (SENSITIVE_KEYWORD_PATTERN.test(redacted)) return '已脱敏';
+  return redacted.slice(0, 120);
 }
 
 function limitationLabel(value: string): string {
@@ -57,9 +157,7 @@ function buildAdminLogHref(drill?: AdminLogDrillThrough): string | null {
   Object.entries(drill.query || {}).forEach(([key, value]) => {
     if (value) query.set(key, value);
   });
-  if (drill.eventId) {
-    query.set('eventId', drill.eventId);
-  }
+  if (drill.eventId) query.set('eventId', drill.eventId);
   const queryText = query.toString();
   return queryText ? `${drill.route}?${queryText}` : drill.route;
 }
@@ -83,45 +181,78 @@ function safeMetadataSummary(response: MarketProviderOperationsResponse): Record
   };
 }
 
-const SummaryTile: React.FC<{
-  label: string;
-  value: number | string;
-  tone?: 'neutral' | 'good' | 'warn' | 'danger' | 'info';
-}> = ({ label, value, tone = 'neutral' }) => {
-  const toneClass = {
-    neutral: 'text-white',
-    good: 'text-emerald-300',
-    warn: 'text-amber-200',
-    danger: 'text-rose-200',
-    info: 'text-cyan-200',
-  }[tone];
-  return (
-    <div className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
-      <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">{label}</p>
-      <p className={cn('mt-2 font-mono text-2xl font-semibold leading-none', toneClass)}>{value}</p>
-    </div>
-  );
-};
+function statusChipVariant(status: StatusTone): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  if (status === 'live') return 'success';
+  if (status === 'cache' || status === 'refreshing' || status === 'partial') return 'info';
+  if (status === 'stale' || status === 'fallback') return 'caution';
+  if (status === 'error') return 'danger';
+  return 'neutral';
+}
 
-const ReadOnlyBadges: React.FC<{ response?: MarketProviderOperationsResponse | null }> = ({ response }) => {
-  const metadata = response?.metadata || {};
-  return (
-    <div className="flex flex-wrap gap-2">
-      <Badge variant="info" className="border-cyan-300/25 bg-cyan-400/10 text-cyan-100">
-        只读
-      </Badge>
-      <Badge variant="success" className="border-emerald-300/25 bg-emerald-400/10 text-emerald-100">
-        {metadata.externalProviderCalls === false ? '外部调用关闭' : '未确认外部调用'}
-      </Badge>
-      <Badge variant="success" className="border-emerald-300/25 bg-emerald-400/10 text-emerald-100">
-        {metadata.cacheMutation === false ? '缓存不变更' : '缓存变更未确认'}
-      </Badge>
-      <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">
-        窗口 {response?.window?.key || '24h'}
-      </Badge>
-    </div>
-  );
-};
+function statusLabel(status: StatusTone): string {
+  return {
+    live: '实时',
+    cache: '缓存',
+    stale: '过期',
+    fallback: '备用',
+    partial: '部分数据',
+    unavailable: '待统计',
+    error: '异常',
+    refreshing: '刷新中',
+  }[status];
+}
+
+function circuitLabel(item: MarketProviderOperationItem): string {
+  if (item.errorSummary) return '异常';
+  if (item.isFallback || item.fallbackUsed) return '备用';
+  if (item.isStale) return '过期';
+  if (item.isRefreshing) return '刷新中';
+  return '正常';
+}
+
+function circuitVariant(item: MarketProviderOperationItem): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  if (item.errorSummary) return 'danger';
+  if (item.isFallback || item.fallbackUsed || item.isStale) return 'caution';
+  if (item.isRefreshing) return 'info';
+  return 'success';
+}
+
+function lastFailureLabel(item: MarketProviderOperationItem): string {
+  if (item.errorSummary) return sanitizeOperatorText(item.errorSummary);
+  if (item.warning) return sanitizeOperatorText(item.warning);
+  return '暂无数据';
+}
+
+function providerRiskLabel(item: MarketProviderOperationItem): string {
+  if (item.errorSummary) return '最近有异常，先核对失败原因与 Admin Logs。';
+  if (item.isFallback || item.fallbackUsed) return '当前存在备用路径，需确认主数据源恢复时点。';
+  if (item.isStale) return '缓存已滞后，需核对更新时间与快照年龄。';
+  if (item.isRefreshing) return '数据正在刷新，注意避免把短时刷新误判为故障。';
+  return '当前快照稳定，维持只读观察。';
+}
+
+function providerNextAction(item: MarketProviderOperationItem): string {
+  if (item.errorSummary) return '进入 Admin Logs 追踪最近异常，再确认缓存快照是否可回退。';
+  if (item.isFallback || item.fallbackUsed) return '先确认主 provider 是否恢复，再决定是否继续接受备用快照。';
+  if (item.isStale) return '核对更新时间、TTL 与最后可用时间，确认是否属于预期滞后。';
+  if (item.isRefreshing) return '等待刷新结束后再判断是否需要进入异常追踪。';
+  return '保持只读监控，优先关注新的失败或熔断事件。';
+}
+
+function selectPreferredProvider(items: MarketProviderOperationItem[]): MarketProviderOperationItem | null {
+  if (!items.length) return null;
+  return [...items].sort((left, right) => {
+    const leftScore = Number(Boolean(left.errorSummary)) * 10
+      + Number(Boolean(left.isFallback || left.fallbackUsed)) * 6
+      + Number(Boolean(left.isStale)) * 4
+      + Number(Boolean(left.isRefreshing)) * 2;
+    const rightScore = Number(Boolean(right.errorSummary)) * 10
+      + Number(Boolean(right.isFallback || right.fallbackUsed)) * 6
+      + Number(Boolean(right.isStale)) * 4
+      + Number(Boolean(right.isRefreshing)) * 2;
+    return rightScore - leftScore;
+  })[0];
+}
 
 const DrillLink: React.FC<{ drill?: AdminLogDrillThrough; className?: string }> = ({ drill, className }) => {
   const href = buildAdminLogHref(drill);
@@ -139,225 +270,260 @@ const DrillLink: React.FC<{ drill?: AdminLogDrillThrough; className?: string }> 
   );
 };
 
-const ProviderOperationsPanel: React.FC<{ items: MarketProviderOperationItem[] }> = ({ items }) => (
-  <GlassCard as="section" className="p-4 md:p-5">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">数据源</p>
-        <h2 className="mt-1 text-lg font-semibold text-white">数据源运维矩阵</h2>
-      </div>
-      <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/58">只读快照</Badge>
+const ReadOnlyBadges: React.FC<{ response?: MarketProviderOperationsResponse | null }> = ({ response }) => {
+  const metadata = response?.metadata || {};
+  return (
+    <div className="flex flex-wrap gap-2">
+      <TerminalChip variant="info">只读</TerminalChip>
+      <TerminalChip variant={metadata.externalProviderCalls === false ? 'success' : 'caution'}>
+        {metadata.externalProviderCalls === false ? '外部调用关闭' : '外部调用未确认'}
+      </TerminalChip>
+      <TerminalChip variant={metadata.cacheMutation === false ? 'success' : 'caution'}>
+        {metadata.cacheMutation === false ? '缓存不变更' : '缓存变更未确认'}
+      </TerminalChip>
+      <TerminalChip variant="neutral">窗口 {response?.window?.key || '24h'}</TerminalChip>
     </div>
-    {items.length === 0 ? (
-      <div className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-6 text-sm text-white/50">
-        暂无数据源运维条目
-      </div>
+  );
+};
+
+const ProviderOperationsTable: React.FC<{
+  items: MarketProviderOperationItem[];
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
+}> = ({ items, selectedKey, onSelect }) => (
+  <TerminalPanel as="section" className="col-span-12 xl:col-span-8">
+    <TerminalSectionHeader
+      eyebrow="数据源健康"
+      title="数据源运维"
+      action={<TerminalChip variant="neutral">只读快照</TerminalChip>}
+    />
+    <div className="mt-4">
+      {items.length === 0 ? (
+        <TerminalEmptyState title="暂无数据源运维条目">缺失快照时只显示只读边界，不推断 provider 运行状态。</TerminalEmptyState>
+      ) : (
+        <TerminalDenseTable>
+          <table className="min-w-full table-fixed">
+            <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
+              <tr className="border-b border-white/5 text-left">
+                <th className="px-3 py-3 font-medium">数据源</th>
+                <th className="px-3 py-3 font-medium">状态</th>
+                <th className="px-3 py-3 font-medium">新鲜度</th>
+                <th className="px-3 py-3 font-medium">熔断</th>
+                <th className="px-3 py-3 font-medium">最近异常</th>
+                <th className="px-3 py-3 font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => {
+                const key = providerKey(item);
+                const selected = key === selectedKey;
+                const status = normalizeStatus(item.status);
+                return (
+                  <tr key={key} className={cn('border-b border-white/[0.04] align-top', selected ? 'bg-white/[0.03]' : 'bg-transparent')}>
+                    <td className="px-3 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-white">{providerLabel(item)}</p>
+                        <p className="mt-1 truncate font-mono text-[11px] text-white/42">{item.provider} · {item.domain}</p>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        <TerminalChip variant={statusChipVariant(status)}>{statusLabel(status)}</TerminalChip>
+                        {item.isRefreshing ? <TerminalChip variant="info">刷新中</TerminalChip> : null}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="space-y-1">
+                        <DataFreshnessBadge status={status as MarketProviderHealthStatus} />
+                        <p className="text-[11px] text-white/42">{formatDisplayDate(item.updatedAt, '待统计')}</p>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <TerminalChip variant={circuitVariant(item)}>{circuitLabel(item)}</TerminalChip>
+                    </td>
+                    <td className="px-3 py-3">
+                      <p className="line-clamp-2 text-[11px] leading-5 text-white/60">{lastFailureLabel(item)}</p>
+                    </td>
+                    <td className="px-3 py-3">
+                      <TerminalButton
+                        variant={selected ? 'secondary' : 'compact'}
+                        className="w-full sm:w-auto"
+                        onClick={() => onSelect(key)}
+                      >
+                        {selected ? '当前已聚焦' : '查看诊断'}
+                      </TerminalButton>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </TerminalDenseTable>
+      )}
+    </div>
+  </TerminalPanel>
+);
+
+const ProviderDetailsPanel: React.FC<{ item: MarketProviderOperationItem | null }> = ({ item }) => (
+  <TerminalPanel as="section" className="col-span-12 xl:col-span-4">
+    <TerminalSectionHeader eyebrow="熔断状态" title={item ? providerLabel(item) : '待统计'} />
+    {item ? (
+      <>
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <TerminalMetric label="状态" value={<DataFreshnessBadge status={normalizeStatus(item.status) as MarketProviderHealthStatus} />} valueClassName="text-sm font-sans" />
+          <TerminalMetric label="缓存" value={item.cacheKey || '待统计'} valueClassName="truncate text-xs font-semibold" />
+          <TerminalMetric label="最近成功" value={formatAgeMinutes(item.lastKnownGoodAgeMinutes)} valueClassName="text-sm" />
+          <TerminalMetric label="最近异常" value={lastFailureLabel(item)} valueClassName="truncate text-xs font-semibold" />
+        </div>
+        <TerminalNotice variant={item.errorSummary ? 'danger' : item.isFallback || item.fallbackUsed || item.isStale ? 'caution' : 'info'} className="mt-4">
+          {providerRiskLabel(item)}
+        </TerminalNotice>
+        <div className="mt-4 grid gap-3">
+          <TerminalMetric label="下一步" value={providerNextAction(item)} valueClassName="text-xs font-sans leading-5" />
+          <TerminalMetric label="延迟" value={formatLatency(item.latencyMs)} valueClassName="text-sm" />
+        </div>
+        <TerminalDenseList className="mt-4">
+          <div className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-white/35">provider ID</p>
+            <p className="mt-1 font-mono text-[11px] text-white/65">{item.provider}</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-white/35">API</p>
+            <p className="mt-1 font-mono text-[11px] text-white/65">{item.endpoint}</p>
+          </div>
+          <DrillLink drill={item.adminLogDrillThrough} />
+        </TerminalDenseList>
+      </>
     ) : (
-      <div className="mt-4 grid grid-cols-1 gap-3 2xl:grid-cols-2">
-        {items.map((item) => {
-          const status = normalizeStatus(item.status);
-          return (
-            <article key={`${item.cacheKey}-${item.endpoint}`} className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3.5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-white">{providerLabel(item)}</p>
-                  <p className="mt-1 truncate font-mono text-[11px] text-white/42">{item.provider} · {item.domain}</p>
-                </div>
-                <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                  <DataFreshnessBadge status={status as MarketProviderHealthStatus} />
-                  {item.isRefreshing ? <DataFreshnessBadge status="refreshing" /> : null}
-                  {item.isFallback || item.fallbackUsed ? <DataFreshnessBadge status="fallback" /> : null}
-                </div>
-              </div>
-              {item.warning ? <p className="mt-2 text-[11px] leading-4 text-amber-200/80">{item.warning}</p> : null}
-              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
-                <p className="min-w-0">卡片 <span className="block truncate font-mono text-white/68">{item.card}</span></p>
-                <p className="min-w-0">缓存 <span className="block truncate font-mono text-white/68">{item.cacheKey}</span></p>
-                <p className="min-w-0">更新 <span className="block truncate font-mono text-white/68">{formatDate(item.updatedAt)}</span></p>
-                <p className="min-w-0">延迟 <span className="block truncate font-mono text-white/68">{compactNumber(item.latencyMs, 0)} ms</span></p>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[11px] text-white/42">最近可用 <span className="font-mono text-white/65">{item.lastKnownGoodAgeMinutes ?? '--'} min</span></p>
-                <DrillLink drill={item.adminLogDrillThrough} />
-              </div>
-              <Disclosure
-                summary="运维细节"
-                className="mt-3"
-                bodyClassName="rounded-xl border border-white/5 bg-white/[0.025] p-3"
-              >
-                <dl className="grid gap-2 text-[11px] leading-5 text-white/50 sm:grid-cols-2">
-                  <div className="min-w-0">
-                    <dt className="text-white/34">API route</dt>
-                    <dd className="break-words font-mono text-white/60">{item.endpoint}</dd>
-                  </div>
-                  <div className="min-w-0">
-                    <dt className="text-white/34">source type</dt>
-                    <dd className="break-words font-mono text-white/60">{item.sourceType || '--'}</dd>
-                  </div>
-                  <div className="min-w-0">
-                    <dt className="text-white/34">asOf</dt>
-                    <dd className="break-words font-mono text-white/60">{formatDate(item.asOf)}</dd>
-                  </div>
-                  <div className="min-w-0">
-                    <dt className="text-white/34">最近异常</dt>
-                    <dd className="break-words text-rose-100/70">{item.errorSummary ? '已脱敏，仅在 Admin Logs 查看' : '--'}</dd>
-                  </div>
-                </dl>
-              </Disclosure>
-            </article>
-          );
-        })}
+      <div className="mt-4">
+        <TerminalEmptyState title="待统计">暂无可聚焦的数据源，保留只读边界与诊断入口。</TerminalEmptyState>
       </div>
     )}
-  </GlassCard>
+  </TerminalPanel>
 );
 
 const CacheStatesPanel: React.FC<{ cacheStates: MarketProviderCacheState[] }> = ({ cacheStates }) => (
-  <GlassCard as="section" className="p-4 md:p-5">
-    <div className="flex items-start gap-3">
-      <DatabaseZap className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">缓存</p>
-        <h2 className="mt-1 text-base font-semibold text-white">缓存状态</h2>
-      </div>
-    </div>
-    {cacheStates.length === 0 ? (
-      <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/50">暂无缓存状态</p>
-    ) : (
-      <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {cacheStates.map((state) => {
-          const status = normalizeStatus(state.status);
-          return (
-            <div key={state.cacheKey} className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <p className="min-w-0 truncate font-mono text-sm font-semibold text-white">{state.cacheKey}</p>
-                <DataFreshnessBadge status={status as MarketProviderHealthStatus} />
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44">
-                <p>TTL <span className="font-mono text-white/68">{state.ttlSeconds ?? '--'}s</span></p>
-                <p>Snapshot <span className="font-mono text-white/68">{state.persistentSnapshotAvailable ? 'yes' : 'no'}</span></p>
-                <p className="col-span-2">Fetched <span className="font-mono text-white/68">{formatDate(state.fetchedAt)}</span></p>
-                <p className="col-span-2">Expires <span className="font-mono text-white/68">{formatDate(state.expiresAt)}</span></p>
-              </div>
-              {state.isRefreshing || state.isFresh === false || state.lastError ? (
-                <div className="mt-3 rounded-xl border border-amber-300/15 bg-amber-400/8 px-3 py-2 text-[11px] leading-4 text-amber-100/80">
-                  {state.isRefreshing ? '刷新中 · ' : ''}
-                  {state.isFresh === false ? '缓存已过期 · ' : ''}
-                  {state.lastError ? '最近错误已脱敏' : '等待下一次读取快照'}
+  <TerminalPanel as="section" className="col-span-12 xl:col-span-5">
+    <TerminalSectionHeader eyebrow="缓存状态" title="缓存状态" />
+    <div className="mt-4">
+      {cacheStates.length === 0 ? (
+        <TerminalEmptyState title="暂无缓存状态">没有可用快照时，不推断 TTL 或刷新表现。</TerminalEmptyState>
+      ) : (
+        <TerminalDenseList>
+          {cacheStates.map((state) => {
+            const status = normalizeStatus(state.status);
+            return (
+              <div key={state.cacheKey} className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-[11px] text-white/72">{state.cacheKey}</p>
+                    <p className="mt-1 text-[11px] text-white/42">
+                      TTL {formatCountLabel(state.ttlSeconds, '待统计')}s · 读取 {formatDisplayDate(state.fetchedAt, '待统计')}
+                    </p>
+                  </div>
+                  <TerminalChip variant={statusChipVariant(status)}>{status}</TerminalChip>
                 </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    )}
-  </GlassCard>
+                {state.lastError ? (
+                  <p className="mt-2 text-[11px] leading-5 text-white/58">{sanitizeOperatorText(state.lastError)}</p>
+                ) : null}
+              </div>
+            );
+          })}
+        </TerminalDenseList>
+      )}
+    </div>
+  </TerminalPanel>
 );
 
 const EventRollupsPanel: React.FC<{ eventRollups: MarketProviderEventRollup[] }> = ({ eventRollups }) => (
-  <GlassCard as="section" className="p-4 md:p-5">
-    <div className="flex items-start gap-3">
-      <Radar className="mt-1 h-4 w-4 text-amber-200" aria-hidden="true" />
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">事件</p>
-        <h2 className="mt-1 text-base font-semibold text-white">市场事件回卷</h2>
-      </div>
-    </div>
-    {eventRollups.length === 0 ? (
-      <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/50">窗口内暂无降级事件</p>
-    ) : (
-      <div className="mt-5 space-y-3">
-        {eventRollups.map((rollup) => (
-          <div key={`${rollup.provider}-${rollup.endpoint || rollup.card || rollup.latestLogEventId}`} className="rounded-2xl border border-white/5 bg-black/20 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="font-semibold text-white">{rollup.provider}</p>
-                <p className="mt-1 text-[11px] text-white/40">{rollup.card || rollup.category || 'market provider'}</p>
+  <TerminalPanel as="section" className="col-span-12 xl:col-span-7">
+    <TerminalSectionHeader eyebrow="最近异常" title="最近异常" />
+    <div className="mt-4">
+      {eventRollups.length === 0 ? (
+        <TerminalEmptyState title="窗口内暂无异常">异常回卷为空时，不把缺失数据误报成健康或失败。</TerminalEmptyState>
+      ) : (
+        <TerminalDenseList>
+          {eventRollups.map((rollup) => {
+            const failureRateLabel = safePercent(rollup.failureRate, safeRatio(rollup.failureCount, rollup.eventCount));
+            const primaryReason = rollup.topReasons.length ? sanitizeOperatorText(rollup.topReasons[0]) : '暂无数据';
+            return (
+              <div key={`${rollup.provider}-${rollup.endpoint || rollup.card || rollup.latestLogEventId}`} className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-white">{rollup.provider}</p>
+                    <p className="mt-1 text-[11px] text-white/42">{rollup.card || rollup.category || 'market provider'}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <TerminalChip variant={rollup.failureCount > 0 ? 'danger' : 'neutral'}>失败 {formatCountLabel(rollup.failureCount, '0')}</TerminalChip>
+                    <TerminalChip variant={rollup.fallbackCount > 0 ? 'caution' : 'neutral'}>失败率 {failureRateLabel}</TerminalChip>
+                  </div>
+                </div>
+                <p className="mt-2 text-[11px] leading-5 text-white/58">{primaryReason}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-white/42">
+                  <span>{formatDisplayDate(rollup.latestStartedAt, '待统计')}</span>
+                  <DrillLink drill={rollup.adminLogDrillThrough} />
+                </div>
               </div>
-              <DrillLink drill={rollup.adminLogDrillThrough} />
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-5">
-              <SummaryTile label="事件" value={rollup.eventCount} tone="info" />
-              <SummaryTile label="失败" value={rollup.failureCount} tone={rollup.failureCount ? 'danger' : 'neutral'} />
-              <SummaryTile label="备用" value={rollup.fallbackCount} tone={rollup.fallbackCount ? 'warn' : 'neutral'} />
-              <SummaryTile label="慢请求" value={rollup.slowCount} tone={rollup.slowCount ? 'warn' : 'neutral'} />
-              <SummaryTile label="失败率" value={formatPercent(rollup.failureRate, { mode: 'ratio' })} tone={rollup.failureRate > 0 ? 'danger' : 'good'} />
-            </div>
-            <Disclosure
-              summary="事件细节"
-              className="mt-3"
-              bodyClassName="rounded-xl border border-white/5 bg-white/[0.025] p-3"
-            >
-              <dl className="grid gap-2 text-[11px] leading-5 text-white/50 sm:grid-cols-2">
-                <div className="min-w-0">
-                  <dt className="text-white/34">API route</dt>
-                  <dd className="break-words font-mono text-white/60">{rollup.endpoint || '--'}</dd>
-                </div>
-                <div className="min-w-0">
-                  <dt className="text-white/34">latest event</dt>
-                  <dd className="break-words font-mono text-white/60">{rollup.latestLogEventId || '--'}</dd>
-                </div>
-                <div className="min-w-0 sm:col-span-2">
-                  <dt className="text-white/34">top reasons</dt>
-                  <dd className="break-words font-mono text-white/60">{rollup.topReasons.length ? rollup.topReasons.join(' · ') : '--'}</dd>
-                </div>
-              </dl>
-            </Disclosure>
-          </div>
-        ))}
-      </div>
-    )}
-  </GlassCard>
-);
-
-const LimitationsPanel: React.FC<{ response: MarketProviderOperationsResponse }> = ({ response }) => (
-  <GlassCard as="section" className="p-4 md:p-5">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">限制</p>
-        <h2 className="mt-1 text-base font-semibold text-white">限制与开发者细节</h2>
-      </div>
-      <DrillLink drill={response.adminLogDrillThrough} />
-    </div>
-    <div className="mt-4 flex flex-wrap gap-2">
-      {response.limitations.length ? response.limitations.map((limitation) => (
-        <span
-          key={limitation}
-          className="inline-flex min-h-6 items-center rounded-full border border-amber-300/25 bg-amber-400/10 px-2.5 py-0.5 text-[11px] font-medium leading-5 text-amber-100"
-        >
-          {limitationLabel(limitation)}
-        </span>
-      )) : (
-        <Badge variant="success" className="border-emerald-300/25 bg-emerald-400/10 text-emerald-100">暂无限制</Badge>
+            );
+          })}
+        </TerminalDenseList>
       )}
     </div>
-    {response.limitations.length ? (
-      <Disclosure
-        summary="原始限制代码"
-        className="mt-4"
-        bodyClassName="rounded-2xl border border-white/5 bg-black/20 p-3"
-      >
-        <ul className="space-y-1 text-[11px] leading-5 text-white/50">
-          {response.limitations.map((limitation) => (
-            <li key={limitation} className="break-words font-mono">{limitation}</li>
-          ))}
-        </ul>
-      </Disclosure>
-    ) : null}
-    <Disclosure
-      summary="开发者 / 响应形状"
-      className="mt-5"
-      bodyClassName="rounded-2xl border border-white/5 bg-black/20 p-3"
+  </TerminalPanel>
+);
+
+const DiagnosticsPanel: React.FC<{
+  response: MarketProviderOperationsResponse;
+  selectedItem: MarketProviderOperationItem | null;
+}> = ({ response, selectedItem }) => (
+  <TerminalPanel as="section" className="col-span-12">
+    <TerminalSectionHeader
+      eyebrow="诊断详情"
+      title="诊断详情"
+      action={response.limitations.length ? <TerminalChip variant="caution">{response.limitations.length} 条限制</TerminalChip> : <TerminalChip variant="neutral">暂无限制</TerminalChip>}
+    />
+    <div className="mt-4 flex flex-wrap gap-2">
+      {response.limitations.length ? response.limitations.map((limitation) => (
+        <TerminalChip key={limitation} variant="caution">{limitationLabel(limitation)}</TerminalChip>
+      )) : <TerminalChip variant="neutral">暂无限制</TerminalChip>}
+    </div>
+    <TerminalDisclosure
+      title="诊断详情"
+      summary="原始限制代码、只读摘要、追踪标识默认折叠"
+      className="mt-4"
+      data-testid="market-provider-diagnostics-disclosure"
     >
-      <pre className="max-h-72 overflow-y-auto no-scrollbar whitespace-pre-wrap break-words text-[11px] leading-5 text-white/50">
-        {JSON.stringify(safeMetadataSummary(response), null, 2)}
-      </pre>
-    </Disclosure>
-  </GlassCard>
+      <div className="grid gap-4 xl:grid-cols-3">
+        <div className="rounded-xl border border-white/[0.04] bg-black/20 p-3">
+          <p className="text-[10px] uppercase tracking-widest text-white/35">限制代码</p>
+          <ul className="mt-2 space-y-1 text-[11px] leading-5 text-white/58">
+            {response.limitations.length ? response.limitations.map((limitation) => (
+              <li key={limitation} className="break-words font-mono">{limitation}</li>
+            )) : <li className="text-white/40">暂无原始限制代码</li>}
+          </ul>
+        </div>
+        <div className="rounded-xl border border-white/[0.04] bg-black/20 p-3 xl:col-span-2">
+          <p className="text-[10px] uppercase tracking-widest text-white/35">JSON</p>
+          <pre className="mt-2 max-h-72 overflow-y-auto no-scrollbar whitespace-pre-wrap break-words text-[11px] leading-5 text-white/58">
+            {JSON.stringify({
+              summary: safeMetadataSummary(response),
+              selectedProvider: selectedItem ? {
+                provider: selectedItem.provider,
+                cacheKey: selectedItem.cacheKey,
+                endpoint: selectedItem.endpoint,
+                status: normalizeStatus(selectedItem.status),
+                latestLogEventId: selectedItem.adminLogDrillThrough?.eventId || null,
+              } : null,
+            }, null, 2)}
+          </pre>
+        </div>
+      </div>
+    </TerminalDisclosure>
+  </TerminalPanel>
 );
 
 const LoadingOperationsState: React.FC = () => (
-  <GlassCard as="section" className="mt-5 p-4 md:p-5" role="status" aria-label="正在读取市场数据源运维快照">
+  <TerminalPanel as="section" role="status" aria-label="正在读取市场数据源运维快照">
     <div className="flex items-center gap-3">
       <Activity className="h-4 w-4 animate-pulse text-cyan-200" aria-hidden="true" />
       <div>
@@ -367,24 +533,25 @@ const LoadingOperationsState: React.FC = () => (
     </div>
     <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
       {[0, 1, 2].map((index) => (
-        <div key={index} className="h-24 rounded-2xl border border-white/5 bg-black/20" />
+        <div key={index} className="h-24 rounded-xl border border-white/[0.04] bg-black/20" />
       ))}
     </div>
-  </GlassCard>
+  </TerminalPanel>
 );
 
 const EmptyErrorState: React.FC = () => (
-  <GlassCard as="section" className="mt-5 p-5">
+  <TerminalPanel as="section">
     <div className="flex items-center gap-2 text-sm text-white/50">
       <Activity className="h-4 w-4" aria-hidden="true" />
       运维快照暂不可用
     </div>
-  </GlassCard>
+  </TerminalPanel>
 );
 
 const MarketProviderOperationsPage: React.FC = () => {
   const { language } = useI18n();
   const [response, setResponse] = useState<MarketProviderOperationsResponse | null>(null);
+  const [selectedProviderKey, setSelectedProviderKey] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
 
@@ -408,128 +575,109 @@ const MarketProviderOperationsPage: React.FC = () => {
     };
   }, []);
 
-  const summary = response?.summary;
-  const summaryTiles = useMemo(() => {
-    if (!summary) return [];
+  const items = response?.items || [];
+  const cacheStates = response?.cacheStates || [];
+  const eventRollups = response?.eventRollups || [];
+  const summary = useMemo(() => normalizeSummary(response?.summary || SUMMARY_DEFAULTS), [response?.summary]);
+  const degradedCount = summary.fallbackCount + summary.partialCount + summary.unavailableCount + summary.errorCount + summary.failureCount;
+  const preferredProvider = useMemo(() => selectPreferredProvider(items), [items]);
+
+  useEffect(() => {
+    if (!items.length) {
+      if (selectedProviderKey !== null) setSelectedProviderKey(null);
+      return;
+    }
+    if (!selectedProviderKey || !items.some((item) => providerKey(item) === selectedProviderKey)) {
+      setSelectedProviderKey(providerKey(preferredProvider || items[0]));
+    }
+  }, [items, preferredProvider, selectedProviderKey]);
+
+  const selectedItem = useMemo(
+    () => items.find((item) => providerKey(item) === selectedProviderKey) || preferredProvider || null,
+    [items, preferredProvider, selectedProviderKey],
+  );
+
+  const topException = useMemo(() => {
+    const withReason = eventRollups.find((rollup) => rollup.topReasons.length) || null;
+    if (withReason) return sanitizeOperatorText(withReason.topReasons[0]);
+    const withItemError = items.find((item) => item.errorSummary || item.warning) || null;
+    return withItemError ? lastFailureLabel(withItemError) : '暂无数据';
+  }, [eventRollups, items]);
+
+  const operatorMetrics = useMemo(() => {
+    const totalItems = summary.totalItems || items.length;
+    const healthValue = totalItems > 0 ? `${formatNumber(summary.liveCount, 0)}/${formatNumber(totalItems, 0)} 实时` : '暂无数据';
+    const circuitValue = totalItems > 0 ? (degradedCount > 0 ? `${formatNumber(degradedCount, 0)} 降级` : '正常') : '待统计';
+    const cacheValue = cacheStates.length > 0
+      ? cacheStates.some((state) => state.isRefreshing)
+        ? '刷新中'
+        : cacheStates.some((state) => state.isFresh === false)
+          ? `${formatNumber(cacheStates.filter((state) => state.isFresh === false).length, 0)} 过期`
+          : `${formatNumber(cacheStates.length, 0)} 正常`
+      : '待统计';
+
     return [
-      { label: '数据源', value: summary.totalItems, tone: 'info' as const },
-      { label: '实时', value: summary.liveCount, tone: 'good' as const },
-      { label: '备用', value: summary.fallbackCount, tone: summary.fallbackCount ? 'warn' as const : 'neutral' as const },
-      { label: '异常', value: summary.errorCount + summary.failureCount, tone: summary.errorCount + summary.failureCount ? 'danger' as const : 'neutral' as const },
-      { label: '刷新', value: summary.refreshingCount, tone: summary.refreshingCount ? 'info' as const : 'neutral' as const },
-      { label: '事件', value: summary.eventCount, tone: summary.eventCount ? 'info' as const : 'neutral' as const },
+      { label: '数据源健康', value: healthValue, subvalue: totalItems > 0 ? `共 ${formatNumber(totalItems, 0)} 个数据源` : '暂无 provider 快照' },
+      { label: '熔断状态', value: circuitValue, subvalue: degradedCount > 0 ? '优先核对降级与失败路径' : '当前未见降级聚合' },
+      { label: '失败率', value: safeRatio(summary.failureCount, summary.eventCount), subvalue: summary.eventCount > 0 ? `事件 ${formatNumber(summary.eventCount, 0)}` : '待统计' },
+      { label: '缓存状态', value: cacheValue, subvalue: cacheStates.length > 0 ? `快照 ${formatNumber(cacheStates.length, 0)}` : '暂无缓存快照' },
+      { label: '最近异常', value: topException, subvalue: eventRollups.length > 0 ? '保留异常可见性，但不暴露敏感内容' : '窗口内暂无异常' },
     ];
-  }, [summary]);
-  const degradedCount = (summary?.fallbackCount || 0)
-    + (summary?.partialCount || 0)
-    + (summary?.unavailableCount || 0)
-    + (summary?.errorCount || 0)
-    + (summary?.failureCount || 0);
-  const readinessLabel = isLoading
-    ? '读取中'
-    : summary
-      ? degradedCount
-        ? `${degradedCount} 个能力降级`
-        : '数据源可用'
-      : '等待快照';
-  const nextAction = degradedCount
-    ? '先查看降级数据源，再进入日志追踪'
-    : '保持只读监控，必要时查看缓存与事件';
+  }, [cacheStates, degradedCount, eventRollups.length, items.length, summary, topException]);
 
   return (
     <div data-testid="market-provider-operations-page" className="market-provider-operations-page flex min-h-0 w-full flex-1 flex-col overflow-y-auto no-scrollbar bg-[#050505] px-4 py-5 text-white md:px-6 xl:px-8">
-      <GlassCard as="section" className="relative shrink-0 overflow-hidden p-5 md:p-6">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/50 to-transparent" />
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200/80">
-              <ServerCog className="h-4 w-4" aria-hidden="true" />
-              数据源就绪台
-            </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-normal text-white md:text-4xl">市场数据源运维</h1>
-            <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
-              {isLoading
-                ? '正在读取市场数据源运维快照'
-                : `先看可用能力和降级影响；DuckDB、缓存、事件、接口细节默认后置。生成 ${formatDate(response?.generatedAt)} · 窗口 ${response?.window?.key || '24h'} · 只读快照`}
-            </p>
-          </div>
-          <ReadOnlyBadges response={response} />
-        </div>
-        {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
-        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <SummaryTile label="当前状态" value={readinessLabel} tone={degradedCount ? 'warn' : 'good'} />
-          <SummaryTile label="需关注" value={`${summary?.fallbackCount || 0} 备用 / ${summary?.failureCount || 0} 失败`} tone={degradedCount ? 'danger' : 'neutral'} />
-          <SummaryTile label="下一步" value={nextAction} tone={degradedCount ? 'warn' : 'info'} />
-        </div>
-      </GlassCard>
-
-      {isLoading && !response && !error ? <LoadingOperationsState /> : null}
-      {error && !response && !isLoading ? <EmptyErrorState /> : null}
-      {!isLoading && (response || !error) ? (
-        <>
-          <div className="mt-5 grid shrink-0 grid-cols-1 gap-5 xl:grid-cols-12">
-            <div className="min-w-0 xl:col-span-8">
-              <ProviderOperationsPanel items={response?.items || []} />
-            </div>
-            <div className="min-w-0 space-y-5 xl:col-span-4">
-              <GlassCard as="section" className="p-4 md:p-5">
-                <div className="flex items-start gap-3">
-                  <LockKeyhole className="mt-1 h-4 w-4 text-emerald-200" aria-hidden="true" />
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">边界</p>
-                    <h2 className="mt-1 text-base font-semibold text-white">只读边界</h2>
-                    <p className="mt-2 text-sm leading-6 text-white/50">
-                      前端只读取现有运维快照，不触发数据源请求、不改变缓存、不改变 provider 排序。
-                    </p>
-                  </div>
-                </div>
-              </GlassCard>
-              <GlassCard as="section" className="p-4 md:p-5">
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">能力摘要</p>
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  {summaryTiles.length ? summaryTiles.slice(0, 4).map((tile) => (
-                    <SummaryTile key={tile.label} label={tile.label} value={tile.value} tone={tile.tone} />
-                  )) : (
-                    <>
-                      <SummaryTile label="数据源" value="--" />
-                      <SummaryTile label="实时" value="--" />
-                      <SummaryTile label="备用" value="--" />
-                      <SummaryTile label="事件" value="--" />
-                    </>
-                  )}
-                </div>
-              </GlassCard>
-            </div>
-          </div>
-
-          <details className="mt-5 rounded-[20px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
-              <span>二级细节：缓存、事件回卷、限制与响应形状</span>
-              <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">默认折叠</span>
-            </summary>
-            <div className="mt-5 grid shrink-0 grid-cols-1 gap-5 xl:grid-cols-12">
-              <div className="min-w-0 xl:col-span-7">
-                <CacheStatesPanel cacheStates={response?.cacheStates || []} />
+      <TerminalPageShell>
+        <TerminalPanel as="section" className="relative overflow-hidden">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/50 to-transparent" />
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200/80">
+                <ServerCog className="h-4 w-4" aria-hidden="true" />
+                数据源就绪台
               </div>
-              <div className="min-w-0 xl:col-span-5">
-                <EventRollupsPanel eventRollups={response?.eventRollups || []} />
-              </div>
-              {response ? (
-                <div className="min-w-0 xl:col-span-12">
-                  <LimitationsPanel response={response} />
-                </div>
-              ) : (
-                <GlassCard as="section" className="p-5 xl:col-span-12">
-                <div className="flex items-center gap-2 text-sm text-white/50">
-                  <Activity className="h-4 w-4" aria-hidden="true" />
-                  等待运维快照
-                </div>
-                </GlassCard>
-              )}
+              <h1 className="mt-3 text-3xl font-semibold tracking-normal text-white md:text-4xl">数据源运维</h1>
+              <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
+                {isLoading
+                  ? '正在读取市场数据源运维快照'
+                  : `先看健康、熔断、失败率与缓存，再下钻诊断详情。生成 ${formatDisplayDate(response?.generatedAt, '待统计')} · 窗口 ${response?.window?.key || '24h'} · 只读快照`}
+              </p>
             </div>
-          </details>
-        </>
-      ) : null}
+            <ReadOnlyBadges response={response} />
+          </div>
+          {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
+        </TerminalPanel>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+          {operatorMetrics.map((metric) => (
+            <TerminalMetric
+              key={metric.label}
+              label={metric.label}
+              value={metric.value}
+              subvalue={metric.subvalue}
+              valueClassName="text-sm leading-5 md:text-base"
+            />
+          ))}
+        </div>
+
+        <TerminalNotice variant="info">
+          前端只读取现有运维快照，不触发数据源请求、不改变缓存、不改变 provider 排序，也不隐藏真实失败。
+        </TerminalNotice>
+
+        {isLoading && !response && !error ? <LoadingOperationsState /> : null}
+        {error && !response && !isLoading ? <EmptyErrorState /> : null}
+        {!isLoading && (response || !error) ? (
+          <>
+            <TerminalGrid>
+              <ProviderOperationsTable items={items} selectedKey={selectedProviderKey} onSelect={setSelectedProviderKey} />
+              <ProviderDetailsPanel item={selectedItem} />
+              <EventRollupsPanel eventRollups={eventRollups} />
+              <CacheStatesPanel cacheStates={cacheStates} />
+              {response ? <DiagnosticsPanel response={response} selectedItem={selectedItem} /> : null}
+            </TerminalGrid>
+          </>
+        ) : null}
+      </TerminalPageShell>
       <span className="sr-only">{language === 'zh' ? '市场数据源运维只读页面' : 'Market provider operations read-only page'}</span>
     </div>
   );

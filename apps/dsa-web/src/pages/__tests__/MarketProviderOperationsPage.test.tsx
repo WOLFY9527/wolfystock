@@ -1,5 +1,5 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketProviderOperationsPage from '../MarketProviderOperationsPage';
 
 const { getOperations } = vi.hoisted(() => ({
@@ -168,43 +168,74 @@ describe('MarketProviderOperationsPage', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('renders the loading state before the read-only operations payload resolves', async () => {
     getOperations.mockReturnValue(new Promise(() => {}));
 
     render(<MarketProviderOperationsPage />);
 
-    expect(screen.getByText('市场数据源运维')).toBeInTheDocument();
+    expect(screen.getByText('数据源运维')).toBeInTheDocument();
     expect(screen.getByText('正在读取市场数据源运维快照')).toBeInTheDocument();
   });
 
-  it('renders populated provider, cache, event, and read-only states without exposing raw metadata', async () => {
+  it('renders Chinese-first operator hierarchy and keeps diagnostics available without exposing raw secrets', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 
     render(<MarketProviderOperationsPage />);
 
-    expect(await screen.findByText('新浪财经')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '数据源运维' })).toBeInTheDocument();
+    expect(screen.getAllByText('数据源健康').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('熔断状态').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('失败率').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('缓存状态').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('最近异常').length).toBeGreaterThan(0);
+    expect(screen.getByText('新浪财经')).toBeInTheDocument();
     expect(screen.getByText('只读')).toBeInTheDocument();
     expect(screen.getByText('外部调用关闭')).toBeInTheDocument();
     expect(screen.getByText('缓存不变更')).toBeInTheDocument();
-    expect(screen.getAllByText('MarketBriefingCard').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('cn_indices').length).toBeGreaterThan(0);
-    expect(screen.getByText('市场事件回卷')).toBeInTheDocument();
+    expect(screen.getAllByText('诊断详情').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('缓存状态').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('最近异常').length).toBeGreaterThan(0);
     expect(screen.getAllByText('查看 Admin Logs').length).toBeGreaterThan(0);
-    expect(screen.getByText('Admin Logs 窗口内暂无降级事件')).toBeInTheDocument();
-
-    const developerDetails = screen.getByText('开发者 / 响应形状');
-    expect(developerDetails).toBeInTheDocument();
+    expect(screen.getAllByText('熔断状态').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已脱敏').length).toBeGreaterThan(0);
     expect(screen.queryByText('SECRET')).not.toBeInTheDocument();
-    screen.getAllByText('/api/v1/market/market-briefing').forEach((node) => {
-      expect(node).not.toBeVisible();
-    });
-    screen.getAllByText('fallback_used', { exact: false }).forEach((node) => {
-      expect(node).not.toBeVisible();
-    });
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByText(/token=/i)).not.toBeInTheDocument();
+
+    const diagnosticsDisclosure = screen.getByTestId('market-provider-diagnostics-disclosure');
+    const disclosureToggle = screen.getByRole('button', { name: '展开 诊断详情' });
+    expect(disclosureToggle).toBeInTheDocument();
+    expect(diagnosticsDisclosure).not.toHaveAttribute('open');
+    fireEvent.click(disclosureToggle);
+    expect(diagnosticsDisclosure).toHaveAttribute('open');
+    expect(screen.getByRole('button', { name: '收起 诊断详情' })).toBeInTheDocument();
+    expect(screen.getByText('cache_metadata_unavailable:rates')).toBeVisible();
   });
 
-  it('renders empty and limitation states compactly', async () => {
+  it('normalizes missing metrics without rendering NaN or raising React warnings', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    getOperations.mockResolvedValue({
+      ...populatedPayload,
+      summary: { totalItems: 0 },
+      items: [],
+      eventRollups: [],
+      cacheStates: [],
+      limitations: [],
+    } as typeof populatedPayload);
+
+    render(<MarketProviderOperationsPage />);
+
+    expect(await screen.findByText('暂无数据源运维条目')).toBeInTheDocument();
+    expect(screen.getAllByText('待统计').length).toBeGreaterThan(0);
+    expect(screen.queryByText('NaN')).not.toBeInTheDocument();
+    expect(consoleErrorSpy.mock.calls.some((call) => call.join(' ').includes('Received NaN'))).toBe(false);
+  });
+
+  it('keeps raw diagnostics collapsed by default and preserves compact empty states', async () => {
     getOperations.mockResolvedValue({
       ...populatedPayload,
       summary: { ...populatedPayload.summary, totalItems: 0, eventCount: 0 },
@@ -218,7 +249,9 @@ describe('MarketProviderOperationsPage', () => {
 
     expect(await screen.findByText('暂无数据源运维条目')).toBeInTheDocument();
     expect(screen.getByText('暂无缓存状态')).toBeInTheDocument();
-    expect(screen.getByText('cache_metadata_unavailable:indices')).toBeInTheDocument();
+    expect(screen.getAllByText('窗口内暂无异常').length).toBeGreaterThan(0);
+    expect(screen.getByText('缓存元数据未覆盖 indices')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '展开 诊断详情' })).toBeInTheDocument();
   });
 
   it('renders API errors with the existing alert pattern', async () => {

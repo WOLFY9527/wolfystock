@@ -104,27 +104,29 @@ export interface MarketProviderOperationsResponse {
   };
 }
 
+const DEFAULT_SUMMARY: MarketProviderOperationsSummary = {
+  totalItems: 0,
+  liveCount: 0,
+  cacheCount: 0,
+  staleCount: 0,
+  fallbackCount: 0,
+  partialCount: 0,
+  unavailableCount: 0,
+  errorCount: 0,
+  refreshingCount: 0,
+  eventCount: 0,
+  failureCount: 0,
+  fallbackEventCount: 0,
+  staleEventCount: 0,
+  slowEventCount: 0,
+};
+
 function normalizeOperations(payload: Record<string, unknown>): MarketProviderOperationsResponse {
   const normalized = toCamelCase<MarketProviderOperationsResponse>(payload);
   return {
     generatedAt: normalized.generatedAt,
     window: normalized.window || { key: '24h' },
-    summary: normalized.summary || {
-      totalItems: 0,
-      liveCount: 0,
-      cacheCount: 0,
-      staleCount: 0,
-      fallbackCount: 0,
-      partialCount: 0,
-      unavailableCount: 0,
-      errorCount: 0,
-      refreshingCount: 0,
-      eventCount: 0,
-      failureCount: 0,
-      fallbackEventCount: 0,
-      staleEventCount: 0,
-      slowEventCount: 0,
-    },
+    summary: { ...DEFAULT_SUMMARY, ...(normalized.summary || {}) },
     items: Array.isArray(normalized.items) ? normalized.items : [],
     eventRollups: Array.isArray(normalized.eventRollups) ? normalized.eventRollups : [],
     cacheStates: Array.isArray(normalized.cacheStates) ? normalized.cacheStates : [],
