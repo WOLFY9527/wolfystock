@@ -248,6 +248,227 @@ class RuleBacktestUniverseServiceTestCase(unittest.TestCase):
         self.assertEqual(by_symbol["ZZZ"]["status"], "skipped")
         self.assertEqual(by_symbol["ZZZ"]["reason_code"], "blocked_missing_local_data")
 
+    def test_universe_job_diagnostics_reports_preflight_only_empty_local_coverage(self) -> None:
+        service = RuleBacktestService(self.db)
+        job = service.create_universe_job(
+            symbols=["ZZZ", "YYY"],
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            start_date="2025-01-01",
+            end_date="2025-01-05",
+            lookback_bars=5,
+        )
+
+        diagnostics = service.get_universe_job_diagnostics(job["id"])
+
+        self.assertEqual(diagnostics["progress"]["status"], "completed_with_failures")
+        self.assertEqual(diagnostics["progress"]["total_count"], 2)
+        self.assertEqual(diagnostics["progress"]["processed_count"], 2)
+        self.assertEqual(diagnostics["progress"]["succeeded_count"], 0)
+        self.assertEqual(diagnostics["progress"]["failed_count"], 0)
+        self.assertEqual(diagnostics["progress"]["skipped_count"], 2)
+        self.assertEqual(diagnostics["progress"]["progress_pct"], 100.0)
+        self.assertEqual(diagnostics["local_data_coverage"]["missing"], 2)
+        self.assertEqual(diagnostics["reason_summary"][0]["reason_code"], "blocked_missing_local_data")
+        self.assertEqual(diagnostics["reason_summary"][0]["count"], 2)
+        self.assertLessEqual(len(diagnostics["reason_summary"][0]["sample_symbols"]), 5)
+        self.assertEqual(diagnostics["metadata"]["local_only"], True)
+        self.assertEqual(diagnostics["metadata"]["live_provider_calls_executed"], False)
+        self.assertEqual(diagnostics["metadata"]["concurrency_enabled"], False)
+
+    def test_universe_job_diagnostics_after_sequential_run_is_compact_and_local_only(self) -> None:
+        closes = [10.0 + (index * 0.2) + (0.4 if index % 7 == 0 else 0.0) for index in range(80)]
+        self._seed_history("AAPL", closes)
+        self._seed_history("MSFT", [20.0 + (index * 0.15) for index in range(80)])
+        service = RuleBacktestService(self.db)
+        job = service.create_universe_job(
+            symbols=["MSFT", "AAPL", "ZZZ"],
+            strategy_text="5日均线上穿20日均线买入，下穿卖出",
+            parsed_strategy=self._ma_strategy(),
+            start_date="2025-01-01",
+            end_date="2025-03-21",
+            lookback_bars=60,
+        )
+
+        with patch.object(RuleBacktestService, "_ensure_market_history") as ensure_mock, patch(
+            "src.services.rule_backtest_service.fetch_daily_history_with_local_us_fallback"
+        ) as fetch_mock:
+            service.run_universe_job_sequential(job["id"])
+            diagnostics = service.get_universe_job_diagnostics(job["id"])
+
+        ensure_mock.assert_not_called()
+        fetch_mock.assert_not_called()
+        self.assertEqual(diagnostics["progress"]["total_count"], 3)
+        self.assertEqual(diagnostics["progress"]["processed_count"], 3)
+        self.assertEqual(diagnostics["progress"]["succeeded_count"], 2)
+        self.assertEqual(diagnostics["progress"]["skipped_count"], 1)
+        top_returns = diagnostics["performance_summary"]["top_return_symbols"]
+        self.assertLessEqual(len(top_returns), 5)
+        self.assertGreaterEqual(top_returns[0]["total_return_pct"], top_returns[-1]["total_return_pct"])
+        self.assertNotIn("execution_trace", diagnostics)
+        self.assertNotIn("equity_curve", diagnostics)
+        self.assertEqual(diagnostics["metadata"]["local_only"], True)
+        self.assertEqual(diagnostics["metadata"]["live_provider_calls_executed"], False)
+        self.assertEqual(diagnostics["metadata"]["concurrency_enabled"], False)
+
+    def test_universe_job_diagnostics_groups_completed_failures_and_skips_by_reason(self) -> None:
+        for code in ["AAPL", "MSFT", "NVDA"]:
+            self._seed_history(code, [10.0 + (index * 0.2) for index in range(80)])
+        service = RuleBacktestService(self.db)
+        job = service.create_universe_job(
+            symbols=["NVDA", "MSFT", "AAPL", "ZZZ"],
+            strategy_text="5日均线上穿20日均线买入，下穿卖出",
+            parsed_strategy=self._ma_strategy(),
+            start_date="2025-01-01",
+            end_date="2025-03-21",
+            lookback_bars=60,
+        )
+        original_run = service.engine.run
+
+        def run_or_fail(**kwargs):
+            if kwargs["code"] == "MSFT":
+                raise RuntimeError("synthetic execution failure")
+            return original_run(**kwargs)
+
+        with patch.object(service.engine, "run", side_effect=run_or_fail):
+            service.run_universe_job_sequential(job["id"])
+
+        diagnostics = service.get_universe_job_diagnostics(job["id"])
+
+        reasons = {bucket["reason_code"]: bucket for bucket in diagnostics["reason_summary"]}
+        self.assertEqual(reasons["symbol_execution_failed"]["count"], 1)
+        self.assertEqual(reasons["symbol_execution_failed"]["sample_symbols"], ["MSFT"])
+        self.assertEqual(reasons["blocked_missing_local_data"]["count"], 1)
+        self.assertEqual(reasons["blocked_missing_local_data"]["sample_symbols"], ["ZZZ"])
+        self.assertEqual(diagnostics["local_data_coverage"]["ready"], 3)
+        self.assertEqual(diagnostics["local_data_coverage"]["missing"], 1)
+
+    def test_universe_metric_leaders_are_bounded_and_sorted(self) -> None:
+        for code in ["AAPL", "MSFT", "NVDA", "ORCL", "TSLA", "AMZN"]:
+            self._seed_history(code, [10.0, 10.2, 10.4, 10.6, 10.8])
+        service = RuleBacktestService(self.db)
+        job = service.create_universe_job(
+            symbols=["AAPL", "MSFT", "NVDA", "ORCL", "TSLA", "AMZN"],
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            start_date="2025-01-01",
+            end_date="2025-01-05",
+            lookback_bars=5,
+        )
+        rows = service.repo.get_universe_symbol_results(job["id"])
+        metrics_by_symbol = {
+            "AAPL": {"total_return_pct": 5.0, "max_drawdown_pct": -2.0, "win_rate_pct": 60.0, "trades_count": 2},
+            "MSFT": {"total_return_pct": 12.0, "max_drawdown_pct": -8.0, "win_rate_pct": 80.0, "trades_count": 3},
+            "NVDA": {"total_return_pct": -4.0, "max_drawdown_pct": -12.0, "win_rate_pct": 20.0, "trades_count": 1},
+            "ORCL": {"total_return_pct": 8.0, "max_drawdown_pct": -1.0, "win_rate_pct": 55.0, "trades_count": 4},
+            "TSLA": {"total_return_pct": 20.0, "max_drawdown_pct": -15.0, "win_rate_pct": 90.0, "trades_count": 5},
+            "AMZN": {"total_return_pct": 1.0, "max_drawdown_pct": -3.0, "win_rate_pct": 40.0, "trades_count": 2},
+        }
+        for row in rows:
+            service.repo.update_universe_symbol_result(
+                int(row.id),
+                status="completed",
+                reason_code=None,
+                reason_message=None,
+                metrics_json=service._serialize_json(
+                    {
+                        **metrics_by_symbol[row.symbol],
+                        "local_data_preflight": {"state": "ready"},
+                    }
+                ),
+            )
+        service.repo.update_universe_job(
+            job["id"],
+            status="completed",
+            completed_count=6,
+            skipped_count=0,
+            failed_count=0,
+            pending_count=0,
+            running_count=0,
+        )
+
+        diagnostics = service.get_universe_job_diagnostics(job["id"])
+
+        self.assertEqual(
+            [item["symbol"] for item in diagnostics["performance_summary"]["top_return_symbols"]],
+            ["TSLA", "MSFT", "ORCL", "AAPL", "AMZN"],
+        )
+        self.assertEqual(
+            [item["symbol"] for item in diagnostics["performance_summary"]["worst_return_symbols"]],
+            ["NVDA", "AMZN", "AAPL", "ORCL", "MSFT"],
+        )
+        self.assertEqual(
+            [item["symbol"] for item in diagnostics["performance_summary"]["worst_drawdown_symbols"]],
+            ["TSLA", "NVDA", "MSFT", "AMZN", "AAPL"],
+        )
+        self.assertEqual(
+            [item["symbol"] for item in diagnostics["performance_summary"]["best_win_rate_symbols"]],
+            ["TSLA", "MSFT", "AAPL", "ORCL", "AMZN"],
+        )
+
+    def test_universe_job_results_filter_and_sort_contract(self) -> None:
+        for code in ["AAPL", "MSFT", "NVDA"]:
+            self._seed_history(code, [10.0, 10.2, 10.4, 10.6, 10.8])
+        service = RuleBacktestService(self.db)
+        job = service.create_universe_job(
+            symbols=["NVDA", "MSFT", "AAPL", "ZZZ"],
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            start_date="2025-01-01",
+            end_date="2025-01-05",
+            lookback_bars=5,
+        )
+        rows = service.repo.get_universe_symbol_results(job["id"])
+        for row in rows:
+            if row.symbol == "AAPL":
+                service.repo.update_universe_symbol_result(
+                    int(row.id),
+                    status="completed",
+                    reason_code=None,
+                    metrics_json=service._serialize_json({"total_return_pct": 2.0, "local_data_preflight": {"state": "ready"}}),
+                )
+            elif row.symbol == "MSFT":
+                service.repo.update_universe_symbol_result(
+                    int(row.id),
+                    status="failed",
+                    reason_code="symbol_execution_failed",
+                    metrics_json=service._serialize_json({"total_return_pct": -1.0, "local_data_preflight": {"state": "ready"}}),
+                )
+            elif row.symbol == "NVDA":
+                service.repo.update_universe_symbol_result(
+                    int(row.id),
+                    status="completed",
+                    reason_code=None,
+                    metrics_json=service._serialize_json({"total_return_pct": 7.0, "local_data_preflight": {"state": "ready"}}),
+                )
+
+        completed = service.list_universe_job_results(job["id"], page=1, limit=10, status="completed")
+        failed_reason = service.list_universe_job_results(
+            job["id"],
+            page=1,
+            limit=10,
+            reason_code="symbol_execution_failed",
+        )
+        sorted_by_return = service.list_universe_job_results(
+            job["id"],
+            page=1,
+            limit=10,
+            sort="total_return_pct",
+            order="desc",
+        )
+        sorted_by_sequence = service.list_universe_job_results(
+            job["id"],
+            page=1,
+            limit=10,
+            sort="sequence_index",
+            order="asc",
+        )
+
+        self.assertEqual([item["symbol"] for item in completed["items"]], ["AAPL", "NVDA"])
+        self.assertEqual([item["symbol"] for item in failed_reason["items"]], ["MSFT"])
+        self.assertEqual([item["symbol"] for item in sorted_by_return["items"][:3]], ["NVDA", "AAPL", "MSFT"])
+        self.assertEqual([item["symbol"] for item in sorted_by_sequence["items"]], ["AAPL", "MSFT", "NVDA", "ZZZ"])
+
+        with self.assertRaises(ValueError):
+            service.list_universe_job_results(job["id"], page=1, limit=10, sort="unsupported_metric")
+
     def test_run_universe_job_sequential_isolates_symbol_failures(self) -> None:
         for code in ["AAPL", "MSFT", "NVDA"]:
             self._seed_history(code, [10.0 + (index * 0.2) for index in range(80)])

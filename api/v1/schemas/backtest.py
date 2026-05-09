@@ -484,6 +484,68 @@ class RuleBacktestUniverseResultsResponse(BaseModel):
     items: List[RuleBacktestUniverseSymbolResultItem] = Field(default_factory=list)
 
 
+class RuleBacktestUniverseProgressSummary(BaseModel):
+    status: str
+    total_count: int
+    processed_count: int
+    succeeded_count: int
+    failed_count: int
+    skipped_count: int
+    progress_pct: float
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+class RuleBacktestUniverseReasonBucket(BaseModel):
+    reason_code: str
+    count: int
+    sample_symbols: List[str] = Field(default_factory=list)
+
+
+class RuleBacktestUniverseMetricLeader(BaseModel):
+    symbol: str
+    sequence_index: int
+    status: str
+    total_return_pct: Optional[float] = None
+    max_drawdown_pct: Optional[float] = None
+    win_rate_pct: Optional[float] = None
+    trades_count: Optional[int] = None
+    elapsed_ms: int = 0
+
+
+class RuleBacktestUniversePerformanceSummary(BaseModel):
+    top_return_symbols: List[RuleBacktestUniverseMetricLeader] = Field(default_factory=list)
+    worst_return_symbols: List[RuleBacktestUniverseMetricLeader] = Field(default_factory=list)
+    worst_drawdown_symbols: List[RuleBacktestUniverseMetricLeader] = Field(default_factory=list)
+    best_win_rate_symbols: List[RuleBacktestUniverseMetricLeader] = Field(default_factory=list)
+    average_total_return_pct: Optional[float] = None
+    average_max_drawdown_pct: Optional[float] = None
+    average_win_rate_pct: Optional[float] = None
+
+
+class RuleBacktestUniverseLocalDataCoverageSummary(BaseModel):
+    ready: int = 0
+    partial: int = 0
+    missing: int = 0
+    insufficient_data: int = 0
+    unknown: int = 0
+
+
+class RuleBacktestUniverseDiagnosticsMetadata(BaseModel):
+    local_only: bool = True
+    live_provider_calls_executed: bool = False
+    concurrency_enabled: bool = False
+
+
+class RuleBacktestUniverseJobDiagnostics(BaseModel):
+    job_id: int
+    progress: RuleBacktestUniverseProgressSummary
+    reason_summary: List[RuleBacktestUniverseReasonBucket] = Field(default_factory=list)
+    performance_summary: RuleBacktestUniversePerformanceSummary
+    local_data_coverage: RuleBacktestUniverseLocalDataCoverageSummary
+    metadata: RuleBacktestUniverseDiagnosticsMetadata
+
+
 class RuleBacktestCompareRequest(BaseModel):
     run_ids: List[int] = Field(
         ...,

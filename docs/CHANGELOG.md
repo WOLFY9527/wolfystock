@@ -1,5 +1,7 @@
 ## 2026-05-10
 
+- 🧪 **Backtest universe diagnostics aggregation** — Rule backtest universe jobs now expose `GET /api/v1/backtest/rule/universe-jobs/{job_id}/diagnostics` for compact job-level progress, reason buckets, metric leaders, and local-data coverage summaries. The paginated results endpoint also supports status, reason, symbol prefix, inferred market, and metric/sequence/runtime sorting for bounded drill-down. This remains local-only and read-mostly: no live provider calls, `_ensure_market_history`, worker pool/concurrency, DuckDB source-of-truth reads, single-symbol calculation changes, strategy math changes, scanner behavior, portfolio/accounting, AI, notification, or auth/RBAC behavior changed.
+
 - 🧪 **Backtest universe sequential executor** — Rule backtest universe jobs can now be run through `POST /api/v1/backtest/rule/universe-jobs/{job_id}/run` as a synchronous local-only sequential executor. It reuses the existing deterministic rule backtest engine for each locally ready symbol, preserves deterministic symbol order, writes compact per-symbol result rows and progress counters, rejects duplicate runs, and isolates per-symbol failures. The path does not call live providers, `_ensure_market_history`, provider fallback, worker pools, DuckDB source-of-truth reads, single-symbol calculation changes, strategy math changes, scanner behavior, portfolio accounting, AI, notifications, or auth/RBAC.
 
 ## 2026-05-09

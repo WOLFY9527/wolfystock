@@ -37,6 +37,7 @@ from api.v1.schemas.backtest import (
     RuleBacktestRunRequest,
     RuleBacktestRunResponse,
     RuleBacktestUniverseJobCreateRequest,
+    RuleBacktestUniverseJobDiagnostics,
     RuleBacktestUniverseJobResponse,
     RuleBacktestUniverseResultsResponse,
 )
@@ -698,6 +699,31 @@ def get_rule_backtest_universe_job_status(
 
 
 @router.get(
+    "/rule/universe-jobs/{job_id}/diagnostics",
+    response_model=RuleBacktestUniverseJobDiagnostics,
+    responses={
+        200: {"description": "本地宇宙回测任务紧凑诊断摘要"},
+        404: {"description": "记录不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取本地规则回测宇宙任务诊断摘要",
+    description="只读返回 job-level 聚合、原因桶、metric leader 与本地数据覆盖摘要；不包含 raw trace 或逐标的大载荷。",
+)
+def get_rule_backtest_universe_job_diagnostics(
+    job_id: int,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> RuleBacktestUniverseJobDiagnostics:
+    def _operation() -> RuleBacktestUniverseJobDiagnostics:
+        service = _build_rule_backtest_service(db_manager, current_user)
+        data = service.get_universe_job_diagnostics(job_id)
+        if data is None:
+            raise _not_found_error("规则回测宇宙任务不存在")
+        return _build_model(RuleBacktestUniverseJobDiagnostics, data)
+    return _run_endpoint("查询规则回测宇宙任务诊断失败", _operation)
+
+
+@router.get(
     "/rule/universe-jobs/{job_id}/results",
     response_model=RuleBacktestUniverseResultsResponse,
     responses={
@@ -711,6 +737,12 @@ def list_rule_backtest_universe_job_results(
     job_id: int,
     page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(50, ge=1, le=100, description="每页数量"),
+    status: Optional[str] = Query(None, description="按 compact symbol status 过滤"),
+    reason_code: Optional[str] = Query(None, alias="reasonCode", description="按 reason_code 过滤"),
+    symbol: Optional[str] = Query(None, description="按标的代码前缀过滤"),
+    market: Optional[str] = Query(None, description="按推断市场过滤：cn/hk/us"),
+    sort: str = Query("sequence_index", description="排序字段"),
+    order: str = Query("asc", description="排序方向：asc/desc"),
     db_manager: DatabaseManager = Depends(get_database_manager),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> RuleBacktestUniverseResultsResponse:
@@ -718,9 +750,19 @@ def list_rule_backtest_universe_job_results(
         service = _build_rule_backtest_service(db_manager, current_user)
         if service.get_universe_job_status(job_id) is None:
             raise _not_found_error("规则回测宇宙任务不存在")
-        data = service.list_universe_job_results(job_id, page=page, limit=limit)
+        data = service.list_universe_job_results(
+            job_id,
+            page=page,
+            limit=limit,
+            status=status,
+            reason_code=reason_code,
+            symbol=symbol,
+            market=market,
+            sort=sort,
+            order=order,
+        )
         return _build_model(RuleBacktestUniverseResultsResponse, data)
-    return _run_endpoint("查询规则回测宇宙任务结果失败", _operation)
+    return _run_endpoint("查询规则回测宇宙任务结果失败", _operation, allow_validation_error=True)
 
 
 @router.get(

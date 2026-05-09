@@ -30,6 +30,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     get_rule_backtest_support_export_index,
     get_rule_backtest_support_bundle_manifest,
     get_rule_backtest_run_status,
+    get_rule_backtest_universe_job_diagnostics,
     get_rule_backtest_universe_job_status,
     list_rule_backtest_universe_job_results,
     router as backtest_router,
@@ -48,6 +49,7 @@ from api.v1.schemas.backtest import (  # noqa: E402
     RuleBacktestRunResponse,
     RuleBacktestStatusResponse,
     RuleBacktestUniverseJobCreateRequest,
+    RuleBacktestUniverseJobDiagnostics,
     RuleBacktestUniverseJobResponse,
     RuleBacktestUniverseResultsResponse,
     RuleBacktestExecutionTraceExportResponse,
@@ -802,6 +804,48 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 }
             ],
         }
+        service.get_universe_job_diagnostics.return_value = {
+            "job_id": 42,
+            "progress": {
+                "status": "completed_with_failures",
+                "total_count": 2,
+                "processed_count": 2,
+                "succeeded_count": 1,
+                "failed_count": 0,
+                "skipped_count": 1,
+                "progress_pct": 100.0,
+                "started_at": "2026-05-09T10:00:00",
+                "completed_at": "2026-05-09T10:00:01",
+            },
+            "reason_summary": [
+                {
+                    "reason_code": "blocked_missing_local_data",
+                    "count": 1,
+                    "sample_symbols": ["MSFT"],
+                }
+            ],
+            "performance_summary": {
+                "top_return_symbols": [],
+                "worst_return_symbols": [],
+                "worst_drawdown_symbols": [],
+                "best_win_rate_symbols": [],
+                "average_total_return_pct": None,
+                "average_max_drawdown_pct": None,
+                "average_win_rate_pct": None,
+            },
+            "local_data_coverage": {
+                "ready": 1,
+                "partial": 0,
+                "missing": 1,
+                "insufficient_data": 0,
+                "unknown": 0,
+            },
+            "metadata": {
+                "local_only": True,
+                "live_provider_calls_executed": False,
+                "concurrency_enabled": False,
+            },
+        }
         request = RuleBacktestUniverseJobCreateRequest(
             symbols=["MSFT", "AAPL"],
             strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
@@ -814,22 +858,42 @@ class BacktestApiContractTestCase(unittest.TestCase):
             created = create_rule_backtest_universe_job(request, db_manager=MagicMock())
             run = run_rule_backtest_universe_job(42, db_manager=MagicMock())
             status = get_rule_backtest_universe_job_status(42, db_manager=MagicMock())
-            results = list_rule_backtest_universe_job_results(42, page=1, limit=1, db_manager=MagicMock())
+            diagnostics = get_rule_backtest_universe_job_diagnostics(42, db_manager=MagicMock())
+            results = list_rule_backtest_universe_job_results(
+                42,
+                page=1,
+                limit=1,
+                status="completed",
+                reason_code=None,
+                symbol="AA",
+                sort="total_return_pct",
+                order="desc",
+                db_manager=MagicMock(),
+            )
 
         self.assertIsInstance(created, RuleBacktestUniverseJobResponse)
         self.assertIsInstance(run, RuleBacktestUniverseJobResponse)
         self.assertIsInstance(status, RuleBacktestUniverseJobResponse)
+        self.assertIsInstance(diagnostics, RuleBacktestUniverseJobDiagnostics)
         self.assertIsInstance(results, RuleBacktestUniverseResultsResponse)
         self.assertEqual(created.execution_mode, "preflight_only")
         self.assertEqual(run.execution_mode, "sequential_local")
         self.assertTrue(created.local_data_only)
+        self.assertEqual(diagnostics.progress.progress_pct, 100.0)
+        self.assertEqual(diagnostics.reason_summary[0].reason_code, "blocked_missing_local_data")
+        self.assertTrue(diagnostics.metadata.local_only)
         self.assertEqual(results.items[0].symbol, "AAPL")
         self.assertEqual(results.items[0].sequence_index, 0)
         self.assertEqual(results.items[0].total_return_pct, 1.23)
         service.create_universe_job.assert_called_once()
         service.run_universe_job_sequential.assert_called_once_with(42)
+        service.get_universe_job_diagnostics.assert_called_once_with(42)
         self.assertEqual(service.create_universe_job.call_args.kwargs["symbols"], ["MSFT", "AAPL"])
         self.assertEqual(service.list_universe_job_results.call_args.kwargs["limit"], 1)
+        self.assertEqual(service.list_universe_job_results.call_args.kwargs["status"], "completed")
+        self.assertEqual(service.list_universe_job_results.call_args.kwargs["symbol"], "AA")
+        self.assertEqual(service.list_universe_job_results.call_args.kwargs["sort"], "total_return_pct")
+        self.assertEqual(service.list_universe_job_results.call_args.kwargs["order"], "desc")
 
     def test_get_backtest_performance_returns_global_summary_contract(self) -> None:
         service = MagicMock()

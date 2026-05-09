@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, List, Optional, Tuple
 
 from sqlalchemy import and_, delete, desc, func, select
@@ -219,15 +220,13 @@ class RuleBacktestRepository:
                 select(RuleBacktestUniverseJob).where(and_(*conditions)).limit(1)
             ).scalar_one_or_none()
 
-    def get_universe_symbol_results_paginated(
+    def get_universe_job_summary(
         self,
         job_id: int,
         *,
-        offset: int,
-        limit: int,
         owner_id: Optional[str] = None,
         include_all_owners: bool = False,
-    ) -> Tuple[List[RuleBacktestUniverseSymbolResult], int]:
+    ) -> dict[str, Any]:
         with self.db.get_session() as session:
             conditions = [RuleBacktestUniverseSymbolResult.job_id == int(job_id)]
             if not include_all_owners:
@@ -236,14 +235,172 @@ class RuleBacktestRepository:
             total = session.execute(
                 select(func.count(RuleBacktestUniverseSymbolResult.id)).where(where_clause)
             ).scalar() or 0
+            status_rows = session.execute(
+                select(
+                    RuleBacktestUniverseSymbolResult.status,
+                    func.count(RuleBacktestUniverseSymbolResult.id),
+                )
+                .where(where_clause)
+                .group_by(RuleBacktestUniverseSymbolResult.status)
+            ).all()
+            return {
+                "total": int(total),
+                "status_counts": {
+                    str(status or "unknown"): int(count or 0)
+                    for status, count in status_rows
+                },
+            }
+
+    def get_universe_job_reason_summary(
+        self,
+        job_id: int,
+        *,
+        sample_limit: int = 5,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[dict[str, Any]]:
+        with self.db.get_session() as session:
+            conditions = [
+                RuleBacktestUniverseSymbolResult.job_id == int(job_id),
+                RuleBacktestUniverseSymbolResult.reason_code.is_not(None),
+            ]
+            if not include_all_owners:
+                conditions.append(RuleBacktestUniverseSymbolResult.owner_id == self.db.require_user_id(owner_id))
+            where_clause = and_(*conditions)
+            grouped = session.execute(
+                select(
+                    RuleBacktestUniverseSymbolResult.reason_code,
+                    func.count(RuleBacktestUniverseSymbolResult.id).label("reason_count"),
+                )
+                .where(where_clause)
+                .group_by(RuleBacktestUniverseSymbolResult.reason_code)
+                .order_by(desc("reason_count"), RuleBacktestUniverseSymbolResult.reason_code.asc())
+            ).all()
+            buckets: List[dict[str, Any]] = []
+            for reason_code, count in grouped:
+                sample_conditions = [
+                    RuleBacktestUniverseSymbolResult.job_id == int(job_id),
+                    RuleBacktestUniverseSymbolResult.reason_code == reason_code,
+                ]
+                if not include_all_owners:
+                    sample_conditions.append(RuleBacktestUniverseSymbolResult.owner_id == self.db.require_user_id(owner_id))
+                samples = session.execute(
+                    select(RuleBacktestUniverseSymbolResult.symbol)
+                    .where(and_(*sample_conditions))
+                    .order_by(RuleBacktestUniverseSymbolResult.sequence_index.asc())
+                    .limit(max(1, int(sample_limit or 5)))
+                ).scalars().all()
+                buckets.append(
+                    {
+                        "reason_code": str(reason_code or "unknown"),
+                        "count": int(count or 0),
+                        "sample_symbols": [str(symbol) for symbol in samples],
+                    }
+                )
+            return buckets
+
+    def get_universe_job_metric_extremes(
+        self,
+        job_id: int,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[RuleBacktestUniverseSymbolResult]:
+        return self.get_universe_symbol_results(
+            job_id,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
+
+    def get_universe_symbol_results_paginated(
+        self,
+        job_id: int,
+        *,
+        offset: int,
+        limit: int,
+        status: Optional[str] = None,
+        reason_code: Optional[str] = None,
+        symbol: Optional[str] = None,
+        sort: str = "sequence_index",
+        order: str = "asc",
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Tuple[List[RuleBacktestUniverseSymbolResult], int]:
+        normalized_sort = str(sort or "sequence_index").strip().lower()
+        normalized_order = str(order or "asc").strip().lower()
+        if normalized_order not in {"asc", "desc"}:
+            raise ValueError("order must be asc or desc")
+        sql_sort_columns = {
+            "sequence_index": RuleBacktestUniverseSymbolResult.sequence_index,
+            "elapsed_ms": RuleBacktestUniverseSymbolResult.runtime_ms,
+            "runtime_ms": RuleBacktestUniverseSymbolResult.runtime_ms,
+            "symbol": RuleBacktestUniverseSymbolResult.symbol,
+            "status": RuleBacktestUniverseSymbolResult.status,
+        }
+        metric_sorts = {
+            "total_return_pct",
+            "max_drawdown_pct",
+            "win_rate_pct",
+            "trades_count",
+        }
+        if normalized_sort not in sql_sort_columns and normalized_sort not in metric_sorts:
+            raise ValueError(f"unsupported universe result sort: {sort}")
+
+        with self.db.get_session() as session:
+            conditions = [RuleBacktestUniverseSymbolResult.job_id == int(job_id)]
+            if not include_all_owners:
+                conditions.append(RuleBacktestUniverseSymbolResult.owner_id == self.db.require_user_id(owner_id))
+            if status:
+                conditions.append(RuleBacktestUniverseSymbolResult.status == str(status).strip())
+            if reason_code:
+                conditions.append(RuleBacktestUniverseSymbolResult.reason_code == str(reason_code).strip())
+            if symbol:
+                pattern = f"{str(symbol).strip().upper()}%"
+                conditions.append(RuleBacktestUniverseSymbolResult.symbol.like(pattern))
+            where_clause = and_(*conditions)
+            total = session.execute(
+                select(func.count(RuleBacktestUniverseSymbolResult.id)).where(where_clause)
+            ).scalar() or 0
+            if normalized_sort in metric_sorts:
+                rows = session.execute(
+                    select(RuleBacktestUniverseSymbolResult)
+                    .where(where_clause)
+                    .order_by(RuleBacktestUniverseSymbolResult.sequence_index.asc())
+                ).scalars().all()
+                sorted_rows = sorted(
+                    list(rows),
+                    key=lambda row: (
+                        self._metric_sort_value(row.metrics_json, normalized_sort, normalized_order),
+                        int(row.sequence_index),
+                    ),
+                    reverse=normalized_order == "desc",
+                )
+                return sorted_rows[offset:offset + limit], int(total)
+
+            sort_column = sql_sort_columns[normalized_sort]
+            order_expr = sort_column.desc() if normalized_order == "desc" else sort_column.asc()
             rows = session.execute(
                 select(RuleBacktestUniverseSymbolResult)
                 .where(where_clause)
-                .order_by(RuleBacktestUniverseSymbolResult.sequence_index.asc())
+                .order_by(order_expr, RuleBacktestUniverseSymbolResult.sequence_index.asc())
                 .offset(offset)
                 .limit(limit)
             ).scalars().all()
             return list(rows), int(total)
+
+    @staticmethod
+    def _metric_sort_value(metrics_json: Optional[str], field_name: str, order: str) -> float:
+        try:
+            payload = json.loads(metrics_json or "{}")
+        except (TypeError, ValueError):
+            payload = {}
+        value = payload.get(field_name) if isinstance(payload, dict) else None
+        if value is None:
+            return float("-inf") if order == "desc" else float("inf")
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return float("-inf") if order == "desc" else float("inf")
 
     def get_universe_symbol_results(
         self,

@@ -1186,6 +1186,7 @@ class RuleBacktestService:
                 **self._owner_kwargs(),
             )
             started_at = datetime.now()
+            coverage: Dict[str, Any] = {}
             try:
                 preflight_metrics = self._load_json_payload(row.metrics_json)
                 if not isinstance(preflight_metrics, dict):
@@ -1287,13 +1288,16 @@ class RuleBacktestService:
                 )
             except Exception as exc:
                 failed_count += 1
+                failure_metrics = {}
+                if isinstance(coverage, dict):
+                    failure_metrics["local_data_preflight"] = coverage
                 self._update_universe_symbol_result(
                     row,
                     status="failed",
                     reason_code="symbol_execution_failed",
                     reason_message=self._sanitize_universe_error(exc),
                     started_at=started_at,
-                    metrics={},
+                    metrics=failure_metrics,
                 )
 
             self.repo.update_universe_job(
@@ -1347,7 +1351,46 @@ class RuleBacktestService:
             return None
         return self._universe_job_row_to_dict(row)
 
-    def list_universe_job_results(self, job_id: int, *, page: int = 1, limit: int = 50) -> Dict[str, Any]:
+    def get_universe_job_diagnostics(self, job_id: int) -> Optional[Dict[str, Any]]:
+        row = self.repo.get_universe_job(job_id, **self._owner_kwargs())
+        if row is None:
+            return None
+
+        progress = self._build_universe_progress_summary(row)
+        reason_summary = self.repo.get_universe_job_reason_summary(
+            job_id,
+            sample_limit=5,
+            **self._owner_kwargs(),
+        )
+        metric_rows = self.repo.get_universe_job_metric_extremes(job_id, **self._owner_kwargs())
+        performance_summary = self._build_universe_performance_summary(metric_rows, limit=5)
+        local_data_coverage = self._build_universe_local_data_coverage_summary(metric_rows)
+        return {
+            "job_id": int(job_id),
+            "progress": progress,
+            "reason_summary": reason_summary,
+            "performance_summary": performance_summary,
+            "local_data_coverage": local_data_coverage,
+            "metadata": {
+                "local_only": True,
+                "live_provider_calls_executed": False,
+                "concurrency_enabled": False,
+            },
+        }
+
+    def list_universe_job_results(
+        self,
+        job_id: int,
+        *,
+        page: int = 1,
+        limit: int = 50,
+        status: Optional[str] = None,
+        reason_code: Optional[str] = None,
+        symbol: Optional[str] = None,
+        market: Optional[str] = None,
+        sort: str = "sequence_index",
+        order: str = "asc",
+    ) -> Dict[str, Any]:
         if self.get_universe_job_status(job_id) is None:
             return {
                 "job_id": int(job_id),
@@ -1356,13 +1399,34 @@ class RuleBacktestService:
                 "limit": limit,
                 "items": [],
             }
-        offset = max(page - 1, 0) * limit
-        rows, total = self.repo.get_universe_symbol_results_paginated(
-            job_id,
-            offset=offset,
-            limit=limit,
-            **self._owner_kwargs(),
-        )
+        normalized_sort = self._normalize_universe_result_sort(sort)
+        normalized_order = self._normalize_universe_result_order(order)
+        offset = max(int(page) - 1, 0) * int(limit)
+        normalized_market = str(market or "").strip().lower()
+        if normalized_market:
+            rows = self.repo.get_universe_symbol_results(job_id, **self._owner_kwargs())
+            filtered_rows = self._filter_universe_rows(
+                rows,
+                status=status,
+                reason_code=reason_code,
+                symbol=symbol,
+                market=normalized_market,
+            )
+            sorted_rows = self._sort_universe_rows(filtered_rows, sort=normalized_sort, order=normalized_order)
+            total = len(sorted_rows)
+            rows = sorted_rows[offset:offset + int(limit)]
+        else:
+            rows, total = self.repo.get_universe_symbol_results_paginated(
+                job_id,
+                offset=offset,
+                limit=int(limit),
+                status=status,
+                reason_code=reason_code,
+                symbol=symbol,
+                sort=normalized_sort,
+                order=normalized_order,
+                **self._owner_kwargs(),
+            )
         return {
             "job_id": int(job_id),
             "total": total,
@@ -1370,6 +1434,239 @@ class RuleBacktestService:
             "limit": limit,
             "items": [self._universe_symbol_row_to_dict(row) for row in rows],
         }
+
+    @staticmethod
+    def _build_universe_progress_summary(row: RuleBacktestUniverseJob) -> Dict[str, Any]:
+        total_count = int(row.symbol_count or 0)
+        succeeded_count = int(row.completed_count or 0)
+        failed_count = int(row.failed_count or 0)
+        skipped_count = int(row.skipped_count or 0)
+        processed_count = succeeded_count + failed_count + skipped_count
+        progress_pct = round((processed_count / total_count) * 100.0, 4) if total_count else 0.0
+        return {
+            "status": row.status,
+            "total_count": total_count,
+            "processed_count": processed_count,
+            "succeeded_count": succeeded_count,
+            "failed_count": failed_count,
+            "skipped_count": skipped_count,
+            "progress_pct": progress_pct,
+            "started_at": row.started_at.isoformat() if row.started_at else None,
+            "completed_at": row.completed_at.isoformat() if row.completed_at else None,
+        }
+
+    @classmethod
+    def _build_universe_performance_summary(
+        cls,
+        rows: List[RuleBacktestUniverseSymbolResult],
+        *,
+        limit: int,
+    ) -> Dict[str, Any]:
+        completed = [
+            row for row in rows
+            if str(row.status or "") == "completed"
+        ]
+        metrics_by_row = [
+            (row, cls._load_json_payload(row.metrics_json))
+            for row in completed
+        ]
+        metrics_by_row = [
+            (row, metrics if isinstance(metrics, dict) else {})
+            for row, metrics in metrics_by_row
+        ]
+        total_returns = [
+            cls._optional_float(metrics.get("total_return_pct"))
+            for _, metrics in metrics_by_row
+            if cls._optional_float(metrics.get("total_return_pct")) is not None
+        ]
+        drawdowns = [
+            cls._optional_float(metrics.get("max_drawdown_pct"))
+            for _, metrics in metrics_by_row
+            if cls._optional_float(metrics.get("max_drawdown_pct")) is not None
+        ]
+        win_rates = [
+            cls._optional_float(metrics.get("win_rate_pct"))
+            for _, metrics in metrics_by_row
+            if cls._optional_float(metrics.get("win_rate_pct")) is not None
+        ]
+        return {
+            "top_return_symbols": cls._metric_leaders(metrics_by_row, "total_return_pct", reverse=True, limit=limit),
+            "worst_return_symbols": cls._metric_leaders(metrics_by_row, "total_return_pct", reverse=False, limit=limit),
+            "worst_drawdown_symbols": cls._metric_leaders(metrics_by_row, "max_drawdown_pct", reverse=False, limit=limit),
+            "best_win_rate_symbols": cls._metric_leaders(metrics_by_row, "win_rate_pct", reverse=True, limit=limit),
+            "average_total_return_pct": cls._average_metric(total_returns),
+            "average_max_drawdown_pct": cls._average_metric(drawdowns),
+            "average_win_rate_pct": cls._average_metric(win_rates),
+        }
+
+    @classmethod
+    def _metric_leaders(
+        cls,
+        metrics_by_row: List[tuple[RuleBacktestUniverseSymbolResult, Dict[str, Any]]],
+        metric_name: str,
+        *,
+        reverse: bool,
+        limit: int,
+    ) -> List[Dict[str, Any]]:
+        candidates = [
+            (row, metrics, cls._optional_float(metrics.get(metric_name)))
+            for row, metrics in metrics_by_row
+        ]
+        candidates = [
+            (row, metrics, value)
+            for row, metrics, value in candidates
+            if value is not None
+        ]
+        candidates.sort(key=lambda item: (item[2], -int(item[0].sequence_index) if reverse else int(item[0].sequence_index)), reverse=reverse)
+        return [
+            cls._universe_metric_leader_to_dict(row, metrics)
+            for row, metrics, _ in candidates[:max(1, int(limit or 5))]
+        ]
+
+    @classmethod
+    def _universe_metric_leader_to_dict(
+        cls,
+        row: RuleBacktestUniverseSymbolResult,
+        metrics: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        return {
+            "symbol": row.symbol,
+            "sequence_index": int(row.sequence_index),
+            "status": row.status,
+            "total_return_pct": cls._optional_float(metrics.get("total_return_pct")),
+            "max_drawdown_pct": cls._optional_float(metrics.get("max_drawdown_pct")),
+            "win_rate_pct": cls._optional_float(metrics.get("win_rate_pct")),
+            "trades_count": cls._optional_int(metrics.get("trades_count", metrics.get("trade_count"))),
+            "elapsed_ms": int(row.runtime_ms or 0),
+        }
+
+    @classmethod
+    def _build_universe_local_data_coverage_summary(cls, rows: List[RuleBacktestUniverseSymbolResult]) -> Dict[str, int]:
+        summary = {
+            "ready": 0,
+            "partial": 0,
+            "missing": 0,
+            "insufficient_data": 0,
+            "unknown": 0,
+        }
+        for row in rows:
+            metrics = cls._load_json_payload(row.metrics_json)
+            if not isinstance(metrics, dict):
+                metrics = {}
+            coverage = metrics.get("local_data_preflight")
+            state = str(coverage.get("state") or "").strip() if isinstance(coverage, dict) else ""
+            if state in summary:
+                summary[state] += 1
+            else:
+                summary["unknown"] += 1
+        return summary
+
+    @staticmethod
+    def _average_metric(values: List[float]) -> Optional[float]:
+        if not values:
+            return None
+        return round(sum(values) / len(values), 4)
+
+    @staticmethod
+    def _optional_float(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _optional_int(value: Any) -> Optional[int]:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _normalize_universe_result_sort(sort: str) -> str:
+        normalized = str(sort or "sequence_index").strip().lower()
+        allowed = {
+            "sequence_index",
+            "total_return_pct",
+            "max_drawdown_pct",
+            "win_rate_pct",
+            "trades_count",
+            "elapsed_ms",
+            "runtime_ms",
+            "symbol",
+            "status",
+        }
+        if normalized not in allowed:
+            raise ValueError(f"unsupported universe result sort: {sort}")
+        return normalized
+
+    @staticmethod
+    def _normalize_universe_result_order(order: str) -> str:
+        normalized = str(order or "asc").strip().lower()
+        if normalized not in {"asc", "desc"}:
+            raise ValueError("order must be asc or desc")
+        return normalized
+
+    @classmethod
+    def _filter_universe_rows(
+        cls,
+        rows: List[RuleBacktestUniverseSymbolResult],
+        *,
+        status: Optional[str],
+        reason_code: Optional[str],
+        symbol: Optional[str],
+        market: Optional[str],
+    ) -> List[RuleBacktestUniverseSymbolResult]:
+        normalized_status = str(status or "").strip()
+        normalized_reason = str(reason_code or "").strip()
+        normalized_symbol = str(symbol or "").strip().upper()
+        normalized_market = str(market or "").strip().lower()
+        filtered: List[RuleBacktestUniverseSymbolResult] = []
+        for row in rows:
+            if normalized_status and str(row.status or "") != normalized_status:
+                continue
+            if normalized_reason and str(row.reason_code or "") != normalized_reason:
+                continue
+            if normalized_symbol and not str(row.symbol or "").upper().startswith(normalized_symbol):
+                continue
+            if normalized_market and cls._infer_compare_market_from_code(
+                cls._canonicalize_compare_market_code(row.symbol)
+            ) != normalized_market:
+                continue
+            filtered.append(row)
+        return filtered
+
+    @classmethod
+    def _sort_universe_rows(
+        cls,
+        rows: List[RuleBacktestUniverseSymbolResult],
+        *,
+        sort: str,
+        order: str,
+    ) -> List[RuleBacktestUniverseSymbolResult]:
+        reverse = order == "desc"
+
+        def _sort_value(row: RuleBacktestUniverseSymbolResult) -> tuple[Any, int]:
+            if sort == "sequence_index":
+                return int(row.sequence_index), int(row.sequence_index)
+            if sort in {"elapsed_ms", "runtime_ms"}:
+                return int(row.runtime_ms or 0), int(row.sequence_index)
+            if sort == "symbol":
+                return str(row.symbol or ""), int(row.sequence_index)
+            if sort == "status":
+                return str(row.status or ""), int(row.sequence_index)
+            metrics = cls._load_json_payload(row.metrics_json)
+            if not isinstance(metrics, dict):
+                metrics = {}
+            value = cls._optional_float(metrics.get(sort))
+            if value is None:
+                value = float("-inf") if reverse else float("inf")
+            return value, int(row.sequence_index)
+
+        return sorted(rows, key=_sort_value, reverse=reverse)
 
     @staticmethod
     def _normalize_universe_symbols(symbols: List[str]) -> List[str]:
