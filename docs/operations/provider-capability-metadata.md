@@ -3,6 +3,11 @@
 Phase 1 adds an inert provider capability matrix at
 `src/services/provider_capability_matrix.py`.
 
+Phase 2 starts cache-first advisory planning in
+`src/services/provider_plan_advisor.py`. The advisor exposes deterministic
+helper functions for reviewing cache/local-first candidate order by domain,
+market, and mode. It is not wired into runtime provider execution.
+
 The matrix documents provider domains, market coverage, quota class, freshness
 class, recommended TTL hints, scanner/backtest eligibility, analysis-route
 eligibility, and domain priority hints. It is intended for reviews, tests, and
@@ -28,3 +33,8 @@ preselection or explicit research actions.
 Technical indicators should be computed locally from available OHLCV whenever
 possible. FMP is documented as fundamentals/statements-first. Alpha Vantage is
 documented as manual/deep last resort only.
+
+Advisory cache-first plans may include local pseudo-providers such as
+`local_cache`, `local_ohlcv`, `local_news_cache`, and `local_inference`. These
+labels are planning metadata only and must not upgrade stale, cached, fallback,
+mock, synthetic, or inferred data to live provider status.

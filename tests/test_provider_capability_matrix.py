@@ -36,6 +36,7 @@ EXPECTED_PROVIDER_IDS = {
     "finnhub",
     "alpha_vantage",
     "gnews",
+    "local_news_cache",
     "tavily",
     "social_sentiment",
     "local_inference",
@@ -80,7 +81,7 @@ def test_backtest_allows_only_local_or_cached_data_sources() -> None:
         if is_provider_allowed_for_backtest(capability.provider_id)
     }
 
-    assert allowed == {"local_cache", "local_ohlcv", "local_inference"}
+    assert allowed == {"local_cache", "local_news_cache", "local_ohlcv", "local_inference"}
     for capability in list_provider_capabilities():
         if capability.provider_id not in allowed:
             assert capability.backtest_usage is BacktestUsage.NEVER
