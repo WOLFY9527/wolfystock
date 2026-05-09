@@ -26,6 +26,15 @@ import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { scannerApi } from '../api/scanner';
 import { watchlistApi } from '../api/watchlist';
 import { ApiErrorAlert, Drawer, Pagination, PillBadge, SectionShell } from '../components/common';
+import {
+  TerminalButton,
+  TerminalChip,
+  TerminalEmptyState,
+  TerminalGrid,
+  TerminalNestedBlock,
+  TerminalPageShell,
+  TerminalPanel,
+} from '../components/terminal';
 import { getDefaultRuleDateRange } from '../components/backtest/shared';
 import { buildPointAndShootStrategyText } from '../components/backtest/strategyCatalog';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -193,15 +202,9 @@ function ScannerEmptyState({
   className?: string;
 }) {
   return (
-    <div className={`w-full flex flex-col items-center justify-center py-10 px-4 border border-white/5 border-dashed rounded-2xl bg-white/[0.01] ${className}`.trim()}>
-      <div className="w-10 h-10 rounded-full bg-white/[0.02] border border-white/5 flex items-center justify-center mb-3">
-        <svg className="w-5 h-5 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-      </div>
-      <p className="text-white/40 text-sm font-medium text-center">{title}</p>
-      <p className="text-white/20 text-xs mt-1 text-center">{body}</p>
-    </div>
+    <TerminalEmptyState title={title} className={`w-full ${className}`.trim()}>
+      {body}
+    </TerminalEmptyState>
   );
 }
 
@@ -1383,19 +1386,19 @@ function PillTagGroup({
 
 function FieldChip({ label, value }: { label: string; value: string }) {
   return (
-    <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-white/8 bg-white/[0.035] px-1.5 py-0.5 text-[10px] text-white/72">
+    <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
       <span className="shrink-0 text-white/36">{safeScannerFieldLabel(label)}</span>
       <span className="min-w-0 truncate">{value}</span>
-    </span>
+    </TerminalChip>
   );
 }
 
 function ScannerRunSummaryCard({ summary }: { summary: ScannerRunSummary }) {
   return (
-    <div className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-2.5" data-testid={`scanner-run-summary-${summary.title}`}>
+    <TerminalNestedBlock className="min-w-0 p-2.5" data-testid={`scanner-run-summary-${summary.title}`}>
       <div className="flex min-w-0 items-center justify-between gap-2">
         <span className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{summary.title}</span>
-        <span className="shrink-0 rounded border border-white/8 bg-white/[0.035] px-1.5 py-0.5 text-[10px] text-white/62">{summary.statusLabel}</span>
+        <TerminalChip variant="neutral" className="shrink-0 px-1.5 py-0.5 text-[10px] font-sans text-white/62">{summary.statusLabel}</TerminalChip>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px] sm:grid-cols-3">
         <FieldChip label="最佳候选" value={summary.bestCandidate} />
@@ -1409,7 +1412,7 @@ function ScannerRunSummaryCard({ summary }: { summary: ScannerRunSummary }) {
         运行时间：<span className="font-mono text-white/58">{summary.runTimeLabel}</span>
         {summary.errorSummary ? <span className="text-rose-200/80"> · {summary.errorSummary}</span> : null}
       </p>
-    </div>
+    </TerminalNestedBlock>
   );
 }
 
@@ -1433,7 +1436,7 @@ function ScannerResultHistorySummary({
 
   return (
     <section data-testid="scanner-result-history-summary" className="shrink-0 border-b border-white/5 px-3 py-2">
-      <div className="grid gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-2.5 backdrop-blur-md">
+      <TerminalPanel dense className="grid gap-2 p-2.5">
         <div className="flex min-w-0 items-center justify-between gap-2">
           <div className="min-w-0">
             <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'en' ? 'Result history' : '结果历史'}</h3>
@@ -1446,15 +1449,14 @@ function ScannerResultHistorySummary({
           </div>
         ) : null}
         {!hasHistory && !currentSummary ? (
-          <div data-testid="scanner-history-empty-state" className="rounded-xl border border-white/5 bg-black/20 px-3 py-2">
-            <p className="text-sm font-medium text-white/70">{language === 'en' ? 'No scan history yet' : '暂无历史扫描'}</p>
-            <p className="mt-1 text-xs text-white/38">{language === 'en' ? 'Run one scan to compare results.' : '运行一次扫描后可查看对比'}</p>
-          </div>
+          <TerminalEmptyState data-testid="scanner-history-empty-state" title={language === 'en' ? 'No scan history yet' : '暂无历史扫描'} className="min-h-[64px] px-3 py-2">
+            {language === 'en' ? 'Run one scan to compare results.' : '运行一次扫描后可查看对比'}
+          </TerminalEmptyState>
         ) : null}
         {currentSummary && !previousSummary ? (
-          <div data-testid="scanner-previous-empty-state" className="rounded-xl border border-white/5 bg-black/20 px-3 py-2 text-xs text-white/46">
+          <TerminalEmptyState data-testid="scanner-previous-empty-state" className="min-h-[56px] px-3 py-2">
             {language === 'en' ? 'No previous scan · run once more to compare.' : '暂无历史扫描 · 运行一次扫描后可查看对比'}
-          </div>
+          </TerminalEmptyState>
         ) : null}
         {comparisonItems.length ? (
           <div data-testid="scanner-run-comparison-compact" className="flex min-w-0 flex-wrap gap-1.5">
@@ -1463,7 +1465,7 @@ function ScannerResultHistorySummary({
             ))}
           </div>
         ) : null}
-      </div>
+      </TerminalPanel>
     </section>
   );
 }
@@ -1503,14 +1505,14 @@ function ScannerLaunchEvidenceSummary({
 
   return (
     <section data-testid="scanner-launch-evidence-summary" className="grid gap-2 border-b border-white/5 px-3 py-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(220px,0.8fr)]">
-      <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-3 backdrop-blur-md">
+      <TerminalPanel dense className="p-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="rounded-full border border-emerald-300/20 bg-emerald-300/[0.08] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-100/85">
+          <TerminalChip variant="success" className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-100/85">
             {stateLabel}
-          </span>
-          <span className="rounded-full border border-white/8 bg-white/[0.035] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/50">
+          </TerminalChip>
+          <TerminalChip variant="neutral" className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/50">
             {language === 'en' ? `${shortlistCount} candidates` : `${shortlistCount} 个候选`}
-          </span>
+          </TerminalChip>
           {generatedAt ? <span className="font-mono text-[11px] text-white/42">{formatTimestamp(generatedAt, language)}</span> : null}
         </div>
         <h2 className="mt-2 text-base font-semibold tracking-tight text-white">
@@ -1519,21 +1521,21 @@ function ScannerLaunchEvidenceSummary({
         <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-white/62">
           {decisionSummary ? [decisionSummary.reason, decisionSummary.data].filter(Boolean).join(language === 'en' ? ' · ' : ' · ') : nextStep}
         </p>
-      </div>
+      </TerminalPanel>
       <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
-        <div className="rounded-2xl border border-white/5 bg-black/20 p-3">
+        <TerminalNestedBlock>
           <span className="block text-[10px] font-bold uppercase tracking-widest text-white/38">{language === 'en' ? 'Evidence confidence' : '证据置信'}</span>
           <span className="mt-1 block font-mono text-lg font-semibold text-emerald-100">{decisionSummary?.best || '--'}</span>
-        </div>
-        <div className="rounded-2xl border border-white/5 bg-black/20 p-3">
+        </TerminalNestedBlock>
+        <TerminalNestedBlock>
           <span className="block text-[10px] font-bold uppercase tracking-widest text-white/38">{language === 'en' ? 'Data readiness' : '数据就绪'}</span>
           <span className="mt-1 block text-sm font-medium text-white/78">{readinessLabel}</span>
           <span className="mt-0.5 block text-[11px] text-white/42">{readinessPlainText}</span>
-        </div>
-        <div className="rounded-2xl border border-white/5 bg-black/20 p-3">
+        </TerminalNestedBlock>
+        <TerminalNestedBlock>
           <span className="block text-[10px] font-bold uppercase tracking-widest text-white/38">{language === 'en' ? 'Next observation' : '下一步观察'}</span>
           <span className="mt-1 block text-xs leading-relaxed text-white/62">{nextStep}</span>
-        </div>
+        </TerminalNestedBlock>
       </div>
     </section>
   );
@@ -1581,10 +1583,10 @@ function DetailSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-white/5 bg-black/20 p-2.5">
+    <TerminalPanel as="section" dense className="p-2.5">
       <h5 className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{title}</h5>
       {children}
-    </section>
+    </TerminalPanel>
   );
 }
 
@@ -1622,9 +1624,11 @@ function AdvancedDisclosure({
     : (title.match(/[A-Za-z]/) ? `Expand ${title}` : `展开 ${title}`);
 
   return (
-    <section
+    <TerminalPanel
+      as="section"
+      dense
       data-testid={testId}
-      className="rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 text-xs backdrop-blur-md transition-all hover:border-white/10"
+      className="px-2.5 py-2 text-xs"
     >
       <div className="flex min-w-0 items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -1652,7 +1656,7 @@ function AdvancedDisclosure({
         </button>
       </div>
       {open ? <div className="mt-2">{children}</div> : null}
-    </section>
+    </TerminalPanel>
   );
 }
 
@@ -3212,9 +3216,9 @@ const UserScannerPage: React.FC = () => {
 	          'bento-surface-root flex w-full flex-1 flex-col min-w-0 bg-transparent text-foreground',
 	        )}
 	      >
-	        <main
+	        <TerminalPageShell
 	          data-testid="user-scanner-workspace"
-	          className="w-full flex-1 flex flex-col min-w-0"
+	          className="flex-1 min-w-0"
 	        >
 	          {pageError ? (
 	            <div className="mx-3 mt-3 rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-100" role="alert" data-testid="scanner-page-error-summary">
@@ -3242,11 +3246,12 @@ const UserScannerPage: React.FC = () => {
             </div>
           ) : null}
 
-	          <div className="flex w-full flex-1 min-w-0 flex-col gap-3">
-	            <section
-	              data-testid="scanner-sidebar"
-	              className="order-2 flex w-full shrink-0 flex-col rounded-[16px] border border-white/5 bg-white/[0.015] p-3"
-	            >
+		          <TerminalGrid data-testid="scanner-workspace-grid" className="w-full flex-1 min-w-0">
+		            <TerminalPanel
+                  as="section"
+		              data-testid="scanner-control-rail"
+		              className="order-1 flex w-full shrink-0 flex-col xl:sticky xl:top-4 xl:col-span-3"
+		            >
 	              <SectionShell
 	                className="flex flex-col rounded-[24px] p-0 bg-transparent shadow-none"
 	                contentClassName="flex flex-col space-y-0"
@@ -3449,28 +3454,31 @@ const UserScannerPage: React.FC = () => {
                     </p>
                   ) : null}
                   <div className="mt-auto flex shrink-0 flex-col gap-2 pt-4 pb-4">
-                    <button
-                      ref={runScannerButton.ref}
-                      type="button"
-                      onClick={runScannerButton.onClick}
+	                    <TerminalButton
+	                      ref={runScannerButton.ref}
+	                      type="button"
+	                      onClick={runScannerButton.onClick}
                       onPointerUp={runScannerButton.onPointerUp}
-                      disabled={runDisabled}
-                      aria-busy={isRunning}
-                      data-testid="scanner-run-button"
-                      className="group flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-5 py-3 text-sm font-bold text-indigo-300 transition-all hover:border-indigo-500/50 hover:bg-indigo-500/20 hover:shadow-[0_0_20px_rgba(99,102,241,0.16)] active:scale-95 disabled:pointer-events-none disabled:opacity-60 disabled:shadow-none disabled:transform-none xl:sticky xl:bottom-0"
-                    >
-                      <Play className="h-4 w-4 group-hover:animate-pulse" />
-                      <span>{isRunning ? t('scanner.running') : t('scanner.run')}</span>
-                    </button>
+	                      disabled={runDisabled}
+	                      aria-busy={isRunning}
+	                      data-testid="scanner-run-button"
+	                      className="group flex w-full px-5 py-3 text-sm font-bold active:scale-95 disabled:pointer-events-none xl:sticky xl:bottom-0"
+                        variant="primary"
+	                    >
+	                      <Play className="h-4 w-4 group-hover:animate-pulse" />
+	                      <span>{isRunning ? t('scanner.running') : (language === 'zh' ? '启动扫描' : t('scanner.run'))}</span>
+	                    </TerminalButton>
                   </div>
                 </div>
               </SectionShell>
-            </section>
+	            </TerminalPanel>
 
-	            <section
-	              data-testid="scanner-results-pane"
-	              className="order-1 flex min-h-[520px] flex-1 min-w-0 flex-col rounded-[16px] border border-white/5 bg-white/[0.01]"
-	            >
+		            <TerminalPanel
+                  as="section"
+		              data-testid="scanner-results-stage"
+		              className="order-2 flex min-h-[520px] flex-1 min-w-0 flex-col xl:col-span-9"
+		            >
+              <div data-testid="scanner-results-pane" className="flex min-h-0 flex-1 min-w-0 flex-col">
               <div data-testid="user-scanner-bento-hero" className="flex shrink-0 flex-col gap-2 border-b border-white/5 px-3 py-2.5">
                 <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
                   <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-white/45">
@@ -3480,7 +3488,7 @@ const UserScannerPage: React.FC = () => {
                     </span>
                     {generatedAt ? <span>{formatTimestamp(generatedAt, language)}</span> : null}
                     {runDetail ? <span className="truncate">{`${runDetail.market.toUpperCase()} · ${runDetail.profileLabel || runDetail.profile}`}</span> : null}
-                  </div>
+	              </div>
                   <div className="flex min-w-0 flex-col gap-2 sm:items-end">
                     {runDetail && primarySelectedCandidate ? (
 	                      <div className="grid w-full min-w-0 grid-cols-1 gap-1.5 sm:w-auto sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -3574,7 +3582,7 @@ const UserScannerPage: React.FC = () => {
 	                              onClick={() => handleBacktestBatch('official_selected')}
 	                              disabled={isBacktestBatchRunning || backtestCounts.official_selected === 0}
 	                            />
-	                          </div>
+	              </div>
 	                            ) : null}
 	                          </div>
 	                        </div>
@@ -4382,9 +4390,10 @@ const UserScannerPage: React.FC = () => {
                   </div>
                 </div>
               ) : null}
-            </section>
-          </div>
-        </main>
+              </div>
+	            </TerminalPanel>
+		          </TerminalGrid>
+		        </TerminalPageShell>
       </div>
 
       <Drawer

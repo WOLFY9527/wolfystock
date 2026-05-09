@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -363,5 +364,21 @@ function escapeRegExp(value) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const result = scanProject();
   printReport(result);
-  process.exitCode = result.blocking.length > 0 ? 1 : 0;
+  const pythonGuard = path.resolve(ROOT_DIR, '..', '..', 'scripts', 'check_frontend_design_constitution.py');
+  let pythonExitCode = 0;
+  if (fs.existsSync(pythonGuard)) {
+    const pythonResult = spawnSync('python3', [pythonGuard], {
+      cwd: path.resolve(ROOT_DIR, '..', '..'),
+      encoding: 'utf8',
+      stdio: 'pipe',
+    });
+    if (pythonResult.stdout) {
+      process.stdout.write(`\n${pythonResult.stdout}`);
+    }
+    if (pythonResult.stderr) {
+      process.stderr.write(pythonResult.stderr);
+    }
+    pythonExitCode = pythonResult.status ?? 1;
+  }
+  process.exitCode = result.blocking.length > 0 || pythonExitCode > 0 ? 1 : 0;
 }

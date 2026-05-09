@@ -14,6 +14,17 @@ import {
   type DensityRailItem,
   type InsightItem,
 } from '../components/guidance';
+import {
+  TerminalButton,
+  TerminalChip,
+  TerminalEmptyState,
+  TerminalGrid,
+  TerminalMetric,
+  TerminalNestedBlock,
+  TerminalNotice,
+  TerminalPageShell,
+  TerminalPanel,
+} from '../components/terminal';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
   getSafariReadySurfaceClassName,
@@ -55,7 +66,7 @@ import type {
 } from '../types/portfolio';
 
 const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
-const PORTFOLIO_GLASS_CARD_CLASS = 'bg-white/[0.02] border border-white/5 backdrop-blur-md rounded-[16px] p-5 transition-all hover:border-white/10';
+const PORTFOLIO_GLASS_CARD_CLASS = 'bg-white/[0.02] border border-white/5 backdrop-blur-md rounded-[16px] p-5 transition-all hover:border-white/10'; // design-constitution-allow: legacy constant retained while panels migrate to TerminalPanel.
 const PORTFOLIO_FIELD_LABEL_CLASS = '!mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40';
 const PORTFOLIO_FIELD_WRAPPER_CLASS = 'flex flex-col gap-1.5';
 const PORTFOLIO_FORM_GRID_CLASS = 'mt-4 grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2';
@@ -159,7 +170,7 @@ function PortfolioSegmentedControl({
   dataTestId?: string;
 }) {
   return (
-    <div data-testid={dataTestId} className={`min-w-0 w-full max-w-full rounded-xl bg-white/[0.05] ${className}`}>
+    <TerminalNestedBlock data-testid={dataTestId} className={`min-w-0 w-full max-w-full p-0 ${className}`}>
       <SegmentedControl
         value={value}
         options={options}
@@ -171,7 +182,7 @@ function PortfolioSegmentedControl({
         inactiveButtonClassName="bg-transparent text-white/40 hover:bg-transparent hover:text-white/70"
         size="sm"
       />
-    </div>
+    </TerminalNestedBlock>
   );
 }
 
@@ -1563,17 +1574,13 @@ const PortfolioPage: React.FC = () => {
     return formatMoney(value, currency);
   };
   const renderPnlTile = (key: 'realized' | 'unrealized' | 'total', value: number, converted: ConvertedMoney) => (
-    <div data-testid={`portfolio-pnl-${key}`} className="rounded-xl bg-white/[0.025] px-3 py-3">
-      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{pnlLabels[key]}</div>
-      <div className={`mt-1 font-mono text-sm tabular-nums ${value >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-        {converted ? formatSignedMoney(converted.value, displayCurrency) : formatSignedMoney(value, pnlSourceCurrency)}
-      </div>
-      {pnlSourceCurrency !== displayCurrency ? (
-        <div className="mt-1 truncate font-mono text-[11px] text-white/35">
-          {pnlLabels.native} {formatSignedMoney(value, pnlSourceCurrency)}
-        </div>
-      ) : null}
-    </div>
+    <TerminalMetric
+      data-testid={`portfolio-pnl-${key}`}
+      label={pnlLabels[key]}
+      value={converted ? formatSignedMoney(converted.value, displayCurrency) : formatSignedMoney(value, pnlSourceCurrency)}
+      valueClassName={value >= 0 ? 'text-emerald-400' : 'text-rose-400'}
+      subvalue={pnlSourceCurrency !== displayCurrency ? `${pnlLabels.native} ${formatSignedMoney(value, pnlSourceCurrency)}` : undefined}
+    />
   );
   const renderExposureValue = (row: PortfolioExposureItem) => {
     const currency = row.displayCurrency || snapshotCurrency;
@@ -1753,7 +1760,7 @@ const PortfolioPage: React.FC = () => {
   ) => {
     const values = renderExposureValue(row);
     return (
-      <div key={`${options.testIdPrefix}-${row.key}`} data-testid={`${options.testIdPrefix}-${row.key}`} className="min-w-0 rounded-lg bg-white/[0.025] px-3 py-2">
+      <TerminalNestedBlock key={`${options.testIdPrefix}-${row.key}`} data-testid={`${options.testIdPrefix}-${row.key}`} className="min-w-0 px-3 py-2">
         <div className="flex min-w-0 items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="truncate text-xs font-medium text-white">{options.label || row.label || row.key}</div>
@@ -1764,11 +1771,11 @@ const PortfolioPage: React.FC = () => {
             {options.showNative && values.native ? <div className="mt-0.5 font-mono text-[10px] text-white/35">{values.native}</div> : null}
           </div>
         </div>
-      </div>
+      </TerminalNestedBlock>
     );
   };
   const renderContributorRow = (row: PortfolioExposureItem, toneClass: string, prefix: string) => (
-    <div key={`${prefix}-${row.key}`} data-testid={`${prefix}-${row.key}`} className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-white/[0.025] px-3 py-2">
+    <TerminalNestedBlock key={`${prefix}-${row.key}`} data-testid={`${prefix}-${row.key}`} className="flex min-w-0 items-center justify-between gap-3 px-3 py-2">
       <div className="min-w-0">
         <div className="truncate text-xs font-medium text-white">{row.label || row.symbol || row.key}</div>
         <div className="mt-0.5 font-mono text-[11px] text-white/40">{formatPercent(row.unrealizedPnlPct)}</div>
@@ -1776,7 +1783,7 @@ const PortfolioPage: React.FC = () => {
       <div className={`shrink-0 font-mono text-xs tabular-nums ${toneClass}`}>
         {formatSignedMoney(Number(row.unrealizedPnl || 0), row.displayCurrency || snapshotCurrency)}
       </div>
-    </div>
+    </TerminalNestedBlock>
   );
 
   const renderTradeActions = (item: PortfolioTradeListItem, context: 'history' | 'recent') => {
@@ -1803,9 +1810,9 @@ const PortfolioPage: React.FC = () => {
             {moreTradeActionsLabel}
           </Button>
           {isOpen ? (
-            <div
+            <TerminalNestedBlock
               data-testid={`${menuKey}-menu`}
-              className="absolute right-0 z-20 mt-2 flex min-w-[132px] flex-col gap-1 rounded-xl border border-white/10 bg-[#0f1726] p-2 shadow-2xl"
+              className="absolute right-0 z-20 mt-2 flex min-w-[132px] flex-col gap-1 bg-[#0f1726] p-2 shadow-2xl"
             >
               <Button type="button" variant="ghost" className="justify-start rounded-lg px-2 text-xs text-white/75" onClick={() => openTradeEditor(item)}>
                 <PenSquare className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1815,7 +1822,7 @@ const PortfolioPage: React.FC = () => {
                 <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                 {deleteTradeActionLabel}
               </Button>
-            </div>
+            </TerminalNestedBlock>
           ) : null}
         </div>
       );
@@ -2022,9 +2029,7 @@ const PortfolioPage: React.FC = () => {
           ))}
         </div>
       ) : (
-        <div className="min-h-[72px] rounded-xl border border-white/[0.02] bg-black/20 px-4 py-3 text-xs text-white/35">
-          {emptyRecentActivityLabel}
-        </div>
+        <TerminalEmptyState title={emptyRecentActivityLabel} className="min-h-[72px]" />
       )}
     </section>
   );
@@ -2054,20 +2059,22 @@ const PortfolioPage: React.FC = () => {
           'w-full flex-1 flex flex-col gap-5 min-h-0 min-w-0 bg-transparent text-white/72',
         )}
       >
-        <section className="w-full max-w-[1600px] mx-auto px-4 xl:px-8 flex flex-col gap-6">
-          <div data-testid="portfolio-workspace-grid" className="flex flex-col gap-5">
-            <div data-testid="portfolio-row-status" className="order-1 grid grid-cols-1 gap-4 xl:grid-cols-12">
-              <section
+        <TerminalPageShell>
+          <TerminalGrid data-testid="portfolio-workspace-grid">
+            <div data-testid="portfolio-row-status" className="order-1 xl:col-span-12">
+              <TerminalPanel
+                as="section"
+                dense
                 data-testid="portfolio-account-status-strip"
-                className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-12 grid gap-4 p-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.5fr)_auto] md:items-center`}
+                className="order-1 col-span-12 grid gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.5fr)_auto] md:items-center xl:col-span-12"
               >
                 <div data-testid="portfolio-total-assets-card" className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <h1 className="text-[10px] font-bold uppercase tracking-widest text-white/40">{totalAssetsTitle}</h1>
-                    <span className="rounded-md border border-white/5 bg-black/20 px-2 py-1 text-[10px] font-semibold text-white/35">
+                    <TerminalChip variant="neutral">
                       {selectedAccount === 'all' ? copy.allAccounts : scopedAccount?.name || copy.allAccounts}
-                    </span>
-                    {hasFxUnavailable ? <PillBadge variant="warning" className="text-amber-200">{fxUnavailableLabel}</PillBadge> : null}
+                    </TerminalChip>
+                    {hasFxUnavailable ? <TerminalChip variant="caution">{fxUnavailableLabel}</TerminalChip> : null}
                   </div>
                   <div
                     data-testid="portfolio-total-assets-value"
@@ -2082,38 +2089,28 @@ const PortfolioPage: React.FC = () => {
                 </div>
 
                 <div className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-4">
-                  <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">{copy.totalCash}</div>
-                    <div className="mt-1 truncate font-mono text-xs text-white">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</div>
-                  </div>
-                  <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">{copy.positionUnrealized}</div>
-                    <div className={`mt-1 truncate font-mono text-xs ${totalUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {totalUnrealizedDisplay ? formatSignedMoney(totalUnrealizedDisplay.value, displayCurrency) : formatSignedMoney(0, displayCurrency)}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">{language === 'zh' ? '持仓数' : 'Holdings'}</div>
-                    <div className="mt-1 font-mono text-xs text-white">{positionRows.length}</div>
-                  </div>
-                  <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">{language === 'zh' ? '账户状态' : 'Account'}</div>
-                    <div className="mt-1 truncate text-xs text-white">{accountStateSummary}</div>
-                  </div>
+                  <TerminalMetric label={copy.totalCash} value={formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)} />
+                  <TerminalMetric
+                    label={copy.positionUnrealized}
+                    value={totalUnrealizedDisplay ? formatSignedMoney(totalUnrealizedDisplay.value, displayCurrency) : formatSignedMoney(0, displayCurrency)}
+                    valueClassName={totalUnrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}
+                  />
+                  <TerminalMetric label={language === 'zh' ? '持仓数' : 'Holdings'} value={positionRows.length} />
+                  <TerminalMetric label={language === 'zh' ? '账户状态' : 'Account'} value={accountStateSummary} valueClassName="text-xs font-sans" />
                 </div>
 
                 <div className="flex min-w-0 flex-wrap gap-2 md:justify-end">
-                  <Button type="button" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} h-9 px-3`} onClick={() => openManualLedger('trade', 'stock')}>
+                  <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={() => openManualLedger('trade', 'stock')}>
                     {addHoldingActionLabel}
-                  </Button>
-                  <Button type="button" variant="secondary" className={PORTFOLIO_SECONDARY_BUTTON_CLASS} onClick={() => openManualLedger('sync')}>
+                  </TerminalButton>
+                  <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
                     {importTradesActionLabel}
-                  </Button>
-                  <Button type="button" variant="ghost" className={PORTFOLIO_SECONDARY_BUTTON_CLASS} onClick={() => openManualLedger('trade')}>
+                  </TerminalButton>
+                  <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('trade')}>
                     {manualLedgerActionLabel}
-                  </Button>
+                  </TerminalButton>
                 </div>
-              </section>
+              </TerminalPanel>
             </div>
 
             <div data-testid="portfolio-row-macro" className="hidden">
@@ -2168,58 +2165,39 @@ const PortfolioPage: React.FC = () => {
                     <div data-testid="portfolio-ledger-disclosure" className="mt-3 max-w-2xl text-xs leading-5 text-white/45">
                       {manualLedgerDisclosure}
                     </div>
-                  </div>
-                  <div className="grid min-w-0 grid-cols-2 gap-2">
-                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.totalMarketValue}</div>
-                      <div className="mt-1 font-mono text-sm text-white tabular-nums">{formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}</div>
-                    </div>
-                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.totalCash}</div>
-                      <div className="mt-1 font-mono text-sm text-white tabular-nums">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</div>
-                    </div>
-                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.positionUnrealized}</div>
-                      <div className={`mt-1 font-mono text-sm tabular-nums ${totalUnrealizedPnl >= 0 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]' : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'}`}>
-                        {totalUnrealizedDisplay ? formatSignedMoney(totalUnrealizedDisplay.value, displayCurrency) : formatSignedMoney(0, displayCurrency)}
-                      </div>
-                    </div>
-                    <div className="rounded-xl bg-white/[0.025] px-3 py-3">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{copy.accountCount}</div>
-                      <div className="mt-1 font-mono text-sm text-white tabular-nums">{snapshot?.accountCount ?? activeAccounts.length}</div>
-                    </div>
-                  </div>
-                </div>
+	                  </div>
+	                  <div className="grid min-w-0 grid-cols-2 gap-2">
+	                    <TerminalMetric label={copy.totalMarketValue} value={formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)} valueClassName="text-sm tabular-nums" />
+	                    <TerminalMetric label={copy.totalCash} value={formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)} valueClassName="text-sm tabular-nums" />
+	                    <TerminalMetric
+	                      label={copy.positionUnrealized}
+	                      value={totalUnrealizedDisplay ? formatSignedMoney(totalUnrealizedDisplay.value, displayCurrency) : formatSignedMoney(0, displayCurrency)}
+	                      valueClassName={`text-sm tabular-nums ${totalUnrealizedPnl >= 0 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]' : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'}`}
+	                    />
+	                    <TerminalMetric label={copy.accountCount} value={snapshot?.accountCount ?? activeAccounts.length} valueClassName="text-sm tabular-nums" />
+	                  </div>
+	                </div>
 
-                <div
-                  data-testid="portfolio-mobile-priority-summary"
-                  className="grid gap-2 rounded-[16px] border border-white/5 bg-white/[0.02] p-3 md:hidden"
-                >
-                  <div className="flex items-center justify-between gap-3 rounded-xl bg-black/20 px-3 py-2.5">
-                    <span className="text-[11px] text-white/42">{language === 'zh' ? '账户状态' : 'Account state'}</span>
-                    <span className="min-w-0 truncate text-right text-sm font-semibold text-cyan-100">{accountStateSummary}</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="min-w-0 rounded-xl bg-black/20 px-2.5 py-2">
-                      <div className="text-[10px] text-white/38">{holdingsSnapshotTitle}</div>
-                      <div className="mt-1 truncate text-xs font-semibold text-white">{holdingsPrimaryValue}</div>
-                    </div>
-                    <div className="min-w-0 rounded-xl bg-black/20 px-2.5 py-2">
-                      <div className="text-[10px] text-white/38">{cashSnapshotTitle}</div>
-                      <div className="mt-1 truncate font-mono text-xs font-semibold text-white">{cashPrimaryValue}</div>
-                    </div>
-                    <div className="min-w-0 rounded-xl bg-black/20 px-2.5 py-2">
-                      <div className="text-[10px] text-white/38">{exposureSnapshotTitle}</div>
-                      <div className="mt-1 truncate text-xs font-semibold text-white">{exposurePrimaryValue}</div>
-                    </div>
-                  </div>
-                  <div className="rounded-xl bg-black/20 px-3 py-2.5">
-                    <div className="text-[10px] text-white/38">{language === 'zh' ? '关注与风险摘要' : 'Attention and Risk Summary'}</div>
-                    <div className="mt-1 text-xs leading-5 text-white/66">
-                      {(attentionItems.length ? attentionItems : [language === 'zh' ? '暂无需要处理项' : 'No attention items']).slice(0, 3).join(' · ')}
-                    </div>
-                  </div>
-                </div>
+	                <TerminalPanel
+	                  data-testid="portfolio-mobile-priority-summary"
+	                  className="grid gap-2 p-3 md:hidden"
+	                >
+	                  <TerminalNestedBlock className="flex items-center justify-between gap-3 px-3 py-2.5">
+	                    <span className="text-[11px] text-white/42">{language === 'zh' ? '账户状态' : 'Account state'}</span>
+	                    <span className="min-w-0 truncate text-right text-sm font-semibold text-cyan-100">{accountStateSummary}</span>
+	                  </TerminalNestedBlock>
+	                  <div className="grid grid-cols-3 gap-2">
+	                    <TerminalMetric label={holdingsSnapshotTitle} value={holdingsPrimaryValue} className="min-w-0 px-2.5 py-2" valueClassName="truncate text-xs font-semibold" />
+	                    <TerminalMetric label={cashSnapshotTitle} value={cashPrimaryValue} className="min-w-0 px-2.5 py-2" valueClassName="truncate text-xs font-semibold" />
+	                    <TerminalMetric label={exposureSnapshotTitle} value={exposurePrimaryValue} className="min-w-0 px-2.5 py-2" valueClassName="truncate text-xs font-semibold" />
+	                  </div>
+	                  <TerminalNestedBlock className="px-3 py-2.5">
+	                    <div className="text-[10px] text-white/38">{language === 'zh' ? '关注与风险摘要' : 'Attention and Risk Summary'}</div>
+	                    <div className="mt-1 text-xs leading-5 text-white/66">
+		                      {(attentionItems.length ? attentionItems : [language === 'zh' ? '暂无需要处理项' : 'No attention items']).slice(0, 3).join(' · ')}
+		                    </div>
+	                  </TerminalNestedBlock>
+	                </TerminalPanel>
 
                 <div data-testid="portfolio-first-fold-primary-grid" className="hidden gap-3 md:grid md:grid-cols-3">
                   <MetricNarrativeCard
@@ -2282,7 +2260,7 @@ const PortfolioPage: React.FC = () => {
                         className="md:max-w-none"
                       />
                     </div>
-                    <div data-testid="portfolio-currency-breakdown" className="rounded-xl bg-white/[0.025] px-3 py-3">
+	                    <TerminalNestedBlock data-testid="portfolio-currency-breakdown" className="px-3 py-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{currencyBreakdownTitle}</span>
                         <a
@@ -2314,18 +2292,18 @@ const PortfolioPage: React.FC = () => {
                       >
                         {copy.refreshFx}
                       </Button>
-                      {fxRefreshFeedback && leftTab !== 'fx' ? (
-                        <div className={`mt-2 text-xs ${
-                          fxRefreshFeedback.tone === 'success'
-                            ? 'text-emerald-300'
+	                      {fxRefreshFeedback && leftTab !== 'fx' ? (
+	                        <div className={`mt-2 text-xs ${
+	                          fxRefreshFeedback.tone === 'success'
+	                            ? 'text-emerald-300'
                             : fxRefreshFeedback.tone === 'warning'
                               ? 'text-amber-200'
                               : 'text-secondary-text'
                         }`}>
-                          {fxRefreshFeedback.text}
-                        </div>
-                      ) : null}
-                    </div>
+	                          {fxRefreshFeedback.text}
+	                        </div>
+	                      ) : null}
+	                    </TerminalNestedBlock>
                   </div>
                 </div>
                 <div data-testid="portfolio-manual-secondary-callout">
@@ -2353,19 +2331,21 @@ const PortfolioPage: React.FC = () => {
             </div>
 
             <div data-testid="portfolio-row-routing" className="order-3 grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
-	            <section
-	              data-testid="portfolio-pnl-summary"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-6 grid gap-2 sm:grid-cols-3`}
-	            >
+              <TerminalPanel
+                as="section"
+                data-testid="portfolio-pnl-summary"
+                className="xl:col-span-6 grid gap-2 sm:grid-cols-3"
+              >
 	              {renderPnlTile('realized', realizedPnl, realizedPnlDisplay)}
 	              {renderPnlTile('unrealized', unrealizedPnl, unrealizedPnlDisplay)}
 	              {renderPnlTile('total', totalPnl, totalPnlDisplay)}
-	            </section>
+              </TerminalPanel>
 
-	            <section
-	              data-testid="portfolio-exposure-card"
-	              className={`${PORTFOLIO_GLASS_CARD_CLASS} xl:col-span-6 flex flex-col gap-4`}
-	            >
+		            <TerminalPanel
+                  as="section"
+		              data-testid="portfolio-exposure-card"
+		              className="xl:col-span-6 flex flex-col gap-4"
+		            >
 	              <div className="flex flex-wrap items-center justify-between gap-3">
 	                <h2 className="text-xs uppercase tracking-widest text-muted-text">{exposureTitle}</h2>
 	                <PortfolioSegmentedControl
@@ -2418,15 +2398,16 @@ const PortfolioPage: React.FC = () => {
 	                  {hasHoldings ? exposureEmpty : analyticsEmptyText}
 	                </div>
 	              )}
-	            </section>
+		              </TerminalPanel>
 
             </div>
 
             <div data-testid="portfolio-summary-and-holdings-row" className="order-2 grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
-		              <div
-		                data-testid="portfolio-current-holdings-panel"
-		                className={`${PORTFOLIO_GLASS_CARD_CLASS} order-1 col-span-12 flex flex-col overflow-visible xl:col-span-8`}
-		              >
+			              <TerminalPanel
+                      as="section"
+			                data-testid="portfolio-current-holdings-panel"
+			                className="order-1 col-span-12 flex flex-col overflow-visible xl:col-span-8"
+			              >
 		                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 pb-4">
 		                  <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
 			                    {hasHoldings
@@ -2478,33 +2459,31 @@ const PortfolioPage: React.FC = () => {
                           </table>
                         </div>
                       ) : (
-                        <div data-testid="portfolio-empty-workflow-column" className="min-w-0">
-                          <div
-                            data-testid="portfolio-start-card"
-                            className="flex min-h-[88px] items-center justify-between gap-3 rounded-xl border border-white/[0.02] bg-black/20 px-4 py-3"
-                          >
-                            <div className="min-w-0">
-                              <h2 className="text-sm font-semibold text-white/78">{language === 'zh' ? '暂无持仓' : 'No holdings'}</h2>
-                              <p className="mt-1 text-xs leading-5 text-white/35">{compactNoHoldingText}</p>
-                            </div>
-                            {hasHistory ? <PillBadge variant="warning" className="shrink-0 text-amber-200">{noHoldingsHistoryNote}</PillBadge> : null}
-                          </div>
-                          {!hasWritableAccounts ? (
-                            <div className="mt-3 rounded-lg border border-amber-300/15 bg-white/[0.02] px-3 py-2 text-xs text-amber-200">
-                              {hasActiveAccounts
-                                ? (language === 'zh' ? '当前账户不可写，请选择具体可写账户。' : 'Current accounts are not writable. Select a writable account.')
-                                : (language === 'zh' ? '暂无可写账户，请先创建账户。' : 'No writable account yet. Create an account first.')}
-                            </div>
-                          ) : null}
-                        </div>
+	                        <div data-testid="portfolio-empty-workflow-column" className="min-w-0">
+	                          <TerminalEmptyState
+	                            data-testid="portfolio-start-card"
+	                            title={language === 'zh' ? '暂无持仓' : 'No holdings'}
+                              action={hasHistory ? <TerminalChip variant="caution" className="shrink-0">{noHoldingsHistoryNote}</TerminalChip> : undefined}
+	                          >
+	                            {compactNoHoldingText}
+	                          </TerminalEmptyState>
+	                          {!hasWritableAccounts ? (
+	                            <TerminalNotice variant="caution" className="mt-3">
+	                              {hasActiveAccounts
+	                                ? (language === 'zh' ? '当前账户不可写，请选择具体可写账户。' : 'Current accounts are not writable. Select a writable account.')
+	                                : (language === 'zh' ? '暂无可写账户，请先创建账户。' : 'No writable account yet. Create an account first.')}
+	                            </TerminalNotice>
+	                          ) : null}
+	                        </div>
                       )}
 		                </div>
-		              </div>
+			              </TerminalPanel>
 
-                  <section
-                    data-testid="portfolio-risk-card"
-                    className={`${PORTFOLIO_GLASS_CARD_CLASS} order-2 col-span-12 flex flex-col gap-3 xl:col-span-4`}
-                  >
+	                  <TerminalPanel
+                      as="section"
+	                    data-testid="portfolio-risk-card"
+	                    className="order-2 col-span-12 flex flex-col gap-3 xl:col-span-4"
+	                  >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <h2 className="text-[10px] font-bold uppercase tracking-widest text-white/40">{riskTitle}</h2>
@@ -2645,11 +2624,11 @@ const PortfolioPage: React.FC = () => {
                         </div>
                       </div>
                     )}
-                  </section>
+	                  </TerminalPanel>
 
                   {!hasHoldings ? recentActivityContent : null}
 
-			          <section data-testid="portfolio-trade-station-card" data-execution-surface="manual-record-entry" className={`${PORTFOLIO_GLASS_CARD_CLASS} order-4 col-span-12 flex flex-col gap-4 overflow-visible xl:col-span-4 xl:min-h-0`}>
+				          <TerminalPanel as="section" data-testid="portfolio-trade-station-card" data-execution-surface="manual-record-entry" className="order-4 col-span-12 flex flex-col gap-4 overflow-visible xl:col-span-4 xl:min-h-0">
             <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -3008,23 +2987,23 @@ const PortfolioPage: React.FC = () => {
                       options={FX_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
                     />
                   </div>
-	                  <div className="rounded-2xl bg-white/[0.025] px-4 py-5">
-	                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">
-	                      {fxBaseCurrency}/{fxQuoteCurrency}
-	                    </div>
+		                  <TerminalNestedBlock className="px-4 py-5">
+		                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">
+		                      {fxBaseCurrency}/{fxQuoteCurrency}
+		                    </div>
 	                    <div data-testid="portfolio-fx-rate-value" className="mt-2 flex items-baseline gap-1.5 whitespace-nowrap">
 	                      <span className="text-sm text-white/60">1 {fxBaseCurrency} =</span>
 	                      {' '}
 	                      <span className="font-mono text-xl text-indigo-400">{selectedFxRate ? formatFxRate(selectedFxRate.rate) : '--'}</span>
 	                      {' '}
-	                      <span className="text-sm text-white/60">{fxQuoteCurrency}</span>
-	                    </div>
-	                    <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
-	                      <span className="truncate">{selectedFxRate?.provider || 'frankfurter'}</span>
-		                      <span>{selectedFxRate?.cacheHit ? (language === 'zh' ? '缓存' : 'CACHE') : (language === 'zh' ? '实时' : 'LIVE')}</span>
-	                      {selectedFxRate?.isStale ? <span className="text-amber-300">{copy.fxStale}</span> : null}
-	                    </div>
-	                  </div>
+		                      <span className="text-sm text-white/60">{fxQuoteCurrency}</span>
+		                    </div>
+		                    <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+		                      <span className="truncate">{selectedFxRate?.provider || 'frankfurter'}</span>
+			                      <span>{selectedFxRate?.cacheHit ? (language === 'zh' ? '缓存' : 'CACHE') : (language === 'zh' ? '实时' : 'LIVE')}</span>
+		                      {selectedFxRate?.isStale ? <span className="text-amber-300">{copy.fxStale}</span> : null}
+		                    </div>
+		                  </TerminalNestedBlock>
 	                  <Button
 	                    type="button"
 	                    variant="primary"
@@ -3054,16 +3033,16 @@ const PortfolioPage: React.FC = () => {
             </div>
               </details>
             </div>
-          </section>
+          </TerminalPanel>
+        </div>
 
             {shouldRenderFullHistory ? (
-              <section data-testid="portfolio-history-full" className={`${PORTFOLIO_GLASS_CARD_CLASS} order-4 col-span-12 flex flex-col overflow-hidden ${currentEventCount > 5 ? 'max-h-[640px] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]' : 'max-h-none'}`}>
+              <TerminalPanel as="section" data-testid="portfolio-history-full" className={`order-4 col-span-12 flex flex-col overflow-hidden ${currentEventCount > 5 ? 'max-h-[640px] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]' : 'max-h-none'}`}>
                 {historyPanelContent}
-              </section>
+              </TerminalPanel>
             ) : null}
-          </div>
-        </div>
-      </section>
+          </TerminalGrid>
+      </TerminalPageShell>
     </div>
 
       <Drawer

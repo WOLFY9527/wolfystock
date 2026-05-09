@@ -1,0 +1,254 @@
+#!/usr/bin/env python3
+"""Lightweight WolfyStock frontend design-constitution guard."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+import re
+import sys
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCAN_ROOTS = [
+    ROOT / "apps" / "dsa-web" / "src" / "pages",
+    ROOT / "apps" / "dsa-web" / "src" / "components",
+]
+
+MIGRATED_PAGES = {
+    "apps/dsa-web/src/pages/PortfolioPage.tsx",
+    "apps/dsa-web/src/pages/UserScannerPage.tsx",
+}
+
+USER_PAGE_PARTS = (
+    "/PortfolioPage.tsx",
+    "/UserScannerPage.tsx",
+    "/OptionsLabPage.tsx",
+    "/HomeBentoDashboardPage.tsx",
+    "/MarketOverviewPage.tsx",
+    "/BacktestPage.tsx",
+    "/DeterministicBacktestResultPage.tsx",
+    "/ChatPage.tsx",
+)
+
+INTERNAL_TERMS = (
+    "开发者详情",
+    "provider_timeout",
+    "not_enough_history",
+    "fundamentals_unavailable",
+    "optional_news_timeout",
+    "LLM Ledger",
+    "QUOTA PILOT",
+    "MarketCache",
+    "local_db",
+    "generatedCandidates",
+    "failedCandidates",
+    "fixture",
+    "mock",
+)
+
+RAW_VISIBLE_TERMS = ("raw", "debug", "schema", "trace")
+
+SOLID_WRAPPER_RE = re.compile(r"\bbg-(?:black|\[#000\]|\[#050505\]|gray-\S+|zinc-\S+|slate-\S+|neutral-\S+)")
+LOUD_WARNING_RE = re.compile(r"\bbg-(yellow|amber)-(\d{2,3})(?:/(\d+))?\b")
+HAND_ROLLED_MATERIAL_RE = re.compile(
+    r"className=.*(?:rounded-(?:xl|2xl|\[16px\])|border\s+border-white/5|bg-white/\[0\.02\]|bg-white/\[0\.025\])"
+)
+NATIVE_CONTROL_RE = re.compile(r"<(?:select|input)\b(?:(?!className=).)*>", re.DOTALL)
+
+
+@dataclass(frozen=True)
+class Finding:
+    rule: str
+    path: str
+    line: int
+    message: str
+    excerpt: str
+
+
+@dataclass(frozen=True)
+class ScanResult:
+    findings: list[Finding]
+
+
+def rel(path: Path) -> str:
+    return path.relative_to(ROOT).as_posix()
+
+
+def iter_files() -> list[Path]:
+    files: list[Path] = []
+    for root in SCAN_ROOTS:
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if path.suffix not in {".tsx", ".ts"}:
+                continue
+            relative = rel(path)
+            if "__tests__" in relative or relative.endswith(".test.tsx") or relative.endswith(".test.ts"):
+                continue
+            files.append(path)
+    return sorted(files)
+
+
+def line_number(text: str, offset: int) -> int:
+    return text.count("\n", 0, offset) + 1
+
+
+def is_user_page(path: str) -> bool:
+    return any(path.endswith(part.lstrip("/")) or path.endswith(part) for part in USER_PAGE_PARTS)
+
+
+def is_guarded_file(path: str) -> bool:
+    return path in MIGRATED_PAGES or path.startswith("apps/dsa-web/src/components/terminal/")
+
+
+def is_loud_warning_material(line: str) -> bool:
+    for match in LOUD_WARNING_RE.finditer(line):
+        if match.group(3) is None and line[match.end():].startswith('/['):
+            continue
+        opacity = int(match.group(3) or "100")
+        if opacity >= 20:
+            return True
+    return False
+
+
+def is_visible_line(line: str) -> bool:
+    stripped = line.strip()
+    if stripped.startswith("//") or stripped.startswith("*"):
+        return False
+    return any(token in stripped for token in (">", "title=", "label=", "placeholder=", "summary", "message", "body", "description"))
+
+
+def add(finding_list: list[Finding], rule: str, path: str, text: str, offset: int, message: str, excerpt: str) -> None:
+    finding_list.append(Finding(rule=rule, path=path, line=line_number(text, offset), message=message, excerpt=excerpt.strip()[:180]))
+
+
+def scan_text(path: str, text: str) -> ScanResult:
+    findings: list[Finding] = []
+    normalized = path.replace("\\", "/")
+    lines = text.splitlines()
+    guarded = is_guarded_file(normalized)
+
+    for index, line in enumerate(lines):
+        if "design-constitution-allow" in line:
+            continue
+        lower_line = line.lower()
+        likely_wrapper = (
+            "<main" in line
+            or "terminalpageshell" in lower_line
+            or (
+                "data-testid" in line
+                and any(token in lower_line for token in ("page", "workspace", "root", "shell", "stage"))
+            )
+        )
+        if guarded and SOLID_WRAPPER_RE.search(line) and likely_wrapper:
+            if "bg-black/20" not in line and "TerminalNestedBlock" not in line:
+                findings.append(Finding(
+                    rule="page-level-solid-slab",
+                    path=normalized,
+                    line=index + 1,
+                    message="Avoid page-level solid black/gray/zinc/slate/neutral slabs; use terminal shell/panel primitives.",
+                    excerpt=line.strip()[:180],
+                ))
+        if guarded and is_loud_warning_material(line):
+            findings.append(Finding(
+                rule="loud-warning-material",
+                path=normalized,
+                line=index + 1,
+                message="Avoid loud yellow/amber warning slabs; use TerminalNotice or TerminalChip caution.",
+                excerpt=line.strip()[:180],
+            ))
+        if guarded and is_user_page(normalized) and is_visible_line(line):
+            lowered = line.lower()
+            for term in INTERNAL_TERMS:
+                if term.lower() in lowered:
+                    findings.append(Finding(
+                        rule="user-facing-internal-term",
+                        path=normalized,
+                        line=index + 1,
+                        message="User pages must map internal/debug terms to plain Chinese or hide them in disclosure.",
+                        excerpt=line.strip()[:180],
+                    ))
+                    break
+            for term in RAW_VISIBLE_TERMS:
+                if re.search(rf"\b{re.escape(term)}\b", lowered):
+                    findings.append(Finding(
+                        rule="user-facing-internal-term",
+                        path=normalized,
+                        line=index + 1,
+                        message="Raw/debug/schema/trace wording must not be visible on user pages by default.",
+                        excerpt=line.strip()[:180],
+                    ))
+                    break
+
+    if normalized in MIGRATED_PAGES and "Terminal" not in text:
+        findings.append(Finding(
+            rule="migrated-page-terminal-primitives",
+            path=normalized,
+            line=1,
+            message="Migrated pages must import and use terminal primitives.",
+            excerpt="missing Terminal primitive import/use",
+        ))
+
+    if normalized in MIGRATED_PAGES and "Terminal" not in text:
+        for match in HAND_ROLLED_MATERIAL_RE.finditer(text):
+            start = match.start()
+            context = text[max(0, start - 160): start + 260]
+            if "Terminal" in context or "design-constitution-allow" in context:
+                continue
+            add(
+                findings,
+                "migrated-page-terminal-primitives",
+                normalized,
+                text,
+                start,
+                "Migrated pages should use TerminalPanel/TerminalNestedBlock/TerminalButton/TerminalChip instead of page-local material classes.",
+                match.group(0),
+            )
+            break
+
+    if not guarded:
+        return ScanResult(findings=findings)
+
+    for match in NATIVE_CONTROL_RE.finditer(text):
+        tag = match.group(0)
+        if "appearance-none" in tag or "select-surface" in tag or "design-constitution-allow" in tag:
+            continue
+        add(
+            findings,
+            "native-control-style",
+            normalized,
+            text,
+            match.start(),
+            "Native controls need project styling or terminal input/select treatment.",
+            tag,
+        )
+
+    return ScanResult(findings=findings)
+
+
+def scan_project() -> ScanResult:
+    findings: list[Finding] = []
+    for path in iter_files():
+        findings.extend(scan_text(rel(path), path.read_text(encoding="utf-8")).findings)
+    return ScanResult(findings=findings)
+
+
+def main() -> int:
+    result = scan_project()
+    print("WolfyStock frontend design constitution guard")
+    print(f"Files scanned: {len(iter_files())}")
+    if not result.findings:
+        print("PASS: no blocking design-constitution violations found.")
+        return 0
+    print(f"FAIL: {len(result.findings)} blocking design-constitution violation(s).")
+    for finding in result.findings[:80]:
+        print(f"- {finding.path}:{finding.line} [{finding.rule}] {finding.message}")
+        print(f"  {finding.excerpt}")
+    if len(result.findings) > 80:
+        print(f"- ... {len(result.findings) - 80} more finding(s) omitted")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

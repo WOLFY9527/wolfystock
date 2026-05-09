@@ -867,8 +867,13 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     expect(await screen.findByTestId('user-scanner-workspace')).toBeInTheDocument();
-    expect(screen.getByTestId('scanner-sidebar')).toContainElement(screen.getByTestId('scanner-run-button'));
+    expect(screen.getByTestId('user-scanner-workspace')).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(screen.getByTestId('scanner-workspace-grid')).toHaveAttribute('data-terminal-primitive', 'grid');
+    expect(screen.getByTestId('scanner-control-rail')).toContainElement(screen.getByTestId('scanner-run-button'));
+    expect(screen.getByTestId('scanner-control-rail')).toHaveClass('xl:col-span-3', 'xl:sticky');
+    expect(screen.getByTestId('scanner-results-stage')).toHaveClass('xl:col-span-9');
     expect(screen.getByTestId('scanner-candidate-scroll-region')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-run-button')).toHaveTextContent('启动扫描');
     expect(screen.queryByText('TACTICAL ROUTER')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /MARKET SCANNER|市场扫描/ })).not.toBeInTheDocument();
   });
@@ -899,7 +904,7 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('user-scanner-bento-page')).not.toHaveClass('xl:overflow-hidden', 'xl:h-[calc(100vh-96px)]');
     expect(screen.getByTestId('user-scanner-workspace')).not.toHaveClass('h-full', 'overflow-hidden');
     expect(screen.getByTestId('scanner-results-pane')).not.toHaveClass('overflow-hidden', 'xl:min-h-0');
-    const sidebar = screen.getByTestId('scanner-sidebar');
+    const sidebar = screen.getByTestId('scanner-control-rail');
     expect(sidebar).not.toHaveClass('overflow-hidden', 'max-h-[calc(100vh-120px)]', 'xl:h-full', 'xl:max-h-[calc(100vh-120px)]');
     expect(screen.getByTestId('scanner-sidebar-scroll-region')).not.toHaveClass('overflow-y-auto');
     expect(screen.getByTestId('scanner-candidate-scroll-region')).not.toHaveClass('overflow-y-auto', 'flex-1');
