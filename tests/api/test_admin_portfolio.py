@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 
 from api.deps import CurrentUser, get_current_user
 from src.admin_rbac import OPS_ADMIN_ROLE
@@ -531,6 +532,178 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(self._portfolio_counts(), before)
         self._assert_safe_json(response)
         self._assert_audit_event("admin_portfolio.activity_viewed")
+
+    def test_portfolio_activity_preserves_ordering_pagination_shape_and_multi_account_scope(self) -> None:
+        self._as_admin()
+        with self.db.get_session() as session:
+            account_c = PortfolioAccount(
+                owner_id="user-1",
+                name="Alice Satellite",
+                broker="IBKR",
+                market="us",
+                base_currency="USD",
+                is_active=True,
+            )
+            session.add(account_c)
+            session.flush()
+            account_c_id = int(account_c.id)
+            session.add_all(
+                [
+                    PortfolioTrade(
+                        account_id=account_c_id,
+                        trade_uid="satellite-trade",
+                        symbol="TSLA",
+                        market="us",
+                        currency="USD",
+                        trade_date=date(2026, 5, 4),
+                        side="sell",
+                        quantity=2.0,
+                        price=210.0,
+                        is_active=True,
+                    ),
+                    PortfolioCashLedger(
+                        account_id=account_c_id,
+                        event_date=date(2026, 5, 3),
+                        direction="out",
+                        amount=250.0,
+                        currency="USD",
+                    ),
+                    PortfolioCorporateAction(
+                        account_id=account_c_id,
+                        symbol="TSLA",
+                        market="us",
+                        currency="USD",
+                        effective_date=date(2026, 5, 2),
+                        action_type="split_adjustment",
+                        split_ratio=2.0,
+                    ),
+                ]
+            )
+            session.commit()
+
+        full = self.client.get("/api/v1/admin/users/user-1/portfolio-activity", params={"limit": 200})
+        page = self.client.get("/api/v1/admin/users/user-1/portfolio-activity", params={"limit": 2, "offset": 1})
+
+        self.assertEqual(full.status_code, 200)
+        self.assertEqual(page.status_code, 200)
+        full_payload = full.json()
+        page_payload = page.json()
+        self.assertEqual(full_payload["total"], 6)
+        self.assertEqual(full_payload["summary"], {"trades": 2, "cashEvents": 2, "corporateActions": 2})
+        self.assertEqual([item["idHash"] for item in page_payload["items"]], [item["idHash"] for item in full_payload["items"][1:3]])
+        self.assertEqual(page_payload["limit"], 2)
+        self.assertEqual(page_payload["offset"], 1)
+        self.assertTrue(page_payload["hasMore"])
+        self.assertEqual(sorted({item["accountId"] for item in full_payload["items"]}), [self.account_a_id, account_c_id])
+        self.assertEqual(
+            set(full_payload["items"][0].keys()),
+            {
+                "idHash",
+                "type",
+                "accountId",
+                "accountName",
+                "eventDate",
+                "symbol",
+                "market",
+                "currency",
+                "side",
+                "direction",
+                "actionType",
+                "quantity",
+                "price",
+                "amount",
+                "createdAt",
+            },
+        )
+        ordered_keys = [(item["eventDate"], item["idHash"]) for item in full_payload["items"]]
+        self.assertEqual(ordered_keys, sorted(ordered_keys, reverse=True))
+        self._assert_safe_json(full)
+        self._assert_safe_json(page)
+
+    def test_portfolio_activity_empty_account_returns_empty_projection(self) -> None:
+        self._as_admin()
+        with self.db.get_session() as session:
+            empty_account = PortfolioAccount(
+                owner_id="user-1",
+                name="Alice Empty",
+                broker="IBKR",
+                market="us",
+                base_currency="USD",
+                is_active=True,
+            )
+            session.add(empty_account)
+            session.commit()
+            empty_account_id = int(empty_account.id)
+
+        response = self.client.get(
+            "/api/v1/admin/users/user-1/portfolio-activity",
+            params={"account_id": empty_account_id, "limit": 5},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["items"], [])
+        self.assertEqual(payload["total"], 0)
+        self.assertEqual(payload["summary"], {"trades": 0, "cashEvents": 0, "corporateActions": 0})
+        self.assertFalse(payload["hasMore"])
+
+    def test_portfolio_activity_uses_bounded_row_projection_queries(self) -> None:
+        self._as_admin()
+        with self.db.get_session() as session:
+            for index in range(12):
+                session.add(
+                    PortfolioTrade(
+                        account_id=self.account_a_id,
+                        trade_uid=f"extra-trade-{index}",
+                        symbol="AAPL",
+                        market="us",
+                        currency="USD",
+                        trade_date=date(2026, 4, 1),
+                        side="buy",
+                        quantity=1.0,
+                        price=100.0 + index,
+                        is_active=True,
+                    )
+                )
+                session.add(
+                    PortfolioCashLedger(
+                        account_id=self.account_a_id,
+                        event_date=date(2026, 4, 1),
+                        direction="in",
+                        amount=100.0 + index,
+                        currency="USD",
+                    )
+                )
+                session.add(
+                    PortfolioCorporateAction(
+                        account_id=self.account_a_id,
+                        symbol="AAPL",
+                        market="us",
+                        currency="USD",
+                        effective_date=date(2026, 4, 1),
+                        action_type="cash_dividend",
+                        cash_dividend_per_share=0.01,
+                    )
+                )
+            session.commit()
+
+        statements: list[str] = []
+
+        def _capture_statement(_conn, _cursor, statement, _parameters, _context, _executemany) -> None:
+            statements.append(str(statement).lower())
+
+        engine = getattr(self.db, "_engine")
+        event.listen(engine, "before_cursor_execute", _capture_statement)
+        try:
+            response = self.client.get("/api/v1/admin/users/user-1/portfolio-activity", params={"limit": 2, "offset": 1})
+        finally:
+            event.remove(engine, "before_cursor_execute", _capture_statement)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["total"], 39)
+        self.assertTrue(any("from portfolio_trades" in statement and " limit " in statement for statement in statements))
+        self.assertTrue(any("from portfolio_cash_ledger" in statement and " limit " in statement for statement in statements))
+        self.assertTrue(any("from portfolio_corporate_actions" in statement and " limit " in statement for statement in statements))
 
     def test_admin_portfolio_export_redaction_matrix_excludes_raw_payloads_and_secrets(self) -> None:
         self._as_admin()

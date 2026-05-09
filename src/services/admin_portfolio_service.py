@@ -198,17 +198,17 @@ class AdminPortfolioService:
                 return [], -1, AdminLedgerCounts()
             account_ids = [int(account_id)] if account_id is not None else [int(row.id) for row in accounts]
             account_name = {int(row.id): str(row.name) for row in accounts}
+            summary = self._ledger_counts(session, account_ids=account_ids)
+            window_size = max(0, int(offset)) + max(1, int(limit))
             items: list[AdminPortfolioActivityItem] = []
-            for row in session.execute(
-                select(PortfolioTrade)
-                .where(
-                    and_(
-                        PortfolioTrade.account_id.in_(account_ids),
-                        or_(PortfolioTrade.is_active.is_(True), PortfolioTrade.is_active.is_(None)),
-                    )
-                )
-                .order_by(desc(PortfolioTrade.trade_date), desc(PortfolioTrade.id))
-            ).scalars().all():
+            for row in self._bounded_activity_rows(
+                session,
+                model=PortfolioTrade,
+                account_ids=account_ids,
+                date_column=PortfolioTrade.trade_date,
+                window_size=window_size,
+                extra_filter=or_(PortfolioTrade.is_active.is_(True), PortfolioTrade.is_active.is_(None)),
+            ):
                 items.append(
                     AdminPortfolioActivityItem(
                         idHash=_hash_ref(f"trade:{row.id}"),
@@ -225,11 +225,13 @@ class AdminPortfolioService:
                         createdAt=_iso(row.created_at),
                     )
                 )
-            for row in session.execute(
-                select(PortfolioCashLedger)
-                .where(PortfolioCashLedger.account_id.in_(account_ids))
-                .order_by(desc(PortfolioCashLedger.event_date), desc(PortfolioCashLedger.id))
-            ).scalars().all():
+            for row in self._bounded_activity_rows(
+                session,
+                model=PortfolioCashLedger,
+                account_ids=account_ids,
+                date_column=PortfolioCashLedger.event_date,
+                window_size=window_size,
+            ):
                 items.append(
                     AdminPortfolioActivityItem(
                         idHash=_hash_ref(f"cash:{row.id}"),
@@ -243,11 +245,13 @@ class AdminPortfolioService:
                         createdAt=_iso(row.created_at),
                     )
                 )
-            for row in session.execute(
-                select(PortfolioCorporateAction)
-                .where(PortfolioCorporateAction.account_id.in_(account_ids))
-                .order_by(desc(PortfolioCorporateAction.effective_date), desc(PortfolioCorporateAction.id))
-            ).scalars().all():
+            for row in self._bounded_activity_rows(
+                session,
+                model=PortfolioCorporateAction,
+                account_ids=account_ids,
+                date_column=PortfolioCorporateAction.effective_date,
+                window_size=window_size,
+            ):
                 items.append(
                     AdminPortfolioActivityItem(
                         idHash=_hash_ref(f"corporate_action:{row.id}"),
@@ -264,12 +268,7 @@ class AdminPortfolioService:
                     )
                 )
             items.sort(key=lambda item: (item.event_date, item.id_hash), reverse=True)
-            summary = AdminLedgerCounts(
-                trades=sum(1 for item in items if item.type == "trade"),
-                cashEvents=sum(1 for item in items if item.type == "cash"),
-                corporateActions=sum(1 for item in items if item.type == "corporate_action"),
-            )
-            total = len(items)
+            total = summary.trades + summary.cash_events + summary.corporate_actions
             start = max(0, int(offset))
             return items[start:start + max(1, int(limit))], total, summary
 
@@ -323,6 +322,43 @@ class AdminPortfolioService:
         if not include_inactive:
             query = query.where(PortfolioAccount.is_active.is_(True))
         return list(session.execute(query.order_by(PortfolioAccount.id.asc())).scalars().all())
+
+    @staticmethod
+    def _bounded_activity_rows(
+        session: Any,
+        *,
+        model: Any,
+        account_ids: list[int],
+        date_column: Any,
+        window_size: int,
+        extra_filter: Any | None = None,
+    ) -> list[Any]:
+        if not account_ids:
+            return []
+        filters = [model.account_id.in_(account_ids)]
+        if extra_filter is not None:
+            filters.append(extra_filter)
+        base_filter = and_(*filters)
+        limited_rows = list(
+            session.execute(
+                select(model)
+                .where(base_filter)
+                .order_by(desc(date_column), desc(model.id))
+                .limit(max(1, int(window_size)))
+            ).scalars().all()
+        )
+        if len(limited_rows) < max(1, int(window_size)):
+            return limited_rows
+        boundary_date = getattr(limited_rows[-1], getattr(date_column, "key", ""), None)
+        if boundary_date is None:
+            return limited_rows
+        return list(
+            session.execute(
+                select(model)
+                .where(and_(base_filter, date_column >= boundary_date))
+                .order_by(desc(date_column), desc(model.id))
+            ).scalars().all()
+        )
 
     @staticmethod
     def _connections(session: Any, *, user_id: str, account_ids: list[int]) -> list[Any]:
