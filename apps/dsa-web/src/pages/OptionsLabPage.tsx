@@ -58,7 +58,7 @@ const OPTIONS_LAB_CRASH_FALLBACK = '期权实验室暂时无法加载，请刷�
 
 const fieldClass = 'h-10 w-full rounded-lg border border-white/10 bg-white/[0.02] px-3 font-mono text-sm text-white outline-none transition-all placeholder:text-white/20 focus:border-emerald-400/50 focus:bg-white/[0.05]';
 const labelClass = 'text-[10px] font-bold uppercase tracking-widest text-white/40';
-const panelClass = 'min-w-0 rounded-[16px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md md:p-5';
+const panelClass = 'min-w-0 rounded-[16px] border border-white/5 bg-white/[0.02] p-5 backdrop-blur-md';
 const innerBlockClass = 'rounded-xl border border-white/[0.02] bg-black/20';
 const primaryButtonClass = 'rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-2.5 text-sm font-medium text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all duration-300 hover:from-blue-500 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-50';
 
@@ -182,14 +182,15 @@ function metricTone(value?: number | null): string {
   return 'text-white/75';
 }
 
-const Pill: React.FC<{ children: React.ReactNode; tone?: 'neutral' | 'info' | 'warn' | 'good' }> = ({ children, tone = 'neutral' }) => {
+const Pill: React.FC<{ children: React.ReactNode; tone?: 'neutral' | 'info' | 'warn' | 'risk' | 'good' }> = ({ children, tone = 'neutral' }) => {
   const toneClass = {
-    neutral: 'border-white/10 bg-white/[0.04] text-white/60',
-    info: 'border-cyan-300/20 bg-cyan-400/8 text-cyan-100',
-    warn: 'border-amber-300/25 bg-amber-400/10 text-amber-100',
-    good: 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100',
+    neutral: 'border-white/10 bg-white/5 text-white/50',
+    info: 'border-cyan-300/20 bg-cyan-400/5 text-cyan-300',
+    warn: 'border-amber-300/20 bg-amber-400/5 text-amber-300',
+    risk: 'border-rose-400/20 bg-rose-500/5 text-rose-300',
+    good: 'border-emerald-300/20 bg-emerald-400/5 text-emerald-300',
   }[tone];
-  return <span className={cn('inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium', toneClass)}>{children}</span>;
+  return <span className={cn('inline-flex rounded-md border px-2.5 py-1 font-mono text-xs tracking-tight', toneClass)}>{children}</span>;
 };
 
 const SectionHeader: React.FC<{
@@ -221,14 +222,14 @@ const SegmentedButtons = <T extends string>({
   onChange: (value: T) => void;
   ariaLabel: string;
 }) => (
-  <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/5 bg-black/20 p-1 sm:grid-cols-4" aria-label={ariaLabel}>
+  <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/[0.02] bg-black/20 p-1 sm:grid-cols-4" aria-label={ariaLabel}>
     {options.map((option) => (
       <button
         key={option.value}
         className={cn(
-          'h-9 rounded-xl px-3 text-sm font-semibold transition-all',
+          'h-9 rounded-lg px-3 text-sm font-medium transition-all',
           option.value === value
-            ? 'border border-cyan-300/25 bg-white/10 text-white shadow-[0_0_18px_rgba(34,211,238,0.14)]'
+            ? 'border border-white/10 bg-white/10 text-white shadow-[0_0_18px_rgba(34,211,238,0.12)]'
             : 'border border-transparent bg-transparent text-white/45 hover:bg-white/[0.04] hover:text-white/75',
         )}
         type="button"
@@ -377,28 +378,28 @@ const SnapshotPanel: React.FC<{
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-6">
         <div className={cn(innerBlockClass, 'p-3')}>
           <p className={labelClass}>标的代码</p>
-          <p className="mt-2 font-mono text-xl font-semibold text-white">{summary?.symbol || chain?.symbol || '--'}</p>
+          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-white">{summary?.symbol || chain?.symbol || '--'}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
           <p className={labelClass}>最新价</p>
-          <p className="mt-2 font-mono text-xl font-semibold text-white">{money(underlying?.price)}</p>
+          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-white">{money(underlying?.price)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
           <p className={labelClass}>涨跌幅</p>
-          <p className="mt-2 font-mono text-xl font-semibold text-emerald-300">{ratio(underlying?.changePct)}</p>
+          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-emerald-300">{ratio(underlying?.changePct)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
           <p className={labelClass}>IV Rank / Percentile</p>
-          <p className="mt-2 font-mono text-xl font-semibold text-cyan-100">{ivRank == null ? '--' : number(ivRank, 1)} / {ivPercentile == null ? '--' : number(ivPercentile, 1)}</p>
+          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-cyan-300">{ivRank == null ? '--' : number(ivRank, 1)} / {ivPercentile == null ? '--' : number(ivPercentile, 1)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
           <p className={labelClass}>预期波动</p>
-          <p className="mt-2 font-mono text-xl font-semibold text-white">{money(expectedMove?.expectedMoveAbs)}</p>
+          <p className="mt-2 font-mono text-xl font-semibold tracking-tight text-white">{money(expectedMove?.expectedMoveAbs)}</p>
           <p className="mt-1 text-xs text-white/40">{ratio(expectedMove?.expectedMovePct)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
           <p className={labelClass}>数据状态</p>
-          <p className="mt-2 font-mono text-sm font-semibold text-cyan-100">{freshnessLabel(decision?.freshness?.freshness || underlying?.freshness)}</p>
+          <p className="mt-2 font-mono text-sm font-semibold tracking-tight text-cyan-300">{freshnessLabel(decision?.freshness?.freshness || underlying?.freshness)}</p>
           <p className="mt-1 truncate text-xs text-white/35">{underlying?.asOf || '--'}</p>
         </div>
       </div>
@@ -429,7 +430,7 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
           </thead>
           <tbody>
             {contracts.map((contract) => (
-              <tr key={contract.contractSymbol} className="rounded-xl bg-black/20 text-xs text-white/72">
+              <tr key={contract.contractSymbol} className="rounded-xl border border-white/[0.02] bg-black/20 text-xs text-white/72">
                 <td className="rounded-l-xl px-3 py-2 font-mono text-xs text-white">{contract.contractSymbol}</td>
                 <td className="px-3 py-2 font-mono">{money(contract.strike)}</td>
                 <td className="px-3 py-2 font-mono">{money(contract.mid)}</td>
@@ -548,7 +549,7 @@ const StrategyComparisonPanel: React.FC<{
       <SectionHeader eyebrow="候选矩阵" title="策略候选" icon={Layers3}>
         <div className="flex flex-wrap justify-end gap-2">
           <Pill tone="info">{freshness ? `数据状态：${limitationLabel(String(freshness))}` : '数据状态：等待快照'}</Pill>
-          <Pill tone="warn">共享风险已合并至风险边界。</Pill>
+          <Pill tone="neutral">风险提示已合并</Pill>
         </div>
       </SectionHeader>
       {emptyMessage ? (
@@ -561,7 +562,7 @@ const StrategyComparisonPanel: React.FC<{
         <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 font-mono text-sm text-cyan-100')}>正在计算策略对比...</p>
       ) : null}
       {!emptyMessage && !loading && comparisonState.error ? (
-        <p className="mt-5 rounded-xl border border-rose-300/20 bg-rose-500/10 px-4 py-4 text-sm text-rose-100">{comparisonState.error}</p>
+        <p className="mt-5 rounded-xl border border-rose-400/20 bg-rose-500/5 px-4 py-4 text-sm text-rose-300">{comparisonState.error}</p>
       ) : null}
       {!emptyMessage && !loading && !comparisonState.error && strategies.length === 0 ? (
         <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 text-sm text-white/45')}>当前假设下暂无可比较策略。</p>
@@ -592,7 +593,7 @@ const StrategyComparisonPanel: React.FC<{
 const DecisionMetric: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-white' }) => (
   <div className={cn(innerBlockClass, 'min-w-0 p-3')}>
     <p className={labelClass}>{label}</p>
-    <p className={cn('mt-2 truncate font-mono text-base font-semibold', tone)}>{value}</p>
+    <p className={cn('mt-2 truncate font-mono text-base font-semibold tracking-tight', tone)}>{value}</p>
   </div>
 );
 
@@ -624,7 +625,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
     <section className={cn(panelClass, className)} data-testid="options-lab-decision-engine">
       <SectionHeader eyebrow="决策中枢" title="策略决策" icon={ShieldCheck}>
         <div className="flex flex-wrap justify-end gap-2">
-          <Pill tone="warn">{label}</Pill>
+          <Pill tone={label.includes('禁止') || label.includes('不建议') ? 'risk' : 'warn'}>{label}</Pill>
           <Pill tone="info">{dataTierLabel(decision?.dataQuality?.dataQualityTier)}</Pill>
         </div>
       </SectionHeader>
@@ -635,7 +636,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
         <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 font-mono text-sm text-cyan-100')}>正在计算策略决策...</p>
       ) : null}
       {!emptyMessage && !decisionState.loading && decisionState.error ? (
-        <p className="mt-5 rounded-xl border border-rose-300/20 bg-rose-500/10 px-4 py-4 text-sm text-rose-100">{decisionState.error}</p>
+        <p className="mt-5 rounded-xl border border-rose-400/20 bg-rose-500/5 px-4 py-4 text-sm text-rose-300">{decisionState.error}</p>
       ) : null}
       {!emptyMessage && !decisionState.loading && !decisionState.error && !decision ? (
         <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 text-sm text-white/45')}>等待策略决策。</p>
@@ -688,19 +689,19 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
               <p className={labelClass}>IV Rank / Percentile</p>
               {ivRankStatus === 'available' ? (
                 <>
-                  <p className="mt-2 font-mono text-base font-semibold text-cyan-100">{number(ivRank, 1)} / {number(ivPercentile, 1)}</p>
+                  <p className="mt-2 font-mono text-base font-semibold tracking-tight text-cyan-300">{number(ivRank, 1)} / {number(ivPercentile, 1)}</p>
                   <p className="mt-1 text-sm text-white/52">来源已清理为用户可读状态</p>
                 </>
               ) : (
                 <>
-                  <p className="mt-2 font-mono text-base font-semibold text-white/62">IV Rank 不可用</p>
+                  <p className="mt-2 font-mono text-base font-semibold tracking-tight text-white/62">IV Rank 不可用</p>
                   <p className="mt-1 text-sm text-white/52">缺少历史 IV 或代理序列，置信度降低。</p>
                 </>
               )}
             </div>
             <div className={cn(innerBlockClass, 'p-4')}>
               <p className={labelClass}>预期波动</p>
-              <p className="mt-2 font-mono text-base font-semibold text-white">{money(expectedMove?.expectedMoveAbs)}</p>
+              <p className="mt-2 font-mono text-base font-semibold tracking-tight text-white">{money(expectedMove?.expectedMoveAbs)}</p>
               <p className="mt-1 text-sm text-white/52">{ratio(expectedMove?.expectedMovePct)} · {expectedMoveSourceLabel(expectedMove?.expectedMoveSource)}</p>
             </div>
           </div>
@@ -708,7 +709,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
             <p className={labelClass}>关键依据</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {(reasons.length ? reasons : ['数据不足，禁止判断']).slice(0, 3).map((reason) => (
-                <Pill key={reason} tone="warn">{warningLabel(reason)}</Pill>
+                <Pill key={reason} tone="risk">{warningLabel(reason)}</Pill>
               ))}
             </div>
           </div>
@@ -755,7 +756,7 @@ const RiskBoundaryPanel: React.FC<{
   return (
     <section className={cn(panelClass, 'order-4 xl:order-none', className)} data-testid="options-lab-risk-boundary-panel">
       <SectionHeader eyebrow="风险控制" title="风险边界" icon={AlertTriangle}>
-        <Pill tone={decisionStatusLabel(decision).includes('禁止') ? 'warn' : 'info'}>
+        <Pill tone={decisionStatusLabel(decision).includes('禁止') ? 'risk' : 'info'}>
           {decisionStatusLabel(decision)}
         </Pill>
       </SectionHeader>
@@ -772,7 +773,7 @@ const RiskBoundaryPanel: React.FC<{
         </div>
         <ul className="grid gap-2" aria-label="风险边界警示">
           {compactWarnings.map((warning) => (
-            <li key={warning} className="flex gap-2 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2 text-xs leading-5 text-white/65">
+            <li key={warning} className="flex gap-2 rounded-xl border border-amber-300/20 bg-amber-400/5 px-3 py-2 text-xs leading-5 text-amber-300">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden="true" />
               <span>{warningLabel(warning)}</span>
             </li>
@@ -1118,9 +1119,9 @@ const OptionsLabPageContent: React.FC = () => {
   }, [hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
 
   return (
-    <main className="min-h-screen w-full overflow-x-hidden bg-[#050505] py-4 text-white">
-      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 xl:px-8">
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-12 xl:items-start" data-testid="options-lab-bento-grid">
+    <main className="w-full overflow-x-hidden py-4 text-white">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 xl:px-8" data-testid="options-lab-page-root">
+        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-12" data-testid="options-lab-bento-grid">
           <SnapshotPanel summary={state.summary} chain={state.chain} decision={decisionState.decision} />
           <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} className="order-2 xl:order-none xl:col-span-5" />
           <AssumptionPanel
@@ -1163,7 +1164,7 @@ const OptionsLabPageContent: React.FC = () => {
           </section>
           ) : null}
           {state.error ? (
-          <section className="order-6 rounded-xl border border-rose-300/20 bg-rose-500/10 p-4 text-sm text-rose-100 xl:order-none xl:col-span-12">
+          <section className="order-6 rounded-xl border border-rose-400/20 bg-rose-500/5 p-4 text-sm text-rose-300 xl:order-none xl:col-span-12">
             {state.error}
           </section>
           ) : null}

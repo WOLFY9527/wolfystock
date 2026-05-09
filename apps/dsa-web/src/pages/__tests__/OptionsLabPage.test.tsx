@@ -362,14 +362,17 @@ describe('OptionsLabPage', () => {
     expect(screen.queryByRole('heading', { name: '期权实验室' })).not.toBeInTheDocument();
     expect(screen.queryByText('分析支持 / 不构成投资建议')).not.toBeInTheDocument();
     expect(screen.queryByText(/教程|如何使用|从这里开始/)).not.toBeInTheDocument();
+    const pageRoot = screen.getByTestId('options-lab-page-root');
+    expect(pageRoot).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6');
+    expect(pageRoot.className).not.toMatch(/\bbg-(black|\[#000\]|\[#050505\]|gray-|zinc-|slate-|neutral-)/);
     expect(screen.getByTestId('options-lab-snapshot-panel')).toHaveTextContent('标的快照');
-    expect(screen.getByTestId('options-lab-bento-grid')).toHaveClass('grid', 'grid-cols-1', 'gap-6', 'xl:grid-cols-12', 'xl:items-start');
+    expect(screen.getByTestId('options-lab-bento-grid')).toHaveClass('grid', 'grid-cols-1', 'gap-6', 'items-start', 'xl:grid-cols-12');
     ['标的快照', '期权假设', '策略决策', '风险边界', '策略候选'].forEach((label) => {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     });
     expect(screen.getByText('期权假设')).toBeInTheDocument();
     expect(screen.getByLabelText('标的代码')).toHaveValue('TEM');
-    expect(screen.getByText('执行')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '执行' })).toHaveClass('bg-gradient-to-r', 'from-blue-600', 'to-purple-600', 'shadow-[0_0_15px_rgba(139,92,246,0.3)]');
     expect(screen.getByLabelText('到期日')).toBeInTheDocument();
     expect(screen.getByText('上涨情景')).toBeInTheDocument();
     expect(screen.getByText('下跌情景')).toBeInTheDocument();
@@ -402,7 +405,7 @@ describe('OptionsLabPage', () => {
     expect(within(section).getByTestId('options-lab-primary-strategy-row')).toHaveTextContent('首选观察');
     expect(within(section).queryByText('流动性提示')).not.toBeInTheDocument();
     expect(within(section).queryByText('波动率 / 时间价值提示')).not.toBeInTheDocument();
-    expect(within(section).getByText('共享风险已合并至风险边界。')).toBeInTheDocument();
+    expect(within(section).getByText('风险提示已合并')).toBeInTheDocument();
   });
 
   it('renders the R2 decision section with IV rank, expected move, optimizer, and synthetic guardrails', async () => {
@@ -826,6 +829,24 @@ describe('OptionsLabPage', () => {
       'provider.example',
     ].forEach((text) => {
       expect(domText.toLowerCase()).not.toContain(text.toLowerCase());
+    });
+  });
+
+  it('uses ghost materials instead of local solid black slabs for major panels', async () => {
+    renderPage();
+
+    await screen.findByText('TEM260619C00055000');
+    [
+      'options-lab-snapshot-panel',
+      'options-lab-decision-engine',
+      'options-lab-assumptions-panel',
+      'options-lab-risk-boundary-panel',
+      'options-lab-strategy-comparison',
+      'options-lab-analysis-details',
+    ].forEach((testId) => {
+      const panel = screen.getByTestId(testId);
+      expect(panel).toHaveClass('bg-white/[0.02]', 'border', 'border-white/5', 'backdrop-blur-md', 'rounded-[16px]');
+      expect(panel.className).not.toMatch(/\bbg-(black|\[#000\]|\[#050505\]|gray-|zinc-|slate-|neutral-)/);
     });
   });
 
