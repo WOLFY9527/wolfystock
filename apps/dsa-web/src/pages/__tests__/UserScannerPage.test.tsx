@@ -878,6 +878,15 @@ describe('UserScannerPage', () => {
     expect(screen.queryByRole('heading', { name: /MARKET SCANNER|市场扫描/ })).not.toBeInTheDocument();
   });
 
+  it('renders exactly one compact semantic scanner page heading without internal terms', async () => {
+    renderUserScannerPage({ initialEntry: '/zh/scanner' });
+
+    const heading = await screen.findByRole('heading', { level: 1, name: '扫描器' });
+    expect(heading).toHaveClass('text-xl', 'md:text-2xl');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.queryByText(/provider_timeout|MarketCache|generatedCandidates|failedCandidates/i)).not.toBeInTheDocument();
+  });
+
   it('loads scanner run history once on initial route entry', async () => {
     renderUserScannerPage();
 

@@ -122,6 +122,9 @@ describe('PersonalSettingsPage', () => {
       </MemoryRouter>,
     );
 
+    const heading = screen.getByRole('heading', { level: 1, name: '设置' });
+    expect(heading).toHaveClass('text-xl', 'md:text-2xl');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(screen.getByTestId('personal-settings-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'gap-4');
     expect(screen.getByTestId('personal-settings-workspace')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8');
@@ -137,6 +140,7 @@ describe('PersonalSettingsPage', () => {
     expect(screen.getByRole('link', { name: zh('settings.personalGuestSignInAction') })).toHaveAttribute('href', '/login?redirect=%2Fsettings');
     expect(screen.getByRole('link', { name: zh('settings.personalGuestCreateAccountAction') })).toHaveAttribute('href', '/login?mode=create&redirect=%2Fsettings');
     expect(screen.queryByRole('link', { name: zh('nav.independentConsole') })).not.toBeInTheDocument();
+    expect(screen.queryByText(/provider_timeout|MarketCache|generatedCandidates|failedCandidates/i)).not.toBeInTheDocument();
     expect(getNotificationPreferences).not.toHaveBeenCalled();
   });
 

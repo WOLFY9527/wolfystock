@@ -359,9 +359,12 @@ describe('OptionsLabPage', () => {
   it('renders the Chinese-first workbench sections, compact assumptions, and dense chain tables', async () => {
     renderPage();
 
-    expect(screen.queryByRole('heading', { name: '期权实验室' })).not.toBeInTheDocument();
+    const heading = screen.getByRole('heading', { level: 1, name: '期权实验室' });
+    expect(heading).toHaveClass('text-xl', 'md:text-2xl');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.queryByText('分析支持 / 不构成投资建议')).not.toBeInTheDocument();
     expect(screen.queryByText(/教程|如何使用|从这里开始/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/provider_timeout|MarketCache|generatedCandidates|failedCandidates/i)).not.toBeInTheDocument();
     const pageRoot = screen.getByTestId('options-lab-page-root');
     expect(pageRoot).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6');
     expect(pageRoot.className).not.toMatch(/\bbg-(black|\[#000\]|\[#050505\]|gray-|zinc-|slate-|neutral-)/);

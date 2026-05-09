@@ -48,3 +48,25 @@ def test_flags_user_page_internal_terms():
 
     rules = {item.rule for item in result.findings}
     assert "user-facing-internal-term" in rules
+
+
+def test_flags_key_route_page_missing_semantic_heading():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/BacktestPage.tsx",
+        '<main data-testid="backtest-v1-page">missing heading</main>',
+    )
+
+    assert any(item.rule == "route-semantic-page-heading" for item in result.findings)
+
+
+def test_allows_single_terminal_page_heading_on_key_route_page():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/OptionsLabPage.tsx",
+        '<TerminalPageHeading title="期权实验室" />\n<main data-testid="options-lab-page-root">ok</main>',
+    )
+
+    assert not any(item.rule == "route-semantic-page-heading" for item in result.findings)

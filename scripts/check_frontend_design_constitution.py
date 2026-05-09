@@ -20,6 +20,14 @@ MIGRATED_PAGES = {
     "apps/dsa-web/src/pages/UserScannerPage.tsx",
 }
 
+KEY_ROUTE_PAGES = {
+    "apps/dsa-web/src/pages/UserScannerPage.tsx",
+    "apps/dsa-web/src/pages/MarketOverviewPage.tsx",
+    "apps/dsa-web/src/pages/BacktestPage.tsx",
+    "apps/dsa-web/src/pages/OptionsLabPage.tsx",
+    "apps/dsa-web/src/pages/PersonalSettingsPage.tsx",
+}
+
 USER_PAGE_PARTS = (
     "/PortfolioPage.tsx",
     "/UserScannerPage.tsx",
@@ -102,6 +110,19 @@ def is_guarded_file(path: str) -> bool:
     return path in MIGRATED_PAGES or path.startswith("apps/dsa-web/src/components/terminal/")
 
 
+def is_key_route_page(path: str) -> bool:
+    return path in KEY_ROUTE_PAGES
+
+
+def count_level_one_heading_markers(text: str) -> int:
+    terminal_page_heading_count = len(re.findall(r"<TerminalPageHeading\b", text))
+    if terminal_page_heading_count:
+        return terminal_page_heading_count
+    explicit_heading_count = len(re.findall(r"<h1\b", text))
+    explicit_heading_count += len(re.findall(r'aria-level\s*=\s*(?:\{1\}|"1")', text))
+    return explicit_heading_count
+
+
 def is_loud_warning_material(line: str) -> bool:
     for match in LOUD_WARNING_RE.finditer(line):
         if match.group(3) is None and line[match.end():].startswith('/['):
@@ -116,7 +137,11 @@ def is_visible_line(line: str) -> bool:
     stripped = line.strip()
     if stripped.startswith("//") or stripped.startswith("*"):
         return False
-    return any(token in stripped for token in (">", "title=", "label=", "placeholder=", "summary", "message", "body", "description"))
+    return bool(
+        (">" in stripped and "<" in stripped)
+        or re.search(r'(?:title|label|placeholder|summary|message|body|description)\s*=\s*["{\']', stripped)
+        or re.search(r'(?:title|label|placeholder|message|body|description)\s*:\s*["\']', stripped)
+    )
 
 
 def add(finding_list: list[Finding], rule: str, path: str, text: str, offset: int, message: str, excerpt: str) -> None:
@@ -128,20 +153,39 @@ def scan_text(path: str, text: str) -> ScanResult:
     normalized = path.replace("\\", "/")
     lines = text.splitlines()
     guarded = is_guarded_file(normalized)
+    key_route_page = is_key_route_page(normalized)
+
+    if key_route_page:
+        heading_count = count_level_one_heading_markers(text)
+        if heading_count == 0:
+            findings.append(Finding(
+                rule="route-semantic-page-heading",
+                path=normalized,
+                line=1,
+                message="Key user routes must expose exactly one compact semantic page heading.",
+                excerpt="missing semantic page heading marker",
+            ))
+        elif heading_count > 1:
+            findings.append(Finding(
+                rule="route-semantic-page-heading",
+                path=normalized,
+                line=1,
+                message="Key user routes must not declare multiple page-level semantic headings.",
+                excerpt=f"found {heading_count} page heading markers",
+            ))
 
     for index, line in enumerate(lines):
         if "design-constitution-allow" in line:
             continue
         lower_line = line.lower()
         likely_wrapper = (
-            "<main" in line
-            or "terminalpageshell" in lower_line
+            "terminalpageshell" in lower_line
             or (
                 "data-testid" in line
                 and any(token in lower_line for token in ("page", "workspace", "root", "shell", "stage"))
             )
         )
-        if guarded and SOLID_WRAPPER_RE.search(line) and likely_wrapper:
+        if key_route_page and SOLID_WRAPPER_RE.search(line) and likely_wrapper:
             if "bg-black/20" not in line and "TerminalNestedBlock" not in line:
                 findings.append(Finding(
                     rule="page-level-solid-slab",
@@ -150,7 +194,7 @@ def scan_text(path: str, text: str) -> ScanResult:
                     message="Avoid page-level solid black/gray/zinc/slate/neutral slabs; use terminal shell/panel primitives.",
                     excerpt=line.strip()[:180],
                 ))
-        if guarded and is_loud_warning_material(line):
+        if key_route_page and is_loud_warning_material(line):
             findings.append(Finding(
                 rule="loud-warning-material",
                 path=normalized,
@@ -158,7 +202,7 @@ def scan_text(path: str, text: str) -> ScanResult:
                 message="Avoid loud yellow/amber warning slabs; use TerminalNotice or TerminalChip caution.",
                 excerpt=line.strip()[:180],
             ))
-        if guarded and is_user_page(normalized) and is_visible_line(line):
+        if key_route_page and is_user_page(normalized) and is_visible_line(line):
             lowered = line.lower()
             for term in INTERNAL_TERMS:
                 if term.lower() in lowered:

@@ -785,6 +785,15 @@ describe('MarketOverviewPage', () => {
     });
   });
 
+  it('renders exactly one compact semantic market overview heading without internal terms', async () => {
+    renderMarketOverviewWithLanguage('zh');
+
+    const heading = await screen.findByRole('heading', { level: 1, name: '市场总览' });
+    expect(heading).toHaveClass('text-xl', 'md:text-2xl');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.queryByText(/provider_timeout|MarketCache|generatedCandidates|failedCandidates/i)).not.toBeInTheDocument();
+  });
+
   it('exposes a distinct tab composition registry for market overview tabs', () => {
     expect(Object.keys(MARKET_OVERVIEW_TAB_CONFIG)).toEqual(['all', 'us', 'cn', 'global', 'crypto']);
     expect(MARKET_OVERVIEW_TAB_CONFIG.all.pulse).toEqual(expect.arrayContaining(['SPX', 'CSI300', 'HSI', 'BTC', 'VIX', 'US10Y', 'DXY']));

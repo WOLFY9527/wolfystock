@@ -5,6 +5,7 @@ import { BellRing, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { ApiErrorAlert, GlassCard } from '../components/common';
 import { authApi } from '../api/auth';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
+import { TerminalPageHeading } from '../components/terminal';
 import { ChangePasswordCard } from '../components/settings/ChangePasswordCard';
 import { FontSizeSettingsCard } from '../components/settings/FontSizeSettingsCard';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -169,6 +170,10 @@ const PersonalSettingsPage: React.FC = () => {
       data-testid="personal-settings-workspace"
       className="flex w-full flex-1 min-h-0 min-w-0 flex-col gap-4"
     >
+      <TerminalPageHeading
+        data-testid="settings-page-heading"
+        title={language === 'en' ? 'Settings' : '设置'}
+      />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
         <GlassCard as="section" className="p-6 md:p-7">
           <div className="mb-5">

@@ -30,6 +30,7 @@ import {
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
 } from '../components/market-overview/marketOverviewPrimitives';
+import { TerminalPageHeading } from '../components/terminal';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { GlassCard } from '../components/common';
 import { cn } from '../utils/cn';
@@ -2527,6 +2528,11 @@ const MarketOverviewPage: React.FC = () => {
     >
       <div data-testid="market-overview-workbench" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6">
         <section data-testid="market-overview-pulse-header" className="flex w-full min-w-0 flex-col gap-4">
+          <TerminalPageHeading
+            data-testid="market-overview-page-heading"
+            className="px-4 xl:px-8"
+            title={language === 'en' ? 'Market Overview' : '市场总览'}
+          />
           <div data-testid="market-overview-top-stack" className="flex w-full min-w-0 flex-col gap-4">
           <MarketDecisionStrip activeCategory={activeCategory} panels={panels} dataQuality={dataQuality} />
           <section data-testid="market-overview-summary-band" data-mobile-order="summary" data-market-research-flow="trust" className="min-w-0">

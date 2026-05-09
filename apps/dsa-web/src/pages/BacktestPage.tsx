@@ -41,6 +41,7 @@ import {
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import { translate } from '../i18n/core';
+import { TerminalPageHeading } from '../components/terminal';
 
 const HISTORICAL_PAGE_SIZE = 20;
 const HISTORY_PAGE_SIZE = 10;
@@ -1220,6 +1221,10 @@ const BacktestPage: React.FC = () => {
       aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
       className={getSafariReadySurfaceClassName(isSafariReady, 'w-full flex-1 flex flex-col gap-6 min-w-0 min-h-0 bg-transparent')}
     >
+      <TerminalPageHeading
+        data-testid="backtest-page-heading"
+        title={language === 'en' ? 'Backtest' : '回测'}
+      />
       <div
         data-testid="backtest-subnav"
         className="w-full rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-sm"

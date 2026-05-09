@@ -917,6 +917,17 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('button', { name: '执行回测任务' })).toHaveClass('bg-emerald-500/10', 'text-emerald-400', 'rounded-lg');
   });
 
+  it('renders exactly one compact semantic backtest page heading without internal terms', async () => {
+    renderBacktestRoutes(['/zh/backtest']);
+
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+
+    const heading = screen.getByRole('heading', { level: 1, name: '回测' });
+    expect(heading).toHaveClass('text-xl', 'md:text-2xl');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.queryByText(/provider_timeout|MarketCache|generatedCandidates|failedCandidates/i)).not.toBeInTheDocument();
+  });
+
   it('includes every engine-supported classic strategy in point-and-shoot mode', async () => {
     renderBacktestRoutes();
 

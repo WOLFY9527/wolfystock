@@ -32,6 +32,7 @@ import {
   TerminalEmptyState,
   TerminalGrid,
   TerminalNestedBlock,
+  TerminalPageHeading,
   TerminalPageShell,
   TerminalPanel,
 } from '../components/terminal';
@@ -3220,6 +3221,10 @@ const UserScannerPage: React.FC = () => {
 	          data-testid="user-scanner-workspace"
 	          className="flex-1 min-w-0"
 	        >
+            <TerminalPageHeading
+              data-testid="scanner-page-heading"
+              title={language === 'en' ? 'Scanner' : '扫描器'}
+            />
 	          {pageError ? (
 	            <div className="mx-3 mt-3 rounded-xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-100" role="alert" data-testid="scanner-page-error-summary">
 	              <div className="flex flex-wrap items-center gap-2">

@@ -87,6 +87,34 @@ export function TerminalSectionHeader({
   );
 }
 
+export function TerminalPageHeading({
+  eyebrow,
+  title,
+  action,
+  className,
+  'data-testid': dataTestId,
+}: {
+  eyebrow?: React.ReactNode;
+  title: React.ReactNode;
+  action?: React.ReactNode;
+  className?: string;
+  'data-testid'?: string;
+}) {
+  return (
+    <div
+      data-testid={dataTestId}
+      data-terminal-primitive="page-heading"
+      className={cn('flex min-w-0 items-start justify-between gap-3', className)}
+    >
+      <div className="min-w-0">
+        {eyebrow ? <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{eyebrow}</p> : null}
+        <h1 className="mt-1 truncate text-xl font-semibold tracking-tight text-white md:text-2xl">{title}</h1>
+      </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
+    </div>
+  );
+}
+
 export function TerminalMetric({
   label,
   value,

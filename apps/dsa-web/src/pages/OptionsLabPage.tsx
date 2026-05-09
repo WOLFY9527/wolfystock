@@ -14,6 +14,7 @@ import {
   type OptionsStrategyType,
   type OptionsUnderlyingSummaryResponse,
 } from '../api/optionsLab';
+import { TerminalPageHeading } from '../components/terminal';
 import { cn } from '../utils/cn';
 import { formatNumber, formatPercent } from '../utils/format';
 
@@ -1143,6 +1144,10 @@ const OptionsLabPageContent: React.FC = () => {
   return (
     <main className="w-full overflow-x-hidden py-4 text-white">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 xl:px-8" data-testid="options-lab-page-root">
+        <TerminalPageHeading
+          data-testid="options-lab-page-heading"
+          title="期权实验室"
+        />
         <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-12" data-testid="options-lab-bento-grid">
           <SnapshotPanel summary={state.summary} chain={state.chain} decision={decisionState.decision} />
           <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} className="order-2 xl:order-none xl:col-span-5" />
