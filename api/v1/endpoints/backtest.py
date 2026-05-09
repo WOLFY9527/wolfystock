@@ -647,6 +647,32 @@ def create_rule_backtest_universe_job(
     return _run_endpoint("创建规则回测宇宙预检任务失败", _operation, allow_validation_error=True)
 
 
+@router.post(
+    "/rule/universe-jobs/{job_id}/run",
+    response_model=RuleBacktestUniverseJobResponse,
+    responses={
+        200: {"description": "本地宇宙规则回测顺序执行完成"},
+        400: {"description": "请求参数错误", "model": ErrorResponse},
+        404: {"description": "记录不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="顺序执行本地规则回测宇宙任务",
+    description="同步顺序执行 stored local-only universe job；仅读取本地日线数据，不触发 provider 拉取，不启用并发 worker。",
+)
+def run_rule_backtest_universe_job(
+    job_id: int,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> RuleBacktestUniverseJobResponse:
+    def _operation() -> RuleBacktestUniverseJobResponse:
+        service = _build_rule_backtest_service(db_manager, current_user)
+        data = service.run_universe_job_sequential(job_id)
+        if data is None:
+            raise _not_found_error("规则回测宇宙任务不存在")
+        return _build_model(RuleBacktestUniverseJobResponse, data)
+    return _run_endpoint("执行规则回测宇宙任务失败", _operation, allow_validation_error=True)
+
+
 @router.get(
     "/rule/universe-jobs/{job_id}/status",
     response_model=RuleBacktestUniverseJobResponse,

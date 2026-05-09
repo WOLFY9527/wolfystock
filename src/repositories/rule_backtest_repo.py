@@ -244,3 +244,67 @@ class RuleBacktestRepository:
                 .limit(limit)
             ).scalars().all()
             return list(rows), int(total)
+
+    def get_universe_symbol_results(
+        self,
+        job_id: int,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[RuleBacktestUniverseSymbolResult]:
+        with self.db.get_session() as session:
+            conditions = [RuleBacktestUniverseSymbolResult.job_id == int(job_id)]
+            if not include_all_owners:
+                conditions.append(RuleBacktestUniverseSymbolResult.owner_id == self.db.require_user_id(owner_id))
+            rows = session.execute(
+                select(RuleBacktestUniverseSymbolResult)
+                .where(and_(*conditions))
+                .order_by(RuleBacktestUniverseSymbolResult.sequence_index.asc())
+            ).scalars().all()
+            return list(rows)
+
+    def update_universe_job(
+        self,
+        job_id: int,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+        **fields: Any,
+    ) -> Optional[RuleBacktestUniverseJob]:
+        with self.db.get_session() as session:
+            conditions = [RuleBacktestUniverseJob.id == int(job_id)]
+            if not include_all_owners:
+                conditions.append(RuleBacktestUniverseJob.owner_id == self.db.require_user_id(owner_id))
+            row = session.execute(
+                select(RuleBacktestUniverseJob).where(and_(*conditions)).limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            for key, value in fields.items():
+                setattr(row, key, value)
+            session.commit()
+            session.refresh(row)
+            return row
+
+    def update_universe_symbol_result(
+        self,
+        result_id: int,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+        **fields: Any,
+    ) -> Optional[RuleBacktestUniverseSymbolResult]:
+        with self.db.get_session() as session:
+            conditions = [RuleBacktestUniverseSymbolResult.id == int(result_id)]
+            if not include_all_owners:
+                conditions.append(RuleBacktestUniverseSymbolResult.owner_id == self.db.require_user_id(owner_id))
+            row = session.execute(
+                select(RuleBacktestUniverseSymbolResult).where(and_(*conditions)).limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            for key, value in fields.items():
+                setattr(row, key, value)
+            session.commit()
+            session.refresh(row)
+            return row

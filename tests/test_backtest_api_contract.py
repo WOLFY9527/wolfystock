@@ -34,6 +34,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     list_rule_backtest_universe_job_results,
     router as backtest_router,
     run_rule_backtest,
+    run_rule_backtest_universe_job,
 )
 from api.v1.schemas.backtest import (  # noqa: E402
     BacktestCodeRequest,
@@ -761,6 +762,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "failed_count": 0,
             "pending_count": 0,
             "running_count": 0,
+            "processed_count": 2,
             "cancel_requested": False,
             "local_data_only": True,
             "execution_mode": "preflight_only",
@@ -769,6 +771,11 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "completed_at": "2026-05-09T10:00:01",
         }
         service.get_universe_job_status.return_value = dict(service.create_universe_job.return_value)
+        service.run_universe_job_sequential.return_value = {
+            **service.create_universe_job.return_value,
+            "status": "completed_with_failures",
+            "execution_mode": "sequential_local",
+        }
         service.list_universe_job_results.return_value = {
             "job_id": 42,
             "total": 2,
@@ -785,6 +792,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "reason_message": None,
                     "runtime_ms": 0,
                     "metrics": {},
+                    "total_return_pct": 1.23,
+                    "max_drawdown_pct": -0.5,
+                    "win_rate_pct": 50.0,
+                    "trades_count": 2,
                     "single_run_id": None,
                     "created_at": "2026-05-09T10:00:00",
                     "updated_at": "2026-05-09T10:00:00",
@@ -801,17 +812,22 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
             created = create_rule_backtest_universe_job(request, db_manager=MagicMock())
+            run = run_rule_backtest_universe_job(42, db_manager=MagicMock())
             status = get_rule_backtest_universe_job_status(42, db_manager=MagicMock())
             results = list_rule_backtest_universe_job_results(42, page=1, limit=1, db_manager=MagicMock())
 
         self.assertIsInstance(created, RuleBacktestUniverseJobResponse)
+        self.assertIsInstance(run, RuleBacktestUniverseJobResponse)
         self.assertIsInstance(status, RuleBacktestUniverseJobResponse)
         self.assertIsInstance(results, RuleBacktestUniverseResultsResponse)
         self.assertEqual(created.execution_mode, "preflight_only")
+        self.assertEqual(run.execution_mode, "sequential_local")
         self.assertTrue(created.local_data_only)
         self.assertEqual(results.items[0].symbol, "AAPL")
         self.assertEqual(results.items[0].sequence_index, 0)
+        self.assertEqual(results.items[0].total_return_pct, 1.23)
         service.create_universe_job.assert_called_once()
+        service.run_universe_job_sequential.assert_called_once_with(42)
         self.assertEqual(service.create_universe_job.call_args.kwargs["symbols"], ["MSFT", "AAPL"])
         self.assertEqual(service.list_universe_job_results.call_args.kwargs["limit"], 1)
 

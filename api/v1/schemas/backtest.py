@@ -448,6 +448,7 @@ class RuleBacktestUniverseJobResponse(BaseModel):
     failed_count: int = 0
     pending_count: int = 0
     running_count: int = 0
+    processed_count: int = 0
     cancel_requested: bool = False
     local_data_only: bool = True
     execution_mode: str = "preflight_only"
@@ -466,6 +467,10 @@ class RuleBacktestUniverseSymbolResultItem(BaseModel):
     reason_message: Optional[str] = None
     runtime_ms: int = 0
     metrics: Dict[str, Any] = Field(default_factory=dict)
+    total_return_pct: Optional[float] = None
+    max_drawdown_pct: Optional[float] = None
+    win_rate_pct: Optional[float] = None
+    trades_count: Optional[int] = None
     single_run_id: Optional[int] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

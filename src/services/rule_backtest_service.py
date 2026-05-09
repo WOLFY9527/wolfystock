@@ -1089,6 +1089,241 @@ class RuleBacktestService:
         saved = self.repo.save_universe_job(job, symbol_rows)
         return self._universe_job_row_to_dict(saved)
 
+    def run_universe_job_sequential(self, job_id: int) -> Optional[Dict[str, Any]]:
+        """Run a stored universe job sequentially against local StockDaily rows only."""
+
+        job = self.repo.get_universe_job(job_id, **self._owner_kwargs())
+        if job is None:
+            return None
+        if not bool(job.local_data_only):
+            raise ValueError("universe job is not local-data-only and is not runnable")
+        if str(job.execution_mode or "") != "preflight_only":
+            raise ValueError(f"universe job {job_id} is not runnable from status {job.status}")
+        if str(job.status or "") not in {"completed", "completed_with_failures", "queued"}:
+            raise ValueError(f"universe job {job_id} is not runnable from status {job.status}")
+        if bool(job.cancel_requested):
+            updated = self.repo.update_universe_job(
+                int(job.id),
+                status="cancelled",
+                completed_count=0,
+                skipped_count=0,
+                failed_count=0,
+                pending_count=0,
+                running_count=0,
+                completed_at=datetime.now(),
+                updated_at=datetime.now(),
+                execution_mode="sequential_local",
+                **self._owner_kwargs(),
+            )
+            return self._universe_job_row_to_dict(updated) if updated is not None else None
+
+        snapshot = self._load_json_payload(job.strategy_snapshot_json)
+        if not isinstance(snapshot, dict):
+            snapshot = {}
+        request = dict(snapshot.get("request") or {})
+        raw_text = str(job.strategy_text or snapshot.get("strategy_text") or "").strip()
+        parsed_snapshot = snapshot.get("parsed_strategy") if isinstance(snapshot.get("parsed_strategy"), dict) else None
+        try:
+            normalized_start, normalized_end = self._normalize_date_range(
+                start_date=request.get("start_date"),
+                end_date=request.get("end_date"),
+            )
+            lookback_bars = int(request.get("lookback_bars") or 252)
+            initial_capital = float(request.get("initial_capital") or 100000.0)
+            fee_bps = float(request.get("fee_bps") or 0.0)
+            slippage_bps = float(request.get("slippage_bps") or 0.0)
+        except Exception as exc:
+            self._mark_universe_job_failed(int(job.id), f"invalid universe job request: {exc}")
+            raise ValueError("universe job request snapshot is invalid") from exc
+
+        rows = self.repo.get_universe_symbol_results(int(job.id), **self._owner_kwargs())
+        now = datetime.now()
+        self.repo.update_universe_job(
+            int(job.id),
+            status="running",
+            completed_count=0,
+            skipped_count=0,
+            failed_count=0,
+            pending_count=len(rows),
+            running_count=0,
+            started_at=now,
+            completed_at=None,
+            updated_at=now,
+            execution_mode="sequential_local",
+            **self._owner_kwargs(),
+        )
+
+        completed_count = 0
+        skipped_count = 0
+        failed_count = 0
+        for index, row in enumerate(rows):
+            latest_job = self.repo.get_universe_job(int(job.id), **self._owner_kwargs())
+            if latest_job is not None and bool(latest_job.cancel_requested):
+                completed_at = datetime.now()
+                updated = self.repo.update_universe_job(
+                    int(job.id),
+                    status="cancelled",
+                    completed_count=completed_count,
+                    skipped_count=skipped_count,
+                    failed_count=failed_count,
+                    pending_count=max(len(rows) - index, 0),
+                    running_count=0,
+                    completed_at=completed_at,
+                    updated_at=completed_at,
+                    **self._owner_kwargs(),
+                )
+                return self._universe_job_row_to_dict(updated) if updated is not None else None
+
+            self.repo.update_universe_job(
+                int(job.id),
+                status="running",
+                completed_count=completed_count,
+                skipped_count=skipped_count,
+                failed_count=failed_count,
+                pending_count=max(len(rows) - index, 0),
+                running_count=1,
+                updated_at=datetime.now(),
+                **self._owner_kwargs(),
+            )
+            started_at = datetime.now()
+            try:
+                preflight_metrics = self._load_json_payload(row.metrics_json)
+                if not isinstance(preflight_metrics, dict):
+                    preflight_metrics = {}
+                coverage = preflight_metrics.get("local_data_preflight")
+                if not isinstance(coverage, dict):
+                    coverage = {}
+                if str(row.status or "") == "skipped" or coverage.get("state") != "ready":
+                    skipped_count += 1
+                    self._update_universe_symbol_result(
+                        row,
+                        status="skipped",
+                        reason_code=str(row.reason_code or coverage.get("reason_code") or "blocked_missing_local_data"),
+                        reason_message=str(
+                            row.reason_message
+                            or coverage.get("reason_message")
+                            or "No local daily bars found for requested window."
+                        ),
+                        started_at=started_at,
+                        metrics={"local_data_preflight": coverage},
+                    )
+                    self.repo.update_universe_job(
+                        int(job.id),
+                        status="running",
+                        completed_count=completed_count,
+                        skipped_count=skipped_count,
+                        failed_count=failed_count,
+                        pending_count=max(len(rows) - index - 1, 0),
+                        running_count=0,
+                        updated_at=datetime.now(),
+                        **self._owner_kwargs(),
+                    )
+                    continue
+
+                parsed = self._ensure_parsed_strategy(
+                    raw_text,
+                    parsed_snapshot,
+                    code=row.symbol,
+                    start_date=normalized_start,
+                    end_date=normalized_end,
+                    initial_capital=initial_capital,
+                    fee_bps=fee_bps,
+                    slippage_bps=slippage_bps,
+                )
+                if parsed.needs_confirmation:
+                    raise ValueError(_CONFIRMATION_REQUIRED_ERROR)
+                bars = self._load_universe_local_bars(
+                    symbol=row.symbol,
+                    parsed=parsed,
+                    start_date=normalized_start,
+                    end_date=normalized_end,
+                    lookback_bars=lookback_bars,
+                )
+                if len(bars) < max(10, parsed.max_lookback + 2):
+                    skipped_count += 1
+                    self._update_universe_symbol_result(
+                        row,
+                        status="skipped",
+                        reason_code="insufficient_local_history",
+                        reason_message="Local daily bars are insufficient for this strategy lookback.",
+                        started_at=started_at,
+                        metrics={"local_data_preflight": coverage, "bars_loaded": len(bars)},
+                    )
+                    self.repo.update_universe_job(
+                        int(job.id),
+                        status="running",
+                        completed_count=completed_count,
+                        skipped_count=skipped_count,
+                        failed_count=failed_count,
+                        pending_count=max(len(rows) - index - 1, 0),
+                        running_count=0,
+                        updated_at=datetime.now(),
+                        **self._owner_kwargs(),
+                    )
+                    continue
+
+                result = self.engine.run(
+                    code=row.symbol,
+                    parsed_strategy=parsed,
+                    bars=bars,
+                    initial_capital=initial_capital,
+                    fee_bps=fee_bps,
+                    slippage_bps=slippage_bps,
+                    lookback_bars=lookback_bars,
+                    start_date=normalized_start,
+                    end_date=normalized_end,
+                )
+                completed_count += 1
+                compact_metrics = self._compact_universe_result_metrics(result)
+                compact_metrics["local_data_preflight"] = coverage
+                compact_metrics["bars_loaded"] = len(bars)
+                self._update_universe_symbol_result(
+                    row,
+                    status="completed",
+                    reason_code=None,
+                    reason_message=None,
+                    started_at=started_at,
+                    metrics=compact_metrics,
+                )
+            except Exception as exc:
+                failed_count += 1
+                self._update_universe_symbol_result(
+                    row,
+                    status="failed",
+                    reason_code="symbol_execution_failed",
+                    reason_message=self._sanitize_universe_error(exc),
+                    started_at=started_at,
+                    metrics={},
+                )
+
+            self.repo.update_universe_job(
+                int(job.id),
+                status="running",
+                completed_count=completed_count,
+                skipped_count=skipped_count,
+                failed_count=failed_count,
+                pending_count=max(len(rows) - index - 1, 0),
+                running_count=0,
+                updated_at=datetime.now(),
+                **self._owner_kwargs(),
+            )
+
+        completed_at = datetime.now()
+        final_status = "completed" if failed_count == 0 and skipped_count == 0 else "completed_with_failures"
+        updated = self.repo.update_universe_job(
+            int(job.id),
+            status=final_status,
+            completed_count=completed_count,
+            skipped_count=skipped_count,
+            failed_count=failed_count,
+            pending_count=0,
+            running_count=0,
+            completed_at=completed_at,
+            updated_at=completed_at,
+            **self._owner_kwargs(),
+        )
+        return self._universe_job_row_to_dict(updated) if updated is not None else None
+
     def preflight_local_data_coverage(
         self,
         *,
@@ -1165,6 +1400,7 @@ class RuleBacktestService:
             "failed_count": int(row.failed_count or 0),
             "pending_count": int(row.pending_count or 0),
             "running_count": int(row.running_count or 0),
+            "processed_count": int(row.completed_count or 0) + int(row.skipped_count or 0) + int(row.failed_count or 0),
             "cancel_requested": bool(row.cancel_requested),
             "local_data_only": bool(row.local_data_only),
             "execution_mode": row.execution_mode,
@@ -1176,6 +1412,7 @@ class RuleBacktestService:
     @staticmethod
     def _universe_symbol_row_to_dict(row: RuleBacktestUniverseSymbolResult) -> Dict[str, Any]:
         metrics = RuleBacktestService._load_json_payload(row.metrics_json)
+        metrics_payload = metrics if isinstance(metrics, dict) else {}
         return {
             "id": int(row.id),
             "job_id": int(row.job_id),
@@ -1185,11 +1422,93 @@ class RuleBacktestService:
             "reason_code": row.reason_code,
             "reason_message": row.reason_message,
             "runtime_ms": int(row.runtime_ms or 0),
-            "metrics": metrics if isinstance(metrics, dict) else {},
+            "metrics": metrics_payload,
+            "total_return_pct": metrics_payload.get("total_return_pct"),
+            "max_drawdown_pct": metrics_payload.get("max_drawdown_pct"),
+            "win_rate_pct": metrics_payload.get("win_rate_pct"),
+            "trades_count": metrics_payload.get("trades_count"),
             "single_run_id": int(row.single_run_id) if row.single_run_id is not None else None,
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
+
+    def _load_universe_local_bars(
+        self,
+        *,
+        symbol: str,
+        parsed: ParsedStrategy,
+        start_date: Optional[date],
+        end_date: Optional[date],
+        lookback_bars: int,
+    ) -> List[Any]:
+        load_count = max(int(lookback_bars) + parsed.max_lookback + 20, int(lookback_bars) + 30)
+        history_start_date = (
+            start_date - timedelta(days=max(parsed.max_lookback * 4, 120))
+            if start_date is not None
+            else None
+        )
+        if history_start_date is not None and end_date is not None:
+            return self.stock_repo.get_range(symbol, history_start_date, end_date)
+        return list(reversed(self.stock_repo.get_latest(symbol, days=load_count)))
+
+    def _update_universe_symbol_result(
+        self,
+        row: RuleBacktestUniverseSymbolResult,
+        *,
+        status: str,
+        reason_code: Optional[str],
+        reason_message: Optional[str],
+        started_at: datetime,
+        metrics: Dict[str, Any],
+    ) -> None:
+        completed_at = datetime.now()
+        runtime_ms = int((completed_at - started_at).total_seconds() * 1000)
+        payload = dict(metrics or {})
+        payload.setdefault("started_at", started_at.isoformat())
+        payload.setdefault("completed_at", completed_at.isoformat())
+        self.repo.update_universe_symbol_result(
+            int(row.id),
+            status=status,
+            reason_code=reason_code,
+            reason_message=reason_message,
+            runtime_ms=runtime_ms,
+            metrics_json=self._serialize_json(payload),
+            updated_at=completed_at,
+            **self._owner_kwargs(),
+        )
+
+    @staticmethod
+    def _compact_universe_result_metrics(result: Any) -> Dict[str, Any]:
+        metrics = dict(getattr(result, "metrics", {}) or {})
+        trade_count = int(metrics.get("trade_count") or 0)
+        return {
+            "total_return_pct": RuleBacktestService._round_optional_metric(metrics.get("total_return_pct")),
+            "max_drawdown_pct": RuleBacktestService._round_optional_metric(metrics.get("max_drawdown_pct")),
+            "win_rate_pct": RuleBacktestService._round_optional_metric(metrics.get("win_rate_pct")),
+            "trades_count": trade_count,
+            "trade_count": trade_count,
+            "final_equity": RuleBacktestService._round_optional_metric(metrics.get("final_equity")),
+            "no_result_reason": getattr(result, "no_result_reason", None),
+        }
+
+    @staticmethod
+    def _sanitize_universe_error(exc: Exception) -> str:
+        message = re.sub(r"\s+", " ", str(exc or "").strip())
+        if not message:
+            message = exc.__class__.__name__
+        return message[:160]
+
+    def _mark_universe_job_failed(self, job_id: int, message: str) -> None:
+        now = datetime.now()
+        self.repo.update_universe_job(
+            int(job_id),
+            status="failed",
+            pending_count=0,
+            running_count=0,
+            completed_at=now,
+            updated_at=now,
+            **self._owner_kwargs(),
+        )
 
     def parse_and_run(
         self,
