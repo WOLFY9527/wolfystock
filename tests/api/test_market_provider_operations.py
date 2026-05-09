@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import market_provider_operations
+import src.services.market_provider_operations_service as operations_service
 from src.services.market_cache import market_cache
 from src.services.market_overview_service import MarketOverviewService
 from src.services.market_provider_operations_service import MarketProviderOperationsService
@@ -58,9 +59,11 @@ class _FakeLogService:
 def isolated_db(tmp_path: Path):
     DatabaseManager.reset_instance()
     DatabaseManager(db_url=f"sqlite:///{tmp_path / 'market-provider-operations.sqlite'}")
+    MarketProviderOperationsService.clear_summary_cache()
     market_cache.clear()
     MarketOverviewService._market_data_cache.clear()
     yield
+    MarketProviderOperationsService.clear_summary_cache()
     market_cache.clear()
     MarketOverviewService._market_data_cache.clear()
     DatabaseManager.reset_instance()
@@ -114,6 +117,96 @@ def test_aggregator_does_not_call_external_providers_or_cache_refresh() -> None:
     crypto = next(item for item in payload["items"] if item["cacheKey"] == "crypto")
     assert crypto["provider"] == "binance"
     assert payload["metadata"]["externalProviderCalls"] is False
+
+
+def test_operations_summary_cache_reuses_projection_within_ttl() -> None:
+    service = _service([])
+
+    with (
+        patch.object(service, "_read_cache_and_snapshots", wraps=service._read_cache_and_snapshots) as cache_reader,
+        patch.object(service, "_read_market_events", wraps=service._read_market_events) as event_reader,
+    ):
+        first = service.get_operations(window="24h")
+        second = service.get_operations(window="24h")
+
+    assert cache_reader.call_count == 1
+    assert event_reader.call_count == 1
+    assert first["metadata"]["summaryCache"]["hit"] is False
+    assert second["metadata"]["summaryCache"]["hit"] is True
+    assert second["metadata"]["summaryCache"]["ttlSeconds"] == 10
+    assert second["metadata"]["summaryCache"]["key"] == "GET:/api/v1/admin/market-providers/operations:v1:24h"
+    assert second["metadata"]["summaryCache"]["cacheAgeMs"] >= 0
+
+
+def test_operations_summary_cache_expiry_rebuilds_projection(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(operations_service.time, "monotonic", lambda: clock["now"])
+    service = _service([])
+
+    with patch.object(service, "_read_market_events", wraps=service._read_market_events) as event_reader:
+        first = service.get_operations(window="24h")
+        clock["now"] = 1005.0
+        second = service.get_operations(window="24h")
+        clock["now"] = 1011.0
+        third = service.get_operations(window="24h")
+
+    assert event_reader.call_count == 2
+    assert first["metadata"]["summaryCache"]["hit"] is False
+    assert second["metadata"]["summaryCache"]["hit"] is True
+    assert second["metadata"]["summaryCache"]["cacheAgeMs"] == 5000
+    assert third["metadata"]["summaryCache"]["hit"] is False
+
+
+def test_cached_operations_summary_remains_sanitized_without_raw_payloads_or_secrets() -> None:
+    market_cache.set(
+        "rates",
+        {
+            "source": "yahoo",
+            "freshness": "stale",
+            "lastError": "provider failed token=SECRET api_key=ABC raw_payload={secret}",
+            "warning": "Authorization: Bearer SECRET",
+            "items": [{"raw_payload": "SECRET"}],
+        },
+        ttl_seconds=60,
+    )
+    service = _service([])
+
+    service.get_operations(window="24h")
+    cached = service.get_operations(window="24h")
+    dumped = str(cached)
+
+    assert cached["metadata"]["summaryCache"]["hit"] is True
+    assert "SECRET" not in dumped
+    assert "ABC" not in dumped
+    assert "raw_payload" not in dumped
+
+
+def test_cached_operations_summary_keeps_provider_failure_state_visible() -> None:
+    events = [
+        {
+            "id": "failed-1",
+            "event": "MarketProviderRefreshFailed",
+            "eventType": "MarketProviderRefreshFailed",
+            "category": "data_source",
+            "status": "failed",
+            "summary": "MarketProviderRefreshFailed",
+            "endpoint": "/api/v1/market/sentiment",
+            "provider": "cnn",
+            "component": "MarketSentimentCard",
+            "reason": "provider_error",
+            "startedAt": "2026-05-06T10:10:00+08:00",
+        },
+    ]
+    service = _service(events)
+
+    first = service.get_operations(window="24h")
+    service.log_service.events = []
+    cached = service.get_operations(window="24h")
+
+    assert first["summary"]["failureCount"] == 1
+    assert cached["metadata"]["summaryCache"]["hit"] is True
+    assert cached["summary"]["failureCount"] == 1
+    assert cached["eventRollups"][0]["provider"] == "cnn"
 
 
 def test_aggregator_does_not_mutate_market_cache() -> None:

@@ -8,7 +8,9 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import re
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+import threading
+import time
+from typing import Any, ClassVar, Dict, Iterable, List, Optional, Tuple
 
 from src.services.execution_log_service import ExecutionLogService
 from src.services.market_cache import MARKET_CACHE_TTLS, MarketCache, market_cache
@@ -29,8 +31,11 @@ MARKET_EVENT_NAMES = {
     "ExternalSourceTimeout",
     "ExternalDataSourceTimeout",
 }
-SECRET_ASSIGNMENT_RE = re.compile(r"\b(api[-_]?key|token|secret|password|authorization|webhook)\b\s*[:=]\s*[^\s,;]+", re.IGNORECASE)
-SECRET_WORD_RE = re.compile(r"(api[-_]?key|token|secret|password|authorization|webhook)", re.IGNORECASE)
+SENSITIVE_FIELD_PATTERN = r"api[-_]?key|token|secret|password|authorization|webhook|raw[-_]?payload|raw[-_]?response|request[-_]?body|response[-_]?body|headers?"
+SECRET_ASSIGNMENT_RE = re.compile(rf"\b({SENSITIVE_FIELD_PATTERN})\b\s*[:=]\s*[^\s,;]+", re.IGNORECASE)
+SECRET_WORD_RE = re.compile(rf"({SENSITIVE_FIELD_PATTERN})", re.IGNORECASE)
+SUMMARY_CACHE_TTL_SECONDS = 10.0
+SUMMARY_CACHE_VERSION = "GET:/api/v1/admin/market-providers/operations:v1"
 
 
 @dataclass(frozen=True)
@@ -66,6 +71,9 @@ PANELS: Tuple[MarketProviderPanel, ...] = (
 class MarketProviderOperationsService:
     """Build a provider operations payload without provider fetches or writes."""
 
+    _summary_cache: ClassVar[Dict[str, Dict[str, Any]]] = {}
+    _summary_cache_lock: ClassVar[threading.RLock] = threading.RLock()
+
     def __init__(
         self,
         *,
@@ -79,6 +87,11 @@ class MarketProviderOperationsService:
 
     def get_operations(self, *, window: str = "24h") -> Dict[str, Any]:
         normalized_window = self._normalize_window(window)
+        summary_cache_key = self._summary_cache_key(normalized_window)
+        cached_payload = self._read_summary_cache(summary_cache_key)
+        if cached_payload is not None:
+            return cached_payload
+
         generated_at = self._now()
         cache_states, items, cache_limitations = self._read_cache_and_snapshots(generated_at)
         events = self._read_market_events(normalized_window)
@@ -87,7 +100,7 @@ class MarketProviderOperationsService:
         limitations = list(cache_limitations)
         if not events:
             limitations.append("admin_logs_no_degraded_market_events_in_window")
-        return {
+        payload = {
             "generatedAt": generated_at.isoformat(timespec="seconds"),
             "window": {
                 "key": normalized_window,
@@ -104,7 +117,82 @@ class MarketProviderOperationsService:
                 "readOnly": True,
                 "externalProviderCalls": False,
                 "cacheMutation": False,
+                "summaryCache": self._summary_cache_metadata(
+                    key=summary_cache_key,
+                    stored_at_monotonic=time.monotonic(),
+                    generated_at=generated_at,
+                    hit=False,
+                ),
             },
+        }
+        return self._write_summary_cache(summary_cache_key, payload)
+
+    @classmethod
+    def clear_summary_cache(cls) -> None:
+        with cls._summary_cache_lock:
+            cls._summary_cache.clear()
+
+    @staticmethod
+    def _summary_cache_key(window: str) -> str:
+        return f"{SUMMARY_CACHE_VERSION}:{window}"
+
+    @classmethod
+    def _read_summary_cache(cls, key: str) -> Optional[Dict[str, Any]]:
+        now_monotonic = time.monotonic()
+        with cls._summary_cache_lock:
+            entry = cls._summary_cache.get(key)
+            if not entry:
+                return None
+            stored_at_monotonic = float(entry.get("stored_at_monotonic") or 0)
+            if now_monotonic - stored_at_monotonic >= SUMMARY_CACHE_TTL_SECONDS:
+                cls._summary_cache.pop(key, None)
+                return None
+            payload = copy.deepcopy(entry.get("payload") or {})
+        generated_at = MarketProviderOperationsService._parse_time(payload.get("generatedAt")) or MarketProviderOperationsService._now()
+        payload.setdefault("metadata", {})["summaryCache"] = cls._summary_cache_metadata(
+            key=key,
+            stored_at_monotonic=stored_at_monotonic,
+            generated_at=generated_at,
+            hit=True,
+            now_monotonic=now_monotonic,
+        )
+        return payload
+
+    @classmethod
+    def _write_summary_cache(cls, key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        stored_at_monotonic = time.monotonic()
+        generated_at = cls._parse_time(payload.get("generatedAt")) or cls._now()
+        payload.setdefault("metadata", {})["summaryCache"] = cls._summary_cache_metadata(
+            key=key,
+            stored_at_monotonic=stored_at_monotonic,
+            generated_at=generated_at,
+            hit=False,
+            now_monotonic=stored_at_monotonic,
+        )
+        with cls._summary_cache_lock:
+            cls._summary_cache[key] = {
+                "stored_at_monotonic": stored_at_monotonic,
+                "payload": copy.deepcopy(payload),
+            }
+        return copy.deepcopy(payload)
+
+    @staticmethod
+    def _summary_cache_metadata(
+        *,
+        key: str,
+        stored_at_monotonic: float,
+        generated_at: datetime,
+        hit: bool,
+        now_monotonic: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        now_monotonic = time.monotonic() if now_monotonic is None else now_monotonic
+        return {
+            "enabled": True,
+            "ttlSeconds": int(SUMMARY_CACHE_TTL_SECONDS),
+            "key": key,
+            "hit": hit,
+            "asOf": generated_at.isoformat(timespec="seconds"),
+            "cacheAgeMs": max(0, int((now_monotonic - stored_at_monotonic) * 1000)),
         }
 
     def _read_cache_and_snapshots(self, now: datetime) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str]]:
