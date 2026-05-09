@@ -539,6 +539,9 @@ class SystemConfigService:
             call_kwargs["api_base"] = base_url.strip()
 
         try:
+            from src.services.litellm_runtime import configure_litellm_cost_map_for_runtime
+
+            configure_litellm_cost_map_for_runtime()
             import litellm
 
             started_at = time.perf_counter()

@@ -13,6 +13,10 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from src.services.litellm_runtime import configure_litellm_cost_map_for_runtime
+
+configure_litellm_cost_map_for_runtime()
+
 import litellm
 from litellm import Router
 

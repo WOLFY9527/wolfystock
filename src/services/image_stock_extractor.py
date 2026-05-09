@@ -276,6 +276,9 @@ def _call_litellm_vision(image_b64: str, mime_type: str, api_key: Optional[str] 
             call_kwargs["extra_headers"] = {"APP-Code": "GPIJ3886"}
 
     if getattr(litellm, "completion", None) is None:
+        from src.services.litellm_runtime import configure_litellm_cost_map_for_runtime
+
+        configure_litellm_cost_map_for_runtime()
         import litellm as litellm_module
         litellm = litellm_module
     event_labels = {

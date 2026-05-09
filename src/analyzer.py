@@ -17,6 +17,10 @@ import time
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple
 
+from src.services.litellm_runtime import configure_litellm_cost_map_for_runtime
+
+configure_litellm_cost_map_for_runtime()
+
 import litellm
 from fastapi.encoders import jsonable_encoder
 from json_repair import repair_json
