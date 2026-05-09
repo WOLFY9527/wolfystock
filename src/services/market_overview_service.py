@@ -7,6 +7,7 @@ import copy
 import math
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
@@ -273,6 +274,7 @@ class MarketOverviewService:
 
     CACHE_TTL_SECONDS = 300
     MARKET_COLD_START_TIMEOUT_SECONDS = 2.0
+    CRYPTO_FANOUT_WORKERS = 4
     _cache: Dict[str, tuple[float, PanelPayload]] = {}
     _market_data_cache: Dict[str, Dict[str, Any]] = {}
     _market_cache = market_cache
@@ -1156,10 +1158,7 @@ class MarketOverviewService:
         )
         ticker_response.raise_for_status()
         ticker_rows = ticker_response.json()
-        history_map = {
-            symbol: self._fetch_binance_kline_history(symbol)
-            for symbol in symbols
-        }
+        history_map = self._fetch_binance_kline_histories(symbols)
         labels = {
             "BTCUSDT": ("BTC", "Bitcoin"),
             "ETHUSDT": ("ETH", "Ethereum"),
@@ -1214,40 +1213,84 @@ class MarketOverviewService:
             "source": "binance",
         }
 
+    def _fetch_binance_kline_histories(self, symbols: List[str]) -> Dict[str, List[float]]:
+        if not symbols:
+            return {}
+        max_workers = min(self.CRYPTO_FANOUT_WORKERS, len(symbols))
+        history_by_symbol: Dict[str, List[float]] = {}
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="market-crypto-kline") as executor:
+            futures = {
+                executor.submit(self._fetch_binance_kline_history, symbol): symbol
+                for symbol in symbols
+            }
+            for future in as_completed(futures):
+                symbol = futures[future]
+                history_by_symbol[symbol] = future.result()
+        return {
+            symbol: history_by_symbol[symbol]
+            for symbol in symbols
+            if symbol in history_by_symbol
+        }
+
     def _fetch_binance_funding_items(self, labels: Dict[str, tuple[str, str]], last_update: str) -> List[Dict[str, Any]]:
-        items: List[Dict[str, Any]] = []
-        for futures_symbol, (short_symbol, label) in labels.items():
-            try:
-                response = requests.get(
-                    "https://fapi.binance.com/fapi/v1/premiumIndex",
-                    params={"symbol": futures_symbol},
-                    timeout=2,
-                )
-                response.raise_for_status()
-                row = response.json()
-                funding_rate = self._clean_number(row.get("lastFundingRate"))
-            except Exception:
-                funding_rate = None
-            if funding_rate is None:
-                continue
-            funding_percent = funding_rate * 100
-            items.append({
-                "symbol": f"{short_symbol}_FUNDING",
-                "label": f"{short_symbol} Funding",
-                "price": round(funding_percent, 4),
-                "value": round(funding_percent, 4),
-                "change": round(funding_percent, 4),
-                "changePercent": round(funding_percent, 4),
-                "change_text": f"{funding_percent:+.4f}%",
-                "trend": [round(funding_percent, 4)],
-                "hover_details": [f"{label} perpetual funding", "Binance Futures public endpoint"],
-                "risk_direction": "increasing" if funding_percent > 0.01 else "neutral",
-                "unit": "%",
-                "source": "binance",
-                "last_update": last_update,
-                "error": None,
-            })
-        return items
+        if not labels:
+            return []
+        max_workers = min(self.CRYPTO_FANOUT_WORKERS, len(labels))
+        items_by_symbol: Dict[str, Dict[str, Any]] = {}
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="market-crypto-funding") as executor:
+            futures = {
+                executor.submit(self._fetch_binance_funding_item, futures_symbol, short_symbol, label, last_update): futures_symbol
+                for futures_symbol, (short_symbol, label) in labels.items()
+            }
+            for future in as_completed(futures):
+                futures_symbol = futures[future]
+                item = future.result()
+                if item:
+                    items_by_symbol[futures_symbol] = item
+        return [
+            items_by_symbol[futures_symbol]
+            for futures_symbol in labels
+            if futures_symbol in items_by_symbol
+        ]
+
+    def _fetch_binance_funding_item(
+        self,
+        futures_symbol: str,
+        short_symbol: str,
+        label: str,
+        last_update: str,
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            response = requests.get(
+                "https://fapi.binance.com/fapi/v1/premiumIndex",
+                params={"symbol": futures_symbol},
+                timeout=2,
+            )
+            response.raise_for_status()
+            row = response.json()
+            funding_rate = self._clean_number(row.get("lastFundingRate"))
+        except Exception:
+            funding_rate = None
+        if funding_rate is None:
+            return None
+        funding_percent = funding_rate * 100
+        return {
+            "symbol": f"{short_symbol}_FUNDING",
+            "label": f"{short_symbol} Funding",
+            "price": round(funding_percent, 4),
+            "value": round(funding_percent, 4),
+            "change": round(funding_percent, 4),
+            "changePercent": round(funding_percent, 4),
+            "change_text": f"{funding_percent:+.4f}%",
+            "trend": [round(funding_percent, 4)],
+            "hover_details": [f"{label} perpetual funding", "Binance Futures public endpoint"],
+            "risk_direction": "increasing" if funding_percent > 0.01 else "neutral",
+            "unit": "%",
+            "source": "binance",
+            "last_update": last_update,
+            "error": None,
+        }
+
 
     def _crypto_unavailable_context_items(self, updated_at: str) -> List[Dict[str, Any]]:
         return [

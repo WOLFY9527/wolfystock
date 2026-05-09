@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import threading
 from datetime import timedelta
 from unittest.mock import Mock, patch
 
@@ -195,6 +196,92 @@ def test_crypto_snapshot_includes_sol_and_funding_when_binance_public_data_avail
     assert payload["source"] == "binance"
     assert payload["items"][0]["source"] == "binance"
     assert any("Quote volume" in detail for item in payload["items"] for detail in item.get("hover_details", []))
+
+
+def test_crypto_snapshot_fetches_kline_histories_with_bounded_parallelism() -> None:
+    service = MarketOverviewService()
+    ticker_rows = [
+        {"symbol": "BTCUSDT", "lastPrice": "70000", "priceChangePercent": "1.2", "quoteVolume": "2200000000", "highPrice": "71000", "lowPrice": "69000"},
+        {"symbol": "ETHUSDT", "lastPrice": "3500", "priceChangePercent": "0.4", "quoteVolume": "1200000000", "highPrice": "3550", "lowPrice": "3400"},
+        {"symbol": "SOLUSDT", "lastPrice": "155", "priceChangePercent": "2.4", "quoteVolume": "700000000", "highPrice": "160", "lowPrice": "150"},
+        {"symbol": "BNBUSDT", "lastPrice": "610", "priceChangePercent": "-0.2", "quoteVolume": "320000000", "highPrice": "618", "lowPrice": "604"},
+    ]
+    barrier = threading.Barrier(4)
+    seen: list[str] = []
+
+    def fetch_history(symbol: str) -> list[float]:
+        seen.append(symbol)
+        barrier.wait(timeout=0.5)
+        return [100.0, 101.0]
+
+    with (
+        patch("src.services.market_overview_service.requests.get") as get,
+        patch.object(service, "_fetch_binance_kline_history", side_effect=fetch_history),
+        patch.object(service, "_fetch_binance_funding_items", return_value=[]),
+    ):
+        get.return_value.raise_for_status.return_value = None
+        get.return_value.json.return_value = ticker_rows
+
+        payload = service._fetch_crypto_market_snapshot()
+
+    assert set(seen) == {"BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"}
+    assert {"BTC", "ETH", "SOL", "BNB"} <= {item["symbol"] for item in payload["items"]}
+    assert payload["source"] == "binance"
+
+
+def test_crypto_funding_fetches_with_bounded_parallelism_and_keeps_item_shape() -> None:
+    service = MarketOverviewService()
+    labels = {
+        "BTCUSDT": ("BTC", "Bitcoin"),
+        "ETHUSDT": ("ETH", "Ethereum"),
+        "SOLUSDT": ("SOL", "Solana"),
+        "BNBUSDT": ("BNB", "BNB"),
+    }
+    rates = {"BTCUSDT": "0.00012", "ETHUSDT": "0.00008", "SOLUSDT": "-0.00005", "BNBUSDT": "0.00003"}
+    barrier = threading.Barrier(4)
+    seen: list[str] = []
+
+    def get_funding(_url: str, *, params: dict, timeout: int) -> Mock:
+        symbol = params["symbol"]
+        seen.append(symbol)
+        barrier.wait(timeout=0.5)
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"lastFundingRate": rates[symbol]}
+        return response
+
+    with patch("src.services.market_overview_service.requests.get", side_effect=get_funding):
+        items = service._fetch_binance_funding_items(labels, "2026-04-29T10:00:00+08:00")
+
+    assert set(seen) == set(labels)
+    assert {item["symbol"] for item in items} == {"BTC_FUNDING", "ETH_FUNDING", "SOL_FUNDING", "BNB_FUNDING"}
+    assert all(item["source"] == "binance" for item in items)
+    assert all(item["unit"] == "%" for item in items)
+
+
+def test_crypto_funding_partial_failure_keeps_successes_item_level() -> None:
+    service = MarketOverviewService()
+    labels = {
+        "BTCUSDT": ("BTC", "Bitcoin"),
+        "ETHUSDT": ("ETH", "Ethereum"),
+        "SOLUSDT": ("SOL", "Solana"),
+        "BNBUSDT": ("BNB", "BNB"),
+    }
+
+    def get_funding(_url: str, *, params: dict, timeout: int) -> Mock:
+        if params["symbol"] == "SOLUSDT":
+            raise RuntimeError("funding unavailable")
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"lastFundingRate": "0.0001"}
+        return response
+
+    with patch("src.services.market_overview_service.requests.get", side_effect=get_funding):
+        items = service._fetch_binance_funding_items(labels, "2026-04-29T10:00:00+08:00")
+
+    assert {item["symbol"] for item in items} == {"BTC_FUNDING", "ETH_FUNDING", "BNB_FUNDING"}
+    assert "SOL_FUNDING" not in {item["symbol"] for item in items}
+    assert all(item["source"] == "binance" for item in items)
 
 
 def test_crypto_snapshot_marks_missing_funding_as_temporarily_unavailable() -> None:
