@@ -670,12 +670,20 @@ describe('PortfolioPage FX refresh', () => {
     const manualDisclosure = screen.getByTestId('portfolio-manual-record-disclosure');
     expect(manualDisclosure).not.toHaveAttribute('open');
     expect(container).not.toHaveTextContent(/developer|debug|raw|schema|trace|provider_timeout|not_enough_history|fallback|MarketCache/i);
-    expect(screen.getByTestId('portfolio-summary-and-holdings-row')).toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-current-holdings-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-summary-and-holdings-row')).toContainElement(screen.getByTestId('portfolio-risk-card'));
-    expect(screen.getByTestId('portfolio-risk-card')).toHaveClass('xl:col-span-4');
-    expect(screen.getByTestId('portfolio-recent-activity')).toHaveClass('xl:col-span-8');
-    expect(screen.getByTestId('portfolio-trade-station-card')).toHaveClass('xl:col-span-4');
+    const workspaceLanes = screen.getByTestId('portfolio-workspace-lanes');
+    const primaryLane = screen.getByTestId('portfolio-primary-lane');
+    const secondaryLane = screen.getByTestId('portfolio-secondary-lane');
+    const activityLane = screen.getByTestId('portfolio-activity-lane');
+    const manualLane = screen.getByTestId('portfolio-manual-lane');
+    expect(workspaceLanes).toHaveClass('order-4', 'col-span-12', 'grid', 'grid-cols-1', 'gap-4', 'xl:grid-cols-12', 'items-start');
+    expect(primaryLane).toHaveClass('xl:col-span-8', 'min-w-0', 'flex', 'flex-col', 'gap-4');
+    expect(secondaryLane).toHaveClass('xl:col-span-4', 'min-w-0', 'flex', 'flex-col', 'gap-4');
+    expect(activityLane).toHaveClass('xl:col-span-8', 'min-w-0', 'flex', 'flex-col', 'gap-4');
+    expect(manualLane).toHaveClass('xl:col-span-4', 'min-w-0', 'flex', 'flex-col', 'gap-4');
+    expect(primaryLane).toContainElement(screen.getByTestId('portfolio-current-holdings-panel'));
+    expect(secondaryLane).toContainElement(screen.getByTestId('portfolio-risk-card'));
+    expect(activityLane).toContainElement(screen.getByTestId('portfolio-recent-activity'));
+    expect(manualLane).toContainElement(screen.getByTestId('portfolio-trade-station-card'));
     expect(
       Boolean(screen.getByTestId('portfolio-recent-activity').compareDocumentPosition(screen.getByTestId('portfolio-trade-station-card')) & Node.DOCUMENT_POSITION_FOLLOWING),
     ).toBe(true);
@@ -1837,8 +1845,9 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
+    const activityLane = screen.getByTestId('portfolio-activity-lane');
     const historyPanel = screen.getByTestId('portfolio-history-full');
-    expect(historyPanel).toHaveClass('col-span-12');
+    expect(activityLane).toContainElement(historyPanel);
     expect(within(historyPanel).getByRole('heading', { name: '历史记录' })).toBeInTheDocument();
     expect(within(historyPanel).getByRole('button', { name: translate('zh', 'portfolio.tradeLedger') })).toBeInTheDocument();
     expect(within(historyPanel).getByRole('button', { name: translate('zh', 'portfolio.cashLedger') })).toBeInTheDocument();
@@ -2109,11 +2118,10 @@ describe('PortfolioPage FX refresh', () => {
 
     const historyPanel = screen.getByTestId('portfolio-history-full');
     expect(historyPanel).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole('button', { name: translate('zh', 'portfolio.cashLedger') })[0]);
+    fireEvent.click(within(historyPanel).getByRole('button', { name: translate('zh', 'portfolio.cashLedger') }));
     await waitFor(() => expect(listCashLedger).toHaveBeenCalled());
 
-    const corporateLedgerButtons = screen.getAllByRole('button', { name: translate('zh', 'portfolio.corporateLedger') });
-    fireEvent.click(corporateLedgerButtons[corporateLedgerButtons.length - 1]);
+    fireEvent.click(within(historyPanel).getByRole('button', { name: translate('zh', 'portfolio.corporateLedger') }));
     await waitFor(() => expect(listCorporateActions).toHaveBeenCalled());
 
     expect(screen.queryByTestId('portfolio-attribution-dashboard')).not.toBeInTheDocument();
@@ -2127,11 +2135,21 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const holdingsPanel = screen.getByTestId('portfolio-current-holdings-panel');
+    const primaryLane = screen.getByTestId('portfolio-primary-lane');
+    const secondaryLane = screen.getByTestId('portfolio-secondary-lane');
+    const activityLane = screen.getByTestId('portfolio-activity-lane');
+    const manualLane = screen.getByTestId('portfolio-manual-lane');
+    const tradeStation = screen.getByTestId('portfolio-trade-station-card');
     expect(within(holdingsPanel).getByRole('heading', { name: /当前持仓/ })).toBeInTheDocument();
     const historyPanel = screen.getByTestId('portfolio-history-full');
     expect(historyPanel).toBeInTheDocument();
     expect(screen.queryByTestId('portfolio-history-drawer')).not.toBeInTheDocument();
+    expect(primaryLane).toContainElement(holdingsPanel);
+    expect(secondaryLane).toContainElement(screen.getByTestId('portfolio-risk-card'));
+    expect(activityLane).toContainElement(historyPanel);
+    expect(manualLane).toContainElement(tradeStation);
     expect(Boolean(holdingsPanel.compareDocumentPosition(historyPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(screen.getByTestId('portfolio-risk-card').compareDocumentPosition(tradeStation) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
   it('keeps the rebuilt shell navigable by tabs instead of the removed attribution widgets', async () => {

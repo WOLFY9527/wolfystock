@@ -1973,7 +1973,7 @@ const PortfolioPage: React.FC = () => {
   const recentActivityContent = (
     <section
       data-testid="portfolio-recent-activity"
-      className={`${PORTFOLIO_GLASS_CARD_CLASS} order-3 col-span-12 flex flex-col gap-3 xl:col-span-8`}
+      className={`${PORTFOLIO_GLASS_CARD_CLASS} min-w-0 flex flex-col gap-3`}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -2402,12 +2402,14 @@ const PortfolioPage: React.FC = () => {
 
             </div>
 
-            <div data-testid="portfolio-summary-and-holdings-row" className="order-2 grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
-			              <TerminalPanel
+            <div data-testid="portfolio-workspace-lanes" className="order-4 col-span-12 grid grid-cols-1 gap-4 xl:grid-cols-12 2xl:gap-5 items-start">
+              <div data-testid="portfolio-primary-lane" className="xl:col-span-8 min-w-0 flex flex-col gap-4">
+                <div data-testid="portfolio-summary-and-holdings-row" className="min-w-0 grid grid-cols-1 gap-4 items-start">
+		              <TerminalPanel
                       as="section"
-			                data-testid="portfolio-current-holdings-panel"
-			                className="order-1 col-span-12 flex flex-col overflow-visible xl:col-span-8"
-			              >
+				                data-testid="portfolio-current-holdings-panel"
+				                className="min-w-0 flex flex-col overflow-visible"
+				              >
 		                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 pb-4">
 		                  <h2 className="min-w-0 text-xs uppercase tracking-widest text-muted-text">
 			                    {hasHoldings
@@ -2474,16 +2476,21 @@ const PortfolioPage: React.FC = () => {
 	                                : (language === 'zh' ? '暂无可写账户，请先创建账户。' : 'No writable account yet. Create an account first.')}
 	                            </TerminalNotice>
 	                          ) : null}
-	                        </div>
-                      )}
-		                </div>
-			              </TerminalPanel>
+		                        </div>
+	                      )}
+			                </div>
+				              </TerminalPanel>
+                </div>
 
-	                  <TerminalPanel
+              </div>
+
+              <div data-testid="portfolio-secondary-lane" className="xl:col-span-4 min-w-0 flex flex-col gap-4">
+
+		                  <TerminalPanel
                       as="section"
-	                    data-testid="portfolio-risk-card"
-	                    className="order-2 col-span-12 flex flex-col gap-3 xl:col-span-4"
-	                  >
+		                    data-testid="portfolio-risk-card"
+		                    className="min-w-0 flex flex-col gap-3"
+		                  >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <h2 className="text-[10px] font-bold uppercase tracking-widest text-white/40">{riskTitle}</h2>
@@ -2624,11 +2631,25 @@ const PortfolioPage: React.FC = () => {
                         </div>
                       </div>
                     )}
-	                  </TerminalPanel>
+		                  </TerminalPanel>
+              </div>
 
-                  {!hasHoldings ? recentActivityContent : null}
+              <div data-testid="portfolio-activity-lane" className="xl:col-span-8 min-w-0 flex flex-col gap-4">
+                {shouldRenderFullHistory ? (
+                  <TerminalPanel
+                    as="section"
+                    data-testid="portfolio-history-full"
+                    className={`min-w-0 flex flex-col overflow-hidden ${currentEventCount > 5 ? 'max-h-[640px] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]' : 'max-h-none'}`}
+                  >
+                    {historyPanelContent}
+                  </TerminalPanel>
+                ) : (
+                  recentActivityContent
+                )}
+              </div>
 
-				          <TerminalPanel as="section" data-testid="portfolio-trade-station-card" data-execution-surface="manual-record-entry" className="order-4 col-span-12 flex flex-col gap-4 overflow-visible xl:col-span-4 xl:min-h-0">
+              <div data-testid="portfolio-manual-lane" className="xl:col-span-4 min-w-0 flex flex-col gap-4">
+					          <TerminalPanel as="section" data-testid="portfolio-trade-station-card" data-execution-surface="manual-record-entry" className="min-w-0 flex flex-col gap-4 overflow-visible xl:min-h-0">
             <div className="shrink-0">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -3031,17 +3052,12 @@ const PortfolioPage: React.FC = () => {
                 </div>
               ) : null}
             </div>
-              </details>
+	              </details>
+	            </div>
+	          </TerminalPanel>
+              </div>
             </div>
-          </TerminalPanel>
-        </div>
-
-            {shouldRenderFullHistory ? (
-              <TerminalPanel as="section" data-testid="portfolio-history-full" className={`order-4 col-span-12 flex flex-col overflow-hidden ${currentEventCount > 5 ? 'max-h-[640px] overflow-y-auto no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]' : 'max-h-none'}`}>
-                {historyPanelContent}
-              </TerminalPanel>
-            ) : null}
-          </TerminalGrid>
+	          </TerminalGrid>
       </TerminalPageShell>
     </div>
 
