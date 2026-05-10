@@ -342,6 +342,34 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
 
+    def test_storage_backed_provider_diagnostics_do_not_mutate_state_or_send_notifications(self) -> None:
+        self._as_provider_read_admin()
+        self._seed_circuit_fixture()
+
+        def forbidden(*_args, **_kwargs):
+            raise AssertionError("read-only diagnostics should not mutate state or send notifications")
+
+        with (
+            patch("src.storage.DatabaseManager.transition_provider_circuit_state", side_effect=forbidden),
+            patch("src.storage.DatabaseManager.update_provider_quota_window_counters", side_effect=forbidden),
+            patch("src.storage.DatabaseManager.record_provider_probe_event", side_effect=forbidden),
+            patch("src.services.provider_circuit_observer.ProviderCircuitObserver.record_observation", side_effect=forbidden),
+            patch("src.notification.NotificationService.send", side_effect=forbidden),
+            patch("requests.sessions.Session.request", side_effect=forbidden),
+        ):
+            responses = (
+                self.client.get("/api/v1/admin/providers/circuits"),
+                self.client.get("/api/v1/admin/providers/circuits/events"),
+                self.client.get("/api/v1/admin/providers/quota-windows"),
+                self.client.get("/api/v1/admin/providers/probe-events"),
+            )
+
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+            metadata = response.json()["metadata"]
+            self.assertTrue(metadata["readOnly"])
+            self.assertTrue(metadata["noExternalCalls"])
+
     def test_diagnostics_api_reads_provider_circuit_observer_dry_run_rows(self) -> None:
         self._as_provider_read_admin()
         observer = ProviderCircuitObserver(db=self.db)
@@ -588,6 +616,35 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         text = self._json_text(response.json()).lower()
         for blocked in ("api_key", "api token", "token", "secret", "password", "placeholder"):
             self.assertNotIn(blocked, text)
+
+    def test_sla_readiness_diagnostics_do_not_mutate_state_or_send_notifications(self) -> None:
+        self._as_provider_read_admin()
+        self._seed_circuit_fixture()
+
+        def forbidden(*_args, **_kwargs):
+            raise AssertionError("sla readiness diagnostics should stay read-only and offline")
+
+        with (
+            patch("src.storage.DatabaseManager.transition_provider_circuit_state", side_effect=forbidden),
+            patch("src.storage.DatabaseManager.update_provider_quota_window_counters", side_effect=forbidden),
+            patch("src.storage.DatabaseManager.record_provider_probe_event", side_effect=forbidden),
+            patch("src.services.provider_circuit_observer.ProviderCircuitObserver.record_observation", side_effect=forbidden),
+            patch("src.notification.NotificationService.send", side_effect=forbidden),
+            patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
+            patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
+            patch("src.services.scanner_ai_service.ScannerAiInterpretationService.interpret_shortlist", side_effect=forbidden),
+            patch("requests.sessions.Session.request", side_effect=forbidden),
+        ):
+            response = self.client.get(
+                "/api/v1/admin/providers/sla-readiness",
+                params={"provider": "fmp", "since": "2026-05-06T00:00:00"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        metadata = response.json()["metadata"]
+        self.assertTrue(metadata["readOnly"])
+        self.assertTrue(metadata["noExternalCalls"])
+        self.assertFalse(metadata["liveEnforcement"])
 
 
 if __name__ == "__main__":
