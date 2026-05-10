@@ -1,5 +1,13 @@
 ## 2026-05-10
 
+- 🧩 **Contracts namespace marker for evidence and data quality** — Added a
+  minimal `src/contracts/` namespace with explicit inert re-exports for the
+  existing AI evidence packet/validator and data-quality contract/validator
+  modules. This is a future-facing module-boundary marker only: no production
+  imports were migrated and no runtime behavior, adapters, providers, LLM,
+  cache, scanner, rotation, options, backtest, portfolio, auth/RBAC, storage,
+  or API wiring changed.
+
 - 📝 **Frontend Playwright invocation guardrail** — Updated
   `docs/codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md` to standardize
   Playwright validation on WolfyStock frontend tasks: prefer
