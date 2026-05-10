@@ -8,6 +8,8 @@ const viewports = [
 
 const forbiddenLaunchLabels = ['交易工作台', '股票买卖', '提交交易', '下单', '订单执行', '买入', '卖出'];
 const requiredLedgerLabels = ['当前持仓', '历史记录', '手工记账台', '手工记账', '持仓流水', '保存记录'];
+const forbiddenInternalLeakagePattern =
+  /\braw\b|\bdebug\b|\bschema\b|\btrace\b|\bprompt\b|\btoken\b|\bcookie\b|\bauthorization\b|provider_timeout|MarketCache|local_db|fixture|mock|synthetic|generatedCandidates|failedCandidates/i;
 
 async function expectNoHorizontalOverflow(page: import('@playwright/test').Page) {
   const overflow = await page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth));
@@ -114,6 +116,8 @@ test.describe('portfolio launch surface', () => {
 
       await expectVisibleTextPresent(page, requiredLedgerLabels);
       await expectVisibleTextAbsent(page, forbiddenLaunchLabels);
+      const bodyText = await page.locator('body').innerText();
+      expect(bodyText).not.toMatch(forbiddenInternalLeakagePattern);
       await expectNoHorizontalOverflow(page);
       expect(consoleErrors).toEqual([]);
       expect(pageErrors).toEqual([]);

@@ -324,6 +324,51 @@ function providerSlaReadinessPayload() {
   };
 }
 
+function scannerRecentWatchlistsPayload() {
+  return {
+    total: 0,
+    page: 1,
+    limit: 10,
+    items: [],
+  };
+}
+
+function marketRotationRadarPayload() {
+  return {
+    generated_at: timestamp,
+    market: 'US',
+    themes: [],
+    metadata: {
+      source: 'playwright_admin_harness',
+      read_only: true,
+      no_external_calls: true,
+    },
+  };
+}
+
+function ruleBacktestRunsPayload() {
+  return {
+    items: [],
+    total: 0,
+    page: 1,
+    limit: 5,
+  };
+}
+
+function portfolioSnapshotPayload() {
+  return {
+    account_count: 0,
+    accounts: [],
+    totals: {
+      total_value: 0,
+      total_cost: 0,
+      total_pnl: 0,
+      total_pnl_percent: 0,
+      currency: 'USD',
+    },
+  };
+}
+
 function adminUsersPayload() {
   const user = {
     id: 'user-123',
@@ -606,6 +651,18 @@ export async function installAdminAuthHarness(
     }
     if (method === 'GET' && path === '/api/v1/system/config') {
       return fulfillJson(route, systemConfigPayload());
+    }
+    if (method === 'GET' && path === '/api/v1/scanner/watchlists/recent') {
+      return fulfillJson(route, scannerRecentWatchlistsPayload());
+    }
+    if (method === 'GET' && path === '/api/v1/market/rotation-radar') {
+      return fulfillJson(route, marketRotationRadarPayload());
+    }
+    if (method === 'GET' && path === '/api/v1/backtest/rule/runs') {
+      return fulfillJson(route, ruleBacktestRunsPayload());
+    }
+    if (method === 'GET' && path === '/api/v1/portfolio/snapshot') {
+      return fulfillJson(route, portfolioSnapshotPayload());
     }
     if (method === 'GET' && path === '/api/v1/quant/duckdb/health') {
       return fulfillJson(route, duckdbHealthPayload());

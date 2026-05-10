@@ -10,6 +10,14 @@ vi.mock('../../components/evidence/AdminEvidenceDiagnosticsConsole', () => ({
   ),
 }));
 
+vi.mock('../../components/evidence/AdminEvidenceDryRunPreview', () => ({
+  AdminEvidenceDryRunPreview: () => (
+    <section data-testid="mock-admin-evidence-dry-run-preview">
+      dry-run preview
+    </section>
+  ),
+}));
+
 const workflowSteps = [
   '本地工作区',
   '生成模板',
@@ -55,6 +63,7 @@ describe('AdminEvidenceWorkflowPage', () => {
 
     const page = screen.getByTestId('admin-evidence-workflow-page');
     expect(within(page).getByTestId('mock-admin-evidence-diagnostics-console')).toBeInTheDocument();
+    expect(within(page).getByTestId('mock-admin-evidence-dry-run-preview')).toBeInTheDocument();
     const workflowGrid = screen.getByTestId('admin-evidence-workflow-grid');
     const statusGrid = screen.getByTestId('admin-evidence-status-grid');
     workflowSteps.forEach((step) => {
@@ -67,13 +76,15 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(within(page).getByText('缺少证据时保持 NO-GO')).toBeInTheDocument();
   });
 
-  it('renders the diagnostics console before the offline workflow reference blocks', () => {
+  it('renders the diagnostics console and dry-run preview before the offline workflow reference blocks', () => {
     render(<AdminEvidenceWorkflowPage />);
 
     const consoleBlock = screen.getByTestId('mock-admin-evidence-diagnostics-console');
+    const dryRunPreview = screen.getByTestId('mock-admin-evidence-dry-run-preview');
     const workflowGrid = screen.getByTestId('admin-evidence-workflow-grid');
 
     expect(Boolean(consoleBlock.compareDocumentPosition(workflowGrid) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(dryRunPreview.compareDocumentPosition(workflowGrid) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
   it('surfaces purpose, current state, and next operator action in the hero', () => {
