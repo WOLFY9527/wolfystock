@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -14,6 +15,39 @@ from src.services import data_quality_contract_validator as service_data_quality
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+CONTRACT_NAMESPACE_MODULES = (
+    "src.contracts",
+    "src.contracts.evidence",
+    "src.contracts.data_quality",
+)
+ALLOWED_IMPLEMENTATION_MODULES = {
+    "src.services.ai_evidence_packet",
+    "src.services.ai_evidence_packet_validator",
+    "src.services.data_quality_contracts",
+    "src.services.data_quality_contract_validator",
+}
+FORBIDDEN_RUNTIME_PREFIXES = (
+    "data_provider",
+    "openai",
+    "litellm",
+    "src.agent",
+    "src.core.pipeline",
+    "api.v1.endpoints",
+    "src.services.litellm_runtime",
+    "src.services.market_cache",
+    "src.services.market_scanner_service",
+    "src.services.market_rotation_radar_service",
+    "src.services.options_lab_service",
+    "src.services.rule_backtest_service",
+    "src.services.portfolio_service",
+    "src.services.portfolio_risk_diagnostics",
+)
+EXCLUDED_ADAPTER_MODULES = (
+    "src.services.ai_evidence_adapters",
+    "src.services.scanner_evidence_packet",
+    "src.services.rotation_state_evidence",
+)
+SUBPROCESS_TRACKED_PREFIXES = ("src.", "api.", "data_provider")
 
 EXPECTED_EVIDENCE_EXPORTS = {
     "AI_EVIDENCE_PACKET_VERSION",
@@ -56,12 +90,46 @@ EXPECTED_DATA_QUALITY_EXPORTS = {
 }
 
 
+def _import_contract_namespaces_in_subprocess() -> set[str]:
+    script = f"""
+import importlib
+import json
+import sys
+
+for module_name in {list(CONTRACT_NAMESPACE_MODULES)!r}:
+    importlib.import_module(module_name)
+
+loaded_modules = sorted(
+    name
+    for name in sys.modules
+    if name.startswith({SUBPROCESS_TRACKED_PREFIXES!r}) or name in {{"openai", "litellm"}}
+)
+print(json.dumps({{"loaded_modules": loaded_modules}}))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    return set(payload["loaded_modules"])
+
+
+def _has_loaded_prefix(loaded_modules: set[str], prefix: str) -> bool:
+    return any(name == prefix or name.startswith(prefix + ".") for name in loaded_modules)
+
+
 def test_evidence_namespace_imports_and_exposes_expected_contract_surface() -> None:
     from src.contracts import evidence
 
     assert EXPECTED_EVIDENCE_EXPORTS == set(evidence.__all__)
     assert evidence.AiEvidencePacket is service_evidence_packet.AiEvidencePacket
     assert evidence.AiEvidenceValidationResult is service_evidence_validator.AiEvidenceValidationResult
+    assert not hasattr(evidence, "build_scanner_evidence_packet")
     assert not hasattr(evidence, "scanner_evidence_to_ai_packet")
 
 
@@ -86,37 +154,20 @@ def test_contract_submodules_delegate_to_existing_implementations() -> None:
 
 
 def test_contract_namespaces_are_inert_and_avoid_runtime_domain_imports() -> None:
-    script = """
-import sys
-import src.contracts.evidence
-import src.contracts.data_quality
+    loaded_modules = _import_contract_namespaces_in_subprocess()
 
-for forbidden_prefix in [
-    "data_provider",
-    "openai",
-    "litellm",
-    "src.agent",
-    "src.core.pipeline",
-    "src.services.litellm_runtime",
-    "src.services.market_scanner_service",
-    "src.services.market_rotation_radar_service",
-    "src.services.options_lab_service",
-    "src.services.rule_backtest_service",
-    "src.services.backtest_service",
-    "src.services.portfolio_service",
-    "api.v1.endpoints",
-]:
-    assert not any(
-        name == forbidden_prefix or name.startswith(forbidden_prefix + ".")
-        for name in sys.modules
-    ), f"unexpected runtime import side effect: {forbidden_prefix}"
-"""
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    assert set(CONTRACT_NAMESPACE_MODULES).issubset(loaded_modules)
+    assert ALLOWED_IMPLEMENTATION_MODULES.issubset(loaded_modules)
 
-    assert result.returncode == 0, result.stderr
+    for forbidden_prefix in FORBIDDEN_RUNTIME_PREFIXES:
+        assert not _has_loaded_prefix(
+            loaded_modules,
+            forbidden_prefix,
+        ), f"unexpected runtime import side effect: {forbidden_prefix}"
+
+
+def test_contract_namespaces_exclude_adapter_modules() -> None:
+    loaded_modules = _import_contract_namespaces_in_subprocess()
+
+    for module_name in EXCLUDED_ADAPTER_MODULES:
+        assert module_name not in loaded_modules, f"unexpected adapter import: {module_name}"
