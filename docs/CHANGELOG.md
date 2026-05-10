@@ -1,5 +1,14 @@
 ## 2026-05-10
 
+- 🧹 **Root backtest smoke wrapper retirement** — Deleted the obsolete root
+  backtest smoke wrapper after confirming
+  `scripts/smoke_backtest_standard.py` and
+  `scripts/smoke_backtest_rule.py` are the canonical committed smoke
+  entrypoints and current docs/tests already target them. This cleanup removes
+  one old entrypoint only: no backtest calculations, rule engine behavior,
+  fills, costs, metrics, provider/runtime behavior, API contracts, frontend
+  code, or compatibility layers changed.
+
 - 🧹 **Phase F archive docs consolidation** — Consolidated the stale
   `docs/architecture/archive/phase-f/` review/index/handoff cluster by
   deleting duplicate Phase F historical snapshots, trimming active Phase F

@@ -188,7 +188,6 @@ These are candidates, not automatic deletions. Each should be removed only after
 | `main.py` `--webui` / `--webui-only` aliases | Still supported in code and docs, despite deprecation | Hide from current deployment docs first, then remove later | Medium risk |
 | `analyzer_service.py` | Repo search found references only from root `SKILL.md` | Archive or move to docs/examples if no external importers depend on it | Medium risk because external/local workflows may import it |
 | `src/agent/strategies/*` compatibility wrappers | Files are explicitly labeled compatibility wrappers for legacy strategy namespace | Remove after clients fully standardize on skills terminology and import paths | Medium risk |
-| Root backtest smoke convention (`test_backtest_run.py` plus ignored `test_backtest_basic.py` and `test_backtest_rule.py`) | `test_backtest_run.py` is tracked but imports two root scripts that are ignored by `.gitignore`; committed equivalents already exist under `scripts/` | Standardize on `scripts/smoke_backtest_standard.py` and `scripts/smoke_backtest_rule.py`, then retire the root wrapper convention | High repo-readiness value, low runtime risk |
 | `sources/` design assets | Tracked 63 MB directory with PSD/AI/icon assets and screenshots, not runtime-critical | Archive to a design-assets location or Git LFS if long-term retention matters | Low runtime risk, low urgency |
 
 ### Deletion Candidates That Should Not Be Removed Yet
@@ -384,7 +383,7 @@ Value:
 | Docker healthcheck can hide real failures | `docker/Dockerfile` falls back to `python -c "import sys; sys.exit(0)"` after HTTP checks | Containers can remain “healthy” even when the server is failing | Remove the always-success fallback and align healthcheck with the real readiness contract |
 | Runtime source-of-truth is still operationally ambiguous | `.env` remains live config source in `src/config.py` and `src/services/system_config_service.py`, while Phase G mirrors config/admin actions into PostgreSQL | Operators can misinterpret PG shadow data as authoritative runtime config | Before deployment, document the real source-of-truth and how config mutations propagate |
 | Graceful shutdown for background executors is not fully wired | `AnalysisTaskQueue.shutdown()` exists, but app lifespan in `api/app.py` only manages `SystemConfigService` | Long-running deploys can leave task executors and subscribers unmanaged during shutdown/restart | Wire cleanup behavior into app/server lifecycle or explicitly document process model and restart expectations |
-| Deployment and smoke runbook drift | `docs/DEPLOY.md` still leans on deprecated `--webui` paths; `test_backtest_run.py` depends on ignored root files | Clean server bring-up and handoff are harder than necessary | Clean the runbook before deployment, even if deeper cleanup waits |
+| Deployment and smoke runbook drift | Historical drift existed around deprecated `--webui` paths and non-canonical smoke entrypoints | Clean server bring-up and handoff are harder than necessary when docs and smoke commands drift from the committed path | Keep deployment docs on `--serve` / `--serve-only` and the canonical `scripts/` smoke commands only |
 
 ### High-Value Operational Hardening Soon After Deployment
 

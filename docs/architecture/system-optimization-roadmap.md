@@ -118,7 +118,6 @@ Because deployment-hardening is already treated as complete, the remaining pre-d
 | Priority | Title | Area / module(s) | Why it matters | Expected impact | Risk | Difficulty | Benchmark first | Timing | Own branch / workstream |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | P0 | Reproducible baseline benchmark harness | `src/services/market_scanner_service.py`, `src/services/portfolio_service.py`, `src/core/pipeline.py`, `src/search_service.py`, `src/services/backtest_service.py`, `src/services/rule_backtest_service.py`, `scripts/` | The next optimization branches are all mixed-bottleneck work. Without stable baseline capture, later tuning will be guesswork and regressions will be hard to detect. | High decision quality and regression protection | Low | Medium | Yes, this item is the measurement pass | Before local manual validation and before deployment | Yes |
-| P0 | Canonical clean-checkout smoke path | `test_backtest_run.py`, `scripts/smoke_backtest_standard.py`, `scripts/smoke_backtest_rule.py`, `docs/DEPLOY.md`, `docs/DEPLOY_EN.md` | The tracked wrapper still depends on root smoke helpers that exist locally but are not tracked. Deployment and collaborator validation should use repo-committed entry points only. | Medium confidence / handoff improvement | Low | Small | No | Before server deployment | No, bundle with baseline-validation work |
 | P0 | Target-host queue/SSE proof run | `api/app.py`, `src/services/task_queue.py`, `docs/DEPLOY.md`, `docs/DEPLOY_EN.md` | The current queue model is intentionally process-local. Prove the exact single-process or sticky-routing deployment shape on the target host before shipping. | High operational confidence | Low | Small | No | Before server deployment | No, checklist-driven |
 | P0 | Canonical manual-validation and rollback pack | `docs/DEPLOY.md`, `docs/DEPLOY_EN.md`, `docs/full-guide.md`, `docs/full-guide_EN.md` | The backend is stable enough to validate now. Deployment should use one canonical validation flow, one rollback path, and one operator-facing smoke command set. | High operational clarity | Low | Small | No | Before server deployment | No, bundle with validation docs cleanup |
 | P0 | Freeze destructive cleanup before first observation window | `src/storage.py`, `src/postgres_phase_*.py`, `main.py`, `webui.py`, `src/agent/strategies/*`, `apps/dsa-web/src/pages/SettingsPage.tsx` | Removing safety nets or splitting large files before real deployment observation will make rollback harder and will contaminate the baseline that later optimization work depends on. | High stability protection | Low | Small | No | Before deployment | No |
@@ -126,7 +125,6 @@ Because deployment-hardening is already treated as complete, the remaining pre-d
 ### Before local manual validation
 
 - Finish the reproducible benchmark harness and record the initial baseline.
-- Ensure the clean-checkout smoke path does not depend on untracked root helpers.
 
 ### Before server deployment
 
@@ -180,7 +178,6 @@ These items are intentionally lower priority than the post-deployment performanc
 | P2 | Hide and split destructive admin actions | `apps/dsa-web/src/pages/SettingsPage.tsx`, `src/services/system_config_service.py` | The current control-plane page mixes routine settings with rare maintenance actions. Simplifying the surface lowers operator error without changing backend semantics. | Medium | Low | Medium | No | After a short observation window | Yes |
 | P2 | Retire `--webui` and `--webui-only` aliases after one deployment window | `main.py`, `webui.py`, `docs/DEPLOY.md`, `docs/DEPLOY_EN.md`, `README.md` | Current docs already prefer `--serve` and `--serve-only`. Code-level alias cleanup should wait until operator habits have actually shifted. | Medium clarity / smaller entry surface | Medium | Small | No | After parity/observation window | Yes |
 | P2 | Remove legacy agent “strategy” wrappers | `src/agent/strategies/*`, `api/v1/endpoints/agent.py`, `src/services/system_config_service.py` | The product surface already prefers “skills”. Wrapper removal should happen only after import paths and compatibility consumers are proven clean. | Medium maintainability gain | Medium | Small | No | After parity/observation window | Yes |
-| P1 | Normalize backtest smoke entry points | `test_backtest_run.py`, `scripts/smoke_backtest_standard.py`, `scripts/smoke_backtest_rule.py` | This is partly a pre-deploy cleanliness issue and partly a simplification issue. After the canonical path is adopted, the wrapper convention should be collapsed. | Medium repo-hygiene gain | Low | Small | No | Before deployment, then finish cleanup after observation window | No, bundle with benchmark/validation work |
 | P3 | Archive large design assets out of the runtime repo | `sources/` | The tracked `sources/` directory is about 63 MB and not runtime-critical. Moving it to a design-assets location or Git LFS reduces repo weight without affecting runtime behavior. | Medium repo-hygiene gain | Low | Small | No | Later / optional | Yes |
 | P3 | Re-evaluate `analyzer_service.py` as an integration asset | `analyzer_service.py`, `SKILL.md` | The file appears to serve local skill/integration usage rather than core runtime. Archive or relocate only after checking external usage and skill expectations. | Low-Medium cleanup gain | Medium | Small | No | Later / optional | Yes |
 
@@ -192,8 +189,6 @@ These items are intentionally lower priority than the post-deployment performanc
   - Delete only after the deployment docs and operator habits have clearly moved to `--serve` / `--serve-only`.
 - `src/agent/strategies/*`
   - Delete only after the import surface is fully standardized on `skills`.
-- Backtest smoke wrapper convention
-  - Collapse to repo-committed `scripts/smoke_backtest_standard.py` and `scripts/smoke_backtest_rule.py`.
 - `sources/`
   - Archive out of the runtime repo if long-term retention still matters.
 
