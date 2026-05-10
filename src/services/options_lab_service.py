@@ -58,6 +58,7 @@ from src.services.options_market_data_provider import (
     OptionsProviderUnsupportedSymbol,
     create_options_market_data_provider,
 )
+from src.services.options_data_quality_gates import evaluate_options_data_quality_gates
 
 
 DEFAULT_FIXTURE_PATH = DEFAULT_OPTIONS_FIXTURE_PATH
@@ -452,6 +453,18 @@ class OptionsLabService:
         )
         risk_reward = self._decision_risk_reward(comparison, decision_contracts, parsed.risk_budget)
         expected_move = self._expected_move(fixture, contracts, decision_contracts, underlying_price)
+        gate_diagnostics = evaluate_options_data_quality_gates(
+            strategy_key=parsed.strategy,
+            contracts=decision_contracts,
+            chain_as_of=str(fixture.get("chainAsOf") or ""),
+            source_type=data_quality.source_type,
+            iv_rank_status=iv_greeks.iv_rank_status,
+            iv_rank_source=iv_greeks.iv_rank_source,
+            iv_percentile=iv_greeks.iv_percentile,
+            expected_move_source=expected_move.expected_move_source,
+            event_calendar=fixture.get("eventCalendar"),
+            requires_event_calendar=bool(parsed.scenario_assumptions.get("requireEventCalendar")),
+        )
         raw_score = (
             data_quality.data_quality_score * 0.25
             + liquidity.liquidity_score * 0.20
@@ -467,8 +480,9 @@ class OptionsLabService:
             iv_greeks=iv_greeks,
             expected_move=expected_move,
             contracts=decision_contracts,
+            gate_diagnostics=gate_diagnostics,
         )
-        label = self._decision_label(score, data_quality)
+        label = self._decision_label(score, data_quality, gate_diagnostics)
         reasons, warnings = self._decision_reasons(
             data_quality,
             liquidity,
@@ -505,6 +519,12 @@ class OptionsLabService:
             decisionLabel=label,
             primaryReasons=reasons,
             riskWarnings=warnings,
+            dataQualityGates=gate_diagnostics.data_quality_gates.to_dict(),
+            liquidityGates=gate_diagnostics.liquidity_gates.to_dict(),
+            gateDecision=gate_diagnostics.gate_decision,
+            gateIssues=[item.to_dict() for item in gate_diagnostics.gate_issues],
+            decisionGrade=gate_diagnostics.decision_grade,
+            failClosedReasonCodes=list(gate_diagnostics.fail_closed_reason_codes),
             betterAlternative=alternative,
             noAdviceDisclosure=(
                 "Analytical output under explicit assumptions only; not personalized financial advice "
@@ -1061,6 +1081,18 @@ class OptionsLabService:
         breakeven = self._decision_breakeven(strategy, comparison, contracts, underlying_price, target_price)
         risk_reward = self._decision_risk_reward(comparison, contracts, risk_budget)
         alignment = self._expected_move_score(expected_move, breakeven)
+        gate_diagnostics = evaluate_options_data_quality_gates(
+            strategy_key=strategy,
+            contracts=contracts,
+            chain_as_of=str(fixture.get("chainAsOf") or ""),
+            source_type=data_quality.source_type,
+            iv_rank_status=iv_greeks.iv_rank_status,
+            iv_rank_source=iv_greeks.iv_rank_source,
+            iv_percentile=iv_greeks.iv_percentile,
+            expected_move_source=expected_move.expected_move_source,
+            event_calendar=fixture.get("eventCalendar"),
+            requires_event_calendar=False,
+        )
         raw_score = (
             data_quality.data_quality_score * 0.23
             + liquidity.liquidity_score * 0.18
@@ -1069,8 +1101,16 @@ class OptionsLabService:
             + risk_reward.score * 0.20
             + alignment * 0.08
         )
-        score = self._apply_decision_caps(raw_score, data_quality, liquidity, iv_greeks, expected_move, contracts)
-        label = self._decision_label(score, data_quality)
+        score = self._apply_decision_caps(
+            raw_score,
+            data_quality,
+            liquidity,
+            iv_greeks,
+            expected_move,
+            contracts,
+            gate_diagnostics,
+        )
+        label = self._decision_label(score, data_quality, gate_diagnostics)
         reasons, warnings = self._decision_reasons(
             data_quality,
             liquidity,
@@ -1117,6 +1157,8 @@ class OptionsLabService:
             return "no_supported_strategy_candidates"
         if all(item.decision_label == "数据不足，禁止判断" for item in ranked):
             return "data_quality_not_decision_grade"
+        if all(item.decision_label in {"数据不足，禁止判断", "仅观察"} for item in ranked):
+            return "data_quality_not_decision_grade"
         return "all_candidates_have_weak_edge_or_unfavorable_risk_reward"
 
     def _apply_decision_caps(
@@ -1127,6 +1169,7 @@ class OptionsLabService:
         iv_greeks: OptionsDecisionIvGreeks,
         expected_move: OptionsExpectedMove,
         contracts: Sequence[OptionContract],
+        gate_diagnostics,
     ) -> float:
         score = self._bounded(raw_score)
         if data_quality.data_quality_tier == "insufficient":
@@ -1145,10 +1188,19 @@ class OptionsLabService:
             score = min(score, 68)
         if any(contract.volume is None or contract.open_interest is None for contract in contracts):
             score = min(score, 60)
+        if gate_diagnostics.gate_decision == "数据不足，禁止判断":
+            score = min(score, 35)
+        elif not gate_diagnostics.decision_grade:
+            score = min(score, 54)
         return round(score, 2)
 
     @staticmethod
-    def _decision_label(score: float, data_quality: OptionsDecisionDataQuality) -> str:
+    def _decision_label(score: float, data_quality: OptionsDecisionDataQuality, gate_diagnostics=None) -> str:
+        if gate_diagnostics is not None:
+            if gate_diagnostics.gate_decision == "数据不足，禁止判断":
+                return "数据不足，禁止判断"
+            if not gate_diagnostics.decision_grade:
+                return "仅观察"
         if data_quality.data_quality_tier in {"insufficient", "synthetic_demo_only"}:
             return "数据不足，禁止判断"
         if score < 45:

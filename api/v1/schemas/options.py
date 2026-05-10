@@ -138,6 +138,8 @@ OptionStrategy = Literal["long_call", "long_put", "bull_call_spread", "bear_put_
 OptionsDataQualityTier = Literal["live_usable", "delayed_usable", "synthetic_demo_only", "insufficient"]
 OptionsDecisionLabel = Literal["数据不足，禁止判断", "不建议", "仅观察", "有条件可交易", "高风险，仅小仓验证"]
 OptionsOptimizerLabel = Literal["数据不足，禁止判断", "不建议交易", "仅观察", "可关注替代结构", "有条件可交易"]
+OptionsGateStatus = Literal["clear", "blocked", "observe_only", "manual_review"]
+OptionsGateDecision = Literal["数据不足，禁止判断", "仅观察", "需人工复核"]
 OptionsIvRankStatus = Literal["unavailable", "available"]
 OptionsExpectedMoveSource = Literal["straddle_mid", "iv_dte", "unavailable"]
 
@@ -369,6 +371,32 @@ class OptionsDecisionFreshness(_OptionsModel):
     as_of: Optional[str] = Field(default=None, alias="asOf")
 
 
+class OptionsGateIssue(_OptionsModel):
+    code: str
+    category: str
+    status: OptionsGateStatus
+    label: str
+    decision_grade: bool = Field(default=False, alias="decisionGrade")
+    leg_index: Optional[int] = Field(default=None, alias="legIndex")
+    contract_symbol: Optional[str] = Field(default=None, alias="contractSymbol")
+
+
+class OptionsLegGateDiagnostics(_OptionsModel):
+    leg_index: int = Field(alias="legIndex")
+    contract_symbol: Optional[str] = Field(default=None, alias="contractSymbol")
+    data_quality_status: OptionsGateStatus = Field(alias="dataQualityStatus")
+    liquidity_status: OptionsGateStatus = Field(alias="liquidityStatus")
+    issue_codes: List[str] = Field(default_factory=list, alias="issueCodes")
+    decision_grade: bool = Field(default=False, alias="decisionGrade")
+
+
+class OptionsStrategyGateSummary(_OptionsModel):
+    status: OptionsGateStatus
+    issue_codes: List[str] = Field(default_factory=list, alias="issueCodes")
+    decision_grade: bool = Field(default=False, alias="decisionGrade")
+    leg_diagnostics: List[OptionsLegGateDiagnostics] = Field(default_factory=list, alias="legDiagnostics")
+
+
 class OptionsExpectedMove(_OptionsModel):
     expected_move_abs: Optional[float] = Field(default=None, alias="expectedMoveAbs")
     expected_move_pct: Optional[float] = Field(default=None, alias="expectedMovePct")
@@ -417,6 +445,12 @@ class OptionsDecisionResponse(_OptionsModel):
     decision_label: OptionsDecisionLabel = Field(alias="decisionLabel")
     primary_reasons: List[str] = Field(default_factory=list, alias="primaryReasons")
     risk_warnings: List[str] = Field(default_factory=list, alias="riskWarnings")
+    data_quality_gates: Optional[OptionsStrategyGateSummary] = Field(default=None, alias="dataQualityGates")
+    liquidity_gates: Optional[OptionsStrategyGateSummary] = Field(default=None, alias="liquidityGates")
+    gate_decision: Optional[OptionsGateDecision] = Field(default=None, alias="gateDecision")
+    gate_issues: List[OptionsGateIssue] = Field(default_factory=list, alias="gateIssues")
+    decision_grade: Optional[bool] = Field(default=None, alias="decisionGrade")
+    fail_closed_reason_codes: List[str] = Field(default_factory=list, alias="failClosedReasonCodes")
     better_alternative: Optional[OptionsDecisionAlternative] = Field(default=None, alias="betterAlternative")
     no_advice_disclosure: str = Field(alias="noAdviceDisclosure")
     freshness: OptionsDecisionFreshness

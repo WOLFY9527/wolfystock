@@ -598,6 +598,12 @@ def test_decision_endpoint_returns_safe_demo_only_contract_quality() -> None:
         assert payload["optimizer"]["optimizerLabel"] == "数据不足，禁止判断"
         assert payload["optimizer"]["preferredStrategyKey"] is None
         assert payload["rankedAlternatives"]
+        assert payload["gateDecision"] == "数据不足，禁止判断"
+        assert payload["decisionGrade"] is False
+        assert payload["dataQualityGates"]["status"] == "blocked"
+        assert payload["liquidityGates"]["status"] in {"blocked", "manual_review"}
+        assert payload["gateIssues"]
+        assert payload["failClosedReasonCodes"]
         assert payload["metadata"]["noExternalCalls"] is True
         assert payload["metadata"]["noOrderPlacement"] is True
         assert "not personalized financial advice" in payload["noAdviceDisclosure"]
@@ -695,6 +701,8 @@ def test_decision_endpoint_delayed_fixture_keeps_tradeability_cap() -> None:
         assert payload["dataQuality"]["dataQualityTier"] == "delayed_usable"
         assert payload["freshness"]["freshness"] == "delayed"
         assert payload["decisionLabel"] != "有条件可交易"
+        assert payload["decisionGrade"] is False
+        assert payload["gateDecision"] in {"数据不足，禁止判断", "仅观察", "需人工复核"}
         assert all(item["decisionLabel"] != "有条件可交易" for item in payload["rankedAlternatives"])
     finally:
         client.close()

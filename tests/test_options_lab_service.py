@@ -513,6 +513,12 @@ def test_decision_synthetic_fixture_forces_demo_only_insufficient_label() -> Non
     assert response.metadata.no_external_calls is True
     assert response.optimizer.optimizer_label == "数据不足，禁止判断"
     assert response.optimizer.preferred_strategy_key is None
+    assert response.gate_decision == "数据不足，禁止判断"
+    assert response.decision_grade is False
+    assert response.data_quality_gates is not None
+    assert response.liquidity_gates is not None
+    assert response.gate_issues
+    assert response.fail_closed_reason_codes
     assert all(item.decision_label != "有条件可交易" for item in response.ranked_alternatives)
 
 
@@ -688,6 +694,8 @@ def test_decision_missing_greeks_caps_score_and_warns() -> None:
     assert "missing_greeks" in response.iv_greeks.warnings
     assert response.trade_quality_score <= 35
     assert "missing_greeks_degrade_confidence" in response.risk_warnings
+    assert response.gate_decision == "数据不足，禁止判断"
+    assert "missing_greeks" in response.fail_closed_reason_codes
 
 
 def test_decision_wide_spread_caps_score_and_warns() -> None:
@@ -714,6 +722,8 @@ def test_decision_wide_spread_caps_score_and_warns() -> None:
     assert response.liquidity.spread_pct >= 90
     assert "wide_bid_ask_spread" in response.liquidity.liquidity_warnings
     assert response.trade_quality_score <= 35
+    assert response.gate_decision in {"数据不足，禁止判断", "需人工复核"}
+    assert "wide_bid_ask_spread" in response.fail_closed_reason_codes
 
 
 def test_decision_delayed_non_live_data_cannot_emit_tradeable_label(tmp_path: Path) -> None:
@@ -917,3 +927,38 @@ def test_decision_response_excludes_raw_provider_secret_and_live_paths() -> None
     for blocked in FORBIDDEN_TERMS + ["traceback", "stack trace", "raw payload"]:
         assert blocked.lower() not in text
     assert response.metadata.force_refresh_ignored is True
+
+
+def test_decision_response_adds_gate_diagnostics_without_removing_existing_fields() -> None:
+    response = _service().evaluate_decision(
+        {
+            "symbol": "TEM",
+            "strategy": "bull_call_spread",
+            "expiration": "2026-06-19",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskBudget": 600,
+        }
+    )
+
+    payload = response.model_dump(by_alias=True)
+    for key in [
+        "dataQuality",
+        "liquidity",
+        "ivGreeks",
+        "expectedMove",
+        "optimizer",
+        "rankedAlternatives",
+        "tradeQualityScore",
+        "decisionLabel",
+    ]:
+        assert key in payload
+    for key in [
+        "dataQualityGates",
+        "liquidityGates",
+        "gateDecision",
+        "gateIssues",
+        "decisionGrade",
+        "failClosedReasonCodes",
+    ]:
+        assert key in payload
