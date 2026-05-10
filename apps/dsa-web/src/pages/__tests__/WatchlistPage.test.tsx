@@ -228,9 +228,9 @@ function renderWatchlist(path = '/watchlist') {
         <Routes>
           <Route path="/watchlist" element={<><WatchlistPage /><LocationProbe /></>} />
           <Route path="/zh" element={<><div>home</div><LocationProbe /></>} />
-          <Route path="/zh/scanner" element={<div>scanner</div>} />
-          <Route path="/zh/backtest" element={<div>backtest</div>} />
-          <Route path="/zh/backtest/results/:runId" element={<div>backtest result</div>} />
+          <Route path="/zh/scanner" element={<><div>scanner</div><LocationProbe /></>} />
+          <Route path="/zh/backtest" element={<><div>backtest</div><LocationProbe /></>} />
+          <Route path="/zh/backtest/results/:runId" element={<><div>backtest result</div><LocationProbe /></>} />
           <Route path="/zh/login" element={<div>login</div>} />
         </Routes>
       </UiLanguageProvider>
@@ -300,6 +300,16 @@ describe('WatchlistPage', () => {
     expect(contextSelect.closest('.select-field__control')?.querySelector('.select-field__overlay')).toHaveAttribute('aria-hidden', 'true');
     expect(contextSelect.closest('.select-field__control')?.querySelector('.select-field__value')).toHaveTextContent('全部');
     expect(listWatchlistItems).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses terminal primitives for the page shell, command actions, and row status material', async () => {
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-NVDA');
+    expect(screen.getByTestId('watchlist-page')).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(screen.getByRole('heading', { name: '观察列表' }).closest('[data-terminal-primitive="panel"]')).not.toBeNull();
+    expect(screen.getByTestId('watchlist-command-bar').querySelectorAll('[data-terminal-primitive="button"]')).toHaveLength(5);
+    expect(row.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThan(0);
   });
 
   it('shows intelligence coverage summary totals', async () => {
@@ -415,7 +425,9 @@ describe('WatchlistPage', () => {
     expect(within(row).getByText(/历史 \+3.2% · 命中 56%/)).toBeInTheDocument();
     expect(within(row).getByText('已回测')).toBeInTheDocument();
     expect(within(row).getByText(/收益 \+24.6% · 回撤 -8.2% · Sharpe 1.34 · 交易 6/)).toBeInTheDocument();
-    expect(within(row).getByRole('link', { name: /结果 33/ })).toHaveAttribute('href', '/zh/backtest/results/33');
+    fireEvent.click(within(row).getByRole('button', { name: /结果 33/ }));
+    expect(screen.getByText('backtest result')).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/zh/backtest/results/33');
   });
 
   it('maps raw scanner and backtest failure statuses to compact Chinese labels', async () => {
@@ -553,7 +565,9 @@ describe('WatchlistPage', () => {
     }));
     const row = await screen.findByTestId('watchlist-row-NVDA');
     expect(within(row).getByText(/收益 \+14.2% · 回撤 -3.2% · Sharpe 1.50 · 交易 5/)).toBeInTheDocument();
-    expect(within(row).getByRole('link', { name: /结果 701/ })).toHaveAttribute('href', '/zh/backtest/results/701');
+    fireEvent.click(within(row).getByRole('button', { name: /结果 701/ }));
+    expect(screen.getByText('backtest result')).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/zh/backtest/results/701');
   });
 
   it('shows compact Chinese failure reasons during failed batch actions', async () => {
@@ -626,18 +640,20 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('watchlist-row-NVDA')).toHaveTextContent('96.0');
   });
 
-  it('links backtest with scanner and watchlist metadata', async () => {
+  it('navigates to backtest with scanner and watchlist metadata', async () => {
     renderWatchlist();
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
-    const link = within(row).getByRole('link', { name: /回测/ });
-    expect(link).toHaveAttribute('href', expect.stringContaining('/zh/backtest?'));
-    expect(link).toHaveAttribute('href', expect.stringContaining('symbol=NVDA'));
-    expect(link).toHaveAttribute('href', expect.stringContaining('source=scanner'));
-    expect(link).toHaveAttribute('href', expect.stringContaining('origin=watchlist'));
-    expect(link).toHaveAttribute('href', expect.stringContaining('watchlistItemId=1'));
-    expect(link).toHaveAttribute('href', expect.stringContaining('scannerRunId=42'));
-    expect(link).toHaveAttribute('href', expect.stringContaining('themeId=ai-momentum'));
+    fireEvent.click(within(row).getByRole('button', { name: /回测/ }));
+
+    expect(screen.getByText('backtest')).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/zh/backtest?');
+    expect(screen.getByTestId('location')).toHaveTextContent('symbol=NVDA');
+    expect(screen.getByTestId('location')).toHaveTextContent('source=scanner');
+    expect(screen.getByTestId('location')).toHaveTextContent('origin=watchlist');
+    expect(screen.getByTestId('location')).toHaveTextContent('watchlistItemId=1');
+    expect(screen.getByTestId('location')).toHaveTextContent('scannerRunId=42');
+    expect(screen.getByTestId('location')).toHaveTextContent('themeId=ai-momentum');
   });
 
   it('removes a candidate through the delete API and drops the row', async () => {
@@ -660,13 +676,15 @@ describe('WatchlistPage', () => {
     expect(await screen.findByText('NVDA 已复制')).toBeInTheDocument();
   });
 
-  it('renders an empty state with a scanner link', async () => {
+  it('renders an empty state with a scanner action', async () => {
     listWatchlistItems.mockResolvedValue({ items: [] });
 
     renderWatchlist();
 
     expect(await screen.findByText('暂无追踪候选。')).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: /打开扫描器/ })[1]).toHaveAttribute('href', '/zh/scanner');
+    fireEvent.click(screen.getAllByRole('button', { name: /打开扫描器/ })[1]);
+    expect(screen.getByText('scanner')).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/zh/scanner');
   });
 
   it('renders the authentication guard for guests', () => {
