@@ -1,3 +1,14 @@
+## 2026-05-11
+
+- 🛡️ **Codex guard-source-of-truth hardening** — Updated the existing WolfyStock
+  guard docs to codify engineering cleanliness, mandatory final-report fields,
+  canonical Terminal primitive reuse, inert `src/contracts` module-boundary
+  rules, protected-runtime semantic boundaries, and focused validation guidance
+  including the Playwright app-config invocation rule. This is docs-only
+  guidance: no runtime, frontend page source, backend service source, tests,
+  wrappers, scripts, aliases, package behavior, or CI workflow behavior
+  changed.
+
 ## 2026-05-10
 
 - 🧩 **Contracts namespace marker for evidence and data quality** — Added a

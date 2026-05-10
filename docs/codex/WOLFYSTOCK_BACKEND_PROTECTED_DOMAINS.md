@@ -8,6 +8,19 @@ Backend prompts should refer to this file instead of repeating the same protecte
 
 Do not modify a protected domain unless the task explicitly requires it and tests cover the semantic change.
 
+## Contracts and boundary staging
+
+`src/contracts` is an inert contract surface only:
+
+- allowed: types, enums, validators, constants, and policy helpers;
+- forbidden: provider runtime imports, LLM/runtime modules, API endpoints, domain services, MarketCache, DB connections, and live-call clients.
+
+Do not add `src.contracts.providers` or `src.contracts.freshness` yet unless boundary guards and focused tests prove the namespace is inert.
+
+Future `src/platform` or `src/domains` migrations must be planned and tested first. Do not move scanner, rotation, options, backtest, portfolio, provider, LLM, or cache runtime into a new boundary as a cleanup side effect.
+
+The API layer should remain orchestration, not a hidden home for domain semantics.
+
 ## Protected domains
 
 ### Scanner
@@ -67,6 +80,7 @@ Do not change:
 - provider global order
 - live call paths
 - first-good-wins fallback
+- provider/freshness contract boundaries by accident
 - circuit semantics
 - cache/SWR/TTL semantics
 - fallback/mock/synthetic not-live semantics
@@ -147,6 +161,17 @@ Allowed only when explicitly requested:
 - UI status consolidation
 - diagnostics preserving semantics
 - performance optimization that preserves response meaning
+
+### API and stored contracts
+
+Do not change:
+- API response shapes as a cleanup side effect
+- stored contract versions
+- hidden compatibility semantics between API and existing clients
+
+Allowed only when explicitly requested:
+- additive fields with explicit compatibility review
+- documentation or tests proving current behavior
 
 ## Required confirmation in final reports
 

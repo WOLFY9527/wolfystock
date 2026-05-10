@@ -18,6 +18,8 @@ Shared primitives should own:
 - table/list row density
 - disclosure behavior
 
+New or modified pages should use canonical Terminal primitives where applicable. Do not invent local card, chip, button, disclosure, status, or empty-state material unless the existing primitive cannot support the task and the reason is documented.
+
 Do not let pages repeatedly hand-roll:
 
 ```text
@@ -54,6 +56,8 @@ Expected exports may include:
 - `TerminalDisclosure`
 
 Do not create competing primitives unless the existing primitive cannot support the task.
+
+For already migrated pages, do not reintroduce retired local panel, chip, badge, or shell helpers blocked by existing guard scripts/tests.
 
 ## TerminalPageShell
 
@@ -234,6 +238,8 @@ Avoid local material classes for:
 - empty states
 - notices
 - dense table rows
+
+Future visual unification should come through layout archetypes, spacing rhythm, typography scale, shared surface material, and approved primitives, not page-local patchwork.
 
 ## User-facing forbidden terms
 

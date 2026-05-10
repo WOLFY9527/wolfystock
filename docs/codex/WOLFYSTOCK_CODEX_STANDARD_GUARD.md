@@ -125,10 +125,14 @@ Task prompts should list task-specific protected domains only when the task is n
 Before adding new helpers, components, or patterns:
 
 - search for existing utilities, services, types, components, tests, and docs;
+- prefer deletion, consolidation, or direct reuse over adding another layer;
 - reuse established helpers when appropriate;
 - avoid duplicating status/label/freshness/provider mappings;
 - avoid ad-hoc UI controls when shared controls exist;
-- justify any new abstraction in the final report.
+- justify any new abstraction in the final report;
+- do not add a wrapper unless it creates a real boundary, has focused tests, and includes a future deletion or migration path;
+- treat compatibility layers as temporary and document owner, scope, and exit path;
+- do not create generated markdown artifacts unless explicitly requested or genuinely needed; if created, say whether they were kept or deleted and why in the final report.
 
 For frontend/UI tasks, read:
 
@@ -139,11 +143,29 @@ docs/audits/frontend-information-density-and-guidance-standard.md
 
 For architecture-sensitive tasks, read the relevant audit/design docs before coding.
 
+## 6.1 Final report contract
+
+Future Codex task reports must include:
+
+- boundary impact: domains, platforms, contracts, and shared UI touched;
+- reused existing patterns;
+- deleted or consolidated patterns;
+- new abstractions added and why;
+- wrapper check: added wrapper yes/no, why it is not debt, and deletion or migration path;
+- net file count change;
+- net concept or primitive count change when relevant;
+- generated artifacts kept or deleted;
+- protected semantics changed or not changed;
+- final git status and any foreign dirty files.
+
 ## 7. Frontend design rules
 
 For WolfyStock frontend work:
 
 - preserve OLED/deep-space/ghost-glass visual language;
+- use canonical Terminal primitives where applicable instead of page-local card/chip/button/disclosure/status/empty-state material;
+- for migrated pages, do not reintroduce retired local helpers or patterns already blocked by guard scripts/tests;
+- visual unification should come from page frame, layout archetypes, spacing rhythm, typography scale, surface system, and approved primitives, not page-local patchwork;
 - no solid gray backgrounds;
 - no native-looking controls;
 - no default scrollbars;
@@ -151,6 +173,7 @@ For WolfyStock frontend work:
 - no noisy explainer copy;
 - no huge dead layout bands;
 - raw/debug/provider/schema/developer details collapsed by default;
+- no broad local gray/zinc/slate slabs, warning walls, or raw provider/schema leakage on user pages;
 - desktop and mobile/narrow layouts must both be usable;
 - no horizontal overflow;
 - prefer Playwright verification when practical.
@@ -200,6 +223,8 @@ No full `ci_gate` is required for docs-only tasks.
 
 ### Frontend tasks
 
+Frontend UI tasks require focused tests, build, design guard, and browser verification unless the scope is docs-only or tests-only.
+
 Run targeted checks such as:
 
 ```bash
@@ -219,6 +244,8 @@ Use Playwright/browser verification when relevant:
 - confirm capability-gated hidden panels do not fetch protected APIs.
 
 ### Backend/service tasks
+
+Backend boundary tasks require focused pytest, `python3 -m py_compile` when source is touched, import-boundary tests where relevant, diff checks, and a secret scan.
 
 Run:
 
@@ -243,6 +270,8 @@ Tasks touching any of these are high risk:
 - portfolio/accounting.
 
 For high-risk tasks, run `./scripts/ci_gate.sh` only when the worktree is clean enough and practical.
+
+Do not overuse full `ci_gate`; reserve it for clean batch boundaries or explicit high-risk runtime changes.
 
 If unrelated dirty files exist, skip/defer `ci_gate` unless the task itself is high risk and the result will still be meaningful. Report:
 

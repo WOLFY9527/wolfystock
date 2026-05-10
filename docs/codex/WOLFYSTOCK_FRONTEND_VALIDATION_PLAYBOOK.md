@@ -4,6 +4,8 @@ Purpose: standard validation for frontend execution tasks.
 
 Use this playbook together with `WOLFYSTOCK_SHARED_MAIN_WORKTREE_PROTOCOL.md` when working in the shared `main` worktree.
 
+This playbook applies to frontend execution work. Docs-only or tests-only tasks may use smaller validation, but frontend UI changes should not skip focused tests, build, design guard, and browser verification.
+
 ## Standard focused validation
 
 Run focused tests for touched pages/components.
@@ -120,6 +122,8 @@ DSA_WEB_PLAYWRIGHT_PORT=4177 npx playwright test --config apps/dsa-web/playwrigh
 
 Avoid repo-root `npx --prefix apps/dsa-web playwright test ...` when relying on the app config. It may skip `apps/dsa-web/playwright.config.ts` and miss the intended `baseURL` / preview-server settings.
 
+Treat repo-root `npx --prefix apps/dsa-web playwright test ...` as a misconfiguration for app-config-dependent runs, not the default workflow.
+
 ## Standard viewports
 
 Use:
@@ -197,3 +201,5 @@ Include:
 - port used and stopped/left running status
 - limitations such as mocked auth/API
 - final `git status --short --branch`
+
+For the broader final-report contract, also follow `WOLFYSTOCK_CODEX_STANDARD_GUARD.md`.

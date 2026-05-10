@@ -5,6 +5,7 @@ WolfyStock is an ultra-minimal deep-space quantitative trading terminal for adva
 This document is mandatory for every frontend change. Before editing any frontend file, read and follow this design system. Do not invent visual styles outside this system unless the change explicitly explains why.
 
 For page hierarchy, information-density budgets, and guided disclosure rules, also follow `docs/audits/frontend-information-density-and-guidance-standard.md`.
+For primitive ownership and migrated-page constraints, also follow `docs/codex/WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md`.
 
 ---
 
@@ -34,6 +35,14 @@ The UI must not feel like:
 ## 1. Hard Anti-Patterns
 
 These are forbidden in normal frontend UI code.
+
+### 1.0 Primitive Drift
+
+New or modified pages should use canonical Terminal primitives where applicable.
+
+Do not invent local card, chip, button, disclosure, status, or empty-state material without a narrow justification.
+
+For already migrated pages, do not reintroduce retired local helpers or styling bridges blocked by existing guards/tests.
 
 ### 1.1 Solid Gray Backgrounds
 
@@ -71,6 +80,8 @@ bg-red-600
 
 Allowed only for primary CTA gradients.
 
+Broad local gray/zinc/slate slabs and warning-wall slabs are also forbidden. Unification should happen through shared shells, spacing rhythm, typography scale, surface material, and approved primitives.
+
 ### 1.3 Native Scrollbars
 
 Scrollable containers must use:
@@ -102,6 +113,8 @@ pointer-events-none
 ```
 
 Checkboxes/radios should be custom-styled or wrapped in existing project primitives.
+
+Do not leak raw/debug/provider/schema wording on normal user pages unless it is collapsed into a deliberate admin/operator disclosure.
 
 ### 1.5 Unconstrained Vertical Stacking
 
