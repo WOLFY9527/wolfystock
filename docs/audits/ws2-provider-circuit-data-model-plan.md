@@ -2,10 +2,14 @@
 
 Status: Partial
 Owner domain: Provider and MarketCache readiness
-Related docs: `docs/audits/ws2-provider-quota-circuit-breaker-policy-design.md`, `docs/audits/provider-marketcache-instrumentation-validation-plan.md`
+Related docs: `docs/audits/ws2-provider-quota-circuit-breaker-policy-design.md`, `docs/audits/provider-data-freshness-reliability-guide.md`
 
 Date: 2026-05-06
 Mode: docs-only migration planning. No migrations, runtime provider behavior, provider ordering/fallback, MarketCache TTL/SWR/cold-start behavior, quota enforcement, schema code, tests, live providers, or servers were changed.
+
+This retained data-model plan now carries the storage-side reference for
+provider fallback/quota reporting and MarketCache instrumentation validation
+expectations after consolidation of duplicate phase-plan docs.
 
 Follows: `410c5cef docs(ws2): design provider quota circuit breaker policy`
 

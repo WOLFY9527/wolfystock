@@ -27,6 +27,8 @@ Options, or Data Pipeline behavior.
   and data-quality dashboard readiness.
 - `docs/audits/deployment-readiness-checklist.md`: operational provider,
   Options, and Data Pipeline readiness gates.
+- `docs/audits/provider-data-freshness-reliability-guide.md`: canonical
+  offline provider freshness, fallback, and no-mock-as-live contract.
 - `docs/audits/provider-data-incident-runbook.md`: provider/data incident
   response runbook.
 - `docs/audits/data-quality-user-disclosure-policy.md`: canonical user-facing
@@ -38,10 +40,6 @@ Options, or Data Pipeline behavior.
 
 ## Partial docs
 
-- `docs/audits/provider-fallback-budget-reporting-design.md`: provider fallback
-  and quota-risk reporting design; should feed a provider readiness index.
-- `docs/audits/provider-marketcache-instrumentation-validation-plan.md`:
-  MarketCache/provider instrumentation validation plan.
 - `docs/audits/ws2-provider-circuit-data-model-plan.md`: storage/API/dry-run
   provider circuit pieces exist, but live enforcement remains future.
 - `docs/audits/ws2-provider-quota-circuit-breaker-policy-design.md`: active
@@ -63,8 +61,6 @@ Options, or Data Pipeline behavior.
   are accepted.
 - `docs/audits/ws2-provider-quota-circuit-breaker-policy-design.md`: live
   provider circuit enforcement pilot remains deferred.
-- `docs/audits/provider-marketcache-instrumentation-validation-plan.md`:
-  dashboard/staging degraded evidence remains future work.
 
 ## Launch blockers related to this domain
 
@@ -86,7 +82,6 @@ See `docs/audits/public-launch-readiness-master.md` and
 - `docs/audits/data-pipeline-r2-progressive-enrichment.md`: short
   implementation summary; useful context but not a canonical runbook or blocker
   register.
-- `docs/audits/provider-fallback-budget-reporting-design.md` and
-  `docs/audits/provider-marketcache-instrumentation-validation-plan.md`: both
-  overlap on provider diagnostics and should stay separate until a future
-  provider readiness index is explicitly approved.
+- Provider fallback measurement, quota-risk reporting, and MarketCache
+  instrumentation guardrails now live in the retained WS2 provider quota/circuit
+  policy and data-model docs rather than separate phase-plan markdown files.

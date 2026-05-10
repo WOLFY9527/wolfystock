@@ -1,5 +1,14 @@
 ## 2026-05-10
 
+- 🧹 **Provider readiness docs consolidation** — Consolidated the stale
+  provider phase-plan cluster by deleting two duplicate provider
+  reporting/validation docs, repointing retained audit indexes to
+  `provider-data-freshness-reliability-guide.md`,
+  `ws2-provider-circuit-data-model-plan.md`, and
+  `ws2-provider-quota-circuit-breaker-policy-design.md`, and keeping this as a
+  docs-only cleanup with no source, runtime, provider behavior, frontend,
+  backend, test, script, wrapper, or compatibility-layer changes.
+
 - 🧹 **Operator evidence docs consolidation** — Consolidated stale
   operator-evidence wrapper guides into the retained source-of-truth set:
   `docs/audits/operator-evidence-real-runbook.md`,

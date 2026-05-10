@@ -71,8 +71,6 @@ Mode: docs-only inventory. No markdown files were deleted or moved.
 | `docs/audits/options-provider-adapter-contract.md` | Keep standalone | Active Options provider adapter contract; live provider remains disabled. |
 | `docs/audits/production-security-hardening-audit.md` | Stale/needs status header | Several mitigations landed after this audit; reconcile before reuse. |
 | `docs/audits/provider-data-incident-runbook.md` | Keep standalone | Operational provider/data incident runbook. |
-| `docs/audits/provider-fallback-budget-reporting-design.md` | Merge candidate | Fold into provider/MarketCache readiness index. |
-| `docs/audits/provider-marketcache-instrumentation-validation-plan.md` | Merge candidate | Fold into provider/MarketCache readiness index. |
 | `docs/audits/public-launch-gap-register.md` | Keep standalone | Current launch blocker register and public-readiness source of truth. |
 | `docs/audits/archive/release-integration-plan-main-ahead.md` | Keep standalone | Current integration plan until the ahead train is pushed or branched. |
 | `docs/audits/release-rollback-runbook.md` | Keep standalone | Operational rollback runbook. |

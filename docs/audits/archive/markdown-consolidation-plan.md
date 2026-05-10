@@ -75,7 +75,7 @@ links until the merge is explicitly approved:
 | Admin RBAC/security governance index | `admin-rbac-capability-model-design.md`, `admin-rbac-r5-coarse-fallback-removal-plan.md`, `admin-rbac-final-qa-report.md`, `admin-role-governance-plan.md`, `admin-role-management-ui-design.md` |
 | Cost observability index | `cost-observability-design-index.md`, `cost-observability-implementation-roadmap.md`, `cost-system-final-qa-matrix.md`, `duplicate-cost-admin-summary-api-design.md`, `duplicate-cost-admin-dashboard-frontend-ux-contract.md`, `llm-external-api-cost-audit.md`, `llm-instrumentation-validation-plan.md`, `llm-provider-duplicate-cost-metrics-design.md` |
 | DB readiness index | `db-production-readiness-index-retention-audit.md`, `db-index-migration-plan-auth-task-log.md`, `db-index-batch-b-execution-provider-cost-plan.md`, `db-retention-backup-restore-drill-plan.md`, `ws2-multi-instance-smoke-test-design.md`, `ws2-multi-user-runtime-cost-control-design.md` |
-| Provider/MarketCache readiness index | `provider-fallback-budget-reporting-design.md`, `provider-marketcache-instrumentation-validation-plan.md`, `ws2-provider-circuit-data-model-plan.md`, `ws2-provider-quota-circuit-breaker-policy-design.md` |
+| Provider/MarketCache readiness index | `ws2-provider-circuit-data-model-plan.md`, `ws2-provider-quota-circuit-breaker-policy-design.md` |
 | Security hardening index | `production-security-hardening-audit.md`, `security-password-kdf-upgrade-plan.md`, `security-admin-mfa-backend-foundation.md`, `security-mfa-secret-storage-hardening-plan.md` |
 | Reuse/cache design index | `guest-preview-reuse-design.md`, `llm-report-output-cache-design.md`, `scanner-ai-interpretation-cache-design.md` |
 | Frontend visual audit index | `wolfystock-frontend-design-conformance-audit.md`, `wolfystock-global-codebase-audit.md`, `wolfystock-phase0-bundle-design-inventory.md`, `wolfystock-bundle-composition-report.md`, `wolfystock-echarts-chart-workspace-audit.md`, `wolfystock-product-command-card-owner-audit.md`, `wolfystock-chinese-form-label-review.md` |
@@ -135,11 +135,9 @@ state `Active`, `Partially implemented`, `Superseded`, or `Historical evidence`.
   `admin-user-directory-api-design.md`, and
   `admin-user-activity-timeline-api-design.md` overlap on admin user IA,
   route contracts, redaction, and audit expectations.
-- `ws2-provider-quota-circuit-breaker-policy-design.md`,
-  `ws2-provider-circuit-data-model-plan.md`,
-  `provider-fallback-budget-reporting-design.md`, and
-  `provider-marketcache-instrumentation-validation-plan.md` overlap on provider
-  diagnostics, quota/circuit vocabulary, and future dashboard readiness.
+- `ws2-provider-quota-circuit-breaker-policy-design.md` and
+  `ws2-provider-circuit-data-model-plan.md` overlap on provider diagnostics,
+  quota/circuit vocabulary, and future dashboard readiness.
 - `deployment-readiness-checklist.md`, `public-launch-gap-register.md`, and
   `release-integration-plan-main-ahead.md` overlap on launch readiness. Keep
   all three for now, but define one source-of-truth responsibility per file.
