@@ -1,0 +1,77 @@
+{
+  "engine": "analysis",
+  "entity": {
+    "type": "symbol",
+    "id": "analysis:PLTR",
+    "symbol": "PLTR",
+    "market": "US"
+  },
+  "run_id": "analysis_unsafe_001",
+  "evidence_version": "ai_evidence_packet_v1",
+  "required_evidence": [
+    {
+      "key": "evidence.packet",
+      "criticality": "required",
+      "status": "available",
+      "value_class": "metadata",
+      "source_ref_ids": [
+        "src_packet"
+      ],
+      "as_of": "2026-05-10T15:00:00Z",
+      "freshness_class": "fresh",
+      "reason_codes": []
+    }
+  ],
+  "optional_evidence": [],
+  "freshness": {
+    "packet": {
+      "as_of": "2026-05-10T15:00:00Z",
+      "freshness_class": "fresh"
+    }
+  },
+  "quality_flags": [],
+  "decision_status": "allowed",
+  "confidence_cap": {
+    "value": 88,
+    "policy_version": "confidence_cap_policy_v1",
+    "reason_codes": []
+  },
+  "source_refs": [
+    {
+      "source_ref_id": "src_packet",
+      "provider": "analysis_adapter",
+      "category": "analysis",
+      "source_class": "local",
+      "cache_hit": true,
+      "provider_usage_event_ids": [
+        "evt_analysis_packet"
+      ],
+      "sanitized_reason_code": "ok",
+      "raw_payload_stored": false,
+      "response_body": {
+        "token": "Bearer fake-token"
+      }
+    }
+  ],
+  "explainable_facts": [
+    {
+      "fact_id": "fact_packet",
+      "statement": "Packet evidence exists.",
+      "source_ref_ids": [
+        "src_packet"
+      ],
+      "criticality": "required",
+      "confidence_class": "high",
+      "user_visible": true
+    }
+  ],
+  "admin_diagnostics": {
+    "raw_payload": {
+      "Authorization": "Bearer fake-token"
+    },
+    "headers": {
+      "set-cookie": "fake=cookie"
+    },
+    "safe_summary": "sanitized metadata only"
+  }
+}

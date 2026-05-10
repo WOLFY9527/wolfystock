@@ -1,0 +1,57 @@
+{
+  "rotationStateEvidence": {
+    "schemaVersion": "rotation_state_evidence_v1",
+    "market": "US",
+    "themeId": "ai_applications",
+    "taxonomyVersion": "sector_rotation_taxonomy_v1",
+    "computedAt": "2026-05-10T09:50:00Z",
+    "asOf": "2026-05-10T09:45:00Z",
+    "state": "acceleration",
+    "stateLabel": "加速扩张观察",
+    "stateConfidence": 0.68,
+    "stateExplanation": "轮动代理证据继续走强，但真实资金流暂缺。",
+    "flowLanguageAllowed": false,
+    "flowEvidenceType": "proxy_only",
+    "requiredDataStatus": {
+      "status": "ready",
+      "hasSufficientEvidence": true,
+      "missingLabels": [
+        "真实资金流暂缺"
+      ],
+      "missingReasonCodes": [
+        "real_flow_missing"
+      ],
+      "coverageLabels": [
+        "代理强度",
+        "广度确认",
+        "量能确认",
+        "跨时窗延续",
+        "轮动代理证据"
+      ]
+    },
+    "signals": {
+      "fundFlow": {
+        "status": "usable",
+        "label": "轮动代理证据",
+        "value": "proxy_only",
+        "note": "仅有价格/量能代理，不代表真实资金流。"
+      },
+      "breadth": {
+        "status": "strong",
+        "label": "广度确认",
+        "value": 82.0
+      }
+    },
+    "riskLabels": [
+      "gap_fade_risk"
+    ],
+    "uiSummary": "量价代理同步扩张，真实资金流暂缺，仅供观察。",
+    "adminDiagnostics": {
+      "proxyQuality": {
+        "coveragePercent": 100.0,
+        "freshness": "delayed"
+      }
+    },
+    "noAdviceDisclosure": "仅用于观察资金轮动迹象，非买卖建议。"
+  }
+}

@@ -1,0 +1,183 @@
+{
+  "portfolioId": "main-portfolio",
+  "market": "GLOBAL",
+  "portfolioRiskEvidence": {
+    "engine": "portfolio_risk",
+    "entity": {
+      "type": "portfolio",
+      "id": "portfolio:main-portfolio",
+      "market": "GLOBAL",
+      "display_name": "Main Portfolio"
+    },
+    "run_id": "portfolio_20260510_001",
+    "evidence_version": "ai_evidence_packet_v1",
+    "required_evidence": [
+      {
+        "key": "holdings.lineage",
+        "criticality": "required",
+        "status": "available",
+        "value_class": "metadata",
+        "source_ref_ids": [
+          "portfolio_snapshot"
+        ],
+        "as_of": "2026-05-10T09:30:00Z",
+        "freshness_class": "fresh",
+        "reason_codes": []
+      },
+      {
+        "key": "cash.ledger",
+        "criticality": "required",
+        "status": "available",
+        "value_class": "metadata",
+        "source_ref_ids": [
+          "portfolio_snapshot"
+        ],
+        "as_of": "2026-05-10T09:30:00Z",
+        "freshness_class": "fresh",
+        "reason_codes": []
+      },
+      {
+        "key": "transactions.lineage",
+        "criticality": "required",
+        "status": "available",
+        "value_class": "metadata",
+        "source_ref_ids": [
+          "portfolio_snapshot"
+        ],
+        "as_of": "2026-05-10T09:30:00Z",
+        "freshness_class": "fresh",
+        "reason_codes": []
+      },
+      {
+        "key": "fx.freshness",
+        "criticality": "required",
+        "status": "stale",
+        "value_class": "metadata",
+        "source_ref_ids": [
+          "fx_snapshot"
+        ],
+        "as_of": "2026-05-08T09:25:00Z",
+        "freshness_class": "stale",
+        "reason_codes": [
+          "stale_fx"
+        ]
+      },
+      {
+        "key": "cost_basis.method",
+        "criticality": "required",
+        "status": "available",
+        "value_class": "categorical",
+        "source_ref_ids": [
+          "portfolio_snapshot"
+        ],
+        "as_of": "2026-05-10T09:30:00Z",
+        "freshness_class": "fresh",
+        "reason_codes": []
+      },
+      {
+        "key": "source.authority",
+        "criticality": "required",
+        "status": "available",
+        "value_class": "categorical",
+        "source_ref_ids": [
+          "portfolio_snapshot"
+        ],
+        "as_of": "2026-05-10T09:30:00Z",
+        "freshness_class": "fresh",
+        "reason_codes": [
+          "manual_replay_authoritative"
+        ]
+      },
+      {
+        "key": "sync_import.status",
+        "criticality": "required",
+        "status": "available",
+        "value_class": "categorical",
+        "source_ref_ids": [
+          "portfolio_snapshot"
+        ],
+        "as_of": "2026-05-10T09:30:00Z",
+        "freshness_class": "fresh",
+        "reason_codes": [
+          "manual_replay_complete"
+        ]
+      }
+    ],
+    "optional_evidence": [],
+    "freshness": {
+      "fx": {
+        "as_of": "2026-05-08T09:25:00Z",
+        "freshness_class": "stale"
+      }
+    },
+    "quality_flags": [
+      "stale_required_data"
+    ],
+    "decision_status": "caution",
+    "confidence_cap": {
+      "value": 72,
+      "policy_version": "confidence_cap_policy_v1",
+      "reason_codes": [
+        "stale_fx"
+      ]
+    },
+    "source_refs": [
+      {
+        "source_ref_id": "portfolio_snapshot",
+        "provider": "portfolio_snapshot",
+        "category": "portfolio",
+        "source_class": "local",
+        "cache_hit": true,
+        "provider_usage_event_ids": [
+          "evt_portfolio_snapshot"
+        ],
+        "sanitized_reason_code": "manual_replay_complete",
+        "raw_payload_stored": false
+      },
+      {
+        "source_ref_id": "fx_snapshot",
+        "provider": "fx_cache",
+        "category": "portfolio",
+        "source_class": "fallback",
+        "cache_hit": true,
+        "provider_usage_event_ids": [
+          "evt_fx_snapshot"
+        ],
+        "sanitized_reason_code": "stale_fx",
+        "raw_payload_stored": false
+      }
+    ],
+    "explainable_facts": [
+      {
+        "fact_id": "fx_fact",
+        "statement": "FX 汇率已过期，跨币种风险判断需要降级。",
+        "source_ref_ids": [
+          "fx_snapshot"
+        ],
+        "criticality": "required",
+        "confidence_class": "medium",
+        "user_visible": true
+      }
+    ],
+    "admin_diagnostics": {
+      "limitation_labels": [
+        "FX 汇率已过期"
+      ]
+    }
+  },
+  "riskDiagnostics": {
+    "confidenceCap": {
+      "value": 72,
+      "decision_status": "caution",
+      "reason_codes": [
+        "stale_fx"
+      ],
+      "limitation_labels": [
+        "FX 汇率已过期"
+      ],
+      "disabled_claims": [
+        "cross_currency_precision"
+      ]
+    }
+  }
+}

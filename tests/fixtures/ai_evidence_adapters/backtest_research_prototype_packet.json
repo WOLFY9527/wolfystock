@@ -1,0 +1,43 @@
+{
+  "run_id": "bt_run_20260510_001",
+  "symbol": "600519",
+  "market": "CN",
+  "adjustedDataState": "unknown_or_mixed",
+  "corporateActionState": "not_ready",
+  "tradingCalendarState": "available_bars_only",
+  "fillModelState": "next_open_baseline",
+  "costModelState": "baseline_bps_only",
+  "reproducibilityState": "partial_without_dataset_lineage",
+  "professionalReadiness": {
+    "overall_state": "research_prototype",
+    "professional_quant_ready": false,
+    "adjusted_data_state": "unknown_or_mixed",
+    "corporate_action_state": "not_ready",
+    "trading_calendar_state": "available_bars_only",
+    "fill_model": "next_open_baseline",
+    "cost_model_state": "baseline_bps_only",
+    "reproducibility_state": "partial_without_dataset_lineage",
+    "dataset_version": "unknown",
+    "provider_calls": false,
+    "categories": {
+      "adjusted_data": {
+        "state": "unknown_or_mixed",
+        "ready": false,
+        "summary": "Adjusted OHLC basis is unknown or mixed; professional return claims are blocked.",
+        "details": {},
+        "blockers": [
+          "adjusted_ohlc_unavailable"
+        ]
+      },
+      "trading_calendar": {
+        "state": "available_bars_only",
+        "ready": false,
+        "summary": "Calendar handling is based on available bars only and is not a market-calendar contract.",
+        "details": {},
+        "blockers": [
+          "holiday_calendar_not_modelled"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "symbol": "PLTR",
+  "name": "Palantir",
+  "market": "US",
+  "diagnostics": {
+    "evidence_packet": {
+      "symbol": "PLTR",
+      "market": "us",
+      "rank": 1,
+      "score": 81.6,
+      "evidenceVersion": "scanner_evidence_v1",
+      "runId": 42,
+      "trendEvidence": {
+        "state": "complete",
+        "facts": [
+          {
+            "label": "趋势分",
+            "value": 18.5
+          }
+        ],
+        "issues": []
+      },
+      "momentumEvidence": {
+        "state": "complete",
+        "facts": [
+          {
+            "label": "5日动量",
+            "value": "6.8%"
+          }
+        ],
+        "issues": []
+      },
+      "volumeEvidence": {
+        "state": "complete",
+        "facts": [
+          {
+            "label": "20日均量",
+            "value": "34.0M"
+          }
+        ],
+        "issues": []
+      },
+      "volatilityRiskEvidence": {
+        "state": "complete",
+        "facts": [
+          {
+            "label": "ATR20%",
+            "value": "4.8%"
+          }
+        ],
+        "issues": []
+      },
+      "liquidityEvidence": {
+        "state": "complete",
+        "facts": [
+          {
+            "label": "20日均额",
+            "value": "7.60亿"
+          }
+        ],
+        "issues": []
+      },
+      "relativeStrengthEvidence": {
+        "state": "complete",
+        "facts": [
+          {
+            "label": "相对强度",
+            "value": "0.92"
+          }
+        ],
+        "issues": []
+      },
+      "sectorThemeContext": {
+        "state": "complete",
+        "facts": [
+          {
+            "label": "主题",
+            "value": "AI软件"
+          }
+        ],
+        "issues": []
+      },
+      "dataQualityState": "partial",
+      "freshnessState": "fallback",
+      "freshnessDetail": {
+        "quoteState": "fallback",
+        "historyState": "stale",
+        "latestTradeDate": "2026-05-08"
+      },
+      "missingEvidence": [],
+      "userFacingLabels": [
+        "历史数据不足",
+        "部分外部数据暂不可用",
+        "仅供观察",
+        "需人工复核",
+        "依据需复核"
+      ],
+      "warningFlags": [
+        "仅供观察",
+        "需人工复核",
+        "依据需复核"
+      ],
+      "adminReasonCodes": [
+        "history_insufficient",
+        "history_stale",
+        "provider_unavailable",
+        "external_optional_unavailable"
+      ]
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "strategyKey": "long_call",
+  "symbol": "TEM",
+  "market": "US",
+  "underlying": {
+    "symbol": "TEM",
+    "market": "US",
+    "asOf": "2026-05-10T14:00:00Z",
+    "freshness": "fixture",
+    "sourceType": "fixture"
+  },
+  "chain": {
+    "asOf": "2026-05-10T14:00:00Z",
+    "provider": "fixture_chain",
+    "sourceType": "fixture"
+  },
+  "gateDecision": "数据不足，禁止判断",
+  "decisionGrade": false,
+  "failClosedReasonCodes": [
+    "fixture_source_not_decision_grade",
+    "missing_bid_ask",
+    "unknown_freshness_not_decision_grade"
+  ],
+  "gateIssues": [
+    {
+      "code": "fixture_source_not_decision_grade",
+      "category": "freshness",
+      "status": "blocked",
+      "label": "演示数据不可用于判断",
+      "legIndex": 0,
+      "contractSymbol": "TEM260620C00100000"
+    },
+    {
+      "code": "missing_bid_ask",
+      "category": "liquidity",
+      "status": "blocked",
+      "label": "买卖价缺失",
+      "legIndex": 0,
+      "contractSymbol": "TEM260620C00100000"
+    }
+  ],
+  "dataQualityGates": {
+    "status": "blocked",
+    "issueCodes": [
+      "fixture_source_not_decision_grade",
+      "unknown_freshness_not_decision_grade"
+    ],
+    "decisionGrade": false,
+    "legDiagnostics": []
+  },
+  "liquidityGates": {
+    "status": "blocked",
+    "issueCodes": [
+      "missing_bid_ask"
+    ],
+    "decisionGrade": false,
+    "legDiagnostics": []
+  }
+}
