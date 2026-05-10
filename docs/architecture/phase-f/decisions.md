@@ -6,6 +6,8 @@ This is the long-lived decision register for the current Phase F coexistence bou
 
 It records the decisions that future AI or human reviewers should treat as already settled unless newer accepted evidence supersedes them.
 
+This page is the current source of truth; archive docs are provenance only.
+
 ## Core Boundary
 
 The current accepted Phase F boundary is:
@@ -41,12 +43,6 @@ Accepted decision:
 - keep it on the metadata-authority / drift-fallback track
 - do not reopen it as a new Phase F comparison implementation line by default
 
-Historical references:
-
-- [accounts-list boundary feasibility](../archive/phase-f/phase-f-accounts-list-comparison-boundary-feasibility-review-2026-04-21.md)
-- [accounts-list track decision](../archive/phase-f/phase-f-accounts-list-track-decision-review-2026-04-21.md)
-- [metadata-authority clarification](../archive/phase-f/phase-f-metadata-authority-track-clarification-review-2026-04-21.md)
-
 ## Plateau Decision
 
 Accepted decision:
@@ -58,11 +54,6 @@ Implication:
 - do not force weak candidate selection
 - do not broaden into replay, snapshot, or generic infrastructure by default
 
-Historical references:
-
-- [no-next-bounded-read-path review](../archive/phase-f/phase-f-no-next-true-bounded-read-path-feasibility-review-2026-04-21.md)
-- [plateau review](../archive/phase-f/phase-f-portfolio-comparison-only-plateau-review-2026-04-21.md)
-
 ## Serving Boundary Decision
 
 Accepted decision:
@@ -71,10 +62,6 @@ Accepted decision:
 - partial PG schema fallback behavior is a safety behavior, not serving approval
 - comparison-only evidence must not be restated as serving approval
 
-Historical references:
-
-- [serving-mode boundary review](../archive/phase-f/phase-f-portfolio-serving-mode-boundary-review-2026-04-21.md)
-
 ## Promotion-Readiness Decision
 
 Accepted decision:
@@ -82,26 +69,12 @@ Accepted decision:
 - promotion-readiness at the current stage means reviewer-facing bounded evidence quality only
 - it does not mean readiness for PG serving or broad operational rollout
 
-Historical references:
-
-- [promotion-readiness framing review](../archive/phase-f/phase-f-portfolio-promotion-readiness-framing-review-2026-04-21.md)
-
 ## Cutover Decision
 
 Accepted decision:
 
 - broader Phase F cutover requires additional prerequisites beyond the validated comparison-only lines
 - current validated lines are useful input to future cutover thinking, not sufficient approval
-
-Historical references:
-
-- [cutover prerequisite analysis](../archive/phase-f/phase-f-portfolio-cutover-prerequisite-analysis-2026-04-21.md)
-
-## Handoff Snapshot
-
-The handoff summary that informed this decision set is preserved in:
-
-- [backend handoff status summary](../archive/phase-f/phase-f-backend-handoff-status-summary-2026-04-21.md)
 
 ## Settled Statements To Reuse
 

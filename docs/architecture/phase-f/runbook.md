@@ -88,10 +88,6 @@ Recommended bounded request set per allowlisted account:
 5. `account_id=<id>&page=1&page_size=1`
 6. `account_id=<id>&page=2&page_size=1`
 
-Historical details:
-
-- [archived trades-list runbook](../archive/phase-f/phase-f-trades-list-evidence-collection-runbook-2026-04-20.md)
-
 ### Cash-ledger
 
 Recommended bounded request set per allowlisted account:
@@ -101,11 +97,6 @@ Recommended bounded request set per allowlisted account:
 3. `account_id=<id>&page=1&page_size=1`
 4. `account_id=<id>&page=2&page_size=1`
 
-Historical details:
-
-- [archived cash-ledger runbook](../archive/phase-f/phase-f-cash-ledger-evidence-collection-runbook-2026-04-21.md)
-- [archived cash-ledger non-empty plan](../archive/phase-f/phase-f-cash-ledger-non-empty-evidence-collection-plan-2026-04-21.md)
-
 ### Corporate-actions
 
 Recommended bounded request set per allowlisted account:
@@ -114,10 +105,6 @@ Recommended bounded request set per allowlisted account:
 2. `account_id=<id>&page=1&page_size=1`
 3. `account_id=<id>&page=2&page_size=1`
 4. `account_id=<id>&action_type=cash_dividend&page=1&page_size=20`
-
-Historical details:
-
-- [archived corporate-actions non-empty plan](../archive/phase-f/phase-f-corporate-actions-non-empty-evidence-collection-plan-2026-04-21.md)
 
 ## Evidence Expectations
 

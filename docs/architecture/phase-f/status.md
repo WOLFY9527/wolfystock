@@ -11,13 +11,7 @@ Phase F remains:
 - legacy-served
 - portfolio-read-path focused
 
-This document is not evidence of:
-
-- PostgreSQL serving readiness
-- broader cutover readiness
-- write-path migration
-- replay or snapshot expansion
-- migration completion
+This page is the current source of truth; archive docs are provenance only.
 
 ## Current Overall Posture
 
@@ -45,11 +39,6 @@ What to carry forward:
 - bounded non-empty evidence exists
 - legacy still serves every response
 
-Primary historical references:
-
-- [trades-list runbook](../archive/phase-f/phase-f-trades-list-evidence-collection-runbook-2026-04-20.md)
-- [trades-list non-empty acceptance](../archive/phase-f/phase-f-trades-list-non-empty-acceptance-evidence-review-2026-04-21.md)
-
 ### Cash-ledger
 
 Accepted status:
@@ -64,12 +53,6 @@ What to carry forward:
 - bounded non-empty real-PG evidence exists
 - legacy still serves every response
 
-Primary historical references:
-
-- [cash-ledger boundary feasibility](../archive/phase-f/phase-f-cash-ledger-comparison-boundary-feasibility-review-2026-04-21.md)
-- [cash-ledger non-empty evidence plan](../archive/phase-f/phase-f-cash-ledger-non-empty-evidence-collection-plan-2026-04-21.md)
-- [cash-ledger non-empty acceptance](../archive/phase-f/phase-f-cash-ledger-non-empty-acceptance-evidence-review-2026-04-21.md)
-
 ### Corporate-actions
 
 Accepted status:
@@ -83,12 +66,6 @@ What to carry forward:
 - bounded non-empty real-PG evidence exists
 - legacy still serves every response
 
-Primary historical references:
-
-- [corporate-actions boundary feasibility](../archive/phase-f/phase-f-corporate-actions-comparison-boundary-feasibility-review-2026-04-21.md)
-- [corporate-actions non-empty evidence plan](../archive/phase-f/phase-f-corporate-actions-non-empty-evidence-collection-plan-2026-04-21.md)
-- [corporate-actions non-empty acceptance](../archive/phase-f/phase-f-corporate-actions-non-empty-acceptance-evidence-review-2026-04-21.md)
-
 ## Separate-Track Surface
 
 The most important excluded surface is:
@@ -99,11 +76,6 @@ Current boundary:
 
 - remains on the metadata-authority / drift-fallback track
 - should not proceed into new Phase F comparison implementation work
-
-Primary historical references:
-
-- [accounts-list track decision](../archive/phase-f/phase-f-accounts-list-track-decision-review-2026-04-21.md)
-- [metadata-authority clarification](../archive/phase-f/phase-f-metadata-authority-track-clarification-review-2026-04-21.md)
 
 ## Plateau And Next-Step Boundary
 
@@ -116,11 +88,6 @@ This means:
 - do not force a weak next candidate
 - do not treat current evidence as serving approval
 - do not broaden into replay, snapshot, or write-path migration by default
-
-Primary historical references:
-
-- [no-next-bounded-read-path review](../archive/phase-f/phase-f-no-next-true-bounded-read-path-feasibility-review-2026-04-21.md)
-- [comparison-only plateau review](../archive/phase-f/phase-f-portfolio-comparison-only-plateau-review-2026-04-21.md)
 
 ## Explicitly Not Done
 
@@ -144,4 +111,3 @@ Use [decisions.md](./decisions.md) for the durable boundary set:
 - cutover prerequisite framing
 - accounts-list exclusion
 - plateau conclusions
-

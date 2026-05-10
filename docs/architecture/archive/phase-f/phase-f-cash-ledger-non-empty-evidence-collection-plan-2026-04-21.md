@@ -8,13 +8,9 @@ This document is docs-only. It does not authorize or implement PostgreSQL servin
 
 ## Status Of This Document
 
-This plan builds directly on the current cash-ledger bounded comparison chain:
+This plan complements the active Phase F runbook and status pages.
 
-- [phase-f-cash-ledger-comparison-boundary-feasibility-review-2026-04-21.md](/Users/yehengli/daily_stock_analysis_backend/docs/architecture/phase-f-cash-ledger-comparison-boundary-feasibility-review-2026-04-21.md)
-- [phase-f-cash-ledger-guarded-comparison-design-scaffolding-plan-2026-04-21.md](/Users/yehengli/daily_stock_analysis_backend/docs/architecture/phase-f-cash-ledger-guarded-comparison-design-scaffolding-plan-2026-04-21.md)
-- [phase-f-cash-ledger-evidence-collection-runbook-2026-04-21.md](/Users/yehengli/daily_stock_analysis_backend/docs/architecture/phase-f-cash-ledger-evidence-collection-runbook-2026-04-21.md)
-- [phase-f-cash-ledger-acceptance-evidence-review-2026-04-21.md](/Users/yehengli/daily_stock_analysis_backend/docs/architecture/phase-f-cash-ledger-acceptance-evidence-review-2026-04-21.md)
-- [phase-f-trades-list-non-empty-evidence-collection-plan-2026-04-21.md](/Users/yehengli/daily_stock_analysis_backend/docs/architecture/phase-f-trades-list-non-empty-evidence-collection-plan-2026-04-21.md)
+The older boundary and acceptance snapshots were consolidated into the active source-of-truth docs, so this file now stands as a historical plan record only.
 
 Code anchors used for this plan:
 

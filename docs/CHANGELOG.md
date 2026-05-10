@@ -1,5 +1,13 @@
 ## 2026-05-10
 
+- 🧹 **Phase F archive docs consolidation** — Consolidated the stale
+  `docs/architecture/archive/phase-f/` review/index/handoff cluster by
+  deleting duplicate Phase F historical snapshots, trimming active Phase F
+  status/decision/runbook references down to the current source-of-truth
+  docs, and keeping the remaining archive runbooks/plans as provenance only.
+  This is docs-only cleanup with no source, runtime, frontend, backend, test,
+  script, wrapper, or compatibility-layer changes.
+
 - 🧹 **Provider readiness docs consolidation** — Consolidated the stale
   provider phase-plan cluster by deleting two duplicate provider
   reporting/validation docs, repointing retained audit indexes to

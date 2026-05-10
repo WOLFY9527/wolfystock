@@ -17,11 +17,9 @@ This runbook is written for a reviewer or operator who:
 
 ## Status Of This Document
 
-This runbook is grounded in the current cash-ledger comparison-only implementation and the existing cash-ledger design docs:
+This runbook is grounded in the current cash-ledger comparison-only implementation and the active Phase F status/runbook pages.
 
-- [phase-f-cash-ledger-comparison-boundary-feasibility-review-2026-04-21.md](/Users/yehengli/daily_stock_analysis_backend/docs/architecture/phase-f-cash-ledger-comparison-boundary-feasibility-review-2026-04-21.md)
-- [phase-f-cash-ledger-guarded-comparison-design-scaffolding-plan-2026-04-21.md](/Users/yehengli/daily_stock_analysis_backend/docs/architecture/phase-f-cash-ledger-guarded-comparison-design-scaffolding-plan-2026-04-21.md)
-- [phase-f-trades-list-evidence-collection-runbook-2026-04-20.md](/Users/yehengli/daily_stock_analysis_backend/docs/architecture/phase-f-trades-list-evidence-collection-runbook-2026-04-20.md)
+The detailed boundary and acceptance snapshots that used to sit beside this runbook were consolidated into the active source-of-truth docs.
 
 Code anchors for this runbook:
 
