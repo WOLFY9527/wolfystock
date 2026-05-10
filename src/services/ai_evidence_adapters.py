@@ -24,6 +24,8 @@ from src.services.ai_evidence_packet import (
     coerce_ai_evidence_packet,
     evaluate_evidence_policy,
 )
+from src.services.rotation_state_evidence import ROTATION_STATE_EVIDENCE_SCHEMA_VERSION
+from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION
 
 
 _FORBIDDEN_FIELD_MARKERS = (
@@ -338,6 +340,43 @@ def _item(
     )
 
 
+def _apply_version_guard(
+    packet: AiEvidencePacket,
+    *,
+    actual_version: Any,
+    expected_version: str,
+    quality_flag: str,
+    reason_code: str,
+) -> AiEvidencePacket:
+    version_text = _text(actual_version)
+    if not version_text or version_text == expected_version:
+        return packet
+
+    quality_flags = list(packet.quality_flags)
+    _append_unique(quality_flags, quality_flag)
+    reason_codes = list(packet.confidence_cap.reason_codes)
+    _append_unique(reason_codes, reason_code)
+    return AiEvidencePacket(
+        engine=packet.engine,
+        entity=packet.entity,
+        run_id=packet.run_id,
+        evidence_version=packet.evidence_version,
+        required_evidence=list(packet.required_evidence),
+        optional_evidence=list(packet.optional_evidence),
+        freshness=packet.freshness,
+        quality_flags=quality_flags,
+        decision_status=_stricter_decision(packet.decision_status, AiEvidenceDecisionStatus.CAUTION),
+        confidence_cap=AiEvidenceConfidenceCap(
+            value=min(packet.confidence_cap.value, 60),
+            policy_version=packet.confidence_cap.policy_version,
+            reason_codes=reason_codes,
+        ),
+        source_refs=list(packet.source_refs),
+        explainable_facts=list(packet.explainable_facts),
+        admin_diagnostics=dict(packet.admin_diagnostics),
+    )
+
+
 def normalize_engine_evidence_to_ai_packet(value: Any) -> AiEvidencePacket:
     payload = value.to_dict() if isinstance(value, AiEvidencePacket) else _mapping(value)
     if not payload:
@@ -553,6 +592,13 @@ def scanner_evidence_to_ai_packet(value: Any) -> AiEvidencePacket:
             )
         ),
     )
+    packet = _apply_version_guard(
+        packet,
+        actual_version=raw.get("evidenceVersion"),
+        expected_version=SCANNER_EVIDENCE_VERSION,
+        quality_flag="unknown_source_packet_version",
+        reason_code="unsupported_source_packet_version",
+    )
     return _finalize_packet(packet)
 
 
@@ -699,6 +745,13 @@ def rotation_evidence_to_ai_packet(value: Any) -> AiEvidencePacket:
                 )
             )
         ),
+    )
+    packet = _apply_version_guard(
+        packet,
+        actual_version=raw.get("schemaVersion"),
+        expected_version=ROTATION_STATE_EVIDENCE_SCHEMA_VERSION,
+        quality_flag="unknown_engine_schema_version",
+        reason_code="unsupported_engine_schema_version",
     )
     return _finalize_packet(packet)
 
