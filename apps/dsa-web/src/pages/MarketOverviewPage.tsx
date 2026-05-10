@@ -946,7 +946,7 @@ function summarizeDataQuality(panels: PanelState): DataQualitySummary {
 type DecisionChip = {
   label: '风险' | '流动性' | '宽度' | '观察';
   value: string;
-  tone?: string;
+  variant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
 };
 
 function describeDirectionalItem(item?: MarketOverviewItem, fallbackLabel = 'N/A'): string {
@@ -973,11 +973,11 @@ function scoreStateLabel(score: MarketTemperatureScore, pressure = false): strin
   return score.label || (score.value >= 60 ? '偏强' : score.value <= 45 ? '偏弱' : '中性');
 }
 
-function buildDecisionChipTone(value: number, pressure = false): string {
+function buildDecisionChipVariant(value: number, pressure = false): DecisionChip['variant'] {
   if (pressure) {
-    return value >= 65 ? 'border-rose-300/25 text-rose-200' : value >= 55 ? 'border-amber-300/25 text-amber-200' : 'border-emerald-300/20 text-emerald-200';
+    return value >= 65 ? 'danger' : value >= 55 ? 'caution' : 'success';
   }
-  return value >= 60 ? 'border-emerald-300/20 text-emerald-200' : value <= 45 ? 'border-sky-300/20 text-sky-200' : 'border-white/10 text-white/60';
+  return value >= 60 ? 'success' : value <= 45 ? 'info' : 'neutral';
 }
 
 function buildMarketDecision(params: {
@@ -997,10 +997,10 @@ function buildMarketDecision(params: {
     return {
       text: '数据不足 · 等待更多实时源',
       chips: [
-        { label: '风险', value: '数据不足', tone: 'border-amber-300/20 text-amber-200' },
-        { label: '流动性', value: 'N/A', tone: 'border-white/10 text-white/45' },
-        { label: '宽度', value: 'N/A', tone: 'border-white/10 text-white/45' },
-        { label: '观察', value: watchSignals, tone: 'border-white/10 text-white/60' },
+        { label: '风险', value: '数据不足', variant: 'caution' },
+        { label: '流动性', value: 'N/A', variant: 'neutral' },
+        { label: '宽度', value: 'N/A', variant: 'neutral' },
+        { label: '观察', value: watchSignals, variant: 'neutral' },
       ],
     };
   }
@@ -1021,10 +1021,10 @@ function buildMarketDecision(params: {
     .slice(0, 3)
     .join(' / ') || '实时源';
   const chips: DecisionChip[] = [
-    { label: '风险', value: riskLabel, tone: reliable ? buildDecisionChipTone(temperature.scores.overall.value) : 'border-amber-300/20 text-amber-200' },
-    { label: '流动性', value: liquidityLabel, tone: reliable ? buildDecisionChipTone(temperature.scores.liquidity.value) : 'border-white/10 text-white/45' },
-    { label: '宽度', value: breadthLabel, tone: reliable ? buildDecisionChipTone(temperature.scores.cnMoneyEffect.value) : 'border-white/10 text-white/45' },
-    { label: '观察', value: watchSignals, tone: 'border-white/10 text-white/60' },
+    { label: '风险', value: riskLabel, variant: reliable ? buildDecisionChipVariant(temperature.scores.overall.value) : 'caution' },
+    { label: '流动性', value: liquidityLabel, variant: reliable ? buildDecisionChipVariant(temperature.scores.liquidity.value) : 'neutral' },
+    { label: '宽度', value: breadthLabel, variant: reliable ? buildDecisionChipVariant(temperature.scores.cnMoneyEffect.value) : 'neutral' },
+    { label: '观察', value: watchSignals, variant: 'neutral' },
   ];
 
   if (!reliable) {
@@ -1083,13 +1083,14 @@ const MarketDecisionStrip: React.FC<{
         </div>
         <div data-testid="market-command-chips" className="ui-scroll-x-quiet -mx-1 flex min-w-0 max-w-full gap-2 px-1 md:mx-0 md:shrink-0 md:px-0">
           {decision.chips.map((chip) => (
-            <span
+            <TerminalChip
               key={`${chip.label}-${chip.value}`}
-              className={cn('inline-flex shrink-0 items-center gap-1 rounded-md border bg-white/[0.025] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest', chip.tone)}
+              variant={chip.variant}
+              className="shrink-0 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest"
             >
               <span className="text-white/36">{chip.label}</span>
               <span className="max-w-[150px] truncate font-mono normal-case tracking-normal">{chip.value}</span>
-            </span>
+            </TerminalChip>
           ))}
         </div>
       </div>
@@ -1163,12 +1164,12 @@ const SignalWatchRailCard: React.FC<{ panels: PanelState; activeCategory: Market
         </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 overflow-hidden">
           {chips.map(([label, item]) => (
-            <span key={label} className="inline-flex max-w-full items-center gap-1 rounded-md border border-white/10 bg-white/[0.025] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/48">
+            <TerminalChip key={label} variant="neutral" className="max-w-full px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/48">
               <span className="shrink-0">{label}</span>
               <span className={cn('min-w-0 truncate font-mono tracking-normal', heroToneClass(item))}>
                 {formatHeroChange(item?.changePct)}
               </span>
-            </span>
+            </TerminalChip>
           ))}
         </div>
       </div>

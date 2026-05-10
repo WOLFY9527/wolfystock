@@ -7,6 +7,12 @@
   no market data fetching, API contracts, freshness semantics, scoring,
   provider/runtime behavior, route behavior, or other product surfaces changed.
 
+- 🧹 **Market Overview content-level chip consolidation** — `/zh/market-overview`
+  now reuses existing `TerminalChip` primitives for one remaining page-local
+  content chip pattern in the market state strip and signal-watch rail,
+  reducing duplicated local pill styling without changing data/API,
+  freshness, scoring, or provider behavior.
+
 - 🧹 **Launch readiness docs consolidation** — Retired two stale single-purpose
   release/readiness guides after confirming the current source-of-truth already
   lives in `docs/audits/README.md`,

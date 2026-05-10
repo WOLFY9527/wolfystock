@@ -952,6 +952,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/流动性/);
     expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/宽度/);
     expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/观察/);
+    expect(screen.getByTestId('market-command-chips').querySelectorAll('[data-terminal-primitive="chip"]')).toHaveLength(4);
     expect(screen.getByTestId('market-decision-text')).toHaveTextContent(/风险|数据不足/);
     expect(screen.getByTestId('market-temperature-strip')).toBeInTheDocument();
     expect(screen.getByText(/信号可信：高/i)).toBeInTheDocument();
@@ -1158,6 +1159,7 @@ describe('MarketOverviewPage', () => {
     expect(sideRail).toContainElement(screen.getByTestId('market-overview-rail-coverage'));
     expect(sideRail).toContainElement(screen.getByTestId('market-overview-rail-quality'));
     expect(sideRail).toContainElement(screen.getByTestId('market-overview-rail-signal-watch'));
+    expect(screen.getByTestId('market-overview-rail-signal-watch').querySelectorAll('[data-terminal-primitive="chip"]')).toHaveLength(4);
     expect(sideRail).toContainElement(screen.getByTestId('market-overview-rail-action-hint'));
     expect(sideRail).not.toContainElement(screen.queryByTestId('market-overview-rail-briefing'));
     expect(screen.queryByTestId('market-overview-signal-disclosure')).not.toBeInTheDocument();
