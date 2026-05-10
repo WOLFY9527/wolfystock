@@ -95,10 +95,30 @@ Preferred:
 Do not kill shared dev/backend servers casually.
 Inspect common ports:
 - backend: `8000`, `8001`
-- frontend/dev/preview: `5173`, `4173`, `4177`, `4178`, `5174`, `5175`, `5176`
+- frontend/dev/preview: `5173`, `4173`, `4177`, `4178`, `4179`, `4180`, `5174`, `5175`, `5176`
 
 Prefer task-owned preview port when possible.
 Leave shared `5173` untouched unless the task owns it.
+
+## Playwright invocation rule
+
+When relying on `apps/dsa-web/playwright.config.ts`, prefer running Playwright from `apps/dsa-web`.
+
+Inspect shared ports first, leave shared `5173` untouched, and prefer isolated preview ports such as `4177`, `4178`, `4179`, or `4180`.
+
+Preferred:
+
+```bash
+cd apps/dsa-web && DSA_WEB_PLAYWRIGHT_PORT=4177 npx playwright test e2e/critical-route-launch-smoke.spec.ts --grep "launch smoke"
+```
+
+Allowed repo-root alternative only when the config is passed explicitly:
+
+```bash
+DSA_WEB_PLAYWRIGHT_PORT=4177 npx playwright test --config apps/dsa-web/playwright.config.ts apps/dsa-web/e2e/critical-route-launch-smoke.spec.ts --grep "launch smoke"
+```
+
+Avoid repo-root `npx --prefix apps/dsa-web playwright test ...` when relying on the app config. It may skip `apps/dsa-web/playwright.config.ts` and miss the intended `baseURL` / preview-server settings.
 
 ## Standard viewports
 

@@ -1,5 +1,16 @@
 ## 2026-05-10
 
+- 📝 **Frontend Playwright invocation guardrail** — Updated
+  `docs/codex/WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md` to standardize
+  Playwright validation on WolfyStock frontend tasks: prefer
+  `cd apps/dsa-web && DSA_WEB_PLAYWRIGHT_PORT=<port> npx playwright test ...`,
+  allow repo-root execution only with
+  `--config apps/dsa-web/playwright.config.ts`, warn against repo-root
+  `npx --prefix apps/dsa-web playwright test ...` when relying on the app
+  config, and reinforce isolated preview-port usage with shared `5173`
+  left untouched. This is docs-only guidance: no source, test, package,
+  wrapper, script, or runtime behavior changed.
+
 - 🧹 **Admin Provider Circuit Diagnostics chip consolidation** — `/zh/admin/provider-circuits`
   now reuses the existing `TerminalChip` primitive for the page-local read-only
   and status chip pattern in `AdminProviderCircuitDiagnosticsPage`, retiring the
