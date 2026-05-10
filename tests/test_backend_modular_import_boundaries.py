@@ -43,6 +43,38 @@ FORBIDDEN_PROVIDER_RUNTIME_PREFIXES = (
     "httpx",
     "pandas",
 )
+FORBIDDEN_LLM_HELPER_RUNTIME_PREFIXES = (
+    "api.v1.endpoints",
+    "src.core.pipeline",
+    "src.agent",
+    "src.services.market_cache",
+    "src.services.market_scanner_service",
+    "src.services.market_rotation_radar_service",
+    "src.services.options_lab_service",
+    "src.services.rule_backtest_service",
+    "src.services.portfolio_service",
+    "src.services.portfolio_risk_diagnostics",
+    "data_provider",
+    "src.providers",
+    "requests",
+    "httpx",
+    "openai",
+    "pandas",
+)
+LLM_HELPER_IMPORT_GUARD_CASES = (
+    {
+        "module_name": "src.services.llm_instrumentation",
+        "forbidden_prefixes": FORBIDDEN_LLM_HELPER_RUNTIME_PREFIXES,
+        "allowed_implementation_prefixes": (),
+    },
+    {
+        "module_name": "src.services.litellm_runtime",
+        "forbidden_prefixes": FORBIDDEN_LLM_HELPER_RUNTIME_PREFIXES,
+        # This helper is the dedicated LiteLLM import boundary, so the guard
+        # intentionally does not forbid litellm itself here.
+        "allowed_implementation_prefixes": ("litellm",),
+    },
+)
 EXPECTED_API_UPWARD_IMPORT_SERVICE_FILES = {
     "src/services/admin_activity_service.py",
     "src/services/admin_portfolio_service.py",
@@ -148,6 +180,30 @@ def test_provider_primitives_stay_lightweight() -> None:
                 loaded_modules,
                 forbidden_prefix,
             ), (
+                f"{module_name} unexpectedly imported runtime-heavy dependency "
+                f"{forbidden_prefix}"
+            )
+
+
+def test_llm_helper_modules_stay_lightweight() -> None:
+    for case in LLM_HELPER_IMPORT_GUARD_CASES:
+        module_name = case["module_name"]
+        forbidden_prefixes = tuple(case["forbidden_prefixes"])
+        tracked_prefixes = tuple(
+            sorted(
+                {
+                    module_name,
+                    *forbidden_prefixes,
+                    *case["allowed_implementation_prefixes"],
+                }
+            )
+        )
+
+        loaded_modules = _import_in_subprocess(module_name, tracked_prefixes)
+
+        assert module_name in loaded_modules, f"expected to import {module_name}"
+        for forbidden_prefix in forbidden_prefixes:
+            assert not _has_loaded_prefix(loaded_modules, forbidden_prefix), (
                 f"{module_name} unexpectedly imported runtime-heavy dependency "
                 f"{forbidden_prefix}"
             )
