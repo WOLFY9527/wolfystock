@@ -942,8 +942,10 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByRole('heading', { name: /大市全景监控/i })).not.toBeInTheDocument();
 
     expect(screen.getByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-hero-ribbon')).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(await screen.findByText(/信号可信：高/i)).toBeInTheDocument();
     expect(screen.getByTestId('market-decision-strip')).toBeInTheDocument();
+    expect(screen.getByTestId('market-decision-strip')).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(screen.getByTestId('market-decision-strip')).toHaveAttribute('data-command-bar', 'market-state');
     expect(screen.getByTestId('market-decision-strip')).toHaveTextContent(/市场状态/);
     expect(screen.getByTestId('market-command-chips')).toHaveTextContent(/风险/);

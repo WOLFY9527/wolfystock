@@ -24,7 +24,6 @@ import { resolveMarketOverviewDisplayLabel } from '../components/market-overview
 import { formatMarketOverviewTimestamp } from '../components/market-overview/marketOverviewFormat';
 import {
   DataFreshnessBadge,
-  MARKET_OVERVIEW_GHOST_CARD_CLASS,
   MarketOverviewCardFrame,
   MarketOverviewDenseQuoteItem,
   MarketOverviewPanelFooter,
@@ -41,7 +40,6 @@ import {
   TerminalSectionHeader,
 } from '../components/terminal';
 import { useI18n } from '../contexts/UiLanguageContext';
-import { GlassCard } from '../components/common';
 import { cn } from '../utils/cn';
 
 type PanelState = {
@@ -744,11 +742,11 @@ function buildMarketOverviewSummaryText(params: {
 const CrossAssetHeroRibbon: React.FC<{ anchors: HeroAnchor[] }> = ({ anchors }) => {
   const { language } = useI18n();
   return (
-    <GlassCard
+    <TerminalPanel
       as="section"
       data-testid="market-overview-hero-ribbon"
       data-mobile-order="pulse"
-      className={cn(MARKET_OVERVIEW_GHOST_CARD_CLASS, 'overflow-hidden p-0')}
+      className="overflow-hidden p-0"
       aria-label="Cross asset hero ribbon"
     >
       <div className="grid grid-cols-[repeat(auto-fit,minmax(112px,1fr))] divide-x divide-y divide-white/5">
@@ -774,7 +772,7 @@ const CrossAssetHeroRibbon: React.FC<{ anchors: HeroAnchor[] }> = ({ anchors }) 
           );
         })}
       </div>
-    </GlassCard>
+    </TerminalPanel>
   );
 };
 
@@ -1062,15 +1060,13 @@ const MarketDecisionStrip: React.FC<{
   const decision = buildMarketDecision({ activeCategory, panels, dataQuality });
   const reliable = isTemperatureReliable(panels.temperature);
   return (
-    <section
+    <TerminalPanel
+      as="section"
       data-testid="market-decision-strip"
       data-command-bar="market-state"
       data-mobile-order="decision"
       data-market-research-flow="state"
-      className={cn(
-        MARKET_OVERVIEW_GHOST_CARD_CLASS,
-        'relative overflow-hidden p-0 shadow-[0_0_24px_rgba(59,130,246,0.10)]',
-      )}
+      className="relative overflow-hidden p-0 shadow-[0_0_24px_rgba(59,130,246,0.10)]"
     >
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-blue-500/0 via-blue-400/45 to-purple-500/0" aria-hidden="true" />
       <div className="flex min-w-0 flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
@@ -1097,7 +1093,7 @@ const MarketDecisionStrip: React.FC<{
           ))}
         </div>
       </div>
-    </section>
+    </TerminalPanel>
   );
 };
 

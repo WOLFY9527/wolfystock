@@ -3,7 +3,7 @@ import { RefreshCcw } from 'lucide-react';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import type { MarketDataFreshness, MarketDataMeta, MarketOverviewItem, MarketOverviewPanel, MarketProviderHealthStatus } from '../../api/marketOverview';
 import { cn } from '../../utils/cn';
-import { GlassCard } from '../common';
+import { TerminalPanel } from '../terminal';
 import { formatMarketOverviewTimestamp } from './marketOverviewFormat';
 import {
   formatChangeSummary,
@@ -44,8 +44,6 @@ const FRESHNESS_CLASSES: Record<MarketProviderHealthStatus, string> = {
   refreshing: 'border-sky-300/25 bg-sky-400/10 text-sky-200',
 };
 
-export const MARKET_OVERVIEW_GHOST_CARD_CLASS = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md p-5 transition-all hover:border-white/10';
-export const MARKET_OVERVIEW_CARD_TITLE_CLASS = 'text-[10px] font-bold uppercase tracking-widest text-white/40 mb-5 block';
 export type MarketOverviewCardSize = 'compact' | 'standard' | 'list' | 'large' | 'rail';
 
 const MARKET_OVERVIEW_CARD_SIZE_CLASS: Record<MarketOverviewCardSize, string> = {
@@ -77,13 +75,12 @@ export const MarketOverviewCardFrame: React.FC<{
   testId,
   railKey,
 }) => (
-  <GlassCard
+  <TerminalPanel
     as="section"
     data-testid={testId}
     data-market-card-size={size}
     data-rail-card={railKey}
     className={cn(
-      MARKET_OVERVIEW_GHOST_CARD_CLASS,
       MARKET_OVERVIEW_CARD_SIZE_CLASS[size],
       'flex min-w-0 flex-col overflow-hidden',
       className,
@@ -98,7 +95,7 @@ export const MarketOverviewCardFrame: React.FC<{
     ) : null}
     <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
     {footer ? <div className="mt-3 shrink-0 border-t border-white/5 pt-2 text-[10px] leading-4 text-white/34">{footer}</div> : null}
-  </GlassCard>
+  </TerminalPanel>
 );
 
 function resolveProviderStatus(meta?: Partial<MarketDataMeta>): MarketProviderHealthStatus {

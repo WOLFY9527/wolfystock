@@ -1,5 +1,12 @@
 ## 2026-05-10
 
+- 🧹 **Market Overview visual primitive consolidation** — `/zh/market-overview`
+  now reuses existing terminal panel primitives for its shared shell/card
+  material and retires the duplicate page-local ghost-card bridge in
+  `marketOverviewPrimitives.tsx`. This is a frontend-only visual consolidation:
+  no market data fetching, API contracts, freshness semantics, scoring,
+  provider/runtime behavior, route behavior, or other product surfaces changed.
+
 - 🧹 **Launch readiness docs consolidation** — Retired two stale single-purpose
   release/readiness guides after confirming the current source-of-truth already
   lives in `docs/audits/README.md`,
