@@ -188,10 +188,15 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.getByText('Trend requests')).toBeInTheDocument();
     expect(screen.getByText('6_20')).toBeInTheDocument();
     expect(screen.getByText('最近错误 buckets')).toBeInTheDocument();
+    expect(screen.getByText('只读诊断').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
     expect(screen.getByText('不触发外部调用')).toBeInTheDocument();
     expect(screen.getByText('不执行熔断 enforcement')).toBeInTheDocument();
     expect(screen.getByText('不触发外部调用').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
+    expect(screen.getByText('不执行熔断 enforcement').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
+    expect(screen.getByText('ops:providers:read').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
+    expect(screen.getByText('只读快照').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
     expect(screen.getByText('打开').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
+    expect(screen.getByText('只读 · 无 live call').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
     expect(screen.queryByText('SECRET')).not.toBeInTheDocument();
   });
 

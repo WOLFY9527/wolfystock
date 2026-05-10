@@ -984,6 +984,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-top-stack')).toContainElement(screen.getByTestId('market-overview-data-state-strip'));
     expect(screen.getByTestId('market-overview-status-strip')).toContainElement(screen.getByTestId('market-overview-temperature-summary'));
     expect(screen.getByTestId('market-overview-cache-status')).toContainElement(screen.getByTestId('market-overview-data-state-fallback-chip'));
+    expect(screen.getByTestId('market-overview-data-state-fallback-chip')).toHaveAttribute('data-terminal-primitive', 'chip');
     expect(shell).toContainElement(screen.getByTestId('market-overview-hero-ribbon'));
     expect(shell).toContainElement(screen.getByTestId('market-temperature-strip'));
     expect(shell).toContainElement(screen.getByTestId('market-data-quality'));
@@ -1065,6 +1066,7 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByText(/更新失败：indices request timed out/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/provider_down|provider_error|UNKNOWN/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('market-overview-data-state-unavailable-chip')).toHaveTextContent(/部分外部数据暂不可用/);
+    expect(screen.getByTestId('market-overview-data-state-unavailable-chip')).toHaveAttribute('data-terminal-primitive', 'chip');
   });
 
   it('stages noncritical market overview panels after the primary route data starts loading', async () => {

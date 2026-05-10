@@ -57,6 +57,39 @@ INTERNAL_TERMS = (
 
 RAW_VISIBLE_TERMS = ("raw", "debug", "schema", "trace")
 
+RETIRED_LOCAL_PRIMITIVE_RULES = {
+    "apps/dsa-web/src/pages/MarketOverviewPage.tsx": [
+        (
+            re.compile(r"\bMARKET_OVERVIEW_GHOST_CARD_CLASS\b"),
+            "Market Overview migrated panel shells must keep using TerminalPanel, not retired ghost-card bridge constants.",
+        ),
+        (
+            re.compile(r"\bMARKET_OVERVIEW_CARD_TITLE_CLASS\b"),
+            "Market Overview migrated panel headings must not reintroduce retired local title material helpers.",
+        ),
+        (
+            re.compile(r"\bbuildDecisionChipTone\b"),
+            "Market Overview migrated decision chips must keep using TerminalChip instead of local tone builders.",
+        ),
+    ],
+    "apps/dsa-web/src/pages/MarketRotationRadarPage.tsx": [
+        (
+            re.compile(r"\bEvidenceBadge\b"),
+            "Rotation Radar migrated evidence/status chips must keep using TerminalChip instead of local EvidenceBadge.",
+        ),
+    ],
+    "apps/dsa-web/src/pages/AdminProviderCircuitDiagnosticsPage.tsx": [
+        (
+            re.compile(r"<Badge\b"),
+            "Admin Provider Circuit Diagnostics migrated status chips must keep using TerminalChip instead of local Badge tags.",
+        ),
+        (
+            re.compile(r"import\s*\{[^}]*\bBadge\b[^}]*\}\s*from"),
+            "Admin Provider Circuit Diagnostics must not re-import a local Badge for migrated status chips.",
+        ),
+    ],
+}
+
 SOLID_WRAPPER_RE = re.compile(r"\bbg-(?:black|\[#000\]|\[#050505\]|gray-\S+|zinc-\S+|slate-\S+|neutral-\S+)")
 LOUD_WARNING_RE = re.compile(r"\bbg-(yellow|amber)-(\d{2,3})(?:/(\d+))?\b")
 HAND_ROLLED_MATERIAL_RE = re.compile(
@@ -250,6 +283,20 @@ def scan_text(path: str, text: str) -> ScanResult:
                 match.group(0),
             )
             break
+
+    for pattern, message in RETIRED_LOCAL_PRIMITIVE_RULES.get(normalized, []):
+        match = pattern.search(text)
+        if not match:
+            continue
+        add(
+            findings,
+            "retired-local-terminal-primitive",
+            normalized,
+            text,
+            match.start(),
+            message,
+            match.group(0),
+        )
 
     if not guarded:
         return ScanResult(findings=findings)
