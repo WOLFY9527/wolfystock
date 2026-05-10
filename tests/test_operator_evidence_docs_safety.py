@@ -7,8 +7,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DOC_PATHS = (
     *sorted((REPO_ROOT / "docs" / "audits").glob("operator-evidence-*.md")),
     *sorted((REPO_ROOT / "docs" / "audits").glob("evidence-*.md")),
-    REPO_ROOT / "docs" / "audits" / "release-review-report-renderer-guide.md",
-    REPO_ROOT / "docs" / "audits" / "release-restore-rollback-drill-guide.md",
+    REPO_ROOT / "docs" / "audits" / "public-launch-readiness-master.md",
+    REPO_ROOT / "docs" / "audits" / "public-launch-gap-register.md",
+    REPO_ROOT / "docs" / "audits" / "deployment-readiness-checklist.md",
+    REPO_ROOT / "docs" / "audits" / "launch-acceptance-evidence-pack.md",
+    REPO_ROOT / "docs" / "audits" / "release-rollback-runbook.md",
+    REPO_ROOT / "docs" / "audits" / "db-retention-backup-restore-drill-plan.md",
     REPO_ROOT / "docs" / "audits" / "public-api-abuse-limiter-operator-note.md",
     REPO_ROOT / "scripts" / "README.md",
 )

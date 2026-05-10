@@ -234,7 +234,7 @@ Remaining blockers:
   emits sanitized cleanup audit events, and keeps storage-size-unavailable
   fallback safe.
 - [x] Synthetic staging-ingress smoke preflight exists:
-  `python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>`.
+  `python3 scripts/staging_ingress_smoke.py --base-url "$STAGING_INGRESS_BASE_URL"`.
 - [x] Ingress smoke is safe by default: without
   `WOLFYSTOCK_STAGING_INGRESS_SMOKE=1` it emits dry-run JSON evidence and does
   not open network sockets.

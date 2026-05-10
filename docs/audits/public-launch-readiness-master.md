@@ -94,7 +94,7 @@ decision after all of the following are true:
 - `git status --short` is clean before tagging or deploying.
 - Staging smoke passes through HTTPS reverse proxy with synthetic users and
   data. The available helper is
-  `WOLFYSTOCK_STAGING_INGRESS_SMOKE=1 python3 scripts/staging_ingress_smoke.py --base-url <staging-ingress-base-url>`;
+  `WOLFYSTOCK_STAGING_INGRESS_SMOKE=1 python3 scripts/staging_ingress_smoke.py --base-url "$STAGING_INGRESS_BASE_URL"`;
   without the opt-in env var it produces dry-run evidence only.
 - WS2 multi-instance smoke passes, or deployment is explicitly constrained to
   single API process with documented task/SSE limitations.

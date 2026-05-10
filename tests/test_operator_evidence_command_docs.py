@@ -11,11 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DOC_PATHS = (
     REPO_ROOT / "docs" / "audits" / "operator-evidence-dry-run-handoff.md",
     REPO_ROOT / "docs" / "audits" / "operator-evidence-real-runbook.md",
-    REPO_ROOT / "docs" / "audits" / "operator-evidence-preflight-guide.md",
-    REPO_ROOT / "docs" / "audits" / "operator-evidence-local-workspace-guide.md",
-    REPO_ROOT / "docs" / "audits" / "operator-evidence-schema-reference-guide.md",
-    REPO_ROOT / "docs" / "audits" / "operator-evidence-archive-pack-guide.md",
-    REPO_ROOT / "docs" / "audits" / "operator-evidence-gap-analyzer-guide.md",
+    REPO_ROOT / "docs" / "audits" / "operator-evidence-redaction-checklist.md",
     REPO_ROOT / "scripts" / "README.md",
 )
 
