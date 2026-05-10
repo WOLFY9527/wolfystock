@@ -284,7 +284,7 @@ function detectPosture(...values: unknown[]): NormalizedEvidencePosture {
 
 function buildLimitationLabels(values: string[], options: NormalizeEvidenceOptions): string[] {
   const mapped = unique(values.map((value) => mapKnownLabel(value)).filter((value): value is string => Boolean(value)));
-  const maxLimitationLabels = options.maxLimitationLabels ?? (options.audience === 'admin' ? mapped.length : 3);
+  const maxLimitationLabels = options.maxLimitationLabels ?? mapped.length;
   return mapped.slice(0, maxLimitationLabels);
 }
 
@@ -366,6 +366,9 @@ export function normalizeRotationEvidence(payload: unknown, options: NormalizeEv
   if (!packet) return baseSummary('rotation', 'unknown', [], payload, options);
 
   const requiredData = firstRecord(firstValue(packet, ['requiredDataStatus', 'required_data_status']), []);
+  const flowLanguageAllowed = firstValue(packet, ['flowLanguageAllowed', 'flow_language_allowed']);
+  const flowBoundaryLabel = flowLanguageAllowed === false ? '真实资金流暂缺' : null;
+  const evidenceBoundaryLabel = requiredData?.hasSufficientEvidence === false && !asString(requiredData?.summaryLabel) ? '证据不足' : null;
   const labels = collectStrings(
     packet.state,
     packet.stateLabel,
@@ -373,11 +376,13 @@ export function normalizeRotationEvidence(payload: unknown, options: NormalizeEv
     requiredData?.statusLabel,
     packet.flowEvidenceType,
     packet.flow_evidence_type,
+    flowBoundaryLabel,
+    evidenceBoundaryLabel,
     packet.riskLabels,
     packet.risk_labels,
   );
   const posture = detectPosture(labels);
-  const limitationLabels = buildLimitationLabels(labels, options).filter((label) => label !== '真实资金流暂缺');
+  const limitationLabels = buildLimitationLabels(labels, options);
   const diagnostics = firstValue(packet, ['adminDiagnostics', 'admin_diagnostics']);
   const adminReasonCodes = collectStrings(packet.adminReasonCodes, packet.admin_reason_codes);
   return baseSummary('rotation', posture, limitationLabels, packet, options, diagnostics, adminReasonCodes);
@@ -387,18 +392,18 @@ export function normalizeOptionsEvidence(payload: unknown, options: NormalizeEvi
   const packet = firstRecord(payload, []);
   if (!packet) return baseSummary('options', 'unknown', [], payload, options);
 
+  const decisionGrade = firstValue(packet, ['decisionGrade', 'decision_grade']);
   const labels = collectStrings(
     packet.gateDecision,
     packet.gate_decision,
     packet.decisionLabel,
     packet.decision_label,
-    packet.decisionGrade,
-    packet.decision_grade,
     packet.gateIssues,
     packet.gate_issues,
     packet.failClosedReasonCodes,
     packet.fail_closed_reason_codes,
     firstValue(packet, ['riskWarnings', 'risk_warnings']),
+    decisionGrade === false ? '数据不足，禁止判断' : null,
   );
   const posture = detectPosture(labels);
   const limitationLabels = buildLimitationLabels(labels, options);

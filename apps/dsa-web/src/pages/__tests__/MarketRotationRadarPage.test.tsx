@@ -165,6 +165,17 @@ const radarFixture = (): MarketRotationRadarResponse => ({
       evidence: ['无明显新闻的同步异动', '成交额扩张迹象', '相对 QQQ 强弱 +2.80%'],
       members: [],
       noAdviceDisclosure: '仅用于观察资金轮动迹象，非买卖建议。',
+      rotationStateEvidence: {
+        state: 'insufficient_evidence',
+        stateLabel: '轮动代理证据',
+        flowEvidenceType: 'proxy_only',
+        flowLanguageAllowed: false,
+        requiredDataStatus: {
+          hasSufficientEvidence: false,
+          summaryLabel: '分类观察',
+        },
+        riskLabels: ['gap_fade_risk'],
+      },
     },
   ],
 });
@@ -459,6 +470,16 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.getByTestId('rotation-radar-leader-row-ai_applications')).toHaveTextContent('信号较弱');
     expect(screen.getByTestId('rotation-radar-leader-row-ai_applications')).toHaveTextContent('备用');
     expect(screen.getByTestId('rotation-radar-leader-row-ai_applications')).not.toHaveTextContent('实时');
+  });
+
+  it('renders proxy-only evidence chips without real fund-flow claims', async () => {
+    render(<MarketRotationRadarPage />);
+
+    const detail = await screen.findByTestId('rotation-theme-detail-panel');
+    expect(within(detail).getByText('轮动代理证据')).toBeInTheDocument();
+    expect(within(detail).getByText('分类观察')).toBeInTheDocument();
+    expect(within(detail).getByText('真实资金流暂缺')).toBeInTheDocument();
+    expect(detail.textContent || '').not.toMatch(/真实资金流确认|资金流入确认/);
   });
 
   it('keeps proxy diagnostics user-facing and omits developer diagnostics by default', async () => {

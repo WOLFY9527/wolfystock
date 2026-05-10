@@ -14,8 +14,10 @@ import {
   type OptionsStrategyType,
   type OptionsUnderlyingSummaryResponse,
 } from '../api/optionsLab';
+import { EvidenceChips } from '../components/evidence/EvidenceChips';
 import { TerminalPageHeading } from '../components/terminal';
 import { cn } from '../utils/cn';
+import { normalizeOptionsEvidence } from '../utils/evidenceDisplay';
 import { formatNumber, formatPercent } from '../utils/format';
 
 type LoadState = {
@@ -613,6 +615,13 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
   const ivRankStatus = decision?.ivRankStatus || decision?.ivGreeks?.ivRankStatus;
   const ivRank = decision?.ivRank ?? decision?.ivGreeks?.ivRank;
   const ivPercentile = decision?.ivPercentile ?? decision?.ivGreeks?.ivPercentile;
+  const evidenceSummary = decision ? normalizeOptionsEvidence(decision) : null;
+  const showEvidenceSummary = Boolean(evidenceSummary && (
+    evidenceSummary.posture !== 'unknown'
+    || evidenceSummary.limitationLabels.length
+    || evidenceSummary.confidenceCap != null
+    || evidenceSummary.freshnessLabel
+  ));
   const labelTone = label === '数据不足，禁止判断' || label === '不建议'
     ? 'text-rose-200'
     : label === '仅观察'
@@ -621,7 +630,6 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
   const primaryStrategy = optimizer?.preferredStrategyKey || null;
   const observationCandidate = primaryStrategy || rankedAlternatives[0]?.strategyKey || decision?.betterAlternative?.strategyType || null;
   const decisionTags = [...new Set([
-    dataTierLabel(decision?.dataQuality?.dataQualityTier),
     freshnessLabel(decision?.freshness?.freshness),
     ivRankStatus === 'available' ? 'IV 分位可用' : 'IV 分位不可用',
   ].filter((item) => item && item !== '--'))].slice(0, 3);
@@ -629,8 +637,10 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
     <section className={cn(panelClass, className)} data-testid="options-lab-decision-engine">
       <SectionHeader eyebrow="决策中枢" title="策略决策" icon={ShieldCheck}>
         <div className="flex flex-wrap justify-end gap-2">
-          <Pill tone={label.includes('禁止') || label.includes('不建议') ? 'risk' : 'warn'}>{label}</Pill>
-          <Pill tone="info">{dataTierLabel(decision?.dataQuality?.dataQualityTier)}</Pill>
+          {showEvidenceSummary ? <EvidenceChips summary={evidenceSummary} maxLabels={1} /> : (
+            <Pill tone={label.includes('禁止') || label.includes('不建议') ? 'risk' : 'warn'}>{label}</Pill>
+          )}
+          {decision?.dataQuality?.dataQualityTier ? <Pill tone="info">{dataTierLabel(decision.dataQuality.dataQualityTier)}</Pill> : null}
         </div>
       </SectionHeader>
       {emptyMessage ? (
@@ -722,6 +732,13 @@ const RiskBoundaryPanel: React.FC<{
   error: string | null;
   className?: string;
 }> = ({ decision, chain, loading, error, className }) => {
+  const evidenceSummary = decision ? normalizeOptionsEvidence(decision) : null;
+  const showEvidenceSummary = Boolean(evidenceSummary && (
+    evidenceSummary.posture !== 'unknown'
+    || evidenceSummary.limitationLabels.length
+    || evidenceSummary.confidenceCap != null
+    || evidenceSummary.freshnessLabel
+  ));
   const dataWarnings = [
     ...asArray(decision?.dataQuality?.blockingReasons),
     ...asArray(decision?.dataQuality?.warnings),
@@ -755,9 +772,11 @@ const RiskBoundaryPanel: React.FC<{
   return (
     <section className={cn(panelClass, 'order-4 xl:order-none', className)} data-testid="options-lab-risk-boundary-panel">
       <SectionHeader eyebrow="风险控制" title="风险边界" icon={AlertTriangle}>
-        <Pill tone={topState.includes('禁止') ? 'risk' : 'info'}>
-          {topState}
-        </Pill>
+        {showEvidenceSummary ? <EvidenceChips summary={evidenceSummary} maxLabels={1} /> : (
+          <Pill tone={topState.includes('禁止') ? 'risk' : 'info'}>
+            {topState}
+          </Pill>
+        )}
       </SectionHeader>
       <div className="mt-5 grid gap-3 text-sm">
         <div className="rounded-xl border border-rose-400/20 bg-rose-500/5 p-3">

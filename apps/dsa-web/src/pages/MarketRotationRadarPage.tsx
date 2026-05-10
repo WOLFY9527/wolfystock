@@ -2,10 +2,12 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Gauge, RefreshCcw, Search, Signal, SlidersHorizontal, Waves } from 'lucide-react';
 import { ApiErrorAlert, GlassCard } from '../components/common';
+import { EvidenceChips } from '../components/evidence/EvidenceChips';
 import { DataFreshnessBadge } from '../components/market-overview/marketOverviewPrimitives';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { marketRotationApi, type MarketRotationRadarResponse, type MarketRotationRiskLabel, type MarketRotationStage, type MarketRotationSummaryItem, type MarketRotationTheme, type MarketRotationTimeWindow } from '../api/marketRotation';
 import { cn } from '../utils/cn';
+import { normalizeRotationEvidence } from '../utils/evidenceDisplay';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 
 const TOP_THEME_LIMIT = 10;
@@ -223,6 +225,11 @@ function matchesSearch(theme: MarketRotationTheme, query: string): boolean {
   return haystack.includes(normalized);
 }
 
+function rotationEvidenceSummary(theme: MarketRotationTheme) {
+  if (!theme.rotationStateEvidence) return null;
+  return normalizeRotationEvidence({ rotationStateEvidence: theme.rotationStateEvidence });
+}
+
 const SummaryCell: React.FC<{
   title: string;
   value: string;
@@ -336,6 +343,7 @@ const LeaderRow: React.FC<{
   onSelect: () => void;
 }> = ({ theme, rank, selected, onSelect }) => {
   const taxonomyOnly = isTaxonomyOnlyTheme(theme);
+  const evidenceSummary = rotationEvidenceSummary(theme);
   return (
   <button
     type="button"
@@ -347,15 +355,18 @@ const LeaderRow: React.FC<{
     )}
   >
     <span className="font-mono text-xs text-white/38 tabular-nums">{rank.toString().padStart(2, '0')}</span>
-    <span className="min-w-0">
-      <span className="flex min-w-0 items-center gap-2">
-        <span className="truncate text-sm font-semibold text-white/84">{theme.name}</span>
-        <DataFreshnessBadge freshness={theme.freshness} className="hidden px-1.5 text-[9px] sm:inline-flex" />
+      <span className="min-w-0">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-semibold text-white/84">{theme.name}</span>
+          <DataFreshnessBadge freshness={theme.freshness} className="hidden px-1.5 text-[9px] sm:inline-flex" />
+        </span>
+        <span className="mt-1 block truncate text-[11px] text-white/38">
+          {taxonomyOnly ? '主题库已载入 · 待行情确认' : `${formatThemeStage(theme.stage)} · ${mapDataStateLabel(theme)}`}
+        </span>
+        {evidenceSummary ? (
+          <EvidenceChips summary={evidenceSummary} maxLabels={2} className="mt-1 hidden sm:flex" />
+        ) : null}
       </span>
-      <span className="mt-1 block truncate text-[11px] text-white/38">
-        {taxonomyOnly ? '主题库已载入 · 待行情确认' : `${formatThemeStage(theme.stage)} · ${mapDataStateLabel(theme)}`}
-      </span>
-    </span>
     <span className={cn('text-right font-mono text-lg font-semibold tabular-nums', taxonomyOnly ? 'text-white/46' : scoreTone(theme.rotationScore))}>
       {taxonomyOnly ? '主题库' : theme.rotationScore}
     </span>
@@ -448,6 +459,7 @@ const ThemeDetailPanel: React.FC<{
   const dataWarning = Boolean(theme.isFallback || theme.freshness === 'fallback' || isThemeStale(theme));
   const evidenceNotes = sanitizeRotationNotes(theme.evidence);
   const riskExplanationNotes = sanitizeRotationNotes(theme.riskExplanations);
+  const evidenceSummary = rotationEvidenceSummary(theme);
   const explanation = sanitizeRotationText(
     theme.stageExplanation,
     `${theme.name} 当前以轮动强度、相对强弱、成交额扩张、广度和同步性作为观察依据。`,
@@ -475,6 +487,9 @@ const ThemeDetailPanel: React.FC<{
         <EvidenceBadge tone={dataWarning ? 'warn' : 'ok'}>{mapDataStateLabel(theme)}</EvidenceBadge>
         {!taxonomyOnly ? <DataFreshnessBadge freshness={theme.freshness} className="px-1.5 text-[9px]" /> : null}
       </div>
+      {evidenceSummary ? (
+        <EvidenceChips summary={evidenceSummary} maxLabels={3} className="mt-2" />
+      ) : null}
 
       {taxonomyOnly ? (
         <div className="mt-3 grid gap-2 rounded-xl border border-cyan-200/12 bg-cyan-200/[0.045] px-3 py-3 text-[11px] leading-5 text-cyan-50/70">

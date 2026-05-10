@@ -128,6 +128,7 @@ export type MarketRotationProxyStatus = {
 };
 
 export type MarketRotationTheme = MarketRotationSummaryItem & {
+  rotationStateEvidence?: Record<string, unknown> | null;
   market?: string;
   taxonomyType?: string;
   englishName: string;

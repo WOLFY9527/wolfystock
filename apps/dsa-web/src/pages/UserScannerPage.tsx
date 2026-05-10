@@ -36,6 +36,7 @@ import {
   TerminalPageShell,
   TerminalPanel,
 } from '../components/terminal';
+import { EvidenceChips } from '../components/evidence/EvidenceChips';
 import { getDefaultRuleDateRange } from '../components/backtest/shared';
 import { buildPointAndShootStrategyText } from '../components/backtest/strategyCatalog';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -64,6 +65,7 @@ import type {
 import type { RuleBacktestRunResponse } from '../types/backtest';
 import type { WatchlistItem } from '../types/watchlist';
 import { buildLocalizedPath } from '../utils/localeRouting';
+import { normalizeScannerEvidence } from '../utils/evidenceDisplay';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 import {
   getScannerDetailOptions,
@@ -222,6 +224,26 @@ function toDisplayText(value: unknown): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getScannerEvidencePayload(candidate: ScannerCandidate | ScannerCandidateDiagnostic): Record<string, unknown> | null {
+  const containers = [
+    isRecord((candidate as ScannerCandidate).diagnostics) ? (candidate as ScannerCandidate).diagnostics : null,
+    isRecord((candidate as ScannerCandidateDiagnostic).metadata) ? (candidate as ScannerCandidateDiagnostic).metadata : null,
+  ].filter((value): value is Record<string, unknown> => Boolean(value));
+
+  for (const container of containers) {
+    if (isRecord(container.evidence_packet) || isRecord(container.evidencePacket)) {
+      return container;
+    }
+  }
+
+  return null;
+}
+
+function getScannerEvidenceSummary(candidate: ScannerCandidate | ScannerCandidateDiagnostic) {
+  const payload = getScannerEvidencePayload(candidate);
+  return payload ? normalizeScannerEvidence(payload) : null;
 }
 
 function parseFirstNumericValue(value?: string | null): number | null {
@@ -1676,6 +1698,7 @@ function CandidateDetailPanel({
   const entryRange = getEntryRange(candidate);
   const targetPrice = getTargetPrice(candidate);
   const stopLoss = getStopLoss(candidate);
+  const evidenceSummary = getScannerEvidenceSummary(candidate);
 
   return (
     <div
@@ -1719,6 +1742,11 @@ function CandidateDetailPanel({
       <div className="md:col-span-2">
         <ScannerBacktestResultStrip item={backtestItem} language={language} />
       </div>
+      {evidenceSummary ? (
+        <DetailSection title={language === 'en' ? 'Evidence status' : '证据状态'}>
+          <EvidenceChips summary={evidenceSummary} maxLabels={2} />
+        </DetailSection>
+      ) : null}
       <DetailSection title={language === 'en' ? 'Key metrics' : '关键指标'}>
         <LabeledValueGrid items={sanitizeScannerLabeledValues(candidate.keyMetrics, language)} empty={language === 'en' ? 'No key metrics provided' : '未提供关键指标'} />
       </DetailSection>
@@ -1826,6 +1854,7 @@ function CandidateInspector({
   const dataQualityLabel = formatCandidateDataQuality(candidate, language);
   const sanitizedFailedRules = Array.from(new Set((candidate.failedRules || []).map((item) => sanitizeUserFacingDataIssue(item, language))));
   const sanitizedMissingFields = Array.from(new Set((candidate.missingFields || []).map((item) => sanitizeUserFacingDataIssue(item, language))));
+  const evidenceSummary = getScannerEvidenceSummary(candidate);
   const officialStatusCopy = isOfficialSelected(candidate)
     ? (language === 'en' ? 'Official selected' : '官方入选')
     : (language === 'en' ? 'Official rejected' : '官方淘汰');
@@ -1882,6 +1911,12 @@ function CandidateInspector({
             empty={language === 'en' ? 'No major risks provided' : '未提供主要风险'}
           />
         </DetailSection>
+
+        {evidenceSummary ? (
+          <DetailSection title={language === 'en' ? 'Evidence status' : '证据状态'}>
+            <EvidenceChips summary={evidenceSummary} maxLabels={2} />
+          </DetailSection>
+        ) : null}
 
         <DetailSection title={language === 'en' ? 'Next observation' : '下一步观察'}>
           <div className="grid grid-cols-2 gap-1.5">
@@ -3727,6 +3762,7 @@ const UserScannerPage: React.FC = () => {
                         const isMoreOpen = rowMoreSymbol === candidate.symbol;
                         const friendlyReason = formatFriendlyDiagnosticReason(candidate, language);
                         const dataQuality = formatCandidateDataQuality(candidate, language);
+                        const evidenceSummary = getScannerEvidenceSummary(candidate);
                         const isSelectedCandidate = isOfficialSelected(candidate);
                         return (
                           <article
@@ -3767,6 +3803,9 @@ const UserScannerPage: React.FC = () => {
                                 <p className="truncate text-[10px] text-white/32">
                                   {language === 'en' ? 'Evidence summary' : '证据摘要'}
                                 </p>
+                                {evidenceSummary ? (
+                                  <EvidenceChips summary={evidenceSummary} maxLabels={1} className="mt-1" />
+                                ) : null}
                               </div>
 	                              <ActionButton
 	                                label={language === 'en' ? 'View evidence' : '查看证据'}
@@ -3818,6 +3857,11 @@ const UserScannerPage: React.FC = () => {
                             ) : null}
                             {isExpanded ? (
                               <div data-testid={`scanner-candidate-detail-${candidate.symbol}`} className="mt-2 grid gap-2 border-t border-white/5 pt-2 text-xs text-white/58 md:grid-cols-3">
+                                {evidenceSummary ? (
+                                  <DetailSection title={language === 'en' ? 'Evidence status' : '证据状态'}>
+                                    <EvidenceChips summary={evidenceSummary} maxLabels={2} />
+                                  </DetailSection>
+                                ) : null}
                                 <DetailSection title={language === 'en' ? 'Rule result' : '规则结果'}>
                                   <NotesList
                                     notes={Array.from(new Set([
@@ -3867,6 +3911,7 @@ const UserScannerPage: React.FC = () => {
 	                      const targetPrice = getTargetPrice(candidate);
 	                      const stopLoss = getStopLoss(candidate);
 	                      const comparison = comparisonState.bySymbol.get(normalizeCandidateSymbol(candidate.symbol) || '');
+                        const evidenceSummary = getScannerEvidenceSummary(candidate);
 	                      return (
                         <article
                           key={`watchlist-${candidateIdentity}`}
@@ -3925,6 +3970,9 @@ const UserScannerPage: React.FC = () => {
                           <div className="mt-2.5 grid gap-2">
                             <section>
                               <p className="line-clamp-1 text-xs leading-relaxed text-white/66">{getKeyReason(candidate, runDetail, language)}</p>
+                              {evidenceSummary ? (
+                                <EvidenceChips summary={evidenceSummary} maxLabels={2} className="mt-1.5" />
+                              ) : null}
                               {candidate.featureSignals?.length ? (
                                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                                   {candidate.featureSignals.slice(0, 2).map((signal) => (

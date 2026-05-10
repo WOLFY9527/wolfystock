@@ -444,6 +444,7 @@ describe('OptionsLabPage', () => {
     expect(within(section).getAllByText(/不交易：数据质量未达到可判断等级/).length).toBeGreaterThan(0);
     expect(within(section).getAllByText(/牛市看涨价差/).length).toBeGreaterThan(0);
     expect(document.body.textContent || '').not.toContain('有条件可交易');
+    expect(within(section).queryByText(/synthetic_or_fixture_data_not_decision_grade|provider_timeout/i)).not.toBeInTheDocument();
   });
 
   it('consolidates risk warnings into a compact boundary with hidden overflow caveats', async () => {
@@ -459,6 +460,20 @@ describe('OptionsLabPage', () => {
     expect(within(riskPanel).getByText('数据状态')).toBeInTheDocument();
     expect(riskPanel.textContent || '').not.toContain('synthetic_or_fixture_data_not_decision_grade');
     expect(riskPanel.textContent || '').not.toContain('synthetic delayed');
+  });
+
+  it('renders compact fail-closed evidence badges on decision and risk panels', async () => {
+    renderPage();
+
+    const decision = await screen.findByTestId('options-lab-decision-engine');
+    const riskPanel = screen.getByTestId('options-lab-risk-boundary-panel');
+    await waitFor(() => {
+      expect(screen.getByTestId('options-lab-decision-summary')).toBeInTheDocument();
+    });
+    expect(within(decision).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
+    expect(within(decision).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
+    expect(within(riskPanel).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
+    expect(within(riskPanel).queryByText(/synthetic_or_fixture_data_not_decision_grade|provider_timeout/i)).not.toBeInTheDocument();
   });
 
   it('puts the decision summary before deep option-chain and scenario detail sections', async () => {

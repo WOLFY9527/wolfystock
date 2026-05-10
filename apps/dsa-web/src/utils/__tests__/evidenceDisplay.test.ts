@@ -32,11 +32,12 @@ describe('evidenceDisplay', () => {
     const normalized = normalizeRotationEvidence({
       rotationStateEvidence: {
         state: 'insufficient_evidence',
+        stateLabel: '轮动代理证据',
         flowEvidenceType: 'proxy_only',
         flowLanguageAllowed: false,
         requiredDataStatus: {
           hasSufficientEvidence: false,
-          summaryLabel: '仅观察',
+          summaryLabel: '分类观察',
         },
         riskLabels: ['gap_fade_risk', 'provider_timeout'],
       },
@@ -45,7 +46,9 @@ describe('evidenceDisplay', () => {
     expect(normalized.engine).toBe('rotation');
     expect(normalized.posture).toBe('observe_only');
     expect(normalized.displayLabel).toBe('仅供观察');
-    expect(normalized.limitationLabels.join(' ')).not.toContain('真实资金流');
+    expect(normalized.limitationLabels).toEqual(expect.arrayContaining(['轮动代理证据', '分类观察']));
+    expect(normalized.limitationLabels).toContain('真实资金流暂缺');
+    expect(normalized.limitationLabels.join(' ')).not.toContain('真实资金流确认');
     expect(normalized.limitationLabels.join(' ')).not.toMatch(/gap_fade_risk|provider_timeout/i);
   });
 

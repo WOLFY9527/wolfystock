@@ -369,10 +369,36 @@ function makeCryptoDiagnosticsRun(overrides: Partial<ScannerRunDetail> = {}): Sc
       limitedByResultCap: false,
     },
     shortlist: [
-      makeCandidate({ symbol: 'WULF', name: 'TeraWulf', companyName: 'TeraWulf', rank: 1, score: 60 }),
+      makeCandidate({
+        symbol: 'WULF',
+        name: 'TeraWulf',
+        companyName: 'TeraWulf',
+        rank: 1,
+        score: 60,
+        diagnostics: {
+          evidence_packet: {
+            userFacingLabels: ['仅观察', 'provider_timeout'],
+            freshnessState: 'stale',
+            adminReasonCodes: ['provider_timeout'],
+          },
+        },
+      }),
     ],
     selected: [
-      makeCandidate({ symbol: 'WULF', name: 'TeraWulf', companyName: 'TeraWulf', rank: 1, score: 60 }),
+      makeCandidate({
+        symbol: 'WULF',
+        name: 'TeraWulf',
+        companyName: 'TeraWulf',
+        rank: 1,
+        score: 60,
+        diagnostics: {
+          evidence_packet: {
+            userFacingLabels: ['仅观察', 'provider_timeout'],
+            freshnessState: 'stale',
+            adminReasonCodes: ['provider_timeout'],
+          },
+        },
+      }),
     ],
     candidates: [
       {
@@ -386,6 +412,13 @@ function makeCryptoDiagnosticsRun(overrides: Partial<ScannerRunDetail> = {}): Sc
         failedRules: [],
         missingFields: [],
         metrics: { return20d: 44.1, trend: 20 },
+        metadata: {
+          evidence_packet: {
+            userFacingLabels: ['仅观察', 'provider_timeout'],
+            freshnessState: 'stale',
+            adminReasonCodes: ['provider_timeout'],
+          },
+        },
       },
       {
         symbol: 'MARA',
@@ -959,6 +992,22 @@ describe('UserScannerPage', () => {
     expect(diagnostics).not.toHaveAttribute('open');
     fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*数据说明|Expand.*Data notes/i }));
     expect(await screen.findByTestId('scanner-diagnostics-panel')).toBeInTheDocument();
+  });
+
+  it('renders compact scanner evidence chips without raw admin reason codes', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
+    renderUserScannerPage();
+
+    const card = await screen.findByTestId('scanner-result-card-WULF');
+    expect(within(card).getByText('仅供观察')).toBeInTheDocument();
+    expect(within(card).getAllByText('数据已过期').length).toBeGreaterThan(0);
+    expect(within(card).queryByText(/provider_timeout/i)).not.toBeInTheDocument();
+    expect(within(card).getByText(/扫描评分 60\/100|scanner score 60\/100/i)).toBeInTheDocument();
+
+    fireEvent.click(within(card).getByRole('button', { name: /查看证据|View evidence/i }));
+    const detail = await screen.findByTestId('scanner-result-detail-WULF');
+    expect(within(detail).getByText('仅供观察')).toBeInTheDocument();
+    expect(within(detail).queryByText(/provider_timeout/i)).not.toBeInTheDocument();
   });
 
   it('reveals rejection reasons from the diagnostics disclosure', async () => {
