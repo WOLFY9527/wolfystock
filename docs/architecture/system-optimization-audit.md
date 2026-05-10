@@ -186,7 +186,7 @@ These are candidates, not automatic deletions. Each should be removed only after
 | `api/v1/endpoints/health.py` | Not included in `api/v1/router.py`; no repo references to `/api/v1/health` | Delete or merge into the single real health/readiness surface | Low risk, pre- or post-deploy |
 | legacy standalone WebUI wrapper | Compatibility wrapper only; now removed in favor of the canonical server entry path | Use `python3 main.py --serve-only` or `uvicorn server:app` for current startup docs | Cleanup completed |
 | legacy WebUI compatibility flags in `main.py` | Deprecated compatibility flags removed from the CLI | Keep current docs and smoke commands on `--serve` / `--serve-only` only | Cleanup completed |
-| `analyzer_service.py` | Repo search found references only from root `SKILL.md` | Archive or move to docs/examples if no external importers depend on it | Medium risk because external/local workflows may import it |
+| root analysis compatibility wrapper | Cleanup completed; direct usage now points to `src.core.pipeline.StockAnalysisPipeline` and `src.core.market_review.run_market_review` | Keep docs/examples on canonical pipeline and market-review entrypoints only | Cleanup completed |
 | `src/agent/strategies/*` compatibility wrappers | Files are explicitly labeled compatibility wrappers for legacy strategy namespace | Remove after clients fully standardize on skills terminology and import paths | Medium risk |
 | `sources/` design assets | Tracked 63 MB directory with PSD/AI/icon assets and screenshots, not runtime-critical | Archive to a design-assets location or Git LFS if long-term retention matters | Low runtime risk, low urgency |
 

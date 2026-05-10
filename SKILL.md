@@ -5,7 +5,7 @@ description: "分析股票和市场。当用户想要分析单个或多个股票
 
 # 股票分析器
 
-本技能基于 `analyzer_service.py` 的逻辑，提供分析股票和整体市场的功能。
+本技能基于当前仓库的 canonical 分析流水线，提供分析股票和整体市场的功能。
 
 ## 输出结构 (`AnalysisResult`)
 
@@ -35,9 +35,8 @@ description: "分析股票和市场。当用户想要分析单个或多个股票
 
 **输入:**
 - `stock_code` (str): 要分析的股票代码。
-- `config` (Config, 可选): 配置对象。默认为 `None`。
-- `full_report` (bool, 可选): 是否生成完整报告。默认为 `False`。
-- `notifier` (NotificationService, 可选): 通知服务对象。默认为 `None`。
+- `config` (Config, 可选): 配置对象。默认为 `get_config()`。
+- `report_type` (`ReportType`, 可选): 报告类型。默认为 `ReportType.SIMPLE`。
 
 **输出:** `Optional[AnalysisResult]`
 一个包含分析结果的 `AnalysisResult` 对象，如果分析失败则为 `None`。
@@ -45,17 +44,24 @@ description: "分析股票和市场。当用户想要分析单个或多个股票
 **示例:**
 
 ```python
-from analyzer_service import analyze_stock
+from src.config import get_config
+from src.core.pipeline import StockAnalysisPipeline
+from src.enums import ReportType
 
-# 分析单只股票
-result = analyze_stock("600989")
+# 直接使用核心流水线获取 AnalysisResult
+pipeline = StockAnalysisPipeline(config=get_config(), query_source="cli")
+result = pipeline.process_single_stock(
+    code="600989",
+    report_type=ReportType.SIMPLE,
+    single_stock_notify=False,
+)
 if result:
     print(f"股票: {result.name} ({result.code})")
     print(f"情绪得分: {result.sentiment_score}")
     print(f"操作建议: {result.operation_advice}")
 ```
 
-**参考:** [`analyze_stock`](./analyzer_service.py)
+**参考:** [`StockAnalysisPipeline.process_single_stock`](./src/core/pipeline.py)
 
 ### 2. 分析多只股票
 
@@ -65,9 +71,8 @@ if result:
 
 **输入:**
 - `stock_codes` (List[str]): 要分析的股票代码列表。
-- `config` (Config, 可选): 配置对象。默认为 `None`。
-- `full_report` (bool, 可选): 是否为每只股票生成完整报告。默认为 `False`。
-- `notifier` (NotificationService, 可选): 通知服务对象。默认为 `None`。
+- `config` (Config, 可选): 配置对象。默认为 `get_config()`。
+- `send_notification` (bool, 可选): 是否发送通知。默认为 `False`。
 
 **输出:** `List[AnalysisResult]`
 一个 `AnalysisResult` 对象列表。
@@ -75,15 +80,17 @@ if result:
 **示例:**
 
 ```python
-from analyzer_service import analyze_stocks
+from src.config import get_config
+from src.core.pipeline import StockAnalysisPipeline
 
-# 分析多只股票
-results = analyze_stocks(["600989", "000001"])
+# 批量运行当前 canonical 分析流水线
+pipeline = StockAnalysisPipeline(config=get_config(), query_source="cli")
+results = pipeline.run(["600989", "000001"], send_notification=False)
 for result in results:
     print(f"股票: {result.name}, 操作建议: {result.operation_advice}")
 ```
 
-**参考:** [`analyze_stocks`](./analyzer_service.py)
+**参考:** [`StockAnalysisPipeline.run`](./src/core/pipeline.py)
 
 
 ### 3. 执行大盘复盘
@@ -93,8 +100,8 @@ for result in results:
 **何时使用:** 当用户要求市场概览、摘要或复盘时。
 
 **输入:**
-- `config` (Config, 可选): 配置对象。默认为 `None`。
-- `notifier` (NotificationService, 可选): 通知服务对象。默认为 `None`。
+- CLI: `python3 main.py --market-review`
+- 代码入口: `run_market_review(notifier=NotificationService())`
 
 **输出:** `Optional[str]`
 一个包含市场复盘报告的字符串，如果失败则为 `None`。
@@ -102,12 +109,13 @@ for result in results:
 **示例:**
 
 ```python
-from analyzer_service import perform_market_review
+from src.core.market_review import run_market_review
+from src.notification import NotificationService
 
-# 执行大盘复盘
-report = perform_market_review()
+# 直接调用当前的大盘复盘入口
+report = run_market_review(notifier=NotificationService())
 if report:
     print(report)
 ```
 
-**参考:** [`perform_market_review`](./analyzer_service.py)
+**参考:** [`run_market_review`](./src/core/market_review.py)

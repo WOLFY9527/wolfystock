@@ -1,5 +1,16 @@
 ## 2026-05-10
 
+- 🧹 **Root analysis wrapper retirement** — Deleted the obsolete root analysis
+  compatibility wrapper after confirming current runtime code, API routes, task
+  queue wiring, and focused tests already use the canonical
+  `src.core.pipeline.StockAnalysisPipeline`,
+  `src.services.analysis_service.AnalysisService`, and
+  `src.core.market_review.run_market_review` surfaces directly. Root skill and
+  architecture docs now point at those canonical entrypoints. This cleanup does
+  not change analysis pipeline behavior, AI prompts/routing, provider runtime,
+  report rendering semantics, API contracts, scanner/backtest/portfolio/options
+  behavior, auth/RBAC, MarketCache, or storage behavior.
+
 - 🧹 **Deprecated agent strategy wrapper removal** — Deleted the legacy
   `src/agent/strategies/*` compatibility namespace and removed the hidden
   `/api/v1/agent/strategies` endpoint after confirming current in-repo tests
