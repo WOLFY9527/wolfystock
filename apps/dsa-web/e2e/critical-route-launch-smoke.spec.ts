@@ -83,13 +83,14 @@ async function expectVisibleTextAbsent(page: Page, sentinels: string[]) {
 
 async function assertRotationRadarReadOnlyShell(page: Page) {
   const bodyText = await page.locator('body').innerText();
-  expect(bodyText).toContain('观察信号 / 非买卖建议');
-  expect(bodyText).toContain('ETF 代理质量');
+  expect(bodyText).toContain('下一观察 / 风险');
+  expect(bodyText).toContain('数据诊断');
   expect(bodyText).toContain('只读证据');
   expect(bodyText).toContain('非交易指令');
-  expect(bodyText).toContain('交付关闭');
+  expect(bodyText).toContain('数据说明');
+  await appExpect(page.getByTestId('rotation-theme-proxy-details-ai_applications')).not.toHaveJSProperty('open', true);
   expect(bodyText).not.toMatch(rotationRadarTradingActionPattern);
-  await appExpect(page.getByTestId('rotation-radar-developer-details')).not.toHaveJSProperty('open', true);
+  await appExpect(page.getByTestId('rotation-radar-developer-details')).toHaveCount(0);
 }
 
 async function assertPublicShell(page: Page) {
@@ -177,7 +178,7 @@ appTest.describe('public launch route smoke', () => {
         await appExpect(page.getByRole('navigation', { name: '导航菜单' }).getByRole('link', { name: '轮动雷达' })).toBeVisible();
       }
       await appExpect(page.getByTestId('rotation-radar-summary-band')).toBeVisible();
-      await appExpect(page.getByTestId('rotation-theme-card-ai_applications')).toBeVisible();
+      await appExpect(page.getByTestId('rotation-radar-leader-row-ai_applications')).toBeVisible();
       await assertRotationRadarReadOnlyShell(page);
       await assertPublicShell(page);
     }

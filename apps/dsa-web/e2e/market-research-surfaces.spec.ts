@@ -17,12 +17,10 @@ const routes = [
   {
     path: '/zh/market/rotation-radar',
     root: 'market-rotation-radar-page',
-    first: ['rotation-radar-summary-band', 'rotation-next-watch-band'],
+    first: ['rotation-radar-summary-band', 'rotation-radar-leader-list'],
     collapsed: [
-      'rotation-theme-mechanics-ai_applications',
       'rotation-theme-proxy-details-ai_applications',
       'rotation-radar-mechanics-details',
-      'rotation-radar-developer-details',
     ],
   },
 ];
