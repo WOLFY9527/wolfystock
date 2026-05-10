@@ -14,6 +14,7 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import { Badge, GlassCard } from '../components/common';
+import { AdminEvidenceDiagnosticsConsole } from '../components/evidence/AdminEvidenceDiagnosticsConsole';
 import { cn } from '../utils/cn';
 
 type Tone = 'info' | 'warn' | 'danger' | 'good';
@@ -188,6 +189,8 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           ))}
         </div>
       </header>
+
+      <AdminEvidenceDiagnosticsConsole />
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
         <GlassCard as="section" className="p-4 md:p-5 xl:col-span-8">

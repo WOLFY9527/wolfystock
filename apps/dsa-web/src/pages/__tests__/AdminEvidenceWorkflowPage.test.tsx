@@ -2,6 +2,14 @@ import { render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AdminEvidenceWorkflowPage from '../AdminEvidenceWorkflowPage';
 
+vi.mock('../../components/evidence/AdminEvidenceDiagnosticsConsole', () => ({
+  AdminEvidenceDiagnosticsConsole: () => (
+    <section data-testid="mock-admin-evidence-diagnostics-console">
+      live diagnostics console
+    </section>
+  ),
+}));
+
 const workflowSteps = [
   '本地工作区',
   '生成模板',
@@ -46,6 +54,7 @@ describe('AdminEvidenceWorkflowPage', () => {
     render(<AdminEvidenceWorkflowPage />);
 
     const page = screen.getByTestId('admin-evidence-workflow-page');
+    expect(within(page).getByTestId('mock-admin-evidence-diagnostics-console')).toBeInTheDocument();
     const workflowGrid = screen.getByTestId('admin-evidence-workflow-grid');
     const statusGrid = screen.getByTestId('admin-evidence-status-grid');
     workflowSteps.forEach((step) => {
@@ -56,6 +65,15 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(within(statusGrid).getByText('manual review required')).toBeInTheDocument();
     expect(within(statusGrid).getByText('releaseApproved=false')).toBeInTheDocument();
     expect(within(page).getByText('缺少证据时保持 NO-GO')).toBeInTheDocument();
+  });
+
+  it('renders the diagnostics console before the offline workflow reference blocks', () => {
+    render(<AdminEvidenceWorkflowPage />);
+
+    const consoleBlock = screen.getByTestId('mock-admin-evidence-diagnostics-console');
+    const workflowGrid = screen.getByTestId('admin-evidence-workflow-grid');
+
+    expect(Boolean(consoleBlock.compareDocumentPosition(workflowGrid) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
   it('surfaces purpose, current state, and next operator action in the hero', () => {
