@@ -1,0 +1,32 @@
+{
+  "engine": "rotation",
+  "contract_version": "data_quality_contract_v1",
+  "required_fields": [
+    {
+      "engine": "rotation",
+      "field_key": "taxonomy.version",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T00:00:00Z",
+      "source_ref_ids": ["taxonomy_registry"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    }
+  ],
+  "important_fields": [],
+  "optional_fields": [],
+  "protected_behavior_notes": [
+    "Proxy-only and actual fund-flow semantics remain unchanged."
+  ],
+  "source_ref_policies": [
+    {
+      "source_ref_id": "taxonomy_registry",
+      "source_class": "local",
+      "provider": "rotation_taxonomy",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "ok"
+    }
+  ]
+}

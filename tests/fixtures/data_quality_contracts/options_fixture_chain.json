@@ -1,0 +1,123 @@
+{
+  "engine": "options",
+  "contract_version": "data_quality_contract_v1",
+  "required_fields": [
+    {
+      "engine": "options",
+      "field_key": "underlying.quote",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["underlying_quote"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "options",
+      "field_key": "chain.snapshot",
+      "criticality": "required",
+      "data_quality_class": "fixture",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["fixture_chain"],
+      "reason_codes": ["fixture_chain"],
+      "decision_grade": true,
+      "confidence_cap_effect": "block_decision_grade"
+    },
+    {
+      "engine": "options",
+      "field_key": "contract.identity",
+      "criticality": "required",
+      "data_quality_class": "fixture",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["fixture_chain"],
+      "reason_codes": ["fixture_chain"],
+      "decision_grade": true,
+      "confidence_cap_effect": "block_decision_grade"
+    },
+    {
+      "engine": "options",
+      "field_key": "quote.bid_ask_mid",
+      "criticality": "required",
+      "data_quality_class": "fixture",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["fixture_chain"],
+      "reason_codes": ["fixture_chain"],
+      "decision_grade": true,
+      "confidence_cap_effect": "block_decision_grade"
+    },
+    {
+      "engine": "options",
+      "field_key": "iv.greeks",
+      "criticality": "required",
+      "data_quality_class": "fixture",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["fixture_chain"],
+      "reason_codes": ["fixture_chain"],
+      "decision_grade": true,
+      "confidence_cap_effect": "block_decision_grade"
+    },
+    {
+      "engine": "options",
+      "field_key": "liquidity.oi_volume",
+      "criticality": "required",
+      "data_quality_class": "fixture",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["fixture_chain"],
+      "reason_codes": ["fixture_chain"],
+      "decision_grade": true,
+      "confidence_cap_effect": "block_decision_grade"
+    },
+    {
+      "engine": "options",
+      "field_key": "event.calendar",
+      "criticality": "required",
+      "data_quality_class": "fixture",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["fixture_chain"],
+      "reason_codes": ["fixture_chain"],
+      "decision_grade": true,
+      "confidence_cap_effect": "block_decision_grade"
+    },
+    {
+      "engine": "options",
+      "field_key": "provider.freshness",
+      "criticality": "required",
+      "data_quality_class": "fixture",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["fixture_chain"],
+      "reason_codes": ["fixture_chain"],
+      "decision_grade": true,
+      "confidence_cap_effect": "block_decision_grade"
+    }
+  ],
+  "important_fields": [],
+  "optional_fields": [],
+  "protected_behavior_notes": [
+    "Fixture-backed options evidence must remain non-decision-grade."
+  ],
+  "source_ref_policies": [
+    {
+      "source_ref_id": "underlying_quote",
+      "source_class": "delayed",
+      "provider": "local_cache",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "ok"
+    },
+    {
+      "source_ref_id": "fixture_chain",
+      "source_class": "fixture",
+      "provider": "offline_fixture",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "fixture_chain"
+    }
+  ]
+}

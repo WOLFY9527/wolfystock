@@ -1,0 +1,111 @@
+{
+  "engine": "portfolio_risk",
+  "contract_version": "data_quality_contract_v1",
+  "required_fields": [
+    {
+      "engine": "portfolio_risk",
+      "field_key": "holdings.lineage",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["portfolio_snapshot"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "portfolio_risk",
+      "field_key": "cash.ledger",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["portfolio_snapshot"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "portfolio_risk",
+      "field_key": "transactions.lineage",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["portfolio_snapshot"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "portfolio_risk",
+      "field_key": "fx.freshness",
+      "criticality": "required",
+      "data_quality_class": "stale",
+      "status": "stale",
+      "as_of": "2026-05-08T09:25:00Z",
+      "source_ref_ids": ["fx_snapshot"],
+      "reason_codes": ["stale_fx"],
+      "decision_grade": true,
+      "confidence_cap_effect": "cap_decision_grade"
+    },
+    {
+      "engine": "portfolio_risk",
+      "field_key": "cost_basis.method",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["portfolio_snapshot"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "portfolio_risk",
+      "field_key": "source.authority",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["portfolio_snapshot"],
+      "reason_codes": ["manual_replay_authoritative"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "portfolio_risk",
+      "field_key": "sync_import.status",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["portfolio_snapshot"],
+      "reason_codes": ["manual_replay_complete"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    }
+  ],
+  "important_fields": [],
+  "optional_fields": [],
+  "protected_behavior_notes": [
+    "Stale FX must cap aggregate risk confidence but not change accounting."
+  ],
+  "source_ref_policies": [
+    {
+      "source_ref_id": "portfolio_snapshot",
+      "source_class": "local",
+      "provider": "portfolio_snapshot",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "manual_replay_complete"
+    },
+    {
+      "source_ref_id": "fx_snapshot",
+      "source_class": "fallback",
+      "provider": "fx_cache",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "stale_fx"
+    }
+  ]
+}

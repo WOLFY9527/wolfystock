@@ -1,0 +1,92 @@
+{
+  "engine": "ai_analysis",
+  "contract_version": "data_quality_contract_v1",
+  "required_fields": [
+    {
+      "engine": "ai_analysis",
+      "field_key": "evidence.packet",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["packet"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "ai_analysis",
+      "field_key": "source.refs",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["packet"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "ai_analysis",
+      "field_key": "freshness.matrix",
+      "criticality": "required",
+      "data_quality_class": "stale",
+      "status": "stale",
+      "as_of": "2026-05-09T09:30:00Z",
+      "source_ref_ids": ["packet"],
+      "reason_codes": ["stale_required_data"],
+      "decision_grade": true,
+      "confidence_cap_effect": "cap_decision_grade"
+    },
+    {
+      "engine": "ai_analysis",
+      "field_key": "quality.flags",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["packet"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "ai_analysis",
+      "field_key": "confidence.cap",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["packet"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "ai_analysis",
+      "field_key": "explainable.facts",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["packet"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    }
+  ],
+  "important_fields": [],
+  "optional_fields": [],
+  "protected_behavior_notes": [
+    "Required stale AI evidence must cap but not upgrade decision-grade wording."
+  ],
+  "source_ref_policies": [
+    {
+      "source_ref_id": "packet",
+      "source_class": "local",
+      "provider": "ai_evidence_packet",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "stale_required_data"
+    }
+  ]
+}

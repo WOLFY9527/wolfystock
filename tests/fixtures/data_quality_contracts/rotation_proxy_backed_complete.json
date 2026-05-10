@@ -1,0 +1,112 @@
+{
+  "engine": "rotation",
+  "contract_version": "data_quality_contract_v1",
+  "required_fields": [
+    {
+      "engine": "rotation",
+      "field_key": "taxonomy.version",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T00:00:00Z",
+      "source_ref_ids": ["taxonomy_registry"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "rotation",
+      "field_key": "proxy.coverage",
+      "criticality": "required",
+      "data_quality_class": "fallback",
+      "status": "partial",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["proxy_snapshot"],
+      "reason_codes": ["proxy_coverage_pass"],
+      "decision_grade": true,
+      "confidence_cap_effect": "cap_decision_grade"
+    },
+    {
+      "engine": "rotation",
+      "field_key": "benchmark_proxy.ohlcv",
+      "criticality": "required",
+      "data_quality_class": "fallback",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["proxy_snapshot"],
+      "reason_codes": ["proxy_backed"],
+      "decision_grade": true,
+      "confidence_cap_effect": "cap_decision_grade"
+    },
+    {
+      "engine": "rotation",
+      "field_key": "breadth.coverage",
+      "criticality": "required",
+      "data_quality_class": "fallback",
+      "status": "partial",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["proxy_snapshot"],
+      "reason_codes": ["proxy_backed"],
+      "decision_grade": true,
+      "confidence_cap_effect": "cap_decision_grade"
+    },
+    {
+      "engine": "rotation",
+      "field_key": "volume.baseline",
+      "criticality": "required",
+      "data_quality_class": "fallback",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["proxy_snapshot"],
+      "reason_codes": ["proxy_backed"],
+      "decision_grade": true,
+      "confidence_cap_effect": "cap_decision_grade"
+    },
+    {
+      "engine": "rotation",
+      "field_key": "flow.evidence_boundary",
+      "criticality": "required",
+      "data_quality_class": "fallback",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["proxy_snapshot"],
+      "reason_codes": ["proxy_price_volume_only"],
+      "decision_grade": true,
+      "confidence_cap_effect": "cap_decision_grade"
+    }
+  ],
+  "important_fields": [],
+  "optional_fields": [
+    {
+      "engine": "rotation",
+      "field_key": "actual_flow.provider",
+      "criticality": "optional",
+      "data_quality_class": "missing",
+      "status": "missing",
+      "as_of": null,
+      "source_ref_ids": ["proxy_snapshot"],
+      "reason_codes": ["optional_actual_flow_missing"],
+      "decision_grade": false,
+      "confidence_cap_effect": "visible_gap_only"
+    }
+  ],
+  "protected_behavior_notes": [
+    "Proxy-backed rotation evidence must not be described as actual fund flow."
+  ],
+  "source_ref_policies": [
+    {
+      "source_ref_id": "taxonomy_registry",
+      "source_class": "local",
+      "provider": "rotation_taxonomy",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "ok"
+    },
+    {
+      "source_ref_id": "proxy_snapshot",
+      "source_class": "fallback",
+      "provider": "local_proxy_bundle",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "proxy_backed"
+    }
+  ]
+}

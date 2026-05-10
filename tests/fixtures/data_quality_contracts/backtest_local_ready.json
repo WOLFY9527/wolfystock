@@ -1,0 +1,113 @@
+{
+  "engine": "backtest",
+  "contract_version": "data_quality_contract_v1",
+  "required_fields": [
+    {
+      "engine": "backtest",
+      "field_key": "local_bars.coverage",
+      "criticality": "required",
+      "data_quality_class": "local_historical",
+      "status": "available",
+      "as_of": "2026-05-09T00:00:00Z",
+      "source_ref_ids": ["local_bars"],
+      "reason_codes": ["coverage_pass"],
+      "decision_grade": true,
+      "confidence_cap_effect": "allow_local_historical"
+    },
+    {
+      "engine": "backtest",
+      "field_key": "adjusted_data.policy",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-09T00:00:00Z",
+      "source_ref_ids": ["dataset_manifest"],
+      "reason_codes": ["adjusted_close_policy"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "backtest",
+      "field_key": "corporate_actions.coverage",
+      "criticality": "required",
+      "data_quality_class": "local_historical",
+      "status": "available",
+      "as_of": "2026-05-09T00:00:00Z",
+      "source_ref_ids": ["dataset_manifest"],
+      "reason_codes": ["coverage_pass"],
+      "decision_grade": true,
+      "confidence_cap_effect": "allow_local_historical"
+    },
+    {
+      "engine": "backtest",
+      "field_key": "trading_calendar.policy",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-09T00:00:00Z",
+      "source_ref_ids": ["calendar_policy"],
+      "reason_codes": ["calendar_pass"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "backtest",
+      "field_key": "cost_fill.model",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-09T00:00:00Z",
+      "source_ref_ids": ["rule_run"],
+      "reason_codes": ["cost_model_declared"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "backtest",
+      "field_key": "rule_engine.dataset_version",
+      "criticality": "required",
+      "data_quality_class": "local_historical",
+      "status": "available",
+      "as_of": "2026-05-09T00:00:00Z",
+      "source_ref_ids": ["rule_run"],
+      "reason_codes": ["dataset_version_declared"],
+      "decision_grade": true,
+      "confidence_cap_effect": "allow_local_historical"
+    }
+  ],
+  "important_fields": [],
+  "optional_fields": [],
+  "protected_behavior_notes": [
+    "Backtest remains local-data-only and reproducible."
+  ],
+  "source_ref_policies": [
+    {
+      "source_ref_id": "local_bars",
+      "source_class": "local_historical",
+      "provider": "stock_repo",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "coverage_pass"
+    },
+    {
+      "source_ref_id": "dataset_manifest",
+      "source_class": "local",
+      "provider": "backtest_dataset",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "coverage_pass"
+    },
+    {
+      "source_ref_id": "calendar_policy",
+      "source_class": "local",
+      "provider": "trading_calendar",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "calendar_pass"
+    },
+    {
+      "source_ref_id": "rule_run",
+      "source_class": "local",
+      "provider": "rule_engine",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "dataset_version_declared"
+    }
+  ]
+}

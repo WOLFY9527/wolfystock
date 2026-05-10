@@ -1,0 +1,151 @@
+{
+  "engine": "scanner",
+  "contract_version": "data_quality_contract_v1",
+  "required_fields": [
+    {
+      "engine": "scanner",
+      "field_key": "universe.version",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["scanner_run"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "scanner",
+      "field_key": "quote.price",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["quote_cache"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "scanner",
+      "field_key": "ohlcv.window",
+      "criticality": "required",
+      "data_quality_class": "local_historical",
+      "status": "available",
+      "as_of": "2026-05-09T00:00:00Z",
+      "source_ref_ids": ["local_history"],
+      "reason_codes": ["coverage_pass"],
+      "decision_grade": true,
+      "confidence_cap_effect": "allow_local_historical"
+    },
+    {
+      "engine": "scanner",
+      "field_key": "liquidity.amount",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["quote_cache"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "scanner",
+      "field_key": "score.component_inputs",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["scanner_run"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "scanner",
+      "field_key": "freshness.quote",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["quote_cache"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    },
+    {
+      "engine": "scanner",
+      "field_key": "run.id",
+      "criticality": "required",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["scanner_run"],
+      "reason_codes": ["ok"],
+      "decision_grade": true,
+      "confidence_cap_effect": "none"
+    }
+  ],
+  "important_fields": [
+    {
+      "engine": "scanner",
+      "field_key": "universe.omission_summary",
+      "criticality": "important",
+      "data_quality_class": "fresh",
+      "status": "available",
+      "as_of": "2026-05-10T09:30:00Z",
+      "source_ref_ids": ["scanner_run"],
+      "reason_codes": ["ok"],
+      "decision_grade": false,
+      "confidence_cap_effect": "none"
+    }
+  ],
+  "optional_fields": [
+    {
+      "engine": "scanner",
+      "field_key": "news.context",
+      "criticality": "optional",
+      "data_quality_class": "missing",
+      "status": "missing",
+      "as_of": null,
+      "source_ref_ids": ["news_gap"],
+      "reason_codes": ["optional_news_missing"],
+      "decision_grade": false,
+      "confidence_cap_effect": "visible_gap_only"
+    }
+  ],
+  "protected_behavior_notes": [
+    "No scanner scoring, ranking, or provider runtime behavior changed."
+  ],
+  "source_ref_policies": [
+    {
+      "source_ref_id": "scanner_run",
+      "source_class": "local",
+      "provider": "scanner_run",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "ok"
+    },
+    {
+      "source_ref_id": "quote_cache",
+      "source_class": "cache",
+      "provider": "local_cache",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "ok"
+    },
+    {
+      "source_ref_id": "local_history",
+      "source_class": "local_historical",
+      "provider": "local_ohlcv",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "coverage_pass"
+    },
+    {
+      "source_ref_id": "news_gap",
+      "source_class": "local",
+      "provider": "scanner_run",
+      "raw_payload_stored": false,
+      "sanitized_reason_code": "optional_news_missing"
+    }
+  ]
+}
