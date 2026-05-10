@@ -851,6 +851,46 @@ describe('PortfolioPage FX refresh', () => {
     expect(risk).not.toHaveTextContent('provider_debug_payload');
   });
 
+  it('renders compact portfolio evidence chips without exposing raw sync or authority internals', async () => {
+    const snapshot = makeSnapshot({ includePosition: true, fxStale: true }) as ReturnType<typeof makeSnapshot> & Record<string, unknown>;
+    snapshot.fxFreshnessState = 'stale';
+    snapshot.holdingsLineageState = 'missing';
+    snapshot.cashLedgerCompletenessState = 'missing';
+    snapshot.benchmarkMappingState = 'missing';
+    snapshot.factorMappingState = 'missing';
+    snapshot.confidenceCap = {
+      value: 60,
+      reason_codes: ['stale_fx', 'manual_replay_complete'],
+      limitation_labels: ['仅供风险观察', '持仓来源待核验', '现金流水不完整'],
+    };
+    snapshot.portfolioRiskEvidence = {
+      limitationLabels: ['FX 汇率已过期', '基准映射暂缺', '因子映射暂缺'],
+      adminDiagnostics: {
+        sourceAuthority: 'manual_replay_authoritative',
+        syncImportStatus: 'manual_replay_complete',
+      },
+    };
+
+    getSnapshot.mockResolvedValue(snapshot);
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const snapshotStrip = screen.getByTestId('portfolio-account-status-strip');
+    expect(within(snapshotStrip).getByTestId('portfolio-snapshot-evidence-chips')).toHaveTextContent('仅供观察');
+
+    const risk = screen.getByTestId('portfolio-risk-card');
+    const chips = within(risk).getByTestId('portfolio-risk-evidence-chips');
+    expect(chips).toHaveTextContent('仅供风险观察');
+    expect(chips).toHaveTextContent('FX 汇率已过期');
+    expect(chips).toHaveTextContent('持仓来源待核验');
+    expect(chips).toHaveTextContent('现金流水不完整');
+    expect(chips).toHaveTextContent('基准映射暂缺');
+    expect(chips).toHaveTextContent('因子映射暂缺');
+    expect(chips).not.toHaveTextContent(/manual_replay_complete|manual_replay_authoritative|sourceAuthority|syncImportStatus|confidenceCap|stale_fx/i);
+  });
+
   it('keeps native exposure visible when FX conversion is unavailable', async () => {
     getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: true }));
 

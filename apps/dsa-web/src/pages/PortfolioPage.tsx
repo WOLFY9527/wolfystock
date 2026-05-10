@@ -5,6 +5,7 @@ import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Drawer, Input, PillBadge, SectionShell, SegmentedControl, Select } from '../components/common';
+import { EvidenceChips } from '../components/evidence/EvidenceChips';
 import {
   DensityRail,
   GuidedDisclosure,
@@ -32,6 +33,7 @@ import {
   useSafariRenderReady,
 } from '../hooks/useSafariInteractionReady';
 import { translate } from '../i18n/core';
+import { normalizePortfolioRiskEvidence } from '../utils/evidenceDisplay';
 import { toDateInputValue } from '../utils/format';
 import { buildLocalizedPath } from '../utils/localeRouting';
 import {
@@ -1651,6 +1653,19 @@ const PortfolioPage: React.FC = () => {
   const safeRiskWarningLabels = (analytics?.risk.warnings || [])
     .map((warning) => riskWarningLabels[warning])
     .filter(Boolean);
+  const portfolioEvidenceSummary = useMemo(
+    () => (snapshot ? normalizePortfolioRiskEvidence(snapshot, { maxLimitationLabels: 6 }) : null),
+    [snapshot],
+  );
+  const showPortfolioEvidenceChips = Boolean(
+    portfolioEvidenceSummary
+    && (
+      portfolioEvidenceSummary.posture !== 'unknown'
+      || portfolioEvidenceSummary.confidenceCap != null
+      || portfolioEvidenceSummary.limitationLabels.length > 0
+      || portfolioEvidenceSummary.freshnessLabel != null
+    ),
+  );
   const launchSurfaceTitle = language === 'zh' ? '资产台账总览' : 'Ledger Overview';
   const launchSurfaceSubtitle = language === 'zh'
     ? '先看账户状态、持仓、现金、敞口与关注项；流水记录与手工记账在下方作为次级录入口。'
@@ -2086,6 +2101,14 @@ const PortfolioPage: React.FC = () => {
                   <p className="mt-2 text-xs leading-5 text-white/35">
                     {hasHoldings ? `${holdingsPrimaryValue} · ${accountStateSummary}` : compactNoHoldingText}
                   </p>
+                  {showPortfolioEvidenceChips ? (
+                    <EvidenceChips
+                      summary={portfolioEvidenceSummary}
+                      maxLabels={0}
+                      className="mt-3"
+                      data-testid="portfolio-snapshot-evidence-chips"
+                    />
+                  ) : null}
                 </div>
 
                 <div className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-4">
@@ -2507,6 +2530,13 @@ const PortfolioPage: React.FC = () => {
                         </PillBadge>
                       </span>
                     </div>
+                    {showPortfolioEvidenceChips ? (
+                      <EvidenceChips
+                        summary={portfolioEvidenceSummary}
+                        maxLabels={6}
+                        data-testid="portfolio-risk-evidence-chips"
+                      />
+                    ) : null}
 
                     <div data-testid="portfolio-risk-overview" className="grid grid-cols-2 gap-2">
                       <div className="rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2">

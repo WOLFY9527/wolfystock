@@ -2,7 +2,9 @@ import type React from 'react';
 import { useMemo, useState } from 'react';
 import type { BacktestDiagnosticWarning, RuleBacktestRunResponse, RuleBacktestTradeItem } from '../../types/backtest';
 import { useI18n } from '../../contexts/UiLanguageContext';
+import { EvidenceChips } from '../evidence/EvidenceChips';
 import { StatusBadge } from '../ui/StatusBadge';
+import { normalizeBacktestReadiness } from '../../utils/evidenceDisplay';
 import {
   downloadExecutionTraceCsv,
   downloadExecutionTraceJson,
@@ -743,6 +745,14 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   const firstDate = normalized.viewerMeta.firstDate || run.startDate || run.periodStart || null;
   const lastDate = normalized.viewerMeta.lastDate || run.endDate || run.periodEnd || null;
   const dateRange = firstDate || lastDate ? `${firstDate || '--'} -> ${lastDate || '--'}` : '--';
+  const readinessSummary = useMemo(
+    () => normalizeBacktestReadiness(run, { maxLimitationLabels: 5 }),
+    [run],
+  );
+  const showReadinessChips = readinessSummary.posture !== 'unknown'
+    || readinessSummary.confidenceCap != null
+    || readinessSummary.limitationLabels.length > 0
+    || readinessSummary.freshnessLabel != null;
 
   const exportTrades = () => {
     downloadCsv(
@@ -830,6 +840,16 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             </div>
             <div className="font-mono text-xs text-white/38">{formatDateTime(run.completedAt || run.runAt)}</div>
           </div>
+          {showReadinessChips ? (
+            <div className="mt-4 flex flex-col gap-2" data-testid="backtest-readiness-strip">
+              <div className={LABEL_CLASS}>研究边界</div>
+              <EvidenceChips
+                summary={readinessSummary}
+                maxLabels={5}
+                data-testid="backtest-readiness-chips"
+              />
+            </div>
+          ) : null}
           <div data-testid="backtest-report-result-summary" className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MetricCard item={{ key: 'summary-return', label: '总收益', value: signedPct(normalized.metrics.totalReturnPct), tone: toneFor(normalized.metrics.totalReturnPct) }} />
             <MetricCard item={{ key: 'summary-risk', label: '最大回撤', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />

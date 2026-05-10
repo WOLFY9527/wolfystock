@@ -148,6 +148,20 @@ function makeRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBacktest
       feeBps: 2,
       slippageBps: 1,
     },
+    professionalReadiness: {
+      overall_state: 'research_prototype',
+      professional_quant_ready: false,
+      adjusted_data_state: 'unknown_or_mixed',
+      corporate_action_state: 'not_ready',
+      trading_calendar_state: 'available_bars_only',
+      cost_model_state: 'baseline_bps_only',
+      reproducibility_state: 'partial_without_dataset_lineage',
+    },
+    adjustedDataState: 'unknown_or_mixed',
+    corporateActionState: 'not_ready',
+    tradingCalendarState: 'available_bars_only',
+    costModelState: 'baseline_bps_only',
+    reproducibilityState: 'partial_without_dataset_lineage',
     benchmarkCurve: [],
     benchmarkSummary: {
       label: 'QQQ',
@@ -313,6 +327,21 @@ describe('BacktestResultReport', () => {
 
     expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('基准缺失');
     expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('不影响策略自身回测结果');
+  });
+
+  it('renders compact readiness chips without leaking raw readiness codes', () => {
+    render(<BacktestResultReport run={makeRun()} mode="professional" />);
+
+    const chips = screen.getByTestId('backtest-readiness-chips');
+    expect(chips).toHaveTextContent('仅供观察');
+    expect(chips).toHaveTextContent('研究级回测');
+    expect(chips).toHaveTextContent('专业级条件未满足');
+    expect(chips).toHaveTextContent('数据口径需复核');
+    expect(chips).toHaveTextContent('交易日历待确认');
+    expect(chips).toHaveTextContent('复权/公司行动待确认');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('总收益');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('最大回撤');
+    expect(chips).not.toHaveTextContent(/research_prototype|unknown_or_mixed|available_bars_only|baseline_bps_only|partial_without_dataset_lineage|professional_quant_ready/i);
   });
 
   it('renders compact drawdown and risk explanation labels without inventing unavailable values', () => {

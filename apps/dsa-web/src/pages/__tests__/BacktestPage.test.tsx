@@ -485,6 +485,20 @@ function makeRuleRunResponse(overrides: Partial<RuleBacktestRunResponse> = {}): 
       entryFillTiming: 'next bar open',
       positionSizing: 'all_available_capital',
     },
+    professionalReadiness: {
+      overall_state: 'research_prototype',
+      professional_quant_ready: false,
+      adjusted_data_state: 'unknown_or_mixed',
+      corporate_action_state: 'not_ready',
+      trading_calendar_state: 'available_bars_only',
+      cost_model_state: 'baseline_bps_only',
+      reproducibility_state: 'partial_without_dataset_lineage',
+    },
+    adjustedDataState: 'unknown_or_mixed',
+    corporateActionState: 'not_ready',
+    tradingCalendarState: 'available_bars_only',
+    costModelState: 'baseline_bps_only',
+    reproducibilityState: 'partial_without_dataset_lineage',
     benchmarkCurve: [],
     benchmarkSummary: {
       label: bt('zh', 'resultPage.buyAndHoldDefault'),
@@ -1279,6 +1293,8 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('deterministic-result-page-hero')).toHaveTextContent('ORCL');
     expect(screen.getByTestId('backtest-result-report')).toHaveAttribute('data-report-mode', 'professional');
     expect(screen.getByTestId('backtest-report-summary')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-readiness-chips')).toHaveTextContent('研究级回测');
+    expect(screen.getByTestId('backtest-readiness-chips')).not.toHaveTextContent(/research_prototype|unknown_or_mixed|available_bars_only|professional_quant_ready/i);
     expect(screen.getByTestId('backtest-report-key-metrics')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-report-trade-table')).toBeInTheDocument();
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');

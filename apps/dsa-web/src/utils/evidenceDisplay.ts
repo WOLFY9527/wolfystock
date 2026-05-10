@@ -60,11 +60,19 @@ const DIRECT_LABEL_MAP: Record<string, string | null> = {
   observe_only: '仅供观察',
   '仅观察': '仅供观察',
   '仅供观察': '仅供观察',
-  '仅供风险观察': '仅供观察',
+  '仅供风险观察': '仅供风险观察',
   review_required: '需人工复核',
   '需人工复核': '需人工复核',
   allowed_metadata_only: '依据需复核',
   '依据需复核': '依据需复核',
+  '研究级回测': '研究级回测',
+  '专业级条件未满足': '专业级条件未满足',
+  '数据口径需复核': '数据口径需复核',
+  '交易日历待确认': '交易日历待确认',
+  '复权/公司行动待确认': '复权/公司行动待确认',
+  '持仓来源待核验': '持仓来源待核验',
+  '现金流水不完整': '现金流水不完整',
+  '成本口径需复核': '成本口径需复核',
   '部分外部数据暂不可用': '部分外部数据暂不可用',
   '历史数据不足': '历史数据不足',
   '真实资金流暂缺': '真实资金流暂缺',
@@ -99,7 +107,10 @@ const DIRECT_LABEL_MAP: Record<string, string | null> = {
   benchmark_mapping_missing: '基准映射暂缺',
   factor_mapping_missing: '因子映射暂缺',
   insufficient_evidence: '仅供观察',
-  research_prototype: '仅供观察',
+  research_prototype: '研究级回测',
+  unknown_or_mixed: '数据口径需复核',
+  available_bars_only: '交易日历待确认',
+  research_prototype_only: '研究级回测',
 };
 
 const HIDDEN_USER_PATTERNS = [
@@ -227,6 +238,24 @@ function mapKnownLabel(value?: string | null): string | null {
   if (normalized.includes('factor') && normalized.includes('mapping')) {
     return '因子映射暂缺';
   }
+  if (normalized.includes('holdings') && normalized.includes('lineage')) {
+    return '持仓来源待核验';
+  }
+  if (normalized.includes('cash') && normalized.includes('ledger')) {
+    return '现金流水不完整';
+  }
+  if (normalized.includes('cost') && (normalized.includes('basis') || normalized.includes('model'))) {
+    return '成本口径需复核';
+  }
+  if (normalized.includes('research_prototype')) {
+    return '研究级回测';
+  }
+  if (normalized.includes('calendar')) {
+    return '交易日历待确认';
+  }
+  if (normalized.includes('corporate') || normalized.includes('adjusted')) {
+    return '复权/公司行动待确认';
+  }
   if (normalized.includes('review')) {
     return '需人工复核';
   }
@@ -271,6 +300,7 @@ function detectPosture(...values: unknown[]): NormalizedEvidencePosture {
     normalizedValues.some((value) => (
       value.includes('仅观察')
       || value.includes('仅供观察')
+      || value.includes('仅供风险观察')
       || value.includes('observe_only')
       || value.includes('research_prototype')
       || value.includes('proxy_only')
@@ -286,6 +316,12 @@ function buildLimitationLabels(values: string[], options: NormalizeEvidenceOptio
   const mapped = unique(values.map((value) => mapKnownLabel(value)).filter((value): value is string => Boolean(value)));
   const maxLimitationLabels = options.maxLimitationLabels ?? mapped.length;
   return mapped.slice(0, maxLimitationLabels);
+}
+
+function stateNeedsBadge(value: unknown, acceptedStates: string[]): boolean {
+  const normalized = normalizeKey(asString(value));
+  if (!normalized) return false;
+  return !acceptedStates.includes(normalized);
 }
 
 function sourceRefCountFrom(payload: unknown): number | undefined {
@@ -420,26 +456,32 @@ export function normalizeBacktestReadiness(payload: unknown, options: NormalizeE
   const packet = firstRecord(payload, ['professionalReadiness', 'professional_readiness']) ?? firstRecord(payload, []);
   if (!packet) return baseSummary('backtest', 'unknown', [], payload, options);
 
+  const root = isRecord(payload) ? payload : {};
+  const combined = { ...root, ...packet };
+  const overallState = firstValue(combined, ['overallState', 'overall_state']);
+  const professionalQuantReady = firstValue(combined, ['professionalQuantReady', 'professional_quant_ready']);
+  const adjustedDataState = firstValue(combined, ['adjustedDataState', 'adjusted_data_state']);
+  const corporateActionState = firstValue(combined, ['corporateActionState', 'corporate_action_state']);
+  const tradingCalendarState = firstValue(combined, ['tradingCalendarState', 'trading_calendar_state']);
+  const costModelState = firstValue(combined, ['costModelState', 'cost_model_state']);
+  const reproducibilityState = firstValue(combined, ['reproducibilityState', 'reproducibility_state']);
+  const backtestLabels = collectStrings(
+    normalizeKey(asString(overallState)) === 'research_prototype' ? '研究级回测' : null,
+    professionalQuantReady === false ? '专业级条件未满足' : null,
+    stateNeedsBadge(adjustedDataState, ['ready', 'available', 'confirmed']) ? '数据口径需复核' : null,
+    stateNeedsBadge(corporateActionState, ['ready', 'available', 'confirmed']) ? '复权/公司行动待确认' : null,
+    stateNeedsBadge(tradingCalendarState, ['ready', 'available', 'confirmed', 'market_calendar_confirmed']) ? '交易日历待确认' : null,
+    stateNeedsBadge(costModelState, ['ready', 'available', 'confirmed']) ? '成本口径需复核' : null,
+    stateNeedsBadge(reproducibilityState, ['ready', 'available', 'confirmed', 'reproducible']) ? '数据口径需复核' : null,
+  );
   const labels = collectStrings(
-    packet.overallState,
-    packet.overall_state,
-    packet.summaryLabel,
-    packet.summary_label,
-    packet.adjustedDataState,
-    packet.adjusted_data_state,
-    packet.corporateActionState,
-    packet.corporate_action_state,
-    packet.tradingCalendarState,
-    packet.trading_calendar_state,
-    packet.reproducibilityState,
-    packet.reproducibility_state,
-    packet.universeBiasState,
-    packet.universe_bias_state,
-    packet.blockers,
+    firstValue(combined, ['overallState', 'overall_state']),
+    firstValue(combined, ['summaryLabel', 'summary_label']),
+    backtestLabels,
   );
   const posture = detectPosture(labels);
   const limitationLabels = buildLimitationLabels(labels, options);
-  return baseSummary('backtest', posture, limitationLabels, packet, options);
+  return baseSummary('backtest', posture, limitationLabels, combined, options);
 }
 
 export function normalizePortfolioRiskEvidence(payload: unknown, options: NormalizeEvidenceOptions = {}): NormalizedEvidenceSummary {
@@ -447,17 +489,27 @@ export function normalizePortfolioRiskEvidence(payload: unknown, options: Normal
   if (!packet) return baseSummary('portfolio_risk', 'unknown', [], payload, options);
 
   const root = isRecord(payload) ? payload : {};
-  const combined = { ...root, ...packet };
-  const cap = firstRecord(firstValue(combined, ['confidenceCap', 'confidence_cap']), []);
+  const diagnosticsRecord = firstRecord(firstValue(root, ['riskDiagnostics', 'risk_diagnostics']), []);
+  const combined = { ...diagnosticsRecord, ...root, ...packet };
+  const cap = firstRecord(
+    firstValue(root, ['confidenceCap', 'confidence_cap'])
+      ?? firstValue(diagnosticsRecord, ['confidenceCap', 'confidence_cap'])
+      ?? firstValue(packet, ['confidenceCap', 'confidence_cap', 'confidence_cap']),
+    [],
+  );
   const labels = collectStrings(
     combined.limitationLabels,
     combined.limitation_labels,
+    cap?.limitationLabels,
+    cap?.limitation_labels,
     combined.fxFreshnessState,
     combined.fx_freshness_state,
     combined.holdingsLineageState,
     combined.holdings_lineage_state,
     combined.cashLedgerCompletenessState,
     combined.cash_ledger_completeness_state,
+    combined.sourceAuthorityState,
+    combined.source_authority_state,
     combined.benchmarkMappingState,
     combined.benchmark_mapping_state,
     combined.factorMappingState,
