@@ -31,6 +31,7 @@ from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER, normali
 from src.repositories.scanner_repo import ScannerRepository
 from src.repositories.stock_repo import StockRepository
 from src.services.scanner_ai_service import ScannerAiInterpretationService
+from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION, build_scanner_evidence_packet
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback, get_us_stock_parquet_dir
 from src.storage import (
     DatabaseManager,
@@ -1214,6 +1215,10 @@ class MarketScannerService:
             shortlist=shortlist_list,
             diagnostics=finalized_diagnostics,
         )
+        self._attach_shortlist_evidence_packets(
+            shortlist=shortlist_list,
+            market=profile_config.market,
+        )
 
         run_model = MarketScannerRun(
             owner_id=owner_id,
@@ -1247,6 +1252,11 @@ class MarketScannerService:
             for candidate in shortlist_list
         ]
         saved_run = self.repo.save_run_with_candidates(run=run_model, candidates=candidate_models)
+        self._attach_shortlist_evidence_packets(
+            shortlist=shortlist_list,
+            market=profile_config.market,
+            run_id=saved_run.id,
+        )
 
         response_shortlist = []
         for candidate in shortlist_list:
@@ -5774,3 +5784,22 @@ class MarketScannerService:
             "ai_interpretation": self.ai_service.public_payload_from_diagnostics(diagnostics.get("ai_interpretation")),
             "diagnostics": diagnostics,
         }
+
+    def _attach_shortlist_evidence_packets(
+        self,
+        *,
+        shortlist: Sequence[Dict[str, Any]],
+        market: str,
+        run_id: Optional[int] = None,
+    ) -> None:
+        for candidate in shortlist:
+            diagnostics = dict(candidate.get("_diagnostics") or {})
+            diagnostics["evidence_packet"] = build_scanner_evidence_packet(
+                candidate,
+                {
+                    "market": market,
+                    "run_id": run_id,
+                    "evidence_version": SCANNER_EVIDENCE_VERSION,
+                },
+            )
+            candidate["_diagnostics"] = diagnostics

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import threading
 import time
@@ -20,6 +21,7 @@ from src.repositories.stock_repo import StockRepository
 from src.core.scanner_profile import get_scanner_profile
 from src.core.scanner_theme_registry import create_ai_scanner_theme, get_scanner_theme
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
+from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION
 from src.storage import DatabaseManager, MarketScannerRun
 
 
@@ -877,6 +879,49 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         detail = service.get_run_detail(result["id"])
         assert detail is not None
         self.assertIn("review_commentary", detail["shortlist"][0]["ai_interpretation"])
+
+    def test_run_scan_attaches_additive_evidence_packet_without_extra_provider_calls(self) -> None:
+        seed_us_local_history(self.stock_repo)
+        data_manager = SlowMissingQuoteDataManager()
+        service = MarketScannerService(
+            self.db,
+            data_manager=data_manager,
+        )
+
+        result = service.run_scan(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=3,
+            universe_limit=50,
+            detail_limit=10,
+            universe_type="symbols",
+            symbols=["NVDA", "AAPL", "PLTR"],
+        )
+
+        self.assertEqual(
+            [(item["symbol"], item["rank"], item["score"]) for item in result["shortlist"]],
+            [("PLTR", 1, 81.6), ("NVDA", 2, 65.8), ("AAPL", 3, 62.8)],
+        )
+        self.assertEqual(len(data_manager.realtime_quote_calls), 3)
+        self.assertEqual(set(data_manager.realtime_quote_calls), {"NVDA", "AAPL", "PLTR"})
+
+        pltr = result["shortlist"][0]
+        packet = pltr["diagnostics"]["evidence_packet"]
+        self.assertEqual(packet["symbol"], "PLTR")
+        self.assertEqual(packet["rank"], 1)
+        self.assertEqual(packet["score"], 81.6)
+        self.assertEqual(packet["evidenceVersion"], SCANNER_EVIDENCE_VERSION)
+        self.assertEqual(packet["freshnessState"], "fallback")
+        self.assertIn("仅供观察", packet["userFacingLabels"])
+        self.assertIn("需人工复核", packet["userFacingLabels"])
+        self.assertIn("部分外部数据暂不可用", packet["userFacingLabels"])
+        self.assertNotIn("provider_timeout", json.dumps(packet, ensure_ascii=False))
+
+        detail = service.get_run_detail(result["id"])
+        assert detail is not None
+        persisted_packet = detail["shortlist"][0]["diagnostics"]["evidence_packet"]
+        self.assertEqual(persisted_packet["symbol"], "PLTR")
+        self.assertEqual(persisted_packet["evidenceVersion"], SCANNER_EVIDENCE_VERSION)
 
     def test_run_scan_parallelizes_cn_remote_history_without_drifting_results(self) -> None:
         data_manager = SlowFaultyScannerDataManager()
