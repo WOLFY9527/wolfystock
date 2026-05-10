@@ -452,6 +452,10 @@ class RuleBacktestUniverseJobResponse(BaseModel):
     cancel_requested: bool = False
     local_data_only: bool = True
     execution_mode: str = "preflight_only"
+    professionalReadiness: Dict[str, Any] = Field(default_factory=dict)
+    localDataCoverageState: Optional[str] = None
+    universeBiasState: Optional[str] = None
+    reproducibilityState: Optional[str] = None
     created_at: Optional[str] = None
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
@@ -535,6 +539,11 @@ class RuleBacktestUniverseDiagnosticsMetadata(BaseModel):
     local_only: bool = True
     live_provider_calls_executed: bool = False
     concurrency_enabled: bool = False
+    professionalReadiness: Dict[str, Any] = Field(default_factory=dict)
+    localDataCoverageState: Optional[str] = None
+    pointInTimeUniverse: bool = False
+    survivorshipBiasState: Optional[str] = None
+    providerCalls: bool = False
 
 
 class RuleBacktestUniverseJobDiagnostics(BaseModel):
@@ -1004,6 +1013,15 @@ class RuleBacktestHistoryItem(BaseModel):
     robustness_analysis: Dict[str, Any] = Field(default_factory=dict)
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)
     readback_integrity: Dict[str, Any] = Field(default_factory=dict)
+    professionalReadiness: Dict[str, Any] = Field(default_factory=dict)
+    adjustedDataState: Optional[str] = None
+    corporateActionState: Optional[str] = None
+    tradingCalendarState: Optional[str] = None
+    fillModelState: Optional[str] = None
+    costModelState: Optional[str] = None
+    antiLeakageState: Optional[str] = None
+    reproducibilityState: Optional[str] = None
+    universeBiasState: Optional[str] = None
     execution_model: RuleBacktestExecutionModel = Field(default_factory=_default_rule_backtest_execution_model)
     execution_assumptions: Dict[str, Any] = Field(default_factory=dict)
     execution_assumptions_snapshot: Dict[str, Any] = Field(default_factory=dict)
@@ -1077,6 +1095,15 @@ class RuleBacktestRunResponse(BaseModel):
     robustness_analysis: Dict[str, Any] = Field(default_factory=dict)
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)
     readback_integrity: Dict[str, Any] = Field(default_factory=dict)
+    professionalReadiness: Dict[str, Any] = Field(default_factory=dict)
+    adjustedDataState: Optional[str] = None
+    corporateActionState: Optional[str] = None
+    tradingCalendarState: Optional[str] = None
+    fillModelState: Optional[str] = None
+    costModelState: Optional[str] = None
+    antiLeakageState: Optional[str] = None
+    reproducibilityState: Optional[str] = None
+    universeBiasState: Optional[str] = None
     execution_model: RuleBacktestExecutionModel = Field(default_factory=_default_rule_backtest_execution_model)
     execution_assumptions: Dict[str, Any] = Field(default_factory=dict)
     execution_assumptions_snapshot: Dict[str, Any] = Field(default_factory=dict)
@@ -1113,6 +1140,15 @@ class RuleBacktestStatusResponse(BaseModel):
     trade_count: int = 0
     parsed_confidence: Optional[float] = None
     needs_confirmation: bool = False
+    professionalReadiness: Dict[str, Any] = Field(default_factory=dict)
+    adjustedDataState: Optional[str] = None
+    corporateActionState: Optional[str] = None
+    tradingCalendarState: Optional[str] = None
+    fillModelState: Optional[str] = None
+    costModelState: Optional[str] = None
+    antiLeakageState: Optional[str] = None
+    reproducibilityState: Optional[str] = None
+    universeBiasState: Optional[str] = None
     artifact_availability: Dict[str, Any] = Field(default_factory=dict)
     readback_integrity: Dict[str, Any] = Field(default_factory=dict)
 

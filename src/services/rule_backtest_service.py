@@ -21,6 +21,7 @@ from src.agent.llm_adapter import LLMToolAdapter
 from src.config import get_config
 from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
+from src.services.backtest_professional_readiness import build_backtest_professional_readiness
 from src.repositories.stock_repo import StockRepository
 from src.services.local_data_preflight_service import LocalDataPreflightService
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
@@ -938,11 +939,13 @@ class RuleBacktestService:
             artifact_availability=artifact_availability,
             trade_rows_present=bool(trade_run_ids),
         )
+        readiness_payload = self._build_single_symbol_professional_readiness_payload()
         return self._build_run_status_payload(
             row=row,
             summary=summary,
             artifact_availability=artifact_availability,
             readback_integrity=readback_integrity,
+            readiness_payload=readiness_payload,
         )
 
     def cancel_run(self, run_id: int) -> Optional[Dict[str, Any]]:
@@ -1087,7 +1090,14 @@ class RuleBacktestService:
             updated_at=completed_at,
         )
         saved = self.repo.save_universe_job(job, symbol_rows)
-        return self._universe_job_row_to_dict(saved)
+        local_data_coverage_state = self._resolve_local_data_coverage_state(preflight.get("summary"))
+        readiness_payload = self._build_universe_professional_readiness_payload(
+            local_data_coverage_state=local_data_coverage_state,
+        )
+        return {
+            **self._universe_job_row_to_dict(saved),
+            **self._build_universe_job_readiness_fields(readiness_payload),
+        }
 
     def run_universe_job_sequential(self, job_id: int) -> Optional[Dict[str, Any]]:
         """Run a stored universe job sequentially against local StockDaily rows only."""
@@ -1115,7 +1125,19 @@ class RuleBacktestService:
                 execution_mode="sequential_local",
                 **self._owner_kwargs(),
             )
-            return self._universe_job_row_to_dict(updated) if updated is not None else None
+            if updated is None:
+                return None
+            readiness_payload = self._build_universe_professional_readiness_payload(
+                local_data_coverage_state=self._resolve_local_data_coverage_state(
+                    self._build_universe_local_data_coverage_summary(
+                        self.repo.get_universe_symbol_results(int(job.id), **self._owner_kwargs())
+                    )
+                ),
+            )
+            return {
+                **self._universe_job_row_to_dict(updated),
+                **self._build_universe_job_readiness_fields(readiness_payload),
+            }
 
         snapshot = self._load_json_payload(job.strategy_snapshot_json)
         if not isinstance(snapshot, dict):
@@ -1172,7 +1194,17 @@ class RuleBacktestService:
                     updated_at=completed_at,
                     **self._owner_kwargs(),
                 )
-                return self._universe_job_row_to_dict(updated) if updated is not None else None
+                if updated is None:
+                    return None
+                readiness_payload = self._build_universe_professional_readiness_payload(
+                    local_data_coverage_state=self._resolve_local_data_coverage_state(
+                        self._build_universe_local_data_coverage_summary(rows)
+                    ),
+                )
+                return {
+                    **self._universe_job_row_to_dict(updated),
+                    **self._build_universe_job_readiness_fields(readiness_payload),
+                }
 
             self.repo.update_universe_job(
                 int(job.id),
@@ -1326,7 +1358,17 @@ class RuleBacktestService:
             updated_at=completed_at,
             **self._owner_kwargs(),
         )
-        return self._universe_job_row_to_dict(updated) if updated is not None else None
+        if updated is None:
+            return None
+        readiness_payload = self._build_universe_professional_readiness_payload(
+            local_data_coverage_state=self._resolve_local_data_coverage_state(
+                self._build_universe_local_data_coverage_summary(rows)
+            ),
+        )
+        return {
+            **self._universe_job_row_to_dict(updated),
+            **self._build_universe_job_readiness_fields(readiness_payload),
+        }
 
     def preflight_local_data_coverage(
         self,
@@ -1349,7 +1391,16 @@ class RuleBacktestService:
         row = self.repo.get_universe_job(job_id, **self._owner_kwargs())
         if row is None:
             return None
-        return self._universe_job_row_to_dict(row)
+        coverage_summary = self._build_universe_local_data_coverage_summary(
+            self.repo.get_universe_symbol_results(job_id, **self._owner_kwargs())
+        )
+        readiness_payload = self._build_universe_professional_readiness_payload(
+            local_data_coverage_state=self._resolve_local_data_coverage_state(coverage_summary),
+        )
+        return {
+            **self._universe_job_row_to_dict(row),
+            **self._build_universe_job_readiness_fields(readiness_payload),
+        }
 
     def get_universe_job_diagnostics(self, job_id: int) -> Optional[Dict[str, Any]]:
         row = self.repo.get_universe_job(job_id, **self._owner_kwargs())
@@ -1365,6 +1416,9 @@ class RuleBacktestService:
         metric_rows = self.repo.get_universe_job_metric_extremes(job_id, **self._owner_kwargs())
         performance_summary = self._build_universe_performance_summary(metric_rows, limit=5)
         local_data_coverage = self._build_universe_local_data_coverage_summary(metric_rows)
+        readiness_payload = self._build_universe_professional_readiness_payload(
+            local_data_coverage_state=self._resolve_local_data_coverage_state(local_data_coverage),
+        )
         return {
             "job_id": int(job_id),
             "progress": progress,
@@ -1375,6 +1429,7 @@ class RuleBacktestService:
                 "local_only": True,
                 "live_provider_calls_executed": False,
                 "concurrency_enabled": False,
+                **self._build_universe_metadata_readiness_fields(readiness_payload),
             },
         }
 
@@ -1560,6 +1615,74 @@ class RuleBacktestService:
             else:
                 summary["unknown"] += 1
         return summary
+
+    @staticmethod
+    def _resolve_local_data_coverage_state(summary: Optional[Dict[str, Any]]) -> str:
+        payload = dict(summary or {})
+        active_states = [
+            state
+            for state in ("ready", "partial", "missing", "insufficient_data")
+            if int(payload.get(state) or 0) > 0
+        ]
+        if len(active_states) == 1:
+            return active_states[0]
+        if len(active_states) > 1:
+            return "mixed"
+        if int(payload.get("unknown") or 0) > 0:
+            return "unknown"
+        return "unknown"
+
+    @staticmethod
+    def _build_single_symbol_professional_readiness_payload() -> Dict[str, Any]:
+        return build_backtest_professional_readiness().to_dict()
+
+    @staticmethod
+    def _build_universe_professional_readiness_payload(
+        *,
+        local_data_coverage_state: str,
+    ) -> Dict[str, Any]:
+        return build_backtest_professional_readiness(
+            universe_mode=True,
+            local_data_coverage_state=local_data_coverage_state,
+            point_in_time_universe=False,
+            provider_calls=False,
+        ).to_dict()
+
+    @staticmethod
+    def _build_single_symbol_readiness_fields(readiness_payload: Dict[str, Any]) -> Dict[str, Any]:
+        payload = dict(readiness_payload or {})
+        return {
+            "professionalReadiness": payload,
+            "adjustedDataState": payload.get("adjusted_data_state"),
+            "corporateActionState": payload.get("corporate_action_state"),
+            "tradingCalendarState": payload.get("calendar_state"),
+            "fillModelState": payload.get("fill_model"),
+            "costModelState": payload.get("cost_model_state"),
+            "antiLeakageState": payload.get("anti_leakage_state"),
+            "reproducibilityState": payload.get("reproducibility_state"),
+            "universeBiasState": payload.get("survivorship_bias_state"),
+        }
+
+    @staticmethod
+    def _build_universe_job_readiness_fields(readiness_payload: Dict[str, Any]) -> Dict[str, Any]:
+        payload = dict(readiness_payload or {})
+        return {
+            "professionalReadiness": payload,
+            "localDataCoverageState": payload.get("local_data_coverage_state"),
+            "universeBiasState": payload.get("survivorship_bias_state"),
+            "reproducibilityState": payload.get("reproducibility_state"),
+        }
+
+    @staticmethod
+    def _build_universe_metadata_readiness_fields(readiness_payload: Dict[str, Any]) -> Dict[str, Any]:
+        payload = dict(readiness_payload or {})
+        return {
+            "professionalReadiness": payload,
+            "localDataCoverageState": payload.get("local_data_coverage_state"),
+            "pointInTimeUniverse": bool(payload.get("point_in_time_universe")),
+            "survivorshipBiasState": payload.get("survivorship_bias_state"),
+            "providerCalls": bool(payload.get("provider_calls")),
+        }
 
     @staticmethod
     def _average_metric(values: List[float]) -> Optional[float]:
@@ -4626,6 +4749,7 @@ class RuleBacktestService:
         summary: Dict[str, Any],
         artifact_availability: Dict[str, Any],
         readback_integrity: Dict[str, Any],
+        readiness_payload: Dict[str, Any],
     ) -> Dict[str, Any]:
         return {
             "id": int(row.id),
@@ -4642,6 +4766,7 @@ class RuleBacktestService:
             "trade_count": int(row.trade_count or 0),
             "parsed_confidence": row.parsed_confidence,
             "needs_confirmation": bool(row.needs_confirmation),
+            **RuleBacktestService._build_single_symbol_readiness_fields(readiness_payload),
             "artifact_availability": dict(artifact_availability or {}),
             "readback_integrity": dict(readback_integrity or {}),
         }
@@ -9625,6 +9750,7 @@ class RuleBacktestService:
             trade_rows_present=bool(trade_rows_present),
         )
         summary["readback_integrity"] = dict(readback_integrity)
+        professional_readiness = self._build_single_symbol_professional_readiness_payload()
         return {
             "id": row.id,
             "code": row.code,
@@ -9671,6 +9797,7 @@ class RuleBacktestService:
             "avg_holding_bars": metrics.get("avg_holding_bars"),
             "avg_holding_calendar_days": metrics.get("avg_holding_calendar_days"),
             "final_equity": metrics.get("final_equity"),
+            **self._build_single_symbol_readiness_fields(professional_readiness),
             "summary": summary,
             "data_quality": data_quality,
             "robustness_analysis": dict(summary.get("robustness_analysis") or {}),

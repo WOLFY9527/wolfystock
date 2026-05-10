@@ -102,6 +102,10 @@ class RuleBacktestUniverseServiceTestCase(unittest.TestCase):
         self.assertEqual(job["skipped_count"], 1)
         self.assertTrue(job["local_data_only"])
         self.assertEqual(job["execution_mode"], "preflight_only")
+        self.assertEqual(job["professionalReadiness"]["overall_state"], "research_prototype")
+        self.assertFalse(job["professionalReadiness"]["professional_quant_ready"])
+        self.assertEqual(job["localDataCoverageState"], "mixed")
+        self.assertEqual(job["universeBiasState"], "uncontrolled")
         ensure_mock.assert_not_called()
         fetch_mock.assert_not_called()
 
@@ -274,6 +278,12 @@ class RuleBacktestUniverseServiceTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["metadata"]["local_only"], True)
         self.assertEqual(diagnostics["metadata"]["live_provider_calls_executed"], False)
         self.assertEqual(diagnostics["metadata"]["concurrency_enabled"], False)
+        self.assertEqual(diagnostics["metadata"]["professionalReadiness"]["overall_state"], "research_prototype")
+        self.assertFalse(diagnostics["metadata"]["professionalReadiness"]["professional_quant_ready"])
+        self.assertEqual(diagnostics["metadata"]["localDataCoverageState"], "missing")
+        self.assertFalse(diagnostics["metadata"]["pointInTimeUniverse"])
+        self.assertEqual(diagnostics["metadata"]["survivorshipBiasState"], "uncontrolled")
+        self.assertFalse(diagnostics["metadata"]["providerCalls"])
 
     def test_universe_job_diagnostics_after_sequential_run_is_compact_and_local_only(self) -> None:
         closes = [10.0 + (index * 0.2) + (0.4 if index % 7 == 0 else 0.0) for index in range(80)]
@@ -309,6 +319,12 @@ class RuleBacktestUniverseServiceTestCase(unittest.TestCase):
         self.assertEqual(diagnostics["metadata"]["local_only"], True)
         self.assertEqual(diagnostics["metadata"]["live_provider_calls_executed"], False)
         self.assertEqual(diagnostics["metadata"]["concurrency_enabled"], False)
+        self.assertEqual(diagnostics["metadata"]["professionalReadiness"]["overall_state"], "research_prototype")
+        self.assertFalse(diagnostics["metadata"]["professionalReadiness"]["professional_quant_ready"])
+        self.assertEqual(diagnostics["metadata"]["localDataCoverageState"], "mixed")
+        self.assertFalse(diagnostics["metadata"]["pointInTimeUniverse"])
+        self.assertEqual(diagnostics["metadata"]["survivorshipBiasState"], "uncontrolled")
+        self.assertFalse(diagnostics["metadata"]["providerCalls"])
 
     def test_universe_job_diagnostics_groups_completed_failures_and_skips_by_reason(self) -> None:
         for code in ["AAPL", "MSFT", "NVDA"]:

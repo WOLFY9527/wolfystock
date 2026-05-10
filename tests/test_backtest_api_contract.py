@@ -97,6 +97,49 @@ EXPECTED_TRACE_EXPORT_FIELD_LABELS = [
 
 
 class BacktestApiContractTestCase(unittest.TestCase):
+    @staticmethod
+    def _professional_readiness_payload(*, local_data_coverage_state: str = "not_applicable_single_symbol") -> dict:
+        return {
+            "overall_state": "research_prototype",
+            "professional_quant_ready": False,
+            "adjusted_data_state": "unknown_or_mixed",
+            "adjusted_ohlc_available": False,
+            "adjusted_close_only": "unknown",
+            "return_basis": "unknown",
+            "corporate_actions_ready": False,
+            "trading_calendar_ready": False,
+            "calendar_state": "available_bars_only",
+            "fill_model": "next_open_baseline",
+            "terminal_fallback": "same_bar_close",
+            "open_missing_fallback": "close_fallback_when_open_missing",
+            "no_fill_supported": False,
+            "partial_fill_supported": False,
+            "volume_participation_limit": None,
+            "commission_model": "bps_per_side",
+            "tax_model": "not_modelled",
+            "stamp_duty_model": "not_modelled",
+            "spread_model": "not_modelled",
+            "market_impact_model": "not_modelled",
+            "minimum_fee_model": "not_modelled",
+            "point_in_time_universe": False,
+            "survivorship_bias_state": "uncontrolled",
+            "dataset_version": "unknown",
+            "professional_reproducibility_ready": False,
+            "local_data_coverage_state": local_data_coverage_state,
+            "provider_calls": False,
+            "categories": {
+                "adjusted_data": {"state": "unknown_or_mixed", "ready": False},
+                "corporate_actions": {"state": "not_ready", "ready": False},
+                "trading_calendar": {"state": "available_bars_only", "ready": False},
+                "fill_model": {"state": "next_open_baseline", "ready": False},
+                "cost_model": {"state": "baseline_bps_only", "ready": False},
+                "anti_leakage": {"state": "basic_bar_close_to_next_open", "ready": False},
+                "reproducibility": {"state": "partial_without_dataset_lineage", "ready": False},
+                "universe_bias": {"state": "uncontrolled", "ready": False},
+                "local_data_coverage": {"state": local_data_coverage_state, "ready": False},
+            },
+        }
+
     def test_performance_routes_are_bound_to_canonical_contract_handlers(self) -> None:
         route_handlers = {
             (next(iter(route.methods)), route.path): route.endpoint
@@ -236,6 +279,15 @@ class BacktestApiContractTestCase(unittest.TestCase):
             },
             "artifact_availability": artifact_availability,
             "readback_integrity": readback_integrity,
+            "professionalReadiness": BacktestApiContractTestCase._professional_readiness_payload(),
+            "adjustedDataState": "unknown_or_mixed",
+            "corporateActionState": "not_ready",
+            "tradingCalendarState": "available_bars_only",
+            "fillModelState": "next_open_baseline",
+            "costModelState": "baseline_bps_only",
+            "antiLeakageState": "basic_bar_close_to_next_open",
+            "reproducibilityState": "partial_without_dataset_lineage",
+            "universeBiasState": "not_applicable_single_symbol",
             "result_authority": {
                 "contract_version": "v1",
                 "read_mode": "stored_first",
@@ -768,6 +820,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "cancel_requested": False,
             "local_data_only": True,
             "execution_mode": "preflight_only",
+            "professionalReadiness": self._professional_readiness_payload(local_data_coverage_state="mixed"),
+            "localDataCoverageState": "mixed",
+            "universeBiasState": "uncontrolled",
+            "reproducibilityState": "partial_without_dataset_lineage",
             "created_at": "2026-05-09T10:00:00",
             "started_at": "2026-05-09T10:00:00",
             "completed_at": "2026-05-09T10:00:01",
@@ -844,6 +900,11 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "local_only": True,
                 "live_provider_calls_executed": False,
                 "concurrency_enabled": False,
+                "professionalReadiness": self._professional_readiness_payload(local_data_coverage_state="mixed"),
+                "localDataCoverageState": "mixed",
+                "pointInTimeUniverse": False,
+                "survivorshipBiasState": "uncontrolled",
+                "providerCalls": False,
             },
         }
         request = RuleBacktestUniverseJobCreateRequest(
@@ -879,9 +940,18 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(created.execution_mode, "preflight_only")
         self.assertEqual(run.execution_mode, "sequential_local")
         self.assertTrue(created.local_data_only)
+        self.assertEqual(created.professionalReadiness["overall_state"], "research_prototype")
+        self.assertFalse(created.professionalReadiness["professional_quant_ready"])
+        self.assertEqual(created.localDataCoverageState, "mixed")
         self.assertEqual(diagnostics.progress.progress_pct, 100.0)
         self.assertEqual(diagnostics.reason_summary[0].reason_code, "blocked_missing_local_data")
         self.assertTrue(diagnostics.metadata.local_only)
+        self.assertEqual(diagnostics.metadata.professionalReadiness["overall_state"], "research_prototype")
+        self.assertFalse(diagnostics.metadata.professionalReadiness["professional_quant_ready"])
+        self.assertEqual(diagnostics.metadata.localDataCoverageState, "mixed")
+        self.assertFalse(diagnostics.metadata.pointInTimeUniverse)
+        self.assertEqual(diagnostics.metadata.survivorshipBiasState, "uncontrolled")
+        self.assertFalse(diagnostics.metadata.providerCalls)
         self.assertEqual(results.items[0].symbol, "AAPL")
         self.assertEqual(results.items[0].sequence_index, 0)
         self.assertEqual(results.items[0].total_return_pct, 1.23)
@@ -1762,6 +1832,15 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "trade_count": 0,
             "parsed_confidence": 0.8,
             "needs_confirmation": False,
+            "professionalReadiness": self._professional_readiness_payload(),
+            "adjustedDataState": "unknown_or_mixed",
+            "corporateActionState": "not_ready",
+            "tradingCalendarState": "available_bars_only",
+            "fillModelState": "next_open_baseline",
+            "costModelState": "baseline_bps_only",
+            "antiLeakageState": "basic_bar_close_to_next_open",
+            "reproducibilityState": "partial_without_dataset_lineage",
+            "universeBiasState": "not_applicable_single_symbol",
             "artifact_availability": {
                 "version": "v1",
                 "source": "summary.artifact_availability",
@@ -1798,6 +1877,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.status_history[0]["status"], "queued")
         self.assertEqual(response.artifact_availability["source"], "summary.artifact_availability")
         self.assertFalse(response.artifact_availability["has_trade_rows"])
+        self.assertEqual(response.professionalReadiness["overall_state"], "research_prototype")
+        self.assertFalse(response.professionalReadiness["professional_quant_ready"])
+        self.assertEqual(response.adjustedDataState, "unknown_or_mixed")
+        self.assertEqual(response.fillModelState, "next_open_baseline")
         self.assertEqual(response.readback_integrity["source"], "stored_status_summary")
         self.assertEqual(response.readback_integrity["integrity_level"], "stored_complete")
         service.get_run_status.assert_called_once_with(123)
