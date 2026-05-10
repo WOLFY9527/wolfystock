@@ -39,7 +39,7 @@ This audit is evidence-based but inspection-driven. No production load test, ben
 
 | Surface | Primary files | Current role | Audit note |
 | --- | --- | --- | --- |
-| CLI / scheduler entry | `main.py`, `server.py`, `webui.py` | Runs analysis, scheduled jobs, scanner schedule, and API service entry modes | Too many serve aliases remain; deployment docs still lean on deprecated names |
+| CLI / scheduler entry | `main.py`, `server.py` | Runs analysis, scheduled jobs, scanner schedule, and API service entry modes | Startup path is now consolidated on `--serve` / `--serve-only` and direct `uvicorn` |
 | FastAPI backend | `api/app.py`, `api/v1/router.py`, `api/v1/endpoints/*.py` | Main API surface for analysis, auth, scanner, backtest, portfolio, agent/chat, settings | Several endpoints are very large and some still bypass repository boundaries |
 | Persistence and coexistence | `src/storage.py`, `src/postgres_phase_a.py` ... `src/postgres_phase_g.py` | SQLite primary runtime plus PostgreSQL coexistence/shadow adapters | Biggest architecture complexity concentration |
 | Config / control plane | `src/config.py`, `src/services/system_config_service.py`, `src/core/config_registry.py` | `.env`-centric runtime config, validation, admin mutations, Phase G shadow sync | Stable enough to run, but operational authority is still split conceptually |
@@ -184,8 +184,8 @@ These are candidates, not automatic deletions. Each should be removed only after
 | Candidate | Evidence | Recommendation | Timing / risk |
 | --- | --- | --- | --- |
 | `api/v1/endpoints/health.py` | Not included in `api/v1/router.py`; no repo references to `/api/v1/health` | Delete or merge into the single real health/readiness surface | Low risk, pre- or post-deploy |
-| `webui.py` | Compatibility wrapper only; docs and changelog already mark `--webui` / `--webui-only` as deprecated | Keep for one deprecation cycle, stop using it in new docs, then remove | Medium risk because docs and external habits may still rely on it |
-| `main.py` `--webui` / `--webui-only` aliases | Still supported in code and docs, despite deprecation | Hide from current deployment docs first, then remove later | Medium risk |
+| legacy standalone WebUI wrapper | Compatibility wrapper only; now removed in favor of the canonical server entry path | Use `python3 main.py --serve-only` or `uvicorn server:app` for current startup docs | Cleanup completed |
+| legacy WebUI compatibility flags in `main.py` | Deprecated compatibility flags removed from the CLI | Keep current docs and smoke commands on `--serve` / `--serve-only` only | Cleanup completed |
 | `analyzer_service.py` | Repo search found references only from root `SKILL.md` | Archive or move to docs/examples if no external importers depend on it | Medium risk because external/local workflows may import it |
 | `src/agent/strategies/*` compatibility wrappers | Files are explicitly labeled compatibility wrappers for legacy strategy namespace | Remove after clients fully standardize on skills terminology and import paths | Medium risk |
 | `sources/` design assets | Tracked 63 MB directory with PSD/AI/icon assets and screenshots, not runtime-critical | Archive to a design-assets location or Git LFS if long-term retention matters | Low runtime risk, low urgency |
@@ -247,13 +247,13 @@ Priority: later cleanup.
 
 Primary evidence:
 
-- Runtime entry options currently include `--serve`, `--serve-only`, `--webui`, `--webui-only`, plus `webui.py`.
-- `docs/DEPLOY.md` still tells operators to use deprecated `--webui` forms for direct deployment.
+- Runtime entry options now converge on `--serve`, `--serve-only`, and direct `uvicorn server:app`.
+- Current deployment docs point operators at the canonical `--serve` / `--serve-only` path.
 
 Recommendation:
 
-- Before deployment, update the runbook to prefer one server invocation path.
-- Do not remove compatibility aliases until the documentation and operator habit have shifted.
+- Keep deployment runbooks on the canonical `--serve` / `--serve-only` path.
+- Avoid reintroducing compatibility startup wrappers or aliases.
 
 Priority: must clarify before deployment, removal can wait.
 
@@ -383,7 +383,7 @@ Value:
 | Docker healthcheck can hide real failures | `docker/Dockerfile` falls back to `python -c "import sys; sys.exit(0)"` after HTTP checks | Containers can remain “healthy” even when the server is failing | Remove the always-success fallback and align healthcheck with the real readiness contract |
 | Runtime source-of-truth is still operationally ambiguous | `.env` remains live config source in `src/config.py` and `src/services/system_config_service.py`, while Phase G mirrors config/admin actions into PostgreSQL | Operators can misinterpret PG shadow data as authoritative runtime config | Before deployment, document the real source-of-truth and how config mutations propagate |
 | Graceful shutdown for background executors is not fully wired | `AnalysisTaskQueue.shutdown()` exists, but app lifespan in `api/app.py` only manages `SystemConfigService` | Long-running deploys can leave task executors and subscribers unmanaged during shutdown/restart | Wire cleanup behavior into app/server lifecycle or explicitly document process model and restart expectations |
-| Deployment and smoke runbook drift | Historical drift existed around deprecated `--webui` paths and non-canonical smoke entrypoints | Clean server bring-up and handoff are harder than necessary when docs and smoke commands drift from the committed path | Keep deployment docs on `--serve` / `--serve-only` and the canonical `scripts/` smoke commands only |
+| Deployment and smoke runbook drift | Historical drift existed around deprecated WebUI startup paths and non-canonical smoke entrypoints | Clean server bring-up and handoff are harder than necessary when docs and smoke commands drift from the committed path | Keep deployment docs on `--serve` / `--serve-only` and the canonical `scripts/` smoke commands only |
 
 ### High-Value Operational Hardening Soon After Deployment
 
@@ -465,7 +465,7 @@ The coexistence slice is complete enough to operate, but the cleanup order shoul
 ### Later / Optional
 
 1. Collapse Phase A-G coexistence scaffolding domain by domain after a measured parity window.
-2. Remove deprecated serve aliases and `webui.py` once operators have moved to the canonical server path.
+2. Keep the canonical server path limited to `--serve` / `--serve-only` (or direct `uvicorn`) and avoid reintroducing deprecated startup aliases.
 3. Remove agent “strategy” compatibility wrappers after the skills vocabulary is fully standardized.
 4. Archive `sources/` design assets out of the main runtime repo if they continue to grow.
 5. Consider deeper file decomposition for the biggest service/page files only after the higher-ROI operational fixes land.

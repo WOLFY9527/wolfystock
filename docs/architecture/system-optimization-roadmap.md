@@ -120,7 +120,7 @@ Because deployment-hardening is already treated as complete, the remaining pre-d
 | P0 | Reproducible baseline benchmark harness | `src/services/market_scanner_service.py`, `src/services/portfolio_service.py`, `src/core/pipeline.py`, `src/search_service.py`, `src/services/backtest_service.py`, `src/services/rule_backtest_service.py`, `scripts/` | The next optimization branches are all mixed-bottleneck work. Without stable baseline capture, later tuning will be guesswork and regressions will be hard to detect. | High decision quality and regression protection | Low | Medium | Yes, this item is the measurement pass | Before local manual validation and before deployment | Yes |
 | P0 | Target-host queue/SSE proof run | `api/app.py`, `src/services/task_queue.py`, `docs/DEPLOY.md`, `docs/DEPLOY_EN.md` | The current queue model is intentionally process-local. Prove the exact single-process or sticky-routing deployment shape on the target host before shipping. | High operational confidence | Low | Small | No | Before server deployment | No, checklist-driven |
 | P0 | Canonical manual-validation and rollback pack | `docs/DEPLOY.md`, `docs/DEPLOY_EN.md`, `docs/full-guide.md`, `docs/full-guide_EN.md` | The backend is stable enough to validate now. Deployment should use one canonical validation flow, one rollback path, and one operator-facing smoke command set. | High operational clarity | Low | Small | No | Before server deployment | No, bundle with validation docs cleanup |
-| P0 | Freeze destructive cleanup before first observation window | `src/storage.py`, `src/postgres_phase_*.py`, `main.py`, `webui.py`, `src/agent/strategies/*`, `apps/dsa-web/src/pages/SettingsPage.tsx` | Removing safety nets or splitting large files before real deployment observation will make rollback harder and will contaminate the baseline that later optimization work depends on. | High stability protection | Low | Small | No | Before deployment | No |
+| P0 | Freeze destructive cleanup before first observation window | `src/storage.py`, `src/postgres_phase_*.py`, `main.py`, `src/agent/strategies/*`, `apps/dsa-web/src/pages/SettingsPage.tsx` | Removing safety nets or splitting large files before real deployment observation will make rollback harder and will contaminate the baseline that later optimization work depends on. | High stability protection | Low | Small | No | Before deployment | No |
 
 ### Before local manual validation
 
@@ -176,7 +176,6 @@ These items are intentionally lower priority than the post-deployment performanc
 | Priority | Title | Area / module(s) | Why it matters | Expected impact | Risk | Difficulty | Benchmark first | Timing | Own branch / workstream |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | P2 | Hide and split destructive admin actions | `apps/dsa-web/src/pages/SettingsPage.tsx`, `src/services/system_config_service.py` | The current control-plane page mixes routine settings with rare maintenance actions. Simplifying the surface lowers operator error without changing backend semantics. | Medium | Low | Medium | No | After a short observation window | Yes |
-| P2 | Retire `--webui` and `--webui-only` aliases after one deployment window | `main.py`, `webui.py`, `docs/DEPLOY.md`, `docs/DEPLOY_EN.md`, `README.md` | Current docs already prefer `--serve` and `--serve-only`. Code-level alias cleanup should wait until operator habits have actually shifted. | Medium clarity / smaller entry surface | Medium | Small | No | After parity/observation window | Yes |
 | P2 | Remove legacy agent “strategy” wrappers | `src/agent/strategies/*`, `api/v1/endpoints/agent.py`, `src/services/system_config_service.py` | The product surface already prefers “skills”. Wrapper removal should happen only after import paths and compatibility consumers are proven clean. | Medium maintainability gain | Medium | Small | No | After parity/observation window | Yes |
 | P3 | Archive large design assets out of the runtime repo | `sources/` | The tracked `sources/` directory is about 63 MB and not runtime-critical. Moving it to a design-assets location or Git LFS reduces repo weight without affecting runtime behavior. | Medium repo-hygiene gain | Low | Small | No | Later / optional | Yes |
 | P3 | Re-evaluate `analyzer_service.py` as an integration asset | `analyzer_service.py`, `SKILL.md` | The file appears to serve local skill/integration usage rather than core runtime. Archive or relocate only after checking external usage and skill expectations. | Low-Medium cleanup gain | Medium | Small | No | Later / optional | Yes |
@@ -185,8 +184,6 @@ These items are intentionally lower priority than the post-deployment performanc
 
 ### Good candidates after observation
 
-- `webui.py` and `main.py` `--webui` / `--webui-only`
-  - Delete only after the deployment docs and operator habits have clearly moved to `--serve` / `--serve-only`.
 - `src/agent/strategies/*`
   - Delete only after the import surface is fully standardized on `skills`.
 - `sources/`
@@ -224,7 +221,7 @@ Keep the execution queue intentionally finite. Each branch should have one main 
 | WS4: Search/provider dedupe | Reduce duplicate network and universe-loading work | search/article dedupe, cache strengthening, provider/universe caching or batching, optional pacing follow-up | no new search provider stack, no broad pipeline rewrite | Immediately after deployment |
 | WS5: Boundary tightening | Reduce `DatabaseManager` reach-through in highest-churn paths | auth/analysis/history/scanner repository alignment, narrow adapter extraction | no broad storage rewrite | After WS2 and WS3 stabilize |
 | WS6: Settings simplification | Simplify the operator/control-plane surface | advanced/maintenance split, destructive-action hiding, UI/backend cleanup limited to current semantics | no full UI redesign, no config-authority migration | After a short operator observation window |
-| WS7: Cleanup and deprecation | Remove proven-dead aliases/wrappers and archive non-runtime assets | `--webui`/`webui.py`, strategy wrappers, smoke wrapper cleanup, `sources/` archive, `analyzer_service.py` review | no coexistence teardown | After parity/observation window |
+| WS7: Cleanup and deprecation | Remove proven-dead aliases/wrappers and archive non-runtime assets | legacy WebUI startup wrappers, strategy wrappers, smoke wrapper cleanup, `sources/` archive, `analyzer_service.py` review | no coexistence teardown | After parity/observation window |
 | WS8: Coexistence reduction | Retire selected Phase D/E shadow scaffolding and shrink `src/storage.py` safely | phase-specific cleanup, shadow-helper removal, adapter extraction | no Phase A/F/G early teardown, no all-at-once storage rewrite | After a longer parity window |
 
 ## Suggested Execution Order

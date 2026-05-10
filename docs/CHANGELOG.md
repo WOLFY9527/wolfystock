@@ -1,5 +1,15 @@
 ## 2026-05-10
 
+- 🧹 **Deprecated WebUI startup wrapper removal** — Deleted the legacy standalone
+  WebUI compatibility entrypoint and removed the deprecated `main.py`
+  WebUI CLI aliases after confirming the current repo already documents and uses
+  the canonical `python3 main.py --serve-only` /
+  `python3 main.py --serve` startup path. Focused WS7 cleanup tests and
+  deployment/architecture docs now target only the canonical server entry.
+  `--serve` / `--serve-only` behavior, `server.py` / `api.app` startup
+  semantics, auth/RBAC, provider runtime, AI/scanner/backtest/portfolio/options
+  behavior, MarketCache, and frontend runtime are unchanged.
+
 - 🧹 **Root backtest smoke wrapper retirement** — Deleted the obsolete root
   backtest smoke wrapper after confirming
   `scripts/smoke_backtest_standard.py` and
