@@ -1,0 +1,124 @@
+{
+  "engine": "scanner",
+  "entity": {
+    "type": "symbol",
+    "id": "scanner:PLTR",
+    "symbol": "PLTR",
+    "market": "US",
+    "display_name": "Palantir"
+  },
+  "run_id": "scan_2026_05_10_001",
+  "evidence_version": "ai_evidence_packet_v1",
+  "required_evidence": [
+    {
+      "key": "quote.price",
+      "criticality": "required",
+      "status": "available",
+      "value_class": "numeric",
+      "source_ref_ids": [
+        "src_quote"
+      ],
+      "as_of": "2026-05-10T13:30:00Z",
+      "freshness_class": "fresh",
+      "reason_codes": []
+    },
+    {
+      "key": "candles.ohlcv",
+      "criticality": "required",
+      "status": "available",
+      "value_class": "timeseries",
+      "source_ref_ids": [
+        "src_hist"
+      ],
+      "as_of": "2026-05-10T13:30:00Z",
+      "freshness_class": "fresh",
+      "reason_codes": []
+    }
+  ],
+  "optional_evidence": [
+    {
+      "key": "news",
+      "criticality": "optional",
+      "status": "available",
+      "value_class": "document",
+      "source_ref_ids": [
+        "src_news"
+      ],
+      "as_of": "2026-05-10T13:00:00Z",
+      "freshness_class": "delayed_usable",
+      "reason_codes": []
+    }
+  ],
+  "freshness": {
+    "quote": {
+      "as_of": "2026-05-10T13:30:00Z",
+      "freshness_class": "fresh"
+    },
+    "candles": {
+      "as_of": "2026-05-10T13:30:00Z",
+      "freshness_class": "fresh"
+    }
+  },
+  "quality_flags": [],
+  "decision_status": "allowed",
+  "confidence_cap": {
+    "value": 90,
+    "policy_version": "confidence_cap_policy_v1",
+    "reason_codes": []
+  },
+  "source_refs": [
+    {
+      "source_ref_id": "src_quote",
+      "provider": "local_cache",
+      "category": "quote",
+      "source_class": "cache",
+      "cache_hit": true,
+      "provider_usage_event_ids": [
+        "evt_quote"
+      ],
+      "sanitized_reason_code": "ok",
+      "raw_payload_stored": false
+    },
+    {
+      "source_ref_id": "src_hist",
+      "provider": "local_history",
+      "category": "ohlcv",
+      "source_class": "local",
+      "cache_hit": true,
+      "provider_usage_event_ids": [
+        "evt_hist"
+      ],
+      "sanitized_reason_code": "ok",
+      "raw_payload_stored": false
+    },
+    {
+      "source_ref_id": "src_news",
+      "provider": "local_news_cache",
+      "category": "news",
+      "source_class": "cache",
+      "cache_hit": true,
+      "provider_usage_event_ids": [
+        "evt_news"
+      ],
+      "sanitized_reason_code": "ok",
+      "raw_payload_stored": false
+    }
+  ],
+  "explainable_facts": [
+    {
+      "fact_id": "fact_1",
+      "statement": "Quote and candle evidence are fresh for this scanner candidate.",
+      "source_ref_ids": [
+        "src_quote",
+        "src_hist"
+      ],
+      "criticality": "required",
+      "confidence_class": "high",
+      "user_visible": true
+    }
+  ],
+  "admin_diagnostics": {
+    "engine_version": "scanner_candidate_v1",
+    "sanitized_summary": "cache_first_candidate"
+  }
+}

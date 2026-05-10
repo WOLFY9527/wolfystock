@@ -1,0 +1,89 @@
+{
+  "engine": "rotation",
+  "entity": {
+    "type": "sector",
+    "id": "rotation:semis",
+    "market": "US",
+    "display_name": "Semiconductors"
+  },
+  "run_id": "rotation_2026_05_10_001",
+  "evidence_version": "ai_evidence_packet_v1",
+  "required_evidence": [
+    {
+      "key": "proxy.ohlcv",
+      "criticality": "required",
+      "status": "available",
+      "value_class": "timeseries",
+      "source_ref_ids": [
+        "src_proxy"
+      ],
+      "as_of": "2026-05-10T13:30:00Z",
+      "freshness_class": "fresh",
+      "reason_codes": []
+    }
+  ],
+  "optional_evidence": [
+    {
+      "key": "news",
+      "criticality": "optional",
+      "status": "missing",
+      "value_class": "document",
+      "source_ref_ids": [],
+      "as_of": null,
+      "freshness_class": "missing",
+      "reason_codes": [
+        "optional_news_missing"
+      ]
+    }
+  ],
+  "freshness": {
+    "proxy": {
+      "as_of": "2026-05-10T13:30:00Z",
+      "freshness_class": "fresh"
+    },
+    "news": {
+      "as_of": null,
+      "freshness_class": "missing"
+    }
+  },
+  "quality_flags": [
+    "optional_enrichment_missing"
+  ],
+  "decision_status": "allowed",
+  "confidence_cap": {
+    "value": 92,
+    "policy_version": "confidence_cap_policy_v1",
+    "reason_codes": []
+  },
+  "source_refs": [
+    {
+      "source_ref_id": "src_proxy",
+      "provider": "local_history",
+      "category": "ohlcv",
+      "source_class": "local_historical",
+      "cache_hit": true,
+      "provider_usage_event_ids": [
+        "evt_proxy"
+      ],
+      "sanitized_reason_code": "ok",
+      "raw_payload_stored": false
+    }
+  ],
+  "explainable_facts": [
+    {
+      "fact_id": "fact_1",
+      "statement": "Required proxy history is fresh while optional news enrichment is absent.",
+      "source_ref_ids": [
+        "src_proxy"
+      ],
+      "criticality": "required",
+      "confidence_class": "high",
+      "user_visible": true
+    }
+  ],
+  "admin_diagnostics": {
+    "optional_gaps": [
+      "news"
+    ]
+  }
+}

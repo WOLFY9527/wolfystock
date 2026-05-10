@@ -1,0 +1,69 @@
+{
+  "engine": "analysis",
+  "entity": {
+    "type": "symbol",
+    "id": "analysis:MSFT",
+    "symbol": "MSFT",
+    "market": "US",
+    "display_name": "Microsoft"
+  },
+  "run_id": "analysis_2026_05_10_unsafe",
+  "evidence_version": "ai_evidence_packet_v1",
+  "required_evidence": [
+    {
+      "key": "quote.price",
+      "criticality": "required",
+      "status": "available",
+      "value_class": "numeric",
+      "source_ref_ids": [
+        "src_quote"
+      ],
+      "as_of": "2026-05-10T13:30:00Z",
+      "freshness_class": "fresh",
+      "reason_codes": []
+    }
+  ],
+  "optional_evidence": [],
+  "freshness": {},
+  "quality_flags": [],
+  "decision_status": "allowed",
+  "confidence_cap": {
+    "value": 90,
+    "policy_version": "confidence_cap_policy_v1",
+    "reason_codes": []
+  },
+  "source_refs": [
+    {
+      "source_ref_id": "src_quote",
+      "provider": "local_cache",
+      "category": "quote",
+      "source_class": "cache",
+      "cache_hit": true,
+      "provider_usage_event_ids": [
+        "evt_quote"
+      ],
+      "sanitized_reason_code": "ok",
+      "raw_payload_stored": false,
+      "raw_payload": {
+        "bid": 410.1
+      },
+      "headers": {
+        "Authorization": "Bearer should-not-be-here"
+      },
+      "prompt_text": "raw prompt must never be stored here"
+    }
+  ],
+  "explainable_facts": [
+    {
+      "fact_id": "fact_1",
+      "statement": "Unsafe raw payload storage should be rejected.",
+      "source_ref_ids": [
+        "src_quote"
+      ],
+      "criticality": "required",
+      "confidence_class": "high",
+      "user_visible": true
+    }
+  ],
+  "admin_diagnostics": {}
+}

@@ -1,0 +1,59 @@
+{
+  "engine": "portfolio_risk",
+  "entity": {
+    "type": "portfolio",
+    "id": "portfolio:demo",
+    "market": "GLOBAL",
+    "display_name": "Demo Portfolio"
+  },
+  "run_id": "portfolio_2026_05_10_001",
+  "evidence_version": "ai_evidence_packet_v1",
+  "required_evidence": [
+    {
+      "key": "holdings.snapshot",
+      "criticality": "required",
+      "status": "available",
+      "value_class": "metadata",
+      "source_ref_ids": [
+        "src_holdings"
+      ],
+      "as_of": "2026-05-10T13:30:00Z",
+      "freshness_class": "fresh",
+      "reason_codes": []
+    }
+  ],
+  "optional_evidence": [],
+  "freshness": {},
+  "quality_flags": [],
+  "decision_status": "allowed",
+  "confidence_cap": {
+    "value": 85,
+    "policy_version": "confidence_cap_policy_v1",
+    "reason_codes": []
+  },
+  "source_refs": [
+    {
+      "source_ref_id": "src_holdings",
+      "provider": "local_projection",
+      "category": "portfolio",
+      "source_class": "local",
+      "cache_hit": true,
+      "provider_usage_event_ids": [
+        "evt_holdings"
+      ],
+      "sanitized_reason_code": "ok",
+      "raw_payload_stored": false
+    }
+  ],
+  "explainable_facts": [
+    {
+      "fact_id": "fact_1",
+      "statement": "This visible fact does not cite any source reference.",
+      "source_ref_ids": [],
+      "criticality": "required",
+      "confidence_class": "medium",
+      "user_visible": true
+    }
+  ],
+  "admin_diagnostics": {}
+}

@@ -1,0 +1,71 @@
+{
+  "engine": "options",
+  "entity": {
+    "type": "strategy",
+    "id": "options:TEM:bull_call",
+    "symbol": "TEM",
+    "market": "US",
+    "display_name": "TEM bull call spread"
+  },
+  "run_id": "options_2026_05_10_001",
+  "evidence_version": "ai_evidence_packet_v1",
+  "required_evidence": [
+    {
+      "key": "options.chain",
+      "criticality": "required",
+      "status": "fixture",
+      "value_class": "document",
+      "source_ref_ids": [
+        "src_chain_fixture"
+      ],
+      "as_of": "2026-05-10T13:30:00Z",
+      "freshness_class": "fixture",
+      "reason_codes": [
+        "fixture_chain"
+      ]
+    }
+  ],
+  "optional_evidence": [],
+  "freshness": {
+    "options_chain": {
+      "as_of": "2026-05-10T13:30:00Z",
+      "freshness_class": "fixture"
+    }
+  },
+  "quality_flags": [
+    "fixture_data"
+  ],
+  "decision_status": "allowed",
+  "confidence_cap": {
+    "value": 70,
+    "policy_version": "confidence_cap_policy_v1",
+    "reason_codes": []
+  },
+  "source_refs": [
+    {
+      "source_ref_id": "src_chain_fixture",
+      "provider": "synthetic_fixture",
+      "category": "options",
+      "source_class": "fixture",
+      "cache_hit": false,
+      "provider_usage_event_ids": [],
+      "sanitized_reason_code": "fixture_chain",
+      "raw_payload_stored": false
+    }
+  ],
+  "explainable_facts": [
+    {
+      "fact_id": "fact_1",
+      "statement": "This packet uses fixture options chain evidence only.",
+      "source_ref_ids": [
+        "src_chain_fixture"
+      ],
+      "criticality": "required",
+      "confidence_class": "not_decision_grade",
+      "user_visible": true
+    }
+  ],
+  "admin_diagnostics": {
+    "demo_mode": true
+  }
+}
