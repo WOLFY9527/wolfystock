@@ -1,5 +1,14 @@
 ## 2026-05-10
 
+- 🧹 **Deprecated agent strategy wrapper removal** — Deleted the legacy
+  `src/agent/strategies/*` compatibility namespace and removed the hidden
+  `/api/v1/agent/strategies` endpoint after confirming current in-repo tests
+  and runtime imports can use the canonical `src.agent.skills.*` namespace and
+  `/api/v1/agent/skills` discovery route directly. This cleanup does not
+  change skill implementations, agent execution semantics, LLM prompts/routing,
+  model selection, tool behavior, Options Lab strategy endpoints, provider
+  runtime, MarketCache, auth/RBAC, or frontend runtime.
+
 - 🧹 **Deprecated WebUI startup wrapper removal** — Deleted the legacy standalone
   WebUI compatibility entrypoint and removed the deprecated `main.py`
   WebUI CLI aliases after confirming the current repo already documents and uses

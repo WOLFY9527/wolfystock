@@ -9,7 +9,7 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -41,9 +41,6 @@ TOOL_DISPLAY_NAMES: Dict[str, str] = {
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-DEPRECATED_STRATEGIES_ENDPOINT_MESSAGE = "Legacy strategy compatibility endpoint; use /api/v1/agent/skills."
-
 
 def _conversation_access_http_error(exc: ValueError) -> HTTPException:
     """Normalize conversation ownership errors into stable HTTP responses."""
@@ -99,11 +96,6 @@ class SkillInfo(BaseModel):
 class SkillsResponse(BaseModel):
     skills: List[SkillInfo]
     default_skill_id: str = ""
-
-
-class StrategiesResponse(BaseModel):
-    strategies: List[SkillInfo]
-    default_strategy_id: str = ""
 
 
 class AgentModelDeployment(BaseModel):
@@ -239,19 +231,6 @@ async def get_skills():
     """
     return _build_skills_response(get_config())
 
-
-@router.get("/strategies", response_model=StrategiesResponse, include_in_schema=False)
-async def get_strategies(response: Response = None):
-    """Deprecated compatibility alias for legacy clients. Prefer `/skills`."""
-    if response is not None:
-        response.headers["Deprecation"] = "true"
-        response.headers["Link"] = '</api/v1/agent/skills>; rel="successor-version"'
-        response.headers["X-DSA-Deprecated-Reason"] = DEPRECATED_STRATEGIES_ENDPOINT_MESSAGE
-    payload = _build_skills_response(get_config())
-    return StrategiesResponse(
-        strategies=payload.skills,
-        default_strategy_id=payload.default_skill_id,
-    )
 
 @router.post("/chat", response_model=ChatResponse)
 async def agent_chat(

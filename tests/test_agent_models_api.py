@@ -7,8 +7,6 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from fastapi import Response
-
 from api.v1.endpoints import agent
 from src.config import Config
 from src.services.agent_model_service import list_agent_model_deployments
@@ -311,7 +309,7 @@ class AgentSkillsEndpointTestCase(unittest.TestCase):
         self.assertEqual(payload["default_skill_id"], "bull_trend")
         self.assertEqual([item["id"] for item in payload["skills"]], ["bull_trend", "chan_theory"])
 
-    def test_legacy_strategies_endpoint_preserves_legacy_field_names(self) -> None:
+    def test_skills_endpoint_uses_canonical_field_names(self) -> None:
         config = _build_config()
         skill_manager = SimpleNamespace(
             list_skills=lambda: [
@@ -330,18 +328,12 @@ class AgentSkillsEndpointTestCase(unittest.TestCase):
             "src.agent.factory.get_skill_manager",
             return_value=skill_manager,
         ):
-            response = Response()
-            payload = asyncio.run(agent.get_strategies(response)).model_dump()
+            payload = asyncio.run(agent.get_skills()).model_dump()
 
-        self.assertNotIn("skills", payload)
-        self.assertEqual(payload["default_strategy_id"], "bull_trend")
-        self.assertEqual(response.headers["Deprecation"], "true")
+        self.assertNotIn("strategies", payload)
+        self.assertEqual(payload["default_skill_id"], "bull_trend")
         self.assertEqual(
-            response.headers["X-DSA-Deprecated-Reason"],
-            "Legacy strategy compatibility endpoint; use /api/v1/agent/skills.",
-        )
-        self.assertEqual(
-            payload["strategies"],
+            payload["skills"],
             [
                 {
                     "id": "bull_trend",

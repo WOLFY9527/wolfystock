@@ -6,8 +6,8 @@ Covers:
 - _extract_stock_code: Chinese boundary, HK, US, common word filtering
 - AgentContext / AgentOpinion / StageResult protocol basics
 - AgentOrchestrator: pipeline execution, mode selection, error handling
-- StrategyRouter: regime detection, manual mode, user override
-- StrategyAggregator: weighted consensus, empty input
+- SkillRouter: regime detection, manual mode, user override
+- SkillAggregator: weighted consensus, empty input
 - PortfolioAgent.post_process: JSON parsing via try_parse_json
 """
 
@@ -244,31 +244,31 @@ class TestAgentRunStats(unittest.TestCase):
 
 
 # ============================================================
-# Deprecated Legacy StrategyRouter Compatibility
+# SkillRouter
 # ============================================================
 
-class TestStrategyRouter(unittest.TestCase):
-    """Test the deprecated StrategyRouter compatibility alias for SkillRouter."""
+class TestSkillRouter(unittest.TestCase):
+    """Test canonical SkillRouter selection behavior."""
 
     def test_user_requested_strategies_take_priority(self):
-        from src.agent.strategies.router import StrategyRouter
-        router = StrategyRouter()
+        from src.agent.skills.router import SkillRouter
+        router = SkillRouter()
         ctx = AgentContext(query="test")
         ctx.meta["strategies_requested"] = ["chan_theory", "wave_theory"]
-        result = router.select_strategies(ctx)
+        result = router.select_skills(ctx)
         self.assertEqual(result, ["chan_theory", "wave_theory"])
 
     def test_user_requested_capped_at_max(self):
-        from src.agent.strategies.router import StrategyRouter
-        router = StrategyRouter()
+        from src.agent.skills.router import SkillRouter
+        router = SkillRouter()
         ctx = AgentContext()
         ctx.meta["strategies_requested"] = ["a", "b", "c", "d", "e"]
-        result = router.select_strategies(ctx, max_count=2)
+        result = router.select_skills(ctx, max_count=2)
         self.assertEqual(len(result), 2)
 
-    @patch("src.agent.skills.router.StrategyRouter._get_routing_mode", return_value="manual")
+    @patch("src.agent.skills.router.SkillRouter._get_routing_mode", return_value="manual")
     @patch(
-        "src.agent.skills.router.StrategyRouter._get_available_skills",
+        "src.agent.skills.router.SkillRouter._get_available_skills",
         return_value=[
             SimpleNamespace(name="chan_theory"),
             SimpleNamespace(name="wave_theory"),
@@ -276,15 +276,15 @@ class TestStrategyRouter(unittest.TestCase):
     )
     @patch("src.config.get_config", return_value=SimpleNamespace(agent_skills=["chan_theory", "wave_theory"]))
     def test_manual_mode_uses_configured_agent_skills(self, _mock_config, _mock_available, _mock):
-        from src.agent.strategies.router import StrategyRouter
-        router = StrategyRouter()
+        from src.agent.skills.router import SkillRouter
+        router = SkillRouter()
         ctx = AgentContext()
-        result = router.select_strategies(ctx)
+        result = router.select_skills(ctx)
         self.assertEqual(result, ["chan_theory", "wave_theory"])
 
-    @patch("src.agent.skills.router.StrategyRouter._get_routing_mode", return_value="manual")
+    @patch("src.agent.skills.router.SkillRouter._get_routing_mode", return_value="manual")
     @patch(
-        "src.agent.skills.router.StrategyRouter._get_available_skills",
+        "src.agent.skills.router.SkillRouter._get_available_skills",
         return_value=[
             SimpleNamespace(name="bull_trend", default_router=True, default_priority=10),
             SimpleNamespace(name="shrink_pullback", default_router=True, default_priority=40),
@@ -292,15 +292,15 @@ class TestStrategyRouter(unittest.TestCase):
     )
     @patch("src.config.get_config", return_value=SimpleNamespace(agent_skills=[]))
     def test_manual_mode_falls_back_to_defaults_when_no_skills_configured(self, _mock_config, _mock_available, _mock):
-        from src.agent.strategies.router import StrategyRouter, _DEFAULT_STRATEGIES
-        router = StrategyRouter()
+        from src.agent.skills.router import SkillRouter, _DEFAULT_SKILLS
+        router = SkillRouter()
         ctx = AgentContext()
-        result = router.select_strategies(ctx)
-        self.assertEqual(result, list(_DEFAULT_STRATEGIES[:3]))
+        result = router.select_skills(ctx)
+        self.assertEqual(result, list(_DEFAULT_SKILLS[:3]))
 
     def test_detect_regime_bullish(self):
-        from src.agent.strategies.router import StrategyRouter
-        router = StrategyRouter()
+        from src.agent.skills.router import SkillRouter
+        router = SkillRouter()
         ctx = AgentContext()
         ctx.add_opinion(AgentOpinion(
             agent_name="technical",
@@ -312,8 +312,8 @@ class TestStrategyRouter(unittest.TestCase):
         self.assertEqual(regime, "trending_up")
 
     def test_detect_regime_bearish(self):
-        from src.agent.strategies.router import StrategyRouter
-        router = StrategyRouter()
+        from src.agent.skills.router import SkillRouter
+        router = SkillRouter()
         ctx = AgentContext()
         ctx.add_opinion(AgentOpinion(
             agent_name="technical",
@@ -325,31 +325,31 @@ class TestStrategyRouter(unittest.TestCase):
         self.assertEqual(regime, "trending_down")
 
     def test_detect_regime_none_without_technical(self):
-        from src.agent.strategies.router import StrategyRouter
-        router = StrategyRouter()
+        from src.agent.skills.router import SkillRouter
+        router = SkillRouter()
         ctx = AgentContext()
         regime = router._detect_regime(ctx)
         self.assertIsNone(regime)
 
 
 # ============================================================
-# Deprecated StrategyAggregator Compatibility
+# SkillAggregator
 # ============================================================
 
-class TestStrategyAggregator(unittest.TestCase):
-    """Test deprecated StrategyAggregator compatibility consensus logic."""
+class TestSkillAggregator(unittest.TestCase):
+    """Test canonical SkillAggregator consensus logic."""
 
     def test_no_strategy_opinions_returns_none(self):
-        from src.agent.strategies.aggregator import StrategyAggregator
-        agg = StrategyAggregator()
+        from src.agent.skills.aggregator import SkillAggregator
+        agg = SkillAggregator()
         ctx = AgentContext()
         ctx.add_opinion(AgentOpinion(agent_name="technical", signal="buy", confidence=0.8))
         result = agg.aggregate(ctx)
         self.assertIsNone(result)
 
     def test_single_strategy_consensus(self):
-        from src.agent.strategies.aggregator import StrategyAggregator
-        agg = StrategyAggregator()
+        from src.agent.skills.aggregator import SkillAggregator
+        agg = SkillAggregator()
         ctx = AgentContext()
         ctx.add_opinion(AgentOpinion(agent_name="strategy_bull_trend", signal="buy", confidence=0.7))
         result = agg.aggregate(ctx)
@@ -358,8 +358,8 @@ class TestStrategyAggregator(unittest.TestCase):
         self.assertEqual(result.signal, "buy")
 
     def test_mixed_signals_produce_hold(self):
-        from src.agent.strategies.aggregator import StrategyAggregator
-        agg = StrategyAggregator()
+        from src.agent.skills.aggregator import SkillAggregator
+        agg = SkillAggregator()
         ctx = AgentContext()
         ctx.add_opinion(AgentOpinion(agent_name="strategy_a", signal="buy", confidence=0.6))
         ctx.add_opinion(AgentOpinion(agent_name="strategy_b", signal="sell", confidence=0.6))
