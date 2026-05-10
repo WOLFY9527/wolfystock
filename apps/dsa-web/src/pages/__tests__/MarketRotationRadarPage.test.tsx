@@ -361,9 +361,12 @@ describe('MarketRotationRadarPage', () => {
 
     const page = await screen.findByTestId('market-rotation-radar-page');
     expect(page).toHaveTextContent('资金轮动雷达');
+    expect(page).toHaveAttribute('data-bento-surface', 'true');
     expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('Top-N');
     expect(screen.getByTestId('rotation-radar-mode-controls')).toHaveTextContent('US');
     expect(screen.getByTestId('rotation-market-tab-US')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '刷新资金轮动雷达' })).toHaveAttribute('data-terminal-primitive', 'button');
+    expect(screen.getByTestId('rotation-radar-freshness')).toHaveAttribute('data-terminal-primitive', 'nested-block');
 
     const leaderList = screen.getByTestId('rotation-radar-leader-list');
     expect(within(leaderList).getAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(10);
@@ -475,6 +478,7 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.getByTestId('rotation-radar-leader-row-ai_applications')).toHaveTextContent('信号较弱');
     expect(screen.getByTestId('rotation-radar-leader-row-ai_applications')).toHaveTextContent('备用');
     expect(screen.getByTestId('rotation-radar-leader-row-ai_applications')).not.toHaveTextContent('实时');
+    expect(screen.getByText('部分外部数据暂不可用').closest('[data-terminal-primitive="notice"]')).not.toBeNull();
   });
 
   it('renders proxy-only evidence chips without real fund-flow claims', async () => {
