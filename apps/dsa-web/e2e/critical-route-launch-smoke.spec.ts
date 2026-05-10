@@ -28,6 +28,7 @@ const viewports = [
 const rawLaunchArtifactPattern = /raw\s+(payload|response|trace)|debug\s+(payload|response|schema|panel)|provider\s+(payload|credential)|stack\s+(trace|details)|traceback|bearer\s+[a-z0-9._-]+|api[_\s-]?key\s*[=:]|password\s*[=:]|session[_\s-]?id\s*[=:]|cookie\s*[=:]|secret\s*[=:]|sk-[a-z0-9_-]{12,}|ghp_[a-z0-9_]{12,}|xox[baprs]-[a-z0-9-]{12,}/i;
 const brokerCredentialOrOrderPattern = /broker[_\s-]?credentials?|broker[_\s-]?order|order[_\s-]?payload|place[_\s-]?order|submit[_\s-]?order|execute[_\s-]?order|payload_json|sync_metadata_json|raw[_\s-]?provider[_\s-]?payload|provider[_\s-]?credential|api[_\s-]?key|access[_\s-]?token|refresh[_\s-]?token|session[_\s-]?token|cookie\s*[=:]|debug[_\s-]?schema|stack[_\s-]?trace/i;
 const rotationRadarTradingActionPattern = /买入按钮|建议买入|建议卖出|卖出指令|立即交易|下单|提交订单|订单载荷|开仓|平仓|加仓|减仓|持仓建议|仓位建议|决策级|decision[-\s]?grade|buy now|sell now|place order|submit order|best contract|guaranteed/i;
+const providerCircuitSecondaryDisclosureLabel = '二级细节：探测、事件、配额窗口、路由 bucket';
 const forbiddenPortfolioLaunchLanguage = ['交易工作台', '股票买卖', '提交交易', '下单', '订单执行', '买入', '卖出'];
 const requiredPortfolioLedgerLanguage = ['手工记账台', '仅用于手工记账', '不连接券商执行', '不发起外部委托', '持仓流水', '保存记录'];
 
@@ -114,6 +115,25 @@ async function assertAdminShell(page: Page) {
   await expectNoRawSecretLikeText(page);
   await expectNoRawLaunchArtifacts(page);
   await expectNoBrokerCredentialOrOrderPayloads(page);
+}
+
+async function expectProviderCircuitSecondaryDisclosure(page: Page) {
+  const disclosure = page
+    .locator('details')
+    .filter({ has: page.locator('summary', { hasText: providerCircuitSecondaryDisclosureLabel }) })
+    .first();
+  const summary = disclosure.locator('summary');
+
+  await appExpect(disclosure).toBeVisible();
+  await appExpect(disclosure).not.toHaveJSProperty('open', true);
+  await appExpect(summary).toContainText(providerCircuitSecondaryDisclosureLabel);
+  await appExpect(summary).toContainText('默认折叠');
+  await appExpect(disclosure.getByRole('heading', { name: '最近熔断事件' })).toBeHidden();
+  await summary.click();
+  await appExpect(disclosure).toHaveJSProperty('open', true);
+  await appExpect(disclosure.getByRole('heading', { name: '最近熔断事件' })).toBeVisible();
+  await appExpect(disclosure.getByRole('heading', { name: '配额窗口' })).toBeVisible();
+  await appExpect(disclosure.getByRole('heading', { name: '探测事件' })).toBeVisible();
 }
 
 appTest.describe('public launch route smoke', () => {
@@ -307,9 +327,7 @@ adminTest.describe('admin launch route smoke', () => {
 
       await appExpect(page.getByRole('heading', { name: 'Provider 熔断诊断' })).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByText('当前熔断状态', { exact: true })).toBeVisible();
-      await appExpect(page.getByRole('heading', { name: '最近熔断事件' })).toBeVisible();
-      await appExpect(page.getByRole('heading', { name: '配额窗口' })).toBeVisible();
-      await appExpect(page.getByRole('heading', { name: '探测事件' })).toBeVisible();
+      await expectProviderCircuitSecondaryDisclosure(page);
       await assertAdminShell(page);
 
       expect(harness.requests.count('GET', '/api/v1/admin/providers/circuits')).toBe(1);

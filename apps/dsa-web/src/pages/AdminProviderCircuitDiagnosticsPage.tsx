@@ -11,7 +11,8 @@ import {
   type ProviderSlaReadinessItem,
 } from '../api/adminProviderCircuits';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Badge, GlassCard } from '../components/common';
+import { ApiErrorAlert, GlassCard } from '../components/common';
+import { TerminalChip } from '../components/terminal/TerminalPrimitives';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
 import { formatDateTime, formatNumber } from '../utils/format';
@@ -126,6 +127,17 @@ function toneClass(tone: Tone): string {
   }[tone];
 }
 
+function chipVariant(tone: Tone): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  const variants = {
+    neutral: 'neutral',
+    good: 'success',
+    warn: 'caution',
+    danger: 'danger',
+    info: 'info',
+  } as const;
+  return variants[tone];
+}
+
 const SummaryTile: React.FC<{ label: string; value: string | number; note?: string; tone?: Tone }> = ({ label, value, note, tone = 'neutral' }) => (
   <div className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
     <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">{label}</p>
@@ -138,14 +150,14 @@ const ReadOnlyBadges: React.FC<{ data?: ProviderCircuitDiagnosticsBundle | null 
   const metadata = data?.states.metadata;
   return (
     <div className="flex flex-wrap gap-2">
-      <Badge variant="info" className="border-cyan-300/25 bg-cyan-400/10 text-cyan-100">只读诊断</Badge>
-      <Badge variant="success" className="border-emerald-300/25 bg-emerald-400/10 text-emerald-100">
+      <TerminalChip variant="info">只读诊断</TerminalChip>
+      <TerminalChip variant="success">
         {metadata?.noExternalCalls === true ? '不触发外部调用' : '外部调用未确认'}
-      </Badge>
-      <Badge variant="success" className="border-emerald-300/25 bg-emerald-400/10 text-emerald-100">
+      </TerminalChip>
+      <TerminalChip variant="success">
         {metadata?.liveEnforcement === false ? '不执行熔断 enforcement' : '执行状态未确认'}
-      </Badge>
-      <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">ops:providers:read</Badge>
+      </TerminalChip>
+      <TerminalChip variant="neutral">ops:providers:read</TerminalChip>
     </div>
   );
 };
@@ -167,7 +179,7 @@ const CurrentStatesPanel: React.FC<{ items: ProviderCircuitStateItem[] }> = ({ i
         <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">当前熔断状态</p>
         <h2 className="mt-1 text-lg font-semibold text-white">Provider / Category / Route</h2>
       </div>
-      <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/58">只读快照</Badge>
+      <TerminalChip variant="neutral">只读快照</TerminalChip>
     </div>
     {items.length === 0 ? (
       <div className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-6 text-sm text-white/50">
@@ -182,9 +194,9 @@ const CurrentStatesPanel: React.FC<{ items: ProviderCircuitStateItem[] }> = ({ i
                 <p className="truncate text-sm font-semibold text-white">{safeText(item.provider)}</p>
                 <DimensionLine provider={item.provider} providerCategory={item.providerCategory} routeFamily={item.routeFamily} />
               </div>
-              <span className={cn('shrink-0 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-semibold', toneClass(stateTone(item.state)))}>
+              <TerminalChip variant={chipVariant(stateTone(item.state))} className="shrink-0 font-semibold">
                 {stateLabel(item.state)}
-              </span>
+              </TerminalChip>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] text-white/44 sm:grid-cols-3">
               <p className="min-w-0">Reason bucket <span className="block truncate font-mono text-white/68">{bucketLabel(item.reasonBucket)}</span></p>
@@ -253,7 +265,9 @@ const QuotaWindowsPanel: React.FC<{ items: ProviderQuotaWindowItem[] }> = ({ ite
                 <p className="truncate text-sm font-semibold text-white">{safeText(item.provider)}</p>
                 <DimensionLine provider={item.provider} providerCategory={item.providerCategory} routeFamily={item.routeFamily} />
               </div>
-              <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 font-mono text-[11px] text-cyan-100">{safeText(item.windowType)}</span>
+              <TerminalChip variant="info" className="shrink-0 font-mono">
+                {safeText(item.windowType)}
+              </TerminalChip>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
               <p>Requests <span className="block font-mono text-white/68">{formatNumber(item.requestCount, 0)}</span></p>
@@ -292,7 +306,9 @@ const ProbeEventsPanel: React.FC<{ items: ProviderProbeEventItem[] }> = ({ items
                 <p className="truncate text-sm font-semibold text-white">{safeText(item.probeType)}</p>
                 <DimensionLine provider={item.provider} providerCategory={item.providerCategory} routeFamily={item.routeFamily} />
               </div>
-              <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-semibold text-emerald-100">{bucketLabel(item.resultBucket)}</span>
+              <TerminalChip variant="success" className="shrink-0 font-semibold">
+                {bucketLabel(item.resultBucket)}
+              </TerminalChip>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-3">
               <p>Source <span className="block truncate font-mono text-white/68">{safeText(item.probeSource)}</span></p>
@@ -313,7 +329,7 @@ const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ it
         <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">SLA readiness</p>
         <h2 className="mt-1 text-base font-semibold text-white">Provider SLA / 凭证就绪</h2>
       </div>
-      <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/58">只读 · 无 live call</Badge>
+      <TerminalChip variant="neutral">只读 · 无 live call</TerminalChip>
     </div>
     {items.length === 0 ? (
       <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/50">暂无 SLA/readiness 诊断</p>
@@ -326,9 +342,9 @@ const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ it
                 <p className="truncate text-sm font-semibold text-white">{safeText(item.provider)}</p>
                 <DimensionLine provider={item.provider} providerCategory={item.providerCategory} routeFamily={item.routeFamily} />
               </div>
-              <span className={cn('shrink-0 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-semibold', toneClass(readinessTone(item.readinessState)))}>
+              <TerminalChip variant={chipVariant(readinessTone(item.readinessState))} className="shrink-0 font-semibold">
                 {credentialLabel(item.credentialState)}
-              </span>
+              </TerminalChip>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
               <p>Latency <span className="block truncate font-mono text-white/68">{latencyLabel(item.latencyState)} · {safeText(item.latencyBucketMs)} ms</span></p>

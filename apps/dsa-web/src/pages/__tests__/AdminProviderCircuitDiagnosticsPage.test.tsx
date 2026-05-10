@@ -190,6 +190,8 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.getByText('最近错误 buckets')).toBeInTheDocument();
     expect(screen.getByText('不触发外部调用')).toBeInTheDocument();
     expect(screen.getByText('不执行熔断 enforcement')).toBeInTheDocument();
+    expect(screen.getByText('不触发外部调用').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
+    expect(screen.getByText('打开').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
     expect(screen.queryByText('SECRET')).not.toBeInTheDocument();
   });
 

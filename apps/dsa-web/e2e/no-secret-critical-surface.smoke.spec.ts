@@ -20,6 +20,7 @@ const viewports = [
 ] as const;
 
 const rawDebugArtifactPattern = /raw\s+(payload|response)|debug\s+(payload|response|panel)|stack\s+(trace|details)|traceback|bearer\s+[a-z0-9._-]+|api[_\s-]?key\s*[=:]|password\s*[=:]|session[_\s-]?id\s*[=:]|secret\s*[=:]|sk-[a-z0-9_-]{12,}|ghp_[a-z0-9_]{12,}|xox[baprs]-[a-z0-9-]{12,}/i;
+const providerCircuitSecondaryDisclosureLabel = '二级细节：探测、事件、配额窗口、路由 bucket';
 
 async function installAuthenticatedAppSmokeSession(page: Page) {
   await page.route('**/api/v1/auth/status', async (route) => {
@@ -47,15 +48,34 @@ async function installAuthenticatedAppSmokeSession(page: Page) {
   });
 }
 
-async function expectCriticalSurfaceClean(page: Page) {
+async function expectCriticalSurfaceClean(page: Page, expectedOpenDetailsCount = 0) {
   await expectRootNonEmpty(page);
   await expectNoHorizontalOverflow(page);
   await expectForbiddenTradingWordingAbsent(page);
   await expectNoRawSecretLikeText(page);
-  await expect(page.locator('details[open]')).toHaveCount(0);
+  await expect(page.locator('details[open]')).toHaveCount(expectedOpenDetailsCount);
 
   const bodyText = await page.locator('body').innerText();
   expect(bodyText).not.toMatch(rawDebugArtifactPattern);
+}
+
+async function expectProviderCircuitSecondaryDisclosure(page: Page) {
+  const disclosure = page
+    .locator('details')
+    .filter({ has: page.locator('summary', { hasText: providerCircuitSecondaryDisclosureLabel }) })
+    .first();
+  const summary = disclosure.locator('summary');
+
+  await expect(disclosure).toBeVisible();
+  await expect(disclosure).not.toHaveJSProperty('open', true);
+  await expect(summary).toContainText(providerCircuitSecondaryDisclosureLabel);
+  await expect(summary).toContainText('默认折叠');
+  await expect(disclosure.getByRole('heading', { name: '最近熔断事件' })).toBeHidden();
+  await summary.click();
+  await expect(disclosure).toHaveJSProperty('open', true);
+  await expect(disclosure.getByRole('heading', { name: '最近熔断事件' })).toBeVisible();
+  await expect(disclosure.getByRole('heading', { name: '配额窗口' })).toBeVisible();
+  await expect(disclosure.getByRole('heading', { name: '探测事件' })).toBeVisible();
 }
 
 appTest.describe('no-secret critical public surfaces', () => {
@@ -149,10 +169,9 @@ adminTest.describe('no-secret critical admin diagnostics surfaces', () => {
 
       await expect(page.getByRole('heading', { name: 'Provider 熔断诊断' })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByText('当前熔断状态', { exact: true })).toBeVisible();
-      await expect(page.getByRole('heading', { name: '最近熔断事件' })).toBeVisible();
-      await expect(page.getByRole('heading', { name: '配额窗口' })).toBeVisible();
-      await expect(page.getByRole('heading', { name: '探测事件' })).toBeVisible();
       await expectCriticalSurfaceClean(page);
+      await expectProviderCircuitSecondaryDisclosure(page);
+      await expectCriticalSurfaceClean(page, 1);
 
       expect(harness.requests.count('GET', '/api/v1/admin/providers/circuits')).toBe(1);
       expect(harness.requests.count('GET', '/api/v1/admin/providers/circuits/events')).toBe(1);

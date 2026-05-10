@@ -1,5 +1,13 @@
 ## 2026-05-10
 
+- 🧹 **Admin Provider Circuit Diagnostics chip consolidation** — `/zh/admin/provider-circuits`
+  now reuses the existing `TerminalChip` primitive for the page-local read-only
+  and status chip pattern in `AdminProviderCircuitDiagnosticsPage`, retiring the
+  local `Badge` dependency on that admin diagnostics surface. This is a
+  frontend-only visual consolidation: no provider runtime behavior, provider
+  health semantics, API contracts, auth/RBAC behavior, or other admin/ops
+  surfaces changed.
+
 - 🧹 **Rotation Radar evidence chip consolidation** — `/zh/market/rotation-radar`
   now reuses the existing `TerminalChip` primitive for local evidence/status
   chips in `MarketRotationRadarPage`, retiring the page-local `EvidenceBadge`
