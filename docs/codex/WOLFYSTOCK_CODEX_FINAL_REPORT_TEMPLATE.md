@@ -1,13 +1,31 @@
 # WolfyStock Codex Final Report Template
 
-Purpose: standardize Codex completion/blocker reports.
+Purpose: standardize Codex completion, blocker, read-only, and report-only responses.
 
-Every execution-class task should use this template unless the user asks otherwise.
+Execution-class tasks should use this template unless the user asks otherwise.
+
+## Progress header
+
+Start every response to the user with a short progress update:
+
+```text
+Progress update:
+- Completed/blocked:
+- Current git state:
+- Current phase:
+- Continue or stop:
+- Next priority:
+```
 
 ## Success report
 
 ```text
 Implemented, validated, committed, and pushed.
+
+Actual workspace:
+- cwd: <path>
+- branch: <branch>
+- base commit: <hash>
 
 Commit:
 <hash> <message>
@@ -25,16 +43,35 @@ What changed:
 - <user-visible / backend-visible changes>
 - <important implementation details>
 
+Boundary impact:
+- domains touched:
+- platform/contracts touched:
+- shared UI touched:
+- API/runtime touched:
+
+Reuse/deletion:
+- reused existing patterns:
+- deleted/consolidated patterns:
+- new abstractions added and why:
+- wrapper check: added wrapper yes/no; if yes, why not debt and deletion/migration path
+- net file count change:
+- net concept/primitive count change:
+
 Behavior boundaries:
-- No backend/API/runtime changes, if frontend-only
-- No scanner scoring/selection/threshold changes
-- No backtest calculation changes
-- No portfolio accounting changes
-- No provider runtime order/live-call path changes
-- No AI prompt/decision logic changes
-- No auth/RBAC/security changes
-- No notification routing changes
-- Fallback/stale/mock/synthetic live-labeling unchanged
+Confirmed unchanged unless explicitly scoped:
+- scanner scoring/selection/thresholds/ranking/sorting
+- rotation score/stage/fund-flow semantics
+- options ranking/gates/recommendation policy
+- backtest calculations/fills/costs/metrics
+- portfolio accounting/cash/holdings/P&L/FX/cost basis
+- provider runtime order/live-call paths/fallback semantics
+- MarketCache TTL/SWR/cold-start behavior
+- AI prompts/routing/model/decision logic
+- auth/RBAC/security
+- notification routing
+- DuckDB/PostgreSQL source-of-truth behavior
+- API response shapes/stored contract versions
+- fallback/mock/synthetic live-labeling
 
 Validation:
 - <command> -> <result>
@@ -46,21 +83,28 @@ Browser verification, if frontend:
 - Route(s):
 - Viewports:
 - Port(s):
+- Shared servers left untouched:
 - Auth/API mocking limitations:
 - Checks:
   - no horizontal overflow
   - no console/page errors
   - no forbidden internal terms
+  - no raw/debug/provider/schema leakage
   - task-specific visual checks
 
-Same-main shared worktree handling, if applicable:
-- TARGET_GLOBS:
-- Foreign dirty files left untouched:
-- Staged files:
-- Targeted diff/secret scan handling:
+Artifact hygiene:
+- generated artifacts kept:
+- generated artifacts deleted:
+- markdown reports created: yes/no
 
-Deferred:
-- <items explicitly not done>
+ci_gate:
+- result or reason skipped/deferred:
+
+Final hygiene:
+- final git status:
+- foreign dirty files:
+- secrets printed/committed: no
+- unrelated files touched/staged/committed: no
 
 Rollback:
 git revert <hash>
@@ -70,6 +114,11 @@ git revert <hash>
 
 ```text
 Stopped at <phase>.
+
+Actual workspace:
+- cwd:
+- branch:
+- base commit:
 
 Reason:
 <clear blocker>
@@ -89,14 +138,45 @@ Unrelated dirty files:
 
 What I did not do:
 - did not edit unrelated files
-- did not stage
+- did not stage unrelated files
 - did not commit
 - did not push
 - did not reset/revert/clean/stash
 
-Required user decision:
+Safe next options:
 1. <option>
 2. <option>
+```
+
+## Read-only decision report
+
+```text
+Read-only task completed.
+
+Actual workspace:
+- cwd:
+- branch:
+- base commit:
+
+Preflight:
+- git status:
+- local ahead status:
+- dirty/staged status:
+
+Decision summary:
+- recommendation:
+- safe future execution target, if any:
+- tasks not recommended:
+
+Evidence:
+- files inspected:
+- tests/docs considered:
+- main risks:
+
+No-write confirmation:
+- no files modified
+- no artifacts created
+- nothing staged/committed/pushed
 ```
 
 ## Report-only audit report
@@ -124,55 +204,18 @@ Artifacts:
 - screenshots:
 - JSON:
 - markdown:
+- kept/deleted rationale:
 
 Validation:
 - report exists
 - required headings present
-- screenshots captured
+- screenshots captured if scoped
 - no secrets found
 - no source files modified
 
 Final git status:
 <status>
 ```
-
-## Required wording for protected domains
-
-Use explicit confirmations:
-
-```text
-Confirmed unchanged:
-- scanner scoring/selection/thresholds
-- backtest calculations
-- portfolio accounting
-- provider runtime order/live-call paths
-- AI prompts/decision logic
-- auth/RBAC/security
-- notification routing
-- fallback/mock/synthetic live-labeling
-```
-
-## Browser verification minimum
-
-For frontend tasks, include:
-- desktop `1440x1000`
-- mobile `390x844`
-- routes verified
-- port used
-- whether preview/dev server was stopped
-- whether shared `5173` or backend ports were left untouched
-- console/page error status
-- horizontal overflow status
-- auth/mock limitations
-
-## Dirty-file handling minimum
-
-If same-main parallel work is present, include:
-- foreign dirty files left untouched
-- staged file list
-- targeted `git diff --check`
-- full or targeted secret scan result
-- reason if full secret scan could not be used cleanly
 
 ## When not pushed
 

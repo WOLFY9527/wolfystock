@@ -1,45 +1,52 @@
 # WolfyStock Codex Standard Guard
 
-Use this file as the baseline operating contract for Codex tasks in the WolfyStock repository. Task prompts should reference this file instead of repeating every fixed rule. Task-specific prompts may add stricter rules when needed.
+Purpose: baseline operating contract for Codex tasks in the WolfyStock repository. Task prompts should reference this file instead of repeating fixed rules. Task prompts may add stricter task-specific rules.
 
-## 1. Repository and branch preflight
+## 0. Default execution model
 
-Default repository:
+Default workflow:
+
+- Use the Codex App isolated task workspace.
+- Use local environment: `WolfyStock Fast`.
+- Base from latest `origin/main`.
+- Do not use or checkout long-lived manual worktree branches.
+- Do not checkout `codex/frontend-lane` or `codex/backend-lane`.
+- Do not create or use manual worktrees under `/Users/yehengli/worktrees` unless the user explicitly requests that mode.
+- Report actual `cwd`, branch, and base commit in final reports.
+
+Default dependency policy:
+
+- Do not run `pip install`, `npm install`, `npm ci`, or `npm audit fix` unless dependency/lock files changed or the task explicitly requires dependency refresh.
+- Reuse the shared `.venv` and existing `node_modules` provided by `WolfyStock Fast`.
+- Never run `npm audit fix` as a setup step.
+
+Use same-main shared worktree rules only when the user explicitly asks to work directly in `/Users/yehengli/daily_stock_analysis`. See `WOLFYSTOCK_SHARED_MAIN_WORKTREE_PROTOCOL.md`.
+
+## 1. Preflight
+
+Every task starts with:
 
 ```bash
-cd /Users/yehengli/daily_stock_analysis
-```
-
-Default branch:
-
-```bash
-main
-```
-
-Every task must start with:
-
-```bash
-cd /Users/yehengli/daily_stock_analysis
 pwd
-git branch --show-current
-git status --short
-git status --branch --short
-git log --oneline -40
-./scripts/task_preflight.sh || true
+git fetch origin
+git status --short --branch
+git log --oneline -5
+git log --oneline --decorate origin/main..HEAD
+git diff --name-only
+git diff --cached --name-only
 ```
 
-Then inspect common shared dev ports without killing anything:
+Stop and report if:
 
-```bash
-lsof -i :8000 -i :8001 -i :5173 -i :4173 -i :5174 -i :5175 -i :5176 -i :4177 || true
-```
+- staged files exist before the task starts;
+- tracked dirty files exist before the task starts unless the prompt explicitly allows them;
+- local branch is ahead of `origin/main` unexpectedly;
+- target files are already dirty;
+- the task would require checkout of forbidden long-lived lane branches;
+- the task would require manual worktree creation;
+- the task would require dependency installation outside scope.
 
-Stop immediately and report if:
-
-- `pwd` is not `/Users/yehengli/daily_stock_analysis`;
-- branch is not `main` unless the user explicitly requested another branch;
-- task target files are already dirty before your changes;
-- another concurrent task is clearly modifying the same target domain.
+Untracked `.codex/` may exist from local environment configuration. Do not stage it unless the task explicitly changes Codex config.
 
 ## 2. Git safety
 
@@ -57,31 +64,28 @@ Rules:
 
 - Stage only task-related files explicitly.
 - Do not broad-format unrelated files.
-- Do not restore, clean, reset, revert, or overwrite unrelated work.
-- If a target file is dirty before your work, stop and report conflict risk.
-- If a file becomes dirty from another task while you are working, do not stage it unless it is explicitly part of your task and you can prove the diff belongs to you.
-- If a changelog file has unrelated hunks, stage only your hunk or leave changelog unstaged and report why.
+- Do not restore, clean, reset, revert, stash, move, or overwrite unrelated work.
+- If a changelog has unrelated hunks, stage only the task hunk or skip changelog and report why.
+- Execution-class tasks should commit and push after validation unless blocked by tests, branch permissions, or explicit prompt scope.
+- Read-only tasks must not stage, commit, or push.
 
-## 3. Secrets, credentials, and sensitive data
+## 3. Secrets and sensitive data
 
 Do not print, inspect, copy, commit, or log real values for:
 
 - passwords or password hashes;
 - session IDs, cookies, tokens, API keys;
 - `.env` values;
-- provider credentials;
-- broker credentials;
+- provider or broker credentials;
 - webhook URLs;
 - private keys;
-- raw prompts;
-- raw provider payloads;
-- raw LLM responses if they may contain user/private content;
-- raw stack traces that contain secrets or internal payloads;
-- production DB contents.
+- raw prompts, raw provider payloads, or raw LLM responses that may contain private content;
+- production DB contents;
+- stack traces containing secrets or internal payloads.
 
 Env var names may be mentioned. Env var values must not be printed.
 
-Use sanitized reason codes, bounded labels, hashes, and redacted metadata where needed.
+Use sanitized reason codes, bounded labels, hashes, and redacted metadata.
 
 ## 4. Dev server and port safety
 
@@ -90,95 +94,76 @@ Do not casually kill or restart shared servers.
 Common shared ports:
 
 - backend: `8000`, `8001`
-- frontend/dev/preview: `5173`, `4173`, `5174`, `5175`, `5176`, `4177`
+- frontend/dev/preview: `5173`, `4173`, `4177`, `4178`, `4179`, `4180`, `5174`, `5175`, `5176`
 
 If a frontend/dev server is needed:
 
-- prefer an isolated port;
-- do not reuse or kill shared ports unless the task explicitly requires it and ownership is clear;
-- report all ports inspected and used;
-- stop only task-owned temporary servers.
+- inspect ports first;
+- prefer an isolated task-owned port;
+- leave shared `5173` untouched unless the task owns it;
+- stop only task-owned temporary servers;
+- report inspected and used ports.
 
 ## 5. Protected runtime domains
 
-Do not change these domains unless the task explicitly asks for it:
+Do not change protected domains unless explicitly scoped. For backend details, read `WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`.
 
-- scanner scoring, ranking, selection, or thresholds;
-- backtest calculations;
-- portfolio accounting, cash, holdings, P&L, sync, import, replay, FX;
-- broker execution or order placement;
-- market provider ordering/fallback behavior;
-- MarketCache TTL, SWR, cold-start fallback, background refresh, or payload shape;
-- AI/LLM prompts, routing, model order, fallback, retry, or integrity retry;
-- notification routing or delivery semantics;
-- DuckDB production runtime;
+Protected domains include:
+
+- scanner scoring, ranking, selection, thresholds, and sorting;
+- backtest calculations, fills, costs, metrics, and stored result semantics;
+- portfolio accounting, cash, holdings, P&L, sync, import, replay, FX, and cost basis;
+- provider runtime order, live-call paths, fallback behavior, and freshness/live labeling;
+- MarketCache TTL, SWR, cold-start fallback, background refresh, cache keys, and payload meaning;
+- AI/LLM prompts, routing, model order, fallback, retry, thresholds, and recommendation semantics;
 - auth/RBAC/security behavior;
-- quota enforcement;
-- cost ledger storage/reconciliation;
-- Options Lab / Options Decision Engine;
-- provider circuit enforcement.
+- notification routing and delivery semantics;
+- DuckDB/PostgreSQL source-of-truth behavior;
+- Options Lab ranking/gates/recommendation policy;
+- API response shapes and stored contract versions.
 
-Task prompts should list task-specific protected domains only when the task is near one of them. Otherwise, reference this file.
+Task prompts should list only task-specific protected domains when near a protected area; otherwise reference this guard and `WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`.
 
-## 6. Audit and reuse expectations
+## 6. Engineering cleanliness and reuse
 
-Before adding new helpers, components, or patterns:
+Before adding new helpers, components, services, docs, wrappers, or namespaces:
 
 - search for existing utilities, services, types, components, tests, and docs;
-- prefer deletion, consolidation, or direct reuse over adding another layer;
-- reuse established helpers when appropriate;
-- avoid duplicating status/label/freshness/provider mappings;
-- avoid ad-hoc UI controls when shared controls exist;
-- justify any new abstraction in the final report;
-- do not add a wrapper unless it creates a real boundary, has focused tests, and includes a future deletion or migration path;
-- treat compatibility layers as temporary and document owner, scope, and exit path;
-- do not create generated markdown artifacts unless explicitly requested or genuinely needed; if created, say whether they were kept or deleted and why in the final report.
+- prefer deletion, consolidation, or direct reuse over adding a layer;
+- avoid duplicating status, label, freshness, provider, evidence, or design mappings;
+- avoid page-local UI controls/material when shared primitives exist;
+- justify any new abstraction in the final report.
 
-For frontend/UI tasks, read:
+Wrapper rule:
 
-```text
-CODEX_FRONTEND_DESIGN_CONSTITUTION.md
-docs/audits/frontend-information-density-and-guidance-standard.md
-```
-
-For architecture-sensitive tasks, read the relevant audit/design docs before coding.
-
-## 6.1 Final report contract
-
-Future Codex task reports must include:
-
-- boundary impact: domains, platforms, contracts, and shared UI touched;
-- reused existing patterns;
-- deleted or consolidated patterns;
-- new abstractions added and why;
-- wrapper check: added wrapper yes/no, why it is not debt, and deletion or migration path;
-- net file count change;
-- net concept or primitive count change when relevant;
-- generated artifacts kept or deleted;
-- protected semantics changed or not changed;
-- final git status and any foreign dirty files.
+- New wrappers are forbidden unless they create a real boundary, have focused tests, and include a future deletion/migration path.
+- Compatibility layers are temporary; document owner, scope, and exit path.
+- Do not create generated markdown artifacts unless explicitly requested or genuinely needed. If created, report kept/deleted and why.
 
 ## 7. Frontend design rules
 
-For WolfyStock frontend work:
+Frontend implementation tasks should also read:
+
+- `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
+- `WOLFYSTOCK_TERMINAL_PRIMITIVES_USAGE.md`
+- `WOLFYSTOCK_FRONTEND_ROUTE_TEMPLATES.md`
+- `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`
+
+Rules:
 
 - preserve OLED/deep-space/ghost-glass visual language;
-- use canonical Terminal primitives where applicable instead of page-local card/chip/button/disclosure/status/empty-state material;
-- for migrated pages, do not reintroduce retired local helpers or patterns already blocked by guard scripts/tests;
-- visual unification should come from page frame, layout archetypes, spacing rhythm, typography scale, surface system, and approved primitives, not page-local patchwork;
-- no solid gray backgrounds;
+- use canonical Terminal primitives where applicable;
+- do not invent page-local card/chip/button/disclosure/status/empty-state material without justification;
+- do not reintroduce retired local helpers or patterns already blocked by guard scripts/tests;
+- visual unification should come from page frame, layout archetypes, spacing rhythm, typography scale, surface system, and approved primitives;
+- no solid gray/zinc/slate/neutral slabs;
 - no native-looking controls;
 - no default scrollbars;
 - Chinese UI labels by default;
-- no noisy explainer copy;
-- no huge dead layout bands;
 - raw/debug/provider/schema/developer details collapsed by default;
-- no broad local gray/zinc/slate slabs, warning walls, or raw provider/schema leakage on user pages;
 - desktop and mobile/narrow layouts must both be usable;
 - no horizontal overflow;
-- prefer Playwright verification when practical.
-
-Use established components and styling patterns.
+- no user-visible raw provider/schema/fixture/mock/debug leakage.
 
 ## 8. Financial/product safety
 
@@ -204,11 +189,16 @@ Use analytical labels such as:
 - `有条件可交易`
 - `高风险，仅小仓验证`
 
-Do not present outputs as personalized financial advice. Always preserve no-advice disclosure where relevant.
+Do not present outputs as personalized financial advice. Preserve no-advice disclosure where relevant.
 
 ## 9. Validation policy
 
 Always run task-focused validation.
+
+### Read-only tasks
+
+- No tests required unless needed for evidence.
+- Must confirm no files modified, staged, committed, or pushed.
 
 ### Docs-only tasks
 
@@ -216,193 +206,128 @@ Run:
 
 ```bash
 git diff --check -- <changed-doc-files>
-git status --short
+git status --short --branch
+./scripts/release_secret_scan.sh
 ```
 
-No full `ci_gate` is required for docs-only tasks.
+No full `ci_gate` is required.
 
-### Frontend tasks
+### Tests-only tasks
 
-Frontend UI tasks require focused tests, build, design guard, and browser verification unless the scope is docs-only or tests-only.
+Run focused tests for touched test/guard files plus nearby guard suites. No browser verification unless frontend source/e2e behavior changed.
 
-Run targeted checks such as:
+### Frontend UI tasks
+
+Run focused tests, build, design guard, and browser verification unless docs-only/tests-only.
+
+Minimum:
 
 ```bash
-cd apps/dsa-web
-npm test -- --run <relevant-tests>
-npm run lint --if-present
-npm run build --if-present
-npm run check:design --if-present
+npm --prefix apps/dsa-web run test -- <focused-tests>
+npm --prefix apps/dsa-web run build
+npm --prefix apps/dsa-web run check:design
+./scripts/release_secret_scan.sh
 ```
 
-Use Playwright/browser verification when relevant:
+Browser verification should use `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`.
 
-- desktop viewport, usually `1440x1000`;
-- mobile/narrow viewport, usually `390x844`;
-- confirm no console/page errors;
-- confirm no horizontal overflow;
-- confirm capability-gated hidden panels do not fetch protected APIs.
-
-### Backend/service tasks
-
-Backend boundary tasks require focused pytest, `python3 -m py_compile` when source is touched, import-boundary tests where relevant, diff checks, and a secret scan.
+### Backend/source tasks
 
 Run:
 
 ```bash
 python3 -m py_compile <changed-python-files>
-pytest <focused-tests> -q
+python3 -m pytest -q <focused-tests>
+git diff --check
+./scripts/release_secret_scan.sh
 ```
 
-Also run relevant regression tests for the touched domain.
+Add import-boundary tests where relevant.
 
 ### High-risk backend tasks
 
-Tasks touching any of these are high risk:
+High-risk areas include storage/schema/auth/RBAC/provider/cache/MarketCache/quota/cost/broker/portfolio/accounting/core pipeline.
 
-- `src/storage.py`;
-- schema/init/migration files;
-- auth/session/RBAC/security;
-- core analysis/pipeline/task queue;
-- provider/cache/MarketCache;
-- quota/cost runtime;
-- broker/order paths;
-- portfolio/accounting.
-
-For high-risk tasks, run `./scripts/ci_gate.sh` only when the worktree is clean enough and practical.
-
-Do not overuse full `ci_gate`; reserve it for clean batch boundaries or explicit high-risk runtime changes.
-
-If unrelated dirty files exist, skip/defer `ci_gate` unless the task itself is high risk and the result will still be meaningful. Report:
-
-```text
-ci_gate deferred due to unrelated dirty worktree
-```
-
-Before final push/merge, run one clean full gate:
-
-```bash
-./scripts/ci_gate.sh
-```
+Run full `./scripts/ci_gate.sh` only at clean batch boundaries or when high-risk runtime changes justify it. Do not overuse full gate for docs-only/tests-only/narrow frontend tasks.
 
 ## 10. Browser verification policy
 
 When browser verification is relevant:
 
 - prefer Playwright first;
-- use an isolated frontend port;
-- mock auth/status and API routes where needed;
-- verify desktop and mobile/narrow viewports;
-- report exact viewport sizes;
-- report console errors and page errors;
-- report horizontal overflow status;
-- report whether real backend, mocked backend, or hybrid verification was used.
+- use isolated frontend port;
+- mock auth/status/API where needed;
+- verify `1440x1000` and `390x844` unless task says otherwise;
+- report routes, viewports, port, auth/API mocking limits, console/page errors, horizontal overflow, and raw/debug leakage status.
 
-If browser verification is blocked, report the exact blocker honestly.
+Use the Playwright invocation rule in `WOLFYSTOCK_FRONTEND_VALIDATION_PLAYBOOK.md`. Do not use repo-root `npx --prefix apps/dsa-web playwright test ...` when relying on app config.
 
-## 11. Task-specific prompt structure
+## 11. Prompt compression rule
 
-Use shorter task prompts. Prefer this structure:
+Task prompts should be short. Do not repeat this guard. Use this structure:
 
 ```text
-Task: <short task name>
-
-Repo:
-cd /Users/yehengli/daily_stock_analysis
-Branch: main
-
-Read first:
+Use Codex App isolated task workspace.
+Use local environment: WolfyStock Fast.
+Base from latest origin/main.
+Read and obey:
 - docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md
-- <task-specific docs/files>
+- <task-specific docs>
 
-Goal:
-<clear 3-6 line goal>
+Task:
+<clear goal>
 
 Scope:
 Change:
-- <allowed domains/files>
-
+- <allowed files/domains>
 Do not change:
-- <only task-specific protected domains>
+- <task-specific protected domains only>
 
-Implementation:
-1. ...
-2. ...
-3. ...
-
-Tests:
-- <focused tests>
-- <frontend/browser checks if relevant>
-- Follow validation policy in WOLFYSTOCK_CODEX_STANDARD_GUARD.md.
+Validation:
+- <focused commands>
 
 Commit:
-- Stage only task-related files.
-- Commit message: <message>
-
-Final report:
-Use the standard final report format, plus:
-- <task-specific required fields>
+- <message or no-commit policy>
 ```
 
-## 12. Standard final report format
+For complete templates, use `WOLFYSTOCK_CODEX_TASK_TEMPLATES.md`.
 
-Every Codex final report should include:
+## 12. Final report
 
-- commit hash and commit message, or state no commit was created;
+Use `WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md`.
+
+Every execution-class final report must include:
+
+- progress summary;
+- actual `cwd`, branch, and base commit;
+- commit hash/message or no-commit status;
 - changed files;
-- behavior changed;
-- behavior explicitly not changed;
-- tests/checks run and exact results;
-- `ci_gate` result, or why it was deferred/skipped;
-- browser/Playwright verification details if relevant;
-- ports inspected/used;
-- final `git status` summary;
-- rollback command if a commit was created;
-- confirmation no real secrets were printed or committed;
-- confirmation unrelated files were not touched/staged/committed.
+- boundary impact;
+- reused existing patterns;
+- deleted/consolidated patterns;
+- new abstractions and why;
+- wrapper check;
+- net file count and net concept/primitive count when relevant;
+- generated artifacts kept/deleted;
+- protected semantics changed/not changed;
+- validation commands and results;
+- `ci_gate` result or reason skipped;
+- browser verification details if frontend;
+- final git status and foreign dirty files;
+- rollback command if committed.
 
-High-risk tasks should also include:
+## 13. Stop conditions
 
-- schema/helper/table changes;
-- owner/capability/security boundary decisions;
-- data-sanitization behavior;
-- compatibility notes;
-- known remaining blockers.
+Stop and report if:
 
-## 13. Commit message style
-
-Use clear conventional messages, for example:
-
-- `feat(options): add trade quality decision engine`
-- `fix(options): prevent options lab black screen`
-- `feat(cost): propagate owner context to llm ledger`
-- `docs(ws2): design multi-instance smoke tests`
-- `test(admin): add admin auth browser harness`
-
-Do not combine unrelated tasks into one commit.
-
-## 14. Rollback guidance
-
-For normal single commits, report:
-
-```bash
-git revert <commit>
-```
-
-If no commit was created, state that rollback is not needed.
-
-If rollback may conflict because of concurrent work, say so.
-
-## 15. When to stop and report
-
-Stop immediately and report if:
-
-- wrong repo or branch;
-- target files already dirty;
-- required dependency/tool is unavailable and no safe fallback exists;
-- task would require live credentials or paid provider calls not explicitly approved;
-- task would require changing protected domains outside scope;
-- tests reveal a serious unrelated failure that would require editing unrelated files;
-- you cannot complete without risking secrets or unrelated work.
+- wrong repo/workspace;
+- staged files or tracked dirty files exist unexpectedly;
+- target files are dirty before work;
+- required tool is unavailable and no safe fallback exists;
+- live credentials or paid provider calls would be required without approval;
+- protected domains would change outside scope;
+- validation fails and fixing it requires unrelated edits;
+- browser verification fails for frontend UI changes;
+- task cannot complete without risking secrets or unrelated work.
 
 Partial completion is acceptable only if clearly reported and not staged/committed incorrectly.
