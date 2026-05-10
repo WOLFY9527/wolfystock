@@ -40,9 +40,10 @@ The matrix also includes domain-local operator validator categories for
 provider operations, real restore/PITR, security MFA/RBAC acceptance,
 quota/budget evidence, staging ingress evidence, WS2/SSE topology operator
 decisions, sanitized config snapshots, and manual release review records. These
-categories recognize the local validator outputs and evidence guides as review
-attachments only. The launch checker does not execute those validators, make
-provider/network/DB calls, or approve launch.
+categories recognize the local validator outputs documented in
+`docs/audits/operator-evidence-real-runbook.md` as review attachments only.
+The launch checker does not execute those validators, make provider/network/DB
+calls, or approve launch.
 
 `scripts/operator_evidence_bundle_check.py` is a review-support aggregation
 tool for already-sanitized domain artifacts. It is not counted as separate
@@ -98,14 +99,14 @@ incomplete evidence keeps the summary at **NO-GO**.
 | `options_derivatives_safety` | Options derivatives safety evidence proving read-only/no-order posture, no broker or portfolio mutation, fixture/delayed/fallback caps, no guaranteed-return wording, and sanitized provider evidence. |
 | `api_abuse_request_safety` | API abuse and request-safety evidence covering rate-limit/invalid-request handling, oversized payload safety, sanitized denial/audit output, no traceback/debug/request-body leakage, and unchanged runtime defaults. |
 | `final_clean_full_ci_gate` | Clean worktree, full `ci_gate`, release secret scan, and final diff check evidence. |
-| `provider_operator_evidence` | Accepted sanitized provider operator evidence from `scripts/provider_operator_evidence_check.py` and `docs/audits/provider-operator-evidence-guide.md`; advisory/review-gated, no validator provider calls, no raw provider payloads or credentials, and runtime behavior unchanged. |
-| `restore_pitr_operator_evidence` | Accepted sanitized real restore/PITR operator evidence from `scripts/restore_pitr_operator_evidence_check.py` and `docs/audits/db-real-restore-pitr-operator-evidence-guide.md`; real restore artifact summary sanitized, no DB commands by the validator, production storage untouched, and manual review required. |
-| `security_operator_acceptance` | Accepted sanitized MFA/RBAC operator acceptance from `scripts/security_operator_acceptance_check.py` and `docs/audits/security-operator-acceptance-evidence-guide.md`; MFA/RBAC sections accepted, `releaseApproved=false`, no auth/RBAC runtime mutation, and manual review required. |
-| `quota_budget_operator_evidence` | Accepted sanitized quota/budget operator evidence from `scripts/quota_operator_evidence_check.py` and `docs/audits/quota-budget-operator-evidence-guide.md`; quota/budget sections accepted, no outbound notifications by the validator, no quota runtime mutation, and advisory review required. |
-| `staging_ingress_operator_evidence` | Accepted sanitized staging ingress operator evidence from `scripts/staging_ingress_operator_evidence_check.py` and `docs/audits/staging-ingress-operator-evidence-guide.md`; artifact summary sanitized, no network calls by the validator, no ingress runtime mutation, and manual review required. |
-| `ws2_sse_operator_decision_evidence` | Accepted sanitized WS2/SSE topology operator decision evidence from `scripts/ws2_sse_operator_decision_check.py` and `docs/audits/ws2-sse-operator-decision-evidence-guide.md`; process-local SSE limitation preserved, polling fallback or single-instance limitation recorded, no validator network calls, no runtime mutation, and manual review required. |
-| `config_snapshot_evidence` | Accepted sanitized config snapshot evidence from `scripts/config_snapshot_evidence_check.py` and `docs/audits/config-snapshot-operator-evidence-guide.md`; auth/provider/quota/database summaries recorded, secret posture represented only as presence/redacted labels, no raw config/env values, no runtime mutation, and manual review required. |
-| `manual_release_approval_review_record` | Accepted sanitized manual release review-record evidence from `scripts/manual_release_approval_evidence_check.py` and `docs/audits/manual-release-approval-evidence-guide.md`; review record sanitized, `releaseApproved=false`, `launchApproved=false`, no automatic approval derived from input, and release approval remains external/manual. |
+| `provider_operator_evidence` | Accepted sanitized provider operator evidence from `scripts/provider_operator_evidence_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; advisory/review-gated, no validator provider calls, no raw provider payloads or credentials, and runtime behavior unchanged. |
+| `restore_pitr_operator_evidence` | Accepted sanitized real restore/PITR operator evidence from `scripts/restore_pitr_operator_evidence_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; real restore artifact summary sanitized, no DB commands by the validator, production storage untouched, and manual review required. |
+| `security_operator_acceptance` | Accepted sanitized MFA/RBAC operator acceptance from `scripts/security_operator_acceptance_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; MFA/RBAC sections accepted, `releaseApproved=false`, no auth/RBAC runtime mutation, and manual review required. |
+| `quota_budget_operator_evidence` | Accepted sanitized quota/budget operator evidence from `scripts/quota_operator_evidence_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; quota/budget sections accepted, no outbound notifications by the validator, no quota runtime mutation, and advisory review required. |
+| `staging_ingress_operator_evidence` | Accepted sanitized staging ingress operator evidence from `scripts/staging_ingress_operator_evidence_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; artifact summary sanitized, no network calls by the validator, no ingress runtime mutation, and manual review required. |
+| `ws2_sse_operator_decision_evidence` | Accepted sanitized WS2/SSE topology operator decision evidence from `scripts/ws2_sse_operator_decision_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; process-local SSE limitation preserved, polling fallback or single-instance limitation recorded, no validator network calls, no runtime mutation, and manual review required. |
+| `config_snapshot_evidence` | Accepted sanitized config snapshot evidence from `scripts/config_snapshot_evidence_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; auth/provider/quota/database summaries recorded, secret posture represented only as presence/redacted labels, no raw config/env values, no runtime mutation, and manual review required. |
+| `manual_release_approval_review_record` | Accepted sanitized manual release review-record evidence from `scripts/manual_release_approval_evidence_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; review record sanitized, `releaseApproved=false`, `launchApproved=false`, no automatic approval derived from input, and release approval remains external/manual. |
 
 ## 3. Input Contract
 

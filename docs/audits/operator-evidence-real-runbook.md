@@ -142,6 +142,34 @@ python3 scripts/release_review_report_render.py \
 
 The report is informational. It must not be edited into a launch decision.
 
+## Optional Review Support
+
+Use these optional local-only helpers when reviewer coordination needs more than
+the core validate-manifest-bundle-report flow:
+
+```bash
+python3 scripts/operator_evidence_gap_analyzer.py \
+  --artifact-dir "$EVIDENCE_DIR" \
+  --output "$EVIDENCE_DIR/operator-evidence-gap-summary.json"
+
+python3 scripts/operator_evidence_bundle_diff.py diff \
+  --before <previous-bundle-summary.json> \
+  --after "$EVIDENCE_DIR/operator-evidence-bundle-summary.json" \
+  --before-manifest <previous-manifest.json> \
+  --after-manifest "$EVIDENCE_DIR/operator-evidence-manifest.json" \
+  --output "$EVIDENCE_DIR/operator-evidence-review-diff.md"
+
+python3 scripts/operator_evidence_archive_pack.py pack \
+  --workflow-output-dir "$EVIDENCE_DIR" \
+  --output-dir <archive-output-dir> \
+  --label <sanitized-archive-label> \
+  --include-manifest \
+  --include-report
+```
+
+These helpers are review support only. They must not approve launch, read raw
+operator records, or replace category validators plus manual review.
+
 ## Manual Review Handoff
 
 Provide reviewers with:

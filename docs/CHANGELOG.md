@@ -1,5 +1,14 @@
 ## 2026-05-10
 
+- 🧹 **Operator evidence docs consolidation** — Consolidated stale
+  operator-evidence wrapper guides into the retained source-of-truth set:
+  `docs/audits/operator-evidence-real-runbook.md`,
+  `docs/audits/operator-evidence-dry-run-handoff.md`, and
+  `docs/audits/operator-evidence-redaction-checklist.md`. Deleted the duplicate
+  per-tool and per-category guide cluster, repointed current launch/readiness
+  references, and kept this as docs-only cleanup with no source, runtime,
+  frontend, backend, test, script, wrapper, or compatibility-layer changes.
+
 - 🧹 **Frontend CSS audit docs cleanup** — Consolidated the completed
   WolfyStock CSS cleanup audit history by deleting the stale pass-1 CSS/DOM
   note and repointing current audit references to

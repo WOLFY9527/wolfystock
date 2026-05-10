@@ -69,6 +69,7 @@ must manually verify and attach sanitized evidence for each provider/category:
 | License and redistribution | Provider/license review status and whether data can be cached/displayed for the intended environment. | Legal conclusions without owner review or launch approval claims. |
 
 Manual evidence should follow the sanitized provider/operator evidence pattern
-in `docs/audits/provider-operator-evidence-guide.md`. Passing the offline CLI
-or attaching sanitized evidence is not launch approval; shared launch
+in `docs/audits/operator-evidence-real-runbook.md` and
+`docs/audits/operator-evidence-redaction-checklist.md`. Passing the offline
+CLI or attaching sanitized evidence is not launch approval; shared launch
 acceptance wiring remains a separate serial review.

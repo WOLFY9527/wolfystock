@@ -36,8 +36,9 @@ notes, fixture examples, or a single product-capability changelog entry.
   response and auditability evidence contract for launch review. It is not
   accepted operator evidence by itself.
 - `docs/audits/operator-evidence-real-runbook.md`: concise offline workflow
-  for collecting sanitized real operator evidence, validating it, creating a
-  manifest, rendering a review report, and handing it to manual reviewers.
+  and current source of truth for collecting sanitized real operator evidence,
+  running validator/tool commands, creating a manifest, rendering a review
+  report, and handing it to manual reviewers.
 - `docs/audits/operator-evidence-dry-run-handoff.md`: synthetic-fixture-only
   dry-run handoff sequence for rehearsing the offline evidence workflow without
   touching launch acceptance plumbing or runtime behavior.
@@ -167,6 +168,12 @@ notes, fixture examples, or a single product-capability changelog entry.
 Completed pre-closure CSS/DOM pass notes are consolidated into
 `wolfystock-css-cleanup-closure-report.md`. Prefer the closure report plus the
 retained route-specific DOM proofs above over older pass-by-pass audit history.
+
+Operator evidence wrappers were similarly consolidated: prefer
+`operator-evidence-real-runbook.md`,
+`operator-evidence-dry-run-handoff.md`, and
+`operator-evidence-redaction-checklist.md` over older per-tool or per-category
+guide documents.
 
 ## Historical and superseded notes
 

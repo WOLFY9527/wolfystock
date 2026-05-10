@@ -17,10 +17,9 @@ Pipeline, cost/quota, or DB behavior was changed.
 - `docs/audits/public-launch-readiness-master.md`
 - `docs/audits/launch-acceptance-evidence-pack.md`
 - `docs/audits/incident-response-audit-evidence-pack.md`
-- `docs/audits/operator-evidence-bundle-guide.md`
-- `docs/audits/ws2-sse-operator-decision-evidence-guide.md`
-- `docs/audits/config-snapshot-operator-evidence-guide.md`
-- `docs/audits/manual-release-approval-evidence-guide.md`
+- `docs/audits/operator-evidence-real-runbook.md`
+- `docs/audits/operator-evidence-dry-run-handoff.md`
+- `docs/audits/operator-evidence-redaction-checklist.md`
 - `docs/audits/public-launch-blocker-burndown.md`
 - `docs/audits/data-quality-user-disclosure-policy.md`
 - Supplemental current audit context:
@@ -69,15 +68,14 @@ unsafe evidence keeps the summary at **NO-GO**. Even when all categories are
 accepted, the checker returns `GO-REVIEW-REQUIRED` with `releaseApproved=false`;
 manual release approval is still required.
 
-Domain-local offline validators/templates are now available for provider
-operator evidence, real restore/PITR operator evidence, security MFA/RBAC
-operator acceptance, quota/budget operator evidence, and staging ingress
-operator evidence. These validators only check sanitized operator artifacts for
-review. Actual launch review still requires real operator-produced artifacts
-for the target environment, and final approval remains manual.
+Domain-local offline validators/templates for provider, restore/PITR, security
+MFA/RBAC, quota/budget, staging ingress, WS2/SSE, config snapshot, and manual
+release review-record evidence are now consolidated into
+`docs/audits/operator-evidence-real-runbook.md`. These validators only check
+sanitized operator artifacts for review. Actual launch review still requires
+real operator-produced artifacts for the target environment, and final approval
+remains manual.
 
-Additional offline review plumbing is available for WS2/SSE topology operator
-decisions, sanitized config snapshots, and manual release review records.
 `scripts/operator_evidence_bundle_check.py` can aggregate already-sanitized
 domain validator summaries for reviewer convenience, but it is a support tool
 only and does not replace any real artifact. The latest launch acceptance

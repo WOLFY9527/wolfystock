@@ -8,10 +8,9 @@ Related docs: `docs/audits/public-launch-gap-register.md`,
 `docs/audits/deployment-readiness-checklist.md`,
 `docs/audits/launch-acceptance-evidence-pack.md`,
 `docs/audits/incident-response-audit-evidence-pack.md`,
-`docs/audits/operator-evidence-bundle-guide.md`,
-`docs/audits/ws2-sse-operator-decision-evidence-guide.md`,
-`docs/audits/config-snapshot-operator-evidence-guide.md`,
-`docs/audits/manual-release-approval-evidence-guide.md`,
+`docs/audits/operator-evidence-real-runbook.md`,
+`docs/audits/operator-evidence-dry-run-handoff.md`,
+`docs/audits/operator-evidence-redaction-checklist.md`,
 `docs/audits/archive/final-pre-push-audit.md`,
 `docs/audits/known-test-warnings-register.md`
 
@@ -50,19 +49,16 @@ portfolio/backtest browser and export proof, notification delivery, user data
 privacy/export/deletion, market freshness/fallback, AI guest-preview safety,
 Options derivatives safety, and API abuse/request-safety evidence.
 
-Offline validator/template coverage is also available for provider operator
-evidence, real restore/PITR operator evidence, security MFA/RBAC operator
-acceptance, quota/budget operator evidence, and staging ingress operator
-evidence. That coverage only proves the local validators and sanitized
-templates exist. Real operator-produced artifacts are still required for launch
-review, and final approval remains manual.
-
-The latest review plumbing also recognizes the offline WS2/SSE topology
-operator decision validator, config snapshot evidence validator, and manual
-release review-record validator. `scripts/operator_evidence_bundle_check.py`
-is available only as an aggregation aid for already-sanitized domain
-artifacts. None of these helpers grants release approval, and
-`releaseApproved` remains false in machine-readable launch evidence.
+Offline validator/template coverage for provider, restore/PITR, security
+MFA/RBAC, quota/budget, staging ingress, WS2/SSE, config snapshot, and manual
+release review-record evidence is now consolidated into
+`docs/audits/operator-evidence-real-runbook.md`. That coverage only proves the
+local validators and sanitized templates exist. Real operator-produced
+artifacts are still required for launch review, and final approval remains
+manual. `scripts/operator_evidence_bundle_check.py` remains only an aggregation
+aid for already-sanitized domain artifacts. None of these helpers grants
+release approval, and `releaseApproved` remains false in machine-readable
+launch evidence.
 
 The offline operator evidence workflow is now documented as a reviewer support
 path: generate sanitized templates with
