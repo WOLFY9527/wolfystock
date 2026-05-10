@@ -389,6 +389,15 @@ class PortfolioSnapshotResponse(BaseModel):
     fx_rates: List[PortfolioFxRateItem] = Field(default_factory=list)
     portfolio_attribution: Dict[str, Any] = Field(default_factory=dict)
     analytics: Optional[PortfolioAnalyticsSummary] = None
+    riskDiagnostics: Optional[Dict[str, Any]] = None
+    portfolioRiskEvidence: Optional[Dict[str, Any]] = None
+    sourceAuthorityState: Optional[str] = None
+    fxFreshnessState: Optional[str] = None
+    holdingsLineageState: Optional[str] = None
+    cashLedgerCompletenessState: Optional[str] = None
+    benchmarkMappingState: Optional[str] = None
+    factorMappingState: Optional[str] = None
+    confidenceCap: Optional[Dict[str, Any]] = None
     accounts: List[PortfolioAccountSnapshot] = Field(default_factory=list)
 
 
@@ -506,3 +515,12 @@ class PortfolioRiskResponse(BaseModel):
     drawdown: Dict[str, Any] = Field(default_factory=dict)
     stop_loss: Dict[str, Any] = Field(default_factory=dict)
     account_attribution: Dict[str, Any] = Field(default_factory=dict)
+    riskDiagnostics: Optional[Dict[str, Any]] = None
+    portfolioRiskEvidence: Optional[Dict[str, Any]] = None
+    sourceAuthorityState: Optional[str] = None
+    fxFreshnessState: Optional[str] = None
+    holdingsLineageState: Optional[str] = None
+    cashLedgerCompletenessState: Optional[str] = None
+    benchmarkMappingState: Optional[str] = None
+    factorMappingState: Optional[str] = None
+    confidenceCap: Optional[Dict[str, Any]] = None

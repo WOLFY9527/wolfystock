@@ -21,6 +21,7 @@ from src.repositories.portfolio_repo import (
     PortfolioRepository,
 )
 from src.services.fx_rate_service import default_fx_rate_service
+from src.services.portfolio_risk_diagnostics import build_portfolio_risk_diagnostics
 from src.utils.security import sanitize_metadata
 
 logger = logging.getLogger(__name__)
@@ -2581,6 +2582,15 @@ class PortfolioService:
             account_rows=account_rows,
             aggregate_currency=aggregate_currency,
             as_of_date=as_of_date,
+        )
+        snapshot_payload.update(
+            build_portfolio_risk_diagnostics(
+                portfolio_service=self,
+                snapshot=snapshot_payload,
+                account_id=account_id,
+                as_of=as_of_date,
+                cost_method=method,
+            )
         )
         return snapshot_payload
 

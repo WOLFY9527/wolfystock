@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.config import Config, get_config
 from src.repositories.portfolio_repo import PortfolioRepository
+from src.services.portfolio_risk_diagnostics import build_portfolio_risk_diagnostics
 from src.services.portfolio_service import PortfolioService
 
 
@@ -82,8 +83,15 @@ class PortfolioRiskService:
             snapshot=snapshot,
             as_of_date=as_of_date,
         )
+        diagnostics = build_portfolio_risk_diagnostics(
+            portfolio_service=self.portfolio_service,
+            snapshot=snapshot,
+            account_id=account_id,
+            as_of=as_of_date,
+            cost_method=cost_method,
+        )
 
-        return {
+        report = {
             "as_of": as_of_date.isoformat(),
             "account_id": account_id,
             "cost_method": cost_method,
@@ -96,6 +104,8 @@ class PortfolioRiskService:
             "stop_loss": stop_loss,
             "account_attribution": account_attribution,
         }
+        report.update(diagnostics)
+        return report
 
     def _ensure_drawdown_snapshot_window(
         self,
