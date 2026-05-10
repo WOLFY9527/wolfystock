@@ -158,3 +158,6 @@ cache/
 # keep only intentional small fixtures/examples under version control
 !tests/fixtures/
 !docs/examples/
+
+# Local Codex app environment/config
+.codex/
