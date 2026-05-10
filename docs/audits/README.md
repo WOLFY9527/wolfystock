@@ -152,7 +152,6 @@ notes, fixture examples, or a single product-capability changelog entry.
   `wolfystock-chinese-form-label-review.md`,
   `wolfystock-corrected-scroll-proof.md`,
   `wolfystock-css-cleanup-closure-report.md`,
-  `wolfystock-css-dom-verification-pass1.md`,
   `wolfystock-css-ownership-inventory.md`,
   `wolfystock-css-selector-usage-verification.md`,
   `wolfystock-echarts-chart-workspace-audit.md`,
@@ -164,6 +163,10 @@ notes, fixture examples, or a single product-capability changelog entry.
   `wolfystock-scanner-dom-verification.md`,
   `wolfystock-scrollarea-custom-scrollbar-owner-inventory.md`,
   `wolfystock-scrollbar-dom-verification.md`.
+
+Completed pre-closure CSS/DOM pass notes are consolidated into
+`wolfystock-css-cleanup-closure-report.md`. Prefer the closure report plus the
+retained route-specific DOM proofs above over older pass-by-pass audit history.
 
 ## Historical and superseded notes
 

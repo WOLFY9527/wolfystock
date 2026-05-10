@@ -87,7 +87,6 @@ Mode: docs-only inventory. No markdown files were deleted or moved.
 | `docs/audits/wolfystock-chinese-form-label-review.md` | Merge candidate | Feed frontend visual/i18n audit index. |
 | `docs/audits/wolfystock-corrected-scroll-proof.md` | Stale/needs status header | Useful evidence but tied to corrected/mock-limited state. |
 | `docs/audits/wolfystock-css-cleanup-closure-report.md` | Keep standalone | Active CSS cleanup governance summary. |
-| `docs/audits/wolfystock-css-dom-verification-pass1.md` | Merge candidate | Chronological CSS/DOM proof; keep until selector index exists. |
 | `docs/audits/wolfystock-css-ownership-inventory.md` | Keep standalone | Active CSS selector ownership reference. |
 | `docs/audits/wolfystock-css-selector-usage-verification.md` | Merge candidate | CSS deletion-trial evidence; preserve until indexed. |
 | `docs/audits/wolfystock-echarts-chart-workspace-audit.md` | Stale/needs status header | Older frontend audit; needs current-route status. |

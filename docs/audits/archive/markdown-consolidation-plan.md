@@ -79,7 +79,7 @@ links until the merge is explicitly approved:
 | Security hardening index | `production-security-hardening-audit.md`, `security-password-kdf-upgrade-plan.md`, `security-admin-mfa-backend-foundation.md`, `security-mfa-secret-storage-hardening-plan.md` |
 | Reuse/cache design index | `guest-preview-reuse-design.md`, `llm-report-output-cache-design.md`, `scanner-ai-interpretation-cache-design.md` |
 | Frontend visual audit index | `wolfystock-frontend-design-conformance-audit.md`, `wolfystock-global-codebase-audit.md`, `wolfystock-phase0-bundle-design-inventory.md`, `wolfystock-bundle-composition-report.md`, `wolfystock-echarts-chart-workspace-audit.md`, `wolfystock-product-command-card-owner-audit.md`, `wolfystock-chinese-form-label-review.md` |
-| CSS/DOM verification index | `wolfystock-css-cleanup-closure-report.md`, `wolfystock-css-ownership-inventory.md`, `wolfystock-css-selector-usage-verification.md`, `wolfystock-css-dom-verification-pass1.md`, `wolfystock-scrollarea-custom-scrollbar-owner-inventory.md`, `wolfystock-scrollbar-dom-verification.md`, `wolfystock-corrected-scroll-proof.md`, `wolfystock-scanner-dom-verification.md`, `wolfystock-backtest-dom-verification.md`, `wolfystock-chat-dom-verification.md` |
+| CSS/DOM verification index | `wolfystock-css-cleanup-closure-report.md`, `wolfystock-css-ownership-inventory.md`, `wolfystock-css-selector-usage-verification.md`, `wolfystock-scrollarea-custom-scrollbar-owner-inventory.md`, `wolfystock-scrollbar-dom-verification.md`, `wolfystock-corrected-scroll-proof.md`, `wolfystock-scanner-dom-verification.md`, `wolfystock-backtest-dom-verification.md`, `wolfystock-chat-dom-verification.md` |
 
 ## Archive or superseded candidates
 

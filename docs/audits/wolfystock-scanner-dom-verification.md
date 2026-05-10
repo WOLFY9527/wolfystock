@@ -57,7 +57,6 @@ Mandatory reading completed:
 
 - `CODEX_FRONTEND_DESIGN_CONSTITUTION.md`
 - `docs/checks/css-visual-regression-checklist.md`
-- `docs/audits/wolfystock-css-dom-verification-pass1.md`
 - `docs/audits/wolfystock-css-selector-usage-verification.md`
 - `docs/audits/wolfystock-css-ownership-inventory.md`
 - `docs/audits/wolfystock-frontend-design-conformance-audit.md`

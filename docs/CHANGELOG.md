@@ -1,5 +1,13 @@
 ## 2026-05-10
 
+- 🧹 **Frontend CSS audit docs cleanup** — Consolidated the completed
+  WolfyStock CSS cleanup audit history by deleting the stale pass-1 CSS/DOM
+  note and repointing current audit references to
+  `wolfystock-css-cleanup-closure-report.md` plus the retained route-specific
+  DOM proof docs. This is docs-only housekeeping: no frontend source,
+  backend/runtime, tests, package files, wrappers, or compatibility layers
+  changed.
+
 - 🧭 **Admin dry-run evidence explanation preview** — `/zh/admin/evidence-workflow` now includes a compact terminal-style deterministic AI evidence dry-run explanation preview for representative Scanner、Rotation、Options、Backtest、Portfolio packets. The new admin-only block surfaces safe summary、posture、confidence cap、validation state、limitation labels、disabled-claim counts, and collapsed representative diagnostics while staying display-only. This change does not alter live AI prompts, routing, weighting, recommendations, provider/runtime behavior, scanner ranking, options recommendation semantics, backtest math, portfolio accounting, or auth/RBAC behavior.
 
 - 🧪 **Deterministic AI evidence dry-run explanation composer** — Backend now includes additive `src/services/ai_evidence_dry_run_explanation.py` plus focused regression coverage for a deterministic display/admin-diagnostics-only explanation preview built from validated `ai_evidence_packet_v1` metadata. The composer is pure/read-only apart from optional injected `generated_at`, degrades safely on invalid or unknown packet versions, preserves fail-closed and research-grade wording across Scanner/Rotation/Options/Backtest/Portfolio evidence, and emits conservative Chinese summaries/limitation labels without exposing raw/internal terms. This change is diagnostics-only: no AI prompt changes, no AI routing/weighting/recommendation changes, no provider/runtime/network calls, no scanner scoring/selection/threshold/ranking changes, no rotation score/stage/fund-flow semantic changes, no options ranking/gate/recommendation changes, no backtest calculations/fills/costs/metrics changes, no portfolio accounting/FX/sync/import/replay changes, and no frontend/API/runtime behavior changes.
