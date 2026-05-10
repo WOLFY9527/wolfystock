@@ -174,6 +174,15 @@ Operator evidence wrappers were similarly consolidated: prefer
 `operator-evidence-redaction-checklist.md` over older per-tool or per-category
 guide documents.
 
+Release review reporting, rollback rehearsal, and restore/PITR launch
+procedures are likewise governed by the retained current runbooks:
+`operator-evidence-real-runbook.md` for bundle/report rendering,
+`release-rollback-runbook.md` for rollback decisioning and rehearsal evidence,
+and `db-retention-backup-restore-drill-plan.md` plus
+`deployment-readiness-checklist.md` for restore/PITR readiness. Do not treat
+older single-purpose release drill or renderer guides as separate launch
+control sources of truth.
+
 ## Historical and superseded notes
 
 - Archived historical notes now live under `docs/audits/archive/`:

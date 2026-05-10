@@ -1,5 +1,19 @@
 ## 2026-05-10
 
+- 🧹 **Launch readiness docs consolidation** — Retired two stale single-purpose
+  release/readiness guides after confirming the current source-of-truth already
+  lives in `docs/audits/README.md`,
+  `docs/audits/public-launch-readiness-master.md`,
+  `docs/audits/public-launch-gap-register.md`,
+  `docs/audits/deployment-readiness-checklist.md`,
+  `docs/audits/operator-evidence-real-runbook.md`,
+  `docs/audits/release-rollback-runbook.md`, and
+  `docs/audits/db-retention-backup-restore-drill-plan.md`. This is docs-only
+  cleanup: launch/release/rollback semantics, current NO-GO gate posture,
+  runtime behavior, scripts, tests, CI, auth/RBAC, provider logic, database
+  behavior, scanner/backtest/portfolio/options behavior, and operator evidence
+  approval rules are unchanged.
+
 - 🧹 **Root analysis wrapper retirement** — Deleted the obsolete root analysis
   compatibility wrapper after confirming current runtime code, API routes, task
   queue wiring, and focused tests already use the canonical
