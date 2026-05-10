@@ -1,5 +1,12 @@
 ## 2026-05-10
 
+- 🧹 **Rotation Radar evidence chip consolidation** — `/zh/market/rotation-radar`
+  now reuses the existing `TerminalChip` primitive for local evidence/status
+  chips in `MarketRotationRadarPage`, retiring the page-local `EvidenceBadge`
+  chip implementation. This is a frontend-only visual consolidation: no
+  rotation score, stage, fund-flow, data freshness semantics, API contracts,
+  provider/runtime behavior, or other product surfaces changed.
+
 - 🧹 **Market Overview visual primitive consolidation** — `/zh/market-overview`
   now reuses existing terminal panel primitives for its shared shell/card
   material and retires the duplicate page-local ghost-card bridge in

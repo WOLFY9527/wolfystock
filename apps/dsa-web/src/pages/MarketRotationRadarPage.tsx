@@ -4,6 +4,7 @@ import { AlertTriangle, Gauge, RefreshCcw, Search, Signal, SlidersHorizontal, Wa
 import { ApiErrorAlert, GlassCard } from '../components/common';
 import { EvidenceChips } from '../components/evidence/EvidenceChips';
 import { DataFreshnessBadge } from '../components/market-overview/marketOverviewPrimitives';
+import { TerminalChip } from '../components/terminal/TerminalPrimitives';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { marketRotationApi, type MarketRotationRadarResponse, type MarketRotationRiskLabel, type MarketRotationStage, type MarketRotationSummaryItem, type MarketRotationTheme, type MarketRotationTimeWindow } from '../api/marketRotation';
 import { cn } from '../utils/cn';
@@ -250,20 +251,6 @@ const ThemeMetric: React.FC<{ label: string; value: string; tone?: string }> = (
   </div>
 );
 
-const EvidenceBadge: React.FC<{ children: React.ReactNode; tone?: 'neutral' | 'info' | 'warn' | 'ok' }> = ({ children, tone = 'neutral' }) => (
-  <span
-    className={cn(
-      'inline-flex min-h-5 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-none',
-      tone === 'info' && 'border-cyan-300/20 bg-cyan-300/10 text-cyan-100',
-      tone === 'warn' && 'border-amber-300/24 bg-amber-300/10 text-amber-100',
-      tone === 'ok' && 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100',
-      tone === 'neutral' && 'border-white/8 bg-white/[0.03] text-white/48',
-    )}
-  >
-    {children}
-  </span>
-);
-
 const WindowChip: React.FC<{ window: MarketRotationTimeWindow }> = ({ window }) => (
   <div className="min-w-0 rounded-lg border border-white/[0.04] bg-black/20 px-3 py-2">
     <p className="truncate text-[10px] font-semibold text-white/38">{window.label}</p>
@@ -482,9 +469,9 @@ const ThemeDetailPanel: React.FC<{
       </div>
 
       <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
-        <EvidenceBadge tone="info">{formatThemeStage(theme.stage)}</EvidenceBadge>
-        <EvidenceBadge>{taxonomyOnly ? theme.confidenceLabel || '待行情确认' : `置信度 ${compactConfidence(theme.confidence)}`}</EvidenceBadge>
-        <EvidenceBadge tone={dataWarning ? 'warn' : 'ok'}>{mapDataStateLabel(theme)}</EvidenceBadge>
+        <TerminalChip variant="info">{formatThemeStage(theme.stage)}</TerminalChip>
+        <TerminalChip>{taxonomyOnly ? theme.confidenceLabel || '待行情确认' : `置信度 ${compactConfidence(theme.confidence)}`}</TerminalChip>
+        <TerminalChip variant={dataWarning ? 'caution' : 'success'}>{mapDataStateLabel(theme)}</TerminalChip>
         {!taxonomyOnly ? <DataFreshnessBadge freshness={theme.freshness} className="px-1.5 text-[9px]" /> : null}
       </div>
       {evidenceSummary ? (
@@ -512,16 +499,16 @@ const ThemeDetailPanel: React.FC<{
             <p className="text-[10px] font-bold uppercase text-white/35">映射概念</p>
             <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
               {(theme.themeDetail?.mappedConcepts || theme.mappedConcepts || []).slice(0, 8).map((concept) => (
-                <EvidenceBadge key={concept} tone="info">{concept}</EvidenceBadge>
+                <TerminalChip key={concept} variant="info">{concept}</TerminalChip>
               ))}
-              {!(theme.themeDetail?.mappedConcepts || theme.mappedConcepts || []).length ? <EvidenceBadge>待补齐</EvidenceBadge> : null}
+              {!(theme.themeDetail?.mappedConcepts || theme.mappedConcepts || []).length ? <TerminalChip>待补齐</TerminalChip> : null}
             </div>
           </div>
           <div>
             <p className="text-[10px] font-bold uppercase text-white/35">代表标签 / 符号</p>
             <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
               {(theme.themeDetail?.representativeLabels || theme.representativeLabels || theme.membersConfigured || []).slice(0, 8).map((label) => (
-                <EvidenceBadge key={label}>{label}</EvidenceBadge>
+                <TerminalChip key={label}>{label}</TerminalChip>
               ))}
             </div>
           </div>
@@ -546,9 +533,9 @@ const ThemeDetailPanel: React.FC<{
         </div>
         <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
           {theme.riskLabels.length ? theme.riskLabels.map((risk) => <RiskChip key={risk} risk={risk} />) : (
-            <EvidenceBadge tone="ok">暂无高亮风险</EvidenceBadge>
+            <TerminalChip variant="success">暂无高亮风险</TerminalChip>
           )}
-          <EvidenceBadge>非交易指令</EvidenceBadge>
+          <TerminalChip>非交易指令</TerminalChip>
         </div>
       </div> : null}
 
@@ -580,13 +567,13 @@ const ThemeDetailPanel: React.FC<{
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <span className="mr-1 text-[10px] font-bold uppercase text-white/35">数据诊断</span>
             <span data-testid={`rotation-proxy-quality-summary-${theme.id}`} className="flex min-w-0 flex-wrap items-center gap-1.5">
-              <EvidenceBadge tone={theme.proxyQuality?.hasMissingRequiredProxy || theme.proxyQuality?.hasStaleProxy ? 'warn' : 'ok'}>
+              <TerminalChip variant={theme.proxyQuality?.hasMissingRequiredProxy || theme.proxyQuality?.hasStaleProxy ? 'caution' : 'success'}>
                 {proxyQualityState(theme)}
-              </EvidenceBadge>
-              <EvidenceBadge>
+              </TerminalChip>
+              <TerminalChip>
                 覆盖 {theme.proxyQuality?.availableProxyCount ?? proxyValues.length}/{theme.proxyQuality?.totalProxyCount ?? proxyValues.length}
-              </EvidenceBadge>
-              <EvidenceBadge>{percent(theme.proxyQuality?.coveragePercent)}</EvidenceBadge>
+              </TerminalChip>
+              <TerminalChip>{percent(theme.proxyQuality?.coveragePercent)}</TerminalChip>
               <DataFreshnessBadge freshness={theme.proxyQuality?.freshness || theme.freshness} className="px-1.5 text-[9px]" />
             </span>
           </div>

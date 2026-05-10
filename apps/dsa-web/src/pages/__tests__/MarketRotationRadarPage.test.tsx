@@ -373,7 +373,10 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.queryByTestId('rotation-theme-card-ai_applications')).not.toBeInTheDocument();
     expect(screen.queryByText('下一观察：')).not.toBeInTheDocument();
 
-    expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('AI 应用');
+    const detail = screen.getByTestId('rotation-theme-detail-panel');
+    expect(detail).toHaveTextContent('AI 应用');
+    expect(within(detail).getByText('确认轮动')).toHaveAttribute('data-terminal-primitive', 'chip');
+    expect(within(detail).getByText('延迟可用')).toHaveAttribute('data-terminal-primitive', 'chip');
     expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('完整主题库');
     expect(screen.getByPlaceholderText('搜索主题、英文名或成员')).toBeInTheDocument();
 
