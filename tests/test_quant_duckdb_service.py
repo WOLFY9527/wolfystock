@@ -135,6 +135,8 @@ def test_permission_denied_read_diagnostic_returns_sanitized_unavailable(tmp_pat
     db_path.write_bytes(b"")
     service = QuantDuckDBService(database_path=str(db_path), enabled=True)
 
+    monkeypatch.setattr(service, "_duckdb_status", lambda: (True, "test", None))
+
     def deny_connect(*_args, **_kwargs):
         raise PermissionError(f"permission denied: {db_path}")
 

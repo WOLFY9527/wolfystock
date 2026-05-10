@@ -548,6 +548,7 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
                 "admin_portfolio.py": 4,
                 "admin_provider_circuits.py": 5,
                 "admin_security.py": 1,
+                "provider_usage_ledger.py": 1,
                 "system_config.py": 9,
             },
             usages,
