@@ -53,6 +53,9 @@ def test_market_rotation_radar_response_is_safe_and_read_only() -> None:
         assert all(theme["themeDetail"]["watchlistSafe"] is True for theme in payload["themes"])
         assert all("benchmarkProxies" in theme for theme in payload["themes"])
         assert all("proxyQuality" in theme for theme in payload["themes"])
+        assert all("rotationStateEvidence" in theme for theme in payload["themes"])
+        assert all(theme["rotationStateEvidence"]["schemaVersion"] == "rotation_state_evidence_v1" for theme in payload["themes"])
+        assert all(theme["rotationStateEvidence"]["flowLanguageAllowed"] is False for theme in payload["themes"])
         assert all(theme["proxyQuality"]["coveragePercent"] <= 100 for theme in payload["themes"])
         assert all("persistenceEvidence" in theme for theme in payload["themes"])
         assert "watchlistSortingExplanation" in payload["summary"]
@@ -107,6 +110,8 @@ def test_market_rotation_radar_market_query_switches_theme_universe() -> None:
         assert all(theme["staticThemeOnly"] is True for theme in cn_payload["themes"])
         assert all(theme["dataQuality"] in {"taxonomy_only", "local_only", "proxy_backed"} for theme in cn_payload["themes"])
         assert all(theme["confidenceLabel"] == "待行情确认" for theme in cn_payload["themes"])
+        assert all(theme["rotationStateEvidence"]["state"] == "insufficient_evidence" for theme in cn_payload["themes"])
+        assert all(theme["rotationStateEvidence"]["flowEvidenceType"] == "none" for theme in cn_payload["themes"])
         assert "静态主题库" in cn_payload["warning"]
     finally:
         client.close()

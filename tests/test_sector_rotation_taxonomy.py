@@ -37,11 +37,16 @@ def test_taxonomy_import_does_not_touch_provider_modules() -> None:
 
 
 def test_taxonomy_registry_has_required_market_counts_and_unique_ids() -> None:
-    from src.services.sector_rotation_taxonomy import get_rotation_taxonomy_by_market, list_rotation_taxonomy_entries
+    from src.services.sector_rotation_taxonomy import (
+        ROTATION_TAXONOMY_VERSION,
+        get_rotation_taxonomy_by_market,
+        list_rotation_taxonomy_entries,
+    )
 
     entries = list_rotation_taxonomy_entries()
     ids = [entry.id for entry in entries]
 
+    assert ROTATION_TAXONOMY_VERSION == "sector_rotation_taxonomy_v1"
     assert len(ids) == len(set(ids))
     assert len(get_rotation_taxonomy_by_market("US")) >= 18
     assert len(get_rotation_taxonomy_by_market("CN")) >= 25

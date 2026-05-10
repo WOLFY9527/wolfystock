@@ -91,6 +91,11 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertIn("ETF 代理覆盖", theme["proxyQuality"]["explanation"])
         self.assertIn("sortExplanation", theme["alertCandidates"][0])
         self.assertIn("非买卖建议", theme["alertCandidates"][0]["sortExplanation"])
+        self.assertEqual(theme["rotationScore"], 89)
+        self.assertEqual(theme["stage"], "early_watch")
+        self.assertIn("rotationStateEvidence", theme)
+        self.assertEqual(theme["rotationStateEvidence"]["flowEvidenceType"], "proxy_only")
+        self.assertFalse(theme["rotationStateEvidence"]["flowLanguageAllowed"])
 
     def test_intraday_windows_are_aggregated_only_when_quote_fixture_provides_them(self) -> None:
         windows = {
@@ -127,6 +132,9 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertIn("watchlistSignals", payload["summary"])
         self.assertIn("watchlistSortingExplanation", payload["summary"])
         self.assertIn("非买卖建议", payload["summary"]["watchlistSortingExplanation"])
+        self.assertEqual(payload["themes"][0]["id"], "ai_applications")
+        self.assertEqual(payload["themes"][0]["rotationScore"], 73)
+        self.assertEqual(payload["themes"][0]["stage"], "early_watch")
         dumped = json.dumps(theme, ensure_ascii=False).lower()
         self.assertNotIn("raw_payload", dumped)
         self.assertNotIn("建议买入", dumped)
@@ -141,12 +149,26 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertNotEqual(payload["freshness"], "live")
         self.assertEqual(payload["metadata"]["noExternalCalls"], True)
         self.assertGreaterEqual(len(payload["themes"]), 18)
+        self.assertEqual(
+            [(theme["id"], theme["rotationScore"], theme["stage"]) for theme in payload["themes"][:5]],
+            [
+                ("ai_applications", 34, "weak_or_no_signal"),
+                ("ai_infrastructure", 32, "weak_or_no_signal"),
+                ("semiconductors", 30, "weak_or_no_signal"),
+                ("cybersecurity", 27, "weak_or_no_signal"),
+                ("cloud_software", 26, "weak_or_no_signal"),
+            ],
+        )
         for theme in payload["themes"]:
             self.assertTrue(theme["isFallback"])
             self.assertEqual(theme["freshness"], "fallback")
             self.assertNotEqual(theme["freshness"], "live")
             self.assertLessEqual(theme["confidence"], 0.25)
             self.assertEqual(theme["stage"], "weak_or_no_signal")
+            self.assertIn("rotationStateEvidence", theme)
+            self.assertEqual(theme["rotationStateEvidence"]["state"], "insufficient_evidence")
+            self.assertEqual(theme["rotationStateEvidence"]["flowEvidenceType"], "none")
+            self.assertFalse(theme["rotationStateEvidence"]["flowLanguageAllowed"])
             self.assertIn("stale_or_incomplete_windows", theme["riskLabels"])
             self.assertTrue(all(not slot["available"] for slot in theme["timeWindows"].values()))
             self.assertTrue(theme["themeDetail"]["watchlistSafe"])
@@ -169,6 +191,10 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(all(theme["dataQuality"] in {"taxonomy_only", "local_only", "proxy_backed"} for theme in payload["themes"]))
         self.assertTrue(all(theme["confidenceLabel"] == "待行情确认" for theme in payload["themes"]))
         self.assertTrue(all(theme["confidence"] <= 0.25 for theme in payload["themes"]))
+        self.assertTrue(all("rotationStateEvidence" in theme for theme in payload["themes"]))
+        self.assertTrue(all(theme["rotationStateEvidence"]["state"] == "insufficient_evidence" for theme in payload["themes"]))
+        self.assertTrue(all(theme["rotationStateEvidence"]["flowEvidenceType"] == "none" for theme in payload["themes"]))
+        self.assertTrue(all(theme["rotationStateEvidence"]["flowLanguageAllowed"] is False for theme in payload["themes"]))
         self.assertIn("AI算力", [theme["name"] for theme in payload["themes"]])
 
     def test_stale_and_missing_data_penalizes_confidence_and_blocks_clean_rotation_claims(self) -> None:
@@ -192,9 +218,35 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertIn("thin_breadth", infra["riskLabels"])
         self.assertIn("single_name_driven", infra["riskLabels"])
         self.assertLess(infra["confidence"], 0.55)
-        self.assertNotEqual(infra["stage"], "confirmed_rotation")
-        self.assertLessEqual(infra["rotationScore"], 69)
+        self.assertEqual(infra["stage"], "weak_or_no_signal")
+        self.assertEqual(infra["rotationScore"], 36)
+        self.assertEqual(infra["rotationStateEvidence"]["state"], "divergence")
         self.assertFalse(infra["newslessRotation"])
+
+    def test_rotation_state_evidence_does_not_trigger_additional_provider_calls(self) -> None:
+        provider_calls: list[list[str]] = []
+        quotes = {
+            "QQQ": _quote("QQQ", 0.8),
+            "SPY": _quote("SPY", 0.45),
+            "IWM": _quote("IWM", 0.15),
+            "APP": _quote("APP", 5.1, volume_ratio=2.4, price=310),
+            "PLTR": _quote("PLTR", 4.6, volume_ratio=2.0, price=132),
+            "CRM": _quote("CRM", 2.8, volume_ratio=1.7, price=285),
+            "SNOW": _quote("SNOW", 3.5, volume_ratio=1.8, price=212),
+            "ADBE": _quote("ADBE", 2.2, volume_ratio=1.5, price=505),
+            "NOW": _quote("NOW", 2.6, volume_ratio=1.6, price=780),
+        }
+        service = MarketRotationRadarService(
+            quote_provider=lambda symbols: provider_calls.append(list(symbols)) or {
+                symbol: quotes[symbol] for symbol in symbols if symbol in quotes
+            },
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+
+        self.assertEqual(len(provider_calls), 1)
+        self.assertTrue(payload["themes"][0]["rotationStateEvidence"])
 
     def test_theme_detail_separates_sorted_leaders_and_laggards_as_observation_evidence(self) -> None:
         windows = {

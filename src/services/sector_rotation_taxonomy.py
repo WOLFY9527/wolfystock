@@ -12,6 +12,7 @@ from typing import Sequence
 
 
 SUPPORTED_ROTATION_MARKETS = ("US", "CN", "HK", "CRYPTO")
+ROTATION_TAXONOMY_VERSION = "sector_rotation_taxonomy_v1"
 
 
 @dataclass(frozen=True)
@@ -173,6 +174,10 @@ def normalize_rotation_market(market: str | None) -> str:
 
 def list_rotation_taxonomy_entries() -> tuple[RotationTaxonomyEntry, ...]:
     return _ENTRIES
+
+
+def get_rotation_taxonomy_version() -> str:
+    return ROTATION_TAXONOMY_VERSION
 
 
 def get_rotation_taxonomy_by_market(market: str | None) -> tuple[RotationTaxonomyEntry, ...]:

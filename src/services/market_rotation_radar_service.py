@@ -15,11 +15,13 @@ from statistics import mean
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from src.services.sector_rotation_taxonomy import (
+    ROTATION_TAXONOMY_VERSION,
     SUPPORTED_ROTATION_MARKETS,
     RotationTaxonomyEntry,
     get_rotation_taxonomy_by_market,
     normalize_rotation_market,
 )
+from src.services.rotation_state_evidence import build_rotation_state_evidence
 
 
 NO_ADVICE_DISCLOSURE = "仅用于观察资金轮动迹象，非买卖建议。"
@@ -236,7 +238,7 @@ class MarketRotationRadarService:
         representative = list(entry.representativeSymbols or entry.representativeLabels)
         mapped_concepts = list(entry.mappedConcepts or entry.aliases)
         score = 18 if entry.dataCoverage == "taxonomy_only" else 22
-        return {
+        payload = {
             "id": entry.id,
             "market": entry.market,
             "taxonomyType": entry.taxonomyType,
@@ -344,6 +346,8 @@ class MarketRotationRadarService:
             "sortOrder": index,
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
+        payload["rotationStateEvidence"] = self._rotation_state_evidence(payload, generated_at)
+        return payload
 
     def _load_quotes(self) -> tuple[Dict[str, Dict[str, Any]], Optional[str]]:
         if self.quote_provider is None:
@@ -500,7 +504,7 @@ class MarketRotationRadarService:
             newsless_rotation=newsless_rotation,
         )
         freshness = "stale" if source_state["isStale"] else "fallback" if source_state["fallbackUsed"] and coverage < 0.6 else "delayed"
-        return {
+        payload = {
             "id": theme.id,
             "market": theme.market,
             "taxonomyType": theme.taxonomyType,
@@ -593,6 +597,8 @@ class MarketRotationRadarService:
             "members": observations,
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
+        payload["rotationStateEvidence"] = self._rotation_state_evidence(payload, generated_at)
+        return payload
 
     def _fallback_theme(
         self,
@@ -614,7 +620,7 @@ class MarketRotationRadarService:
             }
             for symbol in preset.get("leaders", theme.members[:3])
         ]
-        return {
+        payload = {
             "id": theme.id,
             "market": theme.market,
             "taxonomyType": theme.taxonomyType,
@@ -700,6 +706,19 @@ class MarketRotationRadarService:
             "members": list(observations),
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
         }
+        payload["rotationStateEvidence"] = self._rotation_state_evidence(payload, generated_at)
+        return payload
+
+    def _rotation_state_evidence(self, theme: Mapping[str, Any], generated_at: str) -> Dict[str, Any]:
+        return build_rotation_state_evidence(
+            theme,
+            {
+                "market": theme.get("market"),
+                "taxonomyVersion": ROTATION_TAXONOMY_VERSION,
+                "computedAt": theme.get("updatedAt") or generated_at,
+                "asOf": theme.get("asOf") or generated_at,
+            },
+        )
 
     def _member_observation(
         self,

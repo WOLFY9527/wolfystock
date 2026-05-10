@@ -128,6 +128,7 @@ class RotationRadarThemeModel(BaseModel):
     updatedAt: Optional[str] = None
     evidence: List[str] = Field(default_factory=list)
     members: List[RotationRadarMemberModel] = Field(default_factory=list)
+    rotationStateEvidence: Dict[str, Any] = Field(default_factory=dict)
     noAdviceDisclosure: str
 
 
