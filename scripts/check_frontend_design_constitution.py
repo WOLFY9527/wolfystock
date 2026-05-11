@@ -57,6 +57,72 @@ INTERNAL_TERMS = (
 
 RAW_VISIBLE_TERMS = ("raw", "debug", "schema", "trace")
 
+WATCHLIST_RETIRED_TERMINAL_SURFACE_RULES = [
+    (
+        re.compile(r"\bWATCHLIST_(?:BUTTON_CLASS|LINK_BUTTON_CLASS|BADGE_CLASS)\b"),
+        "Watchlist migrated terminal surface must not restore retired local button/badge class bridges.",
+    ),
+    (
+        re.compile(r"\bdisplayBadgeVariant\b"),
+        "Watchlist migrated status chips must keep using TerminalChip instead of retired displayBadgeVariant mapping.",
+    ),
+    (
+        re.compile(r"\bSectionShell\b"),
+        "Watchlist migrated page frame must keep using TerminalPanel and TerminalPageShell instead of SectionShell.",
+    ),
+    (
+        re.compile(r"import\s*\{[^}]*\bBadge\b[^}]*\}\s*from\s*['\"][^'\"]*components/common['\"]"),
+        "Watchlist migrated evidence badges must not re-import common Badge after TerminalChip migration.",
+    ),
+    (
+        re.compile(r"import\s*\{[^}]*\bStatusBadge\b[^}]*\}\s*from\s*['\"][^'\"]*StatusBadge['\"]"),
+        "Watchlist migrated evidence/status chips must not re-import retired StatusBadge.",
+    ),
+    (
+        re.compile(r"<Badge\b"),
+        "Watchlist migrated evidence/status chips must keep using TerminalChip instead of local Badge tags.",
+    ),
+    (
+        re.compile(r"<StatusBadge\b"),
+        "Watchlist migrated evidence/status chips must keep using TerminalChip instead of retired StatusBadge.",
+    ),
+]
+
+ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES = [
+    (
+        re.compile(r"\bGlassCard\b"),
+        "Migrated admin terminal surfaces must keep using TerminalPanel or TerminalNestedBlock instead of GlassCard.",
+    ),
+    (
+        re.compile(r"import\s*\{[^}]*\bBadge\b[^}]*\}\s*from\s*['\"][^'\"]*components/common['\"]"),
+        "Migrated admin terminal surfaces must not re-import common Badge after TerminalChip migration.",
+    ),
+    (
+        re.compile(r"<Badge\b"),
+        "Migrated admin terminal surfaces must keep using TerminalChip instead of local Badge tags.",
+    ),
+    (
+        re.compile(r"\bSummaryTile\b"),
+        "Migrated admin terminal surfaces must not restore retired SummaryTile material helpers.",
+    ),
+    (
+        re.compile(r"\bSectionCard\b"),
+        "Migrated admin terminal surfaces must not restore retired SectionCard wrappers.",
+    ),
+    (
+        re.compile(r"\btoneClass\b"),
+        "Migrated admin terminal surfaces must not restore retired toneClass-style badge material helpers.",
+    ),
+    (
+        re.compile(r"<details\b"),
+        "Migrated admin terminal surfaces must keep using TerminalDisclosure instead of native details shells.",
+    ),
+    (
+        re.compile(r"<summary\b"),
+        "Migrated admin terminal surfaces must keep using TerminalDisclosure instead of native summary shells.",
+    ),
+]
+
 RETIRED_LOCAL_PRIMITIVE_RULES = {
     "apps/dsa-web/src/pages/MarketOverviewPage.tsx": [
         (
@@ -88,6 +154,9 @@ RETIRED_LOCAL_PRIMITIVE_RULES = {
             "Admin Provider Circuit Diagnostics must not re-import a local Badge for migrated status chips.",
         ),
     ],
+    "apps/dsa-web/src/pages/WatchlistPage.tsx": WATCHLIST_RETIRED_TERMINAL_SURFACE_RULES,
+    "apps/dsa-web/src/pages/AdminCostObservabilityPage.tsx": ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES,
+    "apps/dsa-web/src/pages/AdminEvidenceWorkflowPage.tsx": ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES,
 }
 
 SOLID_WRAPPER_RE = re.compile(r"\bbg-(?:black|\[#000\]|\[#050505\]|gray-\S+|zinc-\S+|slate-\S+|neutral-\S+)")

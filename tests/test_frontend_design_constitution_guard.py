@@ -112,3 +112,92 @@ def test_flags_admin_provider_local_badge_regression():
     )
 
     assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_flags_watchlist_retired_local_material_regression():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/WatchlistPage.tsx",
+        "\n".join([
+            "import { Badge, SectionShell } from '../components/common';",
+            "import { StatusBadge } from '../components/ui/StatusBadge';",
+            "const buttonClass = WATCHLIST_BUTTON_CLASS;",
+            "const linkClass = WATCHLIST_LINK_BUTTON_CLASS;",
+            "const badgeClass = WATCHLIST_BADGE_CLASS;",
+            "const variant = displayBadgeVariant('info');",
+            "export default function Page() {",
+            "  return <SectionShell><Badge variant='info' /><StatusBadge status='ready' label='ok' /></SectionShell>;",
+            "}",
+        ]),
+    )
+
+    assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_allows_watchlist_terminal_primitives_after_migration():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/WatchlistPage.tsx",
+        "\n".join([
+            "import { TerminalButton, TerminalChip, TerminalPageShell, TerminalPanel } from '../components/terminal';",
+            "export default function Page() {",
+            "  return <TerminalPageShell><TerminalPanel><TerminalChip variant='info'>观察</TerminalChip><TerminalButton variant='secondary'>刷新</TerminalButton></TerminalPanel></TerminalPageShell>;",
+            "}",
+        ]),
+    )
+
+    assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_flags_admin_cost_retired_terminal_surface_regression():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminCostObservabilityPage.tsx",
+        "\n".join([
+            "import { Badge, GlassCard } from '../components/common';",
+            "const tone = toneClass('warn');",
+            "const Tile = SummaryTile;",
+            "const Card = SectionCard;",
+            "export default function Page() {",
+            "  return <GlassCard><Badge variant='warning'>告警</Badge><details><summary>更多</summary></details></GlassCard>;",
+            "}",
+        ]),
+    )
+
+    assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_flags_admin_evidence_retired_terminal_surface_regression():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminEvidenceWorkflowPage.tsx",
+        "\n".join([
+            "import { Badge, GlassCard } from '../components/common';",
+            "function toneClass(tone) { return tone; }",
+            "export default function Page() {",
+            "  return <GlassCard><Badge variant='info'>只读</Badge><details><summary>折叠</summary></details></GlassCard>;",
+            "}",
+        ]),
+    )
+
+    assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_allows_admin_terminal_disclosure_after_migration():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminCostObservabilityPage.tsx",
+        "\n".join([
+            "import { TerminalChip, TerminalDisclosure, TerminalPanel } from '../components/terminal';",
+            "export default function Page() {",
+            "  return <TerminalPanel><TerminalChip variant='info'>只读</TerminalChip><TerminalDisclosure title='细节' summary='默认折叠'>内容</TerminalDisclosure></TerminalPanel>;",
+            "}",
+        ]),
+    )
+
+    assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
