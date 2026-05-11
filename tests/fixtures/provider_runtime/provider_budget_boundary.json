@@ -1,0 +1,223 @@
+{
+  "quick_budget_with_required_quote": {
+    "budgetSkippedCategories": [
+      "historical_prices",
+      "technical_indicators",
+      "fundamentals",
+      "earnings",
+      "news",
+      "sentiment",
+      "macro"
+    ],
+    "cacheFirstRequired": true,
+    "externalCallBudget": {
+      "max": 4,
+      "remainingAfterPlan": 0,
+      "requiredCategoriesExcluded": [
+        "quote"
+      ]
+    },
+    "optionalDeadlineSeconds": 1.0,
+    "researchMode": "quick",
+    "skippedByBudget": [
+      {
+        "category": "historical_prices",
+        "reason": "external_call_budget_exhausted"
+      },
+      {
+        "category": "technical_indicators",
+        "reason": "external_call_budget_exhausted"
+      },
+      {
+        "category": "fundamentals",
+        "reason": "external_call_budget_exhausted"
+      },
+      {
+        "category": "earnings",
+        "reason": "external_call_budget_exhausted"
+      },
+      {
+        "category": "news",
+        "reason": "skipped_by_budget"
+      },
+      {
+        "category": "sentiment",
+        "reason": "skipped_by_mode"
+      },
+      {
+        "category": "macro",
+        "reason": "external_call_budget_exhausted"
+      }
+    ],
+    "staleCacheAllowed": true,
+    "usageLedgerHints": [
+      {
+        "category": "historical_prices",
+        "event": "skipped_by_budget",
+        "mode": "quick",
+        "reason": "external_call_budget_exhausted"
+      },
+      {
+        "category": "technical_indicators",
+        "event": "skipped_by_budget",
+        "mode": "quick",
+        "reason": "external_call_budget_exhausted"
+      },
+      {
+        "category": "fundamentals",
+        "event": "skipped_by_budget",
+        "mode": "quick",
+        "reason": "external_call_budget_exhausted"
+      },
+      {
+        "category": "earnings",
+        "event": "skipped_by_budget",
+        "mode": "quick",
+        "reason": "external_call_budget_exhausted"
+      },
+      {
+        "category": "news",
+        "event": "skipped_by_budget",
+        "mode": "quick",
+        "reason": "skipped_by_budget"
+      },
+      {
+        "category": "sentiment",
+        "event": "skipped_by_mode",
+        "mode": "quick",
+        "reason": "skipped_by_mode"
+      },
+      {
+        "category": "macro",
+        "event": "skipped_by_budget",
+        "mode": "quick",
+        "reason": "external_call_budget_exhausted"
+      }
+    ]
+  },
+  "scanner_news_advisory_plan": {
+    "advisoryOnly": true,
+    "candidates": [
+      {
+        "advisoryOnly": true,
+        "backtestUsage": "local_only",
+        "displayName": "Local Cache",
+        "domain": "news",
+        "freshnessClass": "cached",
+        "liveProvider": false,
+        "manualReviewRequired": false,
+        "market": "US",
+        "mode": "scanner",
+        "priority": 1,
+        "providerId": "local_cache",
+        "quotaClass": "local",
+        "scannerUsage": "local_only"
+      },
+      {
+        "advisoryOnly": true,
+        "backtestUsage": "local_only",
+        "displayName": "Local News Cache",
+        "domain": "news",
+        "freshnessClass": "cached",
+        "liveProvider": false,
+        "manualReviewRequired": false,
+        "market": "US",
+        "mode": "scanner",
+        "priority": 2,
+        "providerId": "local_news_cache",
+        "quotaClass": "local",
+        "scannerUsage": "local_only"
+      }
+    ],
+    "domain": "news",
+    "market": "US",
+    "mode": "scanner",
+    "networkCallsEnabled": false,
+    "runtimeBehaviorChanged": false
+  },
+  "standard_news_advisory_plan": {
+    "advisoryOnly": true,
+    "candidates": [
+      {
+        "advisoryOnly": true,
+        "backtestUsage": "local_only",
+        "displayName": "Local Cache",
+        "domain": "news",
+        "freshnessClass": "cached",
+        "liveProvider": false,
+        "manualReviewRequired": false,
+        "market": "US",
+        "mode": "standard",
+        "priority": 1,
+        "providerId": "local_cache",
+        "quotaClass": "local",
+        "scannerUsage": "local_only"
+      },
+      {
+        "advisoryOnly": true,
+        "backtestUsage": "local_only",
+        "displayName": "Local News Cache",
+        "domain": "news",
+        "freshnessClass": "cached",
+        "liveProvider": false,
+        "manualReviewRequired": false,
+        "market": "US",
+        "mode": "standard",
+        "priority": 2,
+        "providerId": "local_news_cache",
+        "quotaClass": "local",
+        "scannerUsage": "local_only"
+      },
+      {
+        "advisoryOnly": true,
+        "backtestUsage": "never",
+        "displayName": "Finnhub",
+        "domain": "news",
+        "freshnessClass": "daily",
+        "liveProvider": true,
+        "manualReviewRequired": false,
+        "market": "US",
+        "mode": "standard",
+        "priority": 35,
+        "providerId": "finnhub",
+        "quotaClass": "moderate",
+        "scannerUsage": "top_n_only"
+      },
+      {
+        "advisoryOnly": true,
+        "backtestUsage": "never",
+        "displayName": "Tavily",
+        "domain": "news",
+        "freshnessClass": "manual_review",
+        "liveProvider": true,
+        "manualReviewRequired": true,
+        "market": "US",
+        "mode": "standard",
+        "priority": 45,
+        "providerId": "tavily",
+        "quotaClass": "moderate",
+        "scannerUsage": "top_n_only"
+      },
+      {
+        "advisoryOnly": true,
+        "backtestUsage": "never",
+        "displayName": "GNews",
+        "domain": "news",
+        "freshnessClass": "daily",
+        "liveProvider": true,
+        "manualReviewRequired": false,
+        "market": "US",
+        "mode": "standard",
+        "priority": 65,
+        "providerId": "gnews",
+        "quotaClass": "scarce",
+        "scannerUsage": "never"
+      }
+    ],
+    "domain": "news",
+    "market": "US",
+    "mode": "standard",
+    "networkCallsEnabled": false,
+    "runtimeBehaviorChanged": false
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "cache_state": {
+    "cacheKey": "crypto",
+    "expiresAt": "2026-05-12T00:55:15+08:00",
+    "fetchedAt": "2026-05-12T00:55:00+08:00",
+    "isFresh": false,
+    "isRefreshing": true,
+    "lastError": "provider timeout ***=*** ***=***",
+    "persistentSnapshotAgeMinutes": null,
+    "persistentSnapshotAvailable": false,
+    "status": "stale",
+    "ttlSeconds": 15
+  },
+  "cold_start_fallback_payload": {
+    "freshness": "fallback",
+    "isFallback": true,
+    "isRefreshing": true,
+    "source": "fallback",
+    "value": 1
+  },
+  "operations_item": {
+    "adminLogDrillThrough": {
+      "eventId": null,
+      "label": "查看 Admin Logs",
+      "query": {
+        "provider": "fallback",
+        "query": "/api/v1/market/crypto",
+        "since": "24h"
+      },
+      "route": "/zh/admin/logs"
+    },
+    "asOf": "2026-05-06T10:00:00+08:00",
+    "cacheKey": "crypto",
+    "card": "CryptoCard",
+    "domain": "crypto",
+    "endpoint": "/api/v1/market/crypto",
+    "errorSummary": null,
+    "fallbackUsed": true,
+    "freshness": "fallback",
+    "isFallback": true,
+    "isFromSnapshot": false,
+    "isRefreshing": true,
+    "isStale": false,
+    "lastKnownGoodAgeMinutes": 8100,
+    "lastSuccessfulAt": "2026-05-06T10:00:00+08:00",
+    "latencyMs": null,
+    "provider": "fallback",
+    "sourceLabel": "Fallback Snapshot",
+    "sourceType": null,
+    "status": "refreshing",
+    "updatedAt": "2026-05-06T10:00:00+08:00",
+    "warning": null
+  },
+  "operations_metadata": {
+    "cacheMutation": false,
+    "externalProviderCalls": false,
+    "readOnly": true,
+    "source": "market_cache_and_admin_logs",
+    "summaryCache": {
+      "asOf": "2026-05-12T01:00:00+08:00",
+      "cacheAgeMs": 0,
+      "enabled": true,
+      "hit": false,
+      "key": "GET:/api/v1/admin/market-providers/operations:v1:24h",
+      "ttlSeconds": 10
+    }
+  }
+}

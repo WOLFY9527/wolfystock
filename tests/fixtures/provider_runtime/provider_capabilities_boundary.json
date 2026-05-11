@@ -1,0 +1,212 @@
+{
+  "alpaca": {
+    "backtest_allowed": false,
+    "backtest_usage": "never",
+    "deep_research_allowed": false,
+    "default_priority_by_domain": {
+      "ohlcv": 25,
+      "quote": 20
+    },
+    "display_name": "Alpaca Market Data",
+    "domains": [
+      "quote",
+      "ohlcv"
+    ],
+    "freshness_class": "realtime",
+    "markets": [
+      "US"
+    ],
+    "operator_notes": [
+      "Reserve for configured US quote/OHLCV enrichment, not broad research."
+    ],
+    "provider_id": "alpaca",
+    "quick_analysis_allowed": true,
+    "quota_class": "moderate",
+    "recommended_ttl_seconds_by_domain": {
+      "ohlcv": 900,
+      "quote": 60
+    },
+    "risk_notes": [
+      "Entitlement and feed may affect realtime/delayed posture."
+    ],
+    "scanner_allowed": true,
+    "scanner_usage": "top_n_only",
+    "standard_analysis_allowed": true
+  },
+  "alpha_vantage": {
+    "backtest_allowed": false,
+    "backtest_usage": "never",
+    "deep_research_allowed": true,
+    "default_priority_by_domain": {
+      "fundamentals": 95,
+      "statements": 95,
+      "technicals": 99
+    },
+    "display_name": "Alpha Vantage",
+    "domains": [
+      "fundamentals",
+      "statements",
+      "technicals"
+    ],
+    "freshness_class": "manual_review",
+    "markets": [
+      "US",
+      "global"
+    ],
+    "operator_notes": [
+      "Manual/deep last-resort fallback only."
+    ],
+    "provider_id": "alpha_vantage",
+    "quick_analysis_allowed": false,
+    "quota_class": "scarce",
+    "recommended_ttl_seconds_by_domain": {
+      "fundamentals": 86400,
+      "statements": 86400,
+      "technicals": 86400
+    },
+    "risk_notes": [
+      "Very scarce free quota; external technical indicators are usually avoidable."
+    ],
+    "scanner_allowed": false,
+    "scanner_usage": "never",
+    "standard_analysis_allowed": false
+  },
+  "local_cache": {
+    "backtest_allowed": true,
+    "backtest_usage": "local_only",
+    "deep_research_allowed": true,
+    "default_priority_by_domain": {
+      "crypto": 1,
+      "earnings": 1,
+      "forex": 1,
+      "fundamentals": 1,
+      "macro": 1,
+      "news": 1,
+      "ohlcv": 1,
+      "options": 1,
+      "quote": 1,
+      "sentiment": 1,
+      "statements": 1,
+      "technicals": 3
+    },
+    "display_name": "Local Cache",
+    "domains": [
+      "quote",
+      "ohlcv",
+      "fundamentals",
+      "statements",
+      "earnings",
+      "news",
+      "sentiment",
+      "technicals",
+      "macro",
+      "crypto",
+      "forex",
+      "options"
+    ],
+    "freshness_class": "cached",
+    "markets": [
+      "US",
+      "CN",
+      "HK",
+      "crypto",
+      "forex",
+      "global"
+    ],
+    "operator_notes": [
+      "Backtest and scanner should use persisted/cache data first; stale/fallback labels must remain visible."
+    ],
+    "provider_id": "local_cache",
+    "quick_analysis_allowed": true,
+    "quota_class": "local",
+    "recommended_ttl_seconds_by_domain": {
+      "crypto": 15,
+      "earnings": 43200,
+      "forex": 60,
+      "fundamentals": 43200,
+      "macro": 600,
+      "news": 1800,
+      "ohlcv": 900,
+      "options": 900,
+      "quote": 60,
+      "sentiment": 7200,
+      "statements": 86400,
+      "technicals": 900
+    },
+    "risk_notes": [],
+    "scanner_allowed": true,
+    "scanner_usage": "local_only",
+    "standard_analysis_allowed": true
+  },
+  "local_inference": {
+    "backtest_allowed": true,
+    "backtest_usage": "local_only",
+    "deep_research_allowed": true,
+    "default_priority_by_domain": {
+      "sentiment": 5
+    },
+    "display_name": "Local Inference",
+    "domains": [
+      "sentiment"
+    ],
+    "freshness_class": "inferred",
+    "markets": [
+      "US",
+      "CN",
+      "HK",
+      "global"
+    ],
+    "operator_notes": [
+      "Keep labels inferred/local and tie freshness to source text."
+    ],
+    "provider_id": "local_inference",
+    "quick_analysis_allowed": true,
+    "quota_class": "local",
+    "recommended_ttl_seconds_by_domain": {
+      "sentiment": 7200
+    },
+    "risk_notes": [
+      "Derived from existing text only; never live external sentiment."
+    ],
+    "scanner_allowed": true,
+    "scanner_usage": "local_only",
+    "standard_analysis_allowed": true
+  },
+  "tavily": {
+    "backtest_allowed": false,
+    "backtest_usage": "never",
+    "deep_research_allowed": true,
+    "default_priority_by_domain": {
+      "macro": 70,
+      "news": 45,
+      "sentiment": 65
+    },
+    "display_name": "Tavily",
+    "domains": [
+      "news",
+      "sentiment",
+      "macro"
+    ],
+    "freshness_class": "manual_review",
+    "markets": [
+      "global"
+    ],
+    "operator_notes": [
+      "Deep research after cache/local evidence; never scanner-wide by default."
+    ],
+    "provider_id": "tavily",
+    "quick_analysis_allowed": false,
+    "quota_class": "moderate",
+    "recommended_ttl_seconds_by_domain": {
+      "macro": 1800,
+      "news": 1800,
+      "sentiment": 7200
+    },
+    "risk_notes": [
+      "Multi-dimension searches can multiply provider calls per symbol."
+    ],
+    "scanner_allowed": false,
+    "scanner_usage": "top_n_only",
+    "standard_analysis_allowed": true
+  }
+}
