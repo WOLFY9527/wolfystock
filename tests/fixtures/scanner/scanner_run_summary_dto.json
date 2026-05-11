@@ -1,0 +1,366 @@
+{
+  "id": 42,
+  "market": "us",
+  "profile": "us_preopen_v1",
+  "profile_label": "US pre-open scanner v1",
+  "status": "completed",
+  "run_at": "2026-05-11T08:35:00+08:00",
+  "completed_at": "2026-05-11T08:35:20+08:00",
+  "watchlist_date": "2026-05-11",
+  "trigger_mode": "manual",
+  "universe_name": "us_preopen_watchlist_v1",
+  "shortlist_size": 1,
+  "universe_size": 50,
+  "preselected_size": 12,
+  "evaluated_size": 10,
+  "source_summary": "universe=fixture_local_theme; quote=fixture_local_quote; history=fixture_local_history",
+  "headline": "US pre-open scanner selected NVDA for observation.",
+  "universe_notes": [
+    "Theme universe contains deterministic fixture symbols only."
+  ],
+  "scoring_notes": [
+    "Deterministic ranking and score are authoritative.",
+    "AI interpretation is additive and does not change selection order."
+  ],
+  "universe_type": "theme",
+  "theme_id": "ai_semiconductors_us",
+  "theme_label": "AI Semiconductors",
+  "requested_symbols_count": 3,
+  "accepted_symbols_count": 3,
+  "rejected_symbols": [],
+  "diagnostics": {
+    "coverage_summary": {
+      "input_universe_size": 50,
+      "eligible_after_universe_fetch": 50,
+      "eligible_after_liquidity_filter": 44,
+      "eligible_after_data_availability_filter": 40,
+      "ranked_candidate_count": 12,
+      "shortlisted_count": 1,
+      "excluded_total": 38,
+      "excluded_by_reason": [
+        {
+          "reason": "liquidity_below_profile_minimum",
+          "label": "Liquidity below profile minimum",
+          "count": 6
+        },
+        {
+          "reason": "missing_history",
+          "label": "Missing local history",
+          "count": 4
+        }
+      ],
+      "likely_bottleneck": "profile_filter",
+      "likely_bottleneck_label": "Profile filter"
+    },
+    "provider_diagnostics": {
+      "configured_primary_provider": "fixture_local_history",
+      "quote_source_used": "fixture_local_quote",
+      "snapshot_source_used": "fixture_local_snapshot",
+      "history_source_used": "fixture_local_history",
+      "providers_used": [
+        "fixture_local_history"
+      ],
+      "fallback_occurred": false,
+      "fallback_count": 0,
+      "provider_failure_count": 0,
+      "missing_data_symbol_count": 4,
+      "provider_warnings": []
+    },
+    "ai_interpretation": {
+      "enabled": true,
+      "status": "completed",
+      "top_n": 1,
+      "attempted_candidates": 1,
+      "generated_candidates": 1,
+      "failed_candidates": 0,
+      "skipped_candidates": 0,
+      "models_used": [
+        "scanner-ai-sanitized-model"
+      ],
+      "fallback_used": false,
+      "message": "AI interpretation generated for the deterministic shortlist."
+    }
+  },
+  "notification": {
+    "attempted": false,
+    "status": "not_attempted",
+    "success": null,
+    "channels": [],
+    "message": null,
+    "report_path": null,
+    "sent_at": null
+  },
+  "failure_reason": null,
+  "comparison_to_previous": {
+    "available": true,
+    "previous_run_id": 41,
+    "previous_watchlist_date": "2026-05-08",
+    "new_count": 1,
+    "retained_count": 0,
+    "dropped_count": 1,
+    "new_symbols": [
+      {
+        "symbol": "NVDA",
+        "name": "NVIDIA",
+        "current_rank": 1,
+        "previous_rank": null,
+        "rank_delta": null
+      }
+    ],
+    "retained_symbols": [],
+    "dropped_symbols": [
+      {
+        "symbol": "AVGO",
+        "name": "Broadcom",
+        "current_rank": null,
+        "previous_rank": 1,
+        "rank_delta": null
+      }
+    ]
+  },
+  "review_summary": {
+    "available": false,
+    "review_window_days": 3,
+    "review_status": "pending",
+    "candidate_count": 1,
+    "reviewed_count": 0,
+    "pending_count": 1,
+    "hit_rate_pct": null,
+    "outperform_rate_pct": null,
+    "avg_same_day_close_return_pct": null,
+    "avg_review_window_return_pct": null,
+    "avg_max_favorable_move_pct": null,
+    "avg_max_adverse_move_pct": null,
+    "strong_count": 0,
+    "mixed_count": 0,
+    "weak_count": 0,
+    "best_symbol": null,
+    "best_return_pct": null,
+    "weakest_symbol": null,
+    "weakest_return_pct": null
+  },
+  "theme": {
+    "id": "ai_semiconductors_us",
+    "name": "AI Semiconductors",
+    "universe_count": 3,
+    "symbols": [
+      "NVDA",
+      "AVGO",
+      "AMD"
+    ]
+  },
+  "summary": {
+    "universe_count": 50,
+    "submitted_count": 3,
+    "evaluated_count": 10,
+    "selected_count": 1,
+    "rejected_count": 1,
+    "data_failed_count": 1,
+    "skipped_count": 0,
+    "error_count": 0,
+    "limited_by_result_cap": false
+  },
+  "selected": [
+    {
+      "symbol": "NVDA",
+      "name": "NVIDIA",
+      "rank": 1,
+      "score": 91.25,
+      "quality_hint": "high_priority",
+      "reason_summary": "Momentum and liquidity remain strong while the pre-open plan still requires confirmation.",
+      "reasons": [
+        "Price remains above the 20-day and 60-day moving averages."
+      ],
+      "key_metrics": [
+        {
+          "label": "last_price",
+          "value": "129.40"
+        }
+      ],
+      "feature_signals": [
+        {
+          "label": "trend",
+          "value": "bullish_above_ma20_ma60"
+        }
+      ],
+      "risk_notes": [
+        "Gap risk remains if pre-open enthusiasm fades."
+      ],
+      "watch_context": [
+        {
+          "label": "confirmation",
+          "value": "Watch opening range hold above prior resistance."
+        }
+      ],
+      "boards": [
+        "AI infrastructure"
+      ],
+      "appeared_in_recent_runs": 2,
+      "last_trade_date": "2026-05-08",
+      "scan_timestamp": "2026-05-11T08:35:00+08:00",
+      "ai_interpretation": {
+        "available": true,
+        "status": "generated",
+        "summary": "AI interpretation frames the deterministic candidate as a momentum continuation watch.",
+        "opportunity_type": "momentum_continuation",
+        "risk_interpretation": "The main risk is a failed gap with insufficient follow-through volume.",
+        "watch_plan": "Compare opening range support with volume expansion before treating the thesis as confirmed.",
+        "review_commentary": null,
+        "provider": "scanner_ai_sanitized",
+        "model": "scanner-ai-sanitized-model",
+        "generated_at": "2026-05-11T08:36:00+08:00",
+        "message": null
+      },
+      "realized_outcome": {
+        "review_status": "pending",
+        "outcome_label": "pending",
+        "thesis_match": "pending",
+        "review_window_days": 3,
+        "anchor_date": null,
+        "window_end_date": null,
+        "same_day_close_return_pct": null,
+        "next_day_return_pct": null,
+        "review_window_return_pct": null,
+        "max_favorable_move_pct": null,
+        "max_adverse_move_pct": null,
+        "benchmark_code": "SPY",
+        "benchmark_return_pct": null,
+        "outperformed_benchmark": null
+      },
+      "diagnostics": {
+        "provider_diagnostics": {
+          "providers_used": [
+            "fixture_local_history"
+          ],
+          "fallback_occurred": false
+        }
+      }
+    }
+  ],
+  "candidates": [
+    {
+      "symbol": "NVDA",
+      "name": "NVIDIA",
+      "rank": 1,
+      "status": "selected",
+      "score": 91.25,
+      "provider": "fixture_local_history",
+      "reason": "Selected by deterministic score and liquidity profile.",
+      "failed_rules": [],
+      "missing_fields": [],
+      "metrics": {
+        "score": 91.25,
+        "rank": 1
+      }
+    },
+    {
+      "symbol": "AVGO",
+      "name": "Broadcom",
+      "rank": 2,
+      "status": "rejected",
+      "score": 63.5,
+      "provider": "fixture_local_history",
+      "reason": "Rejected because liquidity profile was below the shortlist threshold.",
+      "failed_rules": [
+        "liquidity_below_profile_minimum"
+      ],
+      "missing_fields": [],
+      "metrics": {
+        "score": 63.5,
+        "rank": 2
+      }
+    },
+    {
+      "symbol": "AMD",
+      "name": "AMD",
+      "rank": 0,
+      "status": "data_failed",
+      "score": null,
+      "provider": "fixture_local_history",
+      "reason": "Missing bounded local history fields.",
+      "failed_rules": [],
+      "missing_fields": [
+        "history.close",
+        "history.volume"
+      ],
+      "metrics": {}
+    }
+  ],
+  "shortlist": [
+    {
+      "symbol": "NVDA",
+      "name": "NVIDIA",
+      "rank": 1,
+      "score": 91.25,
+      "quality_hint": "high_priority",
+      "reason_summary": "Momentum and liquidity remain strong while the pre-open plan still requires confirmation.",
+      "reasons": [
+        "Price remains above the 20-day and 60-day moving averages."
+      ],
+      "key_metrics": [
+        {
+          "label": "last_price",
+          "value": "129.40"
+        }
+      ],
+      "feature_signals": [
+        {
+          "label": "trend",
+          "value": "bullish_above_ma20_ma60"
+        }
+      ],
+      "risk_notes": [
+        "Gap risk remains if pre-open enthusiasm fades."
+      ],
+      "watch_context": [
+        {
+          "label": "confirmation",
+          "value": "Watch opening range hold above prior resistance."
+        }
+      ],
+      "boards": [
+        "AI infrastructure"
+      ],
+      "appeared_in_recent_runs": 2,
+      "last_trade_date": "2026-05-08",
+      "scan_timestamp": "2026-05-11T08:35:00+08:00",
+      "ai_interpretation": {
+        "available": true,
+        "status": "generated",
+        "summary": "AI interpretation frames the deterministic candidate as a momentum continuation watch.",
+        "opportunity_type": "momentum_continuation",
+        "risk_interpretation": "The main risk is a failed gap with insufficient follow-through volume.",
+        "watch_plan": "Compare opening range support with volume expansion before treating the thesis as confirmed.",
+        "review_commentary": null,
+        "provider": "scanner_ai_sanitized",
+        "model": "scanner-ai-sanitized-model",
+        "generated_at": "2026-05-11T08:36:00+08:00",
+        "message": null
+      },
+      "realized_outcome": {
+        "review_status": "pending",
+        "outcome_label": "pending",
+        "thesis_match": "pending",
+        "review_window_days": 3,
+        "anchor_date": null,
+        "window_end_date": null,
+        "same_day_close_return_pct": null,
+        "next_day_return_pct": null,
+        "review_window_return_pct": null,
+        "max_favorable_move_pct": null,
+        "max_adverse_move_pct": null,
+        "benchmark_code": "SPY",
+        "benchmark_return_pct": null,
+        "outperformed_benchmark": null
+      },
+      "diagnostics": {
+        "provider_diagnostics": {
+          "providers_used": [
+            "fixture_local_history"
+          ],
+          "fallback_occurred": false
+        }
+      }
+    }
+  ]
+}

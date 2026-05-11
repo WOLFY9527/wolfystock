@@ -1,0 +1,120 @@
+{
+  "symbol": "NVDA",
+  "name": "NVIDIA",
+  "rank": 1,
+  "score": 91.25,
+  "quality_hint": "high_priority",
+  "reason_summary": "Momentum and liquidity remain strong while the pre-open plan still requires confirmation.",
+  "reasons": [
+    "Price remains above the 20-day and 60-day moving averages.",
+    "Volume expansion supports the breakout watch thesis."
+  ],
+  "key_metrics": [
+    {
+      "label": "last_price",
+      "value": "129.40"
+    },
+    {
+      "label": "avg_turnover_20d",
+      "value": "high"
+    }
+  ],
+  "feature_signals": [
+    {
+      "label": "trend",
+      "value": "bullish_above_ma20_ma60"
+    },
+    {
+      "label": "relative_strength",
+      "value": "top_decile"
+    }
+  ],
+  "risk_notes": [
+    "Gap risk remains if pre-open enthusiasm fades.",
+    "Do not treat this watchlist entry as an execution instruction."
+  ],
+  "watch_context": [
+    {
+      "label": "confirmation",
+      "value": "Watch opening range hold above prior resistance."
+    },
+    {
+      "label": "invalidation",
+      "value": "Weak volume after a large gap lowers confidence."
+    }
+  ],
+  "boards": [
+    "AI infrastructure"
+  ],
+  "appeared_in_recent_runs": 2,
+  "last_trade_date": "2026-05-08",
+  "scan_timestamp": "2026-05-11T08:35:00+08:00",
+  "ai_interpretation": {
+    "available": true,
+    "status": "generated",
+    "summary": "AI interpretation frames the deterministic candidate as a momentum continuation watch.",
+    "opportunity_type": "momentum_continuation",
+    "risk_interpretation": "The main risk is a failed gap with insufficient follow-through volume.",
+    "watch_plan": "Compare opening range support with volume expansion before treating the thesis as confirmed.",
+    "review_commentary": null,
+    "provider": "scanner_ai_sanitized",
+    "model": "scanner-ai-sanitized-model",
+    "generated_at": "2026-05-11T08:36:00+08:00",
+    "message": null
+  },
+  "realized_outcome": {
+    "review_status": "pending",
+    "outcome_label": "pending",
+    "thesis_match": "pending",
+    "review_window_days": 3,
+    "anchor_date": null,
+    "window_end_date": null,
+    "same_day_close_return_pct": null,
+    "next_day_return_pct": null,
+    "review_window_return_pct": null,
+    "max_favorable_move_pct": null,
+    "max_adverse_move_pct": null,
+    "benchmark_code": "SPY",
+    "benchmark_return_pct": null,
+    "outperformed_benchmark": null
+  },
+  "diagnostics": {
+    "coverage_summary": {
+      "input_universe_size": 50,
+      "eligible_after_universe_fetch": 50,
+      "eligible_after_liquidity_filter": 44,
+      "eligible_after_data_availability_filter": 40,
+      "ranked_candidate_count": 12,
+      "shortlisted_count": 1,
+      "excluded_total": 38,
+      "excluded_by_reason": [
+        {
+          "reason": "liquidity_below_profile_minimum",
+          "label": "Liquidity below profile minimum",
+          "count": 6
+        },
+        {
+          "reason": "missing_history",
+          "label": "Missing local history",
+          "count": 4
+        }
+      ],
+      "likely_bottleneck": "profile_filter",
+      "likely_bottleneck_label": "Profile filter"
+    },
+    "provider_diagnostics": {
+      "configured_primary_provider": "fixture_local_history",
+      "quote_source_used": "fixture_local_quote",
+      "snapshot_source_used": "fixture_local_snapshot",
+      "history_source_used": "fixture_local_history",
+      "providers_used": [
+        "fixture_local_history"
+      ],
+      "fallback_occurred": false,
+      "fallback_count": 0,
+      "provider_failure_count": 0,
+      "missing_data_symbol_count": 4,
+      "provider_warnings": []
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "route": "/backtest",
+  "query": {
+    "source": "scanner",
+    "symbol": "NVDA",
+    "market": "US",
+    "scannerRunId": "42",
+    "scannerRank": "1",
+    "scannerProfile": "us_preopen_v1",
+    "themeId": "ai_semiconductors_us",
+    "universeType": "theme"
+  },
+  "prefill": {
+    "symbol": "NVDA",
+    "market": "US",
+    "source": "scanner",
+    "scanner_run_id": 42,
+    "scanner_rank": 1,
+    "scanner_profile": "us_preopen_v1",
+    "theme_id": "ai_semiconductors_us",
+    "universe_type": "theme"
+  }
+}
