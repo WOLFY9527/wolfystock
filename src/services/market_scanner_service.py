@@ -19,7 +19,6 @@ from data_provider.base import (
     is_bse_code,
     is_kc_cy_stock,
     is_st_stock,
-    normalize_stock_code,
 )
 from data_provider.us_index_mapping import is_us_stock_code
 from src.config import get_config
@@ -38,6 +37,7 @@ from src.storage import (
     MarketScannerCandidate,
     MarketScannerRun,
 )
+from src.utils.symbol_normalization import normalize_stock_code
 
 logger = logging.getLogger(__name__)
 
