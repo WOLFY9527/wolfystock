@@ -6,8 +6,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from data_provider.base import normalize_stock_code
 from src.repositories.stock_repo import StockRepository
+from src.utils.symbol_normalization import normalize_stock_code
 
 
 class LocalDataPreflightService:

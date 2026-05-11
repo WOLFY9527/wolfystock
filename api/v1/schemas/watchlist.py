@@ -6,8 +6,8 @@ from __future__ import annotations
 import re
 from typing import List, Literal, Optional
 
-from data_provider.base import canonical_stock_code
 from pydantic import BaseModel, Field, field_validator
+from src.utils.symbol_normalization import canonical_stock_code
 
 
 class WatchlistItemCreateRequest(BaseModel):

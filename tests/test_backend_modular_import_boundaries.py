@@ -227,9 +227,6 @@ PROVIDER_RUNTIME_IMPORT_PREFIXES = (
 # the importing path plus provider-runtime; new entries need architecture review.
 EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
     "api/v1/endpoints/analysis.py": {"data_provider.base"},
-    # Shared-contract helper still reuses provider symbol normalization until a
-    # lower-layer symbol utility replaces the provider-runtime dependency.
-    "api/v1/schemas/watchlist.py": {"data_provider.base"},
     "src/services/agent_stock_evidence_service.py": {
         "data_provider.base",
         "data_provider.realtime_types",
@@ -237,7 +234,6 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
     "src/services/analysis_provider_planner.py": {"data_provider.us_index_mapping"},
     "src/services/crypto_realtime_service.py": {"src.services.market_cache"},
     "src/services/history_service.py": {"data_provider.us_index_mapping"},
-    "src/services/local_data_preflight_service.py": {"data_provider.base"},
     "src/services/market_overview_service.py": {"src.services.market_cache"},
     "src/services/market_provider_operations_service.py": {"src.services.market_cache"},
     "src/services/market_scanner_service.py": {
@@ -266,7 +262,6 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
         "data_provider.base",
         "data_provider.us_index_mapping",
     },
-    "src/services/watchlist_service.py": {"data_provider.base"},
 }
 
 

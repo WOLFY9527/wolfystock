@@ -11,8 +11,8 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, desc, select
 
-from data_provider.base import canonical_stock_code
 from src.storage import AppUser, DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun, UserWatchlistItem
+from src.utils.symbol_normalization import canonical_stock_code
 
 class WatchlistService:
     """Business logic for user-owned candidate tracking."""
