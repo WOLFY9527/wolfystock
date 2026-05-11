@@ -27,6 +27,43 @@ const { writeTextMock } = vi.hoisted(() => ({
   writeTextMock: vi.fn(),
 }));
 
+const { auditTablesImportGate } = vi.hoisted(() => {
+  let delayEnabled = false;
+  let releaseResolver: (() => void) | null = null;
+  let pendingPromise: Promise<void> | null = null;
+
+  return {
+    auditTablesImportGate: {
+      enable() {
+        delayEnabled = true;
+      },
+      reset() {
+        delayEnabled = false;
+        pendingPromise = null;
+        const resolve = releaseResolver;
+        releaseResolver = null;
+        resolve?.();
+      },
+      release() {
+        delayEnabled = false;
+        pendingPromise = null;
+        const resolve = releaseResolver;
+        releaseResolver = null;
+        resolve?.();
+      },
+      wait() {
+        if (!delayEnabled) return Promise.resolve();
+        if (!pendingPromise) {
+          pendingPromise = new Promise<void>((resolve) => {
+            releaseResolver = resolve;
+          });
+        }
+        return pendingPromise;
+      },
+    },
+  };
+});
+
 vi.mock('../../api/backtest', () => ({
   backtestApi: {
     getRuleBacktestRun,
@@ -37,6 +74,11 @@ vi.mock('../../api/backtest', () => ({
     compareRuleBacktestRuns,
   },
 }));
+
+vi.mock('../../components/backtest/BacktestAuditTables', async (importOriginal) => {
+  await auditTablesImportGate.wait();
+  return importOriginal<typeof import('../../components/backtest/BacktestAuditTables')>();
+});
 
 function renderResultPage(initialEntries: string[] = ['/backtest/results/99']) {
   return render(
@@ -293,6 +335,7 @@ describe('DeterministicBacktestResultPage', () => {
     vi.clearAllMocks();
     vi.useRealTimers();
     vi.stubGlobal('confirm', vi.fn(() => true));
+    auditTablesImportGate.reset();
     writeTextMock.mockReset();
     writeTextMock.mockResolvedValue(undefined);
     originalClipboard = navigator.clipboard;
@@ -374,6 +417,43 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByRole('tab', { name: '概览' })).toHaveAttribute('aria-selected', 'true');
     expect(getRuleBacktestRunStatus).toHaveBeenCalledTimes(1);
     expect(getRuleBacktestRun).toHaveBeenCalledTimes(2);
+  }, 10000);
+
+  it('lazy-loads inactive audit tabs without delaying the initial overview path', async () => {
+    const currentRun = makeResultRun({ id: 99, runAt: '2026-04-07T08:00:00Z' });
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    auditTablesImportGate.enable();
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
+    expect(screen.getByRole('tab', { name: '概览' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByTestId('deterministic-result-tab-lazy-fallback')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('deterministic-result-tab-panel-audit')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '审计明细' }));
+
+    expect(screen.getByRole('tab', { name: '审计明细' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('deterministic-result-tab-lazy-fallback')).toBeInTheDocument();
+    expect(screen.queryByTestId('deterministic-result-tab-panel-audit')).not.toBeInTheDocument();
+
+    auditTablesImportGate.release();
+
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
+
+    expect(await screen.findByTestId('deterministic-result-tab-panel-audit')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByTestId('deterministic-result-tab-lazy-fallback')).not.toBeInTheDocument();
+    });
   }, 10000);
 
   it('keeps the first screen compact and moves deep data into dedicated tabs', async () => {

@@ -1,11 +1,10 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Card } from '../components/common';
-import BacktestAuditTables from '../components/backtest/BacktestAuditTables';
 import BacktestResultReport, { type BacktestResultReportMode } from '../components/backtest/BacktestResultReport';
 import BacktestChartWorkspace, {
   type CoverageTrackItem,
@@ -87,6 +86,7 @@ type ScenarioRunState = {
 type ResultPageTabKey = 'overview' | 'audit' | 'trades' | 'parameters' | 'history';
 
 const RESULT_PAGE_TAB_KEYS: ResultPageTabKey[] = ['overview', 'audit', 'trades', 'parameters', 'history'];
+const BacktestAuditTables = lazy(() => import('../components/backtest/BacktestAuditTables'));
 
 function formatStatusHistoryLabel(item: StatusHistoryItem): string {
   return `${String(item.status || '--')} · ${item.at ? formatDateTime(item.at) : '--'}`;
@@ -979,56 +979,85 @@ const DeterministicBacktestResultPage: React.FC = () => {
       );
     }
 
+    const activeTabLabel = backtestCopy(`resultPage.tabs.${activeTab}`);
+
     return (
-      <BacktestAuditTables
-        activeTab={activeTab}
-        resultPage={resultPage}
-        backtestCopy={backtestCopy}
-        language={language}
-        run={run}
-        normalized={normalized}
-        selectedBenchmarkLabel={selectedBenchmarkLabel}
-        buyAndHoldLabel={buyAndHoldLabel}
-        benchmarkStatusNote={benchmarkStatusNote}
-        hasRobustnessAnalysis={hasRobustnessAnalysis}
-        robustnessAnalysisStateLabel={getRobustnessStateLabel(getObjectField(robustnessAnalysis, 'state'), language)}
-        robustnessLensRows={robustnessLensRows}
-        riskControlRows={riskControlRows}
-        activeRobustnessKey={activeRobustnessKey}
-        activeRiskControlKey={activeRiskControlKey}
-        walkForwardWindowCount={formatNumber(getObjectField(walkForward, 'windowCount') as number | null | undefined, 0)}
-        monteCarloSimulationCount={formatNumber(getObjectField(monteCarlo, 'simulationCount') as number | null | undefined, 0)}
-        stressScenarioCount={formatNumber(getObjectField(stressTests, 'scenarioCount') as number | null | undefined, 0)}
-        walkForwardMeanReturn={pct(getObjectField(walkForwardAggregate, 'meanTotalReturnPct') as number | null | undefined)}
-        monteCarloMedianReturn={pct(getObjectField(monteCarloAggregate, 'medianTotalReturnPct') as number | null | undefined)}
-        worstScenarioKey={String(getObjectField(worstScenario, 'scenarioKey') || '--')}
-        strategySummaryRows={strategySummaryRows}
-        parsedSummaryEntries={parsedSummaryEntries}
-        strategyWarningEntries={strategyWarningEntries}
-        comparisonItems={comparisonItems}
-        compareRunIds={compareRunIds}
-        historyItems={historyItems}
-        historyError={historyError}
-        compareError={compareError}
-        isLoadingHistory={isLoadingHistory}
-        isLoadingCompareRuns={isLoadingCompareRuns}
-        onRefreshHistory={() => void fetchHistory(run.code)}
-        onOpenCompareWorkbench={handleOpenCompareWorkbench}
-        onClearComparison={() => setCompareRunIds([])}
-        onOpenHistoryRun={handleOpenHistoryRun}
-        onToggleCompareRun={handleToggleCompareRun}
-        scenarioPlans={scenarioPlans}
-        selectedScenarioPlanId={selectedScenarioPlanId}
-        onSelectScenarioPlanId={setSelectedScenarioPlanId}
-        onRunScenarioPlan={handleRunScenarioPlan}
-        isSubmittingScenarioRuns={isSubmittingScenarioRuns}
-        scenarioRuns={scenarioRuns}
-        scenarioError={scenarioError}
-        scenarioComparisonItems={scenarioComparisonItems}
-        availablePresets={availablePresets}
-        onSavePreset={handleSavePreset}
-        onOpenScenarioRun={(runId) => navigate(`/backtest/results/${runId}`)}
-      />
+      <Suspense
+        fallback={(
+          <section
+            className="backtest-display-section"
+            data-testid="deterministic-result-tab-lazy-fallback"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="rounded-[16px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
+                    WolfyStock
+                  </p>
+                  <p className="truncate text-sm text-white/78">{activeTabLabel}</p>
+                </div>
+                <span
+                  className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
+                  aria-hidden="true"
+                />
+              </div>
+              <p className="mt-2 text-xs text-white/45">正在加载该分区的回测明细。</p>
+            </div>
+          </section>
+        )}
+      >
+        <BacktestAuditTables
+          activeTab={activeTab}
+          resultPage={resultPage}
+          backtestCopy={backtestCopy}
+          language={language}
+          run={run}
+          normalized={normalized}
+          selectedBenchmarkLabel={selectedBenchmarkLabel}
+          buyAndHoldLabel={buyAndHoldLabel}
+          benchmarkStatusNote={benchmarkStatusNote}
+          hasRobustnessAnalysis={hasRobustnessAnalysis}
+          robustnessAnalysisStateLabel={getRobustnessStateLabel(getObjectField(robustnessAnalysis, 'state'), language)}
+          robustnessLensRows={robustnessLensRows}
+          riskControlRows={riskControlRows}
+          activeRobustnessKey={activeRobustnessKey}
+          activeRiskControlKey={activeRiskControlKey}
+          walkForwardWindowCount={formatNumber(getObjectField(walkForward, 'windowCount') as number | null | undefined, 0)}
+          monteCarloSimulationCount={formatNumber(getObjectField(monteCarlo, 'simulationCount') as number | null | undefined, 0)}
+          stressScenarioCount={formatNumber(getObjectField(stressTests, 'scenarioCount') as number | null | undefined, 0)}
+          walkForwardMeanReturn={pct(getObjectField(walkForwardAggregate, 'meanTotalReturnPct') as number | null | undefined)}
+          monteCarloMedianReturn={pct(getObjectField(monteCarloAggregate, 'medianTotalReturnPct') as number | null | undefined)}
+          worstScenarioKey={String(getObjectField(worstScenario, 'scenarioKey') || '--')}
+          strategySummaryRows={strategySummaryRows}
+          parsedSummaryEntries={parsedSummaryEntries}
+          strategyWarningEntries={strategyWarningEntries}
+          comparisonItems={comparisonItems}
+          compareRunIds={compareRunIds}
+          historyItems={historyItems}
+          historyError={historyError}
+          compareError={compareError}
+          isLoadingHistory={isLoadingHistory}
+          isLoadingCompareRuns={isLoadingCompareRuns}
+          onRefreshHistory={() => void fetchHistory(run.code)}
+          onOpenCompareWorkbench={handleOpenCompareWorkbench}
+          onClearComparison={() => setCompareRunIds([])}
+          onOpenHistoryRun={handleOpenHistoryRun}
+          onToggleCompareRun={handleToggleCompareRun}
+          scenarioPlans={scenarioPlans}
+          selectedScenarioPlanId={selectedScenarioPlanId}
+          onSelectScenarioPlanId={setSelectedScenarioPlanId}
+          onRunScenarioPlan={handleRunScenarioPlan}
+          isSubmittingScenarioRuns={isSubmittingScenarioRuns}
+          scenarioRuns={scenarioRuns}
+          scenarioError={scenarioError}
+          scenarioComparisonItems={scenarioComparisonItems}
+          availablePresets={availablePresets}
+          onSavePreset={handleSavePreset}
+          onOpenScenarioRun={(runId) => navigate(`/backtest/results/${runId}`)}
+        />
+      </Suspense>
     );
   };
 
