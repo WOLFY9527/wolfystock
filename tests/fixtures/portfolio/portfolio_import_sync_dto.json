@@ -1,0 +1,139 @@
+{
+  "broker_connection": {
+    "id": 7201,
+    "owner_id": "owner-fixture-1",
+    "portfolio_account_id": 202,
+    "portfolio_account_name": "Global US",
+    "broker_type": "ibkr",
+    "broker_name": "Interactive Brokers",
+    "connection_name": "IBKR Flex",
+    "broker_account_ref": "U123****567",
+    "import_mode": "file",
+    "status": "active",
+    "last_imported_at": "2026-05-11T08:00:00+08:00",
+    "last_import_source": "flex_statement_fixture",
+    "last_import_fingerprint": "sha256:fixture-import-fingerprint",
+    "sync_metadata": {
+      "source": "flex",
+      "source_file_type": "xml",
+      "sanitized_account_ref": "U123****567",
+      "source_payload_redacted": true
+    },
+    "created_at": "2026-05-10T08:00:00+08:00",
+    "updated_at": "2026-05-11T08:00:00+08:00"
+  },
+  "import_parse": {
+    "broker": "ibkr",
+    "record_count": 1,
+    "skipped_count": 1,
+    "error_count": 0,
+    "records": [
+      {
+        "trade_date": "2026-05-10",
+        "symbol": "AAPL",
+        "side": "buy",
+        "quantity": 10.0,
+        "price": 140.0,
+        "fee": 10.0,
+        "tax": 0.0,
+        "trade_uid": "IBKR-FIXTURE-AAPL-1",
+        "dedup_hash": "fixture-dedup-aapl-1",
+        "market": "us",
+        "currency": "USD",
+        "note": "sanitized flex trade"
+      }
+    ],
+    "cash_record_count": 1,
+    "cash_entries": [
+      {
+        "event_date": "2026-05-09",
+        "direction": "in",
+        "amount": 2400.0,
+        "currency": "USD",
+        "note": "sanitized cash deposit"
+      }
+    ],
+    "corporate_action_count": 1,
+    "corporate_actions": [
+      {
+        "effective_date": "2026-05-11",
+        "symbol": "AAPL",
+        "market": "us",
+        "currency": "USD",
+        "action_type": "split_adjustment",
+        "cash_dividend_per_share": null,
+        "split_ratio": 4.0,
+        "note": "sanitized split adjustment"
+      }
+    ],
+    "warnings": [
+      "duplicate_trade_skipped"
+    ],
+    "metadata": {
+      "broker_account_ref": "U123****567",
+      "statement_period": "2026-05",
+      "source_file_type": "xml",
+      "source_payload_redacted": true
+    },
+    "errors": []
+  },
+  "import_commit": {
+    "account_id": 202,
+    "record_count": 1,
+    "inserted_count": 1,
+    "duplicate_count": 1,
+    "failed_count": 0,
+    "cash_record_count": 1,
+    "cash_inserted_count": 1,
+    "cash_failed_count": 0,
+    "corporate_action_count": 1,
+    "corporate_action_inserted_count": 1,
+    "corporate_action_failed_count": 0,
+    "dry_run": false,
+    "duplicate_import": false,
+    "broker_connection_id": 7201,
+    "warnings": [
+      "duplicate_trade_skipped"
+    ],
+    "metadata": {
+      "source": "flex_statement_fixture",
+      "sanitized_account_ref": "U123****567",
+      "source_payload_redacted": true
+    },
+    "errors": []
+  },
+  "ibkr_sync": {
+    "account_id": 202,
+    "broker_connection_id": 7201,
+    "broker_account_ref": "U123****567",
+    "connection_name": "IBKR Flex",
+    "snapshot_date": "2026-05-11",
+    "synced_at": "2026-05-11T08:00:00+08:00",
+    "base_currency": "USD",
+    "total_cash": 1000.0,
+    "total_market_value": 1362.36,
+    "total_equity": 2362.36,
+    "realized_pnl": 0.0,
+    "unrealized_pnl": -37.64,
+    "position_count": 1,
+    "cash_balance_count": 1,
+    "fx_stale": true,
+    "snapshot_overlay_active": true,
+    "used_existing_connection": true,
+    "api_base_url": "https://localhost:5000/v1/api",
+    "verify_ssl": false,
+    "warnings": [
+      "fixture_stale_rate"
+    ]
+  },
+  "status_counts": {
+    "parsed": 3,
+    "inserted": 3,
+    "skipped": 1,
+    "failed": 0,
+    "reason_codes": [
+      "duplicate_trade_skipped",
+      "fixture_stale_rate"
+    ]
+  }
+}

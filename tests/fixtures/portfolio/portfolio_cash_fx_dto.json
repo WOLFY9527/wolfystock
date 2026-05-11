@@ -1,0 +1,46 @@
+{
+  "fx_refresh": {
+    "as_of": "2026-05-11",
+    "account_count": 2,
+    "refresh_enabled": false,
+    "disabled_reason": "fixture_offline_no_live_provider",
+    "pair_count": 1,
+    "updated_count": 0,
+    "stale_count": 1,
+    "error_count": 0
+  },
+  "live_fx_rate": {
+    "base_currency": "USD",
+    "quote_currency": "CNY",
+    "rate": 7.12,
+    "provider": "fixture_manual_rate",
+    "fetched_at": "2026-05-10T16:00:00+08:00",
+    "cache_hit": true,
+    "stale": true,
+    "error": "fixture_stale_rate"
+  },
+  "currency_balances": [
+    {
+      "account_id": 101,
+      "currency": "CNY",
+      "cash_balance": 2500.0,
+      "native_display_currency": "CNY",
+      "display_cash_balance": 2500.0,
+      "fx_status": "live"
+    },
+    {
+      "account_id": 202,
+      "currency": "USD",
+      "cash_balance": 1000.0,
+      "native_display_currency": "USD",
+      "display_cash_balance": 1000.0,
+      "fx_status": "stale"
+    }
+  ],
+  "failure_state": {
+    "degraded": true,
+    "reason_code": "fixture_stale_rate",
+    "native_values_visible": true,
+    "source_payload_redacted": true
+  }
+}

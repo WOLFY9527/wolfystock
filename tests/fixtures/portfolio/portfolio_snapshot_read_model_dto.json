@@ -1,0 +1,347 @@
+{
+  "as_of": "2026-05-11",
+  "cost_method": "fifo",
+  "currency": "CNY",
+  "account_count": 2,
+  "total_cash": 3500.0,
+  "total_market_value": 21700.0,
+  "total_equity": 25200.0,
+  "realized_pnl": 320.0,
+  "unrealized_pnl": 1700.0,
+  "fee_total": 18.0,
+  "tax_total": 4.0,
+  "fx_stale": true,
+  "market_breakdown": [
+    {
+      "market": "cn",
+      "position_count": 1,
+      "total_market_value": 12000.0,
+      "weight_pct": 55.2995
+    },
+    {
+      "market": "us",
+      "position_count": 1,
+      "total_market_value": 9700.0,
+      "weight_pct": 44.7005
+    }
+  ],
+  "fx_rates": [
+    {
+      "from_currency": "USD",
+      "to_currency": "CNY",
+      "rate": 7.12,
+      "rate_date": "2026-05-10",
+      "source": "manual_fixture",
+      "is_stale": true,
+      "updated_at": "2026-05-10T16:00:00+08:00",
+      "source_direction": "direct"
+    }
+  ],
+  "portfolio_attribution": {
+    "account_attribution": {
+      "top_accounts": [
+        {
+          "account_id": 101,
+          "account_name": "Main CN",
+          "equity_weight_pct": 55.5556
+        }
+      ]
+    },
+    "industry_attribution": {
+      "top_industries": [
+        {
+          "industry": "Consumer Staples",
+          "weight_pct": 55.2995
+        }
+      ]
+    }
+  },
+  "analytics": {
+    "pnl": {
+      "display_currency": "CNY",
+      "realized": {
+        "amount": 320.0,
+        "amount_display": "CNY 320.00",
+        "percent": 1.2698,
+        "currency": "CNY",
+        "fx_status": "live"
+      },
+      "unrealized": {
+        "amount": 1700.0,
+        "amount_display": "CNY 1700.00",
+        "percent": 7.8341,
+        "currency": "CNY",
+        "fx_status": "stale"
+      },
+      "total": {
+        "amount": 2020.0,
+        "amount_display": "CNY 2020.00",
+        "percent": 8.0159,
+        "currency": "CNY",
+        "fx_status": "stale"
+      }
+    },
+    "exposure": {
+      "by_account": [
+        {
+          "key": "account:101",
+          "label": "Main CN",
+          "market_value": 12000.0,
+          "display_value": 12000.0,
+          "display_currency": "CNY",
+          "percent": 55.2995,
+          "fx_status": "live",
+          "account_id": 101,
+          "account_name": "Main CN",
+          "base_currency": "CNY"
+        },
+        {
+          "key": "account:202",
+          "label": "Global US",
+          "market_value": 9700.0,
+          "display_value": 1362.36,
+          "display_currency": "USD",
+          "percent": 44.7005,
+          "fx_status": "stale",
+          "native_value": 1362.36,
+          "native_currency": "USD",
+          "account_id": 202,
+          "account_name": "Global US",
+          "base_currency": "USD"
+        }
+      ],
+      "by_currency": [
+        {
+          "key": "currency:CNY",
+          "label": "CNY",
+          "market_value": 12000.0,
+          "display_value": 12000.0,
+          "display_currency": "CNY",
+          "percent": 55.2995,
+          "fx_status": "live",
+          "currency": "CNY"
+        },
+        {
+          "key": "currency:USD",
+          "label": "USD",
+          "market_value": 9700.0,
+          "display_value": 1362.36,
+          "display_currency": "USD",
+          "percent": 44.7005,
+          "fx_status": "stale",
+          "native_value": 1362.36,
+          "native_currency": "USD",
+          "currency": "USD"
+        }
+      ],
+      "by_market": [
+        {
+          "key": "market:cn",
+          "label": "cn",
+          "market_value": 12000.0,
+          "display_value": 12000.0,
+          "display_currency": "CNY",
+          "percent": 55.2995,
+          "fx_status": "live",
+          "market": "cn"
+        },
+        {
+          "key": "market:us",
+          "label": "us",
+          "market_value": 9700.0,
+          "display_value": 1362.36,
+          "display_currency": "USD",
+          "percent": 44.7005,
+          "fx_status": "stale",
+          "native_value": 1362.36,
+          "native_currency": "USD",
+          "market": "us"
+        }
+      ],
+      "by_symbol": [
+        {
+          "key": "symbol:600519",
+          "label": "Kweichow Moutai",
+          "market_value": 12000.0,
+          "display_value": 12000.0,
+          "display_currency": "CNY",
+          "percent": 55.2995,
+          "fx_status": "live",
+          "symbol": "600519",
+          "market": "cn",
+          "currency": "CNY",
+          "holding_count": 1,
+          "unrealized_pnl": 2000.0,
+          "unrealized_pnl_pct": 20.0
+        },
+        {
+          "key": "symbol:AAPL",
+          "label": "Apple",
+          "market_value": 9700.0,
+          "display_value": 1362.36,
+          "display_currency": "USD",
+          "percent": 44.7005,
+          "fx_status": "stale",
+          "native_value": 1362.36,
+          "native_currency": "USD",
+          "symbol": "AAPL",
+          "market": "us",
+          "currency": "USD",
+          "holding_count": 1,
+          "unrealized_pnl": -300.0,
+          "unrealized_pnl_pct": -3.0
+        }
+      ],
+      "by_sector": [
+        {
+          "key": "sector:Consumer Staples",
+          "label": "Consumer Staples",
+          "market_value": 12000.0,
+          "display_value": 12000.0,
+          "display_currency": "CNY",
+          "percent": 55.2995,
+          "fx_status": "live",
+          "sector": "Consumer Staples",
+          "holding_count": 1
+        }
+      ],
+      "sector_status": "available"
+    },
+    "risk": {
+      "largest_position": {
+        "symbol": "600519",
+        "market_value": 12000.0,
+        "weight_pct": 55.2995
+      },
+      "largest_currency": {
+        "currency": "CNY",
+        "market_value": 12000.0,
+        "weight_pct": 55.2995
+      },
+      "largest_market": {
+        "market": "cn",
+        "market_value": 12000.0,
+        "weight_pct": 55.2995
+      },
+      "holding_count": 2,
+      "account_count": 2,
+      "cash_percent": 13.8889,
+      "fx_unavailable": false,
+      "warnings": [
+        "usd_fx_rate_stale"
+      ]
+    }
+  },
+  "riskDiagnostics": {
+    "version": "portfolio_risk_diagnostics_v1",
+    "authority": "backend_read_model",
+    "calculation_owner": "backend",
+    "warnings": [
+      {
+        "code": "usd_fx_rate_stale",
+        "severity": "warning",
+        "message": "USD/CNY FX rate is stale; native USD values remain visible."
+      }
+    ]
+  },
+  "portfolioRiskEvidence": {
+    "evidence_version": "portfolio_risk_evidence_v1",
+    "source": "backend_snapshot",
+    "source_payload_redacted": true
+  },
+  "sourceAuthorityState": "backend_authoritative_read_model",
+  "fxFreshnessState": "stale",
+  "holdingsLineageState": "ledger_backed",
+  "cashLedgerCompletenessState": "complete",
+  "benchmarkMappingState": "mapped",
+  "factorMappingState": "partial",
+  "confidenceCap": {
+    "state": "limited_by_stale_fx",
+    "max_confidence": 0.8,
+    "reasons": [
+      "usd_fx_rate_stale"
+    ]
+  },
+  "accounts": [
+    {
+      "account_id": 101,
+      "account_name": "Main CN",
+      "owner_id": "owner-fixture-1",
+      "broker": "Manual",
+      "market": "cn",
+      "base_currency": "CNY",
+      "as_of": "2026-05-11",
+      "cost_method": "fifo",
+      "total_cash": 2500.0,
+      "total_market_value": 12000.0,
+      "total_equity": 14500.0,
+      "realized_pnl": 320.0,
+      "unrealized_pnl": 2000.0,
+      "fee_total": 8.0,
+      "tax_total": 4.0,
+      "fx_stale": false,
+      "positions": [
+        {
+          "symbol": "600519",
+          "market": "cn",
+          "currency": "CNY",
+          "quantity": 10.0,
+          "avg_cost": 1000.0,
+          "total_cost": 10000.0,
+          "last_price": 1200.0,
+          "market_value_base": 12000.0,
+          "unrealized_pnl_base": 2000.0,
+          "valuation_currency": "CNY",
+          "cost_basis_native": 10000.0,
+          "market_value_native": 12000.0,
+          "unrealized_pnl_native": 2000.0,
+          "unrealized_pnl_pct": 20.0,
+          "display_market_value": 12000.0,
+          "display_unrealized_pnl": 2000.0,
+          "display_currency": "CNY",
+          "display_fx_status": "live"
+        }
+      ]
+    },
+    {
+      "account_id": 202,
+      "account_name": "Global US",
+      "owner_id": "owner-fixture-1",
+      "broker": "IBKR",
+      "market": "us",
+      "base_currency": "USD",
+      "as_of": "2026-05-11",
+      "cost_method": "fifo",
+      "total_cash": 1000.0,
+      "total_market_value": 9700.0,
+      "total_equity": 10700.0,
+      "realized_pnl": 0.0,
+      "unrealized_pnl": -300.0,
+      "fee_total": 10.0,
+      "tax_total": 0.0,
+      "fx_stale": true,
+      "positions": [
+        {
+          "symbol": "AAPL",
+          "market": "us",
+          "currency": "USD",
+          "quantity": 10.0,
+          "avg_cost": 140.0,
+          "total_cost": 10000.0,
+          "last_price": 136.236,
+          "market_value_base": 9700.0,
+          "unrealized_pnl_base": -300.0,
+          "valuation_currency": "CNY",
+          "cost_basis_native": 1400.0,
+          "market_value_native": 1362.36,
+          "unrealized_pnl_native": -37.64,
+          "unrealized_pnl_pct": -3.0,
+          "display_market_value": 1362.36,
+          "display_unrealized_pnl": -37.64,
+          "display_currency": "USD",
+          "display_fx_status": "stale"
+        }
+      ]
+    }
+  ]
+}

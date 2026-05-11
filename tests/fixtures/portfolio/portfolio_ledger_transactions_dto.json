@@ -1,0 +1,112 @@
+{
+  "trade_list": {
+    "items": [
+      {
+        "id": 3101,
+        "account_id": 101,
+        "trade_uid": "fixture-buy-600519-20260510",
+        "symbol": "600519",
+        "market": "cn",
+        "currency": "CNY",
+        "trade_date": "2026-05-10",
+        "side": "buy",
+        "quantity": 10.0,
+        "price": 1000.0,
+        "fee": 8.0,
+        "tax": 0.0,
+        "note": "manual fixture buy",
+        "is_active": true,
+        "voided_at": null,
+        "created_at": "2026-05-10T09:35:00+08:00",
+        "updated_at": "2026-05-10T09:35:00+08:00"
+      },
+      {
+        "id": 3102,
+        "account_id": 202,
+        "trade_uid": "fixture-buy-aapl-20260510",
+        "symbol": "AAPL",
+        "market": "us",
+        "currency": "USD",
+        "trade_date": "2026-05-10",
+        "side": "buy",
+        "quantity": 10.0,
+        "price": 140.0,
+        "fee": 10.0,
+        "tax": 0.0,
+        "note": "imported fixture buy",
+        "is_active": true,
+        "voided_at": null,
+        "created_at": "2026-05-10T22:35:00+08:00",
+        "updated_at": "2026-05-10T22:35:00+08:00"
+      }
+    ],
+    "total": 2,
+    "page": 1,
+    "page_size": 20
+  },
+  "cash_ledger": {
+    "items": [
+      {
+        "id": 4101,
+        "account_id": 101,
+        "event_date": "2026-05-09",
+        "direction": "in",
+        "amount": 12500.0,
+        "currency": "CNY",
+        "note": "cash deposit fixture",
+        "created_at": "2026-05-09T09:00:00+08:00"
+      },
+      {
+        "id": 4102,
+        "account_id": 202,
+        "event_date": "2026-05-09",
+        "direction": "in",
+        "amount": 2400.0,
+        "currency": "USD",
+        "note": "cash deposit fixture",
+        "created_at": "2026-05-09T09:00:00+08:00"
+      }
+    ],
+    "total": 2,
+    "page": 1,
+    "page_size": 20
+  },
+  "corporate_actions": {
+    "items": [
+      {
+        "id": 5101,
+        "account_id": 101,
+        "symbol": "600519",
+        "market": "cn",
+        "currency": "CNY",
+        "effective_date": "2026-05-11",
+        "action_type": "cash_dividend",
+        "cash_dividend_per_share": 2.0,
+        "split_ratio": null,
+        "note": "cash dividend fixture",
+        "created_at": "2026-05-11T12:00:00+08:00"
+      },
+      {
+        "id": 5102,
+        "account_id": 202,
+        "symbol": "AAPL",
+        "market": "us",
+        "currency": "USD",
+        "effective_date": "2026-05-11",
+        "action_type": "split_adjustment",
+        "cash_dividend_per_share": null,
+        "split_ratio": 4.0,
+        "note": "split fixture",
+        "created_at": "2026-05-11T12:00:00+08:00"
+      }
+    ],
+    "total": 2,
+    "page": 1,
+    "page_size": 20
+  },
+  "authority": {
+    "mutation_owner": "backend",
+    "read_model_owner": "backend",
+    "ui_authoritative_accounting": false
+  }
+}
