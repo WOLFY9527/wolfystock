@@ -15,6 +15,8 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+API_ROOT = REPO_ROOT / "api"
+DATA_PROVIDER_ROOT = REPO_ROOT / "data_provider"
 SRC_ROOT = REPO_ROOT / "src"
 CONTRACTS_ROOT = SRC_ROOT / "contracts"
 SERVICES_ROOT = SRC_ROOT / "services"
@@ -23,6 +25,124 @@ INACTIVE_BACKEND_NAMESPACE_MODULES = (
     "src.platform",
     "src.domains",
 )
+ARCHITECTURE_DOMAIN_CLASSIFICATIONS = {
+    "provider-runtime / MarketCache": {
+        "data_provider",
+        "src.providers",
+        "src.services.analysis_provider_planner",
+        "src.services.market_cache",
+        "src.services.market_provider_operations_service",
+        "src.services.options_market_data_provider",
+        "src.services.provider_capability_matrix",
+        "src.services.provider_circuit_observer",
+        "src.services.provider_plan_advisor",
+        "src.services.provider_usage_ledger",
+        "src.services.quota_policy_service",
+    },
+    "scanner": {
+        "src.services.market_scanner_ops_service",
+        "src.services.market_scanner_service",
+        "src.services.scanner_ai_service",
+        "src.services.scanner_evidence_packet",
+    },
+    "backtest": {
+        "src.services.backtest_professional_readiness",
+        "src.services.backtest_service",
+        "src.services.local_data_preflight_service",
+        "src.services.rule_backtest_service",
+    },
+    "portfolio": {
+        "src.services.admin_portfolio_service",
+        "src.services.fx_rate_service",
+        "src.services.portfolio_ibkr_sync_service",
+        "src.services.portfolio_import_service",
+        "src.services.portfolio_risk_diagnostics",
+        "src.services.portfolio_risk_service",
+        "src.services.portfolio_service",
+    },
+    "AI routing / cost": {
+        "src.services.agent_model_service",
+        "src.services.ai_evidence_adapters",
+        "src.services.ai_evidence_dry_run_explanation",
+        "src.services.duplicate_cost_summary_service",
+        "src.services.image_stock_extractor",
+        "src.services.litellm_runtime",
+        "src.services.llm_cost_ledger_service",
+        "src.services.llm_instrumentation",
+        "src.services.model_pricing_policy_import_service",
+        "src.services.research_budget_profiles",
+    },
+    "auth / RBAC": {
+        "api.deps",
+        "api.middlewares.auth",
+        "api.middlewares.public_abuse_limiter",
+        "api.security_headers",
+        "api.v1.endpoints.auth",
+        "src.services.admin_governance_audit_service",
+        "src.services.admin_mfa_service",
+        "src.services.admin_security_service",
+        "src.services.admin_user_service",
+    },
+    "admin observability": {
+        "api.v1.endpoints.admin_cost",
+        "api.v1.endpoints.admin_logs",
+        "api.v1.endpoints.admin_notifications",
+        "api.v1.endpoints.admin_portfolio",
+        "api.v1.endpoints.admin_provider_circuits",
+        "api.v1.endpoints.admin_security",
+        "api.v1.endpoints.admin_users",
+        "api.v1.endpoints.market_provider_operations",
+        "api.v1.endpoints.provider_usage_ledger",
+        "src.services.admin_activity_service",
+        "src.services.admin_logs_service",
+    },
+    "shared contracts": {
+        "api.v1.schemas",
+        "src.contracts",
+        "src.services.ai_evidence_packet",
+        "src.services.ai_evidence_packet_validator",
+        "src.services.data_quality_contract_validator",
+        "src.services.data_quality_contracts",
+    },
+}
+EXPECTED_ARCHITECTURE_DOMAINS = {
+    "provider-runtime / MarketCache",
+    "scanner",
+    "backtest",
+    "portfolio",
+    "AI routing / cost",
+    "auth / RBAC",
+    "admin observability",
+    "shared contracts",
+}
+EXPECTED_RUNTIME_HEAVY_DOMAIN_CLASSIFICATIONS = {
+    "data_provider.akshare_fetcher": "provider-runtime / MarketCache",
+    "data_provider.alpaca_fetcher": "provider-runtime / MarketCache",
+    "data_provider.baostock_fetcher": "provider-runtime / MarketCache",
+    "data_provider.tushare_fetcher": "provider-runtime / MarketCache",
+    "data_provider.yfinance_fetcher": "provider-runtime / MarketCache",
+    "src.services.market_cache": "provider-runtime / MarketCache",
+    "src.services.market_scanner_service": "scanner",
+    "src.services.market_scanner_ops_service": "scanner",
+    "src.services.scanner_ai_service": "scanner",
+    "src.services.backtest_service": "backtest",
+    "src.services.rule_backtest_service": "backtest",
+    "src.services.portfolio_service": "portfolio",
+    "src.services.portfolio_import_service": "portfolio",
+    "src.services.portfolio_ibkr_sync_service": "portfolio",
+    "src.services.portfolio_risk_diagnostics": "portfolio",
+    "src.services.litellm_runtime": "AI routing / cost",
+    "src.services.llm_cost_ledger_service": "AI routing / cost",
+    "src.services.llm_instrumentation": "AI routing / cost",
+    "api.deps": "auth / RBAC",
+    "api.middlewares.auth": "auth / RBAC",
+    "src.services.admin_security_service": "auth / RBAC",
+    "src.services.admin_activity_service": "admin observability",
+    "src.services.admin_logs_service": "admin observability",
+    "api.v1.endpoints.admin_logs": "admin observability",
+    "api.v1.schemas": "shared contracts",
+    "src.contracts": "shared contracts",
+}
 PROVIDER_PRIMITIVE_MODULE_CANDIDATES = (
     "src.providers.types",
     "src.providers.errors",
@@ -91,6 +211,8 @@ EXPECTED_LEGACY_API_DEPS_IMPORTS = {
     "src/services/admin_governance_audit_service.py": {"api.deps"},
     "src/services/admin_security_service.py": {"api.deps"},
 }
+# Transitional, owned upward imports from services into API schemas/deps.
+# These are inventory items, not a pattern to copy into new services.
 EXPECTED_SERVICE_API_IMPORTS = {
     **EXPECTED_API_SCHEMA_UPWARD_IMPORTS,
     **EXPECTED_LEGACY_API_DEPS_IMPORTS,
@@ -98,6 +220,55 @@ EXPECTED_SERVICE_API_IMPORTS = {
 FORBIDDEN_SERVICE_API_PREFIXES = (
     "api.v1.endpoints",
 )
+PROVIDER_RUNTIME_IMPORT_PREFIXES = (
+    "data_provider",
+    "src.services.market_cache",
+)
+# Transitional provider-runtime touch points. Owners are the domain listed in
+# the importing path plus provider-runtime; new entries need architecture review.
+EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
+    "api/v1/endpoints/analysis.py": {"data_provider.base"},
+    # Shared-contract helper still reuses provider symbol normalization until a
+    # lower-layer symbol utility replaces the provider-runtime dependency.
+    "api/v1/schemas/watchlist.py": {"data_provider.base"},
+    "src/services/agent_stock_evidence_service.py": {
+        "data_provider.base",
+        "data_provider.realtime_types",
+    },
+    "src/services/analysis_provider_planner.py": {"data_provider.us_index_mapping"},
+    "src/services/crypto_realtime_service.py": {"src.services.market_cache"},
+    "src/services/history_service.py": {"data_provider.us_index_mapping"},
+    "src/services/local_data_preflight_service.py": {"data_provider.base"},
+    "src/services/market_overview_service.py": {"src.services.market_cache"},
+    "src/services/market_provider_operations_service.py": {"src.services.market_cache"},
+    "src/services/market_scanner_service.py": {
+        "data_provider.base",
+        "data_provider.us_index_mapping",
+    },
+    "src/services/portfolio_ibkr_sync_service.py": {"data_provider.base"},
+    "src/services/portfolio_import_service.py": {"data_provider.base"},
+    "src/services/portfolio_service.py": {"data_provider.base"},
+    # Portfolio risk currently initializes provider runtime lazily for drawdown
+    # history. Keep explicit until a narrow portfolio/provider facade exists.
+    "src/services/portfolio_risk_service.py": {"data_provider"},
+    "src/services/report_renderer.py": {"data_provider.us_index_mapping"},
+    "src/services/rule_backtest_service.py": {
+        "data_provider.base",
+        "data_provider.us_index_mapping",
+    },
+    # Stock lookup/intraday helpers are still provider-coupled; classify them as
+    # existing provider-runtime imports instead of silently normalizing the seam.
+    "src/services/stock_service.py": {
+        "data_provider.base",
+        "data_provider.yfinance_fetcher",
+    },
+    "src/services/task_queue.py": {"data_provider.base"},
+    "src/services/us_history_helper.py": {
+        "data_provider.base",
+        "data_provider.us_index_mapping",
+    },
+    "src/services/watchlist_service.py": {"data_provider.base"},
+}
 
 
 @dataclass(frozen=True)
@@ -105,6 +276,23 @@ class ApiImportRecord:
     module: str
     imported_names: tuple[str, ...]
     wildcard: bool = False
+
+
+def _module_name_from_path(path: Path, package_root: Path, package_name: str) -> str:
+    relative = path.relative_to(package_root).with_suffix("")
+    parts = relative.parts
+    if parts == ("__init__",):
+        return package_name
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join((package_name, *parts))
+
+
+def _python_modules_under(package_root: Path, package_name: str) -> set[str]:
+    return {
+        _module_name_from_path(path, package_root, package_name)
+        for path in package_root.rglob("*.py")
+    }
 
 
 def _contracts_child_namespaces() -> set[str]:
@@ -157,6 +345,50 @@ print(json.dumps({{"loaded_modules": loaded_modules}}))
 
 def _has_loaded_prefix(loaded_modules: set[str], prefix: str) -> bool:
     return any(name == prefix or name.startswith(prefix + ".") for name in loaded_modules)
+
+
+def _classify_backend_module(module_name: str) -> str | None:
+    for domain_name, module_prefixes in ARCHITECTURE_DOMAIN_CLASSIFICATIONS.items():
+        if any(
+            module_name == prefix or module_name.startswith(prefix + ".")
+            for prefix in module_prefixes
+        ):
+            return domain_name
+    return None
+
+
+def _import_mapping_for_prefixes(
+    search_roots: tuple[Path, ...],
+    import_prefixes: tuple[str, ...],
+) -> dict[str, set[str]]:
+    matches: dict[str, set[str]] = {}
+    for search_root in search_roots:
+        for python_file in search_root.rglob("*.py"):
+            tree = ast.parse(
+                python_file.read_text(encoding="utf-8"),
+                filename=str(python_file),
+            )
+            modules: set[str] = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        module_name = alias.name
+                        if any(
+                            module_name == prefix or module_name.startswith(prefix + ".")
+                            for prefix in import_prefixes
+                        ):
+                            modules.add(module_name)
+                elif isinstance(node, ast.ImportFrom):
+                    module_name = node.module or ""
+                    if node.level == 0 and any(
+                        module_name == prefix or module_name.startswith(prefix + ".")
+                        for prefix in import_prefixes
+                    ):
+                        modules.add(module_name)
+
+            if modules:
+                matches[python_file.relative_to(REPO_ROOT).as_posix()] = modules
+    return matches
 
 
 @lru_cache(maxsize=1)
@@ -218,6 +450,44 @@ def test_contracts_namespace_remains_limited_to_inert_evidence_and_data_quality(
         "namespaces until a reviewed boundary plan lands"
     )
     assert set(contracts.__all__) == ACTIVE_CONTRACT_NAMESPACES
+
+
+def test_architecture_manual_domains_have_current_backend_classifications() -> None:
+    assert set(ARCHITECTURE_DOMAIN_CLASSIFICATIONS) == EXPECTED_ARCHITECTURE_DOMAINS
+    classified_prefixes = [
+        module_prefix
+        for module_prefixes in ARCHITECTURE_DOMAIN_CLASSIFICATIONS.values()
+        for module_prefix in module_prefixes
+    ]
+    assert len(classified_prefixes) == len(set(classified_prefixes))
+
+    for module_name, expected_domain in EXPECTED_RUNTIME_HEAVY_DOMAIN_CLASSIFICATIONS.items():
+        assert _classify_backend_module(module_name) == expected_domain
+
+
+def test_data_provider_modules_are_classified_as_provider_runtime_internals() -> None:
+    concrete_provider_modules = _python_modules_under(DATA_PROVIDER_ROOT, "data_provider") - {
+        "data_provider",
+    }
+
+    assert concrete_provider_modules, "expected provider runtime modules under data_provider/"
+    for module_name in concrete_provider_modules:
+        assert (
+            _classify_backend_module(module_name) == "provider-runtime / MarketCache"
+        ), f"{module_name} must be classified as provider-runtime internals"
+
+
+def test_provider_runtime_import_inventory_is_explicit() -> None:
+    actual_mapping = _import_mapping_for_prefixes(
+        (API_ROOT, SERVICES_ROOT, SRC_ROOT / "contracts"),
+        PROVIDER_RUNTIME_IMPORT_PREFIXES,
+    )
+
+    assert actual_mapping == EXPECTED_PROVIDER_RUNTIME_IMPORTS, (
+        "provider-runtime / MarketCache imports outside provider facades are "
+        f"transitional inventory items. Expected {EXPECTED_PROVIDER_RUNTIME_IMPORTS}, "
+        f"found {actual_mapping}"
+    )
 
 
 def test_provider_primitives_stay_lightweight() -> None:
