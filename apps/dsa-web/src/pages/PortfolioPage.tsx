@@ -1804,9 +1804,9 @@ const PortfolioPage: React.FC = () => {
   const renderTradeActions = (item: PortfolioTradeListItem, context: 'history' | 'recent') => {
     if (item.isActive === false) {
       return (
-        <PillBadge variant="default" className="shrink-0 text-white/35">
+        <TerminalChip variant="neutral" className="shrink-0">
           {voidedTradeLabel}
-        </PillBadge>
+        </TerminalChip>
       );
     }
 
@@ -1915,9 +1915,9 @@ const PortfolioPage: React.FC = () => {
                         <span>{item.symbol}</span>
                         <span className="text-xs text-muted-text">{formatSideLabel(item.side, language)}</span>
                         {item.isActive === false ? (
-                          <PillBadge variant="default" className="text-white/35">
+                          <TerminalChip variant="neutral">
                             {voidedTradeLabel}
-                          </PillBadge>
+                          </TerminalChip>
                         ) : null}
                       </div>
                       <div className="mt-1 text-xs text-muted-text">{item.tradeDate} · {item.quantity} @ {item.price}</div>
@@ -1986,9 +1986,10 @@ const PortfolioPage: React.FC = () => {
   );
 
   const recentActivityContent = (
-    <section
+    <TerminalPanel
+      as="section"
       data-testid="portfolio-recent-activity"
-      className={`${PORTFOLIO_GLASS_CARD_CLASS} min-w-0 flex flex-col gap-3`}
+      className="min-w-0 flex flex-col gap-3"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -2046,7 +2047,7 @@ const PortfolioPage: React.FC = () => {
       ) : (
         <TerminalEmptyState title={emptyRecentActivityLabel} className="min-h-[72px]" />
       )}
-    </section>
+    </TerminalPanel>
   );
 
   return (
