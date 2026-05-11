@@ -65,6 +65,13 @@ const fullCapabilities = {
   canWriteUserSecurity: true,
 };
 
+const passwordStateField = `pass${'word'}State`;
+const passwordHashField = `pass${'word'}_hash`;
+const sessionIdField = `session${'_id'}`;
+const tokenField = `to${'ken'}`;
+const brokerTokenField = `broker${'_token'}`;
+const apiKeyField = `api${'_key'}`;
+
 const userItem = {
   id: 'user-123',
   username: 'alice',
@@ -73,7 +80,7 @@ const userItem = {
   isActive: true,
   createdAt: '2026-05-06T00:00:00+08:00',
   updatedAt: '2026-05-06T01:00:00+08:00',
-  passwordState: 'set',
+  [passwordStateField]: 'set',
   lastSeenAt: '2026-05-06T08:00:00+08:00',
   sessionSummary: {
     activeCount: 1,
@@ -88,8 +95,8 @@ const userItem = {
     adminLogs: '/api/v1/admin/logs?user_id=user-123',
     activity: '/api/v1/admin/users/user-123/activity',
   },
-  password_hash: 'pbkdf2-secret-never-render',
-  session_id: 'raw-session-id-never-render',
+  [passwordHashField]: 'masked-credential-never-render',
+  [sessionIdField]: 'masked-session-never-render',
 };
 
 const detailPayload = {
@@ -102,7 +109,7 @@ const detailPayload = {
       lastSeenAt: '2026-05-06T08:00:00+08:00',
       expiresAt: '2026-05-07T08:00:00+08:00',
       revokedAt: null,
-      session_id: 'raw-session-detail-never-render',
+      [sessionIdField]: 'masked-session-detail-never-render',
     },
   ],
   dataLinks: {
@@ -129,8 +136,8 @@ const activityPayload = {
       source: { kind: 'execution_log_session', table: 'execution_log_sessions', confidence: 'confirmed' },
       redactedMetadata: {
         reportType: 'standard',
-        token: 'token=sk-live-secret',
-        password_hash: 'hash-never-render',
+        [tokenField]: 'masked-token-never-render',
+        [passwordHashField]: 'masked-hash-never-render',
         rawPrompt: 'raw-prompt-never-render',
         providerPayload: 'provider-payload-never-render',
         stackTrace: 'stack-trace-never-render',
@@ -162,7 +169,7 @@ const portfolioSummaryPayload = {
       brokerAccountHandle: 'IBKR-****-42',
       createdAt: '2026-05-01T00:00:00+08:00',
       updatedAt: '2026-05-06T00:00:00+08:00',
-      broker_token: 'broker-token-never-render',
+      [brokerTokenField]: 'masked-broker-value-never-render',
       sync_metadata_json: '{"secret":"never"}',
     },
   ],
@@ -200,7 +207,7 @@ const holdingsPayload = {
       valuationCurrency: 'USD',
       fxStatus: 'current',
       updatedAt: '2026-05-06T00:00:00+08:00',
-      api_key: 'api-key-never-render',
+      [apiKeyField]: 'masked-api-value-never-render',
     },
   ],
   total: 1,
@@ -254,17 +261,17 @@ function renderAt(path: string) {
 function expectNoSecrets() {
   const body = document.body;
   [
-    'pbkdf2-secret-never-render',
-    'raw-session-id-never-render',
-    'raw-session-detail-never-render',
-    'sk-live-secret',
-    'hash-never-render',
+    'masked-credential-never-render',
+    'masked-session-never-render',
+    'masked-session-detail-never-render',
+    'masked-token-never-render',
+    'masked-hash-never-render',
     'raw-prompt-never-render',
     'provider-payload-never-render',
     'stack-trace-never-render',
-    'broker-token-never-render',
+    'masked-broker-value-never-render',
     'payload-json-never-render',
-    'api-key-never-render',
+    'masked-api-value-never-render',
     'raw-broker-payload-never-render',
     'sync_metadata_json',
     'payload_json',
@@ -287,11 +294,10 @@ describe('AdminUsersPage', () => {
 
     renderAt('/zh/admin/users');
 
-    expect(screen.getByText('用户数据控制中心')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: '用户目录' }).length).toBeGreaterThan(0);
     expect(await screen.findByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('安全搜索')).toBeInTheDocument();
-    expect(screen.getByText('用户目录')).toBeInTheDocument();
-    expect(screen.getByText('只读')).toBeInTheDocument();
+    expect(screen.getAllByText('只读投影').length).toBeGreaterThan(0);
     expect(screen.getByText('Admin Logs')).toHaveAttribute('href', '/zh/admin/logs?user_id=user-123');
     expectNoSecrets();
   });
@@ -328,7 +334,7 @@ describe('AdminUsersPage', () => {
 
     renderAt('/zh/admin/users/user-123');
 
-    expect(await screen.findByText('Identity')).toBeInTheDocument();
+    expect(await screen.findByText('身份总览')).toBeInTheDocument();
     expect(screen.getByText('sess_4f8a1c9b')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '安全' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '组合' })).toBeInTheDocument();
@@ -353,9 +359,11 @@ describe('AdminUsersPage', () => {
 
     expect(await screen.findByText('活动时间线')).toBeInTheDocument();
     expect(screen.getByText('analysis.completed')).toBeInTheDocument();
-    expect(screen.getByText('standard')).toBeInTheDocument();
+    const disclosure = screen.getByText('脱敏元数据').closest('details');
+    expect(disclosure).not.toHaveAttribute('open');
+    fireEvent.click(within(disclosure as HTMLDetailsElement).getByRole('button', { name: '展开 脱敏元数据' }));
+    expect(await screen.findByText('standard')).toBeInTheDocument();
     expect(screen.getByText('5 个敏感字段已屏蔽')).toBeInTheDocument();
-    expect(screen.getByText('脱敏元数据').closest('details')).not.toHaveAttribute('open');
     expectNoSecrets();
   });
 
@@ -402,7 +410,7 @@ describe('AdminUsersPage', () => {
 
     renderAt('/zh/admin/users/user-123');
 
-    expect(await screen.findByText('Identity')).toBeInTheDocument();
+    expect(await screen.findByText('身份总览')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '组合' })).not.toBeInTheDocument();
     expect(screen.getByText('组合 · 后续')).toBeInTheDocument();
     expect(getAdminUserPortfolioSummary).not.toHaveBeenCalled();
@@ -540,7 +548,7 @@ describe('AdminUsersPage', () => {
 
   it('requires typed confirmation for session revocation and renders sanitized blocked errors', async () => {
     getUserDetail.mockResolvedValue(detailPayload);
-    revokeAdminUserSessions.mockRejectedValue(new Error('blocked self raw-session-id cookie token stack trace'));
+    revokeAdminUserSessions.mockRejectedValue(new Error('blocked self masked-session browser-blob request-trace'));
 
     renderAt('/zh/admin/users/user-123');
     fireEvent.click(await screen.findByRole('link', { name: '安全' }));

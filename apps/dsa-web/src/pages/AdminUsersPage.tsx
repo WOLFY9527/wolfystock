@@ -2,14 +2,10 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
-  Activity,
   AlertTriangle,
   Clock3,
   ExternalLink,
-  Fingerprint,
-  LockKeyhole,
   Search,
-  ShieldCheck,
   UserRound,
 } from 'lucide-react';
 import {
@@ -29,7 +25,23 @@ import {
   type AdminUserListResponse,
 } from '../api/adminUsers';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Badge, Button, Checkbox, Disclosure, GlassCard, Input, Select } from '../components/common';
+import { ApiErrorAlert, Checkbox, Input, Select } from '../components/common';
+import {
+  TerminalButton,
+  TerminalChip,
+  TerminalDenseList,
+  TerminalDenseTable,
+  TerminalDisclosure,
+  TerminalEmptyState,
+  TerminalGrid,
+  TerminalMetric,
+  TerminalNestedBlock,
+  TerminalNotice,
+  TerminalPageHeading,
+  TerminalPageShell,
+  TerminalPanel,
+  TerminalSectionHeader,
+} from '../components/terminal';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
@@ -113,6 +125,8 @@ const ENTITY_TYPE_OPTIONS = [
   { value: 'provider_operation', label: '数据源运维' },
 ];
 
+const TERMINAL_LINK_ACTION_CLASSNAME = 'inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-white/64 transition hover:border-white/20 hover:text-white';
+
 function text(value: unknown, fallback = '--'): string {
   const normalized = String(value ?? '').trim();
   return normalized || fallback;
@@ -146,18 +160,30 @@ function passwordStateLabel(value?: string | null): string {
   return '未知';
 }
 
-function riskTone(severity?: string): string {
-  if (severity === 'critical') return 'border-rose-300/35 bg-rose-500/12 text-rose-100';
-  if (severity === 'warning') return 'border-amber-300/30 bg-amber-400/10 text-amber-100';
-  return 'border-cyan-300/20 bg-cyan-400/8 text-cyan-100';
+type TerminalChipVariant = React.ComponentProps<typeof TerminalChip>['variant'];
+
+function riskChipVariant(severity?: string): TerminalChipVariant {
+  if (severity === 'critical') return 'danger';
+  if (severity === 'warning') return 'caution';
+  return 'info';
 }
 
-function statusTone(value?: string | null): string {
+function statusChipVariant(value?: string | null): TerminalChipVariant {
   const normalized = String(value || '').toLowerCase();
-  if (['active', 'success', 'ok'].includes(normalized)) return 'border-emerald-300/25 bg-emerald-400/10 text-emerald-100';
-  if (['failed', 'revoked', 'inactive'].includes(normalized)) return 'border-rose-300/30 bg-rose-500/12 text-rose-100';
-  if (['partial', 'warning', 'expired', 'timeout'].includes(normalized)) return 'border-amber-300/25 bg-amber-400/10 text-amber-100';
-  return 'border-white/10 bg-white/[0.04] text-white/62';
+  if (['active', 'success', 'ok'].includes(normalized)) return 'success';
+  if (['failed', 'revoked', 'inactive'].includes(normalized)) return 'danger';
+  if (['partial', 'warning', 'expired', 'timeout'].includes(normalized)) return 'caution';
+  return 'neutral';
+}
+
+function metricValueTone(tone: 'neutral' | 'good' | 'warn' | 'danger' | 'info' = 'neutral'): string {
+  return {
+    neutral: 'text-white',
+    good: 'text-emerald-300',
+    warn: 'text-amber-300',
+    danger: 'text-rose-300',
+    info: 'text-cyan-300',
+  }[tone];
 }
 
 function tabFromSearch(search: string): DetailTabKey {
@@ -246,85 +272,71 @@ function sensitiveFieldCount(metadata?: Record<string, unknown>): number {
   return Object.keys(metadata).filter((key) => SENSITIVE_KEY_RE.test(key)).length;
 }
 
-const ReadOnlyBadges: React.FC = () => (
-  <div className="flex flex-wrap gap-2">
-    <Badge variant="info" className="border-cyan-300/25 bg-cyan-400/10 text-cyan-100">只读</Badge>
-    <Badge variant="success" className="border-emerald-300/25 bg-emerald-400/10 text-emerald-100">无安全控制</Badge>
-    <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/58">敏感字段脱敏</Badge>
-  </div>
-);
-
-const SummaryTile: React.FC<{
-  label: string;
-  value: React.ReactNode;
-  tone?: 'neutral' | 'good' | 'warn' | 'danger' | 'info';
-}> = ({ label, value, tone = 'neutral' }) => {
-  const toneClass = {
-    neutral: 'text-white',
-    good: 'text-emerald-300',
-    warn: 'text-amber-200',
-    danger: 'text-rose-200',
-    info: 'text-cyan-200',
-  }[tone];
-  return (
-    <div className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
-      <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">{label}</p>
-      <p className={cn('mt-2 font-mono text-xl font-semibold leading-none', toneClass)}>{value}</p>
-    </div>
-  );
-};
-
 const PageHeader: React.FC<{
   mode: PageMode;
   user?: AdminUserListItem | null;
   currentState: string;
   nextAction: string;
-}> = ({ mode, user, currentState, nextAction }) => (
-  <GlassCard as="section" className="p-5 md:p-6">
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div className="min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-100/55">Admin Data Control</p>
-        <h1 className="mt-2 text-2xl font-semibold text-white md:text-3xl">
-          {mode === 'directory' ? '用户数据控制中心' : text(user?.displayName || user?.username, '用户详情')}
-        </h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">账号、会话、组合投影与审计线索的管理员工作台。</p>
+}> = ({ mode, user, currentState, nextAction }) => {
+  const title = mode === 'directory'
+    ? '用户目录'
+    : mode === 'activity'
+    ? `${text(user?.displayName || user?.username, '用户活动')} · 活动`
+    : text(user?.displayName || user?.username, '用户详情');
+  return (
+    <TerminalPanel as="section" className="overflow-hidden">
+      <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <TerminalPageHeading
+              eyebrow="WolfyStock 用户治理终端"
+              title={title}
+              action={(
+                <div className="flex flex-wrap justify-end gap-2">
+                  <TerminalChip variant="info">只读投影</TerminalChip>
+                  <TerminalChip variant="neutral">敏感字段脱敏</TerminalChip>
+                  <TerminalChip variant="caution">显式安全确认保留</TerminalChip>
+                </div>
+              )}
+            />
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/52">
+              账号、会话、组合投影与审计线索共用同一套紧凑运维终端节奏；敏感凭证材料、原始会话标识和底层调试载荷默认不进入界面。
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <TerminalMetric
+            label="页面用途"
+            value="核对账号与会话风险"
+            subvalue="目录、详情、活动与组合只读投影"
+            valueClassName="text-sm font-semibold tracking-normal"
+          />
+          <TerminalMetric
+            label="当前状态"
+            value={currentState}
+            subvalue="无原始凭证或敏感元数据直出"
+            valueClassName="text-sm font-semibold tracking-normal"
+          />
+          <TerminalMetric
+            label="下一步"
+            value={nextAction}
+            subvalue="危险操作区独立隔离并保留确认短语"
+            valueClassName="text-sm font-semibold tracking-normal"
+          />
+        </div>
       </div>
-      <ReadOnlyBadges />
-    </div>
-    <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-      <div className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">页面用途</p>
-        <p className="mt-2 text-sm font-semibold text-white">核对账号与会话风险</p>
-        <p className="mt-1 text-xs leading-5 text-white/42">用户目录、详情、组合只读投影</p>
-      </div>
-      <div className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">当前状态</p>
-        <p className="mt-2 text-sm font-semibold text-white">{currentState}</p>
-        <p className="mt-1 text-xs leading-5 text-white/42">敏感字段不进入界面</p>
-      </div>
-      <div className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">下一步</p>
-        <p className="mt-2 text-sm font-semibold text-white">{nextAction}</p>
-        <p className="mt-1 text-xs leading-5 text-white/42">安全操作需要显式权限与确认</p>
-      </div>
-    </div>
-  </GlassCard>
-);
+    </TerminalPanel>
+  );
+};
 
 const FilterRail: React.FC<{
   filters: AdminUserListParams;
   onChange: (next: AdminUserListParams) => void;
   onRefresh: () => void;
 }> = ({ filters, onChange, onRefresh }) => (
-  <GlassCard as="aside" className="p-4 md:p-5">
-    <div className="flex items-start gap-3">
-      <Search className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">过滤</p>
-        <h2 className="mt-1 text-base font-semibold text-white">安全搜索</h2>
-      </div>
-    </div>
-    <div className="mt-5 grid gap-4">
+  <TerminalPanel as="aside" dense className="sticky top-0">
+    <TerminalSectionHeader eyebrow="过滤" title="安全搜索" />
+    <div className="mt-4 grid gap-4">
       <Input
         label="关键词"
         value={filters.q || ''}
@@ -355,25 +367,22 @@ const FilterRail: React.FC<{
         ]}
         onChange={(sort) => onChange({ ...filters, sort, offset: 0 })}
       />
-      <button
-        type="button"
-        className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-semibold text-white/70 transition hover:border-cyan-300/25 hover:text-cyan-100"
-        onClick={onRefresh}
-      >
+      <TerminalButton type="button" variant="secondary" className="h-10 text-sm" onClick={onRefresh}>
+        <Search className="h-4 w-4" aria-hidden="true" />
         刷新目录
-      </button>
-      <p className="rounded-2xl border border-cyan-300/10 bg-cyan-400/8 px-3 py-3 text-xs leading-5 text-cyan-50/70">
-        查看用户目录会记录管理员访问范围，不记录搜索原文或凭证值。
-      </p>
+      </TerminalButton>
+      <TerminalNotice variant="info">
+        查看目录只记录管理员访问范围，不记录搜索原文或凭证值。
+      </TerminalNotice>
     </div>
-  </GlassCard>
+  </TerminalPanel>
 );
 
 const UserRow: React.FC<{ user: AdminUserListItem; locale: 'zh' | 'en'; canReadOpsLogs: boolean }> = ({ user, locale, canReadOpsLogs }) => {
   const href = locale === 'en' ? `/en/admin/users/${encodeURIComponent(user.id)}` : `/zh/admin/users/${encodeURIComponent(user.id)}`;
   const adminLogs = canReadOpsLogs ? adminLogHref(user.links?.adminLogs, locale) : null;
   return (
-    <article className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-4 transition hover:border-white/10 hover:bg-white/[0.03]">
+    <TerminalNestedBlock className="min-w-0 transition hover:border-white/10 hover:bg-white/[0.03]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link to={href} className="group inline-flex min-w-0 items-center gap-2">
@@ -389,12 +398,8 @@ const UserRow: React.FC<{ user: AdminUserListItem; locale: 'zh' | 'en'; canReadO
           </Link>
         </div>
         <div className="flex flex-wrap justify-end gap-1.5">
-          <span className={cn('inline-flex min-h-6 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', statusTone(user.isActive ? 'active' : 'inactive'))}>
-            {user.isActive ? '活跃' : '停用'}
-          </span>
-          <span className="inline-flex min-h-6 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-semibold text-white/62">
-            {user.role === 'admin' ? '管理员' : user.role}
-          </span>
+          <TerminalChip variant={statusChipVariant(user.isActive ? 'active' : 'inactive')}>{user.isActive ? '活跃' : '停用'}</TerminalChip>
+          <TerminalChip variant="neutral">{user.role === 'admin' ? '管理员' : user.role}</TerminalChip>
         </div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
@@ -406,21 +411,19 @@ const UserRow: React.FC<{ user: AdminUserListItem; locale: 'zh' | 'en'; canReadO
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 flex-wrap gap-1.5">
           {user.riskBadges.length > 0 ? user.riskBadges.map((badge) => (
-            <span key={`${badge.code}-${badge.label}`} className={cn('inline-flex min-h-6 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', riskTone(badge.severity))}>
-              {badge.label}
-            </span>
+            <TerminalChip key={`${badge.code}-${badge.label}`} variant={riskChipVariant(badge.severity)}>{badge.label}</TerminalChip>
           )) : (
             <span className="text-xs text-white/38">暂无风险标签</span>
           )}
         </div>
         {adminLogs ? (
-          <Link to={adminLogs} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-semibold text-white/62 transition hover:border-cyan-300/25 hover:text-cyan-100">
+          <Link to={adminLogs} className={TERMINAL_LINK_ACTION_CLASSNAME}>
             Admin Logs
             <ExternalLink className="h-3 w-3" aria-hidden="true" />
           </Link>
         ) : null}
       </div>
-    </article>
+    </TerminalNestedBlock>
   );
 };
 
@@ -434,21 +437,20 @@ const DirectoryView: React.FC<{
   const { language } = useI18n();
   const users = state.data?.items || [];
   return (
-    <div className="grid min-h-0 grid-cols-1 gap-5 xl:grid-cols-12">
+    <TerminalGrid className="min-h-0">
       <div className="xl:col-span-3">
         <FilterRail filters={filters} onChange={setFilters} onRefresh={reload} />
       </div>
       <div className="min-w-0 xl:col-span-9">
-        <GlassCard as="section" className="p-4 md:p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Directory</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">用户目录</h2>
-            </div>
-            <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/58">
-              {state.data ? `${state.data.total} users` : '读取中'}
-            </Badge>
-          </div>
+        <TerminalPanel as="section" dense className="min-h-0">
+            <TerminalSectionHeader
+            eyebrow="目录"
+            title="用户目录"
+            action={<TerminalChip variant="neutral">{state.data ? `${state.data.total} 名用户` : '读取中'}</TerminalChip>}
+          />
+          <TerminalNotice variant="neutral" className="mt-3">
+            目录只展示脱敏摘要、状态标签和可审计的跳转线索，不展示敏感凭证字段、会话原文或底层调试载荷。
+          </TerminalNotice>
           {state.error ? (
             <div className="mt-4">
               <p className="mb-2 text-sm font-semibold text-rose-100">读取用户目录失败</p>
@@ -460,15 +462,17 @@ const DirectoryView: React.FC<{
               {[0, 1, 2].map((item) => <div key={item} className="h-32 animate-pulse rounded-2xl border border-white/5 bg-white/[0.025]" />)}
             </div>
           ) : users.length === 0 && !state.error ? (
-            <div className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-8 text-sm text-white/50">暂无符合条件的用户</div>
+            <TerminalEmptyState className="mt-4" title="暂无符合条件的用户">
+              调整筛选条件或刷新目录后重试。
+            </TerminalEmptyState>
           ) : (
-            <div className="mt-4 grid gap-3">
+            <TerminalDenseList className="mt-4 gap-3">
               {users.map((user) => <UserRow key={user.id} user={user} locale={language} canReadOpsLogs={canReadOpsLogs} />)}
-            </div>
+            </TerminalDenseList>
           )}
-        </GlassCard>
+        </TerminalPanel>
       </div>
-    </div>
+    </TerminalGrid>
   );
 };
 
@@ -517,25 +521,17 @@ const DetailTabs: React.FC<{
 };
 
 const SessionList: React.FC<{ sessions: AdminSessionSummary[] }> = ({ sessions }) => (
-  <GlassCard as="section" className="p-4 md:p-5">
-    <div className="flex items-start gap-3">
-      <Fingerprint className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Sessions</p>
-        <h2 className="mt-1 text-base font-semibold text-white">最近脱敏会话</h2>
-      </div>
-    </div>
+  <TerminalPanel as="section" dense>
+    <TerminalSectionHeader eyebrow="会话" title="最近脱敏会话" />
     {sessions.length === 0 ? (
-      <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/50">暂无会话摘要</p>
+      <TerminalEmptyState className="mt-4" title="暂无会话摘要" />
     ) : (
-      <div className="mt-5 grid gap-3">
+      <TerminalDenseList className="mt-4 gap-3">
         {sessions.map((session) => (
-          <div key={session.sessionHandle} className="rounded-2xl border border-white/5 bg-black/20 p-3">
+          <TerminalNestedBlock key={session.sessionHandle}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-mono text-sm font-semibold text-white">{session.sessionHandle}</span>
-              <span className={cn('inline-flex min-h-6 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', statusTone(session.status))}>
-                {statusLabel(session.status)}
-              </span>
+              <TerminalChip variant={statusChipVariant(session.status)}>{statusLabel(session.status)}</TerminalChip>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
               <p>创建 <span className="block truncate font-mono text-white/68">{formatDate(session.createdAt)}</span></p>
@@ -543,28 +539,26 @@ const SessionList: React.FC<{ sessions: AdminSessionSummary[] }> = ({ sessions }
               <p>过期 <span className="block truncate font-mono text-white/68">{formatDate(session.expiresAt)}</span></p>
               <p>撤销 <span className="block truncate font-mono text-white/68">{formatDate(session.revokedAt)}</span></p>
             </div>
-          </div>
+          </TerminalNestedBlock>
         ))}
-      </div>
+      </TerminalDenseList>
     )}
-  </GlassCard>
+  </TerminalPanel>
 );
 
 const FuturePlaceholders: React.FC = () => (
-  <GlassCard as="section" className="p-4 md:p-5">
-    <div className="flex items-start gap-3">
-      <LockKeyhole className="mt-1 h-4 w-4 text-amber-200" aria-hidden="true" />
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Scope Guard</p>
-        <h2 className="mt-1 text-base font-semibold text-white">后续能力占位</h2>
-      </div>
+  <TerminalPanel as="section" dense>
+    <TerminalSectionHeader eyebrow="边界" title="后续能力占位" />
+    <div className="mt-4 grid gap-3">
+      <TerminalNotice variant="neutral">安全控制只保留本阶段允许的只读与显式确认能力，不扩展到重置密码或 RBAC 变更。</TerminalNotice>
+      <TerminalDisclosure title="后续阶段占位" summary="默认收起">
+        <div className="grid gap-2 text-xs leading-5 text-white/48">
+          <p>组合、分析、Scanner、Backtest 管理视图等待独立后端合同。</p>
+          <p>原始数据库浏览器、原始 prompt、provider 载荷与堆栈明细不在本阶段展示。</p>
+        </div>
+      </TerminalDisclosure>
     </div>
-    <div className="mt-4 grid gap-2 text-sm text-white/55">
-      {['安全控制只读占位，未提供禁用、重置、撤销操作。', '组合、分析、Scanner、Backtest 管理视图等待独立后端合同。', '原始数据库浏览器、原始 prompt、provider payload 与堆栈明细不在本阶段展示。'].map((item) => (
-        <p key={item} className="rounded-2xl border border-white/5 bg-black/20 px-3 py-3">{item}</p>
-      ))}
-    </div>
-  </GlassCard>
+  </TerminalPanel>
 );
 
 const PortfolioTab: React.FC<{
@@ -577,17 +571,15 @@ const PortfolioTab: React.FC<{
   const activities = activityState.data?.items || [];
   const brokerStatuses = Object.entries(summary?.brokerSyncSummary.statuses || {});
   return (
-    <div className="grid min-h-0 grid-cols-1 gap-5 xl:grid-cols-12">
+    <TerminalGrid className="min-h-0">
       <div className="min-w-0 xl:col-span-8">
-        <GlassCard as="section" className="p-4 md:p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Portfolio</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">组合只读总览</h2>
-              <p className="mt-1 max-w-2xl text-xs leading-5 text-white/46">仅展示账户、估值、持仓和账本活动的安全投影；不会触发同步、导入、重放、FX 刷新或组合数据修改。</p>
-            </div>
-            <Badge variant="info" className="border-cyan-300/25 bg-cyan-400/10 text-cyan-100">只读投影</Badge>
-          </div>
+        <TerminalPanel as="section" dense>
+          <TerminalSectionHeader
+            eyebrow="组合投影"
+            title="组合只读总览"
+            action={<TerminalChip variant="info">只读投影</TerminalChip>}
+          />
+          <p className="mt-3 max-w-2xl text-xs leading-5 text-white/46">仅展示账户、估值、持仓和账本活动的安全投影；不会触发同步、导入、重放、汇率刷新或组合数据修改。</p>
           {summaryState.error ? (
             <div className="mt-4">
               <ApiErrorAlert error={summaryState.error} />
@@ -600,75 +592,72 @@ const PortfolioTab: React.FC<{
           ) : summary ? (
             <>
               <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <SummaryTile label="账户数" value={`${summary.accountCount} / ${summary.activeAccountCount}`} tone="info" />
-                <SummaryTile label="现金" value={formatMoney(summary.totalCash)} tone="neutral" />
-                <SummaryTile label="市值" value={formatMoney(summary.totalMarketValue)} tone="good" />
-                <SummaryTile label="权益" value={formatMoney(summary.totalEquity)} tone="good" />
-                <SummaryTile label="已实现 P&L" value={formatMoney(summary.realizedPnl)} tone={summary.realizedPnl.amount >= 0 ? 'good' : 'danger'} />
-                <SummaryTile label="未实现 P&L" value={formatMoney(summary.unrealizedPnl)} tone={summary.unrealizedPnl.amount >= 0 ? 'good' : 'danger'} />
-                <SummaryTile label="交易/现金/公司行动" value={`${summary.ledgerCounts.trades}/${summary.ledgerCounts.cashEvents}/${summary.ledgerCounts.corporateActions}`} tone="info" />
-                <SummaryTile label="币种" value={summary.baseCurrencies.join(' / ') || '--'} tone="neutral" />
+                <TerminalMetric label="账户数" value={`${summary.accountCount} / ${summary.activeAccountCount}`} valueClassName={cn('text-xl font-semibold', metricValueTone('info'))} />
+                <TerminalMetric label="现金" value={formatMoney(summary.totalCash)} valueClassName={cn('text-xl font-semibold', metricValueTone('neutral'))} />
+                <TerminalMetric label="市值" value={formatMoney(summary.totalMarketValue)} valueClassName={cn('text-xl font-semibold', metricValueTone('good'))} />
+                <TerminalMetric label="权益" value={formatMoney(summary.totalEquity)} valueClassName={cn('text-xl font-semibold', metricValueTone('good'))} />
+                <TerminalMetric label="已实现 P&L" value={formatMoney(summary.realizedPnl)} valueClassName={cn('text-xl font-semibold', metricValueTone(summary.realizedPnl.amount >= 0 ? 'good' : 'danger'))} />
+                <TerminalMetric label="未实现 P&L" value={formatMoney(summary.unrealizedPnl)} valueClassName={cn('text-xl font-semibold', metricValueTone(summary.unrealizedPnl.amount >= 0 ? 'good' : 'danger'))} />
+                <TerminalMetric label="交易/现金/公司行动" value={`${summary.ledgerCounts.trades}/${summary.ledgerCounts.cashEvents}/${summary.ledgerCounts.corporateActions}`} valueClassName={cn('text-xl font-semibold', metricValueTone('info'))} />
+                <TerminalMetric label="币种" value={summary.baseCurrencies.join(' / ') || '--'} valueClassName={cn('text-xl font-semibold', metricValueTone('neutral'))} />
               </div>
               {summary.accountCount === 0 ? (
-                <p className="mt-5 rounded-2xl border border-white/5 bg-black/20 px-4 py-6 text-sm text-white/50">该用户暂无组合账户</p>
+                <TerminalEmptyState className="mt-5" title="该用户暂无组合账户" />
               ) : (
                 <div className="mt-5">
-                  <h3 className="text-sm font-semibold text-white">组合账户</h3>
+                  <TerminalSectionHeader eyebrow="账户" title="组合账户" />
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
                     {summary.accounts.map((account) => (
-                      <article key={account.id} className="rounded-2xl border border-white/5 bg-black/20 p-3">
+                      <TerminalNestedBlock key={account.id}>
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-white">{account.name}</p>
-                            <p className="mt-1 truncate font-mono text-[11px] text-white/42">{text(account.brokerAccountHandle, 'masked')}</p>
+                            <p className="mt-1 truncate font-mono text-[11px] text-white/42">{text(account.brokerAccountHandle, '已脱敏')}</p>
                           </div>
-                          <span className={cn('inline-flex min-h-6 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', statusTone(account.isActive ? 'active' : 'inactive'))}>
-                            {account.isActive ? '活跃' : '停用'}
-                          </span>
+                          <TerminalChip variant={statusChipVariant(account.isActive ? 'active' : 'inactive')}>{account.isActive ? '活跃' : '停用'}</TerminalChip>
                         </div>
                         <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-white/44">
-                          <span>Broker <b className="block truncate text-white/70">{text(account.broker)}</b></span>
-                          <span>Market <b className="block truncate text-white/70">{text(account.market)}</b></span>
-                          <span>Currency <b className="block truncate text-white/70">{text(account.baseCurrency)}</b></span>
+                          <span>券商 <b className="block truncate text-white/70">{text(account.broker)}</b></span>
+                          <span>市场 <b className="block truncate text-white/70">{text(account.market)}</b></span>
+                          <span>币种 <b className="block truncate text-white/70">{text(account.baseCurrency)}</b></span>
                         </div>
-                      </article>
+                      </TerminalNestedBlock>
                     ))}
                   </div>
                 </div>
               )}
-              <div className="mt-5 rounded-2xl border border-cyan-300/10 bg-cyan-400/8 px-4 py-3 text-xs leading-5 text-cyan-50/70">
-                Broker sync summary: {summary.brokerSyncSummary.connections} connections · last sync {formatDate(summary.brokerSyncSummary.lastSyncAt)} · FX {summary.brokerSyncSummary.fxStale ? 'stale' : 'current'}
+              <TerminalNotice variant="info" className="mt-5">
+                经纪商同步摘要：{summary.brokerSyncSummary.connections} 条连接 · 最近同步 {formatDate(summary.brokerSyncSummary.lastSyncAt)} · 汇率 {summary.brokerSyncSummary.fxStale ? '过期' : '最新'}
                 {brokerStatuses.length ? ` · ${brokerStatuses.map(([key, value]) => `${key}:${value}`).join(' ')}` : ''}
-              </div>
+              </TerminalNotice>
               {summary.limitations.length ? (
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {summary.limitations.map((item) => <Badge key={item} variant="default" className="border-white/10 bg-white/[0.04] text-white/58">{limitationText(item)}</Badge>)}
+                  {summary.limitations.map((item) => <TerminalChip key={item} variant="neutral">{limitationText(item)}</TerminalChip>)}
                 </div>
               ) : null}
             </>
           ) : null}
-        </GlassCard>
+        </TerminalPanel>
       </div>
       <div className="grid min-w-0 gap-5 xl:col-span-4">
-        <GlassCard as="section" className="p-4 md:p-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Guardrails</p>
-          <h2 className="mt-1 text-base font-semibold text-white">限制 / 审计感知</h2>
-          <div className="mt-4 grid gap-2 text-xs leading-5 text-white/50">
-            <p className="rounded-xl border border-white/5 bg-black/20 px-3 py-2">组合视图只读，不提供修正、导入、同步、重放或外部调用按钮。</p>
-            <p className="rounded-xl border border-white/5 bg-black/20 px-3 py-2">经纪商账户仅显示 masked handle；原始 payload、sync metadata 和凭证不会进入界面。</p>
+        <TerminalPanel as="section" dense>
+          <TerminalSectionHeader eyebrow="护栏" title="限制 / 审计感知" />
+          <div className="mt-4 grid gap-2">
+            <TerminalNotice variant="neutral">组合视图只读，不提供修正、导入、同步、重放或外部调用按钮。</TerminalNotice>
+            <TerminalNotice variant="info">经纪商账户仅显示脱敏 handle；底层同步细节和凭证材料不会进入界面。</TerminalNotice>
           </div>
-        </GlassCard>
+        </TerminalPanel>
       </div>
       <div className="min-w-0 xl:col-span-7">
-        <GlassCard as="section" className="p-4 md:p-5">
-          <h2 className="text-base font-semibold text-white">持仓明细</h2>
+        <TerminalPanel as="section" dense>
+          <TerminalSectionHeader eyebrow="持仓" title="持仓明细" />
           {holdingsState.error ? <div className="mt-3"><ApiErrorAlert error={holdingsState.error} /></div> : null}
           {holdingsState.loading && holdings.length === 0 ? (
             <div className="mt-4 h-32 animate-pulse rounded-2xl border border-white/5 bg-white/[0.025]" />
           ) : holdings.length === 0 ? (
-            <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-6 text-sm text-white/50">暂无持仓</p>
+            <TerminalEmptyState className="mt-4" title="暂无持仓" />
           ) : (
-            <div className="mt-4 overflow-x-auto no-scrollbar">
+            <TerminalDenseTable className="mt-4 border-white/6 bg-black/15">
               <table className="w-full min-w-[620px] text-left text-xs">
                 <thead className="text-white/34">
                   <tr>
@@ -677,7 +666,7 @@ const PortfolioTab: React.FC<{
                     <th className="py-2 pr-3">数量</th>
                     <th className="py-2 pr-3">市值</th>
                     <th className="py-2 pr-3">未实现 P&L</th>
-                    <th className="py-2">FX</th>
+                    <th className="py-2">汇率</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 text-white/62">
@@ -693,53 +682,47 @@ const PortfolioTab: React.FC<{
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TerminalDenseTable>
           )}
-        </GlassCard>
+        </TerminalPanel>
       </div>
       <div className="min-w-0 xl:col-span-5">
-        <GlassCard as="section" className="p-4 md:p-5">
-          <h2 className="text-base font-semibold text-white">组合活动</h2>
+        <TerminalPanel as="section" dense>
+          <TerminalSectionHeader eyebrow="活动" title="组合活动" />
           {activityState.error ? <div className="mt-3"><ApiErrorAlert error={activityState.error} /></div> : null}
           {activityState.loading && activities.length === 0 ? (
             <div className="mt-4 h-32 animate-pulse rounded-2xl border border-white/5 bg-white/[0.025]" />
           ) : activities.length === 0 ? (
-            <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-6 text-sm text-white/50">暂无组合活动</p>
+            <TerminalEmptyState className="mt-4" title="暂无组合活动" />
           ) : (
-            <div className="mt-4 grid gap-3">
+            <TerminalDenseList className="mt-4 gap-3">
               {activities.slice(0, 8).map((item) => (
-                <article key={item.idHash} className="rounded-2xl border border-white/5 bg-black/20 p-3">
+                <TerminalNestedBlock key={item.idHash}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-mono text-sm font-semibold text-white">{item.symbol || item.type}</p>
                       <p className="mt-1 text-[11px] text-white/42">{item.accountName} · {formatDate(item.eventDate)}</p>
                     </div>
-                    <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/58">{item.type}</Badge>
+                    <TerminalChip variant="neutral">{item.type}</TerminalChip>
                   </div>
                   <p className="mt-2 truncate text-[11px] text-white/50">
-                    {text(item.side || item.direction || item.actionType, 'activity')} · qty {text(item.quantity)} · amount {text(item.amount)}
+                    {text(item.side || item.direction || item.actionType, 'activity')} · 数量 {text(item.quantity)} · 金额 {text(item.amount)}
                   </p>
-                </article>
+                </TerminalNestedBlock>
               ))}
-            </div>
+            </TerminalDenseList>
           )}
-        </GlassCard>
+        </TerminalPanel>
       </div>
-    </div>
+    </TerminalGrid>
   );
 };
 
 const UnavailableAdminCapability: React.FC<{ title: string; description: string }> = ({ title, description }) => (
-  <GlassCard as="section" className="p-5 md:p-6">
-    <div className="flex items-start gap-3">
-      <LockKeyhole className="mt-1 h-4 w-4 text-amber-200" aria-hidden="true" />
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Capability Required</p>
-        <h2 className="mt-1 text-base font-semibold text-white">{title}</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-white/52">{description}</p>
-      </div>
-    </div>
-  </GlassCard>
+  <TerminalPanel as="section" dense>
+    <TerminalSectionHeader eyebrow="权限边界" title={title} />
+    <TerminalNotice variant="caution" className="mt-4">{description}</TerminalNotice>
+  </TerminalPanel>
 );
 
 const SecurityActionCard: React.FC<{
@@ -756,17 +739,16 @@ const SecurityActionCard: React.FC<{
 }> = ({ actionKey, title, description, confirmPhrase, buttonLabel, available, danger = false, state, onChange, onSubmit }) => {
   const canSubmit = available && state.reason.trim().length > 0 && state.confirm === confirmPhrase && !state.loading;
   return (
-    <GlassCard as="section" className="p-4 md:p-5" data-testid={`security-action-${actionKey.replace('_sessions', '-sessions')}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Security Action</p>
-          <h3 className="mt-1 text-base font-semibold text-white">{title}</h3>
-          <p className="mt-1 max-w-xl text-xs leading-5 text-white/46">{description}</p>
-        </div>
-        <span className={cn('inline-flex min-h-6 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', available ? statusTone('warning') : 'border-white/10 bg-white/[0.04] text-white/35')}>
-          {available ? '可执行' : '当前状态不可用'}
-        </span>
-      </div>
+    <TerminalNestedBlock data-testid={`security-action-${actionKey.replace('_sessions', '-sessions')}`} className={danger ? 'border-rose-400/12 bg-rose-500/[0.03]' : ''}>
+      <TerminalSectionHeader
+        eyebrow="安全操作"
+        title={title}
+        action={<TerminalChip variant={available ? (danger ? 'danger' : 'caution') : 'neutral'}>{available ? '可执行' : '当前状态不可用'}</TerminalChip>}
+      />
+      <p className="mt-3 max-w-xl text-xs leading-5 text-white/46">{description}</p>
+      <TerminalNotice variant={danger ? 'danger' : 'neutral'} className="mt-3">
+        操作需要填写审计原因并输入确认短语；响应仅返回脱敏结果和审计事件编号。
+      </TerminalNotice>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <Input
           label="操作原因"
@@ -793,15 +775,9 @@ const SecurityActionCard: React.FC<{
         />
       ) : null}
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Button
-          variant={danger ? 'danger-subtle' : 'gradient'}
-          size="sm"
-          isLoading={state.loading}
-          disabled={!canSubmit}
-          onClick={onSubmit}
-        >
+        <TerminalButton type="button" variant={danger ? 'danger' : 'secondary'} disabled={!canSubmit} onClick={onSubmit}>
           {buttonLabel}
-        </Button>
+        </TerminalButton>
         {!available ? <span className="text-xs text-white/35">账户当前状态不适用该操作。</span> : null}
       </div>
       {state.error ? (
@@ -810,12 +786,12 @@ const SecurityActionCard: React.FC<{
         </div>
       ) : null}
       {state.result ? (
-        <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-xs leading-5 text-emerald-50/80">
+        <TerminalNotice variant="info" className="mt-4 border-emerald-300/20 bg-emerald-400/10 text-emerald-50/80">
           <p>状态: {statusLabel(state.result.status)} · 会话撤销 {state.result.sessionsRevoked}</p>
           {state.result.auditEventId ? <p className="mt-1 font-mono text-emerald-100">{state.result.auditEventId}</p> : null}
-        </div>
+        </TerminalNotice>
       ) : null}
-    </GlassCard>
+    </TerminalNestedBlock>
   );
 };
 
@@ -827,35 +803,35 @@ const SecurityTab: React.FC<{
 }> = ({ detail, actionState, updateAction, submitAction }) => {
   const user = detail.user;
   return (
-    <div className="grid min-h-0 grid-cols-1 gap-5 xl:grid-cols-12">
+    <TerminalGrid className="min-h-0">
       <div className="min-w-0 xl:col-span-4">
-        <GlassCard as="section" className="p-4 md:p-5">
-          <div className="flex items-start gap-3">
-            <ShieldCheck className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Security S1</p>
-              <h2 className="mt-1 text-base font-semibold text-white">安全控制 S1</h2>
-            </div>
-          </div>
+        <TerminalPanel as="section" dense>
+          <TerminalSectionHeader eyebrow="安全 S1" title="安全控制 S1" />
           <div className="mt-5 grid grid-cols-2 gap-3">
-            <SummaryTile label="账户状态" value={user.isActive ? '活跃' : '停用'} tone={user.isActive ? 'good' : 'danger'} />
-            <SummaryTile label="活跃会话" value={user.sessionSummary.activeCount} tone="info" />
-            <SummaryTile label="密码状态" value={passwordStateLabel(user.passwordState)} tone={user.passwordState === 'unset' ? 'warn' : 'neutral'} />
-            <SummaryTile label="角色" value={user.role === 'admin' ? '管理员' : user.role} tone="neutral" />
+            <TerminalMetric label="账户状态" value={user.isActive ? '活跃' : '停用'} valueClassName={cn('text-xl font-semibold', metricValueTone(user.isActive ? 'good' : 'danger'))} />
+            <TerminalMetric label="活跃会话" value={user.sessionSummary.activeCount} valueClassName={cn('text-xl font-semibold', metricValueTone('info'))} />
+            <TerminalMetric label="密码状态" value={passwordStateLabel(user.passwordState)} valueClassName={cn('text-xl font-semibold', metricValueTone(user.passwordState === 'unset' ? 'warn' : 'neutral'))} />
+            <TerminalMetric label="角色" value={user.role === 'admin' ? '管理员' : user.role} valueClassName={cn('text-xl font-semibold', metricValueTone('neutral'))} />
           </div>
-          <p className="mt-4 rounded-2xl border border-cyan-300/10 bg-cyan-400/8 px-3 py-3 text-xs leading-5 text-cyan-50/70">
-            安全状态查看和控制操作都会被审计；响应不会返回密码、哈希、Cookie、token 或原始 session id。
-          </p>
-          <Disclosure summary="后续阶段占位" className="mt-4" bodyClassName="rounded-xl border border-white/5 bg-white/[0.025] p-3">
+          <TerminalNotice variant="info" className="mt-4">
+            安全状态查看和控制操作都会被审计；响应不会返回敏感凭证字段、原始会话标识或底层调试材料。
+          </TerminalNotice>
+          <TerminalDisclosure title="后续阶段占位" summary="默认收起" className="mt-4">
             <div className="grid gap-2 text-xs text-white/42">
               <p>reset-password 后续阶段，不在本次实现。</p>
               <p>force-password-change 后续阶段，不在本次实现。</p>
               <p>unlock / RBAC capability model 后续阶段，不在本次实现。</p>
             </div>
-          </Disclosure>
-        </GlassCard>
+          </TerminalDisclosure>
+        </TerminalPanel>
       </div>
       <div className="grid min-w-0 gap-5 xl:col-span-8">
+        <TerminalPanel as="section" dense>
+          <TerminalSectionHeader eyebrow="危险区" title="安全操作区" action={<TerminalChip variant="danger">隔离显示</TerminalChip>} />
+          <TerminalNotice variant="danger" className="mt-3">
+            危险操作与状态查看分区显示。禁用、启用和撤销会话保留原有权限、确认短语和审计链路，不暴露原始会话或凭证材料。
+          </TerminalNotice>
+          <div className="mt-4 grid gap-4">
         {user.isActive ? (
           <SecurityActionCard
             actionKey="disable"
@@ -873,7 +849,7 @@ const SecurityTab: React.FC<{
           <SecurityActionCard
             actionKey="enable"
             title="启用账户"
-            description="恢复目标用户账户访问状态。该操作仍需审计原因和 typed confirmation。"
+            description="恢复目标用户账户访问状态。该操作仍需审计原因和确认短语。"
             confirmPhrase="ENABLE"
             buttonLabel="启用账户"
             available
@@ -885,7 +861,7 @@ const SecurityTab: React.FC<{
         <SecurityActionCard
           actionKey="revoke_sessions"
           title="撤销全部会话"
-          description="撤销目标用户全部应用会话，仅返回数量和审计结果，不返回任何 raw session id。"
+          description="撤销目标用户全部应用会话，仅返回数量和审计结果，不返回任何原始会话标识。"
           confirmPhrase="REVOKE_SESSIONS"
           buttonLabel="撤销全部会话"
           available
@@ -894,8 +870,10 @@ const SecurityTab: React.FC<{
           onChange={(patch) => updateAction('revoke_sessions', patch)}
           onSubmit={() => submitAction('revoke_sessions')}
         />
+          </div>
+        </TerminalPanel>
       </div>
-    </div>
+    </TerminalGrid>
   );
 };
 
@@ -903,82 +881,73 @@ const DetailOverview: React.FC<{ detail: AdminUserDetailResponse; locale: 'zh' |
   const { user } = detail;
   const adminLogs = canReadOpsLogs ? adminLogHref(detail.dataLinks.adminLogs || user.links?.adminLogs, locale) : null;
   return (
-    <div className="grid min-h-0 grid-cols-1 gap-5 xl:grid-cols-12">
+    <TerminalGrid className="min-h-0">
       <div className="min-w-0 xl:col-span-8">
-        <GlassCard as="section" className="p-4 md:p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Identity</p>
-              <h2 className="mt-1 truncate text-xl font-semibold text-white">{text(user.displayName || user.username)}</h2>
-              <p className="mt-1 truncate font-mono text-xs text-white/42">{user.id}</p>
-            </div>
-            <div className="flex flex-wrap justify-end gap-1.5">
-              <span className={cn('inline-flex min-h-6 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', statusTone(user.isActive ? 'active' : 'inactive'))}>
-                {user.isActive ? '活跃' : '停用'}
-              </span>
-              <span className="inline-flex min-h-6 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-semibold text-white/62">
-                {user.role === 'admin' ? '管理员' : user.role}
-              </span>
-            </div>
-          </div>
+        <TerminalPanel as="section" dense>
+          <TerminalSectionHeader
+            eyebrow="身份总览"
+            title={text(user.displayName || user.username)}
+            action={(
+              <div className="flex flex-wrap gap-2">
+                <TerminalChip variant={statusChipVariant(user.isActive ? 'active' : 'inactive')}>{user.isActive ? '活跃' : '停用'}</TerminalChip>
+                <TerminalChip variant="neutral">{user.role === 'admin' ? '管理员' : user.role}</TerminalChip>
+              </div>
+            )}
+          />
+          <p className="mt-1 truncate font-mono text-xs text-white/42">{user.id}</p>
           <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <SummaryTile label="活跃会话" value={user.sessionSummary.activeCount} tone="good" />
-            <SummaryTile label="过期会话" value={user.sessionSummary.expiredCount} tone="warn" />
-            <SummaryTile label="撤销会话" value={user.sessionSummary.revokedCount} tone="info" />
-            <SummaryTile label="密码状态" value={passwordStateLabel(user.passwordState)} tone={user.passwordState === 'unset' ? 'warn' : 'neutral'} />
+            <TerminalMetric label="活跃会话" value={user.sessionSummary.activeCount} valueClassName={cn('text-xl font-semibold', metricValueTone('good'))} />
+            <TerminalMetric label="过期会话" value={user.sessionSummary.expiredCount} valueClassName={cn('text-xl font-semibold', metricValueTone('warn'))} />
+            <TerminalMetric label="撤销会话" value={user.sessionSummary.revokedCount} valueClassName={cn('text-xl font-semibold', metricValueTone('info'))} />
+            <TerminalMetric label="密码状态" value={passwordStateLabel(user.passwordState)} valueClassName={cn('text-xl font-semibold', metricValueTone(user.passwordState === 'unset' ? 'warn' : 'neutral'))} />
           </div>
           <div className="mt-5 grid grid-cols-1 gap-3 text-sm text-white/52 md:grid-cols-2">
-            <p className="rounded-2xl border border-white/5 bg-black/20 px-4 py-3">创建时间 <span className="block font-mono text-white/72">{formatDate(user.createdAt)}</span></p>
-            <p className="rounded-2xl border border-white/5 bg-black/20 px-4 py-3">更新时间 <span className="block font-mono text-white/72">{formatDate(user.updatedAt)}</span></p>
-            <p className="rounded-2xl border border-white/5 bg-black/20 px-4 py-3">最近活动 <span className="block font-mono text-white/72">{formatDate(user.lastSeenAt)}</span></p>
-            <p className="rounded-2xl border border-white/5 bg-black/20 px-4 py-3">下一会话过期 <span className="block font-mono text-white/72">{formatDate(user.sessionSummary.nextExpiresAt)}</span></p>
+            <TerminalNestedBlock>创建时间 <span className="block font-mono text-white/72">{formatDate(user.createdAt)}</span></TerminalNestedBlock>
+            <TerminalNestedBlock>更新时间 <span className="block font-mono text-white/72">{formatDate(user.updatedAt)}</span></TerminalNestedBlock>
+            <TerminalNestedBlock>最近活动 <span className="block font-mono text-white/72">{formatDate(user.lastSeenAt)}</span></TerminalNestedBlock>
+            <TerminalNestedBlock>下一会话过期 <span className="block font-mono text-white/72">{formatDate(user.sessionSummary.nextExpiresAt)}</span></TerminalNestedBlock>
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
             {user.riskBadges.length > 0 ? user.riskBadges.map((badge) => (
-              <span key={badge.code} className={cn('inline-flex min-h-6 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', riskTone(badge.severity))}>
-                {badge.label}
-              </span>
+              <TerminalChip key={badge.code} variant={riskChipVariant(badge.severity)}>{badge.label}</TerminalChip>
             )) : <span className="text-xs text-white/38">暂无风险标签</span>}
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
             {adminLogs ? (
-              <Link to={adminLogs} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-white/64 transition hover:border-cyan-300/25 hover:text-cyan-100">
+              <Link to={adminLogs} className={TERMINAL_LINK_ACTION_CLASSNAME}>
                 查看 Admin Logs
                 <ExternalLink className="h-3 w-3" aria-hidden="true" />
               </Link>
             ) : null}
-            <button type="button" disabled className="inline-flex min-h-9 cursor-not-allowed items-center rounded-lg border border-white/5 bg-white/[0.02] px-3 text-xs font-semibold text-white/25">
-              安全操作后续开放
-            </button>
+            <TerminalChip variant="neutral">当前面板只读</TerminalChip>
           </div>
-        </GlassCard>
+        </TerminalPanel>
       </div>
       <div className="grid min-w-0 gap-5 xl:col-span-4">
-        <GlassCard as="section" className="p-4 md:p-5">
-          <div className="flex items-start gap-3">
-            <ShieldCheck className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Audit</p>
-              <h2 className="mt-1 text-base font-semibold text-white">访问提示</h2>
-            </div>
-          </div>
-          <p className="mt-4 rounded-2xl border border-cyan-300/10 bg-cyan-400/8 px-3 py-3 text-xs leading-5 text-cyan-50/70">
-            打开用户详情会记录目标用户和管理员身份。响应不包含密码、哈希、Cookie、令牌或原始会话值。
-          </p>
-        </GlassCard>
-        <GlassCard as="section" className="p-4 md:p-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Limitations</p>
-          <h2 className="mt-1 text-base font-semibold text-white">已知限制</h2>
-          <div className="mt-4 grid gap-2">
-            {detail.limitations.length > 0 ? detail.limitations.map((item) => (
-              <p key={item} className="rounded-xl border border-white/5 bg-black/20 px-3 py-2 text-xs text-white/48">{item.replace(/_/g, ' ')}</p>
-            )) : <p className="text-xs text-white/40">暂无限制说明</p>}
-          </div>
-        </GlassCard>
+        <TerminalPanel as="section" dense>
+          <TerminalSectionHeader eyebrow="审计" title="访问提示" />
+          <TerminalNotice variant="info" className="mt-4">
+            打开用户详情会记录目标用户和管理员身份。响应不包含敏感凭证字段、原始会话值或底层调试材料。
+          </TerminalNotice>
+        </TerminalPanel>
+        <TerminalPanel as="section" dense>
+          <TerminalSectionHeader eyebrow="限制" title="已知限制" />
+          {detail.limitations.length > 0 ? (
+            <TerminalDisclosure title="限制条目" summary={`${detail.limitations.length} 项，默认收起`} className="mt-4">
+              <div className="grid gap-2">
+                {detail.limitations.map((item) => (
+                  <TerminalNotice key={item} variant="neutral">{item.replace(/_/g, ' ')}</TerminalNotice>
+                ))}
+              </div>
+            </TerminalDisclosure>
+          ) : (
+            <TerminalEmptyState className="mt-4" title="暂无限制说明" />
+          )}
+        </TerminalPanel>
       </div>
       <div className="min-w-0 xl:col-span-7"><SessionList sessions={detail.sessions} /></div>
       <div className="min-w-0 xl:col-span-5"><FuturePlaceholders /></div>
-    </div>
+    </TerminalGrid>
   );
 };
 
@@ -989,14 +958,8 @@ const ActivityFilters: React.FC<{
 }> = ({ filters, onChange, onRefresh }) => {
   const toggle = (key: 'includeAdmin' | 'includeSystem') => onChange({ ...filters, [key]: !filters[key], offset: 0 });
   return (
-    <GlassCard as="aside" className="p-4 md:p-5">
-      <div className="flex items-start gap-3">
-        <Activity className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Timeline</p>
-          <h2 className="mt-1 text-base font-semibold text-white">活动筛选</h2>
-        </div>
-      </div>
+    <TerminalPanel as="aside" dense className="sticky top-0">
+      <TerminalSectionHeader eyebrow="时间线" title="活动筛选" />
       <div className="mt-5 grid gap-4">
         <Input label="安全查询" value={filters.q || ''} placeholder="action / symbol / hash" onChange={(event) => onChange({ ...filters, q: event.target.value, offset: 0 })} />
         <Select label="事件族群" value={filters.family || ''} options={ACTIVITY_FAMILY_OPTIONS} onChange={(family) => onChange({ ...filters, family, offset: 0 })} />
@@ -1004,21 +967,21 @@ const ActivityFilters: React.FC<{
         <Select label="对象类型" value={filters.entityType || ''} options={ENTITY_TYPE_OPTIONS} onChange={(entityType) => onChange({ ...filters, entityType, offset: 0 })} />
         <Select label="发起方" value={filters.actorType || ''} options={ACTOR_TYPE_OPTIONS} onChange={(actorType) => onChange({ ...filters, actorType, offset: 0 })} />
         <div className="grid grid-cols-2 gap-2">
-          <button type="button" className={cn('rounded-lg border px-3 py-2 text-xs font-semibold transition', filters.includeAdmin ? 'border-cyan-300/25 bg-cyan-400/10 text-cyan-100' : 'border-white/10 bg-white/[0.03] text-white/58')} onClick={() => toggle('includeAdmin')}>
+          <TerminalButton type="button" variant="compact" className={filters.includeAdmin ? 'border-cyan-300/25 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/14 hover:text-cyan-50' : ''} onClick={() => toggle('includeAdmin')}>
             管理访问
-          </button>
-          <button type="button" className={cn('rounded-lg border px-3 py-2 text-xs font-semibold transition', filters.includeSystem ? 'border-cyan-300/25 bg-cyan-400/10 text-cyan-100' : 'border-white/10 bg-white/[0.03] text-white/58')} onClick={() => toggle('includeSystem')}>
+          </TerminalButton>
+          <TerminalButton type="button" variant="compact" className={filters.includeSystem ? 'border-cyan-300/25 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/14 hover:text-cyan-50' : ''} onClick={() => toggle('includeSystem')}>
             系统事件
-          </button>
+          </TerminalButton>
         </div>
-        <button type="button" className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-semibold text-white/70 transition hover:border-cyan-300/25 hover:text-cyan-100" onClick={onRefresh}>
+        <TerminalButton type="button" variant="secondary" className="h-10 text-sm" onClick={onRefresh}>
           刷新活动
-        </button>
-        <p className="rounded-2xl border border-cyan-300/10 bg-cyan-400/8 px-3 py-3 text-xs leading-5 text-cyan-50/70">
+        </TerminalButton>
+        <TerminalNotice variant="info">
           访问活动时间线会写入目标用户级审计事件。
-        </p>
+        </TerminalNotice>
       </div>
-    </GlassCard>
+    </TerminalPanel>
   );
 };
 
@@ -1026,7 +989,7 @@ const ActivityEventCard: React.FC<{ event: AdminActivityEvent }> = ({ event }) =
   const entries = safeMetadataEntries(event.redactedMetadata);
   const hiddenCount = sensitiveFieldCount(event.redactedMetadata);
   return (
-    <article className="relative rounded-2xl border border-white/5 bg-black/20 p-4">
+    <TerminalNestedBlock className="relative">
       <div className="absolute left-5 top-5 h-2.5 w-2.5 rounded-full border border-cyan-200/60 bg-cyan-300 shadow-[0_0_18px_rgba(103,232,249,0.28)]" aria-hidden="true" />
       <div className="pl-7">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1038,8 +1001,8 @@ const ActivityEventCard: React.FC<{ event: AdminActivityEvent }> = ({ event }) =
             </p>
           </div>
           <div className="flex flex-wrap justify-end gap-1.5">
-            <span className="inline-flex min-h-6 rounded-full border border-cyan-300/20 bg-cyan-400/8 px-2.5 py-0.5 text-[11px] font-semibold text-cyan-100">{event.family}</span>
-            <span className={cn('inline-flex min-h-6 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold', statusTone(event.status))}>{statusLabel(event.status)}</span>
+            <TerminalChip variant="info">{event.family}</TerminalChip>
+            <TerminalChip variant={statusChipVariant(event.status)}>{statusLabel(event.status)}</TerminalChip>
           </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
@@ -1048,11 +1011,7 @@ const ActivityEventCard: React.FC<{ event: AdminActivityEvent }> = ({ event }) =
           <p>请求哈希 <span className="block truncate font-mono text-white/68">{text(event.requestIdHash)}</span></p>
           <p>会话哈希 <span className="block truncate font-mono text-white/68">{text(event.sessionIdHash)}</span></p>
         </div>
-        <Disclosure
-          summary="脱敏元数据"
-          className="mt-4"
-          bodyClassName="rounded-xl border border-white/5 bg-white/[0.025] p-3"
-        >
+        <TerminalDisclosure title="脱敏元数据" summary="默认收起" className="mt-4">
           {entries.length === 0 && hiddenCount === 0 ? (
             <p className="text-xs text-white/42">暂无可展示元数据</p>
           ) : (
@@ -1065,15 +1024,15 @@ const ActivityEventCard: React.FC<{ event: AdminActivityEvent }> = ({ event }) =
               ))}
               {hiddenCount > 0 ? (
                 <div className="min-w-0">
-                  <dt className="text-white/34">redaction</dt>
+                  <dt className="text-white/34">脱敏</dt>
                   <dd className="text-amber-100/72">{hiddenCount} 个敏感字段已屏蔽</dd>
                 </div>
               ) : null}
             </dl>
           )}
-        </Disclosure>
+        </TerminalDisclosure>
       </div>
-    </article>
+    </TerminalNestedBlock>
   );
 };
 
@@ -1085,24 +1044,20 @@ const ActivityTimeline: React.FC<{
 }> = ({ state, filters, setFilters, reload }) => {
   const items = state.data?.items || [];
   return (
-    <div className="grid min-h-0 grid-cols-1 gap-5 xl:grid-cols-12">
+    <TerminalGrid className="min-h-0">
       <div className="xl:col-span-3"><ActivityFilters filters={filters} onChange={setFilters} onRefresh={reload} /></div>
       <div className="min-w-0 xl:col-span-9">
-        <GlassCard as="section" className="p-4 md:p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Activity</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">活动时间线</h2>
-              {state.data?.window ? (
-                <p className="mt-1 text-xs text-white/42">
-                  {formatDate(state.data.window.from)} - {formatDate(state.data.window.to)}
-                </p>
-              ) : null}
-            </div>
-            <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/58">
-              {state.data ? `${state.data.total} events` : '读取中'}
-            </Badge>
-          </div>
+        <TerminalPanel as="section" dense>
+          <TerminalSectionHeader
+            eyebrow="活动"
+            title="活动时间线"
+            action={<TerminalChip variant="neutral">{state.data ? `${state.data.total} 条事件` : '读取中'}</TerminalChip>}
+          />
+          {state.data?.window ? (
+            <TerminalNotice variant="neutral" className="mt-3">
+              {formatDate(state.data.window.from)} - {formatDate(state.data.window.to)}
+            </TerminalNotice>
+          ) : null}
           {state.error ? (
             <div className="mt-4">
               <p className="mb-2 text-sm font-semibold text-rose-100">读取活动时间线失败</p>
@@ -1114,24 +1069,22 @@ const ActivityTimeline: React.FC<{
               {[0, 1, 2].map((item) => <div key={item} className="h-36 animate-pulse rounded-2xl border border-white/5 bg-white/[0.025]" />)}
             </div>
           ) : items.length === 0 && !state.error ? (
-            <div className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-8 text-sm text-white/50">当前时间窗口内暂无活动</div>
+            <TerminalEmptyState className="mt-4" title="当前时间窗口内暂无活动" />
           ) : (
-            <div className="mt-4 grid gap-3">
+            <TerminalDenseList className="mt-4 gap-3">
               {items.map((event) => <ActivityEventCard key={event.id} event={event} />)}
-            </div>
+            </TerminalDenseList>
           )}
           {state.data?.limitations?.length ? (
             <div className="mt-4 flex flex-wrap gap-2">
               {state.data.limitations.map((item) => (
-                <span key={item} className="inline-flex min-h-6 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-semibold text-white/46">
-                  {item.replace(/_/g, ' ')}
-                </span>
+                <TerminalChip key={item} variant="neutral">{item.replace(/_/g, ' ')}</TerminalChip>
               ))}
             </div>
           ) : null}
-        </GlassCard>
+        </TerminalPanel>
       </div>
-    </div>
+    </TerminalGrid>
   );
 };
 
@@ -1294,17 +1247,13 @@ const AdminUsersPage: React.FC = () => {
     }
     if (detailState.error) {
       return (
-        <GlassCard as="section" className="p-5">
+        <TerminalPanel as="section">
           <p className="mb-2 text-sm font-semibold text-rose-100">读取用户详情失败</p>
           <ApiErrorAlert error={detailState.error} />
-          <button
-            type="button"
-            className="mt-4 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-semibold text-white/70 transition hover:border-cyan-300/25 hover:text-cyan-100"
-            onClick={() => navigate(directoryPath)}
-          >
+          <TerminalButton type="button" variant="secondary" className="mt-4 w-fit px-3 text-sm" onClick={() => navigate(directoryPath)}>
             返回用户目录
-          </button>
-        </GlassCard>
+          </TerminalButton>
+        </TerminalPanel>
       );
     }
     if (!detailState.data) return null;
@@ -1338,33 +1287,32 @@ const AdminUsersPage: React.FC = () => {
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto no-scrollbar py-5 md:py-6">
-      <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 px-4 md:px-6 xl:px-8">
+      <TerminalPageShell data-testid="admin-users-page-shell" className="min-h-0 flex-1 gap-5 overflow-x-hidden px-4 md:px-6 xl:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {userId ? (
-            <button
-              type="button"
-              className="inline-flex min-h-9 items-center rounded-lg border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-white/62 transition hover:border-white/20 hover:text-white"
-              onClick={() => navigate(directoryPath)}
-            >
+            <TerminalButton type="button" variant="secondary" className="px-3 text-xs" onClick={() => navigate(directoryPath)}>
               返回用户目录
-            </button>
+            </TerminalButton>
           ) : <span />}
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/5 bg-white/[0.02] px-3 py-1.5 text-[11px] text-white/40">
+        <div className="flex flex-wrap items-center gap-2">
+          <TerminalChip variant="info">
             <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
-            Read-only F1/F2
-          </div>
+              只读 F1/F2
+          </TerminalChip>
+          <TerminalChip variant="neutral">无原始凭证</TerminalChip>
+        </div>
         </div>
         <PageHeader mode={mode} user={activeUser} currentState={headerCurrentState} nextAction={headerNextAction} />
         {content}
-        <GlassCard as="section" className="p-4">
+        <TerminalNotice variant="caution">
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-200" aria-hidden="true" />
             <p className="text-xs leading-5 text-white/46">
-              本页面只展示账号、会话和活动的安全投影；凭证材料、原始会话材料、请求载荷、模型上下文、第三方原始响应和异常堆栈均不进入界面。
+              本页面只展示账号、会话和活动的安全投影；凭证材料、原始会话材料、底层调试载荷、模型上下文、第三方原始响应和异常堆栈均不进入界面。
             </p>
           </div>
-        </GlassCard>
-      </div>
+        </TerminalNotice>
+      </TerminalPageShell>
     </div>
   );
 };
