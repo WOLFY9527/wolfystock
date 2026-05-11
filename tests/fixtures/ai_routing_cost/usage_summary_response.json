@@ -1,0 +1,31 @@
+{
+  "period": "month",
+  "from_date": "2026-05-01",
+  "to_date": "2026-05-12",
+  "total_calls": 7,
+  "total_tokens": 5400,
+  "by_call_type": [
+    {
+      "call_type": "analysis",
+      "calls": 4,
+      "total_tokens": 3600
+    },
+    {
+      "call_type": "agent",
+      "calls": 3,
+      "total_tokens": 1800
+    }
+  ],
+  "by_model": [
+    {
+      "model": "openai/gpt-4o-mini",
+      "calls": 4,
+      "total_tokens": 3200
+    },
+    {
+      "model": "deepseek/deepseek-chat",
+      "calls": 3,
+      "total_tokens": 2200
+    }
+  ]
+}

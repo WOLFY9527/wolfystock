@@ -1,0 +1,95 @@
+{
+  "generatedAt": "2026-05-12T09:00:00+08:00",
+  "window": {
+    "key": "24h",
+    "from": "2026-05-11T09:00:00+08:00",
+    "to": "2026-05-12T09:00:00+08:00",
+    "bucket": "day",
+    "historical": true
+  },
+  "total": {
+    "calls": 4,
+    "promptTokens": 1400,
+    "cachedInputTokens": 200,
+    "completionTokens": 1200,
+    "totalTokens": 2800,
+    "totalCostUsd": "0.182500"
+  },
+  "byUser": [
+    {
+      "group": "guest_or_unknown",
+      "calls": 1,
+      "totalTokens": 400,
+      "totalCostUsd": "0.020000",
+      "dimensions": {
+        "owner_user_id": "guest_or_unknown"
+      }
+    },
+    {
+      "group": "user_hash_42",
+      "calls": 3,
+      "totalTokens": 2400,
+      "totalCostUsd": "0.162500",
+      "dimensions": {
+        "owner_user_id": "user_hash_42"
+      }
+    }
+  ],
+  "byProviderModel": [
+    {
+      "group": "openai/gpt-4o-mini",
+      "calls": 3,
+      "totalTokens": 2200,
+      "totalCostUsd": "0.142500",
+      "dimensions": {
+        "provider": "openai",
+        "model": "gpt-4o-mini"
+      }
+    },
+    {
+      "group": "deepseek/deepseek-chat",
+      "calls": 1,
+      "totalTokens": 600,
+      "totalCostUsd": "0.040000",
+      "dimensions": {
+        "provider": "deepseek",
+        "model": "deepseek-chat"
+      }
+    }
+  ],
+  "byRouteFamily": [
+    {
+      "group": "analysis",
+      "calls": 2,
+      "totalTokens": 1500,
+      "totalCostUsd": "0.097500",
+      "dimensions": {
+        "route_family": "analysis"
+      }
+    },
+    {
+      "group": "agent",
+      "calls": 2,
+      "totalTokens": 1300,
+      "totalCostUsd": "0.085000",
+      "dimensions": {
+        "route_family": "agent"
+      }
+    }
+  ],
+  "metadata": {
+    "readOnly": true,
+    "noExternalCalls": true,
+    "liveEnforcement": false,
+    "dataSources": [
+      "llm_cost_ledger",
+      "model_pricing_policies"
+    ],
+    "redaction": [
+      "prompts_omitted",
+      "provider_payloads_omitted",
+      "credentials_omitted",
+      "safe_hash_labels_only"
+    ]
+  }
+}

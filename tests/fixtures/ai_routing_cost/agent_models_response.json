@@ -1,0 +1,24 @@
+{
+  "models": [
+    {
+      "deployment_id": "llm_channels:1",
+      "model": "gemini/gemini-2.5-flash",
+      "provider": "gemini",
+      "source": "llm_channels",
+      "api_base": null,
+      "deployment_name": "gemini/gemini-2.5-flash",
+      "is_primary": true,
+      "is_fallback": false
+    },
+    {
+      "deployment_id": "llm_channels:0",
+      "model": "openai/gpt-4o-mini",
+      "provider": "openai",
+      "source": "llm_channels",
+      "api_base": "https://api.openai.example/v1",
+      "deployment_name": "openai/gpt-4o-mini",
+      "is_primary": false,
+      "is_fallback": true
+    }
+  ]
+}

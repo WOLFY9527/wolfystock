@@ -1,0 +1,39 @@
+{
+  "routingMode": "AUTO",
+  "currentProvider": "DeepSeek",
+  "currentModel": "deepseek/deepseek-chat",
+  "providers": [
+    {
+      "id": "deepseek",
+      "label": "DeepSeek",
+      "status": "available",
+      "model": "deepseek/deepseek-chat",
+      "selected": true,
+      "reason": null
+    },
+    {
+      "id": "openai",
+      "label": "OpenAI",
+      "status": "not_configured",
+      "model": null,
+      "selected": false,
+      "reason": null
+    },
+    {
+      "id": "gemini",
+      "label": "Gemini",
+      "status": "not_configured",
+      "model": null,
+      "selected": false,
+      "reason": null
+    },
+    {
+      "id": "local",
+      "label": "Local",
+      "status": "offline",
+      "model": null,
+      "selected": false,
+      "reason": null
+    }
+  ]
+}

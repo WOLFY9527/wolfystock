@@ -1,0 +1,74 @@
+{
+  "allowed": true,
+  "wouldBlock": false,
+  "status": "pilot_advisory",
+  "reasonCode": "pilot_scope_missing",
+  "routeFamily": "analysis",
+  "estimatedUnits": 1200,
+  "enforcementMode": "enabled",
+  "operation": "estimate",
+  "reservationId": null,
+  "metadata": {
+    "diagnosticOnly": true,
+    "liveEnforcement": false,
+    "noExternalCalls": true,
+    "quotaDecisionMode": "advisory",
+    "budgetAlert": {
+      "status": "warning",
+      "reasonCode": "daily_budget_near_limit",
+      "ownerUserId": "user_hash_42",
+      "estimatedUnits": 1200,
+      "provider": "openai",
+      "modelTier": "standard"
+    },
+    "budgetAlertNotification": {
+      "delivery": "suppressed",
+      "operatorReview": {
+        "deliveryStatusLabel": "diagnostic_only"
+      }
+    },
+    "shadowPreflight": {
+      "status": "ok",
+      "ownerUserId": "user_hash_42",
+      "reasonCode": null
+    },
+    "pilotReadiness": {
+      "requestBlocked": false,
+      "reasonCode": "pilot_scope_missing",
+      "pilot": {
+        "scopeExplicit": false
+      },
+      "operatorReview": {
+        "statusLabel": "advisory_only",
+        "rollbackLabel": "no_runtime_change"
+      },
+      "invoiceReconciliation": {
+        "status": "not_started"
+      }
+    },
+    "invoiceReconciliation": {
+      "status": "not_started"
+    },
+    "operatorReview": {
+      "quotaDecisionMode": "advisory",
+      "quotaStatusLabel": "pilot_advisory",
+      "pilotStatusLabel": "advisory_only",
+      "budgetAlertDeliveryStatusLabel": "diagnostic_only",
+      "rollbackLabel": "no_runtime_change",
+      "globalEnforcementChanged": false,
+      "realOutboundNotification": false
+    },
+    "dataSources": [
+      "quota_policy_definitions",
+      "quota_usage_windows",
+      "quota_reservations"
+    ],
+    "redaction": [
+      "prompt_content",
+      "provider_payload",
+      "credentials",
+      "session_references",
+      "stack_details"
+    ]
+  }
+}

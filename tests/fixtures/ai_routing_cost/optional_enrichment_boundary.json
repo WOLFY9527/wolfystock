@@ -1,0 +1,64 @@
+{
+  "scanner": {
+    "authoritativeFields": [
+      "rank",
+      "score",
+      "reason_summary",
+      "reasons",
+      "feature_signals"
+    ],
+    "additiveAiPath": "ai_interpretation",
+    "forbiddenAiAuthorityFields": [
+      "rank",
+      "score",
+      "selection_order",
+      "selected_symbols"
+    ]
+  },
+  "backtest": {
+    "authoritativeFields": [
+      "trade_count",
+      "total_return_pct",
+      "max_drawdown_pct",
+      "final_equity",
+      "summary",
+      "artifact_availability",
+      "readback_integrity"
+    ],
+    "forbiddenAiAuthorityFields": [
+      "ai_return_pct",
+      "ai_final_equity",
+      "ai_trade_count",
+      "ai_equity_curve"
+    ]
+  },
+  "portfolio": {
+    "authoritativeFields": [
+      "total_cash",
+      "total_market_value",
+      "total_equity",
+      "realized_pnl",
+      "unrealized_pnl",
+      "analytics"
+    ],
+    "forbiddenAiAuthorityFields": [
+      "ai_total_equity",
+      "ai_pnl",
+      "ai_positions",
+      "ai_fx_rate"
+    ]
+  },
+  "facadeDiscipline": {
+    "endpointFiles": [
+      "api/v1/endpoints/agent.py",
+      "api/v1/endpoints/admin_cost.py",
+      "api/v1/endpoints/usage.py"
+    ],
+    "forbiddenInternalRuntimeImports": [
+      "src.services.litellm_runtime",
+      "src.services.llm_instrumentation",
+      "openai",
+      "litellm"
+    ]
+  }
+}

@@ -1,0 +1,236 @@
+{
+  "generatedAt": "2026-05-12T09:00:00+08:00",
+  "window": {
+    "key": "24h",
+    "from": "2026-05-11T09:00:00+08:00",
+    "to": "2026-05-12T09:00:00+08:00",
+    "bucket": "hour",
+    "historical": false
+  },
+  "summary": {
+    "llmCalls": 4,
+    "llmUsageCalls": 4,
+    "llmUsageTokens": 2800,
+    "estimatedDuplicateCandidates": 1,
+    "providerCalls": 12,
+    "providerCacheHits": 8,
+    "providerCacheMisses": 4,
+    "providerInflightJoins": 1,
+    "providerCacheHitRate": 0.6667,
+    "marketCacheHits": 5,
+    "marketCacheMisses": 1,
+    "marketCacheStaleServed": 1,
+    "marketCacheColdFallbacks": 0,
+    "marketCacheHitRate": 0.8333,
+    "fallbackAttempts": 1,
+    "integrityRetries": 0,
+    "scannerAiAttempts": 1,
+    "scannerAiCompleted": 1,
+    "scannerAiSkipped": 2
+  },
+  "llm": {
+    "byCallType": [
+      {
+        "group": "agent_chat",
+        "count": 2,
+        "eventCounts": {
+          "completed": 2
+        },
+        "dimensions": {
+          "routeFamily": "agent"
+        }
+      }
+    ],
+    "duplicateCandidates": [
+      {
+        "group": "shared_prompt_hash",
+        "count": 1,
+        "eventCounts": {
+          "duplicate_candidate": 1
+        },
+        "dimensions": {
+          "provider": "openai"
+        }
+      }
+    ],
+    "fallbacks": [
+      {
+        "group": "openai/gpt-4o-mini",
+        "count": 1,
+        "eventCounts": {
+          "fallback": 1
+        },
+        "dimensions": {
+          "reason": "provider_timeout"
+        }
+      }
+    ],
+    "integrityRetries": [],
+    "usageByCallType": [
+      {
+        "group": "analysis",
+        "count": 2,
+        "eventCounts": {
+          "usage_logged": 2
+        },
+        "dimensions": {
+          "routeFamily": "analysis"
+        }
+      }
+    ],
+    "usageByModel": [
+      {
+        "group": "openai/gpt-4o-mini",
+        "count": 4,
+        "eventCounts": {
+          "usage_logged": 4
+        },
+        "dimensions": {
+          "provider": "openai",
+          "model": "gpt-4o-mini"
+        }
+      }
+    ]
+  },
+  "providers": {
+    "byCategory": [
+      {
+        "group": "news",
+        "count": 3,
+        "eventCounts": {
+          "success": 2,
+          "skipped": 1
+        },
+        "dimensions": {
+          "market": "US"
+        }
+      }
+    ],
+    "fallbackDepth": [
+      {
+        "group": "news",
+        "count": 1,
+        "eventCounts": {
+          "fallback_depth_1": 1
+        },
+        "dimensions": {
+          "provider": "tavily"
+        }
+      }
+    ],
+    "cacheEfficiency": [
+      {
+        "group": "quote",
+        "hits": 8,
+        "misses": 4,
+        "inflightJoins": 1,
+        "hitRate": 0.6667,
+        "dimensions": {
+          "market": "US"
+        }
+      }
+    ],
+    "duplicateCandidates": []
+  },
+  "marketCache": {
+    "byPanelKey": [
+      {
+        "group": "crypto",
+        "count": 2,
+        "eventCounts": {
+          "cache_hit": 2
+        },
+        "dimensions": {
+          "window": "24h"
+        }
+      }
+    ],
+    "staleServed": [
+      {
+        "group": "crypto",
+        "count": 1,
+        "eventCounts": {
+          "stale_served": 1
+        },
+        "dimensions": {
+          "freshness": "stale"
+        }
+      }
+    ],
+    "coldFallbacks": [],
+    "refreshes": [
+      {
+        "group": "crypto",
+        "count": 1,
+        "eventCounts": {
+          "refresh_completed": 1
+        },
+        "dimensions": {
+          "source": "binance"
+        }
+      }
+    ]
+  },
+  "scannerAi": {
+    "interpretations": [
+      {
+        "group": "scanner_candidate",
+        "count": 1,
+        "eventCounts": {
+          "generated": 1
+        },
+        "dimensions": {
+          "profile": "us_preopen_v1"
+        }
+      }
+    ],
+    "duplicateCandidates": [],
+    "skips": [
+      {
+        "group": "budget_quick",
+        "count": 2,
+        "eventCounts": {
+          "skipped_by_budget": 1,
+          "skipped_by_mode": 1
+        },
+        "dimensions": {
+          "mode": "quick"
+        }
+      }
+    ]
+  },
+  "limitations": [
+    {
+      "code": "observational_not_billing",
+      "message": "Counters are sanitized diagnostics only.",
+      "severity": "info"
+    }
+  ],
+  "metadata": {
+    "readOnly": true,
+    "noExternalCalls": true,
+    "countersSource": "process_local",
+    "exactness": "observational_not_billing",
+    "dataSources": [
+      "llm_usage",
+      "provider_usage_ledger",
+      "market_cache_stats"
+    ],
+    "unsupportedSources": [
+      "invoice_reconciliation"
+    ],
+    "redaction": [
+      "prompt_content",
+      "provider_payload",
+      "credentials",
+      "session_references",
+      "stack_details"
+    ],
+    "requestedArea": "all",
+    "limit": 50,
+    "notes": {
+      "operatorReviewRequired": false,
+      "safeLabelsOnly": true
+    }
+  }
+}
