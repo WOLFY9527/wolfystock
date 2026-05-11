@@ -1,0 +1,389 @@
+{
+  "user_list": {
+    "items": [
+      {
+        "id": "user-1",
+        "username": "wolfy-user",
+        "displayName": "Wolfy User",
+        "role": "user",
+        "isActive": true,
+        "createdAt": "2026-01-10T08:00:00Z",
+        "updatedAt": "2026-05-12T08:40:00Z",
+        "passwordState": "set",
+        "lastSeenAt": "2026-05-12T08:39:00Z",
+        "sessionSummary": {
+          "activeCount": 1,
+          "expiredCount": 0,
+          "revokedCount": 1,
+          "lastSeenAt": "2026-05-12T08:39:00Z",
+          "nextExpiresAt": "2026-05-12T20:39:00Z"
+        },
+        "riskBadges": [
+          {
+            "code": "mfa_recommended",
+            "label": "MFA recommended",
+            "severity": "warning",
+            "reason": "Single active session without MFA.",
+            "source": "future_security"
+          }
+        ],
+        "links": {
+          "self": "/api/v1/admin/users/user-1",
+          "adminLogs": "/api/v1/admin/logs?userId=user-1",
+          "activity": "/api/v1/admin/users/user-1/activity",
+          "portfolio": "/api/v1/admin/users/user-1/portfolio-summary",
+          "analysis": "/api/v1/history?userId=user-1",
+          "scanner": "/api/v1/scanner/runs?userId=user-1",
+          "backtest": "/api/v1/backtest/runs?userId=user-1"
+        }
+      }
+    ],
+    "total": 1,
+    "limit": 50,
+    "offset": 0,
+    "hasMore": false
+  },
+  "user_detail": {
+    "user": {
+      "id": "user-1",
+      "username": "wolfy-user",
+      "displayName": "Wolfy User",
+      "role": "user",
+      "isActive": true,
+      "createdAt": "2026-01-10T08:00:00Z",
+      "updatedAt": "2026-05-12T08:40:00Z",
+      "passwordState": "set",
+      "lastSeenAt": "2026-05-12T08:39:00Z",
+      "sessionSummary": {
+        "activeCount": 1,
+        "expiredCount": 0,
+        "revokedCount": 1,
+        "lastSeenAt": "2026-05-12T08:39:00Z",
+        "nextExpiresAt": "2026-05-12T20:39:00Z"
+      },
+      "riskBadges": [
+        {
+          "code": "mfa_recommended",
+          "label": "MFA recommended",
+          "severity": "warning",
+          "reason": "Single active session without MFA.",
+          "source": "future_security"
+        }
+      ],
+      "links": {
+        "self": "/api/v1/admin/users/user-1",
+        "adminLogs": "/api/v1/admin/logs?userId=user-1",
+        "activity": "/api/v1/admin/users/user-1/activity",
+        "portfolio": "/api/v1/admin/users/user-1/portfolio-summary",
+        "analysis": "/api/v1/history?userId=user-1",
+        "scanner": "/api/v1/scanner/runs?userId=user-1",
+        "backtest": "/api/v1/backtest/runs?userId=user-1"
+      }
+    },
+    "sessions": [
+      {
+        "sessionHandle": "sess-hash-01",
+        "status": "active",
+        "createdAt": "2026-05-12T08:00:00Z",
+        "lastSeenAt": "2026-05-12T08:39:00Z",
+        "expiresAt": "2026-05-12T20:39:00Z",
+        "revokedAt": null
+      },
+      {
+        "sessionHandle": "sess-hash-00",
+        "status": "revoked",
+        "createdAt": "2026-05-10T09:00:00Z",
+        "lastSeenAt": "2026-05-10T10:00:00Z",
+        "expiresAt": "2026-05-10T21:00:00Z",
+        "revokedAt": "2026-05-10T10:05:00Z"
+      }
+    ],
+    "dataLinks": {
+      "self": "/api/v1/admin/users/user-1",
+      "adminLogs": "/api/v1/admin/logs?userId=user-1",
+      "activity": "/api/v1/admin/users/user-1/activity",
+      "portfolio": "/api/v1/admin/users/user-1/portfolio-summary",
+      "analysis": "/api/v1/history?userId=user-1",
+      "scanner": "/api/v1/scanner/runs?userId=user-1",
+      "backtest": "/api/v1/backtest/runs?userId=user-1"
+    },
+    "limitations": [
+      "Directory read model excludes credential internals and auth secrets."
+    ]
+  },
+  "activity": {
+    "items": [
+      {
+        "id": "activity-1",
+        "timestamp": "2026-05-12T08:32:00Z",
+        "actor": {
+          "type": "admin",
+          "userId": "admin-1",
+          "label": "ops-admin",
+          "role": "admin",
+          "sessionIdHash": "sess-hash-admin",
+          "requestIdHash": "req-hash-admin"
+        },
+        "targetUser": {
+          "id": "user-1",
+          "label": "Wolfy User"
+        },
+        "family": "user_governance",
+        "action": "view_activity",
+        "entity": {
+          "type": "user",
+          "idHash": "user-hash-1",
+          "label": "Wolfy User",
+          "symbol": null,
+          "market": null,
+          "sourceTable": "admin_activity_view"
+        },
+        "status": "success",
+        "outcome": "ok",
+        "requestIdHash": "req-hash-admin",
+        "sessionIdHash": "sess-hash-admin",
+        "source": {
+          "kind": "execution_log_projection",
+          "table": "admin_activity_projection",
+          "confidence": "confirmed"
+        },
+        "redactedMetadata": {
+          "routeFamily": "admin_users",
+          "reasonCodes": [
+            "view_only"
+          ]
+        },
+        "logLinks": [
+          {
+            "kind": "admin_logs_event",
+            "idHash": "evt-hash-1"
+          }
+        ]
+      }
+    ],
+    "total": 1,
+    "limit": 50,
+    "offset": 0,
+    "hasMore": false,
+    "window": {
+      "from": "2026-05-05T00:00:00Z",
+      "to": "2026-05-12T23:59:59Z",
+      "maxDays": 30
+    },
+    "limitations": [
+      "Activity view is redacted and omits enforcement internals."
+    ]
+  },
+  "portfolio_summary": {
+    "userId": "user-1",
+    "accountCount": 1,
+    "activeAccountCount": 1,
+    "baseCurrencies": [
+      "USD"
+    ],
+    "accounts": [
+      {
+        "id": 101,
+        "name": "IBKR Margin",
+        "broker": "ibkr",
+        "market": "us",
+        "baseCurrency": "USD",
+        "isActive": true,
+        "brokerAccountHandle": "U12****89",
+        "createdAt": "2026-01-10T08:00:00Z",
+        "updatedAt": "2026-05-12T08:20:00Z"
+      }
+    ],
+    "totalCash": {
+      "amount": 1200.0,
+      "currency": "USD"
+    },
+    "totalMarketValue": {
+      "amount": 5400.0,
+      "currency": "USD"
+    },
+    "totalEquity": {
+      "amount": 6600.0,
+      "currency": "USD"
+    },
+    "realizedPnl": {
+      "amount": 250.0,
+      "currency": "USD"
+    },
+    "unrealizedPnl": {
+      "amount": 480.0,
+      "currency": "USD"
+    },
+    "ledgerCounts": {
+      "trades": 8,
+      "cashEvents": 3,
+      "corporateActions": 1
+    },
+    "brokerSyncSummary": {
+      "connections": 1,
+      "statuses": {
+        "ok": 1
+      },
+      "lastSyncAt": "2026-05-12T08:20:00Z",
+      "fxStale": false
+    },
+    "limitations": [
+      "Projection is read-only and not an accounting mutation command."
+    ]
+  },
+  "portfolio_account_detail": {
+    "userId": "user-1",
+    "account": {
+      "id": 101,
+      "name": "IBKR Margin",
+      "broker": "ibkr",
+      "market": "us",
+      "baseCurrency": "USD",
+      "isActive": true,
+      "brokerAccountHandle": "U12****89",
+      "createdAt": "2026-01-10T08:00:00Z",
+      "updatedAt": "2026-05-12T08:20:00Z"
+    },
+    "brokerConnections": [
+      {
+        "id": 11,
+        "accountId": 101,
+        "brokerType": "ibkr",
+        "brokerName": "Interactive Brokers",
+        "connectionName": "Primary IBKR",
+        "brokerAccountHandle": "U12****89",
+        "importMode": "snapshot_overlay",
+        "status": "ok",
+        "lastImportedAt": "2026-05-12T08:20:00Z",
+        "lastImportSource": "ibkr_sync_overlay",
+        "createdAt": "2026-01-10T08:00:00Z",
+        "updatedAt": "2026-05-12T08:20:00Z"
+      }
+    ],
+    "syncState": {
+      "status": "ok",
+      "source": "snapshot_overlay",
+      "snapshotDate": "2026-05-12",
+      "syncedAt": "2026-05-12T08:20:00Z",
+      "baseCurrency": "USD",
+      "totalCash": {
+        "amount": 1200.0,
+        "currency": "USD"
+      },
+      "totalMarketValue": {
+        "amount": 5400.0,
+        "currency": "USD"
+      },
+      "totalEquity": {
+        "amount": 6600.0,
+        "currency": "USD"
+      },
+      "realizedPnl": {
+        "amount": 250.0,
+        "currency": "USD"
+      },
+      "unrealizedPnl": {
+        "amount": 480.0,
+        "currency": "USD"
+      },
+      "fxStale": false
+    },
+    "holdings": {
+      "items": [
+        {
+          "accountId": 101,
+          "accountName": "IBKR Margin",
+          "broker": "ibkr",
+          "brokerAccountHandle": "U12****89",
+          "symbol": "AAPL",
+          "market": "US",
+          "currency": "USD",
+          "quantity": 20.0,
+          "avgCost": 240.0,
+          "lastPrice": 264.0,
+          "marketValueBase": 5280.0,
+          "unrealizedPnlBase": 480.0,
+          "valuationCurrency": "USD",
+          "fxStatus": "live",
+          "updatedAt": "2026-05-12T08:20:00Z"
+        }
+      ],
+      "total": 1,
+      "limit": 100,
+      "offset": 0,
+      "hasMore": false,
+      "limitations": [
+        "Holdings projection excludes ledger mutation controls."
+      ]
+    },
+    "activity": {
+      "items": [
+        {
+          "idHash": "trade-hash-1",
+          "type": "trade",
+          "accountId": 101,
+          "accountName": "IBKR Margin",
+          "eventDate": "2026-05-09",
+          "symbol": "AAPL",
+          "market": "US",
+          "currency": "USD",
+          "side": "buy",
+          "direction": null,
+          "actionType": null,
+          "quantity": 20.0,
+          "price": 240.0,
+          "amount": null,
+          "createdAt": "2026-05-09T21:00:00Z"
+        }
+      ],
+      "total": 1,
+      "limit": 100,
+      "offset": 0,
+      "hasMore": false,
+      "summary": {
+        "trades": 1,
+        "cashEvents": 0,
+        "corporateActions": 0
+      },
+      "limitations": [
+        "Activity is a read projection with redacted handles."
+      ]
+    },
+    "limitations": [
+      "Account detail omits broker credentials and mutation commands."
+    ]
+  },
+  "fixture_meta": {
+    "surface": "admin_user_observability",
+    "read_only": true,
+    "auth_surfaces": [
+      {
+        "surface": "admin_users_legacy_read",
+        "auth_dependency_label": "admin_user",
+        "capability_label": null,
+        "frontend_capability_flag": "canReadUsers",
+        "transitional_gap": "Backend route inventory still uses coarse admin gating."
+      },
+      {
+        "surface": "admin_activity_legacy_read",
+        "auth_dependency_label": "admin_user",
+        "capability_label": null,
+        "frontend_capability_flag": "canReadUserActivity",
+        "transitional_gap": "Backend activity route remains coarse-admin gated."
+      },
+      {
+        "surface": "admin_portfolio_observability",
+        "auth_dependency_label": "admin_capability",
+        "capability_label": "users:portfolio:read",
+        "frontend_capability_flag": "canReadUserPortfolio",
+        "transitional_gap": null
+      }
+    ],
+    "raw_details_policy": "projection_only",
+    "redaction": [
+      "session_handles_hashed",
+      "credential_values_omitted",
+      "mutation_controls_excluded"
+    ]
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "read_only_surfaces": [
+    {
+      "surface": "admin_logs",
+      "route": "GET /api/v1/admin/logs/storage/summary",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:logs:read",
+      "mutation_authority": false,
+      "payload_fixture": "logs_read_models.json"
+    },
+    {
+      "surface": "admin_cost_observability",
+      "route": "GET /api/v1/admin/cost/llm-ledger-summary",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "cost:observability:read",
+      "mutation_authority": false,
+      "payload_fixture": "cost_read_models.json"
+    },
+    {
+      "surface": "admin_provider_observability",
+      "route": "GET /api/v1/admin/providers/circuits",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "mutation_authority": false,
+      "payload_fixture": "provider_read_models.json"
+    },
+    {
+      "surface": "admin_user_observability",
+      "route": "GET /api/v1/admin/users",
+      "auth_dependency_label": "admin_user",
+      "capability_label": null,
+      "frontend_capability_flag": "canReadUsers",
+      "mutation_authority": false,
+      "payload_fixture": "user_activity_portfolio_read_models.json",
+      "transitional_gap": "Backend route inventory still uses coarse admin gating."
+    },
+    {
+      "surface": "admin_portfolio_observability",
+      "route": "GET /api/v1/admin/users/:userId/portfolio-summary",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "users:portfolio:read",
+      "mutation_authority": false,
+      "payload_fixture": "user_activity_portfolio_read_models.json"
+    }
+  ],
+  "mutation_surfaces": [
+    {
+      "surface": "admin_logs_cleanup",
+      "route": "POST /api/v1/admin/logs/cleanup",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:logs:write",
+      "dangerous": true,
+      "danger_zone": "destructive_retention_cleanup",
+      "bounded_response_only": true
+    },
+    {
+      "surface": "admin_user_security",
+      "route": "POST /api/v1/admin/users/:userId/disable",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "users:security:write",
+      "dangerous": true,
+      "danger_zone": "user_access_control",
+      "bounded_response_only": true
+    },
+    {
+      "surface": "admin_notifications_write",
+      "route": "POST|PATCH|DELETE /api/v1/admin/notification-channels",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:notifications:write",
+      "dangerous": true,
+      "danger_zone": "notification_delivery_controls",
+      "bounded_response_only": true
+    },
+    {
+      "surface": "system_provider_tests",
+      "route": "POST /api/v1/system/config/data-source/test",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:write",
+      "dangerous": true,
+      "danger_zone": "provider_runtime_side_effects",
+      "bounded_response_only": true
+    }
+  ],
+  "ownership_boundary": {
+    "admin_observability_role": "consumes_domain_contracts_only",
+    "consumes": [
+      "execution_log_diagnostics",
+      "cost_ledger_rollups",
+      "provider_runtime_health",
+      "user_activity_read_model",
+      "portfolio_read_projection"
+    ],
+    "must_not_own": [
+      "scanner_ranking",
+      "backtest_calculations",
+      "portfolio_accounting",
+      "provider_fallback_policy",
+      "ai_routing_policy",
+      "auth_enforcement"
+    ],
+    "transitional_gaps": [
+      {
+        "surface": "admin_users_legacy_read",
+        "backend_auth_dependency": "admin_user",
+        "backend_capability_label": null,
+        "frontend_capability_flag": "canReadUsers"
+      },
+      {
+        "surface": "admin_activity_legacy_read",
+        "backend_auth_dependency": "admin_user",
+        "backend_capability_label": null,
+        "frontend_capability_flag": "canReadUserActivity"
+      },
+      {
+        "surface": "admin_market_provider_operations",
+        "backend_auth_dependency": "admin_user",
+        "backend_capability_label": null,
+        "frontend_capability_flag": "canReadProviders"
+      }
+    ]
+  },
+  "sanitization_rules": [
+    "no_raw_provider_details",
+    "no_body_dump",
+    "no_header_dump",
+    "no_auth_tokens",
+    "no_pass_hashes",
+    "no_exception_dump",
+    "bounded_diagnostic_details_only"
+  ],
+  "raw_details_policy": {
+    "allowed": "bounded_diagnostic_metadata_only",
+    "forbidden": [
+      "payload_content",
+      "credential_values",
+      "secret_material",
+      "full_exception_dump"
+    ]
+  }
+}

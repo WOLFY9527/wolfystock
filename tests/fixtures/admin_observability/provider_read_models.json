@@ -1,0 +1,291 @@
+{
+  "provider_circuit_states": {
+    "generatedAt": "2026-05-12T10:10:00Z",
+    "items": [
+      {
+        "provider": "fixture_market_cache",
+        "providerCategory": "market_data",
+        "routeFamily": "analysis",
+        "state": "closed",
+        "reasonBucket": "healthy",
+        "cooldownUntil": null,
+        "operatorActionRef": null,
+        "createdAt": "2026-05-12T09:00:00Z",
+        "updatedAt": "2026-05-12T10:05:00Z"
+      },
+      {
+        "provider": "fixture_quote_backup",
+        "providerCategory": "market_data",
+        "routeFamily": "scanner",
+        "state": "half_open",
+        "reasonBucket": "transient_timeout",
+        "cooldownUntil": "2026-05-12T10:12:00Z",
+        "operatorActionRef": "ops-note-17",
+        "createdAt": "2026-05-12T09:20:00Z",
+        "updatedAt": "2026-05-12T10:08:00Z"
+      }
+    ],
+    "metadata": {
+      "readOnly": true,
+      "noExternalCalls": true,
+      "liveEnforcement": false,
+      "providerBehaviorChanged": false,
+      "marketCacheBehaviorChanged": false,
+      "dataSources": [
+        "provider_circuit_observer"
+      ],
+      "limit": 100,
+      "redaction": [
+        "provider_details_removed",
+        "credential_values_omitted"
+      ],
+      "filters": {
+        "routeFamily": "all"
+      }
+    }
+  },
+  "provider_sla_readiness": {
+    "generatedAt": "2026-05-12T10:10:00Z",
+    "items": [
+      {
+        "provider": "fixture_market_cache",
+        "providerCategory": "market_data",
+        "routeFamily": "analysis",
+        "observedSince": "2026-05-01T00:00:00Z",
+        "readinessState": "ready",
+        "reasonCode": "healthy_window_observed",
+        "credentialState": "indirect_runtime_contract",
+        "credentialContract": {
+          "source": "runtime_facade",
+          "requiredCredentialKinds": [
+            "configured_runtime_reference"
+          ]
+        },
+        "liveProvidersEnabled": false,
+        "providerEnabled": true,
+        "credentialsPresent": true,
+        "dryRunEnabled": true,
+        "liveHttpCallsEnabled": false,
+        "brokerOrderPathEnabled": false,
+        "portfolioMutationPathEnabled": false,
+        "tradeableData": false,
+        "latencyBucketMs": 180,
+        "latencyState": "healthy",
+        "errorRate": 0.0,
+        "errorState": "healthy",
+        "freshnessSeconds": 35,
+        "freshnessState": "fresh",
+        "recentErrors": [],
+        "trendSummary": {
+          "windowCountBucket": "3",
+          "requestCountBucket": "20-49",
+          "failureCountBucket": "0",
+          "timeoutCountBucket": "0",
+          "provider429CountBucket": "0",
+          "provider403CountBucket": "0",
+          "latestObservationAt": "2026-05-12T10:05:00Z"
+        },
+        "circuitAdvisoryState": "healthy",
+        "circuitStateCandidate": "closed",
+        "liveEnforcement": false,
+        "wouldBlockCall": false,
+        "wouldBlockIfEnforced": false,
+        "enforcementBlockReasonCode": null,
+        "wouldChangeProviderOrder": false,
+        "wouldChangeFallbackBehavior": false,
+        "noExternalCalls": true,
+        "providerBehaviorChanged": false,
+        "marketCacheBehaviorChanged": false
+      }
+    ],
+    "metadata": {
+      "readOnly": true,
+      "noExternalCalls": true,
+      "liveEnforcement": false,
+      "providerBehaviorChanged": false,
+      "marketCacheBehaviorChanged": false,
+      "dataSources": [
+        "provider_sla_readiness"
+      ],
+      "limit": 100,
+      "redaction": [
+        "credential_values_omitted",
+        "payload_content_removed"
+      ],
+      "filters": {
+        "routeFamily": "all"
+      }
+    }
+  },
+  "market_provider_operations": {
+    "generatedAt": "2026-05-12T10:10:00Z",
+    "window": {
+      "key": "24h",
+      "since": "2026-05-11T10:10:00Z"
+    },
+    "summary": {
+      "totalItems": 2,
+      "liveCount": 0,
+      "cacheCount": 1,
+      "staleCount": 1,
+      "fallbackCount": 0,
+      "partialCount": 1,
+      "unavailableCount": 0,
+      "errorCount": 0,
+      "refreshingCount": 0,
+      "eventCount": 6,
+      "failureCount": 0,
+      "fallbackEventCount": 0,
+      "staleEventCount": 1,
+      "slowEventCount": 0
+    },
+    "items": [
+      {
+        "provider": "fixture_market_cache",
+        "sourceLabel": "cache_snapshot",
+        "sourceType": "cache",
+        "domain": "analysis",
+        "endpoint": "quote",
+        "card": "overview_quote",
+        "cacheKey": "analysis.quote.AAPL",
+        "status": "ok",
+        "freshness": "fresh",
+        "asOf": "2026-05-12T10:09:30Z",
+        "updatedAt": "2026-05-12T10:09:30Z",
+        "lastSuccessfulAt": "2026-05-12T10:09:30Z",
+        "lastKnownGoodAgeMinutes": 0,
+        "latencyMs": 32.0,
+        "isFallback": false,
+        "isStale": false,
+        "isRefreshing": false,
+        "isFromSnapshot": false,
+        "fallbackUsed": false,
+        "warning": null,
+        "errorSummary": null,
+        "adminLogDrillThrough": {
+          "label": "查看 Admin Logs",
+          "route": "/zh/admin/logs",
+          "query": {
+            "provider": "fixture_market_cache"
+          },
+          "eventId": "evt-fixture-001"
+        }
+      },
+      {
+        "provider": "fixture_quote_backup",
+        "sourceLabel": "cache_snapshot",
+        "sourceType": "cache",
+        "domain": "scanner",
+        "endpoint": "quote",
+        "card": "scanner_candidate_quote",
+        "cacheKey": "scanner.quote.NVDA",
+        "status": "warning",
+        "freshness": "stale",
+        "asOf": "2026-05-12T09:58:00Z",
+        "updatedAt": "2026-05-12T09:58:00Z",
+        "lastSuccessfulAt": "2026-05-12T09:58:00Z",
+        "lastKnownGoodAgeMinutes": 12,
+        "latencyMs": 41.0,
+        "isFallback": false,
+        "isStale": true,
+        "isRefreshing": false,
+        "isFromSnapshot": true,
+        "fallbackUsed": false,
+        "warning": "Bounded stale quote served within allowed window.",
+        "errorSummary": null,
+        "adminLogDrillThrough": {
+          "label": "查看 Admin Logs",
+          "route": "/zh/admin/logs",
+          "query": {
+            "provider": "fixture_quote_backup"
+          },
+          "eventId": "evt-fixture-002"
+        }
+      }
+    ],
+    "eventRollups": [
+      {
+        "provider": "fixture_quote_backup",
+        "endpoint": "quote",
+        "card": "scanner_candidate_quote",
+        "category": "provider",
+        "eventCount": 2,
+        "failureCount": 0,
+        "fallbackCount": 0,
+        "staleServedCount": 1,
+        "slowCount": 0,
+        "failureRate": 0.0,
+        "topReasons": [
+          "stale_quote_served"
+        ],
+        "latestLogEventId": "evt-fixture-002",
+        "latestStartedAt": "2026-05-12T09:58:00Z",
+        "adminLogDrillThrough": {
+          "label": "查看 Admin Logs",
+          "route": "/zh/admin/logs",
+          "query": {
+            "provider": "fixture_quote_backup"
+          },
+          "eventId": "evt-fixture-002"
+        }
+      }
+    ],
+    "cacheStates": [
+      {
+        "cacheKey": "analysis.quote.AAPL",
+        "ttlSeconds": 60,
+        "fetchedAt": "2026-05-12T10:09:30Z",
+        "expiresAt": "2026-05-12T10:10:30Z",
+        "isFresh": true,
+        "isRefreshing": false,
+        "lastError": null,
+        "persistentSnapshotAvailable": true,
+        "persistentSnapshotAgeMinutes": 0,
+        "status": "fresh"
+      }
+    ],
+    "limitations": [
+      "Read-only operational summary; no runtime controls exposed."
+    ],
+    "adminLogDrillThrough": {
+      "label": "查看 Admin Logs",
+      "route": "/zh/admin/logs",
+      "query": {},
+      "eventId": null
+    },
+    "metadata": {
+      "readOnly": true,
+      "authDependencyLabel": "admin_user",
+      "transitionalGap": "Operational provider route still uses coarse admin gating.",
+      "redaction": [
+        "payload_content_removed",
+        "credential_values_omitted"
+      ],
+      "ownership": "provider_runtime_read_model_only"
+    }
+  },
+  "fixture_meta": {
+    "surface": "admin_provider_observability",
+    "read_only": true,
+    "auth_surfaces": [
+      {
+        "surface": "admin_provider_circuits",
+        "auth_dependency_label": "admin_capability",
+        "capability_label": "ops:providers:read",
+        "transitional_gap": null
+      },
+      {
+        "surface": "admin_market_provider_operations",
+        "auth_dependency_label": "admin_user",
+        "capability_label": null,
+        "transitional_gap": "Operational provider route still uses coarse admin gating."
+      }
+    ],
+    "raw_details_policy": "diagnostic_rollups_only",
+    "redaction": [
+      "payload_content_removed",
+      "credential_values_omitted",
+      "runtime_controls_excluded"
+    ]
+  }
+}

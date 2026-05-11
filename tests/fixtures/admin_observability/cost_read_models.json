@@ -1,0 +1,320 @@
+{
+  "duplicate_summary": {
+    "generatedAt": "2026-05-12T10:00:00Z",
+    "window": {
+      "key": "24h",
+      "from": "2026-05-11T10:00:00Z",
+      "to": "2026-05-12T10:00:00Z",
+      "bucket": "hour",
+      "historical": false
+    },
+    "summary": {
+      "llmCalls": 14,
+      "llmUsageCalls": 14,
+      "llmUsageTokens": 12800,
+      "estimatedDuplicateCandidates": 2,
+      "providerCalls": 28,
+      "providerCacheHits": 18,
+      "providerCacheMisses": 10,
+      "providerInflightJoins": 3,
+      "providerCacheHitRate": 0.643,
+      "marketCacheHits": 22,
+      "marketCacheMisses": 6,
+      "marketCacheStaleServed": 1,
+      "marketCacheColdFallbacks": 0,
+      "marketCacheHitRate": 0.786,
+      "fallbackAttempts": 1,
+      "integrityRetries": 0,
+      "scannerAiAttempts": 2,
+      "scannerAiCompleted": 2,
+      "scannerAiSkipped": 0
+    },
+    "llm": {
+      "byCallType": [
+        {
+          "group": "analysis_summary",
+          "count": 8,
+          "eventCounts": {
+            "completed": 8
+          },
+          "dimensions": {
+            "routeFamily": "analysis"
+          }
+        }
+      ],
+      "duplicateCandidates": [
+        {
+          "group": "same_symbol_same_window",
+          "count": 2,
+          "eventCounts": {
+            "deduped": 2
+          },
+          "dimensions": {
+            "area": "analysis"
+          }
+        }
+      ],
+      "fallbacks": [],
+      "integrityRetries": [],
+      "usageByCallType": [
+        {
+          "group": "analysis_summary",
+          "count": 14,
+          "eventCounts": {
+            "tokens": 12800
+          },
+          "dimensions": {
+            "provider": "openai"
+          }
+        }
+      ],
+      "usageByModel": [
+        {
+          "group": "gpt-5.4",
+          "count": 14,
+          "eventCounts": {
+            "tokens": 12800
+          },
+          "dimensions": {
+            "provider": "openai"
+          }
+        }
+      ]
+    },
+    "providers": {
+      "byCategory": [
+        {
+          "group": "market_data",
+          "count": 28,
+          "eventCounts": {
+            "completed": 27,
+            "stale_served": 1
+          },
+          "dimensions": {
+            "routeFamily": "analysis"
+          }
+        }
+      ],
+      "fallbackDepth": [
+        {
+          "group": "depth_0",
+          "count": 27,
+          "eventCounts": {
+            "resolved": 27
+          },
+          "dimensions": {}
+        },
+        {
+          "group": "depth_1",
+          "count": 1,
+          "eventCounts": {
+            "resolved": 1
+          },
+          "dimensions": {}
+        }
+      ],
+      "cacheEfficiency": [
+        {
+          "group": "analysis",
+          "hits": 18,
+          "misses": 10,
+          "inflightJoins": 3,
+          "hitRate": 0.643,
+          "dimensions": {
+            "provider": "fixture_market_cache"
+          }
+        }
+      ],
+      "duplicateCandidates": [
+        {
+          "group": "quote_reuse",
+          "count": 3,
+          "eventCounts": {
+            "deduped": 3
+          },
+          "dimensions": {
+            "provider": "fixture_market_cache"
+          }
+        }
+      ]
+    },
+    "marketCache": {
+      "byPanelKey": [
+        {
+          "group": "analysis.quote",
+          "count": 22,
+          "eventCounts": {
+            "hit": 22
+          },
+          "dimensions": {
+            "scope": "analysis"
+          }
+        }
+      ],
+      "staleServed": [
+        {
+          "group": "quote",
+          "count": 1,
+          "eventCounts": {
+            "served": 1
+          },
+          "dimensions": {
+            "market": "US"
+          }
+        }
+      ],
+      "coldFallbacks": [],
+      "refreshes": [
+        {
+          "group": "background_refresh",
+          "count": 4,
+          "eventCounts": {
+            "completed": 4
+          },
+          "dimensions": {
+            "scope": "analysis"
+          }
+        }
+      ]
+    },
+    "scannerAi": {
+      "interpretations": [
+        {
+          "group": "us_preopen_v1",
+          "count": 2,
+          "eventCounts": {
+            "completed": 2
+          },
+          "dimensions": {
+            "market": "US"
+          }
+        }
+      ],
+      "duplicateCandidates": [],
+      "skips": []
+    },
+    "limitations": [
+      {
+        "code": "observational_only",
+        "message": "Summary is for observability and does not represent billing truth.",
+        "severity": "info"
+      }
+    ],
+    "metadata": {
+      "readOnly": true,
+      "noExternalCalls": true,
+      "countersSource": "process_local",
+      "exactness": "observational_not_billing",
+      "dataSources": [
+        "llm_cost_ledger",
+        "provider_usage_ledger"
+      ],
+      "unsupportedSources": [],
+      "redaction": [
+        "prompt_content_removed",
+        "provider_request_metadata_reduced"
+      ],
+      "requestedArea": "all",
+      "limit": 50,
+      "notes": {
+        "owner": "admin_cost_observability",
+        "mutationAuthority": false
+      }
+    }
+  },
+  "llm_ledger_summary": {
+    "generatedAt": "2026-05-12T10:00:00Z",
+    "window": {
+      "key": "24h",
+      "from": "2026-05-11T10:00:00Z",
+      "to": "2026-05-12T10:00:00Z",
+      "bucket": "hour",
+      "historical": false
+    },
+    "total": {
+      "calls": 14,
+      "promptTokens": 8200,
+      "cachedInputTokens": 900,
+      "completionTokens": 3700,
+      "totalTokens": 12800,
+      "totalCostUsd": "1.82"
+    },
+    "byUser": [
+      {
+        "group": "owner-fixture-1",
+        "calls": 8,
+        "totalTokens": 7200,
+        "totalCostUsd": "1.05",
+        "dimensions": {
+          "role": "admin"
+        }
+      },
+      {
+        "group": "guest-fixture-1",
+        "calls": 6,
+        "totalTokens": 5600,
+        "totalCostUsd": "0.77",
+        "dimensions": {
+          "role": "guest"
+        }
+      }
+    ],
+    "byProviderModel": [
+      {
+        "group": "openai:gpt-5.4",
+        "calls": 14,
+        "totalTokens": 12800,
+        "totalCostUsd": "1.82",
+        "dimensions": {
+          "provider": "openai",
+          "model": "gpt-5.4"
+        }
+      }
+    ],
+    "byRouteFamily": [
+      {
+        "group": "analysis",
+        "calls": 10,
+        "totalTokens": 9800,
+        "totalCostUsd": "1.41",
+        "dimensions": {
+          "surface": "analysis"
+        }
+      },
+      {
+        "group": "scanner",
+        "calls": 4,
+        "totalTokens": 3000,
+        "totalCostUsd": "0.41",
+        "dimensions": {
+          "surface": "scanner"
+        }
+      }
+    ],
+    "metadata": {
+      "readOnly": true,
+      "noExternalCalls": true,
+      "redaction": [
+        "prompt_content_removed",
+        "response_content_removed",
+        "actor_labels_bounded"
+      ],
+      "reasonCodes": [
+        "observability_only"
+      ]
+    }
+  },
+  "fixture_meta": {
+    "surface": "admin_cost_observability",
+    "read_only": true,
+    "auth_dependency_label": "admin_capability",
+    "capability_label": "cost:observability:read",
+    "transitional_gap": null,
+    "raw_details_policy": "rollup_only",
+    "redaction": [
+      "prompt_content_removed",
+      "response_content_removed",
+      "secret_values_omitted"
+    ]
+  }
+}

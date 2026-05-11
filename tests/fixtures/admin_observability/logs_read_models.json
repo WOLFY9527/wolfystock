@@ -1,0 +1,235 @@
+{
+  "storage_summary": {
+    "total_log_count": 18,
+    "event_count": 52,
+    "session_count": 4,
+    "total_event_count": 52,
+    "oldest_log_timestamp": "2026-05-10T09:00:00Z",
+    "oldest_event_at": "2026-05-10T09:00:00Z",
+    "newest_log_timestamp": "2026-05-12T09:40:00Z",
+    "newest_event_at": "2026-05-12T09:40:00Z",
+    "retention_days": 90,
+    "minimum_retention_days": 7,
+    "retention_tiers": {
+      "active_window_days": 7,
+      "archive_window_days": 90
+    },
+    "retention_cutoff": "2026-02-12T00:00:00Z",
+    "logs_older_than_retention_count": 0,
+    "estimated_storage_bytes": 20480,
+    "storage_size_bytes": 20480,
+    "storage_size_label": "20 KB",
+    "storage_size_available": true,
+    "measurement_scope": "sqlite_execution_logs",
+    "measurement_status": "measured",
+    "measurement_reason": "fixture_sampled_offline",
+    "storage_soft_limit_bytes": 536870912,
+    "storage_hard_limit_bytes": 1073741824,
+    "used_percentage_of_soft_limit": 0.0,
+    "used_percentage_of_hard_limit": 0.0,
+    "capacity_cleanup_recommended": false,
+    "auto_cleanup_enabled": true,
+    "auto_cleanup_performed": false,
+    "auto_cleanup_message": "No cleanup needed.",
+    "capacity_cleanup_plan": {
+      "mode": "observe_only",
+      "candidate_log_count": 0
+    },
+    "postgres_vacuum_note": "not_applicable_sqlite_fixture",
+    "warning_threshold_count": 50000,
+    "critical_threshold_count": 100000,
+    "status": "ok",
+    "status_reasons": [
+      "within_capacity_limits"
+    ],
+    "recommended_cleanup_action": "No cleanup needed.",
+    "last_cleanup_timestamp": "2026-05-09T08:30:00Z"
+  },
+  "session_detail": {
+    "session_id": "ops-session-20260512-01",
+    "task_id": "analysis-task-17",
+    "query_id": "qry-17",
+    "analysis_history_id": 17,
+    "code": "AAPL",
+    "name": "AAPL premarket review",
+    "overall_status": "completed",
+    "truth_level": "diagnostic_summary",
+    "started_at": "2026-05-12T09:30:00Z",
+    "ended_at": "2026-05-12T09:34:00Z",
+    "summary": {
+      "actor_type": "admin",
+      "provider_count": 1,
+      "warning_count": 1
+    },
+    "readable_summary": {
+      "headline": "Premarket review completed with bounded stale quote warning.",
+      "reason_codes": [
+        "stale_quote_served"
+      ]
+    },
+    "events": [
+      {
+        "id": 501,
+        "event_at": "2026-05-12T09:30:01Z",
+        "level": "INFO",
+        "phase": "analysis",
+        "category": "scanner",
+        "event_name": "analysis.started",
+        "step": "prepare_inputs",
+        "action": "start",
+        "outcome": "ok",
+        "reason": null,
+        "target": "AAPL",
+        "status": "success",
+        "truth_level": "event_summary",
+        "message": "Analysis request accepted.",
+        "error_code": null,
+        "detail": {
+          "actor": "admin",
+          "route_family": "analysis",
+          "provider_summary": "history_cache_only"
+        }
+      },
+      {
+        "id": 502,
+        "event_at": "2026-05-12T09:33:14Z",
+        "level": "WARN",
+        "phase": "analysis",
+        "category": "provider",
+        "event_name": "quote.stale_served",
+        "step": "fetch_quote",
+        "action": "read_cache",
+        "outcome": "warning",
+        "reason": "stale_quote_served",
+        "target": "AAPL",
+        "status": "partial",
+        "truth_level": "bounded_diagnostic",
+        "message": "Cached quote served within stale tolerance.",
+        "error_code": "stale_quote_served",
+        "detail": {
+          "provider": "fixture_market_cache",
+          "freshness_state": "stale",
+          "stale_age_minutes": 12
+        }
+      }
+    ],
+    "operation_detail": {
+      "provider_diagnostics": {
+        "providers_used": [
+          "fixture_market_cache"
+        ],
+        "fallback_occurred": false
+      },
+      "raw_detail_policy": "bounded_diagnostic_only"
+    }
+  },
+  "event_detail": {
+    "id": "evt-fixture-001",
+    "event": "analysis.completed",
+    "category": "analysis",
+    "type": "workflow",
+    "eventType": "analysis.completed",
+    "status": "success",
+    "summary": "Analysis completed with one bounded provider freshness warning.",
+    "subject": "AAPL premarket review",
+    "symbol": "AAPL",
+    "market": "US",
+    "actorType": "admin",
+    "actorLabel": "ops-admin",
+    "contextLabel": "manual review",
+    "route": "/api/v1/analysis/analyze",
+    "endpoint": "analysis.analyze",
+    "provider": "fixture_market_cache",
+    "source": "execution_log",
+    "component": "analysis_pipeline",
+    "feature": "report_generation",
+    "reason": null,
+    "errorSummary": null,
+    "traceId": "trace-fixture-001",
+    "rootCauseSummary": "none",
+    "stepTraceAvailable": true,
+    "analysisType": "standard",
+    "strategyId": null,
+    "scannerId": null,
+    "backtestId": null,
+    "userId": "owner-fixture-1",
+    "requestId": "req-fixture-001",
+    "recordId": "record-fixture-001",
+    "startedAt": "2026-05-12T09:30:00Z",
+    "finishedAt": "2026-05-12T09:34:00Z",
+    "durationMs": 240000.0,
+    "stepCount": 2,
+    "successStepCount": 1,
+    "failedStepCount": 0,
+    "skippedStepCount": 0,
+    "unknownStepCount": 0,
+    "metadata": {
+      "actor_scope": "admin_read_only",
+      "reason_codes": [
+        "stale_quote_served"
+      ]
+    },
+    "steps": [
+      {
+        "id": "step-prepare",
+        "executionId": "exec-fixture-001",
+        "name": "prepare_inputs",
+        "label": "Prepare inputs",
+        "category": "analysis",
+        "provider": null,
+        "model": null,
+        "endpoint": "analysis.analyze",
+        "apiPath": "/api/v1/analysis/analyze",
+        "status": "success",
+        "reason": null,
+        "message": "Inputs normalized.",
+        "startedAt": "2026-05-12T09:30:00Z",
+        "finishedAt": "2026-05-12T09:30:01Z",
+        "durationMs": 1000.0,
+        "errorType": null,
+        "errorMessage": null,
+        "recordId": "record-fixture-001",
+        "metadata": {
+          "symbol_count": 1
+        }
+      },
+      {
+        "id": "step-quote",
+        "executionId": "exec-fixture-001",
+        "name": "fetch_quote",
+        "label": "Fetch quote",
+        "category": "provider",
+        "provider": "fixture_market_cache",
+        "model": null,
+        "endpoint": "market_cache.quote",
+        "apiPath": "/api/v1/analysis/analyze",
+        "status": "partial",
+        "reason": "stale_quote_served",
+        "message": "Bounded stale quote served.",
+        "startedAt": "2026-05-12T09:33:00Z",
+        "finishedAt": "2026-05-12T09:33:14Z",
+        "durationMs": 14000.0,
+        "errorType": null,
+        "errorMessage": null,
+        "recordId": "record-fixture-001",
+        "metadata": {
+          "freshness_state": "stale",
+          "stale_age_minutes": 12
+        }
+      }
+    ]
+  },
+  "fixture_meta": {
+    "surface": "admin_logs",
+    "read_only": true,
+    "auth_dependency_label": "admin_capability",
+    "capability_label": "ops:logs:read",
+    "transitional_gap": null,
+    "raw_details_policy": "bounded_diagnostic_only",
+    "redaction": [
+      "payload_content_removed",
+      "request_metadata_hashed",
+      "secret_values_omitted"
+    ]
+  }
+}
