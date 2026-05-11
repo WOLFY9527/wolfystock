@@ -1,0 +1,46 @@
+{
+  "run_id": 7001,
+  "status": "completed",
+  "exports": [
+    {
+      "key": "support_bundle_manifest_json",
+      "available": true,
+      "availability_reason": "run_exists",
+      "format": "json",
+      "media_type": "application/json",
+      "delivery_mode": "api",
+      "endpoint_path": "/api/v1/backtest/rule/runs/7001/support-bundle-manifest",
+      "payload_class": "compact"
+    },
+    {
+      "key": "support_bundle_reproducibility_manifest_json",
+      "available": true,
+      "availability_reason": "run_exists",
+      "format": "json",
+      "media_type": "application/json",
+      "delivery_mode": "api",
+      "endpoint_path": "/api/v1/backtest/rule/runs/7001/support-bundle-reproducibility-manifest",
+      "payload_class": "compact"
+    },
+    {
+      "key": "execution_trace_json",
+      "available": false,
+      "availability_reason": "execution_trace_rows_missing",
+      "format": "json",
+      "media_type": "application/json",
+      "delivery_mode": "api",
+      "endpoint_path": "/api/v1/backtest/rule/runs/7001/execution-trace.json",
+      "payload_class": "heavy"
+    },
+    {
+      "key": "execution_trace_csv",
+      "available": false,
+      "availability_reason": "execution_trace_rows_missing",
+      "format": "csv",
+      "media_type": "text/csv",
+      "delivery_mode": "api",
+      "endpoint_path": "/api/v1/backtest/rule/runs/7001/execution-trace.csv",
+      "payload_class": "heavy"
+    }
+  ]
+}

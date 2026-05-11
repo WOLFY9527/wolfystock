@@ -1,0 +1,87 @@
+{
+  "version": "v1",
+  "source": "summary.execution_trace",
+  "completeness": "complete",
+  "missing_fields": [],
+  "trace_rows": [
+    {
+      "date": "2025-01-08",
+      "event_type": "action",
+      "action": "buy",
+      "signal_summary": "SMA5 crossed above SMA20 at prior close",
+      "position": 1.0,
+      "shares": 803.0,
+      "cash": 214.0,
+      "holdings_value": 99786.0,
+      "total_portfolio_value": 100000.0,
+      "fees": 10.0,
+      "slippage": 20.0,
+      "notes": "stored action row"
+    },
+    {
+      "date": "2025-02-03",
+      "event_type": "fallback",
+      "action": "hold",
+      "signal_summary": "No trade; next open missing on non-trading boundary",
+      "position": 1.0,
+      "shares": 803.0,
+      "cash": 214.0,
+      "holdings_value": 103587.0,
+      "total_portfolio_value": 103801.0,
+      "fallback": {
+        "code": "open_missing_close_fallback",
+        "applied": true,
+        "authority": "stored_trace_row"
+      },
+      "notes": "bounded fallback summary"
+    },
+    {
+      "date": "2025-03-17",
+      "event_type": "anomaly",
+      "action": "skip_exit",
+      "signal_summary": "Exit signal observed but no next open was available",
+      "position": 1.0,
+      "shares": 803.0,
+      "cash": 214.0,
+      "holdings_value": 106075.0,
+      "total_portfolio_value": 106289.0,
+      "anomaly": {
+        "code": "insufficient_next_bar_open",
+        "severity": "warning",
+        "authority": "stored_trace_row"
+      },
+      "notes": "compact anomaly row"
+    }
+  ],
+  "assumptions": {
+    "summary_text": "daily bars, close signal, next open fill"
+  },
+  "execution_model": {
+    "version": "v1",
+    "timeframe": "daily",
+    "signal_evaluation_timing": "bar_close",
+    "entry_timing": "next_bar_open",
+    "exit_timing": "next_bar_open",
+    "entry_fill_price_basis": "open",
+    "exit_fill_price_basis": "open",
+    "position_sizing": "single_position_full_notional",
+    "fee_model": "bps_per_side",
+    "fee_bps_per_side": 1.0,
+    "slippage_model": "bps_per_side",
+    "slippage_bps_per_side": 2.0
+  },
+  "execution_assumptions": {
+    "indicator_price_basis": "close",
+    "terminal_bar_fill_fallback": "same_bar_close"
+  },
+  "benchmark_summary": {
+    "method": "same_symbol_buy_and_hold",
+    "resolved_mode": "same_symbol_buy_and_hold",
+    "return_pct": 8.1
+  },
+  "fallback": {
+    "run_fallback": false,
+    "trace_rebuilt": false,
+    "provider_authority": "none"
+  }
+}

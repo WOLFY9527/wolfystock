@@ -1,0 +1,382 @@
+{
+  "id": 7001,
+  "code": "AAPL",
+  "strategy_text": "Buy when SMA5 crosses above SMA20. Sell when SMA5 crosses below SMA20.",
+  "parsed_strategy": {
+    "version": "v1",
+    "timeframe": "daily",
+    "source_text": "Buy when SMA5 crosses above SMA20. Sell when SMA5 crosses below SMA20.",
+    "normalized_text": "SMA5 crosses above SMA20 entry; SMA5 crosses below SMA20 exit.",
+    "entry": {
+      "indicator": "ma_crossover",
+      "direction": "above",
+      "fast_period": 5,
+      "slow_period": 20
+    },
+    "exit": {
+      "indicator": "ma_crossover",
+      "direction": "below",
+      "fast_period": 5,
+      "slow_period": 20
+    },
+    "confidence": 1.0,
+    "needs_confirmation": false,
+    "ambiguities": [],
+    "summary": {
+      "entry": "SMA5 crosses above SMA20",
+      "exit": "SMA5 crosses below SMA20",
+      "strategy": "moving average crossover"
+    },
+    "max_lookback": 20,
+    "strategy_kind": "moving_average_crossover",
+    "setup": {
+      "fast_period": 5,
+      "slow_period": 20,
+      "fast_type": "simple",
+      "slow_type": "simple"
+    },
+    "strategy_spec": {
+      "version": "v1",
+      "strategy_type": "moving_average_crossover",
+      "strategy_family": "moving_average_crossover",
+      "symbol": "AAPL",
+      "timeframe": "daily",
+      "max_lookback": 20,
+      "date_range": {
+        "start_date": "2025-01-02",
+        "end_date": "2025-04-30"
+      },
+      "capital": {
+        "initial_capital": 100000.0,
+        "currency": "USD"
+      },
+      "costs": {
+        "fee_bps": 1.0,
+        "slippage_bps": 2.0
+      },
+      "signal": {
+        "indicator_family": "moving_average",
+        "fast_period": 5,
+        "slow_period": 20,
+        "fast_type": "simple",
+        "slow_type": "simple",
+        "entry_condition": "fast_crosses_above_slow",
+        "exit_condition": "fast_crosses_below_slow"
+      },
+      "execution": {
+        "frequency": "daily",
+        "signal_timing": "bar_close",
+        "fill_timing": "next_bar_open"
+      },
+      "position_behavior": {
+        "direction": "long_only",
+        "entry_sizing": "all_in",
+        "max_positions": 1,
+        "pyramiding": false
+      },
+      "end_behavior": {
+        "policy": "liquidate_at_end",
+        "price_basis": "close"
+      },
+      "support": {
+        "executable": true,
+        "normalization_state": "ready",
+        "requires_confirmation": false,
+        "unsupported_reason": null,
+        "detected_strategy_family": "moving_average_crossover"
+      }
+    },
+    "executable": true,
+    "normalization_state": "ready",
+    "detected_strategy_family": "moving_average_crossover",
+    "interpretation_confidence": 1.0
+  },
+  "strategy_hash": "fixture-sma5-sma20-v1",
+  "timeframe": "daily",
+  "start_date": "2025-01-02",
+  "end_date": "2025-04-30",
+  "period_start": "2025-01-02",
+  "period_end": "2025-04-30",
+  "lookback_bars": 80,
+  "initial_capital": 100000.0,
+  "fee_bps": 1.0,
+  "slippage_bps": 2.0,
+  "parsed_confidence": 1.0,
+  "needs_confirmation": false,
+  "warnings": [],
+  "run_at": "2025-05-01T09:30:00Z",
+  "completed_at": "2025-05-01T09:30:07Z",
+  "status": "completed",
+  "status_message": "completed from stored summary",
+  "status_history": [
+    {
+      "status": "completed",
+      "at": "2025-05-01T09:30:07Z"
+    }
+  ],
+  "run_timing": {
+    "created_at": "2025-05-01T09:30:00Z",
+    "started_at": "2025-05-01T09:30:01Z",
+    "finished_at": "2025-05-01T09:30:07Z",
+    "queue_duration_seconds": 1.0,
+    "run_duration_seconds": 6.0
+  },
+  "run_diagnostics": {
+    "current_status": "completed",
+    "terminal_status": "completed",
+    "reason_code": null,
+    "message": "stored summary reopened"
+  },
+  "no_result_reason": null,
+  "no_result_message": null,
+  "trade_count": 4,
+  "win_count": 3,
+  "loss_count": 1,
+  "total_return_pct": 12.4,
+  "annualized_return_pct": 38.2,
+  "sharpe_ratio": 1.41,
+  "benchmark_mode": "same_symbol_buy_and_hold",
+  "benchmark_code": "AAPL",
+  "benchmark_return_pct": 8.1,
+  "excess_return_vs_benchmark_pct": 4.3,
+  "buy_and_hold_return_pct": 8.1,
+  "excess_return_vs_buy_and_hold_pct": 4.3,
+  "win_rate_pct": 75.0,
+  "avg_trade_return_pct": 3.1,
+  "max_drawdown_pct": 5.2,
+  "avg_holding_days": 9.5,
+  "avg_holding_bars": 7.0,
+  "avg_holding_calendar_days": 9.5,
+  "final_equity": 112400.0,
+  "summary": {
+    "metrics": {
+      "total_return_pct": 12.4,
+      "benchmark_return_pct": 8.1,
+      "max_drawdown_pct": 5.2,
+      "win_rate_pct": 75.0,
+      "trade_count": 4,
+      "final_equity": 112400.0
+    },
+    "artifact_availability": {
+      "version": "v1",
+      "source": "summary.artifact_availability",
+      "completeness": "complete",
+      "has_summary": true,
+      "has_parsed_strategy": true,
+      "has_metrics": true,
+      "has_execution_model": true,
+      "has_comparison": true,
+      "has_trade_rows": true,
+      "has_equity_curve": true,
+      "has_execution_trace": true,
+      "has_run_diagnostics": true,
+      "has_run_timing": true
+    },
+    "readback_integrity": {
+      "version": "v1",
+      "source": "derived_from_result_authority",
+      "completeness": "complete",
+      "used_legacy_fallback": false,
+      "used_live_storage_repair": false,
+      "has_summary_storage_drift": false,
+      "drift_domains": [],
+      "missing_summary_fields": [],
+      "integrity_level": "stored_complete"
+    }
+  },
+  "data_quality": {
+    "source": "fixture_local_history",
+    "state": "local_ready"
+  },
+  "robustness_analysis": {
+    "state": "research_prototype",
+    "profile": "single_symbol_fixture"
+  },
+  "artifact_availability": {
+    "version": "v1",
+    "source": "summary.artifact_availability",
+    "completeness": "complete",
+    "has_summary": true,
+    "has_parsed_strategy": true,
+    "has_metrics": true,
+    "has_execution_model": true,
+    "has_comparison": true,
+    "has_trade_rows": true,
+    "has_equity_curve": true,
+    "has_execution_trace": true,
+    "has_run_diagnostics": true,
+    "has_run_timing": true
+  },
+  "readback_integrity": {
+    "version": "v1",
+    "source": "derived_from_result_authority",
+    "completeness": "complete",
+    "used_legacy_fallback": false,
+    "used_live_storage_repair": false,
+    "has_summary_storage_drift": false,
+    "drift_domains": [],
+    "missing_summary_fields": [],
+    "integrity_level": "stored_complete"
+  },
+  "professionalReadiness": {
+    "overall_state": "research_prototype",
+    "professional_quant_ready": false,
+    "local_data_coverage_state": "local_ready",
+    "provider_calls": false
+  },
+  "adjustedDataState": "unknown_or_mixed",
+  "corporateActionState": "not_ready",
+  "tradingCalendarState": "available_bars_only",
+  "fillModelState": "next_open_baseline",
+  "costModelState": "baseline_bps_only",
+  "antiLeakageState": "basic_bar_close_to_next_open",
+  "reproducibilityState": "partial_without_dataset_lineage",
+  "universeBiasState": "not_applicable_single_symbol",
+  "execution_model": {
+    "version": "v1",
+    "timeframe": "daily",
+    "signal_evaluation_timing": "bar_close",
+    "entry_timing": "next_bar_open",
+    "exit_timing": "next_bar_open",
+    "entry_fill_price_basis": "open",
+    "exit_fill_price_basis": "open",
+    "position_sizing": "single_position_full_notional",
+    "fee_model": "bps_per_side",
+    "fee_bps_per_side": 1.0,
+    "slippage_model": "bps_per_side",
+    "slippage_bps_per_side": 2.0,
+    "market_rules": {
+      "trading_day_execution": "available_bars_only",
+      "terminal_bar_fill_fallback": "same_bar_close",
+      "window_end_position_handling": "force_flatten"
+    }
+  },
+  "execution_assumptions": {
+    "timeframe": "daily",
+    "indicator_price_basis": "close"
+  },
+  "execution_assumptions_snapshot": {
+    "version": "v1",
+    "source": "summary.execution_assumptions_snapshot",
+    "completeness": "complete",
+    "missing_keys": [],
+    "payload": {
+      "timeframe": "daily",
+      "indicator_price_basis": "close"
+    }
+  },
+  "benchmark_curve": [],
+  "benchmark_summary": {
+    "method": "same_symbol_buy_and_hold",
+    "resolved_mode": "same_symbol_buy_and_hold",
+    "return_pct": 8.1
+  },
+  "buy_and_hold_curve": [],
+  "buy_and_hold_summary": {
+    "method": "same_symbol_buy_and_hold",
+    "resolved_mode": "same_symbol_buy_and_hold",
+    "return_pct": 8.1
+  },
+  "audit_rows": [],
+  "daily_return_series": [],
+  "exposure_curve": [],
+  "ai_summary": null,
+  "equity_curve": [],
+  "trades": [],
+  "execution_trace": {
+    "version": "v1",
+    "source": "summary.execution_trace",
+    "completeness": "complete",
+    "missing_fields": [],
+    "rows": [
+      {
+        "date": "2025-01-08",
+        "event_type": "action",
+        "action": "buy"
+      },
+      {
+        "date": "2025-02-12",
+        "event_type": "action",
+        "action": "sell"
+      },
+      {
+        "date": "2025-03-05",
+        "event_type": "fallback",
+        "action": "hold"
+      }
+    ],
+    "assumptions_defaults": {
+      "items": [],
+      "summary_text": "stored fixture assumptions"
+    },
+    "execution_model": {
+      "entry_timing": "next_bar_open",
+      "exit_timing": "next_bar_open"
+    },
+    "execution_assumptions": {
+      "indicator_price_basis": "close"
+    },
+    "fallback": {
+      "run_fallback": false,
+      "trace_rebuilt": false,
+      "provider_authority": "none"
+    }
+  },
+  "result_authority": {
+    "contract_version": "v1",
+    "read_mode": "stored_first",
+    "summary_source": "row.summary_json",
+    "summary_completeness": "complete",
+    "summary_missing_fields": [],
+    "metrics_source": "summary.metrics",
+    "metrics_completeness": "complete",
+    "metrics_missing_fields": [],
+    "execution_model_source": "summary.execution_model",
+    "execution_model_completeness": "complete",
+    "execution_model_missing_fields": [],
+    "execution_assumptions_source": "summary.execution_assumptions_snapshot",
+    "trade_rows_source": "stored_rule_backtest_trades",
+    "trade_rows_completeness": "complete",
+    "trade_rows_missing_fields": [],
+    "execution_trace_source": "summary.execution_trace",
+    "execution_trace_completeness": "complete",
+    "execution_trace_missing_fields": [],
+    "domains": {
+      "summary": {
+        "source": "row.summary_json",
+        "completeness": "complete",
+        "state": "available",
+        "missing": [],
+        "missing_kind": "fields"
+      },
+      "metrics": {
+        "source": "summary.metrics",
+        "completeness": "complete",
+        "state": "available",
+        "missing": [],
+        "missing_kind": "fields"
+      },
+      "execution_model": {
+        "source": "summary.execution_model",
+        "completeness": "complete",
+        "state": "available",
+        "missing": [],
+        "missing_kind": "fields"
+      },
+      "trade_rows": {
+        "source": "stored_rule_backtest_trades",
+        "completeness": "complete",
+        "state": "available",
+        "missing": [],
+        "missing_kind": "fields"
+      },
+      "execution_trace": {
+        "source": "summary.execution_trace",
+        "completeness": "complete",
+        "state": "available",
+        "missing": [],
+        "missing_kind": "fields"
+      }
+    }
+  }
+}

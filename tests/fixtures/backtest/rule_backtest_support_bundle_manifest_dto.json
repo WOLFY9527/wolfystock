@@ -1,0 +1,108 @@
+{
+  "manifest_version": "v1",
+  "manifest_kind": "rule_backtest_support_bundle",
+  "run": {
+    "id": 7001,
+    "code": "AAPL",
+    "status": "completed",
+    "status_message": "completed from stored summary",
+    "run_at": "2025-05-01T09:30:00Z",
+    "completed_at": "2025-05-01T09:30:07Z",
+    "strategy_hash": "fixture-sma5-sma20-v1",
+    "timeframe": "daily",
+    "lookback_bars": 80,
+    "period_start": "2025-01-02",
+    "period_end": "2025-04-30",
+    "benchmark_mode": "same_symbol_buy_and_hold",
+    "benchmark_code": "AAPL",
+    "trade_count": 4,
+    "total_return_pct": 12.4,
+    "max_drawdown_pct": 5.2,
+    "final_equity": 112400.0,
+    "no_result_reason": null,
+    "no_result_message": null
+  },
+  "run_timing": {
+    "created_at": "2025-05-01T09:30:00Z",
+    "started_at": "2025-05-01T09:30:01Z",
+    "finished_at": "2025-05-01T09:30:07Z",
+    "queue_duration_seconds": 1.0,
+    "run_duration_seconds": 6.0
+  },
+  "run_diagnostics": {
+    "current_status": "completed",
+    "terminal_status": "completed",
+    "reason_code": null,
+    "message": "stored summary reopened"
+  },
+  "artifact_availability": {
+    "version": "v1",
+    "source": "summary.artifact_availability",
+    "completeness": "complete",
+    "has_summary": true,
+    "has_parsed_strategy": true,
+    "has_metrics": true,
+    "has_execution_model": true,
+    "has_comparison": true,
+    "has_trade_rows": true,
+    "has_equity_curve": true,
+    "has_execution_trace": true,
+    "has_run_diagnostics": true,
+    "has_run_timing": true
+  },
+  "readback_integrity": {
+    "version": "v1",
+    "source": "derived_from_result_authority",
+    "completeness": "complete",
+    "used_legacy_fallback": false,
+    "used_live_storage_repair": false,
+    "has_summary_storage_drift": false,
+    "drift_domains": [],
+    "missing_summary_fields": [],
+    "integrity_level": "stored_complete"
+  },
+  "result_authority": {
+    "contract_version": "v1",
+    "read_mode": "stored_first",
+    "domains": {
+      "summary": {
+        "source": "row.summary_json",
+        "completeness": "complete",
+        "state": "available",
+        "missing": [],
+        "missing_kind": "fields"
+      },
+      "metrics": {
+        "source": "summary.metrics",
+        "completeness": "complete",
+        "state": "available",
+        "missing": [],
+        "missing_kind": "fields"
+      },
+      "execution_model": {
+        "source": "summary.execution_model",
+        "completeness": "complete",
+        "state": "available",
+        "missing": [],
+        "missing_kind": "fields"
+      },
+      "execution_trace": {
+        "source": "summary.execution_trace",
+        "completeness": "complete",
+        "state": "available",
+        "missing": [],
+        "missing_kind": "fields"
+      }
+    }
+  },
+  "artifact_counts": {
+    "status_history_count": 1,
+    "warning_count": 0,
+    "trade_rows_count": 4,
+    "equity_curve_points": 80,
+    "audit_rows_count": 80,
+    "daily_return_series_count": 80,
+    "exposure_curve_count": 80,
+    "execution_trace_rows_count": 3
+  }
+}
