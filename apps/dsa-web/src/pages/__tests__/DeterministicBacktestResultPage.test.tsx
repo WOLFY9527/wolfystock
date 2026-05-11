@@ -1394,7 +1394,7 @@ describe('DeterministicBacktestResultPage', () => {
     expect(await screen.findByText('场景结果比较')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: '概览' }));
-    fireEvent.click(screen.getByText('查看可导出的结果摘要'));
+    fireEvent.click(screen.getByRole('button', { name: /查看可导出的结果摘要/ }));
     fireEvent.click(screen.getByRole('button', { name: '导出 Markdown' }));
 
     await waitFor(() => {

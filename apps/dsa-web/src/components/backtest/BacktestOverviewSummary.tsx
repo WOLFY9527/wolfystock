@@ -1,10 +1,17 @@
 import type React from 'react';
 import { useState } from 'react';
-import { Button, Card } from '../common';
-import { Disclosure, SummaryStrip, AssumptionList, pct } from './shared';
+import { SummaryStrip, AssumptionList, pct } from './shared';
 import type { DeterministicBacktestNormalizedResult } from './normalizeDeterministicBacktestResult';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 import { useI18n } from '../../contexts/UiLanguageContext';
+import {
+  TerminalButton,
+  TerminalDisclosure,
+  TerminalMetric,
+  TerminalNestedBlock,
+  TerminalPanel,
+  TerminalSectionHeader,
+} from '../terminal/TerminalPrimitives';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 
@@ -46,8 +53,12 @@ const BacktestOverviewSummary: React.FC<BacktestOverviewSummaryProps> = ({
       role="tabpanel"
       aria-labelledby="deterministic-result-tab-overview"
     >
-      <Card title={resultPage('overview.title')} subtitle={resultPage('overview.subtitle')} className="product-section-card product-section-card--backtest-secondary">
-        <p className="product-section-copy">{resultPage('overview.intro')}</p>
+      <TerminalPanel className="product-section-card product-section-card--backtest-secondary flex flex-col gap-4">
+        <TerminalSectionHeader
+          eyebrow={resultPage('overview.subtitle')}
+          title={resultPage('overview.title')}
+        />
+        <p className="text-sm leading-6 text-white/60">{resultPage('overview.intro')}</p>
         <SummaryStrip
           items={[
             { label: resultPage('overview.metricAuditRows'), value: String(normalized.viewerMeta.rowCount) },
@@ -56,60 +67,61 @@ const BacktestOverviewSummary: React.FC<BacktestOverviewSummaryProps> = ({
             { label: resultPage('overview.metricBuyAndHold'), value: pct(run.buyAndHoldReturnPct) },
           ]}
         />
-        <Disclosure summary={resultPage('overview.benchmarkDisclosure')}>
-          <div className="backtest-result-page__tab-stack">
-            <div className="preview-grid">
-              <div className="preview-card">
-                <p className="metric-card__label">{resultPage('overview.selectedBenchmark')}</p>
-                <p className="preview-card__text">{selectedBenchmarkLabel}</p>
-              </div>
-              <div className="preview-card">
-                <p className="metric-card__label">{resultPage('overview.vsBenchmark')}</p>
-                <p className="preview-card__text">{pct(run.excessReturnVsBenchmarkPct)}</p>
-              </div>
-              <div className="preview-card">
-                <p className="metric-card__label">{resultPage('overview.buyAndHold')}</p>
-                <p className="preview-card__text">{buyAndHoldLabel} · {pct(run.buyAndHoldReturnPct)}</p>
-              </div>
-              <div className="preview-card">
-                <p className="metric-card__label">{resultPage('overview.statusTimeline')}</p>
-                <p className="preview-card__text">{resultPage('overview.checkpoints', { count: run.statusHistory.length })}</p>
-              </div>
+        <TerminalDisclosure title={resultPage('overview.benchmarkDisclosure')}>
+          <div className="flex flex-col gap-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <TerminalMetric label={resultPage('overview.selectedBenchmark')} value={selectedBenchmarkLabel} valueClassName="truncate text-sm font-semibold" />
+              <TerminalMetric label={resultPage('overview.vsBenchmark')} value={pct(run.excessReturnVsBenchmarkPct)} valueClassName="text-sm" />
+              <TerminalMetric
+                label={resultPage('overview.buyAndHold')}
+                value={`${buyAndHoldLabel} · ${pct(run.buyAndHoldReturnPct)}`}
+                valueClassName="text-xs font-semibold leading-5"
+              />
+              <TerminalMetric
+                label={resultPage('overview.statusTimeline')}
+                value={resultPage('overview.checkpoints', { count: run.statusHistory.length })}
+                valueClassName="text-xs font-semibold leading-5"
+              />
             </div>
-            <p className="product-footnote">{benchmarkStatusNote}</p>
+            <p className="text-xs leading-5 text-white/40">{benchmarkStatusNote}</p>
             <AssumptionList assumptions={run.executionAssumptions} emptyText={resultPage('overview.emptyExecutionAssumptions')} />
           </div>
-        </Disclosure>
-        <Disclosure summary={resultPage('overview.exportSummaryDisclosure')}>
-          <div className="backtest-result-page__tab-stack">
-            <div className="summary-block">
-              <div className="summary-block__header">
-                <div>
-                  <h3 className="summary-block__title">{resultPage('overview.resultSummaryTitle')}</h3>
-                  <p className="product-section-copy">{resultPage('overview.resultSummaryBody')}</p>
-                </div>
-                <div className="product-action-row">
-                  <Button variant="secondary" onClick={() => onExportDecisionReport('md')}>{resultPage('overview.exportMarkdown')}</Button>
-                  <Button variant="ghost" onClick={() => onExportDecisionReport('html')}>{resultPage('overview.exportHtml')}</Button>
-                </div>
+        </TerminalDisclosure>
+        <TerminalDisclosure title={resultPage('overview.exportSummaryDisclosure')}>
+          <TerminalNestedBlock className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h3 className="text-sm font-medium text-white/90">{resultPage('overview.resultSummaryTitle')}</h3>
+                <p className="mt-2 text-sm leading-6 text-white/60">{resultPage('overview.resultSummaryBody')}</p>
               </div>
-              <div className="backtest-report-console" data-testid="decision-report-console">
-                <Button
-                  variant="ghost"
-                  size="sm"
+              <div className="flex flex-wrap gap-2 lg:justify-end">
+                <TerminalButton variant="secondary" onClick={() => onExportDecisionReport('md')}>
+                  {resultPage('overview.exportMarkdown')}
+                </TerminalButton>
+                <TerminalButton variant="compact" onClick={() => onExportDecisionReport('html')}>
+                  {resultPage('overview.exportHtml')}
+                </TerminalButton>
+              </div>
+            </div>
+            <TerminalNestedBlock data-testid="decision-report-console" className="flex flex-col gap-3 overflow-hidden">
+              <div className="flex justify-end">
+                <TerminalButton
+                  variant="compact"
                   onClick={() => void handleCopyReport()}
-                  className="backtest-report-console__copy"
+                  className="shrink-0"
                 >
                   {copied
                     ? (language === 'en' ? 'Copied' : '已复制')
                     : (language === 'en' ? 'Copy full report' : '复制完整报告')}
-                </Button>
-                <pre className="comparison-report-preview">{decisionReportMarkdown}</pre>
+                </TerminalButton>
               </div>
-            </div>
-          </div>
-        </Disclosure>
-      </Card>
+              <pre className="overflow-x-auto no-scrollbar rounded-lg border border-white/5 bg-black/30 px-3 py-3 text-xs leading-6 text-white/75">
+                {decisionReportMarkdown}
+              </pre>
+            </TerminalNestedBlock>
+          </TerminalNestedBlock>
+        </TerminalDisclosure>
+      </TerminalPanel>
     </section>
   );
 };
