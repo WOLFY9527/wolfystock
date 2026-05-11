@@ -34,6 +34,7 @@ const {
   buildDuckDBFactors,
   useAuthMock,
   useSystemConfigMock,
+  llmEditorModuleLoad,
 } = vi.hoisted(() => ({
   load: vi.fn(),
   clearToast: vi.fn(),
@@ -62,6 +63,24 @@ const {
   buildDuckDBFactors: vi.fn(),
   useAuthMock: vi.fn(),
   useSystemConfigMock: vi.fn(),
+  llmEditorModuleLoad: (() => {
+    let resolve: (() => void) | null = null;
+    const state = {
+      loadCount: 0,
+      promise: Promise.resolve(),
+      reset() {
+        state.loadCount = 0;
+        state.promise = new Promise<void>((nextResolve) => {
+          resolve = nextResolve;
+        });
+      },
+      resolve() {
+        resolve?.();
+      },
+    };
+    state.reset();
+    return state;
+  })(),
 }));
 
 vi.mock('../../api/systemConfig', async (importOriginal) => {
@@ -103,6 +122,42 @@ vi.mock('../../components/theme/ThemeProvider', () => ({
     setThemeStyle,
   }),
 }));
+
+vi.mock('../../components/settings/LLMChannelEditor', async () => {
+  llmEditorModuleLoad.loadCount += 1;
+  await llmEditorModuleLoad.promise;
+  return {
+    LLMChannelEditor: ({
+      onSaveItems,
+      providerScopeName,
+      focusChannelName,
+      externalCreatePreset,
+      onExternalCreateHandled,
+    }: {
+      onSaveItems: (items: Array<{ key: string; value: string }>, successMessage: string) => void;
+      providerScopeName?: string;
+      focusChannelName?: string;
+      externalCreatePreset?: string | null;
+      onExternalCreateHandled?: () => void;
+    }) => (
+      <div>
+        <button
+          type="button"
+          onClick={() => onSaveItems([{ key: 'LLM_CHANNELS', value: 'primary,backup' }], '渠道配置已保存')}
+        >
+          save llm channels
+        </button>
+        <p data-testid="llm-provider-scope">{providerScopeName || ''}</p>
+        <p data-testid="llm-focus-channel">{focusChannelName || ''}</p>
+        {externalCreatePreset ? (
+          <button type="button" onClick={() => onExternalCreateHandled?.()}>
+            external create {externalCreatePreset}
+          </button>
+        ) : null}
+      </div>
+    ),
+  };
+});
 
 vi.mock('../../components/settings', () => ({
   AuthSettingsCard: () => <div>认证与登录保护</div>,
@@ -815,6 +870,7 @@ function buildDataSourceConfigItem(key: string, value: string) {
 describe('SettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    llmEditorModuleLoad.reset();
     window.history.replaceState({}, '', '/');
     window.innerWidth = 1280;
     window.dispatchEvent(new Event('resize'));
@@ -1863,6 +1919,30 @@ describe('SettingsPage', () => {
 
     expect(saveExternalItems).toHaveBeenCalledWith([{ key: 'STOCK_LIST', value: 'SZ000001,SZ000002' }], '操作成功');
     expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('lazy loads the advanced llm editor only after the drawer opens', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({ activeCategory: 'ai_model' }));
+
+    render(<SettingsPage />);
+
+    expect(llmEditorModuleLoad.loadCount).toBe(0);
+    expect(screen.queryByRole('button', { name: 'save llm channels' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '打开高级设置' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: '高级服务商 / 渠道编辑' })).toBeInTheDocument();
+    });
+    expect(llmEditorModuleLoad.loadCount).toBe(1);
+    expect(screen.getByText('正在按需加载高级渠道终端…')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'save llm channels' })).toBeNull();
+
+    llmEditorModuleLoad.resolve();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'save llm channels' })).toBeInTheDocument();
+    });
   });
 
   it('refreshes server state after llm channel editor saves', async () => {

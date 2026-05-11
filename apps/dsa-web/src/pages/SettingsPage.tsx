@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { getApiErrorMessage, getParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfig';
@@ -34,7 +34,6 @@ import {
   AuthSettingsCard,
   ChangePasswordCard,
   IntelligentImport,
-  LLMChannelEditor,
   SettingsAlert,
   SettingsCategoryNav,
   SettingsField,
@@ -107,6 +106,11 @@ type CustomDataSourceRecord = {
   capabilities: DataSourceCapability[];
   validation?: CustomDataSourceValidation;
 };
+
+const LazyLLMChannelEditor = lazy(async () => {
+  const module = await import('../components/settings/LLMChannelEditor');
+  return { default: module.LLMChannelEditor };
+});
 
 const SEGMENT_WRAPPER_CLASS = 'inline-flex rounded-xl border border-white/10 bg-white/[0.02] p-1';
 const SEGMENT_BUTTON_CLASS = 'rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors';
@@ -4151,21 +4155,41 @@ const SettingsPage: React.FC = () => {
               </div>
             ) : null}
           </div>
-          <LLMChannelEditor
-            items={rawActiveItems}
-            adminUnlockToken={adminUnlockToken}
-            providerScopeName={advancedNavigationContext?.provider || ''}
-            focusChannelName={advancedFocusChannelName}
-            externalCreatePreset={advancedCreatePreset}
-            onExternalCreateHandled={() => setAdvancedCreatePreset(null)}
-            onSaveItems={async (updatedItems, successMessage) => {
-              if (adminLocked) {
-                return;
-              }
-              await saveExternalItems(updatedItems, successMessage);
-            }}
-            disabled={isSaving || isLoading || adminLocked}
-          />
+          <Suspense
+            fallback={(
+              <div
+                role="status"
+                aria-live="polite"
+                className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3"
+              >
+                <div className="flex items-center gap-3">
+                  <span aria-hidden="true" className="h-2 w-2 rounded-full bg-cyan-300/80 animate-pulse" />
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200/80">
+                      高级渠道终端
+                    </p>
+                    <p className="text-xs text-secondary-text">正在按需加载高级渠道终端…</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          >
+            <LazyLLMChannelEditor
+              items={rawActiveItems}
+              adminUnlockToken={adminUnlockToken}
+              providerScopeName={advancedNavigationContext?.provider || ''}
+              focusChannelName={advancedFocusChannelName}
+              externalCreatePreset={advancedCreatePreset}
+              onExternalCreateHandled={() => setAdvancedCreatePreset(null)}
+              onSaveItems={async (updatedItems, successMessage) => {
+                if (adminLocked) {
+                  return;
+                }
+                await saveExternalItems(updatedItems, successMessage);
+              }}
+              disabled={isSaving || isLoading || adminLocked}
+            />
+          </Suspense>
         </div>
       </Drawer>
 
