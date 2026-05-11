@@ -489,6 +489,13 @@ describe('MarketRotationRadarPage', () => {
     expect(within(detail).getByText('分类观察')).toBeInTheDocument();
     expect(within(detail).getByText('真实资金流暂缺')).toBeInTheDocument();
     expect(detail.textContent || '').not.toMatch(/真实资金流确认|资金流入确认/);
+
+    const evidenceDetails = within(detail).getByTestId('rotation-theme-evidence-details-ai_applications');
+    expect(evidenceDetails).toHaveAttribute('data-terminal-primitive', 'disclosure');
+    expect(evidenceDetails).not.toHaveAttribute('open');
+    expect(within(evidenceDetails).queryByText('AI 应用 观察证据')).not.toBeInTheDocument();
+    fireEvent.click(within(evidenceDetails).getByRole('button', { name: '展开 证据详情' }));
+    expect(evidenceDetails).toHaveTextContent('AI 应用 观察证据');
   });
 
   it('keeps proxy diagnostics user-facing and omits developer diagnostics by default', async () => {
@@ -568,7 +575,11 @@ describe('MarketRotationRadarPage', () => {
     expect(document.body.textContent || '').toMatch(/历史数据不足|技术指标数据不足|基本面数据缺失/);
 
     const proxyDetails = within(detail).getByTestId('rotation-theme-proxy-details-ai_applications');
+    expect(proxyDetails).toHaveAttribute('data-terminal-primitive', 'disclosure');
     expect(proxyDetails).not.toHaveAttribute('open');
+    fireEvent.click(within(proxyDetails).getByRole('button', { name: '展开 数据诊断' }));
+    expect(within(proxyDetails).getByTestId('rotation-proxy-row-IWM')).toBeInTheDocument();
+    expect(within(proxyDetails).getByTestId('rotation-proxy-row-IGV')).toBeInTheDocument();
     expect(screen.queryByTestId('rotation-radar-developer-details')).not.toBeInTheDocument();
     expect(document.body.textContent || '').not.toMatch(/开发者|Developer|schemaVersion|provider_payload|raw_payload|debug|trace/i);
   });
@@ -584,7 +595,12 @@ describe('MarketRotationRadarPage', () => {
     expect(buckets).toHaveTextContent('窄幅龙头');
 
     const mechanics = screen.getByTestId('rotation-radar-mechanics-details');
+    expect(mechanics).toHaveAttribute('data-terminal-primitive', 'disclosure');
     expect(mechanics).toHaveTextContent('数据说明');
+    expect(mechanics).not.toHaveAttribute('open');
+    expect(screen.queryByText('不代表实时买卖信号，不触发交易、通知、组合或新的外部数据请求。')).not.toBeInTheDocument();
+    fireEvent.click(within(mechanics).getByRole('button', { name: '展开 数据说明' }));
+    expect(screen.getByText('不代表实时买卖信号，不触发交易、通知、组合或新的外部数据请求。')).toBeInTheDocument();
     expect(mechanics).not.toHaveTextContent('schemaVersion');
   });
 });

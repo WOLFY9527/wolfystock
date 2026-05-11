@@ -7,6 +7,7 @@ import { DataFreshnessBadge } from '../components/market-overview/marketOverview
 import {
   TerminalButton,
   TerminalChip,
+  TerminalDisclosure,
   TerminalEmptyState,
   TerminalGrid,
   TerminalNestedBlock,
@@ -444,9 +445,8 @@ const WatchlistMemberRow: React.FC<{ member: {
 
 const ThemeDetailPanel: React.FC<{
   theme?: MarketRotationTheme;
-  isProxyOpen: boolean;
-  onProxyToggle: (open: boolean) => void;
-}> = ({ theme, isProxyOpen, onProxyToggle }) => {
+  proxyResetKey: number;
+}> = ({ theme, proxyResetKey }) => {
   if (!theme) {
     return null;
   }
@@ -571,72 +571,72 @@ const ThemeDetailPanel: React.FC<{
         </div>
       </div> : null}
 
-      {!taxonomyOnly ? <details
+      {!taxonomyOnly ? <TerminalDisclosure
+        key={`${theme.id}-${proxyResetKey}`}
         data-testid={`rotation-theme-proxy-details-${theme.id}`}
-        className="mt-5 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2"
-        onToggle={(event) => onProxyToggle(event.currentTarget.open)}
+        title="数据诊断"
+        summary={(
+          <span data-testid={`rotation-proxy-quality-summary-${theme.id}`} className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
+            <TerminalChip variant={theme.proxyQuality?.hasMissingRequiredProxy || theme.proxyQuality?.hasStaleProxy ? 'caution' : 'success'}>
+              {proxyQualityState(theme)}
+            </TerminalChip>
+            <TerminalChip>
+              覆盖 {theme.proxyQuality?.availableProxyCount ?? proxyValues.length}/{theme.proxyQuality?.totalProxyCount ?? proxyValues.length}
+            </TerminalChip>
+            <TerminalChip>{percent(theme.proxyQuality?.coveragePercent)}</TerminalChip>
+            <DataFreshnessBadge freshness={theme.proxyQuality?.freshness || theme.freshness} className="px-1.5 text-[9px]" />
+          </span>
+        )}
+        className="mt-5"
       >
-        <summary className="cursor-pointer list-none">
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <span className="mr-1 text-[10px] font-bold uppercase text-white/35">数据诊断</span>
-            <span data-testid={`rotation-proxy-quality-summary-${theme.id}`} className="flex min-w-0 flex-wrap items-center gap-1.5">
-              <TerminalChip variant={theme.proxyQuality?.hasMissingRequiredProxy || theme.proxyQuality?.hasStaleProxy ? 'caution' : 'success'}>
-                {proxyQualityState(theme)}
-              </TerminalChip>
-              <TerminalChip>
-                覆盖 {theme.proxyQuality?.availableProxyCount ?? proxyValues.length}/{theme.proxyQuality?.totalProxyCount ?? proxyValues.length}
-              </TerminalChip>
-              <TerminalChip>{percent(theme.proxyQuality?.coveragePercent)}</TerminalChip>
-              <DataFreshnessBadge freshness={theme.proxyQuality?.freshness || theme.freshness} className="px-1.5 text-[9px]" />
-            </span>
-          </div>
-        </summary>
-        {isProxyOpen ? (
-          <div className="mt-3 grid gap-2 text-[11px] text-white/48">
-            {theme.proxyQuality?.explanation ? <p className="leading-5">{sanitizeRotationText(theme.proxyQuality.explanation)}</p> : null}
-            {proxyValues.map((proxy) => (
-              <div
-                key={proxy.symbol}
-                data-testid={`rotation-proxy-row-${proxy.symbol}`}
-                className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-white/82">{proxy.symbol}</span>
-                  <span className="block truncate text-[11px] text-white/38">{proxy.role === 'sector_proxy' ? '行业代理' : '市场代理'}</span>
-                </span>
-                <span className="shrink-0 text-right">
-                  <span className="block font-mono text-sm text-cyan-100">{signedPercent(proxy.relativeStrength)}</span>
-                  <span className="block text-[10px] text-white/42">{proxyMissingReasonLabel(proxy.quality?.missingReason)}</span>
-                </span>
-              </div>
-            ))}
-            {theme.timeWindows ? (
-              <div className="grid grid-cols-2 gap-2">
-                {(['5m', '15m', '60m', '1d'] as const).map((window) => (
-                  <WindowChip key={window} window={theme.timeWindows?.[window] || {
-                    window,
-                    label: window,
-                    available: false,
-                    freshness: 'fallback',
-                    isFallback: true,
-                    isStale: false,
-                    reason: 'window_unavailable',
-                  }} />
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </details> : null}
+        <div className="grid gap-2 text-[11px] text-white/48">
+          {theme.proxyQuality?.explanation ? <p className="leading-5">{sanitizeRotationText(theme.proxyQuality.explanation)}</p> : null}
+          {proxyValues.map((proxy) => (
+            <div
+              key={proxy.symbol}
+              data-testid={`rotation-proxy-row-${proxy.symbol}`}
+              className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-white/82">{proxy.symbol}</span>
+                <span className="block truncate text-[11px] text-white/38">{proxy.role === 'sector_proxy' ? '行业代理' : '市场代理'}</span>
+              </span>
+              <span className="shrink-0 text-right">
+                <span className="block font-mono text-sm text-cyan-100">{signedPercent(proxy.relativeStrength)}</span>
+                <span className="block text-[10px] text-white/42">{proxyMissingReasonLabel(proxy.quality?.missingReason)}</span>
+              </span>
+            </div>
+          ))}
+          {theme.timeWindows ? (
+            <div className="grid grid-cols-2 gap-2">
+              {(['5m', '15m', '60m', '1d'] as const).map((window) => (
+                <WindowChip key={window} window={theme.timeWindows?.[window] || {
+                  window,
+                  label: window,
+                  available: false,
+                  freshness: 'fallback',
+                  isFallback: true,
+                  isStale: false,
+                  reason: 'window_unavailable',
+                }} />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </TerminalDisclosure> : null}
 
-      <details className="mt-3 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
-        <summary className="cursor-pointer list-none text-[10px] font-bold uppercase text-white/35">证据详情</summary>
-        <div className="mt-2 grid gap-1 text-[11px] leading-5 text-white/48">
+      <TerminalDisclosure
+        data-testid={`rotation-theme-evidence-details-${theme.id}`}
+        title="证据详情"
+        summary={evidenceNotes.length || riskExplanationNotes.length ? '观察证据与风险说明默认折叠' : '暂无额外证据'}
+        className="mt-3"
+      >
+        <div className="grid gap-1 text-[11px] leading-5 text-white/48">
           {evidenceNotes.slice(0, 5).map((item) => <p key={item} className="truncate">· {item}</p>)}
           {riskExplanationNotes.slice(0, 3).map((item) => <p key={item} className="truncate">· {item}</p>)}
           {!evidenceNotes.length && !riskExplanationNotes.length ? <p>暂无额外证据。</p> : null}
         </div>
-      </details>
+      </TerminalDisclosure>
     </TerminalPanel>
   );
 };
@@ -657,7 +657,7 @@ const MarketRotationRadarPage: React.FC = () => {
   const [selectedMarket, setSelectedMarket] = useState('US');
   const [selectedThemeId, setSelectedThemeId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [proxyOpenThemeId, setProxyOpenThemeId] = useState<string>('');
+  const [proxyDisclosureSeed, setProxyDisclosureSeed] = useState(0);
 
   const loadRadar = useCallback(async (market = selectedMarket) => {
     setLoading(true);
@@ -666,8 +666,8 @@ const MarketRotationRadarPage: React.FC = () => {
       const nextPayload = await marketRotationApi.getRotationRadar(market);
       setPayload(nextPayload);
       setSelectedThemeId(nextPayload.themes[0]?.id || '');
-      setProxyOpenThemeId('');
       setSearchQuery('');
+      setProxyDisclosureSeed((seed) => seed + 1);
     } catch (nextError) {
       setError({ ...getParsedApiError(nextError), title: '读取资金轮动雷达失败' });
     } finally {
@@ -777,7 +777,7 @@ const MarketRotationRadarPage: React.FC = () => {
                         selected={selectedTheme?.id === theme.id}
                         onSelect={() => {
                           setSelectedThemeId(theme.id);
-                          setProxyOpenThemeId('');
+                          setProxyDisclosureSeed((seed) => seed + 1);
                         }}
                       />
                     ))}
@@ -811,7 +811,7 @@ const MarketRotationRadarPage: React.FC = () => {
                         selected={selectedTheme?.id === theme.id}
                         onSelect={() => {
                           setSelectedThemeId(theme.id);
-                          setProxyOpenThemeId('');
+                          setProxyDisclosureSeed((seed) => seed + 1);
                         }}
                       />
                     ))}
@@ -825,20 +825,18 @@ const MarketRotationRadarPage: React.FC = () => {
               <div className="min-w-0 xl:col-span-4">
                 <ThemeDetailPanel
                   theme={selectedTheme}
-                  isProxyOpen={selectedTheme ? proxyOpenThemeId === selectedTheme.id : false}
-                  onProxyToggle={(open) => setProxyOpenThemeId(open && selectedTheme ? selectedTheme.id : '')}
+                  proxyResetKey={proxyDisclosureSeed}
                 />
               </div>
             </TerminalGrid>
 
-            <details
+            <TerminalDisclosure
               data-testid="rotation-radar-mechanics-details"
-              className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 text-sm text-white/55 backdrop-blur-md"
+              title="数据说明"
+              summary="默认折叠"
+              className="rounded-2xl p-4 text-sm text-white/55"
             >
-              <summary className="cursor-pointer list-none text-[11px] font-bold uppercase text-white/42">
-                数据说明
-              </summary>
-              <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-white/46">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-white/46">
                 <Gauge className="h-4 w-4 text-cyan-200/70" aria-hidden="true" />
                 <span>当前为静态主题库，本地行情覆盖后可计算轮动强度。</span>
                 <Signal className="ml-2 h-4 w-4 text-emerald-200/70" aria-hidden="true" />
@@ -846,7 +844,7 @@ const MarketRotationRadarPage: React.FC = () => {
                 <Waves className="ml-2 h-4 w-4 text-white/40" aria-hidden="true" />
                 <span>{payload.noAdviceDisclosure}</span>
               </div>
-            </details>
+            </TerminalDisclosure>
           </>
         ) : null}
       </TerminalPageShell>
