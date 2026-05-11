@@ -326,6 +326,13 @@ const rawSessions = [
   },
 ];
 
+async function expandStorageDisclosure() {
+  const disclosure = await screen.findByTestId('admin-logs-storage-disclosure');
+  if (!disclosure.hasAttribute('open')) {
+    fireEvent.click(within(disclosure).getByRole('button'));
+  }
+}
+
 describe('AdminLogsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -443,6 +450,9 @@ describe('AdminLogsPage', () => {
     render(<AdminLogsPage />);
 
     expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'overflow-x-hidden');
+    expect(screen.getByTestId('admin-logs-page-shell')).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(screen.getByTestId('admin-logs-header-panel')).toHaveAttribute('data-terminal-primitive', 'panel');
+    expect(screen.getByTestId('admin-logs-storage-disclosure')).toHaveAttribute('data-terminal-primitive', 'disclosure');
     expect(screen.getByRole('tab', { name: '业务事件' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '股票分析' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '扫描器' })).toBeInTheDocument();
@@ -458,6 +468,7 @@ describe('AdminLogsPage', () => {
     expect(screen.getByText('先处理失败和数据源降级')).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-filter-bar')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-health-summary')).toBeInTheDocument();
+    await expandStorageDisclosure();
     expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('120,000 会话');
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('180,000 事件');
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('日志容量 690.0 MB');
@@ -538,6 +549,7 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
+    await expandStorageDisclosure();
     fireEvent.click(await screen.findByRole('button', { name: '预览保留期清理' }));
     await waitFor(() => expect(cleanupLogs).toHaveBeenCalledWith({ mode: 'retention', useRetention: true, dryRun: true }));
     expect(await screen.findByText(/保留期清理预览：将在/)).toBeInTheDocument();
@@ -590,6 +602,7 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
+    await expandStorageDisclosure();
     expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('容量暂不可用');
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('数据库路径不可用');
     expect(screen.queryByText('大小不可用')).not.toBeInTheDocument();
@@ -666,6 +679,7 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
+    await expandStorageDisclosure();
     expect(await screen.findByText('严重')).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('日志容量 1.2 GB');
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('需要自动清理');
@@ -684,6 +698,7 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
+    await expandStorageDisclosure();
     fireEvent.click(await screen.findByRole('button', { name: '清理超过保留期的日志' }));
 
     await waitFor(() => expect(window.confirm).toHaveBeenCalled());
@@ -980,6 +995,7 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
+    await expandStorageDisclosure();
     expect(await screen.findByTestId('admin-logs-storage-summary')).toHaveTextContent('日志容量 120.6 KB');
     expect(screen.getByTestId('admin-logs-storage-summary')).toHaveTextContent('SQLite 数据库文件');
   });
@@ -1003,9 +1019,9 @@ describe('AdminLogsPage', () => {
     expect(await screen.findByTestId('scanner-execution-summary')).toHaveTextContent('扫描器执行摘要');
     expect(screen.getByTestId('scanner-execution-summary')).toHaveTextContent('US · US Pre-open Scanner v1');
     expect(screen.getByTestId('scanner-execution-summary')).toHaveTextContent('30 / 5');
-    const metadataSummary = screen.getAllByText('元数据').find((item) => item.tagName.toLowerCase() === 'summary');
-    expect(metadataSummary).toBeTruthy();
-    expect(metadataSummary.closest('details')).not.toHaveAttribute('open');
+    const metadataToggle = screen.getByRole('button', { name: '展开 元数据' });
+    expect(metadataToggle).toBeTruthy();
+    expect(metadataToggle.closest('details')).not.toHaveAttribute('open');
     expect(screen.queryByText('DEBUG')).not.toBeInTheDocument();
   });
 

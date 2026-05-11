@@ -3,8 +3,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { adminLogsApi, type AdminLogCleanupResponse, type AdminLogHealthSummary, type AdminLogStorageSummary, type BusinessEvent, type BusinessEventDetail, type BusinessEventListResponse, type ExecutionLogSessionDetail, type ExecutionLogSessionListResponse, type ExecutionLogSessionSummary, type ExecutionStep } from '../api/adminLogs';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Drawer, GlassCard } from '../components/common';
-import { StatusBadge, getStatusLabel, normalizeStatus, type UnifiedStatus } from '../components/ui/StatusBadge';
+import { ApiErrorAlert, Drawer } from '../components/common';
+import {
+  TerminalButton,
+  TerminalChip,
+  TerminalDenseList,
+  TerminalDenseTable,
+  TerminalEmptyState,
+  TerminalMetric,
+  TerminalNestedBlock,
+  TerminalNotice,
+  TerminalPageShell,
+  TerminalPanel,
+  TerminalSectionHeader,
+} from '../components/terminal';
+import { getStatusLabel, normalizeStatus, type UnifiedStatus } from '../components/ui/StatusBadge';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { describeAdminLogLevel } from '../utils/displayStatus';
 import { formatDateTime as formatDateTimeValue, formatDurationMs } from '../utils/format';
@@ -23,20 +36,56 @@ const CATEGORY_OPTIONS: LogCategory[] = ['system', 'auth', 'market', 'cache', 'd
 const SINCE_OPTIONS = ['15m', '1h', '24h', '7d'] as const;
 const STATUS_FILTER_OPTIONS = ['all', 'success', 'partial', 'failed', 'skipped', 'running', 'unknown', 'cancelled'] as const;
 const PAGE_SIZE = 20;
+type TerminalChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
 
-const LEVEL_CLASS: Record<LogLevel, string> = {
-  DEBUG: 'border-white/10 bg-white/[0.04] text-white/50',
-  INFO: 'border-white/10 bg-white/[0.05] text-white/62',
-  NOTICE: 'border-cyan-300/25 bg-cyan-400/10 text-cyan-100',
-  WARNING: 'border-amber-300/30 bg-amber-400/12 text-amber-100',
-  ERROR: 'border-rose-300/35 bg-rose-500/14 text-rose-100',
-  CRITICAL: 'border-red-300/45 bg-red-500/25 text-red-50 shadow-[0_0_24px_rgba(239,68,68,0.18)]',
-};
+function statusChipVariant(status: UnifiedStatus): TerminalChipVariant {
+  if (status === 'success') return 'success';
+  if (status === 'failed' || status === 'error' || status === 'cancelled') return 'danger';
+  if (status === 'partial' || status === 'warning') return 'caution';
+  if (status === 'running' || status === 'info') return 'info';
+  return 'neutral';
+}
+
+function levelChipVariant(level: LogLevel): TerminalChipVariant {
+  if (level === 'NOTICE') return 'info';
+  if (level === 'WARNING') return 'caution';
+  if (level === 'ERROR' || level === 'CRITICAL') return 'danger';
+  return 'neutral';
+}
+
+function actorChipVariant(value: unknown): TerminalChipVariant {
+  const actor = actorBadgeLabel(value);
+  if (actor === 'admin') return 'info';
+  if (actor === 'system') return 'success';
+  if (actor === 'guest' || actor === 'anonymous') return 'caution';
+  return 'neutral';
+}
+
+function StatusChip({
+  status,
+  locale,
+  className = '',
+}: {
+  status: UnifiedStatus;
+  locale: AdminLogsLanguage;
+  className?: string;
+}) {
+  const extraClassName = className ? ` ${className}` : '';
+  return (
+    <TerminalChip
+      variant={statusChipVariant(status)}
+      className={`justify-center font-semibold${extraClassName}`}
+      data-status={status}
+    >
+      {statusLabel(status, locale)}
+    </TerminalChip>
+  );
+}
 
 function AdminLogLevelPill({
   value,
   locale,
-  className = 'inline-flex w-fit rounded-full border px-2 py-0.5 text-[11px] font-semibold',
+  className = 'w-fit justify-center font-semibold',
 }: {
   value: unknown;
   locale: AdminLogsLanguage;
@@ -45,9 +94,9 @@ function AdminLogLevelPill({
   const level = normalizeLogLevel(String(value || ''));
   const descriptor = describeAdminLogLevel(level, { language: locale });
   return (
-    <span className={`${className} ${LEVEL_CLASS[level]}`}>
+    <TerminalChip variant={levelChipVariant(level)} className={className}>
       {descriptor.label}
-    </span>
+    </TerminalChip>
   );
 }
 
@@ -681,10 +730,36 @@ function severityLabel(severity: EventSeverity, locale: AdminLogsLanguage): stri
   return locale === 'zh' ? '成功' : 'Success';
 }
 
-function severityClass(severity: EventSeverity): string {
-  if (severity === 'failed') return 'border-rose-300/25 bg-rose-500/10 text-rose-100';
-  if (severity === 'degraded') return 'border-amber-300/25 bg-amber-400/10 text-amber-100';
-  return 'border-emerald-300/20 bg-emerald-400/10 text-emerald-100';
+function severityChipVariant(severity: EventSeverity): TerminalChipVariant {
+  if (severity === 'failed') return 'danger';
+  if (severity === 'degraded') return 'caution';
+  return 'success';
+}
+
+function SeverityChip({
+  severity,
+  locale,
+  className = '',
+}: {
+  severity: EventSeverity;
+  locale: AdminLogsLanguage;
+  className?: string;
+}) {
+  const textToneClass = severity === 'failed'
+    ? 'text-rose-100'
+    : severity === 'degraded'
+      ? 'text-amber-100'
+      : 'text-emerald-100';
+  const extraClassName = className ? ` ${className}` : '';
+  return (
+    <TerminalChip
+      variant={severityChipVariant(severity)}
+      data-testid="event-severity-pill"
+      className={`justify-center font-semibold ${textToneClass}${extraClassName}`}
+    >
+      {severityLabel(severity, locale)}
+    </TerminalChip>
+  );
 }
 
 function summaryTitle(severity: EventSeverity, locale: AdminLogsLanguage): string {
@@ -774,9 +849,59 @@ function JsonBlock({ value }: { value: unknown }) {
     return <span>{String(value)}</span>;
   }
   return (
-    <pre className="mt-2 max-h-44 overflow-auto no-scrollbar rounded-xl border border-white/5 bg-black/30 p-3 text-[11px] leading-5 text-white/68">
+    <pre className="mt-2 max-h-44 overflow-auto no-scrollbar rounded-xl border border-white/[0.02] bg-black/30 p-3 text-[11px] leading-5 text-white/68">
       {JSON.stringify(sanitizeDisplayValue(value), null, 2)}
     </pre>
+  );
+}
+
+function AdminLogsDisclosure({
+  title,
+  summary,
+  children,
+  defaultOpen = false,
+  className = '',
+  'data-testid': dataTestId,
+}: {
+  title: React.ReactNode;
+  summary?: React.ReactNode;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+  className?: string;
+  'data-testid'?: string;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const titleText = typeof title === 'string' ? title : '';
+  const actionLabel = open ? `收起 ${titleText}` : `展开 ${titleText}`;
+  return (
+    <details
+      data-testid={dataTestId || 'admin-logs-disclosure'}
+      data-terminal-primitive="disclosure"
+      open={open}
+      className={`rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 text-xs backdrop-blur-md transition-all hover:border-white/10 ${className}`.trim()}
+    >
+      <summary
+        role="button"
+        aria-expanded={open}
+        aria-label={actionLabel}
+        className="list-none cursor-pointer [&::-webkit-details-marker]:hidden"
+        onClick={(event) => {
+          event.preventDefault();
+          setOpen((current) => !current);
+        }}
+      >
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{title}</h3>
+            {summary ? <p className="mt-0.5 truncate text-[11px] text-white/38">{summary}</p> : null}
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/8 bg-white/[0.035] px-2 py-1 text-[11px] text-white/58 hover:bg-white/[0.07] hover:text-white">
+            <span>{open ? '收起' : '展开'}</span>
+          </span>
+        </div>
+      </summary>
+      {open ? <div className="mt-2">{children}</div> : null}
+    </details>
   );
 }
 
@@ -796,17 +921,16 @@ function CallCard({
   const reason = friendlyRawStatusLabel(item.reason || item.error || item.failureReason, locale);
   const fallback = text(item.fallback || item.fallbackChain || item.retryFallback, '');
   return (
-    <details className="rounded-2xl border border-white/6 bg-white/[0.025] p-4" open={index === 0}>
-      <summary className="cursor-pointer list-none">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.2em] text-white/36">{type === 'llm' ? 'LLM' : 'API'} #{index + 1}</p>
-            <h4 className="mt-1 text-sm font-semibold text-foreground">{name}</h4>
-          </div>
-          <StatusBadge status={status} label={statusLabel(status, locale)} className="shrink-0" variant="soft" size="sm" />
-        </div>
-      </summary>
-      <div className="mt-4 grid gap-4 text-xs text-secondary-text lg:grid-cols-2">
+    <AdminLogsDisclosure
+      title={`${type === 'llm' ? 'LLM' : 'API'} #${index + 1}`}
+      summary={name}
+      defaultOpen={index === 0}
+      className="px-4 py-3"
+    >
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+        <StatusChip status={status} locale={locale} />
+      </div>
+      <div className="grid gap-4 text-xs text-secondary-text lg:grid-cols-2">
         <div>
           <p className="text-[10px] uppercase tracking-[0.18em] text-white/36">{locale === 'zh' ? '请求参数' : 'Request'}</p>
           <JsonBlock value={item.request || item.params || item.requestParams} />
@@ -821,7 +945,7 @@ function CallCard({
         <p className="break-words">{locale === 'zh' ? '失败原因' : 'Failure reason'}: <span className="text-foreground">{reason || '--'}</span></p>
         <p className="break-words lg:col-span-2">{locale === 'zh' ? '回退情况' : 'Fallback'}: <span className="text-foreground">{fallback || '--'}</span></p>
       </div>
-    </details>
+    </AdminLogsDisclosure>
   );
 }
 
@@ -1222,47 +1346,57 @@ const AdminLogsPage: React.FC = () => {
 
   return (
     <section data-testid="admin-logs-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-x-hidden">
-      <GlassCard as="section" className="overflow-hidden p-0">
-        <div className="relative px-4 py-4 sm:px-5">
-          <div className="relative flex min-w-0 flex-col gap-4">
+      <TerminalPageShell data-testid="admin-logs-page-shell" className="min-h-0 flex-1 overflow-x-hidden">
+        <TerminalPanel as="section" data-testid="admin-logs-header-panel" className="overflow-hidden">
+          <div className="flex min-w-0 flex-col gap-4">
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-emerald-200/70">{locale === 'zh' ? 'WolfyStock 运维追踪' : 'WolfyStock Ops Trace'}</p>
               <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{t('adminLogs.pageTitle')}</h1>
               <p className="mt-1 max-w-4xl text-xs leading-5 text-secondary-text">
                 {locale === 'zh' ? '业务事件优先，原始日志与调试细节留在高级标签。' : t('adminLogs.pageSubtitle')}
               </p>
-              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="min-w-0 rounded-2xl border border-white/6 bg-black/20 px-4 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '页面用途' : 'Purpose'}</p>
-                  <p className="mt-2 text-sm font-semibold text-foreground">{locale === 'zh' ? '定位失败与审计线索' : 'Find failures and audit trails'}</p>
-                  <p className="mt-1 text-xs leading-5 text-muted-text">{locale === 'zh' ? '业务事件、状态、操作者、来源' : 'Business events, status, actor, source'}</p>
-                </div>
-                <div className="min-w-0 rounded-2xl border border-white/6 bg-black/20 px-4 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '当前状态' : 'Current state'}</p>
-                  <p className="mt-2 text-sm font-semibold text-foreground">{operatorCurrentState}</p>
-                  <p className="mt-1 text-xs leading-5 text-muted-text">{healthStatusLabel(healthSummary.status, locale)} · {healthSummary.warningEvents} {locale === 'zh' ? '个警告' : 'warnings'}</p>
-                </div>
-                <div className="min-w-0 rounded-2xl border border-white/6 bg-black/20 px-4 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '下一步' : 'Next action'}</p>
-                  <p className="mt-2 text-sm font-semibold text-foreground">{operatorNextAction}</p>
-                  <p className="mt-1 text-xs leading-5 text-muted-text">{locale === 'zh' ? '清理与原始日志保持二级入口' : 'Cleanup and raw logs stay secondary'}</p>
-                </div>
-              </div>
-              <div role="tablist" aria-label={locale === 'zh' ? '日志视图' : 'Log views'} className="mt-4 flex max-w-full gap-2 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap sm:overflow-visible">
-                {(['business', 'analysis', 'scanner', 'backtest', 'data_source', 'security', 'raw'] as LogsTab[]).map((tab) => (
-                  <button
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <TerminalMetric
+                label={locale === 'zh' ? '页面用途' : 'Purpose'}
+                value={locale === 'zh' ? '定位失败与审计线索' : 'Find failures and audit trails'}
+                subvalue={locale === 'zh' ? '业务事件、状态、操作者、来源' : 'Business events, status, actor, source'}
+                valueClassName="text-sm font-semibold tracking-normal"
+              />
+              <TerminalMetric
+                label={locale === 'zh' ? '当前状态' : 'Current state'}
+                value={operatorCurrentState}
+                subvalue={`${healthStatusLabel(healthSummary.status, locale)} · ${healthSummary.warningEvents} ${locale === 'zh' ? '个警告' : 'warnings'}`}
+                valueClassName="text-sm font-semibold tracking-normal"
+              />
+              <TerminalMetric
+                label={locale === 'zh' ? '下一步' : 'Next action'}
+                value={operatorNextAction}
+                subvalue={locale === 'zh' ? '清理与原始日志保持二级入口' : 'Cleanup and raw logs stay secondary'}
+                valueClassName="text-sm font-semibold tracking-normal"
+              />
+            </div>
+
+            <div role="tablist" aria-label={locale === 'zh' ? '日志视图' : 'Log views'} className="flex max-w-full gap-2 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap sm:overflow-visible">
+              {(['business', 'analysis', 'scanner', 'backtest', 'data_source', 'security', 'raw'] as LogsTab[]).map((tab) => {
+                const isActive = activeTab === tab;
+                return (
+                  <TerminalButton
                     key={tab}
                     type="button"
                     role="tab"
-                    aria-selected={activeTab === tab}
-                    className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${activeTab === tab ? 'border-emerald-300/45 bg-emerald-400/14 text-emerald-50' : 'border-white/8 bg-white/[0.035] text-secondary-text hover:border-white/15 hover:bg-white/[0.055]'}`}
+                    aria-selected={isActive}
+                    variant={isActive ? 'compact' : 'secondary'}
+                    className={`shrink-0 px-3 py-1.5 text-xs font-semibold ${isActive ? 'border-emerald-300/45 bg-emerald-400/14 text-emerald-50 hover:bg-emerald-400/18 hover:text-emerald-50' : 'text-secondary-text'}`}
                     onClick={() => setActiveTab(tab)}
                   >
                     {tabLabel(tab, locale)}
-                  </button>
-                ))}
-              </div>
+                  </TerminalButton>
+                );
+              })}
             </div>
+
             <div
               data-testid="admin-logs-filter-bar"
               className={`grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 ${activeTab === 'raw' ? 'xl:grid-cols-[9.5rem_9.5rem_minmax(12rem,1fr)_9.5rem_auto_auto]' : 'xl:grid-cols-[minmax(14rem,1fr)_9.5rem_9.5rem_auto]'}`}
@@ -1329,325 +1463,362 @@ const AdminLogsPage: React.FC = () => {
                   <option key={option} value={option}>{sinceLabel(option, locale)}</option>
                 ))}
               </select>
-              {activeTab === 'raw' ? <button
-                type="button"
-                role="switch"
-                aria-checked={showDebugLogs}
-                aria-label={locale === 'zh' ? '显示调试日志' : 'Show debug logs'}
-                className="flex h-9 min-w-0 items-center gap-2 rounded-lg border border-white/8 bg-white/[0.035] px-3 text-xs text-secondary-text transition hover:border-white/15 hover:bg-white/[0.055]"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  skipDebugClickRef.current = true;
-                  toggleDebugLogs();
-                }}
-                onClick={() => {
-                  if (skipDebugClickRef.current) {
-                    skipDebugClickRef.current = false;
-                    return;
-                  }
-                  toggleDebugLogs();
-                }}
-              >
-                <span
-                  className={`relative h-4 w-8 rounded-full border transition ${showDebugLogs ? 'border-cyan-300/60 bg-cyan-400/35' : 'border-white/15 bg-black/30'}`}
-                  aria-hidden="true"
+              {activeTab === 'raw' ? (
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={showDebugLogs}
+                  aria-label={locale === 'zh' ? '显示调试日志' : 'Show debug logs'}
+                  className="flex h-9 min-w-0 items-center gap-2 rounded-lg border border-white/8 bg-white/[0.035] px-3 text-xs text-secondary-text transition hover:border-white/15 hover:bg-white/[0.055]"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    skipDebugClickRef.current = true;
+                    toggleDebugLogs();
+                  }}
+                  onClick={() => {
+                    if (skipDebugClickRef.current) {
+                      skipDebugClickRef.current = false;
+                      return;
+                    }
+                    toggleDebugLogs();
+                  }}
                 >
-                  <span className={`absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white transition ${showDebugLogs ? 'left-[1.05rem]' : 'left-0.5'}`} />
-                </span>
-                <span>{locale === 'zh' ? '显示调试日志' : 'Show debug logs'}</span>
-              </button> : null}
-              <button type="button" className="btn-secondary h-9 rounded-lg px-4 text-sm sm:col-span-2 xl:col-span-1" onClick={() => void loadSessions()} disabled={isLoadingList}>
+                  <span
+                    className={`relative h-4 w-8 rounded-full border transition ${showDebugLogs ? 'border-cyan-300/60 bg-cyan-400/35' : 'border-white/15 bg-black/30'}`}
+                    aria-hidden="true"
+                  >
+                    <span className={`absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white transition ${showDebugLogs ? 'left-[1.05rem]' : 'left-0.5'}`} />
+                  </span>
+                  <span>{locale === 'zh' ? '显示调试日志' : 'Show debug logs'}</span>
+                </button>
+              ) : null}
+              <TerminalButton
+                type="button"
+                variant="secondary"
+                className="h-9 px-4 text-sm sm:col-span-2 xl:col-span-1"
+                onClick={() => void loadSessions()}
+                disabled={isLoadingList}
+              >
                 {isLoadingList ? t('adminLogs.loading') : t('adminLogs.refreshButton')}
-              </button>
+              </TerminalButton>
             </div>
-            <p className="text-xs text-muted-text">{t('adminLogs.filterHintDetailed', { count: activeTab === 'raw' ? filteredSessions.length : businessTotal })}</p>
+
+            <TerminalNotice variant="neutral">
+              {t('adminLogs.filterHintDetailed', { count: activeTab === 'raw' ? filteredSessions.length : businessTotal })}
+            </TerminalNotice>
           </div>
-        </div>
-      </GlassCard>
+        </TerminalPanel>
 
-      {error ? <ApiErrorAlert error={error} /> : null}
+        {error ? <ApiErrorAlert error={error} /> : null}
 
-      <details className="rounded-[20px] border border-white/5 bg-white/[0.02] p-3 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-1 text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
-          <span>{locale === 'zh' ? '二级细节：日志容量与破坏性清理' : 'Secondary details: storage and destructive cleanup'}</span>
-          <span className="rounded-full border border-rose-300/20 bg-rose-500/10 px-2.5 py-1 text-[11px] font-medium text-rose-100">
-            {locale === 'zh' ? '需确认' : 'confirmation required'}
-          </span>
-        </summary>
-      <section
-        data-testid="admin-logs-storage-summary"
-        className="mt-3 grid grid-cols-1 gap-2 rounded-xl border border-white/8 bg-black/20 p-2.5 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,1.35fr)_9rem_10rem_10rem_minmax(12rem,1fr)_auto]"
-      >
-        <div className={`rounded-lg border px-3 py-2 ${storageStatusTone(storageSummary?.status)}`}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? '日志容量' : 'LOG STORAGE'}</p>
-              {storageSummary?.storageSizeAvailable ? (
-                <>
-                  <p className="mt-1 text-base font-semibold">
-                    {locale === 'zh' ? '日志容量 ' : ''}{storageSummary.storageSizeLabel || storageSummary.sizeLabel || formatStorageBytes(currentStorageBytes)}
-                  </p>
-                  <p className="text-[11px] opacity-80">{storageMeasurementLabel(storageSummary, locale)} · {formatStorageBytes(softLimitBytes)} {locale === 'zh' ? '软限制' : 'soft'} · {formatStorageBytes(hardLimitBytes)} {locale === 'zh' ? '硬限制' : 'hard limit'}</p>
-                </>
-              ) : (
-                <>
-                  <p className="mt-1 text-base font-semibold">{locale === 'zh' ? '容量暂不可用' : 'Size unavailable'}</p>
-                  <p className="text-[11px] opacity-80">{storageUnavailableReason(storageSummary, locale)} · {locale === 'zh' ? '保留期检查仍在生效' : 'Retention checks active'}</p>
-                </>
-              )}
-            </div>
-            <span className="shrink-0 rounded-md border border-current/25 px-2 py-1 text-[10px] font-semibold uppercase">
-              {storageStatusLabel(storageSummary?.status, locale)}
-            </span>
-          </div>
-          {storageSummary?.storageSizeAvailable ? (
-            <div className="mt-2">
-              <div className="h-1.5 overflow-hidden rounded-full bg-black/35">
-                <div className="h-full rounded-full bg-current" style={{ width: `${Math.max(3, hardPercent)}%` }} />
-              </div>
-              <p className="mt-1 text-[10px] opacity-75">{softPercent}% {locale === 'zh' ? '软限制' : 'soft'} · {hardPercent}% {locale === 'zh' ? '硬限制' : 'hard'}</p>
-            </div>
-          ) : null}
-        </div>
-        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '日志规模' : 'LOG VOLUME'}</p>
-          <p className="mt-1 text-base font-semibold text-foreground">{countLabel(storageSummary?.totalLogCount, 'session', 'sessions', '会话', locale)}</p>
-          <p className="text-[11px] text-muted-text">{countLabel(storageSummary?.totalEventCount, 'event', 'events', '事件', locale)}</p>
-        </div>
-        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '保留期' : 'Retention'}</p>
-          <p className="mt-1 text-base font-semibold text-foreground">{storageSummary?.retentionDays ?? '--'} {locale === 'zh' ? '天' : 'days'}</p>
-          <p className="text-[11px] text-muted-text">{locale === 'zh' ? '最少' : 'min'} {storageSummary?.minimumRetentionDays ?? '--'} {locale === 'zh' ? '天' : 'days'} · {storageSummary?.logsOlderThanRetentionCount ?? 0} {locale === 'zh' ? '条超期' : 'older'}</p>
-        </div>
-        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '最早日志' : 'OLDEST LOG'}</p>
-          <p className="mt-1 truncate text-sm font-semibold text-foreground">{formatDateTime(storageSummary?.oldestLogTimestamp, locale)}</p>
-          <p className="text-[11px] text-muted-text">{locale === 'zh' ? '当前保留的最早会话 / 事件' : 'oldest retained session/event'}</p>
-        </div>
-        <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '清理建议' : 'Cleanup guidance'}</p>
-          <p className="mt-1 truncate text-sm text-foreground" title={localizedRecommendedCleanupAction(storageSummary?.recommendedCleanupAction, locale)}>
-            {localizedRecommendedCleanupAction(storageSummary?.recommendedCleanupAction, locale)}
-          </p>
-          {storageSummary && ['warning', 'critical'].includes(String(storageSummary.status)) ? (
-            <a
-              href="/admin/notifications"
-              className="mt-1 inline-flex text-[11px] font-semibold text-emerald-100 underline-offset-4 hover:underline"
-            >
-              {locale === 'zh' ? '配置管理员通知通道' : 'Configure Admin notification channels'}
-            </a>
-          ) : null}
-          {storageSummary?.postgresVacuumNote ? <p className="mt-1 text-[11px] text-amber-100">{locale === 'zh' ? '删除行后可能需要 PostgreSQL autovacuum 回收物理磁盘空间。' : storageSummary.postgresVacuumNote}</p> : null}
-          {storageSummary?.autoCleanupEnabled && storageSummary?.status === 'critical' ? <p className="mt-1 text-[11px] text-rose-100">{locale === 'zh' ? '需要自动清理' : 'Auto cleanup required'}</p> : null}
-          {cleanupMessage ? <p className="mt-1 text-[11px] text-emerald-100">{cleanupMessage}</p> : null}
-        </div>
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row lg:flex-col">
-          <button
-            type="button"
-            className="btn-secondary h-9 rounded-lg px-3 text-xs"
-            onClick={() => void previewCleanup()}
-            disabled={isCleanupBusy || !storageSummary}
-          >
-            {isCleanupBusy ? t('adminLogs.loading') : (locale === 'zh' ? '预览保留期清理' : 'Preview retention cleanup')}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary h-9 rounded-lg px-3 text-xs"
-            onClick={() => void previewCapacityCleanup()}
-            disabled={isCleanupBusy || !storageSummary?.storageSizeAvailable}
-          >
-            {locale === 'zh' ? '预览容量清理' : 'Preview capacity cleanup'}
-          </button>
-          <button
-            type="button"
-            className="rounded-lg border border-rose-300/25 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/16 disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={() => void confirmCleanup()}
-            disabled={isCleanupBusy || !storageSummary || (cleanupPreview?.matchedLogCount ?? storageSummary.logsOlderThanRetentionCount) <= 0 || (cleanupPreview?.mode === 'capacity' && !canRunCapacityCleanup)}
-          >
-            {cleanupPreview?.mode === 'capacity'
-              ? (locale === 'zh' ? '按容量清理日志' : 'Run capacity cleanup')
-              : (locale === 'zh' ? '清理超过保留期的日志' : 'Clean logs older than retention')}
-          </button>
-        </div>
-      </section>
-      </details>
-
-      <section
-        data-testid="admin-logs-health-summary"
-        className="grid grid-cols-1 gap-2 rounded-xl border border-white/8 bg-black/20 p-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[10rem_9rem_9rem_minmax(10rem,1fr)_minmax(10rem,1fr)_minmax(12rem,1.2fr)]"
-      >
-        <div className={`rounded-lg border px-3 py-2 ${healthStatusTone(healthSummary.status)}`}>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? '整体状态' : 'Overall status'}</p>
-          <p className="mt-1 text-base font-semibold">{healthStatusLabel(healthSummary.status, locale)}</p>
-        </div>
-        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-secondary-text">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '失败' : 'Failures'}</p>
-          <p className="mt-1 text-base font-semibold text-foreground">{healthSummary.failedEvents} / {healthSummary.totalEvents}</p>
-          <p className="text-[11px] text-muted-text">{Math.round((healthSummary.failureRate || 0) * 100)}% · {healthSummary.warningEvents} {locale === 'zh' ? '警告' : 'warning'}</p>
-        </div>
-        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-secondary-text">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '警告' : 'Warnings'}</p>
-          <p className="mt-1 text-base font-semibold text-foreground">{healthSummary.warningEvents}</p>
-          <p className="text-[11px] text-muted-text">{healthSummary.slowEvents} {locale === 'zh' ? '慢请求' : 'slow'}</p>
-        </div>
-        <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '主要失败功能' : 'Top failing feature'}</p>
-          <p className="mt-1 truncate text-sm font-semibold text-foreground" title={friendlyRawStatusLabel(topCategory?.label || topCategory?.key, locale)}>{friendlyRawStatusLabel(topCategory?.label || topCategory?.key, locale)}</p>
-          <p className="text-[11px] text-muted-text">{topCategory ? countLabel(topCategory.count, 'event', 'events', '事件', locale) : '--'}</p>
-        </div>
-        <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '供应商 / 原因' : 'Provider / reason'}</p>
-          <p className="mt-1 truncate text-sm text-foreground" title={compactHealthList(healthSummary.failuresByProvider, locale)}>{compactHealthList(healthSummary.failuresByProvider, locale)}</p>
-          <p className="truncate text-[11px] text-muted-text" title={compactHealthList(healthSummary.failuresByReason, locale)}>{compactHealthList(healthSummary.failuresByReason, locale)}</p>
-        </div>
-        <div className="min-w-0 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '最新严重错误' : 'Latest critical error'}</p>
-          <p className="mt-1 truncate text-sm font-semibold text-foreground" title={text(latestCriticalError?.event || latestCriticalError?.category)}>{text(latestCriticalError?.event || latestCriticalError?.category)}</p>
-          <p className="truncate text-[11px] text-muted-text" title={friendlyRawStatusLabel(latestCriticalError?.errorSummary || latestCriticalError?.reason, locale)}>{friendlyRawStatusLabel(latestCriticalError?.errorSummary || latestCriticalError?.reason, locale)}</p>
-        </div>
-      </section>
-
-      {activeTab === 'scanner' ? (
-        <section
-          data-testid="admin-logs-scanner-summary"
-          className="grid grid-cols-1 gap-2 rounded-xl border border-white/8 bg-black/20 p-2.5 sm:grid-cols-2 lg:grid-cols-4"
+        <AdminLogsDisclosure
+          data-testid="admin-logs-storage-disclosure"
+          title={locale === 'zh' ? '二级细节：日志容量与破坏性清理' : 'Secondary details: storage and destructive cleanup'}
+          summary={locale === 'zh' ? '需确认' : 'confirmation required'}
+          className="px-4 py-3"
         >
-          <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '最近一次扫描' : 'Latest scan'}</p>
-            <p className="mt-1 truncate text-sm font-semibold text-foreground">{text(scannerSummary.latest?.event, locale === 'zh' ? '暂无扫描' : 'No scan')}</p>
-            <p className="text-[11px] text-muted-text">{formatDateTime(scannerSummary.latest?.startedAt, locale)} · {formatDuration(scannerSummary.latest?.durationMs)}</p>
-          </div>
-          <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '成功 / 失败' : 'Success / failed'}</p>
-            <p className="mt-1 text-base font-semibold text-foreground">{scannerSummary.success} / {scannerSummary.failed}</p>
-            <p className="text-[11px] text-muted-text">{locale === 'zh' ? '包含 INFO 生命周期记录' : 'Includes INFO lifecycle records'}</p>
-          </div>
-          <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '最近错误' : 'Latest error'}</p>
-            <p className="mt-1 truncate text-sm font-semibold text-foreground">{friendlyRawStatusLabel(scannerSummary.latestError?.errorSummary || scannerSummary.latestError?.reason, locale)}</p>
-            <p className="text-[11px] text-muted-text">{text(scannerSummary.latestError?.event, locale === 'zh' ? '暂无失败扫描' : 'No failed scan')}</p>
-          </div>
-          <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{locale === 'zh' ? '运行耗时' : 'Run duration'}</p>
-            <p className="mt-1 text-base font-semibold text-foreground">{formatDuration(scannerSummary.latest?.durationMs)}</p>
-            <p className="text-[11px] text-muted-text">{locale === 'zh' ? '开始、完成、失败均进入日志中心' : 'Start, completion, and failure are logged'}</p>
-          </div>
-        </section>
-      ) : null}
+          <section
+            data-testid="admin-logs-storage-summary"
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,1.35fr)_9rem_10rem_10rem_minmax(12rem,1fr)_auto]"
+          >
+            <TerminalNestedBlock className={`min-w-0 ${storageStatusTone(storageSummary?.status)}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? '日志容量' : 'LOG STORAGE'}</p>
+                  {storageSummary?.storageSizeAvailable ? (
+                    <>
+                      <p className="mt-1 text-base font-semibold">
+                        {locale === 'zh' ? '日志容量 ' : ''}{storageSummary.storageSizeLabel || storageSummary.sizeLabel || formatStorageBytes(currentStorageBytes)}
+                      </p>
+                      <p className="text-[11px] opacity-80">{storageMeasurementLabel(storageSummary, locale)} · {formatStorageBytes(softLimitBytes)} {locale === 'zh' ? '软限制' : 'soft'} · {formatStorageBytes(hardLimitBytes)} {locale === 'zh' ? '硬限制' : 'hard limit'}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-1 text-base font-semibold">{locale === 'zh' ? '容量暂不可用' : 'Size unavailable'}</p>
+                      <p className="text-[11px] opacity-80">{storageUnavailableReason(storageSummary, locale)} · {locale === 'zh' ? '保留期检查仍在生效' : 'Retention checks active'}</p>
+                    </>
+                  )}
+                </div>
+                <TerminalChip variant={storageSummary?.status === 'critical' ? 'danger' : storageSummary?.status === 'warning' ? 'caution' : 'success'} className="shrink-0 font-semibold uppercase">
+                  {storageStatusLabel(storageSummary?.status, locale)}
+                </TerminalChip>
+              </div>
+              {storageSummary?.storageSizeAvailable ? (
+                <div className="mt-2">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-black/35">
+                    <div className="h-full rounded-full bg-current" style={{ width: `${Math.max(3, hardPercent)}%` }} />
+                  </div>
+                  <p className="mt-1 text-[10px] opacity-75">{softPercent}% {locale === 'zh' ? '软限制' : 'soft'} · {hardPercent}% {locale === 'zh' ? '硬限制' : 'hard'}</p>
+                </div>
+              ) : null}
+            </TerminalNestedBlock>
 
-      <GlassCard as="section" className="min-h-0 p-4">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">{t('adminLogs.sessionListTitle')}</h2>
-            <p className="mt-1 text-xs text-muted-text">{locale === 'zh' ? '点击查看详情会打开右侧抽屉，调用链和数据源可独立折叠。' : 'View Details opens a right drawer; LLM and data-source chains collapse independently.'}</p>
+            <TerminalMetric
+              label={locale === 'zh' ? '日志规模' : 'LOG VOLUME'}
+              value={countLabel(storageSummary?.totalLogCount, 'session', 'sessions', '会话', locale)}
+              subvalue={countLabel(storageSummary?.totalEventCount, 'event', 'events', '事件', locale)}
+              valueClassName="text-base"
+            />
+            <TerminalMetric
+              label={locale === 'zh' ? '保留期' : 'Retention'}
+              value={`${storageSummary?.retentionDays ?? '--'} ${locale === 'zh' ? '天' : 'days'}`}
+              subvalue={`${locale === 'zh' ? '最少' : 'min'} ${storageSummary?.minimumRetentionDays ?? '--'} ${locale === 'zh' ? '天' : 'days'} · ${storageSummary?.logsOlderThanRetentionCount ?? 0} ${locale === 'zh' ? '条超期' : 'older'}`}
+              valueClassName="text-base"
+            />
+            <TerminalMetric
+              label={locale === 'zh' ? '最早日志' : 'OLDEST LOG'}
+              value={formatDateTime(storageSummary?.oldestLogTimestamp, locale)}
+              subvalue={locale === 'zh' ? '当前保留的最早会话 / 事件' : 'oldest retained session/event'}
+              valueClassName="truncate text-sm font-semibold tracking-normal"
+            />
+
+            <div className="min-w-0 space-y-2">
+              <TerminalNotice variant={storageSummary?.status === 'critical' ? 'danger' : storageSummary?.status === 'warning' ? 'caution' : 'neutral'}>
+                <p className="font-medium text-white/88">{locale === 'zh' ? '清理建议' : 'Cleanup guidance'}</p>
+                <p className="mt-1">{localizedRecommendedCleanupAction(storageSummary?.recommendedCleanupAction, locale)}</p>
+                {storageSummary && ['warning', 'critical'].includes(String(storageSummary.status)) ? (
+                  <a
+                    href="/admin/notifications"
+                    className="mt-1 inline-flex text-[11px] font-semibold text-emerald-100 underline-offset-4 hover:underline"
+                  >
+                    {locale === 'zh' ? '配置管理员通知通道' : 'Configure Admin notification channels'}
+                  </a>
+                ) : null}
+              </TerminalNotice>
+              {storageSummary?.postgresVacuumNote ? (
+                <TerminalNotice variant="caution">
+                  {locale === 'zh' ? '删除行后可能需要 PostgreSQL autovacuum 回收物理磁盘空间。' : storageSummary.postgresVacuumNote}
+                </TerminalNotice>
+              ) : null}
+              {storageSummary?.autoCleanupEnabled && storageSummary?.status === 'critical' ? (
+                <TerminalNotice variant="danger">
+                  {locale === 'zh' ? '需要自动清理' : 'Auto cleanup required'}
+                </TerminalNotice>
+              ) : null}
+              {cleanupMessage ? (
+                <TerminalNotice variant="info">
+                  {cleanupMessage}
+                </TerminalNotice>
+              ) : null}
+            </div>
+
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row lg:flex-col">
+              <TerminalButton
+                type="button"
+                variant="secondary"
+                className="h-9 px-3 text-xs"
+                onClick={() => void previewCleanup()}
+                disabled={isCleanupBusy || !storageSummary}
+              >
+                {isCleanupBusy ? t('adminLogs.loading') : (locale === 'zh' ? '预览保留期清理' : 'Preview retention cleanup')}
+              </TerminalButton>
+              <TerminalButton
+                type="button"
+                variant="secondary"
+                className="h-9 px-3 text-xs"
+                onClick={() => void previewCapacityCleanup()}
+                disabled={isCleanupBusy || !storageSummary?.storageSizeAvailable}
+              >
+                {locale === 'zh' ? '预览容量清理' : 'Preview capacity cleanup'}
+              </TerminalButton>
+              <TerminalButton
+                type="button"
+                variant="danger"
+                className="h-9 px-3 py-2 text-xs font-semibold"
+                onClick={() => void confirmCleanup()}
+                disabled={isCleanupBusy || !storageSummary || (cleanupPreview?.matchedLogCount ?? storageSummary.logsOlderThanRetentionCount) <= 0 || (cleanupPreview?.mode === 'capacity' && !canRunCapacityCleanup)}
+              >
+                {cleanupPreview?.mode === 'capacity'
+                  ? (locale === 'zh' ? '按容量清理日志' : 'Run capacity cleanup')
+                  : (locale === 'zh' ? '清理超过保留期的日志' : 'Clean logs older than retention')}
+              </TerminalButton>
+            </div>
+          </section>
+        </AdminLogsDisclosure>
+
+        <TerminalPanel as="section" data-testid="admin-logs-health-summary" dense>
+          <TerminalSectionHeader
+            eyebrow={locale === 'zh' ? '运维健康' : 'OPS HEALTH'}
+            title={locale === 'zh' ? '业务事件健康摘要' : 'Business event health summary'}
+            action={<TerminalChip variant={healthSummary.status === 'failing' ? 'danger' : healthSummary.status === 'degraded' ? 'caution' : 'success'}>{healthStatusLabel(healthSummary.status, locale)}</TerminalChip>}
+          />
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[10rem_9rem_9rem_minmax(10rem,1fr)_minmax(10rem,1fr)_minmax(12rem,1.2fr)]">
+            <TerminalNestedBlock className={`min-w-0 ${healthStatusTone(healthSummary.status)}`}>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{locale === 'zh' ? '整体状态' : 'Overall status'}</p>
+              <p className="mt-1 text-base font-semibold">{healthStatusLabel(healthSummary.status, locale)}</p>
+            </TerminalNestedBlock>
+            <TerminalMetric
+              label={locale === 'zh' ? '失败' : 'Failures'}
+              value={`${healthSummary.failedEvents} / ${healthSummary.totalEvents}`}
+              subvalue={`${Math.round((healthSummary.failureRate || 0) * 100)}% · ${healthSummary.warningEvents} ${locale === 'zh' ? '警告' : 'warning'}`}
+              valueClassName="text-base"
+            />
+            <TerminalMetric
+              label={locale === 'zh' ? '警告' : 'Warnings'}
+              value={healthSummary.warningEvents}
+              subvalue={`${healthSummary.slowEvents} ${locale === 'zh' ? '慢请求' : 'slow'}`}
+              valueClassName="text-base"
+            />
+            <TerminalMetric
+              label={locale === 'zh' ? '主要失败功能' : 'Top failing feature'}
+              value={friendlyRawStatusLabel(topCategory?.label || topCategory?.key, locale)}
+              subvalue={topCategory ? countLabel(topCategory.count, 'event', 'events', '事件', locale) : '--'}
+              valueClassName="truncate text-sm font-semibold tracking-normal"
+            />
+            <TerminalMetric
+              label={locale === 'zh' ? '供应商 / 原因' : 'Provider / reason'}
+              value={compactHealthList(healthSummary.failuresByProvider, locale)}
+              subvalue={compactHealthList(healthSummary.failuresByReason, locale)}
+              valueClassName="truncate text-sm font-semibold tracking-normal"
+            />
+            <TerminalMetric
+              label={locale === 'zh' ? '最新严重错误' : 'Latest critical error'}
+              value={text(latestCriticalError?.event || latestCriticalError?.category)}
+              subvalue={friendlyRawStatusLabel(latestCriticalError?.errorSummary || latestCriticalError?.reason, locale)}
+              valueClassName="truncate text-sm font-semibold tracking-normal"
+            />
           </div>
-          <p className="text-[10px] uppercase tracking-[0.22em] text-white/36">{countLabel(activeTab === 'raw' ? filteredSessions.length : businessTotal, 'record', 'records', '记录', locale)}</p>
-        </div>
-        {activeTab !== 'raw' ? (
-          businessEvents.length === 0 ? (
-            <div className="rounded-2xl bg-white/[0.02] px-4 py-6">
-              <p className="text-sm font-medium text-foreground">{activeTab === 'scanner' && locale === 'zh' ? '暂无扫描器日志' : t('adminLogs.noSessionsTitle')}</p>
-              <p className="mt-1 text-sm text-muted-text">
+        </TerminalPanel>
+
+        {activeTab === 'scanner' ? (
+          <TerminalPanel as="section" data-testid="admin-logs-scanner-summary" dense>
+            <TerminalSectionHeader
+              eyebrow={locale === 'zh' ? '扫描器摘要' : 'SCANNER'}
+              title={locale === 'zh' ? '扫描器运行摘要' : 'Scanner execution summary'}
+            />
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <TerminalMetric
+                label={locale === 'zh' ? '最近一次扫描' : 'Latest scan'}
+                value={text(scannerSummary.latest?.event, locale === 'zh' ? '暂无扫描' : 'No scan')}
+                subvalue={`${formatDateTime(scannerSummary.latest?.startedAt, locale)} · ${formatDuration(scannerSummary.latest?.durationMs)}`}
+                valueClassName="truncate text-sm font-semibold tracking-normal"
+              />
+              <TerminalMetric
+                label={locale === 'zh' ? '成功 / 失败' : 'Success / failed'}
+                value={`${scannerSummary.success} / ${scannerSummary.failed}`}
+                subvalue={locale === 'zh' ? '包含 INFO 生命周期记录' : 'Includes INFO lifecycle records'}
+                valueClassName="text-base"
+              />
+              <TerminalMetric
+                label={locale === 'zh' ? '最近错误' : 'Latest error'}
+                value={friendlyRawStatusLabel(scannerSummary.latestError?.errorSummary || scannerSummary.latestError?.reason, locale)}
+                subvalue={text(scannerSummary.latestError?.event, locale === 'zh' ? '暂无失败扫描' : 'No failed scan')}
+                valueClassName="truncate text-sm font-semibold tracking-normal"
+              />
+              <TerminalMetric
+                label={locale === 'zh' ? '运行耗时' : 'Run duration'}
+                value={formatDuration(scannerSummary.latest?.durationMs)}
+                subvalue={locale === 'zh' ? '开始、完成、失败均进入日志中心' : 'Start, completion, and failure are logged'}
+                valueClassName="text-base"
+              />
+            </div>
+          </TerminalPanel>
+        ) : null}
+
+        <TerminalPanel as="section" className="min-h-0" dense>
+          <TerminalSectionHeader
+            eyebrow={locale === 'zh' ? '主队列' : 'MAIN QUEUE'}
+            title={t('adminLogs.sessionListTitle')}
+            action={<TerminalChip variant="neutral">{countLabel(activeTab === 'raw' ? filteredSessions.length : businessTotal, 'record', 'records', '记录', locale)}</TerminalChip>}
+          />
+          <TerminalNotice variant="neutral" className="mt-3">
+            {locale === 'zh' ? '点击查看详情会打开右侧抽屉，调用链和数据源可独立折叠。' : 'View Details opens a right drawer; LLM and data-source chains collapse independently.'}
+          </TerminalNotice>
+
+          {activeTab !== 'raw' ? (
+            businessEvents.length === 0 ? (
+              <TerminalEmptyState className="mt-3 min-h-[88px]" title={activeTab === 'scanner' && locale === 'zh' ? '暂无扫描器日志' : t('adminLogs.noSessionsTitle')}>
                 {activeTab === 'scanner' && locale === 'zh'
                   ? '暂无扫描器日志。运行一次扫描后，这里会显示扫描开始、完成、失败和耗时。'
                   : t('adminLogs.noSessionsBody')}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-white/6 bg-black/15">
-              <div data-testid="business-events-table-shell" className="min-w-0">
-                <div className="min-w-0">
-                  <div className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
-                    <div>{locale === 'zh' ? '时间' : 'Time'}</div>
-                    <div>{locale === 'zh' ? '事件' : 'Event'}</div>
-                    <div>{locale === 'zh' ? '状态 / 严重度' : 'Status / Severity'}</div>
-                    <div>{locale === 'zh' ? '原因' : 'Reason'}</div>
-                    <div className="hidden xl:block">{locale === 'zh' ? '操作者' : 'Actor'}</div>
-                    <div className="hidden xl:block">{locale === 'zh' ? '上下文' : 'Context'}</div>
-                    <div className="hidden xl:block">{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}</div>
-                    <div>{locale === 'zh' ? '操作' : 'Action'}</div>
-                  </div>
-                  <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto no-scrollbar">
-                    {businessEvents.map((item) => {
-                      const status = normalizeStatus(item.status);
-                      const actorType = actorBadgeDisplay(item.actorType, locale);
-                      const actorSecondary = text(item.actorLabel || item.userId || item.requestId, locale === 'zh' ? '未记录' : 'Not recorded');
-                      const contextPrimary = text(item.contextLabel || item.symbol || item.subject || item.event, locale === 'zh' ? '未记录' : 'Not recorded');
-                      const contextSecondary = [item.market, item.route || item.endpoint, item.component || item.feature]
-                        .map((value) => String(value || '').trim())
-                        .filter(Boolean)
-                        .join(' · ');
-                      const sourcePrimary = text(item.provider || item.source || item.category, locale === 'zh' ? '未记录' : 'Not recorded');
-                      const sourceSecondary = [item.source && item.source !== item.provider ? item.source : null, item.category, item.type]
-                        .map((value) => String(value || '').trim())
-                        .filter(Boolean)
-                        .filter((value, index, values) => values.indexOf(value) === index)
-                        .join(' · ');
-                      const severity = businessEventSeverity(item);
-                      const reason = friendlyRawStatusLabel(item.reason || (isFailedStatus(item.status) ? 'unknown' : '--'), locale);
-                      const errorSummary = friendlyRawStatusLabel(item.errorSummary || item.rootCauseSummary, locale);
-                      const traceValue = item.traceId || item.requestId;
-                      const stepLabel = stepStatsLabel(item, locale);
-                      return (
-                        <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] items-center gap-3 px-3 py-2.5 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
-                          <p className="truncate text-xs text-secondary-text" title={formatDateTime(item.startedAt, locale)}>{formatDateTime(item.startedAt, locale)}</p>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-foreground" title={text(item.event || item.symbol)}>{text(item.event || item.symbol)}</p>
-                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(item.type)}>{text(item.eventType || item.type)}</p>
-                          </div>
-                          <div className="min-w-0">
-                            <StatusBadge status={status} label={statusLabel(status, locale)} variant="soft" size="sm" />
-                            <span data-testid="event-severity-pill" className={`mt-1 inline-flex w-fit rounded-full border px-2 py-0.5 text-[11px] font-semibold ${severityClass(severity)}`}>
-                              {severityLabel(severity, locale)}
-                            </span>
-                          </div>
-                          <div className="min-w-0">
-                            <p className="line-clamp-2 text-xs font-medium leading-5 text-foreground" title={errorSummary || reason || stepLabel}>{errorSummary || reason || stepLabel}</p>
-                            <p className="mt-1 truncate text-[11px] text-muted-text" title={stepLabel}>{stepLabel}</p>
-                          </div>
-                          <div className="hidden min-w-0 xl:block">
-                            <span className="inline-flex w-fit rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-100">{actorType}</span>
-                            <p className="mt-1 truncate text-[11px] text-muted-text" title={actorSecondary}>{actorSecondary}</p>
-                          </div>
-                          <div className="hidden min-w-0 xl:block">
-                            <p className="truncate text-xs font-medium text-foreground" title={contextPrimary}>{contextPrimary}</p>
-                            <p className="mt-1 truncate text-[11px] text-muted-text" title={contextSecondary || text(item.summary)}>{contextSecondary || text(item.summary)}</p>
-                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(traceValue)}>{traceValue ? `trace ${shortIdentifier(traceValue)}` : '--'}</p>
-                          </div>
-                          <div className="hidden min-w-0 xl:block">
-                            <p className="truncate text-xs text-secondary-text" title={sourcePrimary}>{sourcePrimary}</p>
-                            <p className="mt-1 truncate text-[11px] text-muted-text" title={sourceSecondary}>{sourceSecondary || '--'}</p>
-                          </div>
-                          <button type="button" className="btn-secondary w-fit rounded-lg px-2.5 py-1 text-xs" onClick={() => void openBusinessDetail(item)}>
-                            {t('adminLogs.viewDetails')}
-                          </button>
+              </TerminalEmptyState>
+            ) : (
+              <TerminalDenseList data-testid="business-events-table-shell" className="mt-3 gap-0 overflow-hidden rounded-xl border border-white/6 bg-black/15">
+                <div className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
+                  <div>{locale === 'zh' ? '时间' : 'Time'}</div>
+                  <div>{locale === 'zh' ? '事件' : 'Event'}</div>
+                  <div>{locale === 'zh' ? '状态 / 严重度' : 'Status / Severity'}</div>
+                  <div>{locale === 'zh' ? '原因' : 'Reason'}</div>
+                  <div className="hidden xl:block">{locale === 'zh' ? '操作者' : 'Actor'}</div>
+                  <div className="hidden xl:block">{locale === 'zh' ? '上下文' : 'Context'}</div>
+                  <div className="hidden xl:block">{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}</div>
+                  <div>{locale === 'zh' ? '操作' : 'Action'}</div>
+                </div>
+                <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto no-scrollbar">
+                  {businessEvents.map((item) => {
+                    const status = normalizeStatus(item.status);
+                    const actorType = actorBadgeDisplay(item.actorType, locale);
+                    const actorSecondary = text(item.actorLabel || item.userId || item.requestId, locale === 'zh' ? '未记录' : 'Not recorded');
+                    const contextPrimary = text(item.contextLabel || item.symbol || item.subject || item.event, locale === 'zh' ? '未记录' : 'Not recorded');
+                    const contextSecondary = [item.market, item.route || item.endpoint, item.component || item.feature]
+                      .map((value) => String(value || '').trim())
+                      .filter(Boolean)
+                      .join(' · ');
+                    const sourcePrimary = text(item.provider || item.source || item.category, locale === 'zh' ? '未记录' : 'Not recorded');
+                    const sourceSecondary = [item.source && item.source !== item.provider ? item.source : null, item.category, item.type]
+                      .map((value) => String(value || '').trim())
+                      .filter(Boolean)
+                      .filter((value, index, values) => values.indexOf(value) === index)
+                      .join(' · ');
+                    const severity = businessEventSeverity(item);
+                    const reason = friendlyRawStatusLabel(item.reason || (isFailedStatus(item.status) ? 'unknown' : '--'), locale);
+                    const errorSummary = friendlyRawStatusLabel(item.errorSummary || item.rootCauseSummary, locale);
+                    const traceValue = item.traceId || item.requestId;
+                    const stepLabel = stepStatsLabel(item, locale);
+                    return (
+                      <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] items-center gap-3 px-3 py-2.5 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
+                        <p className="truncate text-xs text-secondary-text" title={formatDateTime(item.startedAt, locale)}>{formatDateTime(item.startedAt, locale)}</p>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-foreground" title={text(item.event || item.symbol)}>{text(item.event || item.symbol)}</p>
+                          <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(item.type)}>{text(item.eventType || item.type)}</p>
                         </div>
-                      );
-                    })}
+                        <div className="min-w-0 space-y-1">
+                          <StatusChip status={status} locale={locale} className="w-fit" />
+                          <SeverityChip severity={severity} locale={locale} className="w-fit" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="line-clamp-2 text-xs font-medium leading-5 text-foreground" title={errorSummary || reason || stepLabel}>{errorSummary || reason || stepLabel}</p>
+                          <p className="mt-1 truncate text-[11px] text-muted-text" title={stepLabel}>{stepLabel}</p>
+                        </div>
+                        <div className="hidden min-w-0 xl:block">
+                          <TerminalChip variant={actorChipVariant(item.actorType)} className="w-fit font-semibold">{actorType}</TerminalChip>
+                          <p className="mt-1 truncate text-[11px] text-muted-text" title={actorSecondary}>{actorSecondary}</p>
+                        </div>
+                        <div className="hidden min-w-0 xl:block">
+                          <p className="truncate text-xs font-medium text-foreground" title={contextPrimary}>{contextPrimary}</p>
+                          <p className="mt-1 truncate text-[11px] text-muted-text" title={contextSecondary || text(item.summary)}>{contextSecondary || text(item.summary)}</p>
+                          <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(traceValue)}>{traceValue ? `trace ${shortIdentifier(traceValue)}` : '--'}</p>
+                        </div>
+                        <div className="hidden min-w-0 xl:block">
+                          <p className="truncate text-xs text-secondary-text" title={sourcePrimary}>{sourcePrimary}</p>
+                          <p className="mt-1 truncate text-[11px] text-muted-text" title={sourceSecondary}>{sourceSecondary || '--'}</p>
+                        </div>
+                        <TerminalButton type="button" variant="compact" className="w-fit px-2.5 py-1 text-xs" onClick={() => void openBusinessDetail(item)}>
+                          {t('adminLogs.viewDetails')}
+                        </TerminalButton>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div data-testid="admin-logs-pagination" className="flex flex-wrap items-center justify-between gap-3 border-t border-white/6 px-3 py-2.5">
+                  <p className="text-xs text-muted-text">{locale === 'zh' ? `第 ${Math.floor(pageOffset / PAGE_SIZE) + 1} 页` : `Page ${Math.floor(pageOffset / PAGE_SIZE) + 1}`}</p>
+                  <div className="flex gap-2">
+                    <TerminalButton type="button" variant="compact" className="px-3 py-1 text-xs" disabled={pageOffset <= 0 || isLoadingList} onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}>
+                      {locale === 'zh' ? '上一页' : 'Previous'}
+                    </TerminalButton>
+                    <TerminalButton type="button" variant="compact" className="px-3 py-1 text-xs" disabled={!businessHasMore || isLoadingList} onClick={() => setPageOffset((current) => current + PAGE_SIZE)}>
+                      {locale === 'zh' ? '下一页' : 'Next'}
+                    </TerminalButton>
                   </div>
                 </div>
-              </div>
-              <div data-testid="admin-logs-pagination" className="flex flex-wrap items-center justify-between gap-3 border-t border-white/6 px-3 py-2.5">
-                <p className="text-xs text-muted-text">{locale === 'zh' ? `第 ${Math.floor(pageOffset / PAGE_SIZE) + 1} 页` : `Page ${Math.floor(pageOffset / PAGE_SIZE) + 1}`}</p>
-                <div className="flex gap-2">
-                  <button type="button" className="btn-secondary rounded-lg px-3 py-1 text-xs" disabled={pageOffset <= 0 || isLoadingList} onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}>
-                    {locale === 'zh' ? '上一页' : 'Previous'}
-                  </button>
-                  <button type="button" className="btn-secondary rounded-lg px-3 py-1 text-xs" disabled={!businessHasMore || isLoadingList} onClick={() => setPageOffset((current) => current + PAGE_SIZE)}>
-                    {locale === 'zh' ? '下一页' : 'Next'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )
-        ) : filteredSessions.length === 0 ? (
-          <div className="rounded-2xl bg-white/[0.02] px-4 py-6">
-            <p className="text-sm font-medium text-foreground">{t('adminLogs.noSessionsTitle')}</p>
-            <p className="mt-1 text-sm text-muted-text">{t('adminLogs.noSessionsBody')}</p>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-white/6 bg-black/15">
-            <div data-testid="raw-logs-table-shell" className="overflow-x-auto no-scrollbar">
+              </TerminalDenseList>
+            )
+          ) : filteredSessions.length === 0 ? (
+            <TerminalEmptyState className="mt-3 min-h-[88px]" title={t('adminLogs.noSessionsTitle')}>
+              {t('adminLogs.noSessionsBody')}
+            </TerminalEmptyState>
+          ) : (
+            <TerminalDenseTable data-testid="raw-logs-table-shell" className="mt-3 border-white/6 bg-black/15">
               <div className="min-w-[880px]">
                 <div className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
                   <div>{locale === 'zh' ? '时间' : 'Time'}</div>
@@ -1674,22 +1845,22 @@ const AdminLogsPage: React.FC = () => {
                       <div key={item.sessionId} data-testid="admin-log-row" className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] items-center gap-3 px-3 py-2.5">
                         <p className="truncate text-xs text-secondary-text">{formatDateTime(item.startedAt, locale)}</p>
                         <AdminLogLevelPill value={level} locale={locale} />
-                        <span className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.035] px-2 py-0.5 text-[11px] text-secondary-text">{categoryLabel(category, locale)}</span>
+                        <TerminalChip variant="neutral" className="w-fit">{categoryLabel(category, locale)}</TerminalChip>
                         <p className="min-w-0 truncate text-sm font-semibold text-foreground">{eventName}</p>
                         <p className="min-w-0 truncate text-xs text-secondary-text" title={message}>{message}</p>
                         <p className="min-w-0 truncate text-xs text-muted-text" title={source}>{source}</p>
-                        <button type="button" className="btn-secondary w-fit rounded-lg px-2.5 py-1 text-xs" onClick={() => void openDetail(item)}>
+                        <TerminalButton type="button" variant="compact" className="w-fit px-2.5 py-1 text-xs" onClick={() => void openDetail(item)}>
                           {t('adminLogs.viewDetails')}
-                        </button>
+                        </TerminalButton>
                       </div>
                     );
                   })}
                 </div>
               </div>
-            </div>
-          </div>
-        )}
-      </GlassCard>
+            </TerminalDenseTable>
+          )}
+        </TerminalPanel>
+      </TerminalPageShell>
 
       <Drawer
         isOpen={isDrawerOpen}
@@ -1701,29 +1872,27 @@ const AdminLogsPage: React.FC = () => {
           <div className="space-y-5">
             {detailError ? <ApiErrorAlert error={detailError} /> : null}
             {isLoadingDetail ? <p className="text-sm text-muted-text">{t('adminLogs.loading')}</p> : null}
-            <section className="rounded-3xl border border-white/8 bg-black/25 p-5">
+            <TerminalPanel as="section" className="bg-black/25">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <div className="mb-3 flex items-center gap-2">
                     <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">{text(businessDetail.category).slice(0, 1).toUpperCase()}</span>
-                    <StatusBadge status={drawerStatus} label={statusLabel(drawerStatus, locale)} variant="soft" size="sm" />
-                    <span className={`inline-flex min-h-6 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${severityClass(businessSeverity)}`}>
-                      {severityLabel(businessSeverity, locale)}
-                    </span>
+                    <StatusChip status={drawerStatus} locale={locale} />
+                    <SeverityChip severity={businessSeverity} locale={locale} />
                   </div>
                   <h2 className="break-words text-2xl font-semibold text-foreground">{text(businessDetail.event || businessDetail.symbol)}</h2>
                   <p className="mt-2 text-sm text-secondary-text">{businessDetail.summary} · {categoryLabel(businessDetail.category, locale)} · {text(businessDetail.type)} · {formatDateTime(businessDetail.startedAt, locale)}</p>
                 </div>
                 <div className="grid gap-2 text-xs text-secondary-text">
-                  <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => void copyTextValue(buildBusinessDebugSummary(businessDetail))}>
+                  <TerminalButton type="button" variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => void copyTextValue(buildBusinessDebugSummary(businessDetail))}>
                     {locale === 'zh' ? '复制执行摘要' : 'Copy execution summary'}
-                  </button>
+                  </TerminalButton>
                   <span>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(businessDetail.durationMs)}</span></span>
                   <span>{locale === 'zh' ? '步骤统计' : 'Step stats'}: <span className="text-foreground">{stepStatsLabel(businessDetail, locale)}</span></span>
                 </div>
               </div>
               <div className="mt-4">
-                <section data-testid="root-cause-section" className={`rounded-2xl border p-4 ${summarySectionClass(businessSeverity)}`}>
+                <TerminalPanel data-testid="root-cause-section" dense className={summarySectionClass(businessSeverity)}>
                   <h3 className="text-sm font-semibold text-foreground">{summaryTitle(businessSeverity, locale)}</h3>
                   <div className="mt-3 grid gap-2 text-xs text-secondary-text md:grid-cols-2">
                     <p>{locale === 'zh' ? '状态' : 'Status'}: <span className="text-foreground">{statusLabel(drawerStatus, locale)}</span></p>
@@ -1737,9 +1906,9 @@ const AdminLogsPage: React.FC = () => {
                     <p className="md:col-span-2">
                       {locale === 'zh' ? '请求 / trace id' : 'request/trace id'}: <span className="text-foreground">{text(businessTraceValue, locale === 'zh' ? '未记录' : 'Not recorded')}</span>
                       {businessTraceValue ? (
-                        <button type="button" className="ml-2 text-[11px] font-semibold text-emerald-100 underline decoration-emerald-300/30 underline-offset-2" onClick={() => void copyTextValue(businessTraceValue)}>
+                        <TerminalButton type="button" variant="compact" className="ml-2 px-2 py-1 text-[11px]" onClick={() => void copyTextValue(businessTraceValue)}>
                           {locale === 'zh' ? '复制' : 'Copy'}
-                        </button>
+                        </TerminalButton>
                       ) : null}
                     </p>
                     <p className="md:col-span-2">{locale === 'zh' ? '步骤 trace' : 'Step trace'}: <span className="text-foreground">{traceAvailabilityLabel(businessDetail, locale)}</span></p>
@@ -1747,19 +1916,21 @@ const AdminLogsPage: React.FC = () => {
                   {!businessDetail.reason ? (
                     <p className="mt-3 text-xs text-muted-text">{locale === 'zh' ? '原因未确认：该事件没有附加结构化 reason。' : 'Reason unknown: no structured reason was attached to this event.'}</p>
                   ) : null}
-                </section>
+                </TerminalPanel>
               </div>
               <div className="mt-4">
-                <details className="rounded-2xl border border-white/6 bg-black/20 px-3 py-3">
-                  <summary className="cursor-pointer text-sm font-semibold text-foreground">{locale === 'zh' ? '元数据' : 'Metadata'}</summary>
+                <AdminLogsDisclosure title={locale === 'zh' ? '元数据' : 'Metadata'} defaultOpen={false} className="bg-black/20 px-3 py-3">
                   <JsonBlock value={businessDetail.metadata || {}} />
-                </details>
+                </AdminLogsDisclosure>
               </div>
-            </section>
+            </TerminalPanel>
 
             {businessDetail.category === 'scanner' ? (
-              <section data-testid="scanner-execution-summary" className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
-                <h3 className="text-sm font-semibold text-foreground">{locale === 'zh' ? '扫描器执行摘要' : 'Scanner execution summary'}</h3>
+              <TerminalPanel data-testid="scanner-execution-summary">
+                <TerminalSectionHeader
+                  eyebrow={locale === 'zh' ? '扫描器执行' : 'SCANNER EXECUTION'}
+                  title={locale === 'zh' ? '扫描器执行摘要' : 'Scanner execution summary'}
+                />
                 <div className="mt-4 grid gap-3 text-sm text-secondary-text md:grid-cols-3">
                   <p>{locale === 'zh' ? '市场 / 配置' : 'Market / config'}: <span className="text-foreground">{text([businessDetail.market, businessDetail.metadata?.configName || businessDetail.subject].filter(Boolean).join(' · '))}</span></p>
                   <p>{locale === 'zh' ? '评估 / 入选' : 'Evaluated / selected'}: <span className="text-foreground">{text(businessDetail.metadata?.evaluatedCount ?? businessDetail.metadata?.matchedCount ?? businessDetail.stepCount)} / {text(businessDetail.metadata?.selectedCount ?? businessDetail.metadata?.matchedCount ?? businessDetail.successStepCount)}</span></p>
@@ -1768,25 +1939,22 @@ const AdminLogsPage: React.FC = () => {
                   <p>{locale === 'zh' ? 'Top 标的' : 'Top symbol'}: <span className="text-foreground">{text(businessDetail.metadata?.topSymbol)}</span></p>
                   <p>{locale === 'zh' ? '数据源摘要' : 'Provider summary'}: <span className="text-foreground">{text(businessDetail.metadata?.sourceProviderSummary || businessDetail.source)}</span></p>
                 </div>
-              </section>
+              </TerminalPanel>
             ) : null}
 
-            <section className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
-              <h3 className="text-sm font-semibold text-foreground">{locale === 'zh' ? '调用链时间线' : 'Call-chain timeline'}</h3>
+            <TerminalPanel>
+              <TerminalSectionHeader
+                eyebrow={locale === 'zh' ? '调用链' : 'CALL CHAIN'}
+                title={locale === 'zh' ? '调用链时间线' : 'Call-chain timeline'}
+              />
               <div className="mt-4 space-y-3">
                 {businessSteps.length ? businessSteps.map((step: ExecutionStep, index: number) => {
                   const status = normalizeStatus(step.status);
                   return (
-                    <details key={`${step.name}-${index}`} className="rounded-2xl border border-white/6 bg-black/20 px-3 py-3 text-xs" open={index === 0 || status === 'failed' || status === 'error'}>
-                      <summary className="cursor-pointer list-none">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <p className="font-medium text-foreground">{text(step.label || step.name)} · {formatDuration(step.durationMs)}</p>
-                            <p className="mt-1 text-muted-text">{[step.category, step.provider, step.model, step.endpoint || step.apiPath].map((value) => String(value || '').trim()).filter(Boolean).join(' · ') || '--'}</p>
-                          </div>
-                          <StatusBadge status={status} label={statusLabel(status, locale)} variant="soft" size="sm" />
-                        </div>
-                      </summary>
+                    <AdminLogsDisclosure key={`${step.name}-${index}`} title={`${text(step.label || step.name)} · ${formatDuration(step.durationMs)}`} summary={[step.category, step.provider, step.model, step.endpoint || step.apiPath].map((value) => String(value || '').trim()).filter(Boolean).join(' · ') || '--'} defaultOpen={index === 0 || status === 'failed' || status === 'error' || status === 'skipped' || status === 'unknown'} className="bg-black/20 px-3 py-3 text-xs">
+                      <div className="mb-3 flex justify-end">
+                        <StatusChip status={status} locale={locale} />
+                      </div>
                       <div className="mt-3 grid gap-2 text-secondary-text md:grid-cols-2">
                         <p>{locale === 'zh' ? '开始' : 'Started'}: <span className="text-foreground">{formatDateTime(step.startedAt, locale)}</span></p>
                         <p>{locale === 'zh' ? '结束' : 'Finished'}: <span className="text-foreground">{formatDateTime(step.finishedAt, locale)}</span></p>
@@ -1798,25 +1966,23 @@ const AdminLogsPage: React.FC = () => {
                           <JsonBlock value={step.metadata || {}} />
                         </div>
                       </div>
-                    </details>
+                    </AdminLogsDisclosure>
                   );
                 }) : <p className="text-sm text-muted-text">{t('adminLogs.emptyTimelineBody')}</p>}
               </div>
-            </section>
+            </TerminalPanel>
           </div>
         ) : drawerDetail ? (
           <div className="space-y-5">
             {detailError ? <ApiErrorAlert error={detailError} /> : null}
             {isLoadingDetail ? <p className="text-sm text-muted-text">{t('adminLogs.loading')}</p> : null}
-            <section className="rounded-3xl border border-white/8 bg-black/25 p-5">
+            <TerminalPanel as="section" className="bg-black/25">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <div className="mb-3 flex items-center gap-2">
                     <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-emerald-100">{operationIcon(drawerOperationType)}</span>
-                    <StatusBadge status={drawerStatus} label={statusLabel(drawerStatus, locale)} variant="soft" size="sm" />
-                    <span className={`inline-flex min-h-6 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${severityClass(rawSeverity)}`}>
-                      {severityLabel(rawSeverity, locale)}
-                    </span>
+                    <StatusChip status={drawerStatus} locale={locale} />
+                    <SeverityChip severity={rawSeverity} locale={locale} />
                   </div>
                   <h2 className="break-words text-2xl font-semibold text-foreground">
                     {text(operationDetail.target || readable.operationTarget || drawerDetail.name || drawerDetail.code)}
@@ -1824,15 +1990,15 @@ const AdminLogsPage: React.FC = () => {
                   <p className="mt-2 text-sm text-secondary-text">{operationLabel(drawerOperationType, locale)} · {formatDateTime(drawerDetail.startedAt, locale)}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => void copyTextValue(buildRawDebugSummary(drawerDetail))}>
+                  <TerminalButton type="button" variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => void copyTextValue(buildRawDebugSummary(drawerDetail))}>
                     {locale === 'zh' ? '复制执行摘要' : 'Copy execution summary'}
-                  </button>
-                  <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => void copyLogJson(drawerDetail)}>
+                  </TerminalButton>
+                  <TerminalButton type="button" variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => void copyLogJson(drawerDetail)}>
                     {t('adminLogs.copyDetails')}
-                  </button>
-                  <button type="button" className="btn-secondary rounded-xl px-3 py-1.5 text-xs" onClick={() => downloadLogJson(drawerDetail)}>
+                  </TerminalButton>
+                  <TerminalButton type="button" variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => downloadLogJson(drawerDetail)}>
                     {t('adminLogs.exportDetails')}
-                  </button>
+                  </TerminalButton>
                 </div>
               </div>
               <div className="mt-5 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
@@ -1841,9 +2007,9 @@ const AdminLogsPage: React.FC = () => {
                 <p className="text-secondary-text">{t('adminLogs.operationType')}: <span className="text-foreground">{text(operationDetail.operationType || readable.operationType || operationLabel(drawerOperationType, locale))}</span></p>
                 <p className="text-secondary-text">{t('adminLogs.keyMetric')}: <span className="text-foreground">{text(operationDetail.keyMetric || readable.keyMetric, t('adminLogs.unavailable'))}</span></p>
               </div>
-            </section>
+            </TerminalPanel>
 
-            <section data-testid="root-cause-section" className={`rounded-3xl border p-5 ${summarySectionClass(rawSeverity)}`}>
+            <TerminalPanel data-testid="root-cause-section" className={summarySectionClass(rawSeverity)}>
               <h3 className="text-sm font-semibold text-foreground">{summaryTitle(rawSeverity, locale)}</h3>
               <div className="mt-4 grid gap-2 text-sm text-secondary-text md:grid-cols-2">
                 <p>{locale === 'zh' ? '状态' : 'Status'}: <span className="text-foreground">{statusLabel(drawerStatus, locale)}</span></p>
@@ -1857,9 +2023,9 @@ const AdminLogsPage: React.FC = () => {
                 <p className="md:col-span-2">
                   {locale === 'zh' ? '请求 / trace id' : 'request/trace id'}: <span className="text-foreground">{text(rawTraceValue, locale === 'zh' ? '未记录' : 'Not recorded')}</span>
                   {rawTraceValue ? (
-                    <button type="button" className="ml-2 text-[11px] font-semibold text-emerald-100 underline decoration-emerald-300/30 underline-offset-2" onClick={() => void copyTextValue(rawTraceValue)}>
+                    <TerminalButton type="button" variant="compact" className="ml-2 px-2 py-1 text-[11px]" onClick={() => void copyTextValue(rawTraceValue)}>
                       {locale === 'zh' ? '复制' : 'Copy'}
-                    </button>
+                    </TerminalButton>
                   ) : null}
                 </p>
                 <p className="md:col-span-2">{locale === 'zh' ? '步骤 trace' : 'Step trace'}: <span className="text-foreground">{drawerDetail.events.length ? (locale === 'zh' ? '已记录事件明细' : 'Event trace attached') : (locale === 'zh' ? '未附加步骤级 trace。' : 'No step-level trace was attached to this event.')}</span></p>
@@ -1867,11 +2033,11 @@ const AdminLogsPage: React.FC = () => {
               {!(readable.reason || readable.topFailureReason) ? (
                 <p className="mt-3 text-xs text-muted-text">{locale === 'zh' ? '原因未确认：该事件没有附加结构化 reason。' : 'Reason unknown: no structured reason was attached to this event.'}</p>
               ) : null}
-            </section>
+            </TerminalPanel>
 
             {drawerOperationType === 'system_operation' ? (
-              <section data-testid="system-operation-detail" className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
-                <h3 className="text-sm font-semibold text-foreground">{locale === 'zh' ? '系统操作详情' : 'System operation details'}</h3>
+              <TerminalPanel data-testid="system-operation-detail">
+                <TerminalSectionHeader title={locale === 'zh' ? '系统操作详情' : 'System operation details'} />
                 <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
                   <p className="text-secondary-text"><span>{locale === 'zh' ? '操作类型:' : 'Operation type:'}</span> <span className="text-foreground">{text(systemOperation.action || operationDetail.operationType || readable.operationType)}</span></p>
                   <p className="text-secondary-text"><span>{locale === 'zh' ? '操作用户:' : 'Operation user:'}</span> <span className="text-foreground">{text(systemOperation.actor || readable.actorDisplay || readable.actorUsername, 'admin')}</span></p>
@@ -1879,91 +2045,85 @@ const AdminLogsPage: React.FC = () => {
                   <p className="text-secondary-text"><span>{locale === 'zh' ? '执行结果:' : 'Result:'}</span> <span className="text-foreground">{text(systemOperation.status || operationDetail.finalResult || operationDetail.status || readable.operationStatus)}</span></p>
                   <p className="text-secondary-text md:col-span-2"><span>{locale === 'zh' ? '失败原因:' : 'Failure reason:'}</span> <span className="text-foreground">{friendlyRawStatusLabel(systemOperation.reason || readable.topFailureReason || '--', locale)}</span></p>
                 </div>
-              </section>
+              </TerminalPanel>
             ) : null}
 
-            <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
-              <summary className="cursor-pointer text-sm font-semibold text-foreground">{locale === 'zh' ? 'LLM 调用链' : 'LLM call chain'}</summary>
+            <AdminLogsDisclosure title={locale === 'zh' ? 'LLM 调用链' : 'LLM call chain'} defaultOpen={false} className="px-5 py-4">
               <div className="mt-4 space-y-3">
                 {aiCalls.length ? aiCalls.map((item, index) => (
                   <CallCard key={`${text(item.model)}-${index}`} item={item} index={index} type="llm" locale={locale} />
                 )) : <p className="text-sm text-muted-text">{t('adminLogs.emptyOperationTable')}</p>}
               </div>
-            </details>
+            </AdminLogsDisclosure>
 
-            <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
-              <summary className="cursor-pointer text-sm font-semibold text-foreground">{locale === 'zh' ? '数据源调用' : 'Data source calls'}</summary>
+            <AdminLogsDisclosure title={locale === 'zh' ? '数据源调用' : 'Data source calls'} defaultOpen={false} className="px-5 py-4">
               <div className="mt-4 space-y-3">
                 {dataSourceCalls.length ? dataSourceCalls.map((item, index) => (
                   <CallCard key={`${text(item.api || item.source)}-${index}`} item={item} index={index} type="data" locale={locale} />
                 )) : <p className="text-sm text-muted-text">{t('adminLogs.emptyOperationTable')}</p>}
               </div>
-            </details>
+            </AdminLogsDisclosure>
 
             <section className="grid gap-4 xl:grid-cols-2">
-              <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
-                <summary className="cursor-pointer text-sm font-semibold text-foreground">{locale === 'zh' ? '系统回退记录' : 'System fallback records'}</summary>
+              <AdminLogsDisclosure title={locale === 'zh' ? '系统回退记录' : 'System fallback records'} defaultOpen={false} className="px-5 py-4">
                 <div className="mt-4 space-y-2">
                   {systemFallbacks.length ? systemFallbacks.map((item, index) => (
-                    <p key={`${text(item.source)}-${index}`} className="rounded-2xl border border-amber-300/15 bg-amber-400/5 px-3 py-2 text-xs text-amber-100">
+                    <TerminalNotice key={`${text(item.source)}-${index}`} variant="caution">
                       {text(item.source)} · {text(item.message)}
-                    </p>
+                    </TerminalNotice>
                   )) : <p className="text-sm text-muted-text">{locale === 'zh' ? '暂无系统回退。' : 'No system fallback recorded.'}</p>}
                 </div>
-              </details>
-              <section className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
-                <h3 className="text-sm font-semibold text-foreground">{locale === 'zh' ? '最终执行结果' : 'Final result'}</h3>
+              </AdminLogsDisclosure>
+              <TerminalPanel>
+                <TerminalSectionHeader title={locale === 'zh' ? '最终执行结果' : 'Final result'} />
                 <p className="mt-3 text-sm leading-6 text-secondary-text">
                   {text(operationDetail.finalResult || readable.summaryParagraph || readable.topFailureReason || operationDetail.status || drawerDetail.overallStatus, t('adminLogs.unavailable'))}
                 </p>
-              </section>
+              </TerminalPanel>
             </section>
 
-            <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
-              <summary className="cursor-pointer text-sm font-semibold text-foreground">{t('adminLogs.operationTimelineTitle')}</summary>
+            <AdminLogsDisclosure title={t('adminLogs.operationTimelineTitle')} defaultOpen={false} className="px-5 py-4">
               <div className="mt-4 space-y-2">
                 {timeline.length ? timeline.map((item, index) => {
                   const status = normalizeStatus(String(item.status || ''));
                   return (
-                    <div key={`${text(item.label)}-${index}`} className="rounded-2xl border border-white/6 bg-black/20 px-3 py-3 text-xs">
+                    <TerminalNestedBlock key={`${text(item.label)}-${index}`} className="text-xs">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="font-medium text-foreground">{text(item.label)}</p>
-                        <StatusBadge status={status} label={statusLabel(status, locale)} variant="soft" size="sm" />
+                        <StatusChip status={status} locale={locale} />
                       </div>
                       <p className="mt-1 text-muted-text">{text(item.timestamp)} · {text(item.category)}</p>
-                    </div>
+                    </TerminalNestedBlock>
                   );
                 }) : <p className="text-sm text-muted-text">{t('adminLogs.emptyTimelineBody')}</p>}
               </div>
-            </details>
+            </AdminLogsDisclosure>
 
-            <details className="rounded-3xl border border-white/8 bg-white/[0.018] p-5">
-              <summary className="cursor-pointer text-sm font-semibold text-foreground">{locale === 'zh' ? '元数据详情' : 'Metadata detail'}</summary>
+            <AdminLogsDisclosure title={locale === 'zh' ? '元数据详情' : 'Metadata detail'} defaultOpen={false} className="px-5 py-4">
               <div className="mt-4 space-y-3">
                 {drawerDetail.events.length ? drawerDetail.events.map((event) => (
-                  <div key={event.id} className="rounded-2xl border border-white/6 bg-black/20 px-3 py-3 text-xs">
+                  <TerminalNestedBlock key={event.id} className="text-xs">
                     <div className="flex flex-wrap items-center gap-2">
-                      <AdminLogLevelPill value={event.level} locale={locale} className="inline-flex rounded-full border px-2 py-0.5 font-semibold" />
+                      <AdminLogLevelPill value={event.level} locale={locale} className="w-fit font-semibold" />
                       <span className="text-secondary-text">{categoryLabel(event.category || event.phase, locale)}</span>
                       <span className="text-foreground">{text(event.eventName || event.step)}</span>
                     </div>
                     <JsonBlock value={event.detail || {}} />
-                  </div>
+                  </TerminalNestedBlock>
                 )) : <p className="text-sm text-muted-text">{t('adminLogs.emptyTimelineBody')}</p>}
               </div>
-            </details>
+            </AdminLogsDisclosure>
 
-            <details className="rounded-3xl border border-rose-400/15 bg-rose-500/[0.025] p-5">
-              <summary className="cursor-pointer text-sm font-semibold text-foreground">{t('adminLogs.diagnosticsTitle')}</summary>
+            <AdminLogsDisclosure title={t('adminLogs.diagnosticsTitle')} defaultOpen={false} className="border-rose-400/15 bg-rose-500/[0.025] px-5 py-4">
               <div className="mt-4 space-y-2">
                 {diagnostics.length ? diagnostics.map((item, index) => (
-                  <div key={`${text(item.source)}-${index}`} className="rounded-2xl border border-rose-400/15 bg-rose-500/5 px-3 py-3 text-xs">
-                    <p className="text-rose-100">{text(item.message)}</p>
+                  <TerminalNotice key={`${text(item.source)}-${index}`} variant="danger">
+                    <p>{text(item.message)}</p>
                     <p className="mt-1 text-muted-text">{text(item.source)} · {text(item.severity)}</p>
-                  </div>
+                  </TerminalNotice>
                 )) : <p className="text-sm text-muted-text">{t('adminLogs.noDiagnostics')}</p>}
               </div>
-            </details>
+            </AdminLogsDisclosure>
           </div>
         ) : (
           <p className="text-sm text-muted-text">{t('adminLogs.selectSessionBody')}</p>
