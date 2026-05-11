@@ -318,6 +318,26 @@ RETIRED_LOCAL_PRIMITIVE_RULES = {
             re.compile(r"<StatusBadge\b"),
             "Admin Provider Circuit Diagnostics migrated status chips must keep using TerminalChip-based status pills instead of StatusBadge.",
         ),
+        (
+            re.compile(r"\bCollapsibleTerminalBlock\b"),
+            "Admin Provider Circuit Diagnostics migrated advanced details must keep using TerminalDisclosure instead of the retired CollapsibleTerminalBlock helper.",
+        ),
+        (
+            re.compile(r"\bReadOnlyBadges\b"),
+            "Admin Provider Circuit Diagnostics migrated header chips must stay inline with TerminalChip instead of the retired ReadOnlyBadges helper.",
+        ),
+        (
+            re.compile(r"\btoneClass\b"),
+            "Admin Provider Circuit Diagnostics migrated metric tones must not restore the retired toneClass helper.",
+        ),
+        (
+            re.compile(r"<details\b"),
+            "Admin Provider Circuit Diagnostics migrated advanced details must keep using TerminalDisclosure instead of native details shells in the page source.",
+        ),
+        (
+            re.compile(r"<summary\b"),
+            "Admin Provider Circuit Diagnostics migrated advanced details must keep using TerminalDisclosure instead of native summary shells in the page source.",
+        ),
     ],
     "apps/dsa-web/src/pages/WatchlistPage.tsx": WATCHLIST_RETIRED_TERMINAL_SURFACE_RULES,
     "apps/dsa-web/src/pages/AdminCostObservabilityPage.tsx": ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES,

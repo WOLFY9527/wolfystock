@@ -132,6 +132,23 @@ def test_flags_admin_provider_circuit_retired_terminal_surface_regression():
     assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
 
 
+def test_flags_admin_provider_circuit_local_helper_regressions():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminProviderCircuitDiagnosticsPage.tsx",
+        "\n".join([
+            "const valueClass = toneClass('warn')",
+            "const Chips = ReadOnlyBadges;",
+            "export default function Page() {",
+            "  return <CollapsibleTerminalBlock title='二级细节' summary='默认折叠'><details><summary>更多</summary></details></CollapsibleTerminalBlock>;",
+            "}",
+        ]),
+    )
+
+    assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
 def test_allows_admin_provider_circuit_terminal_primitives_after_migration():
     guard = load_guard_module()
 

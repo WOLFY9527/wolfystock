@@ -127,15 +127,13 @@ function boolLabel(value?: boolean | null): string {
   return value ? '是' : '否';
 }
 
-function toneClass(tone: Tone): string {
-  return {
-    neutral: 'text-white',
-    good: 'text-emerald-300',
-    warn: 'text-amber-300',
-    danger: 'text-rose-300',
-    info: 'text-cyan-300',
-  }[tone];
-}
+const METRIC_VALUE_CLASS_BY_TONE: Record<Tone, string> = {
+  neutral: 'text-white',
+  good: 'text-emerald-300',
+  warn: 'text-amber-300',
+  danger: 'text-rose-300',
+  info: 'text-cyan-300',
+};
 
 function chipVariant(tone: Tone): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
   return ({
@@ -157,54 +155,6 @@ function readinessNotice(item: ProviderSlaReadinessItem): string {
   if (item.wouldBlockCall) return '当前门禁判断会阻断调用，需先查看熔断与最近错误。';
   return '当前仅展示就绪信号与趋势，不改变排序、fallback 或配额语义。';
 }
-
-const CollapsibleTerminalBlock: React.FC<{
-  title: string;
-  summary: string;
-  className?: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}> = ({ title, summary, className, defaultOpen = false, children }) => {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div
-      data-terminal-primitive="disclosure"
-      className={cn('rounded-xl border border-white/5 bg-white/[0.02] px-2.5 py-2 text-xs backdrop-blur-md transition-all hover:border-white/10', className)}
-    >
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{title}</h3>
-          <p className="mt-0.5 truncate text-[11px] text-white/38">{summary}</p>
-        </div>
-        <TerminalButton
-          variant="compact"
-          className="shrink-0 px-2 py-1 text-[11px] text-white/58 hover:text-white"
-          aria-expanded={open}
-          aria-label={`${open ? '收起' : '展开'} ${title}`}
-          onClick={() => setOpen((current) => !current)}
-        >
-          {open ? '收起' : '展开'}
-        </TerminalButton>
-      </div>
-      {open ? <div className="mt-2">{children}</div> : null}
-    </div>
-  );
-};
-
-const ReadOnlyBadges: React.FC<{ data?: ProviderCircuitDiagnosticsBundle | null }> = ({ data }) => {
-  const metadata = data?.states.metadata;
-  return (
-    <div className="flex flex-wrap gap-2">
-      <TerminalChip variant="info">只读诊断</TerminalChip>
-      <TerminalChip variant={metadata?.noExternalCalls === true ? ('success' as const) : ('caution' as const)}>
-        {metadata?.noExternalCalls === true ? '不触发外部调用' : '外部调用状态待确认'}
-      </TerminalChip>
-      <TerminalChip variant={metadata?.liveEnforcement === false ? ('success' as const) : ('caution' as const)}>
-        {metadata?.liveEnforcement === false ? '不执行熔断门禁' : '熔断门禁状态待确认'}
-      </TerminalChip>
-    </div>
-  );
-};
 
 const CurrentStatesPanel: React.FC<{ items: ProviderCircuitStateItem[] }> = ({ items }) => (
   <TerminalPanel as="section" className="h-full">
@@ -414,167 +364,233 @@ const ProbeEventsPanel: React.FC<{ items: ProviderProbeEventItem[] }> = ({ items
   </TerminalPanel>
 );
 
-const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ items }) => (
-  <TerminalPanel as="section" className="col-span-12">
-    <TerminalSectionHeader
-      eyebrow="就绪度"
-      title="Provider SLA / 凭证就绪"
-      action={<TerminalChip variant="neutral">只读 · 外部调用关闭</TerminalChip>}
-    />
-    {items.length === 0 ? (
-      <TerminalNotice variant="neutral" className="mt-4">
-        暂无 SLA / readiness 诊断
-      </TerminalNotice>
-    ) : (
-      <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
-        {items.map((item, index) => (
-          <TerminalNestedBlock key={`${item.provider}-${item.providerCategory || 'all'}-${item.routeFamily || 'all'}-${index}`} className="min-w-0">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white">{safeText(item.provider)}</p>
-                <p className="mt-1 truncate font-mono text-[11px] text-white/42">
-                  {dimensionText(item.providerCategory, item.routeFamily)}
-                </p>
-              </div>
-              <TerminalChip variant={chipVariant(readinessTone(item.readinessState))} className="shrink-0 font-semibold">
-                {credentialLabel(item.credentialState)}
-              </TerminalChip>
-            </div>
+const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ items }) => {
+  const [openErrorSections, setOpenErrorSections] = useState<Record<string, boolean>>({});
+  const [openBoundarySections, setOpenBoundarySections] = useState<Record<string, boolean>>({});
 
-            <TerminalNotice
-              variant={item.wouldBlockCall ? 'caution' : item.credentialsPresent === false ? 'danger' : 'info'}
-              className="mt-3"
-            >
-              {readinessNotice(item)}
-            </TerminalNotice>
+  return (
+    <TerminalPanel as="section" className="col-span-12">
+      <TerminalSectionHeader
+        eyebrow="就绪度"
+        title="Provider SLA / 凭证就绪"
+        action={<TerminalChip variant="neutral">只读 · 外部调用关闭</TerminalChip>}
+      />
+      {items.length === 0 ? (
+        <TerminalNotice variant="neutral" className="mt-4">
+          暂无 SLA / readiness 诊断
+        </TerminalNotice>
+      ) : (
+        <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
+          {items.map((item, index) => {
+            const itemKey = `${item.provider}-${item.providerCategory || 'all'}-${item.routeFamily || 'all'}-${index}`;
+            const errorSectionOpen = openErrorSections[itemKey] === true;
+            const boundarySectionOpen = openBoundarySections[itemKey] === true;
 
-            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
-              <p>
-                延迟
-                <span className="block truncate font-mono text-white/68">
-                  {latencyLabel(item.latencyState)} · {safeText(item.latencyBucketMs)} ms
-                </span>
-              </p>
-              <p>
-                新鲜度
-                <span className="block truncate font-mono text-white/68">
-                  {freshnessLabel(item.freshnessState)} · {safeText(item.freshnessSeconds)} s
-                </span>
-              </p>
-              <p>
-                错误状态
-                <span className="block truncate font-mono text-white/68">
-                  {safeText(item.errorState)} · {safeText(item.errorRate)}
-                </span>
-              </p>
-              <p>
-                阻断判断
-                <span className="block truncate font-mono text-white/68">{boolLabel(item.wouldBlockCall)}</span>
-              </p>
-            </div>
-
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <TerminalMetric
-                label="趋势请求"
-                value={safeText(item.trendSummary?.requestCountBucket, '0')}
-                valueClassName="text-sm"
-              />
-              <TerminalMetric
-                label="趋势失败"
-                value={safeText(item.trendSummary?.failureCountBucket, '0')}
-                valueClassName="text-sm"
-              />
-              <TerminalMetric
-                label="429 / 403"
-                value={`${safeText(item.trendSummary?.provider429CountBucket, '0')} / ${safeText(item.trendSummary?.provider403CountBucket, '0')}`}
-                valueClassName="text-sm"
-              />
-              <TerminalMetric
-                label="最近观察"
-                value={safeDate(item.trendSummary?.latestObservationAt)}
-                valueClassName="text-sm"
-              />
-            </div>
-
-            <CollapsibleTerminalBlock
-              title="最近错误 buckets"
-              summary={`${(item.recentErrors || []).length} 项，默认收起`}
-              className="mt-3"
-            >
-              {(item.recentErrors || []).length === 0 ? (
-                <p className="text-white/48">暂无错误 bucket</p>
-              ) : (
-                <div className="space-y-2">
-                  {(item.recentErrors || []).map((error) => (
-                    <p key={`${error.reasonBucket}-${error.latestAt || 'none'}`} className="font-mono text-white/60">
-                      {bucketLabel(error.reasonBucket)} · {safeText(error.countBucket)} · {safeDate(error.latestAt)}
+            return (
+              <TerminalNestedBlock key={itemKey} className="min-w-0">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-white">{safeText(item.provider)}</p>
+                    <p className="mt-1 truncate font-mono text-[11px] text-white/42">
+                      {dimensionText(item.providerCategory, item.routeFamily)}
                     </p>
-                  ))}
+                  </div>
+                  <TerminalChip variant={chipVariant(readinessTone(item.readinessState))} className="shrink-0 font-semibold">
+                    {credentialLabel(item.credentialState)}
+                  </TerminalChip>
                 </div>
-              )}
-            </CollapsibleTerminalBlock>
 
-            <CollapsibleTerminalBlock title="技术边界" summary="默认收起" className="mt-3">
-              <div className="grid grid-cols-1 gap-2 text-[11px] text-white/50 md:grid-cols-2">
-                <p>
-                  调用门禁
-                  <span className="block font-mono text-white/68">{boolLabel(item.liveHttpCallsEnabled)}</span>
-                </p>
-                <p>
-                  Dry-run
-                  <span className="block font-mono text-white/68">{boolLabel(item.dryRunEnabled)}</span>
-                </p>
-                <p>
-                  排序 / fallback 变化
-                  <span className="block font-mono text-white/68">
-                    {boolLabel(item.wouldChangeProviderOrder)} / {boolLabel(item.wouldChangeFallbackBehavior)}
-                  </span>
-                </p>
-                <p>
-                  熔断建议
-                  <span className="block font-mono text-white/68">
-                    {safeText(item.circuitAdvisoryState)} / {stateLabel(item.circuitStateCandidate)}
-                  </span>
-                </p>
-              </div>
-            </CollapsibleTerminalBlock>
-          </TerminalNestedBlock>
-        ))}
-      </div>
-    )}
-  </TerminalPanel>
-);
+                <TerminalNotice
+                  variant={item.wouldBlockCall ? 'caution' : item.credentialsPresent === false ? 'danger' : 'info'}
+                  className="mt-3"
+                >
+                  {readinessNotice(item)}
+                </TerminalNotice>
+
+                <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/44 md:grid-cols-4">
+                  <p>
+                    延迟
+                    <span className="block truncate font-mono text-white/68">
+                      {latencyLabel(item.latencyState)} · {safeText(item.latencyBucketMs)} ms
+                    </span>
+                  </p>
+                  <p>
+                    新鲜度
+                    <span className="block truncate font-mono text-white/68">
+                      {freshnessLabel(item.freshnessState)} · {safeText(item.freshnessSeconds)} s
+                    </span>
+                  </p>
+                  <p>
+                    错误状态
+                    <span className="block truncate font-mono text-white/68">
+                      {safeText(item.errorState)} · {safeText(item.errorRate)}
+                    </span>
+                  </p>
+                  <p>
+                    阻断判断
+                    <span className="block truncate font-mono text-white/68">{boolLabel(item.wouldBlockCall)}</span>
+                  </p>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <TerminalMetric
+                    label="趋势请求"
+                    value={safeText(item.trendSummary?.requestCountBucket, '0')}
+                    valueClassName="text-sm"
+                  />
+                  <TerminalMetric
+                    label="趋势失败"
+                    value={safeText(item.trendSummary?.failureCountBucket, '0')}
+                    valueClassName="text-sm"
+                  />
+                  <TerminalMetric
+                    label="429 / 403"
+                    value={`${safeText(item.trendSummary?.provider429CountBucket, '0')} / ${safeText(item.trendSummary?.provider403CountBucket, '0')}`}
+                    valueClassName="text-sm"
+                  />
+                  <TerminalMetric
+                    label="最近观察"
+                    value={safeDate(item.trendSummary?.latestObservationAt)}
+                    valueClassName="text-sm"
+                  />
+                </div>
+
+                <TerminalNestedBlock data-terminal-primitive="disclosure" className="mt-3 px-2.5 py-2">
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">最近错误 buckets</h3>
+                      <p className="mt-0.5 truncate text-[11px] text-white/38">{`${(item.recentErrors || []).length} 项，默认收起`}</p>
+                    </div>
+                    <TerminalButton
+                      variant="compact"
+                      className="shrink-0 px-2 py-1 text-[11px] text-white/58 hover:text-white"
+                      aria-expanded={errorSectionOpen}
+                      aria-label={`${errorSectionOpen ? '收起' : '展开'} 最近错误 buckets`}
+                      onClick={() => {
+                        setOpenErrorSections((current) => ({ ...current, [itemKey]: !errorSectionOpen }));
+                      }}
+                    >
+                      {errorSectionOpen ? '收起' : '展开'}
+                    </TerminalButton>
+                  </div>
+                  {errorSectionOpen ? (
+                    <div className="mt-2">
+                      {(item.recentErrors || []).length === 0 ? (
+                        <p className="text-white/48">暂无错误 bucket</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {(item.recentErrors || []).map((error) => (
+                            <p key={`${error.reasonBucket}-${error.latestAt || 'none'}`} className="font-mono text-white/60">
+                              {bucketLabel(error.reasonBucket)} · {safeText(error.countBucket)} · {safeDate(error.latestAt)}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </TerminalNestedBlock>
+
+                <TerminalNestedBlock data-terminal-primitive="disclosure" className="mt-3 px-2.5 py-2">
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">技术边界</h3>
+                      <p className="mt-0.5 truncate text-[11px] text-white/38">默认收起</p>
+                    </div>
+                    <TerminalButton
+                      variant="compact"
+                      className="shrink-0 px-2 py-1 text-[11px] text-white/58 hover:text-white"
+                      aria-expanded={boundarySectionOpen}
+                      aria-label={`${boundarySectionOpen ? '收起' : '展开'} 技术边界`}
+                      onClick={() => {
+                        setOpenBoundarySections((current) => ({ ...current, [itemKey]: !boundarySectionOpen }));
+                      }}
+                    >
+                      {boundarySectionOpen ? '收起' : '展开'}
+                    </TerminalButton>
+                  </div>
+                  {boundarySectionOpen ? (
+                    <div className="mt-2 grid grid-cols-1 gap-2 text-[11px] text-white/50 md:grid-cols-2">
+                      <p>
+                        调用门禁
+                        <span className="block font-mono text-white/68">{boolLabel(item.liveHttpCallsEnabled)}</span>
+                      </p>
+                      <p>
+                        Dry-run
+                        <span className="block font-mono text-white/68">{boolLabel(item.dryRunEnabled)}</span>
+                      </p>
+                      <p>
+                        排序 / fallback 变化
+                        <span className="block font-mono text-white/68">
+                          {boolLabel(item.wouldChangeProviderOrder)} / {boolLabel(item.wouldChangeFallbackBehavior)}
+                        </span>
+                      </p>
+                      <p>
+                        熔断建议
+                        <span className="block font-mono text-white/68">
+                          {safeText(item.circuitAdvisoryState)} / {stateLabel(item.circuitStateCandidate)}
+                        </span>
+                      </p>
+                    </div>
+                  ) : null}
+                </TerminalNestedBlock>
+              </TerminalNestedBlock>
+            );
+          })}
+        </div>
+      )}
+    </TerminalPanel>
+  );
+};
 
 const BoundaryPanel: React.FC<{ data?: ProviderCircuitDiagnosticsBundle | null }> = ({ data }) => {
   const metadata = data?.states.metadata;
+  const [boundaryOpen, setBoundaryOpen] = useState(false);
+
   return (
     <TerminalPanel as="aside" dense className="h-full">
       <TerminalSectionHeader eyebrow="边界" title="诊断观测" />
       <TerminalNotice variant="info" className="mt-4">
         当前为诊断观测，不会改变 provider fallback 或 MarketCache 行为。
       </TerminalNotice>
-      <CollapsibleTerminalBlock title="技术边界" summary="默认收起" className="mt-3">
-        <div className="grid grid-cols-1 gap-2 text-[11px] text-white/50">
-          <p>
-            权限能力
-            <span className="block font-mono text-white/68">ops:providers:read</span>
-          </p>
-          <p>
-            只读 / 外呼 / 门禁
-            <span className="block font-mono text-white/68">
-              {metadata?.readOnly === true ? '只读' : '未确认'} / {metadata?.noExternalCalls === true ? '关闭' : '未确认'} / {metadata?.liveEnforcement === false ? '关闭' : '未确认'}
-            </span>
-          </p>
-          <p>
-            数据来源
-            <span className="block font-mono text-white/68">{safeText(metadata?.dataSources?.join(', '), '未提供')}</span>
-          </p>
-          <p>
-            Redaction
-            <span className="block font-mono text-white/68">{safeText(metadata?.redaction?.join(', '), '未提供')}</span>
-          </p>
+      <TerminalNestedBlock data-terminal-primitive="disclosure" className="mt-3 px-2.5 py-2">
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">技术边界</h3>
+            <p className="mt-0.5 truncate text-[11px] text-white/38">默认收起</p>
+          </div>
+          <TerminalButton
+            variant="compact"
+            className="shrink-0 px-2 py-1 text-[11px] text-white/58 hover:text-white"
+            aria-expanded={boundaryOpen}
+            aria-label={`${boundaryOpen ? '收起' : '展开'} 技术边界`}
+            onClick={() => setBoundaryOpen((current) => !current)}
+          >
+            {boundaryOpen ? '收起' : '展开'}
+          </TerminalButton>
         </div>
-      </CollapsibleTerminalBlock>
+        {boundaryOpen ? (
+          <div className="mt-2 grid grid-cols-1 gap-2 text-[11px] text-white/50">
+            <p>
+              权限能力
+              <span className="block font-mono text-white/68">ops:providers:read</span>
+            </p>
+            <p>
+              只读 / 外呼 / 门禁
+              <span className="block font-mono text-white/68">
+                {metadata?.readOnly === true ? '只读' : '未确认'} / {metadata?.noExternalCalls === true ? '关闭' : '未确认'} / {metadata?.liveEnforcement === false ? '关闭' : '未确认'}
+              </span>
+            </p>
+            <p>
+              数据来源
+              <span className="block font-mono text-white/68">{safeText(metadata?.dataSources?.join(', '), '未提供')}</span>
+            </p>
+            <p>
+              Redaction
+              <span className="block font-mono text-white/68">{safeText(metadata?.redaction?.join(', '), '未提供')}</span>
+            </p>
+          </div>
+        ) : null}
+      </TerminalNestedBlock>
     </TerminalPanel>
   );
 };
@@ -596,6 +612,7 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
   const [data, setData] = useState<ProviderCircuitDiagnosticsBundle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
+  const [secondaryDetailsOpen, setSecondaryDetailsOpen] = useState(false);
 
   useEffect(() => {
     if (!canReadProviders) {
@@ -712,7 +729,15 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
                   : `先判断生产调用是否可继续、哪里被阻断、是否缺凭证；事件、配额与探测细节默认折叠。生成 ${safeDate(data?.states.generatedAt)} · 只读观测`}
               </p>
             </div>
-            <ReadOnlyBadges data={data} />
+            <div className="flex flex-wrap gap-2">
+              <TerminalChip variant="info">只读诊断</TerminalChip>
+              <TerminalChip variant={data?.states.metadata?.noExternalCalls === true ? 'success' : 'caution'}>
+                {data?.states.metadata?.noExternalCalls === true ? '不触发外部调用' : '外部调用状态待确认'}
+              </TerminalChip>
+              <TerminalChip variant={data?.states.metadata?.liveEnforcement === false ? 'success' : 'caution'}>
+                {data?.states.metadata?.liveEnforcement === false ? '不执行熔断门禁' : '熔断门禁状态待确认'}
+              </TerminalChip>
+            </div>
           </div>
           {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
         </TerminalPanel>
@@ -724,7 +749,7 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
               label={metric.label}
               value={metric.value}
               subvalue={metric.subvalue}
-              valueClassName={cn('text-sm leading-5 md:text-base', toneClass(metric.tone))}
+              valueClassName={cn('text-sm leading-5 md:text-base', METRIC_VALUE_CLASS_BY_TONE[metric.tone])}
             />
           ))}
         </div>
@@ -745,19 +770,36 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
           <SlaReadinessPanel items={data?.slaReadiness.items || []} />
         </TerminalGrid>
 
-        <CollapsibleTerminalBlock title="二级细节：探测、事件、配额窗口、路由 bucket" summary="默认折叠">
-          <div className="mt-1 grid grid-cols-1 gap-5 xl:grid-cols-12">
-            <div className="min-w-0 xl:col-span-4">
-              <ProbeEventsPanel items={data?.probeEvents.items || []} />
+        <TerminalNestedBlock data-terminal-primitive="disclosure" className="px-2.5 py-2">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h2 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">二级细节：探测、事件、配额窗口、路由 bucket</h2>
+              <p className="mt-0.5 truncate text-[11px] text-white/38">默认折叠</p>
             </div>
-            <div className="min-w-0 xl:col-span-4">
-              <EventsPanel items={data?.events.items || []} />
-            </div>
-            <div className="min-w-0 xl:col-span-4">
-              <QuotaWindowsPanel items={data?.quotaWindows.items || []} />
-            </div>
+            <TerminalButton
+              variant="compact"
+              className="shrink-0 px-2 py-1 text-[11px] text-white/58 hover:text-white"
+              aria-expanded={secondaryDetailsOpen}
+              aria-label={`${secondaryDetailsOpen ? '收起' : '展开'} 二级细节：探测、事件、配额窗口、路由 bucket`}
+              onClick={() => setSecondaryDetailsOpen((current) => !current)}
+            >
+              {secondaryDetailsOpen ? '收起' : '展开'}
+            </TerminalButton>
           </div>
-        </CollapsibleTerminalBlock>
+          {secondaryDetailsOpen ? (
+            <div className="mt-3 grid grid-cols-1 gap-5 xl:grid-cols-12">
+              <div className="min-w-0 xl:col-span-4">
+                <ProbeEventsPanel items={data?.probeEvents.items || []} />
+              </div>
+              <div className="min-w-0 xl:col-span-4">
+                <EventsPanel items={data?.events.items || []} />
+              </div>
+              <div className="min-w-0 xl:col-span-4">
+                <QuotaWindowsPanel items={data?.quotaWindows.items || []} />
+              </div>
+            </div>
+          ) : null}
+        </TerminalNestedBlock>
       </TerminalPageShell>
       <span className="sr-only">Provider 熔断诊断只读页面</span>
     </div>
