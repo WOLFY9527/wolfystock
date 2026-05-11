@@ -28,6 +28,16 @@ const providerCircuitApiPaths = [
   ['GET', '/api/v1/admin/providers/sla-readiness'],
 ] as const;
 
+const primaryCostApiPaths = [
+  ['GET', '/api/v1/admin/cost/duplicate-summary'],
+  ['POST', '/api/v1/admin/cost/quota-dry-run'],
+] as const;
+
+const secondaryCostApiPaths = [
+  ['GET', '/api/v1/admin/cost/llm-ledger-summary'],
+  ['GET', '/api/v1/admin/cost/model-pricing-policies'],
+] as const;
+
 const systemApiPaths = [
   ['GET', '/api/v1/system/config'],
   ['GET', '/api/v1/quant/duckdb/health'],
@@ -42,6 +52,7 @@ const adminSecurityActionApiPaths = [
 
 const rawAuthRehearsalLeakPattern =
   /raw-session-canary-should-not-render|cookie_canary_should_not_render|RECOVERY-CODE-CANARY-0001|rawRbacCapabilityDump|adminCapabilities:\s|coarseFallbackEnabled|stagingOnly/i;
+const providerCircuitSecondaryDisclosureLabel = '二级细节：探测、事件、配额窗口、路由 bucket';
 
 async function expectNoRawAuthRehearsalLeak(page: Parameters<typeof expectNoHorizontalOverflow>[0]) {
   const bodyText = await page.locator('body').innerText();
@@ -58,24 +69,36 @@ async function expectAdminRouteShellClean(page: Parameters<typeof expectNoHorizo
 async function expectProviderSlaReadinessSmoke(page: Parameters<typeof expectNoHorizontalOverflow>[0]) {
   const slaPanel = page.getByRole('heading', { name: 'Provider SLA / 凭证就绪' }).locator('xpath=ancestor::section[1]');
   await expect(slaPanel).toBeVisible();
-  await expect(slaPanel.getByText('只读 · 无 live call')).toBeVisible();
-  await expect(slaPanel.getByText('mock-provider · llm · analysis')).toBeVisible();
+  await expect(slaPanel.getByText('只读 · 外部调用关闭')).toBeVisible();
+  await expect(slaPanel.getByText('分类 llm · 路由 analysis')).toBeVisible();
   await expect(slaPanel.getByText('缺少凭证')).toBeVisible();
-  await expect(slaPanel.getByText('Latency')).toBeVisible();
+  await expect(slaPanel.getByText('延迟')).toBeVisible();
   await expect(slaPanel.getByText('正常 · 120 ms')).toBeVisible();
-  await expect(slaPanel.getByText('Freshness')).toBeVisible();
+  await expect(slaPanel.getByText('新鲜度')).toBeVisible();
   await expect(slaPanel.getByText('新鲜 · 60 s')).toBeVisible();
-  await expect(slaPanel.getByText('Credentials')).toBeVisible();
-  await expect(slaPanel.getByText('否 · dry-run 是')).toBeVisible();
-  await expect(slaPanel.getByText('Live calls')).toBeVisible();
-  await expect(slaPanel.getByText('Would block')).toBeVisible();
-  await expect(slaPanel.getByText('Trend requests')).toBeVisible();
+  await expect(slaPanel.getByText('错误状态')).toBeVisible();
+  await expect(slaPanel.getByText('阻断判断')).toBeVisible();
+  await expect(slaPanel.getByText('趋势请求')).toBeVisible();
   await expect(slaPanel.getByText('6_20')).toBeVisible();
   await expect(slaPanel.getByText('最近错误 buckets')).toBeVisible();
-  await expect(slaPanel.locator('details[open]')).toHaveCount(0);
+  await expect(slaPanel.getByRole('button', { name: '展开 最近错误 buckets' })).toHaveAttribute('aria-expanded', 'false');
+  await expect(slaPanel.getByRole('button', { name: '展开 技术边界' })).toHaveAttribute('aria-expanded', 'false');
+  await expect(slaPanel.getByRole('button', { name: /^收起 / })).toHaveCount(0);
 
   const bodyText = await page.locator('body').innerText();
   expect(bodyText).not.toMatch(/raw\s+(payload|response)|debug\s+(payload|response)|provider\s+payload|token|api[_\s-]?key|secret|password|bearer/i);
+}
+
+async function expandProviderCircuitSecondaryDiagnostics(page: Parameters<typeof expectNoHorizontalOverflow>[0]) {
+  const expandButton = page.getByRole('button', { name: `展开 ${providerCircuitSecondaryDisclosureLabel}` });
+  await expect(expandButton).toBeVisible();
+  await expect(expandButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('heading', { name: '最近熔断事件' })).toHaveCount(0);
+  await expandButton.click();
+  await expect(page.getByRole('button', { name: `收起 ${providerCircuitSecondaryDisclosureLabel}` })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('heading', { name: '最近熔断事件', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '配额窗口', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '探测事件', exact: true })).toBeVisible();
 }
 
 function installUnexpectedExternalRequestTracker(page: Parameters<typeof expectNoHorizontalOverflow>[0]) {
@@ -108,27 +131,27 @@ test.describe('mocked admin auth browser harness', () => {
       let harness = await openAdminRouteWithHarness(page, '/zh/admin/cost-observability');
       await expect(page.getByRole('heading', { name: '成本观测' })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('quota-dry-run-panel')).toBeVisible();
-      await expect(page.getByTestId('llm-ledger-panel')).toBeVisible();
-      await expect(page.getByTestId('model-pricing-policy-panel')).toBeVisible();
-      await expect(page.getByText('LLM 成本账本')).toBeVisible();
-      await expect(page.getByText('模型价格策略')).toBeVisible();
+      await expect(page.getByTestId('llm-ledger-panel')).toHaveCount(0);
+      await expect(page.getByTestId('model-pricing-policy-panel')).toHaveCount(0);
+      await expect(page.getByText('LLM 成本账本')).toHaveCount(0);
+      await expect(page.getByText('模型价格策略')).toHaveCount(0);
       await expect(page.getByText('配额试运行诊断')).toBeVisible();
-      await expect(page.getByText('用户成本排行')).toBeVisible();
-      await expect(page.getByText('模型成本分布')).toBeVisible();
-      await expect(page.getByText('功能成本分布')).toBeVisible();
-      expect(harness.requests.count('GET', '/api/v1/admin/cost/duplicate-summary')).toBeGreaterThan(0);
-      expect(harness.requests.count('POST', '/api/v1/admin/cost/quota-dry-run')).toBe(1);
-      expect(harness.requests.count('GET', '/api/v1/admin/cost/llm-ledger-summary')).toBe(1);
-      expect(harness.requests.count('GET', '/api/v1/admin/cost/model-pricing-policies')).toBe(1);
+      await expect(page.getByText('用户成本排行')).toHaveCount(0);
+      await expect(page.getByText('模型成本分布')).toHaveCount(0);
+      await expect(page.getByText('功能成本分布')).toHaveCount(0);
+      for (const [method, path] of primaryCostApiPaths) {
+        expect(harness.requests.count(method, path)).toBeGreaterThan(0);
+      }
+      for (const [method, path] of secondaryCostApiPaths) {
+        expect(harness.requests.count(method, path)).toBe(0);
+      }
       await expectAdminRouteShellClean(page);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
 
       harness = await openAdminRouteWithHarness(page, '/zh/admin/provider-circuits');
       await expect(page.getByRole('heading', { name: 'Provider 熔断诊断' })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByText('当前熔断状态', { exact: true })).toBeVisible();
-      await expect(page.getByRole('heading', { name: '最近熔断事件' })).toBeVisible();
-      await expect(page.getByRole('heading', { name: '配额窗口' })).toBeVisible();
-      await expect(page.getByRole('heading', { name: '探测事件' })).toBeVisible();
+      await expandProviderCircuitSecondaryDiagnostics(page);
       await expectProviderSlaReadinessSmoke(page);
       for (const [method, path] of providerCircuitApiPaths) {
         expect(harness.requests.count(method, path)).toBe(1);
@@ -137,7 +160,7 @@ test.describe('mocked admin auth browser harness', () => {
       await page.unrouteAll({ behavior: 'ignoreErrors' });
 
       harness = await openAdminRouteWithHarness(page, '/zh/admin/users');
-      await expect(page.getByRole('heading', { name: '用户目录' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole('heading', { name: '用户目录', level: 1 })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByText('alice')).toBeVisible();
       expect(harness.requests.count('GET', '/api/v1/admin/users')).toBeGreaterThan(0);
       await expectAdminRouteShellClean(page);
@@ -159,7 +182,7 @@ test.describe('mocked admin auth browser harness', () => {
       harness = await openAdminRouteWithHarness(page, '/zh/settings/system');
       await expect(page.getByTestId('settings-bento-page')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('system-health-summary')).toBeVisible();
-      await expect(page.getByTestId('duckdb-quant-panel')).toBeVisible();
+      await expect(page.getByTestId('duckdb-quant-panel')).toBeAttached();
       expect(harness.requests.count('GET', '/api/v1/system/config')).toBeGreaterThan(0);
       await expectAdminRouteShellClean(page);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
@@ -175,12 +198,15 @@ test.describe('mocked admin auth browser harness', () => {
       });
       await expect(page.getByRole('heading', { name: '成本观测' })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('quota-dry-run-panel')).toBeVisible();
-      await expect(page.getByTestId('llm-ledger-panel')).toBeVisible();
-      await expect(page.getByTestId('model-pricing-policy-panel')).toBeVisible();
-      await expect(page.getByText('模型价格策略')).toBeVisible();
+      await expect(page.getByTestId('llm-ledger-panel')).toHaveCount(0);
+      await expect(page.getByTestId('model-pricing-policy-panel')).toHaveCount(0);
+      await expect(page.getByText('模型价格策略')).toHaveCount(0);
       await expect(page.getByText('配额试运行诊断')).toBeVisible();
-      for (const [method, path] of costApiPaths) {
+      for (const [method, path] of primaryCostApiPaths) {
         expect(harness.requests.count(method, path)).toBeGreaterThan(0);
+      }
+      for (const [method, path] of secondaryCostApiPaths) {
+        expect(harness.requests.count(method, path)).toBe(0);
       }
       await expectAdminRouteShellClean(page);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
@@ -232,9 +258,7 @@ test.describe('mocked admin auth browser harness', () => {
       });
       await expect(page.getByRole('heading', { name: 'Provider 熔断诊断' })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByText('当前熔断状态', { exact: true })).toBeVisible();
-      await expect(page.getByRole('heading', { name: '最近熔断事件' })).toBeVisible();
-      await expect(page.getByRole('heading', { name: '配额窗口' })).toBeVisible();
-      await expect(page.getByRole('heading', { name: '探测事件' })).toBeVisible();
+      await expandProviderCircuitSecondaryDiagnostics(page);
       await expectProviderSlaReadinessSmoke(page);
       for (const [method, path] of providerCircuitApiPaths) {
         expect(harness.requests.count(method, path)).toBe(1);

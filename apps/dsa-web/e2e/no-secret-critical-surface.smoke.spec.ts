@@ -48,34 +48,30 @@ async function installAuthenticatedAppSmokeSession(page: Page) {
   });
 }
 
-async function expectCriticalSurfaceClean(page: Page, expectedOpenDetailsCount = 0) {
+async function expectCriticalSurfaceClean(page: Page, expectedExpandedDisclosureCount = 0) {
   await expectRootNonEmpty(page);
   await expectNoHorizontalOverflow(page);
   await expectForbiddenTradingWordingAbsent(page);
   await expectNoRawSecretLikeText(page);
-  await expect(page.locator('details[open]')).toHaveCount(expectedOpenDetailsCount);
+  await expect(page.getByRole('button', { name: /^收起 / })).toHaveCount(expectedExpandedDisclosureCount);
 
   const bodyText = await page.locator('body').innerText();
   expect(bodyText).not.toMatch(rawDebugArtifactPattern);
 }
 
 async function expectProviderCircuitSecondaryDisclosure(page: Page) {
-  const disclosure = page
-    .locator('details')
-    .filter({ has: page.locator('summary', { hasText: providerCircuitSecondaryDisclosureLabel }) })
-    .first();
-  const summary = disclosure.locator('summary');
+  const expandButton = page.getByRole('button', { name: `展开 ${providerCircuitSecondaryDisclosureLabel}` });
 
-  await expect(disclosure).toBeVisible();
-  await expect(disclosure).not.toHaveJSProperty('open', true);
-  await expect(summary).toContainText(providerCircuitSecondaryDisclosureLabel);
-  await expect(summary).toContainText('默认折叠');
-  await expect(disclosure.getByRole('heading', { name: '最近熔断事件' })).toBeHidden();
-  await summary.click();
-  await expect(disclosure).toHaveJSProperty('open', true);
-  await expect(disclosure.getByRole('heading', { name: '最近熔断事件' })).toBeVisible();
-  await expect(disclosure.getByRole('heading', { name: '配额窗口' })).toBeVisible();
-  await expect(disclosure.getByRole('heading', { name: '探测事件' })).toBeVisible();
+  await expect(page.getByText(providerCircuitSecondaryDisclosureLabel, { exact: true })).toBeVisible();
+  await expect(page.getByText('默认折叠', { exact: true })).toBeVisible();
+  await expect(expandButton).toBeVisible();
+  await expect(expandButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('heading', { name: '最近熔断事件' })).toHaveCount(0);
+  await expandButton.click();
+  await expect(page.getByRole('button', { name: `收起 ${providerCircuitSecondaryDisclosureLabel}` })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('heading', { name: '最近熔断事件', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '配额窗口', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '探测事件', exact: true })).toBeVisible();
 }
 
 appTest.describe('no-secret critical public surfaces', () => {
@@ -131,8 +127,8 @@ productTest.describe('no-secret critical product surfaces', () => {
       await page.goto('/portfolio');
       await page.waitForLoadState('domcontentloaded');
       await expect(page.getByTestId('portfolio-bento-page')).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByTestId('portfolio-total-assets-card')).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByTestId('portfolio-current-holdings-panel')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole('heading', { name: '总资产' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole('heading', { name: /当前持仓/ })).toBeVisible({ timeout: 15_000 });
       await expectCriticalSurfaceClean(page);
 
       expect(harness.requests.count('GET', '/api/v1/portfolio/snapshot')).toBeGreaterThan(0);
@@ -150,14 +146,14 @@ adminTest.describe('no-secret critical admin diagnostics surfaces', () => {
 
       await expect(page.getByRole('heading', { name: '成本观测' })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('quota-dry-run-panel')).toBeVisible();
-      await expect(page.getByTestId('llm-ledger-panel')).toBeVisible();
-      await expect(page.getByTestId('model-pricing-policy-panel')).toBeVisible();
+      await expect(page.getByTestId('llm-ledger-panel')).toHaveCount(0);
+      await expect(page.getByTestId('model-pricing-policy-panel')).toHaveCount(0);
       await expectCriticalSurfaceClean(page);
 
       expect(harness.requests.count('GET', '/api/v1/admin/cost/duplicate-summary')).toBeGreaterThan(0);
       expect(harness.requests.count('POST', '/api/v1/admin/cost/quota-dry-run')).toBe(1);
-      expect(harness.requests.count('GET', '/api/v1/admin/cost/llm-ledger-summary')).toBe(1);
-      expect(harness.requests.count('GET', '/api/v1/admin/cost/model-pricing-policies')).toBe(1);
+      expect(harness.requests.count('GET', '/api/v1/admin/cost/llm-ledger-summary')).toBe(0);
+      expect(harness.requests.count('GET', '/api/v1/admin/cost/model-pricing-policies')).toBe(0);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
     }
   });

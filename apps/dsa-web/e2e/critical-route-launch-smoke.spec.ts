@@ -85,11 +85,14 @@ async function expectVisibleTextAbsent(page: Page, sentinels: string[]) {
 async function assertRotationRadarReadOnlyShell(page: Page) {
   const bodyText = await page.locator('body').innerText();
   expect(bodyText).toContain('下一观察 / 风险');
-  expect(bodyText).toContain('数据诊断');
   expect(bodyText).toContain('只读证据');
   expect(bodyText).toContain('非交易指令');
-  expect(bodyText).toContain('数据说明');
-  await appExpect(page.getByTestId('rotation-theme-proxy-details-ai_applications')).not.toHaveJSProperty('open', true);
+  const proxyDisclosure = page.getByTestId('rotation-theme-proxy-details-ai_applications');
+  await appExpect(proxyDisclosure).toBeAttached();
+  await appExpect(proxyDisclosure.getByTestId('rotation-proxy-row-QQQ')).toBeHidden();
+  const mechanicsDisclosure = page.getByTestId('rotation-radar-mechanics-details');
+  await appExpect(mechanicsDisclosure).toBeAttached();
+  await appExpect(mechanicsDisclosure.getByText('当前为静态主题库，本地行情覆盖后可计算轮动强度。')).toBeHidden();
   expect(bodyText).not.toMatch(rotationRadarTradingActionPattern);
   await appExpect(page.getByTestId('rotation-radar-developer-details')).toHaveCount(0);
 }
@@ -118,22 +121,18 @@ async function assertAdminShell(page: Page) {
 }
 
 async function expectProviderCircuitSecondaryDisclosure(page: Page) {
-  const disclosure = page
-    .locator('details')
-    .filter({ has: page.locator('summary', { hasText: providerCircuitSecondaryDisclosureLabel }) })
-    .first();
-  const summary = disclosure.locator('summary');
+  const expandButton = page.getByRole('button', { name: `展开 ${providerCircuitSecondaryDisclosureLabel}` });
 
-  await appExpect(disclosure).toBeVisible();
-  await appExpect(disclosure).not.toHaveJSProperty('open', true);
-  await appExpect(summary).toContainText(providerCircuitSecondaryDisclosureLabel);
-  await appExpect(summary).toContainText('默认折叠');
-  await appExpect(disclosure.getByRole('heading', { name: '最近熔断事件' })).toBeHidden();
-  await summary.click();
-  await appExpect(disclosure).toHaveJSProperty('open', true);
-  await appExpect(disclosure.getByRole('heading', { name: '最近熔断事件' })).toBeVisible();
-  await appExpect(disclosure.getByRole('heading', { name: '配额窗口' })).toBeVisible();
-  await appExpect(disclosure.getByRole('heading', { name: '探测事件' })).toBeVisible();
+  await appExpect(page.getByText(providerCircuitSecondaryDisclosureLabel, { exact: true })).toBeVisible();
+  await appExpect(page.getByText('默认折叠', { exact: true })).toBeVisible();
+  await appExpect(expandButton).toBeVisible();
+  await appExpect(expandButton).toHaveAttribute('aria-expanded', 'false');
+  await appExpect(page.getByRole('heading', { name: '最近熔断事件' })).toHaveCount(0);
+  await expandButton.click();
+  await appExpect(page.getByRole('button', { name: `收起 ${providerCircuitSecondaryDisclosureLabel}` })).toHaveAttribute('aria-expanded', 'true');
+  await appExpect(page.getByRole('heading', { name: '最近熔断事件', exact: true })).toBeVisible();
+  await appExpect(page.getByRole('heading', { name: '配额窗口', exact: true })).toBeVisible();
+  await appExpect(page.getByRole('heading', { name: '探测事件', exact: true })).toBeVisible();
 }
 
 appTest.describe('public launch route smoke', () => {
@@ -212,7 +211,7 @@ appTest.describe('public launch route smoke', () => {
       await page.goto('/scanner');
       await page.waitForLoadState('domcontentloaded');
       await appExpect(page.getByTestId('user-scanner-bento-page')).toBeVisible({ timeout: 15_000 });
-      await appExpect(page.getByTestId('scanner-sidebar')).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByTestId('scanner-sidebar-scroll-region')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('scanner-results-pane')).toBeVisible({ timeout: 15_000 });
       await assertProductShell(page);
 
@@ -253,12 +252,14 @@ productTest.describe('product launch route smoke', () => {
       await appExpect(page.getByRole('heading', { name: '期权实验室' })).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('options-lab-decision-engine')).toBeVisible();
       await appExpect(page.getByTestId('options-lab-decision-summary')).toBeVisible();
-      await appExpect(page.getByTestId('options-lab-analysis-details')).not.toHaveJSProperty('open', true);
-      await appExpect(page.getByTestId('options-lab-chain-details')).not.toHaveJSProperty('open', true);
-      await appExpect(page.getByTestId('options-lab-strategy-details')).not.toHaveJSProperty('open', true);
-      await page.getByTestId('options-lab-chain-details').getByText('合约链明细').click();
+      const analysisDetails = page.getByTestId('options-lab-analysis-details');
+      await appExpect(analysisDetails.getByText('收益结构只表达显式假设下的情景结果')).toBeHidden();
+      await analysisDetails.getByText('计算假设 / 数据说明 / 限制说明').click();
+      await appExpect(analysisDetails.getByText('收益结构只表达显式假设下的情景结果')).toBeVisible();
+      await appExpect(page.getByTestId('options-lab-chain-panel')).toHaveCount(2);
+      await appExpect(page.getByText('Call 链').first()).toBeVisible();
+      await appExpect(page.getByText('Put 链').first()).toBeVisible();
       await appExpect(page.getByTestId('options-lab-calls-table')).toBeVisible();
-      await page.getByTestId('options-lab-strategy-details').getByText('策略对比明细').click();
       await appExpect(page.getByTestId('options-lab-strategy-comparison')).toBeVisible();
       await expectForbiddenTradingWordingAbsent(page);
       await assertProductShell(page);
@@ -279,9 +280,9 @@ productTest.describe('product launch route smoke', () => {
       await page.goto('/portfolio');
       await page.waitForLoadState('domcontentloaded');
       await appExpect(page.getByTestId('portfolio-bento-page')).toBeVisible({ timeout: 15_000 });
-      await appExpect(page.getByTestId('portfolio-total-assets-card')).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByRole('heading', { name: '总资产' })).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('portfolio-workspace-lanes')).toBeVisible({ timeout: 15_000 });
-      await appExpect(page.getByTestId('portfolio-current-holdings-panel')).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByRole('heading', { name: /当前持仓/ })).toBeVisible({ timeout: 15_000 });
       await expectVisibleTextPresent(page, visibleOwnerPortfolioSentinels);
       await expectVisibleTextPresent(page, requiredPortfolioLedgerLanguage);
       await expectVisibleTextAbsent(page, [
@@ -308,14 +309,14 @@ adminTest.describe('admin launch route smoke', () => {
 
       await appExpect(page.getByRole('heading', { name: '成本观测' })).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('quota-dry-run-panel')).toBeVisible();
-      await appExpect(page.getByTestId('llm-ledger-panel')).toBeVisible();
-      await appExpect(page.getByTestId('model-pricing-policy-panel')).toBeVisible();
+      await appExpect(page.getByTestId('llm-ledger-panel')).toHaveCount(0);
+      await appExpect(page.getByTestId('model-pricing-policy-panel')).toHaveCount(0);
       await assertAdminShell(page);
 
       expect(harness.requests.count('GET', '/api/v1/admin/cost/duplicate-summary')).toBeGreaterThan(0);
       expect(harness.requests.count('POST', '/api/v1/admin/cost/quota-dry-run')).toBe(1);
-      expect(harness.requests.count('GET', '/api/v1/admin/cost/llm-ledger-summary')).toBe(1);
-      expect(harness.requests.count('GET', '/api/v1/admin/cost/model-pricing-policies')).toBe(1);
+      expect(harness.requests.count('GET', '/api/v1/admin/cost/llm-ledger-summary')).toBe(0);
+      expect(harness.requests.count('GET', '/api/v1/admin/cost/model-pricing-policies')).toBe(0);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
     }
   });
@@ -346,7 +347,7 @@ adminTest.describe('admin launch route smoke', () => {
 
       await appExpect(page.getByTestId('settings-bento-page')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('system-health-summary')).toBeVisible();
-      await appExpect(page.getByTestId('duckdb-quant-panel')).toBeVisible();
+      await appExpect(page.getByTestId('duckdb-quant-panel')).toBeAttached();
       await assertAdminShell(page);
 
       expect(harness.requests.count('GET', '/api/v1/system/config')).toBeGreaterThan(0);

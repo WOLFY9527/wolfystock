@@ -41,7 +41,8 @@ test.describe('admin evidence dry-run preview', () => {
       await expect(rotationCard.getByText('真实资金流暂缺', { exact: true })).toBeVisible();
 
       const optionsDisclosure = page.getByTestId('admin-evidence-dry-run-disclosure-options');
-      await expect(optionsDisclosure).not.toHaveAttribute('open', '');
+      await expect(optionsDisclosure).toBeAttached();
+      await expect(optionsDisclosure.getByText('禁用结论')).toBeHidden();
       await expect(optionsDisclosure).toContainText('已禁用 2 项结论');
 
       const bodyText = await page.locator('body').innerText();

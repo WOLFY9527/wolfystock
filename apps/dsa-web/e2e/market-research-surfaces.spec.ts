@@ -6,21 +6,21 @@ const routes = [
     path: '/zh/market-overview',
     root: 'market-overview-shell',
     first: ['market-decision-strip', 'market-overview-summary-band'],
-    collapsed: ['market-overview-cache-status'],
+    collapsedDisclosures: [],
   },
   {
     path: '/zh/watchlist',
     root: 'watchlist-page',
     first: ['watchlist-candidate-list', 'watchlist-row-NVDA'],
-    collapsed: [],
+    collapsedDisclosures: [],
   },
   {
     path: '/zh/market/rotation-radar',
     root: 'market-rotation-radar-page',
     first: ['rotation-radar-summary-band', 'rotation-radar-leader-list'],
-    collapsed: [
-      'rotation-theme-proxy-details-ai_applications',
-      'rotation-radar-mechanics-details',
+    collapsedDisclosures: [
+      { testId: 'rotation-theme-proxy-details-ai_applications', hiddenTestId: 'rotation-proxy-row-QQQ' },
+      { testId: 'rotation-radar-mechanics-details', hiddenText: '当前为静态主题库，本地行情覆盖后可计算轮动强度。' },
     ],
   },
 ];
@@ -110,8 +110,15 @@ test.describe('market research surfaces IA', () => {
         for (const testId of route.first) {
           await expect(page.getByTestId(testId)).toBeVisible();
         }
-        for (const testId of route.collapsed) {
-          await expect(page.getByTestId(testId)).not.toHaveAttribute('open');
+        for (const disclosure of route.collapsedDisclosures) {
+          const disclosureRoot = page.getByTestId(disclosure.testId);
+          await expect(disclosureRoot).toBeAttached();
+          if ('hiddenTestId' in disclosure) {
+            await expect(disclosureRoot.getByTestId(disclosure.hiddenTestId)).toBeHidden();
+          }
+          if ('hiddenText' in disclosure) {
+            await expect(disclosureRoot.getByText(disclosure.hiddenText)).toBeHidden();
+          }
         }
 
         await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);

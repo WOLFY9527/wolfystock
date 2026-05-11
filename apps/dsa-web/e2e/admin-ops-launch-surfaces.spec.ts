@@ -256,11 +256,13 @@ async function visibleText(page: Page) {
   return page.locator('body').innerText();
 }
 
-async function expectClosedDetails(page: Page, testId?: string) {
-  const details = testId ? page.getByTestId(testId) : page.locator('details');
-  const count = await details.count();
+async function expectClosedDisclosureButtons(page: Page) {
+  await expect(page.getByRole('button', { name: /^收起 / })).toHaveCount(0);
+
+  const expandButtons = page.getByRole('button', { name: /^展开 / });
+  const count = await expandButtons.count();
   for (let index = 0; index < count; index += 1) {
-    await expect(details.nth(index)).not.toHaveJSProperty('open', true);
+    await expect(expandButtons.nth(index)).toHaveAttribute('aria-expanded', 'false');
   }
 }
 
@@ -279,7 +281,6 @@ const routes = [
     first: ['成本观测', '需关注', '下一步', '压力、异常、归属', '配额试运行诊断'],
     secondary: [],
     secondaryButtons: [],
-    disclosureCountMin: 2,
   },
   {
     key: 'evidence',
@@ -288,21 +289,20 @@ const routes = [
     first: ['证据工作流复核', '当前状态', '下一步', '操作员证据路径'],
     secondary: [],
     secondaryButtons: [],
-    disclosureCountMin: 4,
   },
   {
     key: 'market-providers',
     path: '/zh/admin/market-providers',
     ready: 'market-provider-operations-page',
-    first: ['市场数据源运维', '当前状态', '需关注', '下一步', '数据源运维矩阵'],
-    secondary: ['二级细节：缓存、事件回卷、限制与响应形状'],
+    first: ['数据源就绪台', '数据源健康', '熔断状态', '失败率', '数据源运维'],
+    secondary: [],
   },
   {
     key: 'provider-circuits',
     path: '/zh/admin/provider-circuits',
     ready: 'admin-provider-circuit-diagnostics-page',
     first: ['Provider 熔断诊断', '生产调用', '当前阻断', '下一步', 'Provider SLA / 凭证就绪'],
-    secondary: ['二级细节：探测、事件、配额窗口、路由 bucket'],
+    secondary: ['二级细节：探测、事件、配额窗口、路由 BUCKET'],
   },
   {
     key: 'system-settings',
@@ -345,10 +345,10 @@ test.describe('admin ops launch surfaces', () => {
           await expect(page.getByRole('button', { name: `展开 ${text}` })).toBeVisible();
         }
         if (route.disclosureCountMin) {
-          const disclosureCount = await page.locator('[data-terminal-primitive="disclosure"]').count();
+          const disclosureCount = await page.getByRole('button', { name: /^展开 / }).count();
           expect(disclosureCount).toBeGreaterThanOrEqual(route.disclosureCountMin);
         }
-        await expectClosedDetails(page);
+        await expectClosedDisclosureButtons(page);
         await page.unrouteAll({ behavior: 'ignoreErrors' });
       }
     });
