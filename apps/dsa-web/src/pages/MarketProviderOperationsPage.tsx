@@ -22,6 +22,7 @@ import {
   TerminalEmptyState,
   TerminalGrid,
   TerminalMetric,
+  TerminalNestedBlock,
   TerminalNotice,
   TerminalPageShell,
   TerminalPanel,
@@ -383,14 +384,14 @@ const ProviderDetailsPanel: React.FC<{ item: MarketProviderOperationItem | null 
           <TerminalMetric label="延迟" value={formatLatency(item.latencyMs)} valueClassName="text-sm" />
         </div>
         <TerminalDenseList className="mt-4">
-          <div className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
+          <TerminalNestedBlock className="px-3 py-2">
             <p className="text-[10px] uppercase tracking-widest text-white/35">provider ID</p>
             <p className="mt-1 font-mono text-[11px] text-white/65">{item.provider}</p>
-          </div>
-          <div className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
+          </TerminalNestedBlock>
+          <TerminalNestedBlock className="px-3 py-2">
             <p className="text-[10px] uppercase tracking-widest text-white/35">API</p>
             <p className="mt-1 font-mono text-[11px] text-white/65">{item.endpoint}</p>
-          </div>
+          </TerminalNestedBlock>
           <DrillLink drill={item.adminLogDrillThrough} />
         </TerminalDenseList>
       </>
@@ -413,7 +414,7 @@ const CacheStatesPanel: React.FC<{ cacheStates: MarketProviderCacheState[] }> = 
           {cacheStates.map((state) => {
             const status = normalizeStatus(state.status);
             return (
-              <div key={state.cacheKey} className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-3">
+              <TerminalNestedBlock key={state.cacheKey}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate font-mono text-[11px] text-white/72">{state.cacheKey}</p>
@@ -426,7 +427,7 @@ const CacheStatesPanel: React.FC<{ cacheStates: MarketProviderCacheState[] }> = 
                 {state.lastError ? (
                   <p className="mt-2 text-[11px] leading-5 text-white/58">{sanitizeOperatorText(state.lastError)}</p>
                 ) : null}
-              </div>
+              </TerminalNestedBlock>
             );
           })}
         </TerminalDenseList>
@@ -447,7 +448,7 @@ const EventRollupsPanel: React.FC<{ eventRollups: MarketProviderEventRollup[] }>
             const failureRateLabel = safePercent(rollup.failureRate, safeRatio(rollup.failureCount, rollup.eventCount));
             const primaryReason = rollup.topReasons.length ? sanitizeOperatorText(rollup.topReasons[0]) : '暂无数据';
             return (
-              <div key={`${rollup.provider}-${rollup.endpoint || rollup.card || rollup.latestLogEventId}`} className="rounded-xl border border-white/[0.04] bg-black/20 px-3 py-3">
+              <TerminalNestedBlock key={`${rollup.provider}-${rollup.endpoint || rollup.card || rollup.latestLogEventId}`}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-white">{rollup.provider}</p>
@@ -463,7 +464,7 @@ const EventRollupsPanel: React.FC<{ eventRollups: MarketProviderEventRollup[] }>
                   <span>{formatDisplayDate(rollup.latestStartedAt, '待统计')}</span>
                   <DrillLink drill={rollup.adminLogDrillThrough} />
                 </div>
-              </div>
+              </TerminalNestedBlock>
             );
           })}
         </TerminalDenseList>
@@ -494,15 +495,15 @@ const DiagnosticsPanel: React.FC<{
       data-testid="market-provider-diagnostics-disclosure"
     >
       <div className="grid gap-4 xl:grid-cols-3">
-        <div className="rounded-xl border border-white/[0.04] bg-black/20 p-3">
+        <TerminalNestedBlock>
           <p className="text-[10px] uppercase tracking-widest text-white/35">限制代码</p>
           <ul className="mt-2 space-y-1 text-[11px] leading-5 text-white/58">
             {response.limitations.length ? response.limitations.map((limitation) => (
               <li key={limitation} className="break-words font-mono">{limitation}</li>
             )) : <li className="text-white/40">暂无原始限制代码</li>}
           </ul>
-        </div>
-        <div className="rounded-xl border border-white/[0.04] bg-black/20 p-3 xl:col-span-2">
+        </TerminalNestedBlock>
+        <TerminalNestedBlock className="xl:col-span-2">
           <p className="text-[10px] uppercase tracking-widest text-white/35">JSON</p>
           <pre className="mt-2 max-h-72 overflow-y-auto no-scrollbar whitespace-pre-wrap break-words text-[11px] leading-5 text-white/58">
             {JSON.stringify({
@@ -516,7 +517,7 @@ const DiagnosticsPanel: React.FC<{
               } : null,
             }, null, 2)}
           </pre>
-        </div>
+        </TerminalNestedBlock>
       </div>
     </TerminalDisclosure>
   </TerminalPanel>
@@ -533,7 +534,7 @@ const LoadingOperationsState: React.FC = () => (
     </div>
     <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
       {[0, 1, 2].map((index) => (
-        <div key={index} className="h-24 rounded-xl border border-white/[0.04] bg-black/20" />
+        <TerminalNestedBlock key={index} className="h-24" aria-hidden="true" />
       ))}
     </div>
   </TerminalPanel>
