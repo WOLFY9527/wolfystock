@@ -302,6 +302,22 @@ RETIRED_LOCAL_PRIMITIVE_RULES = {
             re.compile(r"import\s*\{[^}]*\bBadge\b[^}]*\}\s*from"),
             "Admin Provider Circuit Diagnostics must not re-import a local Badge for migrated status chips.",
         ),
+        (
+            re.compile(r"\bGlassCard\b"),
+            "Admin Provider Circuit Diagnostics migrated terminal surface must keep using TerminalPanel or TerminalNestedBlock instead of GlassCard.",
+        ),
+        (
+            re.compile(r"\bSummaryTile\b"),
+            "Admin Provider Circuit Diagnostics migrated summary cells must not restore retired SummaryTile helpers.",
+        ),
+        (
+            re.compile(r"import\s*\{[^}]*\bStatusBadge\b[^}]*\}\s*from\s*['\"][^'\"]*StatusBadge['\"]"),
+            "Admin Provider Circuit Diagnostics migrated status chips must not re-import the retired StatusBadge component.",
+        ),
+        (
+            re.compile(r"<StatusBadge\b"),
+            "Admin Provider Circuit Diagnostics migrated status chips must keep using TerminalChip-based status pills instead of StatusBadge.",
+        ),
     ],
     "apps/dsa-web/src/pages/WatchlistPage.tsx": WATCHLIST_RETIRED_TERMINAL_SURFACE_RULES,
     "apps/dsa-web/src/pages/AdminCostObservabilityPage.tsx": ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES,

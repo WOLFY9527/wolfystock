@@ -114,6 +114,58 @@ def test_flags_admin_provider_local_badge_regression():
     assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
 
 
+def test_flags_admin_provider_circuit_retired_terminal_surface_regression():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminProviderCircuitDiagnosticsPage.tsx",
+        "\n".join([
+            "import { GlassCard } from '../components/common';",
+            "import { StatusBadge } from '../components/ui/StatusBadge';",
+            "const tile = SummaryTile;",
+            "export default function Page() {",
+            "  return <GlassCard><StatusBadge status='open' label='打开' /></GlassCard>;",
+            "}",
+        ]),
+    )
+
+    assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_allows_admin_provider_circuit_terminal_primitives_after_migration():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminProviderCircuitDiagnosticsPage.tsx",
+        "\n".join([
+            "import { TerminalChip, TerminalNestedBlock, TerminalPanel } from '../components/terminal';",
+            "export default function Page() {",
+            "  return <TerminalPanel><TerminalNestedBlock><TerminalChip variant='caution'>只读诊断</TerminalChip></TerminalNestedBlock></TerminalPanel>;",
+            "}",
+        ]),
+    )
+
+    assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_does_not_apply_admin_provider_circuit_retired_rules_to_non_target_pages():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/SettingsPage.tsx",
+        "\n".join([
+            "import { GlassCard } from '../components/common';",
+            "import { StatusBadge } from '../components/ui/StatusBadge';",
+            "const tile = SummaryTile;",
+            "export default function Page() {",
+            "  return <GlassCard><StatusBadge status='info' label='说明' /></GlassCard>;",
+            "}",
+        ]),
+    )
+
+    assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
 def test_flags_watchlist_retired_local_material_regression():
     guard = load_guard_module()
 
