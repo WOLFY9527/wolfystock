@@ -233,6 +233,45 @@ ADMIN_USERS_RETIRED_TERMINAL_SURFACE_RULES = [
     ),
 ]
 
+ADMIN_NOTIFICATIONS_RETIRED_TERMINAL_SURFACE_RULES = [
+    (
+        re.compile(r"\bGlassCard\b"),
+        "Admin Notifications migrated terminal surface must keep using TerminalPanel or TerminalNestedBlock instead of GlassCard.",
+    ),
+    (
+        re.compile(r"import\s*\{[^}]*\bBadge\b[^}]*\}\s*from\s*['\"][^'\"]*components/common['\"]"),
+        "Admin Notifications migrated status chips must not re-import common Badge after TerminalChip migration.",
+    ),
+    (
+        re.compile(r"<Badge\b"),
+        "Admin Notifications migrated status chips must keep using TerminalChip instead of local Badge tags.",
+    ),
+    (
+        re.compile(r"import\s*\{[^}]*\bButton\b[^}]*\}\s*from\s*['\"][^'\"]*components/common['\"]"),
+        "Admin Notifications migrated actions must not re-import the retired common Button surface.",
+    ),
+    (
+        re.compile(r"<Button\b"),
+        "Admin Notifications migrated actions must keep using TerminalButton instead of the retired common Button surface.",
+    ),
+    (
+        re.compile(r"import\s*\{[^}]*\bDisclosure\b[^}]*\}\s*from\s*['\"][^'\"]*components/common['\"]"),
+        "Admin Notifications migrated advanced details must not re-import the retired common Disclosure surface.",
+    ),
+    (
+        re.compile(r"<Disclosure\b"),
+        "Admin Notifications migrated advanced details must keep using TerminalDisclosure instead of the retired common Disclosure surface.",
+    ),
+    (
+        re.compile(r"<details\b"),
+        "Admin Notifications migrated advanced details must keep using TerminalDisclosure instead of native details shells.",
+    ),
+    (
+        re.compile(r"<summary\b"),
+        "Admin Notifications migrated advanced details must keep using TerminalDisclosure instead of native summary shells.",
+    ),
+]
+
 RETIRED_LOCAL_PRIMITIVE_RULES = {
     "apps/dsa-web/src/pages/MarketOverviewPage.tsx": [
         (
@@ -268,6 +307,7 @@ RETIRED_LOCAL_PRIMITIVE_RULES = {
     "apps/dsa-web/src/pages/AdminCostObservabilityPage.tsx": ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES,
     "apps/dsa-web/src/pages/AdminEvidenceWorkflowPage.tsx": ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES,
     "apps/dsa-web/src/pages/AdminLogsPage.tsx": ADMIN_LOGS_RETIRED_TERMINAL_SURFACE_RULES,
+    "apps/dsa-web/src/pages/AdminNotificationsPage.tsx": ADMIN_NOTIFICATIONS_RETIRED_TERMINAL_SURFACE_RULES,
     "apps/dsa-web/src/pages/AdminUsersPage.tsx": ADMIN_USERS_RETIRED_TERMINAL_SURFACE_RULES,
 }
 

@@ -274,6 +274,54 @@ def test_does_not_apply_admin_logs_retired_rules_to_non_target_pages():
     assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
 
 
+def test_flags_admin_notifications_retired_terminal_surface_regression():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminNotificationsPage.tsx",
+        "\n".join([
+            "import { Badge, Button, Disclosure, GlassCard } from '../components/common';",
+            "export default function Page() {",
+            "  return <GlassCard><Badge variant='warning'>告警</Badge><Button>发送测试</Button><Disclosure summary='原始响应'>细节</Disclosure><details><summary>Webhook 错误</summary></details></GlassCard>;",
+            "}",
+        ]),
+    )
+
+    assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_allows_admin_notifications_terminal_primitives_after_migration():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminNotificationsPage.tsx",
+        "\n".join([
+            "import { TerminalButton, TerminalChip, TerminalDisclosure, TerminalNotice, TerminalPanel } from '../components/terminal';",
+            "export default function Page() {",
+            "  return <TerminalPanel><TerminalChip variant='caution'>Webhook 告警</TerminalChip><TerminalButton variant='secondary'>发送测试</TerminalButton><TerminalNotice variant='info' title='已脱敏'>仅展示安全诊断。</TerminalNotice><TerminalDisclosure title='Webhook 错误' summary='默认折叠'>细节</TerminalDisclosure></TerminalPanel>;",
+            "}",
+        ]),
+    )
+
+    assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_does_not_apply_admin_notifications_retired_rules_to_non_target_pages():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/SettingsPage.tsx",
+        "\n".join([
+            "import { Badge, Button, Disclosure, GlassCard } from '../components/common';",
+            "export default function Page() {",
+            "  return <GlassCard><Badge variant='info'>说明</Badge><Button>保存</Button><Disclosure summary='高级选项'>内容</Disclosure><details><summary>更多</summary></details></GlassCard>;",
+            "}",
+        ]),
+    )
+
+    assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
 def test_flags_admin_users_retired_terminal_surface_regression():
     guard = load_guard_module()
 
