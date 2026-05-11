@@ -319,6 +319,11 @@ const pricingPoliciesPayload = {
   },
 };
 
+async function openCostSecondaryDisclosure() {
+  const toggle = await screen.findByRole('button', { name: '展开 二级细节：窗口筛选、账本、价格、Provider / 缓存' });
+  fireEvent.click(toggle);
+}
+
 describe('AdminCostObservabilityPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -345,6 +350,7 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('只读')).toBeInTheDocument();
     expect(screen.getByText('外部调用关闭')).toBeInTheDocument();
     expect(screen.getAllByText('观测值非账单').length).toBeGreaterThan(0);
+    await openCostSecondaryDisclosure();
     expect(screen.getAllByText('LLM 调用').length).toBeGreaterThan(0);
     expect(screen.getByText('数据源状态 / 备用链路')).toBeInTheDocument();
     expect(screen.getByText('市场缓存命中 / 过期 / 缺失')).toBeInTheDocument();
@@ -357,11 +363,28 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('模型价格策略')).toBeInTheDocument();
   });
 
+  it('uses terminal operator primitives for the cost observability surface', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+
+    render(<AdminCostObservabilityPage />);
+
+    const page = screen.getByTestId('admin-cost-observability-page');
+    expect(await screen.findByRole('heading', { name: '成本观测' })).toBeInTheDocument();
+    await openCostSecondaryDisclosure();
+    expect(page.querySelector('[data-terminal-primitive="page-shell"]')).not.toBeNull();
+    expect(page.querySelectorAll('[data-terminal-primitive="panel"]').length).toBeGreaterThan(4);
+    expect(page.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThan(4);
+    expect(page.querySelectorAll('[data-terminal-primitive="notice"]').length).toBeGreaterThan(1);
+    expect(page.querySelectorAll('[data-terminal-primitive="disclosure"]').length).toBeGreaterThanOrEqual(3);
+    expect(page.querySelectorAll('[data-terminal-primitive="nested-block"]').length).toBeGreaterThan(8);
+  });
+
   it('keeps developer details collapsed and does not render secret-like strings in the DOM', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
     render(<AdminCostObservabilityPage />);
 
+    await openCostSecondaryDisclosure();
     expect(await screen.findByText('开发者 / 响应形状')).toBeInTheDocument();
     expect(screen.queryByText('SHOULD_NOT_RENDER')).not.toBeInTheDocument();
     expect(screen.queryByText('SHOULD_NOT_RENDER_PAYLOAD')).not.toBeInTheDocument();
@@ -424,7 +447,8 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
-    expect(await screen.findByText('计数器尚未接入或当前窗口暂无事件')).toBeInTheDocument();
+    expect((await screen.findAllByText('计数器尚未接入或当前窗口暂无事件')).length).toBeGreaterThan(0);
+    await openCostSecondaryDisclosure();
     expect(screen.getByText('LLM 用量账务摘要不可用')).toBeInTheDocument();
   });
 
@@ -444,7 +468,7 @@ describe('AdminCostObservabilityPage', () => {
     render(<AdminCostObservabilityPage />);
     await screen.findByRole('heading', { name: '成本观测' });
 
-    fireEvent.click(screen.getByText('二级细节：窗口筛选、账本、价格、数据源 / 缓存'));
+    await openCostSecondaryDisclosure();
 
     fireEvent.change(screen.getByLabelText('窗口'), { target: { value: '7d' } });
     fireEvent.change(screen.getByLabelText('粒度'), { target: { value: 'day' } });
@@ -473,6 +497,7 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
+    await openCostSecondaryDisclosure();
     expect(await screen.findByText('配额试运行诊断')).toBeInTheDocument();
     await waitFor(() => expect(runQuotaDryRun).toHaveBeenCalled());
     expect(screen.getByText('17')).toBeInTheDocument();
@@ -490,6 +515,7 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
+    await openCostSecondaryDisclosure();
     expect(await screen.findByTestId('llm-ledger-panel')).toBeInTheDocument();
     await waitFor(() => expect(getLlmLedgerSummary).toHaveBeenCalledWith({ window: '24h', bucket: 'hour', limit: 50 }));
     expect(screen.getByText('总用量')).toBeInTheDocument();
@@ -530,6 +556,7 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
+    await openCostSecondaryDisclosure();
     expect(await screen.findByText('当前窗口暂无 AI 调用账本记录')).toBeInTheDocument();
     expect(screen.getByText('暂无用户成本记录')).toBeInTheDocument();
     expect(screen.getByText('暂无模型成本记录')).toBeInTheDocument();
@@ -541,6 +568,7 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
+    await openCostSecondaryDisclosure();
     const panel = await screen.findByTestId('model-pricing-policy-panel');
     expect(getModelPricingPolicies).toHaveBeenCalledTimes(1);
     expect(within(panel).getByText('模型价格策略')).toBeInTheDocument();
@@ -566,6 +594,7 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
+    await openCostSecondaryDisclosure();
     expect(await screen.findByText('暂无模型价格策略')).toBeInTheDocument();
   });
 
@@ -645,6 +674,7 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
+    await openCostSecondaryDisclosure();
     expect(await screen.findByText('读取 AI 调用账本失败')).toBeInTheDocument();
     expect(screen.getByText('当前账号没有成本观测权限。')).toBeInTheDocument();
     expect(screen.getByText('配额试运行诊断')).toBeInTheDocument();
@@ -664,6 +694,7 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
+    await openCostSecondaryDisclosure();
     expect(await screen.findByText('读取模型价格策略失败')).toBeInTheDocument();
     expect(screen.getByText('当前账号没有成本观测权限。')).toBeInTheDocument();
     expect(screen.queryByText(/token=secret/)).not.toBeInTheDocument();
@@ -674,6 +705,7 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
+    await openCostSecondaryDisclosure();
     await waitFor(() => expect(screen.getAllByText('读取模型价格策略失败').length).toBeGreaterThan(0));
     expect(screen.getByText('服务器暂时不可用，请稍后重试。')).toBeInTheDocument();
     expect(screen.queryByText('apiKey=secret')).not.toBeInTheDocument();
@@ -684,8 +716,9 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
+    await openCostSecondaryDisclosure();
     expect(await screen.findByText('开发者 / Quota 响应形状')).toBeInTheDocument();
-    expect(screen.getByText('diagnosticOnly')).not.toBeVisible();
+    expect(screen.queryByText('diagnosticOnly')).not.toBeInTheDocument();
   });
 
   it('keeps LLM ledger developer details collapsed by default', async () => {
@@ -693,9 +726,10 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
+    await openCostSecondaryDisclosure();
     const panel = await screen.findByTestId('llm-ledger-panel');
     await waitFor(() => expect(within(panel).getByText('开发者 / LLM 账本响应形状')).toBeInTheDocument());
-    expect(within(panel).getByText('liveEnforcement')).not.toBeVisible();
+    expect(within(panel).queryByText('liveEnforcement')).not.toBeInTheDocument();
   });
 
   it('keeps pricing policy developer details collapsed by default', async () => {
@@ -703,9 +737,10 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
+    await openCostSecondaryDisclosure();
     const panel = await screen.findByTestId('model-pricing-policy-panel');
     await waitFor(() => expect(within(panel).getByText('开发者 / 价格策略响应形状')).toBeInTheDocument());
-    expect(within(panel).getByText('manualMaintenance')).not.toBeVisible();
+    expect(within(panel).queryByText('manualMaintenance')).not.toBeInTheDocument();
   });
 
   it('keeps the cost page within the viewport width in jsdom layout checks', async () => {
@@ -715,6 +750,7 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
+    await openCostSecondaryDisclosure();
     expect(await screen.findByTestId('llm-ledger-panel')).toBeInTheDocument();
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
   });

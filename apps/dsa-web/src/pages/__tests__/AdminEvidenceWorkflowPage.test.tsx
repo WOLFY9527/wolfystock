@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AdminEvidenceWorkflowPage from '../AdminEvidenceWorkflowPage';
 
@@ -53,6 +53,10 @@ const runbookReferences = [
   ['CLI 合约 / 预检', 'docs/audits/operator-evidence-workflow-runner-guide.md', '离线 runner'],
 ];
 
+function openEvidenceDisclosure(title: string) {
+  fireEvent.click(screen.getByRole('button', { name: `展开 ${title}` }));
+}
+
 describe('AdminEvidenceWorkflowPage', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -73,7 +77,7 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(within(statusGrid).getByText('NO-GO when evidence missing')).toBeInTheDocument();
     expect(within(statusGrid).getByText('manual review required')).toBeInTheDocument();
     expect(within(statusGrid).getByText('releaseApproved=false')).toBeInTheDocument();
-    expect(within(page).getByText('缺少证据时保持 NO-GO')).toBeInTheDocument();
+    expect(page).toHaveTextContent('缺证据时保持 NO-GO');
   });
 
   it('renders the diagnostics console and dry-run preview before the offline workflow reference blocks', () => {
@@ -127,12 +131,11 @@ describe('AdminEvidenceWorkflowPage', () => {
 
     render(<AdminEvidenceWorkflowPage />);
 
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(document.querySelector('form')).not.toBeInTheDocument();
     expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
-    expect(document.querySelector('input, textarea, select, button, form, [contenteditable="true"]')).not.toBeInTheDocument();
+    expect(document.querySelector('input, textarea, select, form, [contenteditable="true"]')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/upload|上传|file|文件/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
@@ -142,6 +145,7 @@ describe('AdminEvidenceWorkflowPage', () => {
   it('renders static local runbook reference cards for the operator workflow', () => {
     render(<AdminEvidenceWorkflowPage />);
 
+    openEvidenceDisclosure('二级细节：Runbook 参考');
     const runbookPanel = screen.getByTestId('admin-evidence-runbook-references');
     expect(within(runbookPanel).getByRole('heading', { name: '操作员工作流参考' })).toBeInTheDocument();
     expect(within(runbookPanel).getByText('静态标签')).toBeInTheDocument();
@@ -161,6 +165,7 @@ describe('AdminEvidenceWorkflowPage', () => {
 
     render(<AdminEvidenceWorkflowPage />);
 
+    openEvidenceDisclosure('二级细节：Runbook 参考');
     const runbookPanel = screen.getByTestId('admin-evidence-runbook-references');
     expect(within(runbookPanel).queryByRole('button')).not.toBeInTheDocument();
     expect(within(runbookPanel).queryByRole('link')).not.toBeInTheDocument();
@@ -173,6 +178,7 @@ describe('AdminEvidenceWorkflowPage', () => {
   it('renders a static schema reference panel for all offline evidence categories', () => {
     render(<AdminEvidenceWorkflowPage />);
 
+    openEvidenceDisclosure('二级细节：Schema 与字段参考');
     const referencePanel = screen.getByTestId('admin-evidence-schema-reference');
     expect(within(referencePanel).getByRole('heading', { name: '离线证据数据结构参考' })).toBeInTheDocument();
     expect(within(referencePanel).getByText('人工复核必需')).toBeInTheDocument();
@@ -194,8 +200,9 @@ describe('AdminEvidenceWorkflowPage', () => {
 
     render(<AdminEvidenceWorkflowPage />);
 
+    openEvidenceDisclosure('二级细节：Schema 与字段参考');
     const referencePanel = screen.getByTestId('admin-evidence-schema-reference');
-    expect(within(referencePanel).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(referencePanel).queryByRole('button', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
     expect(within(referencePanel).queryByRole('link')).not.toBeInTheDocument();
     expect(within(referencePanel).queryByRole('textbox')).not.toBeInTheDocument();
     expect(referencePanel.querySelector('input, textarea, select, form, [contenteditable="true"]')).not.toBeInTheDocument();
@@ -206,6 +213,7 @@ describe('AdminEvidenceWorkflowPage', () => {
   it('renders static copy-safe offline command snippets without secrets or real paths', () => {
     render(<AdminEvidenceWorkflowPage />);
 
+    openEvidenceDisclosure('二级细节：离线命令与空状态说明');
     const commandPanel = screen.getByTestId('admin-evidence-command-snippets');
     const commandText = commandPanel.textContent || '';
 
@@ -221,6 +229,7 @@ describe('AdminEvidenceWorkflowPage', () => {
   it('keeps command snippets and raw details keyboard-focusable without adding write controls', () => {
     render(<AdminEvidenceWorkflowPage />);
 
+    openEvidenceDisclosure('二级细节：离线命令与空状态说明');
     const commandSnippets = screen.getAllByRole('group', { name: /可复制命令/ });
     expect(commandSnippets).toHaveLength(3);
     commandSnippets.forEach((snippet) => {
@@ -231,11 +240,10 @@ describe('AdminEvidenceWorkflowPage', () => {
     });
 
     const disclosure = screen.getByTestId('admin-evidence-raw-disclosure');
-    const summary = within(disclosure).getByText('原始 / 数据结构 / 数据源 / 调试字段').closest('summary');
-    expect(summary).not.toBeNull();
-    summary?.focus();
-    expect(summary).toHaveFocus();
-    expect(summary).toHaveClass('focus-visible:ring-2');
+    const toggle = within(disclosure).getByRole('button', { name: '展开 原始 / 数据结构 / 数据源 / 调试字段' });
+    toggle.focus();
+    expect(toggle).toHaveFocus();
+    expect(toggle).toHaveClass('rounded-lg');
   });
 
   it('keeps review status language constrained to manual and missing-evidence states', () => {
@@ -263,21 +271,29 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(disclosure).not.toHaveAttribute('open');
     expect(within(disclosure).getByText('原始 / 数据结构 / 数据源 / 调试字段')).toBeInTheDocument();
 
+    openEvidenceDisclosure('二级细节：Schema 与字段参考');
     const schemaNotes = screen.getByTestId('admin-evidence-schema-notes');
     expect(schemaNotes).not.toHaveAttribute('open');
     expect(within(schemaNotes).getByText('字段细节与脱敏规则')).toBeInTheDocument();
   });
 
-  it('uses responsive ghost-glass layout classes for desktop and narrow screens', () => {
+  it('uses terminal operator primitives and responsive grid layouts', () => {
     render(<AdminEvidenceWorkflowPage />);
 
+    openEvidenceDisclosure('二级细节：Runbook 参考');
+    openEvidenceDisclosure('二级细节：离线命令与空状态说明');
     const page = screen.getByTestId('admin-evidence-workflow-page');
     const workflowGrid = screen.getByTestId('admin-evidence-workflow-grid');
     const statusGrid = screen.getByTestId('admin-evidence-status-grid');
-    const commandGrid = screen.getByTestId('admin-evidence-command-snippets');
+    const commandGrid = screen.getByTestId('admin-evidence-command-snippets').querySelector('.grid');
     const runbookGrid = screen.getByTestId('admin-evidence-runbook-references').querySelector('.grid');
 
     expect(page).toHaveClass('overflow-y-auto', 'overflow-x-hidden', 'no-scrollbar', 'bg-[#050505]');
+    expect(page.querySelector('[data-terminal-primitive="page-shell"]')).not.toBeNull();
+    expect(page.querySelectorAll('[data-terminal-primitive="panel"]').length).toBeGreaterThan(5);
+    expect(page.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThan(5);
+    expect(page.querySelectorAll('[data-terminal-primitive="disclosure"]').length).toBeGreaterThan(3);
+    expect(page.querySelectorAll('[data-terminal-primitive="nested-block"]').length).toBeGreaterThan(10);
     expect(workflowGrid).toHaveClass('grid-cols-1', 'xl:grid-cols-6');
     expect(statusGrid).toHaveClass('grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-4');
     expect(commandGrid).toHaveClass('grid-cols-1', 'xl:grid-cols-3');

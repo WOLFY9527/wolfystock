@@ -19,7 +19,21 @@ import {
   type QuotaEnforcementMode,
 } from '../api/adminCost';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Badge, Disclosure, GlassCard, Select } from '../components/common';
+import { ApiErrorAlert, Select } from '../components/common';
+import {
+  TerminalButton,
+  TerminalChip,
+  TerminalDenseList,
+  TerminalDisclosure,
+  TerminalEmptyState,
+  TerminalMetric,
+  TerminalNestedBlock,
+  TerminalNotice,
+  TerminalPageHeading,
+  TerminalPageShell,
+  TerminalPanel,
+  TerminalSectionHeader,
+} from '../components/terminal';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
 import { formatDateTime, formatNumber, formatPercent } from '../utils/format';
@@ -90,6 +104,7 @@ const ENFORCEMENT_OPTIONS: Array<{ value: QuotaEnforcementMode; label: string }>
   { value: 'dry_run', label: '试运行' },
   { value: 'enabled', label: '启用策略模拟' },
 ];
+
 const UNSAFE_VISIBLE_TEXT_PATTERN = /(https?:\/\/|www\.|\?|=|token|secret|cookie|session|password|bearer|apikey|api_key|stack|trace|payload|prompt|credential)/i;
 
 function formatDate(value?: string | null): string {
@@ -176,8 +191,8 @@ function sanitizedQuotaError(error: unknown): ParsedApiError {
     message: parsed.status === 403
       ? '当前账号没有成本观测权限。'
       : parsed.isTimeoutError
-      ? '配额诊断请求超时，请稍后重试。'
-      : parsed.message || '配额诊断暂不可用。',
+        ? '配额诊断请求超时，请稍后重试。'
+        : parsed.message || '配额诊断暂不可用。',
     rawMessage: '',
     details: undefined,
   };
@@ -191,8 +206,8 @@ function sanitizedLedgerError(error: unknown): ParsedApiError {
     message: parsed.status === 403
       ? '当前账号没有成本观测权限。'
       : parsed.isTimeoutError
-      ? 'AI 调用账本请求超时，请稍后重试。'
-      : parsed.message || 'AI 调用账本暂不可用。',
+        ? 'AI 调用账本请求超时，请稍后重试。'
+        : parsed.message || 'AI 调用账本暂不可用。',
     rawMessage: '',
     details: undefined,
   };
@@ -206,8 +221,8 @@ function sanitizedPricingPolicyError(error: unknown): ParsedApiError {
     message: parsed.status === 403
       ? '当前账号没有成本观测权限。'
       : parsed.isTimeoutError
-      ? '模型价格策略请求超时，请稍后重试。'
-      : parsed.message || '模型价格策略暂不可用。',
+        ? '模型价格策略请求超时，请稍后重试。'
+        : parsed.message || '模型价格策略暂不可用。',
     rawMessage: '',
     details: undefined,
   };
@@ -247,40 +262,33 @@ function safeVisibleText(value?: string | null): string {
   return UNSAFE_VISIBLE_TEXT_PATTERN.test(text) ? '已脱敏' : text.slice(0, 96);
 }
 
+function metricValueClass(tone: 'neutral' | 'info' | 'good' | 'warn' = 'neutral'): string {
+  if (tone === 'info') return 'text-lg font-semibold text-cyan-100';
+  if (tone === 'good') return 'text-lg font-semibold text-emerald-200';
+  if (tone === 'warn') return 'text-lg font-semibold text-amber-100';
+  return 'text-lg font-semibold text-white';
+}
+
+function iconTitle(icon: React.ReactNode, title: string) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span className="text-cyan-200">{icon}</span>
+      <span>{title}</span>
+    </span>
+  );
+}
+
 const ReadOnlyBadges: React.FC<{ data?: AdminCostSummaryResponse | null }> = ({ data }) => {
   const metadata = data?.metadata;
   return (
     <div className="flex flex-wrap gap-2">
-      <Badge variant="info" className="border-cyan-300/25 bg-cyan-400/10 text-cyan-100">
+      <TerminalChip variant="info">
         {metadata?.readOnly === false ? '只读未确认' : '只读'}
-      </Badge>
-      <Badge variant="success" className="border-emerald-300/25 bg-emerald-400/10 text-emerald-100">
+      </TerminalChip>
+      <TerminalChip variant="success">
         {metadata?.noExternalCalls === false ? '外部调用未确认' : '外部调用关闭'}
-      </Badge>
-      <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">
-        {exactnessLabel(metadata?.exactness)}
-      </Badge>
-    </div>
-  );
-};
-
-const SummaryTile: React.FC<{
-  label: string;
-  value: React.ReactNode;
-  note?: React.ReactNode;
-  tone?: 'neutral' | 'info' | 'good' | 'warn';
-}> = ({ label, value, note, tone = 'neutral' }) => {
-  const toneClass = {
-    neutral: 'text-white',
-    info: 'text-cyan-200',
-    good: 'text-emerald-300',
-    warn: 'text-amber-200',
-  }[tone];
-  return (
-    <div className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
-      <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">{label}</p>
-      <p className={cn('mt-2 text-lg font-semibold leading-tight', toneClass)}>{value}</p>
-      {note ? <p className="mt-1 text-xs leading-5 text-white/42">{note}</p> : null}
+      </TerminalChip>
+      <TerminalChip variant="neutral">{exactnessLabel(metadata?.exactness)}</TerminalChip>
     </div>
   );
 };
@@ -289,14 +297,12 @@ const FilterRail: React.FC<{
   filters: Required<AdminCostSummaryParams>;
   onChange: (filters: Required<AdminCostSummaryParams>) => void;
 }> = ({ filters, onChange }) => (
-  <GlassCard as="aside" className="p-4 md:p-5">
-    <div className="flex items-start gap-3">
-      <ShieldCheck className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Filters</p>
-        <h2 className="mt-1 text-base font-semibold text-white">安全过滤</h2>
-      </div>
-    </div>
+  <TerminalPanel as="aside">
+    <TerminalSectionHeader
+      eyebrow="Filters"
+      title={iconTitle(<ShieldCheck className="h-4 w-4" />, '安全过滤')}
+      action={<TerminalChip variant="neutral">只读筛选</TerminalChip>}
+    />
     <div className="mt-5 grid gap-4">
       <Select
         label="窗口"
@@ -327,10 +333,10 @@ const FilterRail: React.FC<{
         onChange={(limit) => onChange({ ...filters, limit: Number(limit) })}
       />
     </div>
-    <p className="mt-4 rounded-xl border border-cyan-300/10 bg-cyan-400/8 px-3 py-2 text-[11px] leading-5 text-cyan-100/72">
+    <TerminalNotice variant="info" className="mt-4">
       仅使用窗口、粒度、区域和数量上限；不会按用户、凭证、地址或原始供应商内容搜索。
-    </p>
-  </GlassCard>
+    </TerminalNotice>
+  </TerminalPanel>
 );
 
 const RollupList: React.FC<{
@@ -338,105 +344,86 @@ const RollupList: React.FC<{
   empty: string;
 }> = ({ items, empty }) => {
   if (items.length === 0) {
-    return <p className="rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/45">{empty}</p>;
+    return <TerminalEmptyState title={empty} />;
   }
   return (
-    <div className="grid gap-3">
+    <TerminalDenseList>
       {items.slice(0, 6).map((item) => (
-        <article key={`${item.group}-${item.count}`} className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3.5">
-          <div className="flex items-start justify-between gap-3">
-            <p className="min-w-0 truncate font-mono text-sm font-semibold text-white">{item.group}</p>
-            <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">{compactNumber(item.count)}</Badge>
-          </div>
-          <p className="mt-2 truncate text-[11px] text-white/42">{safeDimensionText(item.dimensions)}</p>
+        <article key={`${item.group}-${item.count}`} className="min-w-0">
+          <TerminalNestedBlock className="min-w-0">
+            <div className="flex items-start justify-between gap-3">
+              <p className="min-w-0 truncate font-mono text-sm font-semibold text-white">{item.group}</p>
+              <TerminalChip variant="neutral">{compactNumber(item.count)}</TerminalChip>
+            </div>
+            <p className="mt-2 truncate text-[11px] text-white/42">{safeDimensionText(item.dimensions)}</p>
+          </TerminalNestedBlock>
         </article>
       ))}
-    </div>
+    </TerminalDenseList>
   );
 };
 
 const CacheEfficiencyList: React.FC<{ items: AdminCostCacheEfficiency[] }> = ({ items }) => {
   if (items.length === 0) {
-    return <p className="rounded-2xl border border-white/5 bg-black/20 px-4 py-5 text-sm text-white/45">暂无数据源缓存计数</p>;
+    return <TerminalEmptyState title="暂无数据源缓存计数" />;
   }
   return (
-    <div className="grid gap-3">
+    <TerminalDenseList>
       {items.slice(0, 6).map((item) => (
-        <article key={item.group} className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3.5">
-          <div className="flex items-start justify-between gap-3">
-            <p className="min-w-0 truncate font-mono text-sm font-semibold text-white">{item.group}</p>
-            <Badge variant="success" className="border-emerald-300/20 bg-emerald-400/10 text-emerald-100">{percent(item.hitRate)}</Badge>
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-white/44">
-            <span>Hit <b className="font-mono text-white/70">{compactNumber(item.hits)}</b></span>
-            <span>Miss <b className="font-mono text-white/70">{compactNumber(item.misses)}</b></span>
-            <span>Join <b className="font-mono text-white/70">{compactNumber(item.inflightJoins)}</b></span>
-          </div>
+        <article key={item.group} className="min-w-0">
+          <TerminalNestedBlock className="min-w-0">
+            <div className="flex items-start justify-between gap-3">
+              <p className="min-w-0 truncate font-mono text-sm font-semibold text-white">{item.group}</p>
+              <TerminalChip variant="success">{percent(item.hitRate)}</TerminalChip>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-white/44">
+              <span>Hit <b className="font-mono text-white/70">{compactNumber(item.hits)}</b></span>
+              <span>Miss <b className="font-mono text-white/70">{compactNumber(item.misses)}</b></span>
+              <span>Join <b className="font-mono text-white/70">{compactNumber(item.inflightJoins)}</b></span>
+            </div>
+          </TerminalNestedBlock>
         </article>
       ))}
-    </div>
+    </TerminalDenseList>
   );
 };
 
-const SectionCard: React.FC<{
-  icon: React.ReactNode;
-  eyebrow: string;
-  title: string;
-  children: React.ReactNode;
-}> = ({ icon, eyebrow, title, children }) => (
-  <GlassCard as="section" className="p-4 md:p-5">
-    <div className="mb-4 flex items-start gap-3">
-      <span className="mt-1 text-cyan-200">{icon}</span>
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">{eyebrow}</p>
-        <h2 className="mt-1 text-base font-semibold text-white">{title}</h2>
-      </div>
-    </div>
-    {children}
-  </GlassCard>
-);
-
 const LimitationsPanel: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }) => (
-  <GlassCard as="section" className="p-4 md:p-5">
-    <div className="flex items-start gap-3">
-      <AlertTriangle className="mt-1 h-4 w-4 text-amber-200" aria-hidden="true" />
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Limitations</p>
-        <h2 className="mt-1 text-base font-semibold text-white">限制与数据质量</h2>
-      </div>
-    </div>
+  <TerminalPanel as="section">
+    <TerminalSectionHeader
+      eyebrow="Limitations"
+      title={iconTitle(<AlertTriangle className="h-4 w-4" />, '限制与数据质量')}
+      action={(
+        <TerminalChip variant={data.limitations.length ? 'caution' : 'neutral'}>
+          {data.limitations.length ? `${data.limitations.length} 条限制` : '暂无限制'}
+        </TerminalChip>
+      )}
+    />
     <div className="mt-4 grid gap-2">
       {data.limitations.length === 0 ? (
-        <p className="rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/45">暂无限制项</p>
+        <TerminalEmptyState title="暂无限制项" />
       ) : data.limitations.map((item) => (
-        <div key={item.code} className="rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
+        <TerminalNotice key={item.code} variant={item.severity === 'warning' ? 'caution' : 'info'}>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge
-              variant={item.severity === 'warning' ? 'warning' : 'info'}
-              className={item.severity === 'warning' ? 'border-amber-300/25 bg-amber-400/10 text-amber-100' : 'border-cyan-300/20 bg-cyan-400/8 text-cyan-100'}
-            >
+            <TerminalChip variant={item.severity === 'warning' ? 'caution' : 'info'}>
               {limitationLabel(item.code)}
-            </Badge>
+            </TerminalChip>
             <span className="text-xs text-white/58">{item.severity === 'warning' ? '需关注' : '信息'}</span>
           </div>
-          <p className="mt-2 text-xs leading-5 text-white/50">
+          <p className="mt-2">
             {safeVisibleText(item.message) === '已脱敏' ? limitationLabel(item.code) : safeVisibleText(item.message)}
           </p>
-        </div>
+        </TerminalNotice>
       ))}
     </div>
-    <p className="mt-4 text-xs leading-5 text-white/42">
+    <TerminalNotice variant="neutral" className="mt-4">
       这些计数器是观测信号，不是精确账单；重复候选只提示重复模式，不能单独证明可避免浪费。
-    </p>
-  </GlassCard>
+    </TerminalNotice>
+  </TerminalPanel>
 );
 
 const DeveloperDetails: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }) => (
-  <Disclosure
-    summary="开发者 / 响应形状"
-    className="mt-4"
-    bodyClassName="rounded-2xl border border-white/5 bg-black/20 p-4"
-  >
+  <TerminalDisclosure title="开发者 / 响应形状" summary="默认折叠" className="mt-4">
     <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
       <div className="min-w-0">
         <dt className="text-white/32">countersSource</dt>
@@ -455,7 +442,7 @@ const DeveloperDetails: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }
         <dd className="break-words font-mono text-white/64">{data.metadata.redaction.join(', ') || '--'}</dd>
       </div>
     </dl>
-  </Disclosure>
+  </TerminalDisclosure>
 );
 
 function ledgerQueryFromFilters(filters: Required<AdminCostSummaryParams>) {
@@ -498,23 +485,25 @@ const LedgerRollupList: React.FC<{
   labelFor: (item: LlmLedgerSummaryRollup) => string;
 }> = ({ items, empty, labelFor }) => {
   if (items.length === 0) {
-    return <p className="rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/45">{empty}</p>;
+    return <TerminalEmptyState title={empty} />;
   }
   return (
-    <div className="grid gap-2">
+    <TerminalDenseList>
       {items.slice(0, 5).map((item) => (
-        <article key={`${item.group}-${item.totalTokens}-${item.totalCostUsd}`} className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-3.5 py-3">
-          <div className="flex items-start justify-between gap-3">
-            <p className="min-w-0 truncate font-mono text-sm font-semibold text-white">{labelFor(item)}</p>
-            <span className="shrink-0 font-mono text-sm text-cyan-100">{moneyUsd(item.totalCostUsd)}</span>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/42">
-            <span>用量 <b className="font-mono text-white/68">{compactNumber(item.totalTokens)}</b></span>
-            <span>请求 <b className="font-mono text-white/68">{compactNumber(item.requestCount ?? item.ledgerCount ?? item.calls)}</b></span>
-          </div>
+        <article key={`${item.group}-${item.totalTokens}-${item.totalCostUsd}`} className="min-w-0">
+          <TerminalNestedBlock className="min-w-0">
+            <div className="flex items-start justify-between gap-3">
+              <p className="min-w-0 truncate font-mono text-sm font-semibold text-white">{labelFor(item)}</p>
+              <TerminalChip variant="info">{moneyUsd(item.totalCostUsd)}</TerminalChip>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/42">
+              <span>用量 <b className="font-mono text-white/68">{compactNumber(item.totalTokens)}</b></span>
+              <span>请求 <b className="font-mono text-white/68">{compactNumber(item.requestCount ?? item.ledgerCount ?? item.calls)}</b></span>
+            </div>
+          </TerminalNestedBlock>
         </article>
       ))}
-    </div>
+    </TerminalDenseList>
   );
 };
 
@@ -549,57 +538,38 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
   const pricingInactive = data ? pricingCount(data, 'pricing_inactive') : null;
 
   return (
-    <GlassCard as="section" className="p-4 md:p-5" data-testid="llm-ledger-panel">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <Coins className="mt-1 h-4 w-4 shrink-0 text-cyan-200" aria-hidden="true" />
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">AI 调用账本</p>
-            <h2 className="mt-1 text-lg font-semibold text-white">AI 调用账本</h2>
-          </div>
-        </div>
-        <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">
-          估算值，不等同于供应商账单
-        </Badge>
-      </div>
+    <TerminalPanel as="section" data-testid="llm-ledger-panel">
+      <TerminalSectionHeader
+        eyebrow="AI 调用账本"
+        title={iconTitle(<Coins className="h-4 w-4" />, 'AI 调用账本')}
+        action={<TerminalChip variant="neutral">估算值，不等同于供应商账单</TerminalChip>}
+      />
 
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryTile label="当前窗口" value={data?.window.key || ledgerQueryFromFilters(filters).window} tone="info" />
-        <SummaryTile label="总用量" value={compactNumber(data?.total.totalTokens)} tone="info" />
-        <SummaryTile label="估算成本" value={moneyUsd(data?.total.totalCostUsd)} tone="warn" />
-        <SummaryTile label="请求数" value={compactNumber(data ? ledgerCount(data) : undefined)} />
+        <TerminalMetric label="当前窗口" value={data?.window.key || ledgerQueryFromFilters(filters).window} valueClassName="text-sm font-semibold text-cyan-100" />
+        <TerminalMetric label="总用量" value={compactNumber(data?.total.totalTokens)} valueClassName="text-lg font-semibold text-cyan-100" />
+        <TerminalMetric label="估算成本" value={moneyUsd(data?.total.totalCostUsd)} valueClassName="text-lg font-semibold text-amber-100" />
+        <TerminalMetric label="请求数" value={compactNumber(data ? ledgerCount(data) : undefined)} valueClassName="text-lg font-semibold text-white" />
       </div>
 
       {data ? (
-        <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-white/44">
-          <span className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-2">输入 <b className="font-mono text-white/68">{compactNumber(data.total.promptTokens ?? data.total.inputTokens)}</b></span>
-          <span className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-2">缓存输入 <b className="font-mono text-white/68">{compactNumber(data.total.cachedInputTokens)}</b></span>
-          <span className="min-w-0 rounded-xl border border-white/5 bg-black/20 px-3 py-2">输出 <b className="font-mono text-white/68">{compactNumber(data.total.completionTokens ?? data.total.outputTokens)}</b></span>
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <TerminalMetric label="输入" value={compactNumber(data.total.promptTokens ?? data.total.inputTokens)} valueClassName="text-sm font-semibold text-white" />
+          <TerminalMetric label="缓存输入" value={compactNumber(data.total.cachedInputTokens)} valueClassName="text-sm font-semibold text-white" />
+          <TerminalMetric label="输出" value={compactNumber(data.total.completionTokens ?? data.total.outputTokens)} valueClassName="text-sm font-semibold text-white" />
         </div>
       ) : null}
 
-      {state.loading ? (
-        <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/50">正在读取 AI 调用账本</p>
-      ) : null}
+      {state.loading ? <TerminalNotice variant="neutral" className="mt-4">正在读取 AI 调用账本</TerminalNotice> : null}
       {state.error ? <div className="mt-4"><ApiErrorAlert error={state.error} /></div> : null}
-      {empty ? (
-        <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/45">当前窗口暂无 AI 调用账本记录</p>
-      ) : null}
+      {empty ? <div className="mt-4"><TerminalEmptyState title="当前窗口暂无 AI 调用账本记录" /></div> : null}
 
       {data ? (
         <>
           {pricingUnknown != null || pricingInactive != null ? (
             <div className="mt-4 flex flex-wrap gap-2">
-              {pricingUnknown != null ? (
-                <Badge variant="warning" className="border-amber-300/25 bg-amber-400/10 text-amber-100">
-                  价格未知 {compactNumber(pricingUnknown)}
-                </Badge>
-              ) : null}
-              {pricingInactive != null ? (
-                <Badge variant="warning" className="border-amber-300/25 bg-amber-400/10 text-amber-100">
-                  价格未激活 {compactNumber(pricingInactive)}
-                </Badge>
-              ) : null}
+              {pricingUnknown != null ? <TerminalChip variant="caution">价格未知 {compactNumber(pricingUnknown)}</TerminalChip> : null}
+              {pricingInactive != null ? <TerminalChip variant="caution">价格未激活 {compactNumber(pricingInactive)}</TerminalChip> : null}
             </div>
           ) : null}
           <div className="mt-4 grid grid-cols-1 gap-4 2xl:grid-cols-3">
@@ -628,11 +598,7 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
               />
             </section>
           </div>
-          <Disclosure
-            summary="开发者 / LLM 账本响应形状"
-            className="mt-4"
-            bodyClassName="rounded-2xl border border-white/5 bg-black/20 p-4"
-          >
+          <TerminalDisclosure title="开发者 / LLM 账本响应形状" summary="默认折叠" className="mt-4">
             <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
               <div className="min-w-0">
                 <dt className="text-white/32">readOnly</dt>
@@ -651,10 +617,10 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
                 <dd className="break-words font-mono text-white/64">{data.metadata.redaction.join(', ') || '--'}</dd>
               </div>
             </dl>
-          </Disclosure>
+          </TerminalDisclosure>
         </>
       ) : null}
-    </GlassCard>
+    </TerminalPanel>
   );
 };
 
@@ -686,35 +652,26 @@ const PricingPolicyPanel: React.FC = () => {
   const policies = state.data?.policies || [];
 
   return (
-    <GlassCard as="section" className="p-4 md:p-5" data-testid="model-pricing-policy-panel">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <Tags className="mt-1 h-4 w-4 shrink-0 text-cyan-200" aria-hidden="true" />
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Pricing Policies</p>
-            <h2 className="mt-1 text-lg font-semibold text-white">模型价格策略</h2>
+    <TerminalPanel as="section" data-testid="model-pricing-policy-panel">
+      <TerminalSectionHeader
+        eyebrow="Pricing Policies"
+        title={iconTitle(<Tags className="h-4 w-4" />, '模型价格策略')}
+        action={(
+          <div className="flex flex-wrap gap-2">
+            <TerminalChip variant="info">激活 {compactNumber(state.data?.activeCount)}</TerminalChip>
+            <TerminalChip variant="neutral">手动维护</TerminalChip>
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="info" className="border-cyan-300/20 bg-cyan-400/8 text-cyan-100">
-            激活 {compactNumber(state.data?.activeCount)}
-          </Badge>
-          <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">
-            手动维护
-          </Badge>
-        </div>
-      </div>
+        )}
+      />
 
-      <p className="mt-4 rounded-2xl border border-amber-300/16 bg-amber-400/8 px-4 py-3 text-xs leading-5 text-amber-100/86">
+      <TerminalNotice variant="caution" className="mt-4">
         价格由本地策略维护，需定期按供应商官网更新；估算值不等同于供应商账单。
-      </p>
+      </TerminalNotice>
 
-      {state.loading ? (
-        <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/50">正在读取模型价格策略</p>
-      ) : null}
+      {state.loading ? <TerminalNotice variant="neutral" className="mt-4">正在读取模型价格策略</TerminalNotice> : null}
       {state.error ? <div className="mt-4"><ApiErrorAlert error={state.error} /></div> : null}
       {!state.loading && !state.error && policies.length === 0 ? (
-        <p className="mt-4 rounded-2xl border border-white/5 bg-black/20 px-4 py-4 text-sm text-white/45">暂无模型价格策略</p>
+        <div className="mt-4"><TerminalEmptyState title="暂无模型价格策略" /></div>
       ) : null}
 
       {policies.length > 0 ? (
@@ -722,64 +679,50 @@ const PricingPolicyPanel: React.FC = () => {
           {policies.map((policy) => (
             <article
               key={`${policy.provider}-${policy.model}-${policy.effectiveFrom || 'na'}`}
-              className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3.5"
+              className="min-w-0"
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="break-words font-mono text-sm font-semibold text-white">
-                    {policy.provider} / {policy.model}
-                  </p>
-                  <p className="mt-1 text-[11px] text-white/42">
-                    {formatDate(policy.effectiveFrom)} - {formatDate(policy.effectiveUntil)}
-                  </p>
+              <TerminalNestedBlock className="min-w-0">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-words font-mono text-sm font-semibold text-white">
+                      {policy.provider} / {policy.model}
+                    </p>
+                    <p className="mt-1 text-[11px] text-white/42">
+                      {formatDate(policy.effectiveFrom)} - {formatDate(policy.effectiveUntil)}
+                    </p>
+                  </div>
+                  <TerminalChip variant={policy.active ? 'success' : 'neutral'}>
+                    {policy.active ? 'active' : 'inactive'}
+                  </TerminalChip>
                 </div>
-                <Badge
-                  variant={policy.active ? 'success' : 'default'}
-                  className={policy.active ? 'border-emerald-300/20 bg-emerald-400/10 text-emerald-100' : 'border-white/10 bg-white/[0.04] text-white/50'}
-                >
-                  {policy.active ? 'active' : 'inactive'}
-                </Badge>
-              </div>
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <div className="min-w-0 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">Input / 1M</p>
-                  <p className="mt-1 font-mono text-sm text-cyan-100">{pricePerMillion(policy.inputPricePer1m, policy.currency)}</p>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <TerminalMetric label="Input / 1M" value={pricePerMillion(policy.inputPricePer1m, policy.currency)} valueClassName="text-sm font-semibold text-cyan-100" />
+                  <TerminalMetric label="Cached / 1M" value={pricePerMillion(policy.cachedInputPricePer1m, policy.currency)} valueClassName="text-sm font-semibold text-cyan-100" />
+                  <TerminalMetric label="Output / 1M" value={pricePerMillion(policy.outputPricePer1m, policy.currency)} valueClassName="text-sm font-semibold text-cyan-100" />
                 </div>
-                <div className="min-w-0 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">Cached / 1M</p>
-                  <p className="mt-1 font-mono text-sm text-cyan-100">{pricePerMillion(policy.cachedInputPricePer1m, policy.currency)}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/44">
+                  <TerminalChip variant="neutral">{policy.currency}</TerminalChip>
+                  {policy.sourceUrl ? (
+                    <a
+                      className="min-w-0 break-words rounded-md border border-cyan-300/15 bg-cyan-400/8 px-2.5 py-1 text-cyan-100 transition hover:border-cyan-200/35"
+                      href={policy.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {sourceLabel(policy)}
+                    </a>
+                  ) : (
+                    <TerminalChip variant="neutral">{sourceLabel(policy)}</TerminalChip>
+                  )}
                 </div>
-                <div className="min-w-0 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">Output / 1M</p>
-                  <p className="mt-1 font-mono text-sm text-cyan-100">{pricePerMillion(policy.outputPricePer1m, policy.currency)}</p>
-                </div>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/44">
-                <span className="min-w-0 truncate rounded-full border border-white/5 bg-white/[0.02] px-2.5 py-1">{policy.currency}</span>
-                {policy.sourceUrl ? (
-                  <a
-                    className="min-w-0 break-words rounded-full border border-cyan-300/15 bg-cyan-400/8 px-2.5 py-1 text-cyan-100 transition hover:border-cyan-200/35"
-                    href={policy.sourceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {sourceLabel(policy)}
-                  </a>
-                ) : (
-                  <span className="min-w-0 break-words rounded-full border border-white/5 bg-white/[0.02] px-2.5 py-1">{sourceLabel(policy)}</span>
-                )}
-              </div>
+              </TerminalNestedBlock>
             </article>
           ))}
         </div>
       ) : null}
 
       {state.data ? (
-        <Disclosure
-          summary="开发者 / 价格策略响应形状"
-          className="mt-4"
-          bodyClassName="rounded-2xl border border-white/5 bg-black/20 p-4"
-        >
+        <TerminalDisclosure title="开发者 / 价格策略响应形状" summary="默认折叠" className="mt-4">
           <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
             <div className="min-w-0">
               <dt className="text-white/32">readOnly</dt>
@@ -798,9 +741,9 @@ const PricingPolicyPanel: React.FC = () => {
               <dd className="break-words font-mono text-white/64">{state.data.metadata.redaction.join(', ') || '--'}</dd>
             </div>
           </dl>
-        </Disclosure>
+        </TerminalDisclosure>
       ) : null}
-    </GlassCard>
+    </TerminalPanel>
   );
 };
 
@@ -858,25 +801,22 @@ const QuotaDryRunPanel: React.FC = () => {
   };
 
   return (
-    <GlassCard as="section" className="p-4 md:p-5" data-testid="quota-dry-run-panel">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <Gauge className="mt-1 h-4 w-4 shrink-0 text-cyan-200" aria-hidden="true" />
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">Quota Pilot</p>
-            <h2 className="mt-1 text-lg font-semibold text-white">配额试运行诊断</h2>
-          </div>
-        </div>
-        <Badge variant="info" className="border-cyan-300/20 bg-cyan-400/8 text-cyan-100">
-          当前为试运行/诊断，不会阻断真实请求
-        </Badge>
-      </div>
+    <TerminalPanel as="section" data-testid="quota-dry-run-panel">
+      <TerminalSectionHeader
+        eyebrow="Quota Pilot"
+        title={iconTitle(<Gauge className="h-4 w-4" />, '配额试运行诊断')}
+        action={<TerminalChip variant="info">只读诊断</TerminalChip>}
+      />
+
+      <TerminalNotice variant="info" className="mt-4">
+        当前为试运行/诊断，不会阻断真实请求
+      </TerminalNotice>
 
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-4">
-        <SummaryTile label="状态" value={state.loading ? '检查中' : quotaStatusLabel(data?.status)} tone={data?.wouldBlock ? 'warn' : 'info'} />
-        <SummaryTile label="模式" value={enforcementLabel(data?.enforcementMode || enforcementMode)} tone="warn" />
-        <SummaryTile label="估算单位" value={compactNumber(data?.estimatedUnits)} tone="info" />
-        <SummaryTile label="判定" value={data?.wouldBlock ? '会阻断' : data?.allowed ? '允许' : '--'} tone={data?.wouldBlock ? 'warn' : 'good'} />
+        <TerminalMetric label="状态" value={state.loading ? '检查中' : quotaStatusLabel(data?.status)} valueClassName={metricValueClass(data?.wouldBlock ? 'warn' : 'info')} />
+        <TerminalMetric label="模式" value={enforcementLabel(data?.enforcementMode || enforcementMode)} valueClassName={metricValueClass('warn')} />
+        <TerminalMetric label="估算单位" value={compactNumber(data?.estimatedUnits)} valueClassName={metricValueClass('info')} />
+        <TerminalMetric label="判定" value={data?.wouldBlock ? '会阻断' : data?.allowed ? '允许' : '--'} valueClassName={metricValueClass(data?.wouldBlock ? 'warn' : data?.allowed ? 'good' : 'neutral')} />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-12">
@@ -934,30 +874,26 @@ const QuotaDryRunPanel: React.FC = () => {
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 text-xs leading-5 text-white/48">
-          <span className="text-white/64">原因：</span> <span className={cn('font-mono', data?.wouldBlock ? 'text-amber-200' : 'text-white/62')}>{reasonLabel(data?.reasonCode)}</span>
+          <span className="text-white/64">原因：</span>{' '}
+          <span className={cn('font-mono', data?.wouldBlock ? 'text-amber-200' : 'text-white/62')}>{reasonLabel(data?.reasonCode)}</span>
         </div>
-        <button
-          type="button"
-          className="rounded-lg border border-cyan-300/20 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-100 transition hover:border-cyan-200/35 hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-45"
+        <TerminalButton
+          variant="secondary"
           onClick={runDiagnostic}
           disabled={state.loading || !canSubmit}
         >
           {state.loading ? '诊断中' : '运行试运行'}
-        </button>
+        </TerminalButton>
       </div>
 
       {data?.wouldBlock ? (
-        <div className="mt-4 rounded-2xl border border-amber-300/18 bg-amber-400/8 px-4 py-3 text-sm text-amber-100" role="status">
+        <TerminalNotice variant="caution" className="mt-4" role="status">
           试运行结果显示该策略会阻断；真实请求未被阻断。
-        </div>
+        </TerminalNotice>
       ) : null}
       {state.error ? <div className="mt-4"><ApiErrorAlert error={state.error} /></div> : null}
 
-      <Disclosure
-        summary="开发者 / Quota 响应形状"
-        className="mt-4"
-        bodyClassName="rounded-2xl border border-white/5 bg-black/20 p-4"
-      >
+      <TerminalDisclosure title="开发者 / Quota 响应形状" summary="默认折叠" className="mt-4">
         <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
           <div className="min-w-0">
             <dt className="text-white/32">diagnosticOnly</dt>
@@ -976,8 +912,8 @@ const QuotaDryRunPanel: React.FC = () => {
             <dd className="break-words font-mono text-white/64">{data?.metadata.redaction.join(', ') || '--'}</dd>
           </div>
         </dl>
-      </Disclosure>
-    </GlassCard>
+      </TerminalDisclosure>
+    </TerminalPanel>
   );
 };
 
@@ -1014,8 +950,8 @@ const AdminCostObservabilityPage: React.FC = () => {
   const operatorState = data
     ? `${compactNumber(data.summary.llmCalls)} 次 AI / ${compactNumber(data.summary.providerCalls)} 次数据源`
     : state.loading
-    ? '读取中'
-    : '等待快照';
+      ? '读取中'
+      : '等待快照';
   const needsAttentionCount = data
     ? data.summary.estimatedDuplicateCandidates + data.summary.fallbackAttempts + data.summary.integrityRetries
     : 0;
@@ -1026,120 +962,144 @@ const AdminCostObservabilityPage: React.FC = () => {
       : '暂无明显成本压力';
 
   return (
-    <div data-testid="admin-cost-observability-page" className="min-h-0 flex-1 overflow-y-auto no-scrollbar bg-[#050505] px-4 py-4 text-white md:px-6 md:py-6">
-      <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5">
-        <GlassCard as="section" className="p-5 md:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-100/55">成本压力台</p>
-              <h1 className="mt-2 text-2xl font-semibold text-white md:text-3xl">成本观测</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">先判断预算压力、异常归属和下一步处理；模型、数据源、缓存细节默认放在二级区。</p>
-            </div>
-            <ReadOnlyBadges data={data} />
-          </div>
+    <div data-testid="admin-cost-observability-page" className="min-h-0 flex-1 overflow-y-auto no-scrollbar bg-[#050505] py-4 text-white md:py-6">
+      <TerminalPageShell>
+        <TerminalPanel as="section" className="relative overflow-hidden">
+          <TerminalPageHeading
+            eyebrow="成本压力台"
+            title="成本观测"
+            action={<ReadOnlyBadges data={data} />}
+          />
+          <TerminalNotice variant="info" className="mt-4">
+            先判断预算压力、异常归属和下一步处理；模型、数据源、缓存细节默认放在二级区。
+          </TerminalNotice>
           <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <SummaryTile label="页面用途" value="评估成本与配额风险" note={`窗口 ${data?.window?.key || filters.window} · ${data?.window?.bucket || filters.bucket}`} tone="info" />
-            <SummaryTile label="当前状态" value={operatorState} note={`生成 ${formatDate(data?.generatedAt)} · ${exactnessLabel(data?.metadata.exactness)}`} tone={emptyCounters ? 'warn' : 'neutral'} />
-            <SummaryTile label="需关注" value={attentionLabel} note="重复候选、备用链路、完整性重试汇总" tone={emptyCounters || needsAttentionCount ? 'warn' : 'good'} />
-            <SummaryTile label="下一步" value={needsAttentionCount ? '先做配额试运行，再定位归属' : '保持观测，按需切换窗口'} note={`生成 ${formatDate(data?.generatedAt)} · ${exactnessLabel(data?.metadata.exactness)}`} tone={needsAttentionCount ? 'warn' : 'neutral'} />
+            <TerminalMetric
+              label="页面用途"
+              value="评估成本与配额风险"
+              subvalue={`窗口 ${data?.window?.key || filters.window} · ${data?.window?.bucket || filters.bucket}`}
+              valueClassName="text-sm font-semibold text-cyan-100"
+            />
+            <TerminalMetric
+              label="当前状态"
+              value={operatorState}
+              subvalue={`生成 ${formatDate(data?.generatedAt)} · ${exactnessLabel(data?.metadata.exactness)}`}
+              valueClassName={metricValueClass(emptyCounters ? 'warn' : 'neutral')}
+            />
+            <TerminalMetric
+              label="需关注"
+              value={attentionLabel}
+              subvalue="重复候选、备用链路、完整性重试汇总"
+              valueClassName={metricValueClass(emptyCounters || needsAttentionCount ? 'warn' : 'good')}
+            />
+            <TerminalMetric
+              label="下一步"
+              value={needsAttentionCount ? '先做配额试运行，再定位归属' : '保持观测，按需切换窗口'}
+              subvalue={`生成 ${formatDate(data?.generatedAt)} · ${exactnessLabel(data?.metadata.exactness)}`}
+              valueClassName={metricValueClass(needsAttentionCount ? 'warn' : 'neutral')}
+            />
           </div>
-        </GlassCard>
+        </TerminalPanel>
 
         {state.error ? <ApiErrorAlert error={state.error} /> : null}
         {state.loading ? (
-          <GlassCard as="section" className="p-5">
-            <p className="text-sm text-white/55">正在读取成本观测快照</p>
-          </GlassCard>
+          <TerminalPanel as="section">
+            <TerminalNotice variant="neutral">正在读取成本观测快照</TerminalNotice>
+          </TerminalPanel>
         ) : null}
         {data ? (
-          <div className="grid gap-5">
-            <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-              <GlassCard as="section" className="p-4 md:p-5 xl:col-span-7">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">操作员判断</p>
-                    <h2 className="mt-1 text-lg font-semibold text-white">压力、异常、归属</h2>
-                  </div>
-                  {emptyCounters ? (
-                    <Badge variant="warning" className="border-amber-300/25 bg-amber-400/10 text-amber-100">
-                      计数器尚未接入或当前窗口暂无事件
-                    </Badge>
-                  ) : null}
-                </div>
+          <div className="grid gap-6">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+              <TerminalPanel as="section" className="xl:col-span-8">
+                <TerminalSectionHeader
+                  eyebrow="操作员判断"
+                  title="压力、异常、归属"
+                  action={emptyCounters ? <TerminalChip variant="caution">计数器尚未接入或当前窗口暂无事件</TerminalChip> : <TerminalChip variant="neutral">窗口 {data.window?.key || filters.window}</TerminalChip>}
+                />
+                <TerminalNotice variant={emptyCounters ? 'caution' : needsAttentionCount ? 'info' : 'neutral'} className="mt-4">
+                  {emptyCounters ? '计数器尚未接入或当前窗口暂无事件' : needsAttentionCount ? '优先查看重复候选、备用链路和完整性重试，再进入配额试运行。' : '当前成本观测保持稳定，先维持只读观察。'}
+                </TerminalNotice>
                 <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <SummaryTile
-                      label="成本压力"
-                      value={`${compactNumber(data.summary.estimatedDuplicateCandidates)} 重复候选`}
-                      note={`${compactNumber(data.summary.fallbackAttempts)} 备用链路 · ${compactNumber(data.summary.integrityRetries)} 完整性重试`}
-                      tone={data.summary.estimatedDuplicateCandidates || data.summary.fallbackAttempts || data.summary.integrityRetries ? 'warn' : 'good'}
-                    />
-                    <SummaryTile
-                      label="缓存效率"
-                      value={`${percent(data.summary.providerCacheHitRate)} 数据源`}
-                      note={`${percent(data.summary.marketCacheHitRate)} 市场缓存`}
-                      tone="good"
-                    />
-                    <SummaryTile
-                      label="模型归属"
-                      value={`${compactNumber(data.summary.llmCalls)} AI 调用`}
-                      note={`${compactNumber(data.summary.llmUsageTokens)} tokens · ${compactNumber(data.summary.llmUsageCalls)} usage rows`}
-                      tone="info"
-                    />
-                    <SummaryTile
-                      label="功能归属"
-                      value={`${compactNumber(data.summary.scannerAiCompleted)} / ${compactNumber(data.summary.scannerAiAttempts)}`}
-                      note={`${compactNumber(data.summary.scannerAiSkipped)} skipped`}
-                      tone="info"
-                    />
+                  <TerminalMetric
+                    label="成本压力"
+                    value={`${compactNumber(data.summary.estimatedDuplicateCandidates)} 重复候选`}
+                    subvalue={`${compactNumber(data.summary.fallbackAttempts)} 备用链路 · ${compactNumber(data.summary.integrityRetries)} 完整性重试`}
+                    valueClassName={metricValueClass(data.summary.estimatedDuplicateCandidates || data.summary.fallbackAttempts || data.summary.integrityRetries ? 'warn' : 'good')}
+                  />
+                  <TerminalMetric
+                    label="缓存效率"
+                    value={`${percent(data.summary.providerCacheHitRate)} 数据源`}
+                    subvalue={`${percent(data.summary.marketCacheHitRate)} 市场缓存`}
+                    valueClassName={metricValueClass('good')}
+                  />
+                  <TerminalMetric
+                    label="模型归属"
+                    value={`${compactNumber(data.summary.llmCalls)} AI 调用`}
+                    subvalue={`${compactNumber(data.summary.llmUsageTokens)} tokens · ${compactNumber(data.summary.llmUsageCalls)} usage rows`}
+                    valueClassName={metricValueClass('info')}
+                  />
+                  <TerminalMetric
+                    label="功能归属"
+                    value={`${compactNumber(data.summary.scannerAiCompleted)} / ${compactNumber(data.summary.scannerAiAttempts)}`}
+                    subvalue={`${compactNumber(data.summary.scannerAiSkipped)} skipped`}
+                    valueClassName={metricValueClass('info')}
+                  />
                 </div>
-              </GlassCard>
-              <div className="min-w-0 xl:col-span-5">
+              </TerminalPanel>
+              <div className="min-w-0 xl:col-span-4">
                 <QuotaDryRunPanel />
               </div>
-            </section>
+            </div>
 
-            <details
-              className="rounded-[20px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden"
-            >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
-                <span>二级细节：窗口筛选、账本、价格、数据源 / 缓存</span>
-                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">默认折叠</span>
-              </summary>
-              <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-12">
+            <TerminalDisclosure title="二级细节：窗口筛选、账本、价格、Provider / 缓存" summary="默认折叠">
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
                 <div className="xl:col-span-3">
                   <FilterRail filters={filters} onChange={updateFilters} />
                 </div>
-                <div className="min-w-0 space-y-5 xl:col-span-9">
+                <div className="min-w-0 space-y-6 xl:col-span-9">
                   <LlmLedgerPanel key={`${filters.window}-${filters.bucket}-${filters.limit}`} filters={filters} />
                   <PricingPolicyPanel />
-                  <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
-                    <SectionCard icon={<Activity className="h-4 w-4" />} eyebrow="LLM" title="LLM 调用">
-                      <RollupList items={data.llm.byCallType} empty="暂无 LLM 调用计数" />
-                    </SectionCard>
-                    <SectionCard icon={<BarChart3 className="h-4 w-4" />} eyebrow="Duplicate" title="Guest Preview / Report duplicate candidates">
-                      <RollupList items={[...data.llm.duplicateCandidates, ...data.providers.duplicateCandidates, ...data.scannerAi.duplicateCandidates]} empty="暂无重复候选" />
-                    </SectionCard>
-                    <SectionCard icon={<DatabaseZap className="h-4 w-4" />} eyebrow="数据源状态" title="数据源状态 / 备用链路">
-                      <div className="grid gap-3">
+                  <div className="grid grid-cols-1 gap-6 2xl:grid-cols-2">
+                    <TerminalPanel as="section">
+                      <TerminalSectionHeader eyebrow="LLM" title={iconTitle(<Activity className="h-4 w-4" />, 'LLM 调用')} />
+                      <div className="mt-4">
+                        <RollupList items={data.llm.byCallType} empty="暂无 LLM 调用计数" />
+                      </div>
+                    </TerminalPanel>
+                    <TerminalPanel as="section">
+                      <TerminalSectionHeader eyebrow="Duplicate" title={iconTitle(<BarChart3 className="h-4 w-4" />, 'Guest Preview / Report duplicate candidates')} />
+                      <div className="mt-4">
+                        <RollupList items={[...data.llm.duplicateCandidates, ...data.providers.duplicateCandidates, ...data.scannerAi.duplicateCandidates]} empty="暂无重复候选" />
+                      </div>
+                    </TerminalPanel>
+                    <TerminalPanel as="section">
+                      <TerminalSectionHeader eyebrow="数据源状态" title={iconTitle(<DatabaseZap className="h-4 w-4" />, '数据源状态 / 备用链路')} />
+                      <div className="mt-4 grid gap-3">
                         <RollupList items={[...data.providers.byCategory, ...data.providers.fallbackDepth, ...data.llm.fallbacks]} empty="暂无数据源备用计数" />
                         <CacheEfficiencyList items={data.providers.cacheEfficiency} />
                       </div>
-                    </SectionCard>
-                    <SectionCard icon={<DatabaseZap className="h-4 w-4" />} eyebrow="市场缓存" title="市场缓存命中 / 过期 / 缺失">
-                      <RollupList items={[...data.marketCache.byPanelKey, ...data.marketCache.staleServed, ...data.marketCache.coldFallbacks, ...data.marketCache.refreshes]} empty="暂无市场缓存计数" />
-                    </SectionCard>
-                    <SectionCard icon={<Radar className="h-4 w-4" />} eyebrow="Scanner AI" title="Scanner AI 解释">
-                      <RollupList items={[...data.scannerAi.interpretations, ...data.scannerAi.skips]} empty="暂无 Scanner AI 计数" />
-                    </SectionCard>
+                    </TerminalPanel>
+                    <TerminalPanel as="section">
+                      <TerminalSectionHeader eyebrow="市场缓存" title={iconTitle(<DatabaseZap className="h-4 w-4" />, '市场缓存命中 / 过期 / 缺失')} />
+                      <div className="mt-4">
+                        <RollupList items={[...data.marketCache.byPanelKey, ...data.marketCache.staleServed, ...data.marketCache.coldFallbacks, ...data.marketCache.refreshes]} empty="暂无市场缓存计数" />
+                      </div>
+                    </TerminalPanel>
+                    <TerminalPanel as="section">
+                      <TerminalSectionHeader eyebrow="Scanner AI" title={iconTitle(<Radar className="h-4 w-4" />, 'Scanner AI 解释')} />
+                      <div className="mt-4">
+                        <RollupList items={[...data.scannerAi.interpretations, ...data.scannerAi.skips]} empty="暂无 Scanner AI 计数" />
+                      </div>
+                    </TerminalPanel>
                     <LimitationsPanel data={data} />
                   </div>
                   <DeveloperDetails data={data} />
                 </div>
               </div>
-            </details>
+            </TerminalDisclosure>
           </div>
         ) : null}
-      </div>
+      </TerminalPageShell>
     </div>
   );
 };

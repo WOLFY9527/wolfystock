@@ -4,19 +4,25 @@ import {
   BookOpenCheck,
   CheckCircle2,
   ClipboardCheck,
-  Code2,
-  FileCheck2,
-  Layers3,
   LockKeyhole,
   Route,
   ShieldCheck,
   TerminalSquare,
   TriangleAlert,
 } from 'lucide-react';
-import { Badge, GlassCard } from '../components/common';
 import { AdminEvidenceDiagnosticsConsole } from '../components/evidence/AdminEvidenceDiagnosticsConsole';
 import { AdminEvidenceDryRunPreview } from '../components/evidence/AdminEvidenceDryRunPreview';
-import { cn } from '../utils/cn';
+import {
+  TerminalChip,
+  TerminalDisclosure,
+  TerminalMetric,
+  TerminalNestedBlock,
+  TerminalNotice,
+  TerminalPageHeading,
+  TerminalPageShell,
+  TerminalPanel,
+  TerminalSectionHeader,
+} from '../components/terminal';
 
 type Tone = 'info' | 'warn' | 'danger' | 'good';
 type CommandSnippet = {
@@ -40,11 +46,17 @@ const workflowSteps = [
   { label: '人工复核', note: '外部复核' },
 ];
 
-const statusCards: Array<{ label: string; value: string; tone: Tone; icon: React.ComponentType<{ className?: string }> }> = [
-  { label: '复核入口', value: 'GO-REVIEW-REQUIRED', tone: 'warn', icon: ShieldCheck },
-  { label: '缺证据状态', value: 'NO-GO when evidence missing', tone: 'danger', icon: TriangleAlert },
-  { label: '人工门禁', value: 'manual review required', tone: 'info', icon: LockKeyhole },
-  { label: '发布字段', value: 'releaseApproved=false', tone: 'good', icon: CheckCircle2 },
+const statusCards: Array<{
+  label: string;
+  value: string;
+  tone: Tone;
+  icon: React.ComponentType<{ className?: string }>;
+  note: string;
+}> = [
+  { label: '复核入口', value: 'GO-REVIEW-REQUIRED', tone: 'warn', icon: ShieldCheck, note: '进入人工复核之前不提升任何上线结论。' },
+  { label: '缺证据状态', value: 'NO-GO when evidence missing', tone: 'danger', icon: TriangleAlert, note: '缺少关键脱敏证据时保持 NO-GO。' },
+  { label: '人工门禁', value: 'manual review required', tone: 'info', icon: LockKeyhole, note: '页面仅展示门禁姿态，不提供审批动作。' },
+  { label: '发布字段', value: 'releaseApproved=false', tone: 'good', icon: CheckCircle2, note: '发布结论由线下复核流程决定。' },
 ];
 
 const commandSnippets: CommandSnippet[] = [
@@ -148,338 +160,307 @@ const schemaReferenceGroups = [
   },
 ];
 
-function toneClass(tone: Tone): string {
-  return {
-    info: 'border-cyan-300/20 bg-cyan-400/8 text-cyan-100',
-    warn: 'border-amber-300/25 bg-amber-400/10 text-amber-100',
-    danger: 'border-rose-300/28 bg-rose-500/10 text-rose-100',
-    good: 'border-emerald-300/22 bg-emerald-400/10 text-emerald-100',
-  }[tone];
+function toneVariant(tone: Tone): React.ComponentProps<typeof TerminalChip>['variant'] {
+  if (tone === 'good') return 'success';
+  if (tone === 'warn') return 'caution';
+  if (tone === 'danger') return 'danger';
+  return 'info';
 }
 
 const AdminEvidenceWorkflowPage: React.FC = () => (
   <div
     data-testid="admin-evidence-workflow-page"
-    className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto no-scrollbar bg-[#050505] px-4 py-5 text-white md:px-6 xl:px-8"
+    className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto no-scrollbar bg-[#050505] py-5 text-white md:py-6"
   >
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
-      <header className="rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-5 backdrop-blur-md md:px-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-200/70">ADMIN EVIDENCE REVIEW</p>
-            <h1 className="mt-3 text-2xl font-semibold tracking-normal text-white md:text-3xl">证据工作流复核</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-white/58">离线证据复核总览，只读、脱敏、人工门禁。</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="info" className="border-cyan-300/20 bg-cyan-400/8 text-cyan-100">只读视图</Badge>
-            <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">脱敏状态</Badge>
-            <Badge variant="warning" className="border-amber-300/25 bg-amber-400/10 text-amber-100">人工门禁</Badge>
-          </div>
-        </div>
-        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-          {[
-            ['页面用途', '复核脱敏证据路径', '模板、校验、归档、人工复核'],
-            ['当前状态', '等待人工复核', '缺证据时保持 NO-GO'],
-            ['下一步', '按本地操作手册生成复核材料', '先确认交接状态；命令、数据结构、参考文档默认折叠'],
-          ].map(([label, value, note]) => (
-            <div key={label} className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">{label}</p>
-              <p className="mt-2 text-sm font-semibold text-white">{value}</p>
-              <p className="mt-1 text-xs leading-5 text-white/42">{note}</p>
+    <TerminalPageShell>
+      <TerminalPanel as="section" className="relative overflow-hidden">
+        <TerminalPageHeading
+          eyebrow="ADMIN EVIDENCE REVIEW"
+          title="证据工作流复核"
+          action={(
+            <div className="flex flex-wrap gap-2">
+              <TerminalChip variant="info">只读视图</TerminalChip>
+              <TerminalChip variant="neutral">脱敏状态</TerminalChip>
+              <TerminalChip variant="caution">人工门禁</TerminalChip>
             </div>
-          ))}
+          )}
+        />
+        <TerminalNotice variant="info" className="mt-4">
+          离线证据复核总览，只读、脱敏、人工门禁。
+        </TerminalNotice>
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <TerminalMetric
+            label="页面用途"
+            value="复核脱敏证据路径"
+            subvalue="模板、校验、归档、人工复核"
+            valueClassName="text-sm font-semibold"
+            className="min-w-0"
+          />
+          <TerminalMetric
+            label="当前状态"
+            value="等待人工复核"
+            subvalue="缺证据时保持 NO-GO"
+            valueClassName="text-sm font-semibold"
+            className="min-w-0"
+          />
+          <TerminalMetric
+            label="下一步"
+            value="按本地操作手册生成复核材料"
+            subvalue="先确认交接状态；命令、数据结构、参考文档默认折叠"
+            valueClassName="text-sm font-semibold"
+            className="min-w-0"
+          />
         </div>
-      </header>
+      </TerminalPanel>
 
       <AdminEvidenceDiagnosticsConsole />
       <AdminEvidenceDryRunPreview />
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <GlassCard as="section" className="p-4 md:p-5 xl:col-span-8">
-          <div className="flex items-start gap-3">
-            <Layers3 className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">离线序列</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">操作员证据路径</h2>
-            </div>
-          </div>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+        <TerminalPanel as="section" className="xl:col-span-8">
+          <TerminalSectionHeader
+            eyebrow="离线序列"
+            title="操作员证据路径"
+            action={<TerminalChip variant="info">6 步只读流程</TerminalChip>}
+          />
           <div
             data-testid="admin-evidence-workflow-grid"
             className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6"
           >
             {workflowSteps.map((step, index) => (
-              <article
-                key={step.label}
-                className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3.5"
-              >
-                <p className="font-mono text-[11px] text-white/36">{String(index + 1).padStart(2, '0')}</p>
-                <h3 className="mt-2 min-h-10 text-sm font-semibold leading-5 text-white/86">{step.label}</h3>
-                <p className="mt-2 text-xs leading-5 text-white/42">{step.note}</p>
+              <article key={step.label} className="min-w-0">
+                <TerminalNestedBlock className="h-full">
+                  <p className="font-mono text-[11px] text-white/36">{String(index + 1).padStart(2, '0')}</p>
+                  <h3 className="mt-2 min-h-10 text-sm font-semibold leading-5 text-white/86">{step.label}</h3>
+                  <p className="mt-2 text-xs leading-5 text-white/42">{step.note}</p>
+                </TerminalNestedBlock>
               </article>
             ))}
           </div>
-        </GlassCard>
+        </TerminalPanel>
 
-        <div className="grid grid-cols-1 gap-4 xl:col-span-4">
-          <GlassCard as="section" className="p-4 md:p-5">
-            <div className="flex items-start gap-3">
-              <FileCheck2 className="mt-1 h-4 w-4 text-emerald-200" aria-hidden="true" />
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">能力边界</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">页面不执行动作</h2>
-              </div>
+        <div className="grid grid-cols-1 gap-6 xl:col-span-4">
+          <TerminalPanel as="section">
+            <TerminalSectionHeader
+              eyebrow="能力边界"
+              title="页面不执行动作"
+              action={<TerminalChip variant="success">只读</TerminalChip>}
+            />
+            <div className="mt-4 space-y-3">
+              <TerminalNotice variant="neutral">不提供上传入口，不调用后端写接口，不变更运行时配置。</TerminalNotice>
+              <TerminalNotice variant="neutral">不读取原始证据文件内容，不展示数据源载荷、数据结构细节或调试字段。</TerminalNotice>
             </div>
-            <div className="mt-5 space-y-3 text-sm leading-6 text-white/58">
-              <p>不提供上传入口，不调用后端写接口，不变更运行时配置。</p>
-              <p>不读取原始证据文件内容，不展示数据源载荷、数据结构细节或调试字段。</p>
-            </div>
-          </GlassCard>
+          </TerminalPanel>
 
-          <GlassCard
+          <TerminalPanel
             as="section"
             data-testid="admin-evidence-local-workspace-guard"
-            className="p-4 md:p-5"
           >
-            <div className="flex items-start gap-3">
-              <LockKeyhole className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">LOCAL GUARD</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">本地目录保护</h2>
-              </div>
-            </div>
+            <TerminalSectionHeader
+              eyebrow="LOCAL GUARD"
+              title="本地目录保护"
+              action={<TerminalChip variant="info">仅占位路径</TerminalChip>}
+            />
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
               {localWorkspaceGuards.map((guard) => (
-                <div
-                  key={guard.label}
-                  className="min-w-0 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2"
-                >
+                <TerminalNestedBlock key={guard.label} className="min-w-0">
                   <p className="text-[11px] font-medium text-white/72">{guard.label}</p>
                   <p className="mt-1 break-words font-mono text-[11px] text-cyan-100/66">{guard.value}</p>
-                </div>
+                </TerminalNestedBlock>
               ))}
             </div>
-          </GlassCard>
+          </TerminalPanel>
         </div>
-      </section>
+      </div>
 
-      <section
-        data-testid="admin-evidence-status-grid"
-        className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"
-        aria-label="静态复核状态"
-      >
-        {statusCards.map(({ label, value, tone, icon: Icon }) => (
-          <GlassCard key={value} as="article" className="p-4" aria-label={`${label}：${value}`}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/34">{label}</p>
-                <p className="mt-3 break-words font-mono text-sm font-semibold text-white">{value}</p>
-              </div>
-              <span className={cn('inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border', toneClass(tone))}>
-                <Icon className="h-4 w-4" aria-hidden="true" />
-              </span>
-            </div>
-          </GlassCard>
-        ))}
-      </section>
-
-      <details className="rounded-[20px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
-          <span>二级细节：操作手册参考</span>
-          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">默认折叠</span>
-        </summary>
-      <GlassCard
-        as="section"
-        data-testid="admin-evidence-runbook-references"
-        className="mt-4 p-4 md:p-5"
-      >
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <BookOpenCheck className="mt-1 h-4 w-4 shrink-0 text-cyan-200" aria-hidden="true" />
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">本地操作手册</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">操作员工作流参考</h2>
-            </div>
-          </div>
-          <Badge variant="default" className="w-fit border-white/10 bg-white/[0.04] text-white/62">
-            静态标签
-          </Badge>
-        </div>
-
-        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {runbookReferences.map(({ label, docLabel, stage, icon: Icon }) => (
-            <article
-              key={docLabel}
-              className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3.5"
-              aria-label={`${label}：${docLabel}`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">参考卡</p>
-                  <h3 className="mt-2 text-sm font-semibold leading-5 text-white/88">{label}</h3>
-                </div>
-                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cyan-300/15 bg-cyan-400/8 text-cyan-100">
-                  <Icon className="h-4 w-4" aria-hidden="true" />
-                </span>
-              </div>
-              <p className="mt-4 rounded-xl border border-white/[0.04] bg-white/[0.02] px-2.5 py-2 font-mono text-[11px] leading-5 text-cyan-100/78 break-all">
-                {docLabel}
-              </p>
-              <p className="mt-3 text-xs leading-5 text-white/44">{stage}</p>
-            </article>
-          ))}
-        </div>
-      </GlassCard>
-      </details>
-
-      <details className="rounded-[20px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
-          <span>二级细节：数据结构与字段参考</span>
-          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">默认折叠</span>
-        </summary>
-      <GlassCard
-        as="section"
-        data-testid="admin-evidence-schema-reference"
-        className="mt-4 p-4 md:p-5"
-      >
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <FileCheck2 className="mt-1 h-4 w-4 shrink-0 text-cyan-200" aria-hidden="true" />
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">本地参考</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">离线证据数据结构参考</h2>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="warning" className="border-amber-300/25 bg-amber-400/10 text-amber-100">人工复核必需</Badge>
-            <Badge variant="default" className="border-white/10 bg-white/[0.04] text-white/62">只读字段</Badge>
-          </div>
-        </div>
-
-        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {schemaReferenceGroups.map((group) => (
-            <article
-              key={group.artifact}
-              className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3.5"
-              aria-label={`${group.label}：${group.artifact}`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">证据类别</p>
-                  <h3 className="mt-2 text-sm font-semibold leading-5 text-white/88">{group.label}</h3>
-                </div>
-                <span className="shrink-0 rounded-full border border-cyan-300/15 bg-cyan-400/8 px-2 py-1 text-[10px] font-medium text-cyan-100">
-                  本地校验
-                </span>
-              </div>
-              <dl className="mt-4 space-y-3 text-xs leading-5">
-                <div>
-                  <dt className="text-white/34">预期证据文件</dt>
-                  <dd className="mt-1 break-all font-mono text-white/74">{group.artifact}</dd>
-                </div>
-                <div>
-                  <dt className="text-white/34">validator / review stage</dt>
-                  <dd className="mt-1 break-all font-mono text-cyan-100/78">{group.validator}</dd>
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-1 2xl:grid-cols-2">
-                  <span className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-2.5 py-2 font-mono text-[11px] text-amber-100/86">
-                    manual review required
-                  </span>
-                  <span className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-2.5 py-2 font-mono text-[11px] text-emerald-100/84">
-                    releaseApproved=false
-                  </span>
-                </div>
-              </dl>
-            </article>
-          ))}
-        </div>
-
-        <details
-          data-testid="admin-evidence-schema-notes"
-          className="mt-4 rounded-2xl border border-white/[0.04] bg-white/[0.02] px-3 py-2.5 [&>summary::-webkit-details-marker]:hidden"
+      <TerminalPanel as="section">
+        <TerminalSectionHeader
+          eyebrow="静态门禁"
+          title="复核状态带"
+          action={<TerminalChip variant="caution">缺证据时 NO-GO</TerminalChip>}
+        />
+        <div
+          data-testid="admin-evidence-status-grid"
+          className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4"
+          aria-label="静态复核状态"
         >
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/70 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
-            <span>字段细节与脱敏规则</span>
-            <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">
-              默认折叠
-            </span>
-          </summary>
-          <p className="mt-3 text-xs leading-6 text-white/48">
-            仅展示类别、文件名、校验脚本和复核姿态；字段清单、原始数据结构、数据源载荷和调试细节不在页面默认展开。
-          </p>
-        </details>
-      </GlassCard>
-      </details>
+          {statusCards.map(({ label, value, tone, icon: Icon, note }) => (
+            <article key={value} aria-label={`${label}：${value}`}>
+              <TerminalNestedBlock className="h-full">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/34">{label}</p>
+                    <p className="mt-2 break-words font-mono text-sm font-semibold text-white">{value}</p>
+                  </div>
+                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/8 bg-white/[0.03] text-white/70">
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                </div>
+                <div className="mt-3 flex items-start justify-between gap-3">
+                  <TerminalChip variant={toneVariant(tone)}>{label}</TerminalChip>
+                  <p className="min-w-0 text-right text-[11px] leading-5 text-white/40">{note}</p>
+                </div>
+              </TerminalNestedBlock>
+            </article>
+          ))}
+        </div>
+      </TerminalPanel>
 
-      <details className="rounded-[20px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
-          <span>二级细节：离线命令与空状态说明</span>
-          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">默认折叠</span>
-        </summary>
-      <section className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <GlassCard as="section" className="p-4 md:p-5 xl:col-span-8">
-          <div className="flex items-start gap-3">
-            <Code2 className="mt-1 h-4 w-4 text-cyan-200" aria-hidden="true" />
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">离线命令</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">可复制的静态片段</h2>
-            </div>
-          </div>
-          <div
-            data-testid="admin-evidence-command-snippets"
-            className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-3"
-          >
-            {commandSnippets.map((snippet) => (
+      <TerminalDisclosure title="二级细节：Runbook 参考" summary="默认折叠">
+        <div data-testid="admin-evidence-runbook-references">
+          <TerminalSectionHeader
+            eyebrow="本地操作手册"
+            title="操作员工作流参考"
+            action={<TerminalChip variant="neutral">静态标签</TerminalChip>}
+          />
+          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+            {runbookReferences.map(({ label, docLabel, stage, icon: Icon }) => (
               <article
-                key={snippet.label}
-                className="min-w-0 rounded-2xl border border-white/5 bg-black/20 p-3.5"
-                aria-labelledby={`admin-evidence-command-${snippet.label}`}
+                key={docLabel}
+                className="min-w-0"
+                aria-label={`${label}：${docLabel}`}
               >
-                <p id={`admin-evidence-command-${snippet.label}`} className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/34">{snippet.label}</p>
-                <pre
-                  tabIndex={0}
-                  role="group"
-                  aria-label={`可复制命令：${snippet.label}`}
-                  className="mt-3 max-w-full overflow-x-auto no-scrollbar whitespace-pre-wrap break-all rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 font-mono text-[11px] leading-5 text-cyan-100/86 outline-none transition-colors focus-visible:border-cyan-300/35 focus-visible:ring-2 focus-visible:ring-cyan-300/30"
-                >
-                  <code>{snippet.command}</code>
-                </pre>
-                <p className="mt-3 text-xs leading-5 text-white/44">{snippet.note}</p>
+                <TerminalNestedBlock className="h-full">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">参考卡</p>
+                      <h3 className="mt-2 text-sm font-semibold leading-5 text-white/88">{label}</h3>
+                    </div>
+                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cyan-300/15 bg-cyan-400/8 text-cyan-100">
+                      <Icon className="h-4 w-4" aria-hidden="true" />
+                    </span>
+                  </div>
+                  <p className="mt-4 break-all rounded-xl border border-white/[0.04] bg-white/[0.02] px-2.5 py-2 font-mono text-[11px] leading-5 text-cyan-100/78">
+                    {docLabel}
+                  </p>
+                  <p className="mt-3 text-xs leading-5 text-white/44">{stage}</p>
+                </TerminalNestedBlock>
               </article>
             ))}
           </div>
-        </GlassCard>
+        </div>
+      </TerminalDisclosure>
 
-        <GlassCard as="aside" className="p-4 md:p-5 xl:col-span-4">
-          <div className="flex items-start gap-3">
-            <TriangleAlert className="mt-1 h-4 w-4 text-amber-200" aria-hidden="true" />
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/34">空状态</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">缺少证据时保持 NO-GO</h2>
+      <TerminalDisclosure title="二级细节：Schema 与字段参考" summary="默认折叠">
+        <div data-testid="admin-evidence-schema-reference">
+          <TerminalSectionHeader
+            eyebrow="本地参考"
+            title="离线证据数据结构参考"
+            action={(
+              <div className="flex flex-wrap gap-2">
+                <TerminalChip variant="caution">人工复核必需</TerminalChip>
+                <TerminalChip variant="neutral">只读字段</TerminalChip>
+              </div>
+            )}
+          />
+
+          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {schemaReferenceGroups.map((group) => (
+              <article
+                key={group.artifact}
+                className="min-w-0"
+                aria-label={`${group.label}：${group.artifact}`}
+              >
+                <TerminalNestedBlock className="h-full">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">证据类别</p>
+                      <h3 className="mt-2 text-sm font-semibold leading-5 text-white/88">{group.label}</h3>
+                    </div>
+                    <TerminalChip variant="info">本地校验</TerminalChip>
+                  </div>
+                  <dl className="mt-4 space-y-3 text-xs leading-5">
+                    <div>
+                      <dt className="text-white/34">预期证据文件</dt>
+                      <dd className="mt-1 break-all font-mono text-white/74">{group.artifact}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-white/34">validator / review stage</dt>
+                      <dd className="mt-1 break-all font-mono text-cyan-100/78">{group.validator}</dd>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-1 2xl:grid-cols-2">
+                      <TerminalNestedBlock className="px-2.5 py-2">
+                        <span className="font-mono text-[11px] text-amber-100/86">manual review required</span>
+                      </TerminalNestedBlock>
+                      <TerminalNestedBlock className="px-2.5 py-2">
+                        <span className="font-mono text-[11px] text-emerald-100/84">releaseApproved=false</span>
+                      </TerminalNestedBlock>
+                    </div>
+                  </dl>
+                </TerminalNestedBlock>
+              </article>
+            ))}
+          </div>
+
+          <TerminalDisclosure
+            data-testid="admin-evidence-schema-notes"
+            title="字段细节与脱敏规则"
+            summary="默认折叠"
+            className="mt-4"
+          >
+            <TerminalNotice variant="neutral">
+              仅展示类别、文件名、校验脚本和复核姿态；字段清单、原始数据结构、数据源载荷和调试细节不在页面默认展开。
+            </TerminalNotice>
+          </TerminalDisclosure>
+        </div>
+      </TerminalDisclosure>
+
+      <TerminalDisclosure title="二级细节：离线命令与空状态说明" summary="默认折叠">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+          <div className="xl:col-span-8">
+            <div data-testid="admin-evidence-command-snippets">
+              <TerminalSectionHeader eyebrow="离线命令" title="可复制的静态片段" />
+              <div className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-3">
+                {commandSnippets.map((snippet) => (
+                  <article
+                    key={snippet.label}
+                    className="min-w-0"
+                    aria-labelledby={`admin-evidence-command-${snippet.label}`}
+                  >
+                    <TerminalNestedBlock className="h-full">
+                      <p id={`admin-evidence-command-${snippet.label}`} className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/34">
+                        {snippet.label}
+                      </p>
+                      <pre
+                        tabIndex={0}
+                        role="group"
+                        aria-label={`可复制命令：${snippet.label}`}
+                        className="mt-3 max-w-full overflow-x-auto no-scrollbar whitespace-pre-wrap break-all rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 font-mono text-[11px] leading-5 text-cyan-100/86 outline-none transition-colors focus-visible:border-cyan-300/35 focus-visible:ring-2 focus-visible:ring-cyan-300/30"
+                      >
+                        <code>{snippet.command}</code>
+                      </pre>
+                      <p className="mt-3 text-xs leading-5 text-white/44">{snippet.note}</p>
+                    </TerminalNestedBlock>
+                  </article>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="mt-5 space-y-3 text-sm leading-6 text-white/58">
-            <p>页面不会读取证据目录；没有脱敏摘要时，只展示复核路径和静态命令。</p>
-            <p>权限不足时由管理员能力门禁拦截，本页不提供替代入口。</p>
-          </div>
-        </GlassCard>
-      </section>
-      </details>
 
-      <details
-        data-testid="admin-evidence-raw-disclosure"
-        className="rounded-[20px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md [&>summary::-webkit-details-marker]:hidden"
-      >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl text-sm font-semibold text-white/76 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-cyan-300/30">
-          <span>原始 / 数据结构 / 数据源 / 调试字段</span>
-          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-medium text-white/42">
-            默认折叠
-          </span>
-        </summary>
-        <div className="mt-3 rounded-2xl border border-white/[0.04] bg-black/20 p-3 text-xs leading-6 text-white/48">
-          原始诊断、数据源载荷、数据结构字段和调试内容不在本视图展开。复核材料只以脱敏状态码和人工检查结论进入页面。
+          <TerminalPanel as="aside" className="xl:col-span-4">
+            <TerminalSectionHeader
+              eyebrow="空状态"
+              title="缺少证据时保持 NO-GO"
+              action={<TerminalChip variant="caution">默认保守</TerminalChip>}
+            />
+            <div className="mt-4 space-y-3">
+              <TerminalNotice variant="neutral">页面不会读取证据目录；没有脱敏摘要时，只展示复核路径和静态命令。</TerminalNotice>
+              <TerminalNotice variant="neutral">权限不足时由管理员能力门禁拦截，本页不提供替代入口。</TerminalNotice>
+            </div>
+          </TerminalPanel>
         </div>
-      </details>
-    </div>
+      </TerminalDisclosure>
+
+      <TerminalDisclosure
+        data-testid="admin-evidence-raw-disclosure"
+        title="原始 / 数据结构 / 数据源 / 调试字段"
+        summary="默认折叠"
+      >
+        <TerminalNotice variant="neutral">
+          原始诊断、数据源载荷、数据结构字段和调试内容不在本视图展开。复核材料只以脱敏状态码和人工检查结论进入页面。
+        </TerminalNotice>
+      </TerminalDisclosure>
+    </TerminalPageShell>
   </div>
 );
 

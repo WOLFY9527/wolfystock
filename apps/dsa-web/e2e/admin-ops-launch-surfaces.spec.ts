@@ -266,36 +266,46 @@ async function expectClosedDetails(page: Page, testId?: string) {
 
 const routes = [
   {
+    key: 'logs',
     path: '/zh/admin/logs',
     ready: 'admin-logs-workspace',
     first: ['定位失败与审计线索', '当前状态', '下一步', '整体状态'],
     secondary: ['二级细节：日志容量与破坏性清理'],
   },
   {
+    key: 'cost',
     path: '/zh/admin/cost-observability',
     ready: 'admin-cost-observability-page',
     first: ['成本观测', '需关注', '下一步', '压力、异常、归属', '配额试运行诊断'],
-    secondary: ['二级细节：窗口筛选、账本、价格、Provider / 缓存'],
+    secondary: [],
+    secondaryButtons: [],
+    disclosureCountMin: 2,
   },
   {
+    key: 'evidence',
     path: '/zh/admin/evidence-workflow',
     ready: 'admin-evidence-workflow-page',
     first: ['证据工作流复核', '当前状态', '下一步', '操作员证据路径'],
-    secondary: ['二级细节：Runbook 参考', '二级细节：Schema 与字段参考', '二级细节：离线命令与空状态说明'],
+    secondary: [],
+    secondaryButtons: [],
+    disclosureCountMin: 4,
   },
   {
+    key: 'market-providers',
     path: '/zh/admin/market-providers',
     ready: 'market-provider-operations-page',
     first: ['市场数据源运维', '当前状态', '需关注', '下一步', '数据源运维矩阵'],
     secondary: ['二级细节：缓存、事件回卷、限制与响应形状'],
   },
   {
+    key: 'provider-circuits',
     path: '/zh/admin/provider-circuits',
     ready: 'admin-provider-circuit-diagnostics-page',
     first: ['Provider 熔断诊断', '生产调用', '当前阻断', '下一步', 'Provider SLA / 凭证就绪'],
     secondary: ['二级细节：探测、事件、配额窗口、路由 bucket'],
   },
   {
+    key: 'system-settings',
     path: '/zh/settings/system',
     ready: 'system-settings-page',
     first: ['系统设置', '当前状态', '需关注', '下一步'],
@@ -303,12 +313,21 @@ const routes = [
   },
 ];
 
+const routeFilter = (process.env.WOLFYSTOCK_ADMIN_OPS_ROUTE_FILTER || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+
+const activeRoutes = routeFilter.length
+  ? routes.filter((route) => routeFilter.includes(route.key))
+  : routes;
+
 test.describe('admin ops launch surfaces', () => {
   for (const viewport of viewports) {
     test(`operator-first hierarchy stays clean at ${viewport.width}x${viewport.height}`, async ({ page }) => {
       await page.setViewportSize(viewport);
 
-      for (const route of routes) {
+      for (const route of activeRoutes) {
         await installAdminOpsMocks(page);
         await page.goto(route.path);
         await page.waitForLoadState('domcontentloaded');
@@ -321,6 +340,13 @@ test.describe('admin ops launch surfaces', () => {
         }
         for (const text of route.secondary) {
           expect(bodyText).toContain(text);
+        }
+        for (const text of route.secondaryButtons || []) {
+          await expect(page.getByRole('button', { name: `展开 ${text}` })).toBeVisible();
+        }
+        if (route.disclosureCountMin) {
+          const disclosureCount = await page.locator('[data-terminal-primitive="disclosure"]').count();
+          expect(disclosureCount).toBeGreaterThanOrEqual(route.disclosureCountMin);
         }
         await expectClosedDetails(page);
         await page.unrouteAll({ behavior: 'ignoreErrors' });
