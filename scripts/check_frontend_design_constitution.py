@@ -86,6 +86,38 @@ WATCHLIST_RETIRED_TERMINAL_SURFACE_RULES = [
         re.compile(r"<StatusBadge\b"),
         "Watchlist migrated evidence/status chips must keep using TerminalChip instead of retired StatusBadge.",
     ),
+    (
+        re.compile(r"\bGlassCard\b"),
+        "Watchlist migrated terminal surface must keep using TerminalPanel or TerminalNotice instead of GlassCard.",
+    ),
+    (
+        re.compile(r"\bSummaryTile\b"),
+        "Watchlist migrated summary cells must not restore retired SummaryTile material helpers.",
+    ),
+    (
+        re.compile(r"<details\b"),
+        "Watchlist migrated advanced details must keep using TerminalDisclosure instead of native details shells.",
+    ),
+    (
+        re.compile(r"<summary\b"),
+        "Watchlist migrated advanced details must keep using TerminalDisclosure instead of native summary shells.",
+    ),
+    (
+        re.compile(r"import\s*\{[^}]*\bButton\b[^}]*\}\s*from\s*['\"][^'\"]*components/common['\"]"),
+        "Watchlist migrated actions must not re-import the retired common Button surface.",
+    ),
+    (
+        re.compile(r"<Button\b"),
+        "Watchlist migrated actions must keep using TerminalButton instead of the retired common Button surface.",
+    ),
+    (
+        re.compile(r"import\s*\{[^}]*\bDisclosure\b[^}]*\}\s*from\s*['\"][^'\"]*components/common['\"]"),
+        "Watchlist migrated advanced details must not re-import the retired common Disclosure surface.",
+    ),
+    (
+        re.compile(r"<Disclosure\b"),
+        "Watchlist migrated advanced details must keep using TerminalDisclosure instead of the retired common Disclosure surface.",
+    ),
 ]
 
 ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES = [

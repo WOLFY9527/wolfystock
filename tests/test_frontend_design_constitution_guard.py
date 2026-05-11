@@ -204,6 +204,23 @@ def test_flags_watchlist_retired_local_material_regression():
     assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
 
 
+def test_flags_watchlist_retired_terminal_surface_regression():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/WatchlistPage.tsx",
+        "\n".join([
+            "import { Button, Disclosure, GlassCard } from '../components/common';",
+            "const tile = SummaryTile;",
+            "export default function Page() {",
+            "  return <GlassCard><Button>刷新</Button><Disclosure summary='高级细节'>内容</Disclosure><details><summary>更多</summary></details></GlassCard>;",
+            "}",
+        ]),
+    )
+
+    assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
 def test_allows_watchlist_terminal_primitives_after_migration():
     guard = load_guard_module()
 
@@ -213,6 +230,39 @@ def test_allows_watchlist_terminal_primitives_after_migration():
             "import { TerminalButton, TerminalChip, TerminalPageShell, TerminalPanel } from '../components/terminal';",
             "export default function Page() {",
             "  return <TerminalPageShell><TerminalPanel><TerminalChip variant='info'>观察</TerminalChip><TerminalButton variant='secondary'>刷新</TerminalButton></TerminalPanel></TerminalPageShell>;",
+            "}",
+        ]),
+    )
+
+    assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_allows_watchlist_terminal_disclosure_notice_and_button_primitives():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/WatchlistPage.tsx",
+        "\n".join([
+            "import { TerminalButton, TerminalChip, TerminalDisclosure, TerminalNotice, TerminalPanel } from '../components/terminal';",
+            "export default function Page() {",
+            "  return <TerminalPanel><TerminalChip variant='info'>观察</TerminalChip><TerminalNotice variant='info'>当前终端组件允许保留</TerminalNotice><TerminalDisclosure title='批次细节' summary='默认折叠'>只读内容</TerminalDisclosure><TerminalButton variant='secondary'>刷新</TerminalButton></TerminalPanel>;",
+            "}",
+        ]),
+    )
+
+    assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_does_not_apply_watchlist_retired_rules_to_non_target_pages():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/SettingsPage.tsx",
+        "\n".join([
+            "import { Button, Disclosure, GlassCard } from '../components/common';",
+            "const tile = SummaryTile;",
+            "export default function Page() {",
+            "  return <GlassCard><Button>保存</Button><Disclosure summary='高级选项'>内容</Disclosure><details><summary>更多</summary></details></GlassCard>;",
             "}",
         ]),
     )
