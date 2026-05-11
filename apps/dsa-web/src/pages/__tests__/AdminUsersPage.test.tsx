@@ -329,6 +329,29 @@ describe('AdminUsersPage', () => {
     expect(screen.getByText('读取用户目录失败')).toBeInTheDocument();
   });
 
+  it('renders terminal-styled loading placeholders for directory and detail states', async () => {
+    listUsers.mockReturnValue(new Promise(() => {}));
+    const { unmount } = renderAt('/zh/admin/users');
+    await waitFor(() => expect(screen.getAllByTestId('admin-users-loading-directory-card')).toHaveLength(3));
+    const directoryCards = screen.getAllByTestId('admin-users-loading-directory-card');
+    expect(directoryCards).toHaveLength(3);
+    directoryCards.forEach((card) => {
+      expect(card).toHaveAttribute('data-terminal-primitive', 'nested-block');
+    });
+    unmount();
+
+    getUserDetail.mockReturnValue(new Promise(() => {}));
+    renderAt('/zh/admin/users/user-123');
+    await waitFor(() => expect(screen.getByTestId('admin-users-loading-detail')).toBeInTheDocument());
+    const detailLoading = screen.getByTestId('admin-users-loading-detail');
+    expect(detailLoading).toHaveAttribute('data-terminal-primitive', 'panel');
+    const detailCards = within(detailLoading).getAllByTestId('admin-users-loading-detail-card');
+    expect(detailCards).toHaveLength(4);
+    detailCards.forEach((card) => {
+      expect(card).toHaveAttribute('data-terminal-primitive', 'nested-block');
+    });
+  });
+
   it('renders the user detail overview with redacted session handles and disabled future tabs', async () => {
     getUserDetail.mockResolvedValue(detailPayload);
 

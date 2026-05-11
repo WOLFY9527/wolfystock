@@ -125,7 +125,11 @@ const ENTITY_TYPE_OPTIONS = [
   { value: 'provider_operation', label: '数据源运维' },
 ];
 
-const TERMINAL_LINK_ACTION_CLASSNAME = 'inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-white/64 transition hover:border-white/20 hover:text-white';
+const TERMINAL_LINK_ACTION_CLASSNAME = 'inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 transition-all duration-300 hover:border-white/20 hover:bg-white/10 hover:text-white';
+const TERMINAL_DISABLED_TAB_CLASSNAME = 'inline-flex min-h-9 shrink-0 items-center rounded-lg border border-white/8 bg-white/[0.02] px-3 py-1.5 text-xs font-medium text-white/25';
+const TERMINAL_IDLE_TAB_CLASSNAME = 'border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:bg-white/[0.07] hover:text-white';
+const TERMINAL_ACTIVE_TAB_CLASSNAME = 'border-cyan-300/20 bg-cyan-400/5 text-cyan-100 shadow-[0_0_0_1px_rgba(34,211,238,0.04)]';
+const TERMINAL_ACTIVE_TOGGLE_CLASSNAME = 'border-cyan-300/20 bg-cyan-400/5 text-cyan-100 hover:border-cyan-300/30 hover:bg-cyan-400/10 hover:text-cyan-50';
 
 function text(value: unknown, fallback = '--'): string {
   const normalized = String(value ?? '').trim();
@@ -241,6 +245,22 @@ function freshSecurityActionState(): SecurityActionFormState {
     result: null,
   };
 }
+
+const LoadingBar: React.FC<{ className?: string }> = ({ className }) => (
+  <div aria-hidden="true" className={cn('animate-pulse rounded-full bg-white/[0.08]', className)} />
+);
+
+const LoadingNestedCard: React.FC<{ className?: string; 'data-testid'?: string }> = ({ className, 'data-testid': dataTestId }) => (
+  <TerminalNestedBlock data-testid={dataTestId} className={className}>
+    <div className="grid gap-3">
+      <LoadingBar className="h-3 w-20" />
+      <LoadingBar className="h-5 w-36 max-w-full" />
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        {[0, 1, 2, 3].map((item) => <LoadingBar key={item} className="h-10 w-full" />)}
+      </div>
+    </div>
+  </TerminalNestedBlock>
+);
 
 function adminLogHref(raw?: string | null, locale = 'zh'): string | null {
   if (!raw) return null;
@@ -459,7 +479,7 @@ const DirectoryView: React.FC<{
           ) : null}
           {state.loading ? (
             <div className="mt-4 grid gap-3">
-              {[0, 1, 2].map((item) => <div key={item} className="h-32 animate-pulse rounded-2xl border border-white/5 bg-white/[0.025]" />)}
+              {[0, 1, 2].map((item) => <LoadingNestedCard key={item} data-testid="admin-users-loading-directory-card" />)}
             </div>
           ) : users.length === 0 && !state.error ? (
             <TerminalEmptyState className="mt-4" title="暂无符合条件的用户">
@@ -499,7 +519,7 @@ const DetailTabs: React.FC<{
   return (
     <nav className="flex gap-2 overflow-x-auto no-scrollbar" aria-label="用户详情标签">
       {items.map((item) => item.disabled ? (
-        <span key={item.key} className="inline-flex min-h-9 shrink-0 items-center rounded-lg border border-white/5 bg-white/[0.02] px-3 text-xs font-semibold text-white/25">
+        <span key={item.key} className={TERMINAL_DISABLED_TAB_CLASSNAME}>
           {item.label} · 后续
         </span>
       ) : (
@@ -507,10 +527,10 @@ const DetailTabs: React.FC<{
           key={item.key}
           to={item.href}
           className={cn(
-            'inline-flex min-h-9 shrink-0 items-center rounded-lg border px-3 text-xs font-semibold transition',
+            'inline-flex min-h-9 shrink-0 items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-all duration-300',
             (active === 'activity' && item.key === 'activity') || (active === 'detail' && activeDetailTab === item.key)
-              ? 'border-cyan-300/25 bg-cyan-400/10 text-cyan-100'
-              : 'border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:text-white',
+              ? TERMINAL_ACTIVE_TAB_CLASSNAME
+              : TERMINAL_IDLE_TAB_CLASSNAME,
           )}
         >
           {item.label}
@@ -587,7 +607,7 @@ const PortfolioTab: React.FC<{
           ) : null}
           {summaryState.loading && !summary ? (
             <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-              {[0, 1, 2, 3].map((item) => <div key={item} className="h-20 animate-pulse rounded-2xl border border-white/5 bg-white/[0.025]" />)}
+              {[0, 1, 2, 3].map((item) => <LoadingNestedCard key={item} className="min-h-[80px]" />)}
             </div>
           ) : summary ? (
             <>
@@ -653,7 +673,7 @@ const PortfolioTab: React.FC<{
           <TerminalSectionHeader eyebrow="持仓" title="持仓明细" />
           {holdingsState.error ? <div className="mt-3"><ApiErrorAlert error={holdingsState.error} /></div> : null}
           {holdingsState.loading && holdings.length === 0 ? (
-            <div className="mt-4 h-32 animate-pulse rounded-2xl border border-white/5 bg-white/[0.025]" />
+            <LoadingNestedCard className="mt-4" />
           ) : holdings.length === 0 ? (
             <TerminalEmptyState className="mt-4" title="暂无持仓" />
           ) : (
@@ -691,7 +711,7 @@ const PortfolioTab: React.FC<{
           <TerminalSectionHeader eyebrow="活动" title="组合活动" />
           {activityState.error ? <div className="mt-3"><ApiErrorAlert error={activityState.error} /></div> : null}
           {activityState.loading && activities.length === 0 ? (
-            <div className="mt-4 h-32 animate-pulse rounded-2xl border border-white/5 bg-white/[0.025]" />
+            <LoadingNestedCard className="mt-4" />
           ) : activities.length === 0 ? (
             <TerminalEmptyState className="mt-4" title="暂无组合活动" />
           ) : (
@@ -739,7 +759,7 @@ const SecurityActionCard: React.FC<{
 }> = ({ actionKey, title, description, confirmPhrase, buttonLabel, available, danger = false, state, onChange, onSubmit }) => {
   const canSubmit = available && state.reason.trim().length > 0 && state.confirm === confirmPhrase && !state.loading;
   return (
-    <TerminalNestedBlock data-testid={`security-action-${actionKey.replace('_sessions', '-sessions')}`} className={danger ? 'border-rose-400/12 bg-rose-500/[0.03]' : ''}>
+    <TerminalNestedBlock data-testid={`security-action-${actionKey.replace('_sessions', '-sessions')}`} className={danger ? 'border-rose-400/16' : ''}>
       <TerminalSectionHeader
         eyebrow="安全操作"
         title={title}
@@ -786,8 +806,11 @@ const SecurityActionCard: React.FC<{
         </div>
       ) : null}
       {state.result ? (
-        <TerminalNotice variant="info" className="mt-4 border-emerald-300/20 bg-emerald-400/10 text-emerald-50/80">
-          <p>状态: {statusLabel(state.result.status)} · 会话撤销 {state.result.sessionsRevoked}</p>
+        <TerminalNotice variant="neutral" className="mt-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <TerminalChip variant="success">已记录审计结果</TerminalChip>
+            <p>状态: {statusLabel(state.result.status)} · 会话撤销 {state.result.sessionsRevoked}</p>
+          </div>
           {state.result.auditEventId ? <p className="mt-1 font-mono text-emerald-100">{state.result.auditEventId}</p> : null}
         </TerminalNotice>
       ) : null}
@@ -967,10 +990,10 @@ const ActivityFilters: React.FC<{
         <Select label="对象类型" value={filters.entityType || ''} options={ENTITY_TYPE_OPTIONS} onChange={(entityType) => onChange({ ...filters, entityType, offset: 0 })} />
         <Select label="发起方" value={filters.actorType || ''} options={ACTOR_TYPE_OPTIONS} onChange={(actorType) => onChange({ ...filters, actorType, offset: 0 })} />
         <div className="grid grid-cols-2 gap-2">
-          <TerminalButton type="button" variant="compact" className={filters.includeAdmin ? 'border-cyan-300/25 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/14 hover:text-cyan-50' : ''} onClick={() => toggle('includeAdmin')}>
+          <TerminalButton type="button" variant="compact" aria-pressed={filters.includeAdmin} className={filters.includeAdmin ? TERMINAL_ACTIVE_TOGGLE_CLASSNAME : ''} onClick={() => toggle('includeAdmin')}>
             管理访问
           </TerminalButton>
-          <TerminalButton type="button" variant="compact" className={filters.includeSystem ? 'border-cyan-300/25 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/14 hover:text-cyan-50' : ''} onClick={() => toggle('includeSystem')}>
+          <TerminalButton type="button" variant="compact" aria-pressed={filters.includeSystem} className={filters.includeSystem ? TERMINAL_ACTIVE_TOGGLE_CLASSNAME : ''} onClick={() => toggle('includeSystem')}>
             系统事件
           </TerminalButton>
         </div>
@@ -1066,7 +1089,7 @@ const ActivityTimeline: React.FC<{
           ) : null}
           {state.loading ? (
             <div className="mt-4 grid gap-3">
-              {[0, 1, 2].map((item) => <div key={item} className="h-36 animate-pulse rounded-2xl border border-white/5 bg-white/[0.025]" />)}
+              {[0, 1, 2].map((item) => <LoadingNestedCard key={item} className="min-h-[96px]" />)}
             </div>
           ) : items.length === 0 && !state.error ? (
             <TerminalEmptyState className="mt-4" title="当前时间窗口内暂无活动" />
@@ -1243,7 +1266,19 @@ const AdminUsersPage: React.FC = () => {
       return <UnavailableAdminCapability title="不可查看用户资料" description="当前账号缺少用户治理读取权限，前端不会请求或渲染用户详情。后端授权仍是最终边界。" />;
     }
     if (detailState.loading && !detailState.data) {
-      return <div className="h-64 animate-pulse rounded-[24px] border border-white/5 bg-white/[0.025]" />;
+      return (
+        <TerminalPanel as="section" data-testid="admin-users-loading-detail">
+          <div className="grid gap-4">
+            <div className="flex flex-wrap gap-2">
+              <LoadingBar className="h-6 w-24" />
+              <LoadingBar className="h-6 w-20" />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {[0, 1, 2, 3].map((item) => <LoadingNestedCard key={item} data-testid="admin-users-loading-detail-card" className="min-h-[128px]" />)}
+            </div>
+          </div>
+        </TerminalPanel>
+      );
     }
     if (detailState.error) {
       return (
