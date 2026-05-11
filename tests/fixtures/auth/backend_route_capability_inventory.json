@@ -1,0 +1,329 @@
+{
+  "protected_groups": [
+    {
+      "route_id": "agent.member_surface",
+      "path_pattern": "^/api/v1/agent/(?:stock-evidence|chat|chat/sessions(?:/\\{session_id\\})?|chat/stream)$",
+      "methods": ["GET", "POST", "DELETE"],
+      "surface": "agent",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "agent.admin_send",
+      "path_pattern": "^/api/v1/agent/chat/send$",
+      "methods": ["POST"],
+      "surface": "agent_admin_send",
+      "auth_dependency_label": "admin_user",
+      "capability_label": null,
+      "transitional_note": "Legacy admin-only route without an explicit capability dependency."
+    },
+    {
+      "route_id": "analysis.member_surface",
+      "path_pattern": "^/api/v1/analysis/(?:analyze|tasks(?:/\\{task_id\\}/progress|/stream)?|status/\\{task_id\\}(?:/poll)?)$",
+      "methods": ["GET", "POST"],
+      "surface": "analysis",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "history.member_surface",
+      "path_pattern": "^/api/v1/history(?:/\\{record_id\\}(?:/(?:news|markdown))?)?$",
+      "methods": ["GET", "DELETE"],
+      "surface": "history",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "backtest.member_surface",
+      "path_pattern": "^/api/v1/backtest/(?:run|prepare-samples|sample-status|runs|results|performance(?:/\\{code\\})?|samples/clear|results/clear|rule/(?:parse|run|universe-jobs(?:/\\{job_id\\}(?:/(?:run|status|diagnostics|results))?)?|runs(?:/\\{run_id\\}(?:/(?:status|support-bundle-manifest|export-index|support-bundle-reproducibility-manifest|execution-trace\\.json|execution-trace\\.csv|cancel))?)?|compare))$",
+      "methods": ["GET", "POST"],
+      "surface": "backtest",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "scanner.member_surface",
+      "path_pattern": "^/api/v1/scanner/(?:run|runs|strategy-simulation|runs/\\{run_id\\})$",
+      "methods": ["GET", "POST"],
+      "surface": "scanner",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "scanner.admin_watchlists_and_status",
+      "path_pattern": "^/api/v1/scanner/(?:watchlists/(?:today|recent)|status)$",
+      "methods": ["GET"],
+      "surface": "scanner_admin",
+      "auth_dependency_label": "admin_user",
+      "capability_label": null,
+      "transitional_note": "Legacy admin scanner endpoints still depend on coarse admin gating."
+    },
+    {
+      "route_id": "portfolio.member_surface",
+      "path_pattern": "^/api/v1/portfolio/(?:accounts(?:/\\{account_id\\})?|fx-rate(?:/refresh)?|broker-connections(?:/\\{connection_id\\})?|sync/ibkr|trades(?:/\\{trade_id\\})?|cash-ledger(?:/\\{entry_id\\})?|corporate-actions(?:/\\{action_id\\})?|snapshot|imports/(?:parse|brokers|commit|csv/parse|csv/brokers|csv/commit)|fx/refresh|risk)$",
+      "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+      "surface": "portfolio",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "watchlist.member_surface",
+      "path_pattern": "^/api/v1/watchlist/(?:items(?:/\\{item_id\\})?|refresh-scores|refresh-status)$",
+      "methods": ["GET", "POST", "DELETE"],
+      "surface": "watchlist",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "usage.admin_summary",
+      "path_pattern": "^/api/v1/usage/summary$",
+      "methods": ["GET"],
+      "surface": "usage_admin",
+      "auth_dependency_label": "admin_user",
+      "capability_label": null,
+      "transitional_note": "Usage summary is still admin-role gated instead of explicit capability gated."
+    },
+    {
+      "route_id": "quant.duckdb.admin_surface",
+      "path_pattern": "^/api/v1/quant/duckdb/(?:health|init|ingest-ohlcv|build-factors|factor-snapshot|validate-factor-path|compare-runtime-context|coverage|benchmark)$",
+      "methods": ["GET", "POST"],
+      "surface": "quant_duckdb_admin",
+      "auth_dependency_label": "admin_user",
+      "capability_label": null,
+      "transitional_note": "DuckDB admin routes remain protected by coarse admin gating."
+    },
+    {
+      "route_id": "admin.users.legacy_read",
+      "path_pattern": "^/api/v1/admin/users(?:/\\{user_id\\}(?:/activity)?)?$",
+      "methods": ["GET"],
+      "surface": "admin_user_governance",
+      "auth_dependency_label": "admin_user",
+      "capability_label": null,
+      "transitional_note": "Core admin user read routes still use require_admin_user without a narrow capability label."
+    },
+    {
+      "route_id": "admin.users.portfolio_read",
+      "path_pattern": "^/api/v1/admin/users/\\{user_id\\}/(?:portfolio-summary|holdings|portfolio-activity|portfolio/accounts/\\{account_id\\})$",
+      "methods": ["GET"],
+      "surface": "admin_user_portfolio",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "users:portfolio:read",
+      "transitional_note": null
+    },
+    {
+      "route_id": "admin.users.security_write",
+      "path_pattern": "^/api/v1/admin/users/\\{user_id\\}/(?:disable|enable|revoke-sessions)$",
+      "methods": ["POST"],
+      "surface": "admin_user_security",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "users:security:write",
+      "transitional_note": "Capability is discoverable through a wrapper helper that also enforces recent admin reauthentication."
+    },
+    {
+      "route_id": "admin.activity.legacy_read",
+      "path_pattern": "^/api/v1/admin/activity$",
+      "methods": ["GET"],
+      "surface": "admin_activity",
+      "auth_dependency_label": "admin_user",
+      "capability_label": null,
+      "transitional_note": "Admin activity feed remains coarse-admin gated."
+    },
+    {
+      "route_id": "admin.logs.read",
+      "path_pattern": "^/api/v1/admin/logs(?:/storage/summary|/sessions(?:/\\{session_id\\})?|/\\{event_id\\})?$",
+      "methods": ["GET"],
+      "surface": "admin_logs",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:logs:read",
+      "transitional_note": null
+    },
+    {
+      "route_id": "admin.logs.write",
+      "path_pattern": "^/api/v1/admin/logs/cleanup$",
+      "methods": ["POST"],
+      "surface": "admin_logs",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:logs:write",
+      "transitional_note": null
+    },
+    {
+      "route_id": "admin.notifications.read",
+      "path_pattern": "^/api/v1/admin/(?:notification-channels|notifications)$",
+      "methods": ["GET"],
+      "surface": "admin_notifications",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:notifications:read",
+      "transitional_note": null
+    },
+    {
+      "route_id": "admin.notifications.write",
+      "path_pattern": "^/api/v1/admin/(?:notification-channels(?:/\\{channel_id\\}(?:/test)?)?|notifications/\\{event_id\\}/ack)$",
+      "methods": ["POST", "PATCH", "DELETE"],
+      "surface": "admin_notifications",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:notifications:write",
+      "transitional_note": null
+    },
+    {
+      "route_id": "admin.cost.read",
+      "path_pattern": "^/api/v1/admin/cost/(?:duplicate-summary|quota-dry-run|llm-ledger-summary|model-pricing-policies)$",
+      "methods": ["GET", "POST"],
+      "surface": "admin_cost_observability",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "cost:observability:read",
+      "transitional_note": null
+    },
+    {
+      "route_id": "admin.providers.read",
+      "path_pattern": "^/api/v1/admin/(?:providers/(?:circuits(?:/events)?|quota-windows|probe-events|sla-readiness)|provider-usage-ledger)$",
+      "methods": ["GET"],
+      "surface": "admin_provider_observability",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "transitional_note": null
+    },
+    {
+      "route_id": "admin.market_providers.operations",
+      "path_pattern": "^/api/v1/admin/market-providers/operations$",
+      "methods": ["GET"],
+      "surface": "admin_market_provider_operations",
+      "auth_dependency_label": "admin_user",
+      "capability_label": null,
+      "transitional_note": "Operational provider route still uses require_admin_user instead of a dedicated read capability."
+    },
+    {
+      "route_id": "system.config.read",
+      "path_pattern": "^/api/v1/system/config(?:/schema)?$",
+      "methods": ["GET"],
+      "surface": "system_config",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:system_config:read",
+      "transitional_note": null
+    },
+    {
+      "route_id": "system.config.validate",
+      "path_pattern": "^/api/v1/system/config/validate$",
+      "methods": ["POST"],
+      "surface": "system_config",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:system_config:read",
+      "transitional_note": null
+    },
+    {
+      "route_id": "system.config.write",
+      "path_pattern": "^/api/v1/system/(?:config|actions/(?:runtime-cache/reset|factory-reset))$",
+      "methods": ["PUT", "POST"],
+      "surface": "system_config",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:system_config:write",
+      "transitional_note": null
+    },
+    {
+      "route_id": "system.provider_tests.write",
+      "path_pattern": "^/api/v1/system/config/(?:llm/test-channel|data-source/test|data-source/test-builtin)$",
+      "methods": ["POST"],
+      "surface": "system_provider_tests",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:write",
+      "transitional_note": null
+    }
+  ],
+  "public_samples": [
+    {
+      "route_id": "market_overview.indices.optional_user_context",
+      "path": "/api/v1/market-overview/indices",
+      "method": "GET",
+      "surface": "market_overview",
+      "auth_dependency_label": "optional_current_user",
+      "capability_label": null,
+      "transitional_note": "Guest-safe route that may consume optional user context but must not be relabeled as admin-only."
+    },
+    {
+      "route_id": "market.cn_indices.optional_user_context",
+      "path": "/api/v1/market/cn-indices",
+      "method": "GET",
+      "surface": "market",
+      "auth_dependency_label": "optional_current_user",
+      "capability_label": null,
+      "transitional_note": "Guest-safe route that must remain outside admin-only capability mapping."
+    },
+    {
+      "route_id": "auth.status.public",
+      "path": "/api/v1/auth/status",
+      "method": "GET",
+      "surface": "auth",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "transitional_note": "Public auth status probe should not silently become protected."
+    }
+  ],
+  "request_guarded_auth_routes": [
+    {
+      "route_id": "auth.me",
+      "path": "/api/v1/auth/me",
+      "method": "GET",
+      "guard_kind": "request_current_user"
+    },
+    {
+      "route_id": "auth.preferences.notifications",
+      "path": "/api/v1/auth/preferences/notifications",
+      "methods": ["GET", "PUT"],
+      "guard_kind": "request_current_user"
+    },
+    {
+      "route_id": "auth.reauth",
+      "path": "/api/v1/auth/reauth",
+      "method": "POST",
+      "guard_kind": "request_current_user"
+    },
+    {
+      "route_id": "auth.mfa.admin_session",
+      "path_pattern": "^/api/v1/auth/mfa/(?:enroll/start|enroll/verify|verify|disable|recovery-codes/generate|recovery-codes/verify|recovery-codes/rotate)$",
+      "methods": ["POST"],
+      "guard_kind": "request_current_user"
+    },
+    {
+      "route_id": "auth.verify_password",
+      "path": "/api/v1/auth/verify-password",
+      "method": "POST",
+      "guard_kind": "request_current_user"
+    },
+    {
+      "route_id": "auth.settings",
+      "path": "/api/v1/auth/settings",
+      "method": "POST",
+      "guard_kind": "request_current_user"
+    },
+    {
+      "route_id": "auth.change_password",
+      "path": "/api/v1/auth/change-password",
+      "method": "POST",
+      "guard_kind": "request_current_user"
+    },
+    {
+      "route_id": "auth.logout",
+      "path": "/api/v1/auth/logout",
+      "method": "POST",
+      "guard_kind": "request_current_user"
+    },
+    {
+      "route_id": "auth.login.public",
+      "path": "/api/v1/auth/login",
+      "method": "POST",
+      "guard_kind": "public"
+    },
+    {
+      "route_id": "auth.reset_password_request.public",
+      "path": "/api/v1/auth/reset-password/request",
+      "method": "POST",
+      "guard_kind": "public"
+    }
+  ]
+}
