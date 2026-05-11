@@ -328,8 +328,9 @@ const rawSessions = [
 
 async function expandStorageDisclosure() {
   const disclosure = await screen.findByTestId('admin-logs-storage-disclosure');
-  if (!disclosure.hasAttribute('open')) {
-    fireEvent.click(within(disclosure).getByRole('button'));
+  const toggle = within(disclosure).getByRole('button');
+  if (toggle.getAttribute('aria-expanded') !== 'true') {
+    fireEvent.click(toggle);
   }
 }
 
@@ -1021,7 +1022,7 @@ describe('AdminLogsPage', () => {
     expect(screen.getByTestId('scanner-execution-summary')).toHaveTextContent('30 / 5');
     const metadataToggle = screen.getByRole('button', { name: '展开 元数据' });
     expect(metadataToggle).toBeTruthy();
-    expect(metadataToggle.closest('details')).not.toHaveAttribute('open');
+    expect(metadataToggle).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByText('DEBUG')).not.toBeInTheDocument();
   });
 

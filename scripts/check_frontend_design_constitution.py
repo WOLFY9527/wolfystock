@@ -145,6 +145,10 @@ ADMIN_LOGS_RETIRED_TERMINAL_SURFACE_RULES = [
         "Admin Logs migrated severity badges must not restore retired severityClass material helpers.",
     ),
     (
+        re.compile(r"\bAdminLogsDisclosure\b"),
+        "Admin Logs migrated advanced details must keep using TerminalDisclosure instead of a retired page-local disclosure wrapper.",
+    ),
+    (
         re.compile(r"rounded-(?:\[20px\]|2xl|3xl)\s+border\s+border-white/(?:5|6|8)\s+bg-(?:black/20|white/\[(?:0\.018|0\.02|0\.025)\])"),
         "Admin Logs migrated page-local shell classes removed by the terminal wave must not be reintroduced.",
     ),
