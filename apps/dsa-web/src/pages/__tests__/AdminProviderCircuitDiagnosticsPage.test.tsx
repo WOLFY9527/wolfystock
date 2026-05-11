@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminProviderCircuitDiagnosticsPage from '../AdminProviderCircuitDiagnosticsPage';
 
@@ -165,9 +165,13 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
   it('renders provider circuit states, events, quota windows, probes, and read-only boundary copy', async () => {
     getDiagnostics.mockResolvedValue(response);
 
-    render(<AdminProviderCircuitDiagnosticsPage />);
+    const { container } = render(<AdminProviderCircuitDiagnosticsPage />);
 
     expect(screen.getByText('Provider 熔断诊断')).toBeInTheDocument();
+    expect(container.querySelector('[data-terminal-primitive="page-shell"]')).not.toBeNull();
+    expect(container.querySelector('[data-terminal-primitive="page-heading"]')).not.toBeNull();
+    expect(container.querySelector('[data-terminal-primitive="notice"]')).not.toBeNull();
+    expect(container.querySelector('[data-terminal-primitive="disclosure"]')).not.toBeNull();
     expect(await screen.findByText('页面用途')).toBeInTheDocument();
     expect(screen.getByText('当前状态')).toBeInTheDocument();
     expect(screen.getByText('下一步')).toBeInTheDocument();
@@ -178,25 +182,27 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.getByText('需关注')).toBeInTheDocument();
     expect(screen.getByText('诊断范围')).toBeInTheDocument();
     expect((await screen.findAllByText('finnhub')).length).toBeGreaterThan(0);
-    expect(screen.getByText('当前为诊断观测，不会改变 provider fallback 或 MarketCache 行为。')).toBeInTheDocument();
+    expect(screen.getAllByText('当前为诊断观测，不会改变 provider fallback 或 MarketCache 行为。').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Provider 429').length).toBeGreaterThan(0);
+    expect(screen.getByText('Provider SLA / 凭证就绪')).toBeInTheDocument();
+    expect(screen.getByText('已配置')).toBeInTheDocument();
+    expect(screen.getByText('趋势请求')).toBeInTheDocument();
+    expect(screen.getByText('6_20')).toBeInTheDocument();
+    expect(screen.getByText('最近错误 buckets')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '展开 二级细节：探测、事件、配额窗口、路由 bucket' }));
     expect(screen.getByText('最近熔断事件')).toBeInTheDocument();
     expect(screen.getAllByText('配额窗口').length).toBeGreaterThan(0);
     expect(screen.getByText('探测事件')).toBeInTheDocument();
-    expect(screen.getByText('Provider SLA / 凭证就绪')).toBeInTheDocument();
-    expect(screen.getByText('已配置')).toBeInTheDocument();
-    expect(screen.getByText('Trend requests')).toBeInTheDocument();
-    expect(screen.getByText('6_20')).toBeInTheDocument();
-    expect(screen.getByText('最近错误 buckets')).toBeInTheDocument();
     expect(screen.getByText('只读诊断').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
     expect(screen.getByText('不触发外部调用')).toBeInTheDocument();
-    expect(screen.getByText('不执行熔断 enforcement')).toBeInTheDocument();
+    expect(screen.getByText('不执行熔断门禁')).toBeInTheDocument();
     expect(screen.getByText('不触发外部调用').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
-    expect(screen.getByText('不执行熔断 enforcement').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
-    expect(screen.getByText('ops:providers:read').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
+    expect(screen.getByText('不执行熔断门禁').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
     expect(screen.getByText('只读快照').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
     expect(screen.getByText('打开').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
-    expect(screen.getByText('只读 · 无 live call').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
+    expect(screen.getByText('只读 · 外部调用关闭').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
+    expect(screen.queryByText('ops:providers:read')).not.toBeInTheDocument();
+    expect(screen.queryByText(/live call/i)).not.toBeInTheDocument();
     expect(screen.queryByText('SECRET')).not.toBeInTheDocument();
   });
 
