@@ -129,6 +129,14 @@ ADMIN_LOGS_RETIRED_TERMINAL_SURFACE_RULES = [
         "Admin Logs migrated terminal surface must keep using TerminalPageShell/TerminalPanel instead of GlassCard.",
     ),
     (
+        re.compile(r"import\s*\{[^}]*\bBadge\b[^}]*\}\s*from\s*['\"][^'\"]*components/common['\"]"),
+        "Admin Logs migrated status chips must not re-import common Badge after TerminalChip migration.",
+    ),
+    (
+        re.compile(r"<Badge\b"),
+        "Admin Logs migrated status chips must keep using TerminalChip instead of local Badge tags.",
+    ),
+    (
         re.compile(r"import\s*\{[^}]*\bStatusBadge\b[^}]*\}\s*from\s*['\"][^'\"]*StatusBadge['\"]"),
         "Admin Logs migrated status chips must not re-import the retired StatusBadge component.",
     ),
@@ -145,8 +153,20 @@ ADMIN_LOGS_RETIRED_TERMINAL_SURFACE_RULES = [
         "Admin Logs migrated severity badges must not restore retired severityClass material helpers.",
     ),
     (
+        re.compile(r"\bSummaryTile\b"),
+        "Admin Logs migrated summary cells must not restore retired SummaryTile helpers.",
+    ),
+    (
         re.compile(r"\bAdminLogsDisclosure\b"),
         "Admin Logs migrated advanced details must keep using TerminalDisclosure instead of a retired page-local disclosure wrapper.",
+    ),
+    (
+        re.compile(r"<details\b"),
+        "Admin Logs migrated advanced details must keep using TerminalDisclosure instead of native details shells.",
+    ),
+    (
+        re.compile(r"<summary\b"),
+        "Admin Logs migrated advanced details must keep using TerminalDisclosure instead of native summary shells.",
     ),
     (
         re.compile(r"rounded-(?:\[20px\]|2xl|3xl)\s+border\s+border-white/(?:5|6|8)\s+bg-(?:black/20|white/\[(?:0\.018|0\.02|0\.025)\])"),

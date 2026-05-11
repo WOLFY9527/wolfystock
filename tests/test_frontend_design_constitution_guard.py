@@ -222,17 +222,51 @@ def test_flags_admin_logs_retired_terminal_surface_regression():
     assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
 
 
+def test_flags_admin_logs_remaining_retired_visual_patterns():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminLogsPage.tsx",
+        "\n".join([
+            "import { Badge } from '../components/common';",
+            "const tile = SummaryTile;",
+            "export default function Page() {",
+            "  return <details><summary>执行细节</summary><Badge variant='warning'>告警</Badge></details>;",
+            "}",
+        ]),
+    )
+
+    assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
 def test_allows_admin_logs_terminal_primitives_with_status_utilities():
     guard = load_guard_module()
 
     result = guard.scan_text(
         "apps/dsa-web/src/pages/AdminLogsPage.tsx",
         "\n".join([
-            "import { TerminalButton, TerminalChip, TerminalPanel } from '../components/terminal';",
+            "import { TerminalButton, TerminalChip, TerminalDisclosure, TerminalPanel } from '../components/terminal';",
             "import { getStatusLabel, normalizeStatus, type UnifiedStatus } from '../components/ui/StatusBadge';",
             "export default function Page() {",
             "  const status = normalizeStatus('running') as UnifiedStatus;",
-            "  return <TerminalPanel><TerminalChip variant='info'>{getStatusLabel(status)}</TerminalChip><TerminalButton variant='secondary'>复制执行摘要</TerminalButton></TerminalPanel>;",
+            "  return <TerminalPanel><TerminalChip variant='info'>{getStatusLabel(status)}</TerminalChip><TerminalButton variant='secondary'>复制执行摘要</TerminalButton><TerminalDisclosure title='执行细节' summary='默认收起'>脱敏内容</TerminalDisclosure></TerminalPanel>;",
+            "}",
+        ]),
+    )
+
+    assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_does_not_apply_admin_logs_retired_rules_to_non_target_pages():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/SettingsPage.tsx",
+        "\n".join([
+            "import { Badge } from '../components/common';",
+            "const tile = SummaryTile;",
+            "export default function Page() {",
+            "  return <details><summary>高级选项</summary><Badge variant='info'>说明</Badge></details>;",
             "}",
         ]),
     )
