@@ -10,7 +10,22 @@ import {
   type NotificationSeverity,
 } from '../api/adminNotifications';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Badge, Button, Checkbox, Disclosure, GlassCard, Input, Select } from '../components/common';
+import { ApiErrorAlert, Checkbox, Input, Select } from '../components/common';
+import {
+  TerminalButton,
+  TerminalChip,
+  TerminalDenseList,
+  TerminalDisclosure,
+  TerminalEmptyState,
+  TerminalGrid,
+  TerminalMetric,
+  TerminalNestedBlock,
+  TerminalNotice,
+  TerminalPageHeading,
+  TerminalPageShell,
+  TerminalPanel,
+  TerminalSectionHeader,
+} from '../components/terminal/TerminalPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { cn } from '../utils/cn';
 import {
@@ -51,9 +66,11 @@ const INITIAL_DRAFT: ChannelDraft = {
 
 const SYSTEM_CHANNEL_OPTIONS = ['wechat', 'feishu', 'telegram', 'email', 'pushover', 'pushplus', 'serverchan3', 'custom', 'discord', 'slack', 'astrbot'];
 
-const severityBadgeVariant: Record<NotificationSeverity, React.ComponentProps<typeof Badge>['variant']> = {
+type TerminalChipVariant = React.ComponentProps<typeof TerminalChip>['variant'];
+
+const severityChipVariant: Record<NotificationSeverity, TerminalChipVariant> = {
   info: 'info',
-  warning: 'warning',
+  warning: 'caution',
   critical: 'danger',
 };
 
@@ -191,12 +208,16 @@ function eventTypesText(channel: NotificationChannel, language: 'zh' | 'en'): st
   return channel.eventTypes.length ? channel.eventTypes.join(', ') : (language === 'en' ? 'All event types' : '全部事件类型');
 }
 
-function displayStatusBadgeVariant(tone: DisplayStatusTone): React.ComponentProps<typeof Badge>['variant'] {
+function displayStatusChipVariant(tone: DisplayStatusTone): TerminalChipVariant {
   if (tone === 'success') return 'success';
-  if (tone === 'warning') return 'warning';
+  if (tone === 'warning') return 'caution';
   if (tone === 'danger') return 'danger';
   if (tone === 'info') return 'info';
-  return 'default';
+  return 'neutral';
+}
+
+function noticeVariant(tone: StatusNotice['tone']): React.ComponentProps<typeof TerminalNotice>['variant'] {
+  return tone === 'success' ? 'info' : 'danger';
 }
 
 function coverageLabel(channel: NotificationChannel, language: 'zh' | 'en'): string {
@@ -433,28 +454,37 @@ const AdminNotificationsPage: React.FC = () => {
   }, [loadAll]);
 
   return (
-    <section data-testid="admin-notifications-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-x-hidden">
-      <GlassCard as="section" className="p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-200/70">{text('Operational alerts', '运维告警')}</p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{text('Admin notifications', '管理员通知')}</h1>
-            <p className="mt-1 max-w-3xl text-xs leading-5 text-secondary-text">
-              {text(
-                'Route Admin Logs, scanner, market data, and future provider alerts to in-app records or a controlled webhook.',
-                '将管理员日志、扫描器、市场数据和后续的供应商告警路由到站内记录或受控 webhook。',
-              )}
-            </p>
-          </div>
-          <Button type="button" variant="secondary" size="sm" onClick={() => void loadAll()} isLoading={isLoading} loadingText={text('Refreshing', '刷新中')}>
-            {text('Refresh', '刷新')}
-          </Button>
-        </div>
-      </GlassCard>
+    <TerminalPageShell
+      data-testid="admin-notifications-workspace"
+      className="min-h-0 flex-1 overflow-x-hidden"
+    >
+      <TerminalPanel as="section" className="relative overflow-hidden">
+        <TerminalPageHeading
+          eyebrow={text('Operational alerts', '运维告警')}
+          title={text('Admin notifications', '管理员通知')}
+          action={(
+            <TerminalButton
+              type="button"
+              variant="secondary"
+              className="px-3 text-xs"
+              onClick={() => void loadAll()}
+              disabled={isLoading}
+            >
+              {isLoading ? text('Refreshing', '刷新中') : text('Refresh', '刷新')}
+            </TerminalButton>
+          )}
+        />
+        <p className="mt-3 max-w-3xl text-xs leading-5 text-white/55">
+          {text(
+            'Route Admin Logs, scanner, market data, and future provider alerts to in-app records or a controlled webhook.',
+            '将管理员日志、扫描器、市场数据和后续的供应商告警路由到站内记录或受控 webhook。',
+          )}
+        </p>
+      </TerminalPanel>
 
       {error ? <ApiErrorAlert error={error} /> : null}
       {notice ? (
-        <div className={cn('rounded-lg border px-3 py-2 text-xs', notice.tone === 'success' ? 'border-emerald-300/20 bg-emerald-400/10 text-emerald-100' : 'border-rose-300/20 bg-rose-500/10 text-rose-100')}>
+        <TerminalNotice variant={noticeVariant(notice.tone)}>
           <p>{notice.message}</p>
           {notice.details?.length ? (
             <ul className="mt-2 space-y-1 text-[11px] leading-5 opacity-90">
@@ -464,70 +494,80 @@ const AdminNotificationsPage: React.FC = () => {
             </ul>
           ) : null}
           {notice.rawMessage && notice.rawMessage !== notice.message ? (
-            <Disclosure
-              className="mt-2 rounded-md border border-white/10 bg-black/10 px-2 py-1"
-              summaryClassName="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-secondary-text"
-              bodyClassName="mt-2"
-              summary={text('Developer details', '开发者细节')}
+            <TerminalDisclosure
+              data-testid="notification-notice-raw-diagnostics"
+              title={text('Developer details', '开发者细节')}
+              summary={text('Collapsed by default', '默认收起')}
+              className="mt-3"
             >
-              <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] leading-5 text-secondary-text">{notice.rawMessage}</pre>
-            </Disclosure>
+              <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-white/55">{notice.rawMessage}</pre>
+            </TerminalDisclosure>
           ) : null}
-        </div>
+        </TerminalNotice>
       ) : null}
 
-      <GlassCard as="section" className="p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">{text('Route coverage', '路由覆盖')}</h2>
-            <p className="mt-1 text-xs text-muted-text">
-              {channels.length
-                ? text('Log notification rules mapped to safe operator channels.', '日志通知规则与安全运维通道的覆盖情况。')
-                : text('No rules exist yet.', '暂无通知规则。')}
-            </p>
-          </div>
-          <ShieldCheck className="h-4 w-4 text-emerald-100/70" />
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+      <TerminalPanel as="section">
+        <TerminalSectionHeader
+          eyebrow={text('Route coverage', '路由覆盖')}
+          title={channels.length
+            ? text('Log notification rules mapped to safe operator channels.', '日志通知规则与安全运维通道的覆盖情况。')
+            : text('No rules exist yet.', '暂无通知规则。')}
+          action={<TerminalChip variant="info"><ShieldCheck className="h-3.5 w-3.5" />{text('Operator route', '运维路由')}</TerminalChip>}
+        />
+        <TerminalGrid data-testid="admin-notifications-summary-grid" className="mt-4">
+          <div className="col-span-12 grid grid-cols-2 gap-3 md:grid-cols-4">
           {[
             { label: text('Enabled', '已启用'), value: routeSummary.enabledRoutes, tone: 'text-emerald-100' },
             { label: text('Configured channels', '已配置通道'), value: channels.length, tone: 'text-white' },
             { label: text('Disabled', '已停用'), value: routeSummary.disabledRoutes, tone: 'text-white/55' },
             { label: text('Unconfigured', '未配置'), value: routeSummary.missingTargets, tone: routeSummary.missingTargets ? 'text-amber-100' : 'text-white/55' },
           ].map((item) => (
-            <div key={item.label} className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
-              <p className="text-[11px] font-semibold text-muted-text">{item.label}</p>
-              <p className={cn('mt-2 text-xl font-semibold', item.tone)}>{item.value}</p>
-            </div>
+            <TerminalMetric
+              key={item.label}
+              label={item.label}
+              value={item.value}
+              valueClassName={cn('text-xl font-semibold', item.tone)}
+            />
           ))}
-        </div>
+          </div>
         {channels.length ? (
-          <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
-              <p className="text-[11px] font-semibold text-muted-text">{text('Grouped routes', '路由分组')}</p>
-              <p className="mt-2 break-words text-xs leading-5 text-secondary-text">
-                {Object.entries(routeSummary.grouped).map(([label, count]) => `${label} × ${count}`).join(' · ')}
-              </p>
+          <>
+            <div className="col-span-12 xl:col-span-6">
+              <TerminalNestedBlock>
+                <p className="text-[11px] font-semibold text-white/40">{text('Grouped routes', '路由分组')}</p>
+                <p className="mt-2 break-words text-xs leading-5 text-white/55">
+                  {Object.entries(routeSummary.grouped).map(([label, count]) => `${label} × ${count}`).join(' · ')}
+                </p>
+              </TerminalNestedBlock>
             </div>
-            <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
-              <p className="text-[11px] font-semibold text-muted-text">{text('Covered events', '覆盖事件')}</p>
-              <p className="mt-2 break-words text-xs leading-5 text-secondary-text">
-                {routeSummary.categories.join(' · ')}
-              </p>
+            <div className="col-span-12 xl:col-span-6">
+              <TerminalNestedBlock>
+                <p className="text-[11px] font-semibold text-white/40">{text('Covered events', '覆盖事件')}</p>
+                <p className="mt-2 break-words text-xs leading-5 text-white/55">
+                  {routeSummary.categories.join(' · ')}
+                </p>
+              </TerminalNestedBlock>
             </div>
-          </div>
+          </>
         ) : null}
-      </GlassCard>
+        </TerminalGrid>
+      </TerminalPanel>
 
-      <section className="grid min-h-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
-        <GlassCard as="form" className="space-y-3 p-4" onSubmit={(event) => {
-          event.preventDefault();
-          void createChannel();
-        }}>
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">{text('Channel setup', '通道设置')}</h2>
-            <p className="mt-1 text-xs text-muted-text">{text('Create a low-risk in-app or webhook route. Secrets are masked after save.', '创建一个低风险的站内或 webhook 通道。保存后密钥会被遮罩。')}</p>
-          </div>
+      <TerminalGrid className="min-h-0">
+        <TerminalPanel as="section" dense className="col-span-12 xl:col-span-4">
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void createChannel();
+            }}
+          >
+          <TerminalSectionHeader
+            eyebrow={text('Channel setup', '通道设置')}
+            title={text('Create a low-risk in-app or webhook route.', '创建一个低风险的站内或 webhook 通道。')}
+            action={<TerminalChip variant="neutral">{text('Masked after save', '保存后脱敏')}</TerminalChip>}
+          />
+          <p className="text-xs leading-5 text-white/45">{text('Secrets are masked after save.', '保存后密钥会被遮罩。')}</p>
           <Input
             label={text('Channel name', '通道名称')}
             value={draft.name}
@@ -595,36 +635,34 @@ const AdminNotificationsPage: React.FC = () => {
             label={text('Enabled', '启用')}
             checked={draft.enabled}
             onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}
-            containerClassName="min-h-[40px] rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2"
+            containerClassName="min-h-[40px] rounded-xl border border-white/[0.02] bg-black/20 px-3 py-2"
           />
-          {formError ? <p className="text-xs text-rose-100">{formError}</p> : null}
-          <Button type="submit" variant="primary" size="md" isLoading={isSaving} loadingText={text('Saving', '保存中')} className="w-full">
-            {text('Create channel', '创建通道')}
-          </Button>
-        </GlassCard>
+          {formError ? <TerminalNotice variant="danger">{formError}</TerminalNotice> : null}
+          <TerminalButton type="submit" variant="primary" className="w-full" disabled={isSaving}>
+            {isSaving ? text('Saving', '保存中') : text('Create channel', '创建通道')}
+          </TerminalButton>
+          </form>
+        </TerminalPanel>
 
-        <div className="grid min-h-0 grid-cols-1 gap-4">
-          <GlassCard as="section" className="min-h-0 p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">{text('Notification rules', '通知规则')}</h2>
-                <p className="mt-1 text-xs text-muted-text">{text(`${channels.length} configured routes`, `${channels.length} 条已配置路由`)}</p>
-              </div>
-              <BellRing className="h-4 w-4 text-emerald-100/70" />
-            </div>
-            <div className="overflow-hidden rounded-xl border border-white/6 bg-black/15">
-              <div className="divide-y divide-white/6">
+        <div className="col-span-12 grid min-h-0 grid-cols-1 gap-6 xl:col-span-8">
+          <TerminalPanel as="section" data-testid="admin-notifications-rules-panel" className="min-h-0">
+            <TerminalSectionHeader
+              eyebrow={text('Notification rules', '通知规则')}
+              title={text(`${channels.length} configured routes`, `${channels.length} 条已配置路由`)}
+              action={<TerminalChip variant="info"><BellRing className="h-3.5 w-3.5" />{text('Route bindings', '路由绑定')}</TerminalChip>}
+            />
+            <TerminalDenseList className="mt-4 gap-3">
                 {channels.length ? channels.map((channel) => {
                   const deliveryError = formatDeliveryError(language as 'zh' | 'en', channel.lastError, channel.lastErrorCode, channel.lastErrorDiagnostics);
                   const enabledStatus = describeBooleanEnabled(channel.enabled, { language: language as 'zh' | 'en' });
                   const lastStatus = describeAdminNotificationStatus(channel.lastStatus, { language: language as 'zh' | 'en' });
 
                   return (
-                  <div key={channel.id} data-testid={`notification-channel-${channel.id}`} className="grid gap-3 px-3 py-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(16rem,1.4fr)_minmax(11rem,0.8fr)_minmax(13rem,0.9fr)] lg:items-start">
+                  <TerminalNestedBlock key={channel.id} data-testid={`notification-channel-${channel.id}`} className="grid gap-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(16rem,1.35fr)_minmax(11rem,0.85fr)_minmax(13rem,0.95fr)] lg:items-start">
                     <div className="min-w-0 space-y-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{channel.name}</p>
-                        <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-text">
+                        <p className="truncate text-sm font-semibold text-white/90">{channel.name}</p>
+                        <p className="mt-1 flex items-center gap-1 text-[11px] text-white/40">
                           {channel.type === 'webhook' ? <Webhook className="h-3 w-3" /> : <BellRing className="h-3 w-3" />}
                           {scopeLabel(channel, language as 'zh' | 'en')} · {channel.type === 'system_channel'
                             ? text('Existing channel', '已有通道')
@@ -633,129 +671,123 @@ const AdminNotificationsPage: React.FC = () => {
                               : text('In-app', '站内')}
                         </p>
                       </div>
-                      <Badge variant={displayStatusBadgeVariant(enabledStatus.tone)}>
+                      <TerminalChip variant={displayStatusChipVariant(enabledStatus.tone)}>
                         {enabledStatus.label}
-                      </Badge>
+                      </TerminalChip>
                     </div>
-                    <div className="min-w-0 rounded-xl border border-white/[0.04] bg-black/20 px-3 py-2">
-                      <p className="text-[11px] font-semibold text-muted-text">{text('Route coverage', '路由覆盖')}</p>
-                      <p className="mt-1 break-words text-xs leading-5 text-secondary-text">{coverageLabel(channel, language as 'zh' | 'en')}</p>
-                      <p className="mt-2 text-[11px] font-semibold text-muted-text">{text('Destination', '目标通道')}</p>
-                      <p className="mt-1 break-words text-xs leading-5 text-secondary-text">{channelTarget(channel, language as 'zh' | 'en')}</p>
-                    </div>
-                    <div className="min-w-0 space-y-2 text-[11px] text-muted-text">
+                    <TerminalNestedBlock className="min-w-0">
+                      <p className="text-[11px] font-semibold text-white/40">{text('Route coverage', '路由覆盖')}</p>
+                      <p className="mt-1 break-words text-xs leading-5 text-white/55">{coverageLabel(channel, language as 'zh' | 'en')}</p>
+                      <p className="mt-2 text-[11px] font-semibold text-white/40">{text('Destination', '目标通道')}</p>
+                      <p className="mt-1 break-words text-xs leading-5 text-white/55">{channelTarget(channel, language as 'zh' | 'en')}</p>
+                    </TerminalNestedBlock>
+                    <div className="min-w-0 space-y-2 text-[11px] text-white/40">
                       <div>
-                        <Badge variant={severityBadgeVariant[channel.severityMin]}>
+                        <TerminalChip variant={severityChipVariant[channel.severityMin]}>
                           {severityLabel(channel.severityMin, language as 'zh' | 'en')}
-                        </Badge>
+                        </TerminalChip>
                       </div>
                       <p>
-                        {text('Last trigger', '最近触发')}: <span className="text-secondary-text">{formatDate(channel.lastTriggeredAt || channel.lastSentAt)}</span>
+                        {text('Last trigger', '最近触发')}: <span className="text-white/72">{formatDate(channel.lastTriggeredAt || channel.lastSentAt)}</span>
                       </p>
                       <p>
-                        {text('Last status', '最近状态')}: <Badge variant={displayStatusBadgeVariant(lastStatus.tone)}>{lastStatus.label}</Badge>
+                        {text('Last status', '最近状态')}: <TerminalChip variant={displayStatusChipVariant(lastStatus.tone)}>{lastStatus.label}</TerminalChip>
                       </p>
                       <p>
-                        {text('Last failure', '最近失败')}: <span className="text-secondary-text">{failureSummaryLabel(channel, deliveryError, language as 'zh' | 'en')}</span>
+                        {text('Last failure', '最近失败')}: <span className="text-white/72">{failureSummaryLabel(channel, deliveryError, language as 'zh' | 'en')}</span>
                       </p>
                     </div>
                     <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
-                      <Button
+                      <TerminalButton
                         type="button"
-                        variant="secondary"
-                        size="sm"
+                        variant="compact"
                         onClick={() => void testChannel(channel.id, true)}
                         disabled={busyId === channel.id}
                       >
                         <ShieldCheck className="h-3 w-3" />
                         {text('Dry run', '仅验证')}
-                      </Button>
-                      <Button
+                      </TerminalButton>
+                      <TerminalButton
                         type="button"
-                        variant="secondary"
-                        size="sm"
+                        variant="compact"
                         onClick={() => void toggleChannel(channel)}
                         disabled={busyId === channel.id}
                       >
                         <Power className="h-3 w-3" />
                         {channel.enabled ? text('Disable', '停用') : text('Enable', '启用')}
-                      </Button>
-                      <Button
+                      </TerminalButton>
+                      <TerminalButton
                         type="button"
-                        variant="secondary"
-                        size="sm"
+                        variant="compact"
                         onClick={() => void testChannel(channel.id, false)}
                         disabled={busyId === channel.id}
                       >
                         <Send className="h-3 w-3" />
                         {text('Test send', '测试发送')}
-                      </Button>
-                      <Button
+                      </TerminalButton>
+                      <TerminalButton
                         type="button"
-                        variant="danger-subtle"
-                        size="sm"
+                        variant="danger"
                         onClick={() => void deleteChannel(channel.id)}
                         disabled={busyId === channel.id}
                         title={text('Only unbind the log notification route; system channel is not deleted.', '仅解除日志路由绑定；不会删除系统通道。')}
                       >
                         <Trash2 className="h-3 w-3" />
                         {text('Unbind', '解除绑定')}
-                      </Button>
-                      <p className="basis-full text-[11px] leading-4 text-muted-text lg:text-right">
+                      </TerminalButton>
+                      <p className="basis-full text-[11px] leading-4 text-white/40 lg:text-right">
                         {text('Only removes the log route binding. The system channel is not deleted.', '仅解除日志路由绑定，不会删除系统通道。')}
                       </p>
                     </div>
-                  </div>
+                  </TerminalNestedBlock>
                 ); }) : (
-                  <p className="px-3 py-6 text-sm text-muted-text">{text('No notification rules configured.', '暂无通知规则。')}</p>
+                  <TerminalEmptyState data-testid="notification-rules-empty-state" title={text('No notification rules configured.', '暂无通知规则。')}>
+                    {text('Create the first operator route on the left and keep delivery diagnostics secondary.', '在左侧创建第一条运维路由，原始投递诊断默认保持为次级信息。')}
+                  </TerminalEmptyState>
                 )}
-              </div>
-            </div>
-          </GlassCard>
+            </TerminalDenseList>
+          </TerminalPanel>
 
-          <GlassCard as="section" className="min-h-0 p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">{text('Notifications', '通知事件')}</h2>
-                <p className="mt-1 text-xs text-muted-text">{text('Recent operational alert events and acknowledgement state.', '最近的运维告警事件与确认状态。')}</p>
-              </div>
-              <CheckCircle2 className="h-4 w-4 text-emerald-100/70" />
-            </div>
-            <div className="overflow-hidden rounded-xl border border-white/6 bg-black/15">
-              <div className="divide-y divide-white/6">
+          <TerminalPanel as="section" data-testid="admin-notifications-events-panel" className="min-h-0">
+            <TerminalSectionHeader
+              eyebrow={text('Notifications', '通知事件')}
+              title={text('Recent operational alert events and acknowledgement state.', '最近的运维告警事件与确认状态。')}
+              action={<TerminalChip variant="info"><CheckCircle2 className="h-3.5 w-3.5" />{text('Recent events', '最近事件')}</TerminalChip>}
+            />
+            <TerminalDenseList className="mt-4 gap-3">
                 {events.length ? events.map((event) => (
-                  <div key={event.id} data-testid={`notification-event-${event.id}`} className="grid gap-3 px-3 py-3 md:grid-cols-[8rem_minmax(12rem,1fr)_9rem_7rem] md:items-center">
-                    <p className="text-xs text-secondary-text">{formatDate(event.createdAt)}</p>
+                  <TerminalNestedBlock key={event.id} data-testid={`notification-event-${event.id}`} className="grid gap-3 md:grid-cols-[8rem_minmax(12rem,1fr)_9rem_7rem] md:items-center">
+                    <p className="text-xs text-white/72">{formatDate(event.createdAt)}</p>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{event.title}</p>
-                      <p className="mt-1 truncate text-[11px] text-muted-text" title={displayEventMessage(event.message, language as 'zh' | 'en')}>{event.eventType} · {describeAdminNotificationStatus(event.deliveryStatus, { language: language as 'zh' | 'en' }).label}</p>
+                      <p className="truncate text-sm font-semibold text-white/90">{event.title}</p>
+                      <p className="mt-1 truncate text-[11px] text-white/40" title={displayEventMessage(event.message, language as 'zh' | 'en')}>{event.eventType} · {describeAdminNotificationStatus(event.deliveryStatus, { language: language as 'zh' | 'en' }).label}</p>
                     </div>
                     <div>
-                      <Badge variant={severityBadgeVariant[event.severity]}>{severityLabel(event.severity, language as 'zh' | 'en')}</Badge>
-                      <p className="mt-1 text-[11px] text-muted-text">{acknowledgedLabel(event.acknowledgedAt, language as 'zh' | 'en')}</p>
+                      <TerminalChip variant={severityChipVariant[event.severity]}>{severityLabel(event.severity, language as 'zh' | 'en')}</TerminalChip>
+                      <p className="mt-1 text-[11px] text-white/40">{acknowledgedLabel(event.acknowledgedAt, language as 'zh' | 'en')}</p>
                     </div>
                     <div className="md:text-right">
-                      <Button
+                      <TerminalButton
                         type="button"
-                        variant="secondary"
-                        size="sm"
+                        variant="compact"
                         onClick={() => void acknowledge(event.id)}
                         disabled={Boolean(event.acknowledgedAt) || busyId === event.id}
                       >
                         {text('Acknowledge', '确认')}
-                      </Button>
+                      </TerminalButton>
                     </div>
-                  </div>
+                  </TerminalNestedBlock>
                 )) : (
-                  <p className="px-3 py-6 text-sm text-muted-text">{text('No notification events yet.', '暂无通知事件。')}</p>
+                  <TerminalEmptyState data-testid="notification-events-empty-state" title={text('No notification events yet.', '暂无通知事件。')}>
+                    {text('Acknowledge actions appear here after operational alerts are recorded.', '运维告警产生后，会在这里显示确认动作。')}
+                  </TerminalEmptyState>
                 )}
-              </div>
-            </div>
-          </GlassCard>
+            </TerminalDenseList>
+          </TerminalPanel>
         </div>
-      </section>
+      </TerminalGrid>
       <p className="sr-only">{text('Current language:', '当前语言：')} {language}</p>
-    </section>
+    </TerminalPageShell>
   );
 };
 

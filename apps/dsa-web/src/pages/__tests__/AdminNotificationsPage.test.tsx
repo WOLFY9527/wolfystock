@@ -137,6 +137,16 @@ describe('AdminNotificationsPage', () => {
     expect(screen.queryByText('********')).not.toBeInTheDocument();
   });
 
+  it('renders the admin notifications route with terminal primitives', async () => {
+    render(<AdminNotificationsPage />);
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Admin notifications' })).toBeInTheDocument();
+    expect(screen.getByTestId('admin-notifications-workspace')).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(screen.getByTestId('admin-notifications-summary-grid')).toHaveAttribute('data-terminal-primitive', 'grid');
+    expect(screen.getByTestId('admin-notifications-rules-panel')).toHaveAttribute('data-terminal-primitive', 'panel');
+    expect(screen.getByTestId('admin-notifications-events-panel')).toHaveAttribute('data-terminal-primitive', 'panel');
+  });
+
   it('renders localized chinese page copy when the ui language is zh', async () => {
     uiLanguageState.current = 'zh';
     render(<AdminNotificationsPage />);
@@ -276,7 +286,8 @@ describe('AdminNotificationsPage', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText('开发者细节')).toBeInTheDocument();
-    expect(screen.getByText('开发者细节').closest('details')).not.toHaveAttribute('open');
+    expect(screen.getByTestId('notification-notice-raw-diagnostics')).toHaveAttribute('data-terminal-primitive', 'disclosure');
+    expect(screen.getByTestId('notification-notice-raw-diagnostics')).not.toHaveAttribute('open');
   });
 
   it('shows localized english ssl delivery diagnostics when webhook verification fails', async () => {
@@ -330,5 +341,7 @@ describe('AdminNotificationsPage', () => {
 
     expect((await screen.findAllByText('暂无通知规则。')).length).toBeGreaterThan(0);
     expect(screen.getByText('暂无通知事件。')).toBeInTheDocument();
+    expect(screen.getByTestId('notification-rules-empty-state')).toHaveAttribute('data-terminal-primitive', 'empty-state');
+    expect(screen.getByTestId('notification-events-empty-state')).toHaveAttribute('data-terminal-primitive', 'empty-state');
   });
 });
