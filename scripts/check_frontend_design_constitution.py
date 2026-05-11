@@ -123,6 +123,92 @@ ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES = [
     ),
 ]
 
+ADMIN_LOGS_RETIRED_TERMINAL_SURFACE_RULES = [
+    (
+        re.compile(r"\bGlassCard\b"),
+        "Admin Logs migrated terminal surface must keep using TerminalPageShell/TerminalPanel instead of GlassCard.",
+    ),
+    (
+        re.compile(r"import\s*\{[^}]*\bStatusBadge\b[^}]*\}\s*from\s*['\"][^'\"]*StatusBadge['\"]"),
+        "Admin Logs migrated status chips must not re-import the retired StatusBadge component.",
+    ),
+    (
+        re.compile(r"<StatusBadge\b"),
+        "Admin Logs migrated status chips must keep using TerminalChip-based status pills instead of StatusBadge.",
+    ),
+    (
+        re.compile(r"\bLEVEL_CLASS\b"),
+        "Admin Logs migrated level badges must not restore retired LEVEL_CLASS material maps.",
+    ),
+    (
+        re.compile(r"\bseverityClass\b"),
+        "Admin Logs migrated severity badges must not restore retired severityClass material helpers.",
+    ),
+    (
+        re.compile(r"rounded-(?:\[20px\]|2xl|3xl)\s+border\s+border-white/(?:5|6|8)\s+bg-(?:black/20|white/\[(?:0\.018|0\.02|0\.025)\])"),
+        "Admin Logs migrated page-local shell classes removed by the terminal wave must not be reintroduced.",
+    ),
+]
+
+ADMIN_USERS_RETIRED_TERMINAL_SURFACE_RULES = [
+    (
+        re.compile(r"\bGlassCard\b"),
+        "Admin Users migrated terminal surface must keep using TerminalPanel/TerminalNestedBlock instead of GlassCard.",
+    ),
+    (
+        re.compile(r"import\s*\{[^}]*\bBadge\b[^}]*\}\s*from\s*['\"][^'\"]*components/common['\"]"),
+        "Admin Users migrated status chips must not re-import common Badge after TerminalChip migration.",
+    ),
+    (
+        re.compile(r"<Badge\b"),
+        "Admin Users migrated status chips must keep using TerminalChip instead of local Badge tags.",
+    ),
+    (
+        re.compile(r"import\s*\{[^}]*\bButton\b[^}]*\}\s*from\s*['\"][^'\"]*components/common['\"]"),
+        "Admin Users migrated actions must not re-import the retired common Button surface.",
+    ),
+    (
+        re.compile(r"<Button\b"),
+        "Admin Users migrated actions must keep using TerminalButton instead of the retired common Button surface.",
+    ),
+    (
+        re.compile(r"import\s*\{[^}]*\bDisclosure\b[^}]*\}\s*from\s*['\"][^'\"]*components/common['\"]"),
+        "Admin Users migrated advanced details must not re-import the retired common Disclosure surface.",
+    ),
+    (
+        re.compile(r"<Disclosure\b"),
+        "Admin Users migrated advanced details must keep using TerminalDisclosure instead of the retired common Disclosure surface.",
+    ),
+    (
+        re.compile(r"\bReadOnlyBadges\b"),
+        "Admin Users migrated header badges must not restore retired ReadOnlyBadges helper material.",
+    ),
+    (
+        re.compile(r"\bSummaryTile\b"),
+        "Admin Users migrated summary cells must not restore retired SummaryTile helpers.",
+    ),
+    (
+        re.compile(r"\briskTone\b"),
+        "Admin Users migrated risk chips must not restore retired riskTone badge material helpers.",
+    ),
+    (
+        re.compile(r"\bstatusTone\b"),
+        "Admin Users migrated status chips must not restore retired statusTone badge material helpers.",
+    ),
+    (
+        re.compile(r"<details\b"),
+        "Admin Users migrated advanced details must keep using TerminalDisclosure instead of native details shells.",
+    ),
+    (
+        re.compile(r"<summary\b"),
+        "Admin Users migrated advanced details must keep using TerminalDisclosure instead of native summary shells.",
+    ),
+    (
+        re.compile(r"密码、哈希、Cookie、(?:token|令牌)\s*或原始\s*(?:session id|会话值)"),
+        "Admin Users default operator copy must keep using sanitized credential wording instead of raw sensitive-field lists.",
+    ),
+]
+
 RETIRED_LOCAL_PRIMITIVE_RULES = {
     "apps/dsa-web/src/pages/MarketOverviewPage.tsx": [
         (
@@ -157,6 +243,8 @@ RETIRED_LOCAL_PRIMITIVE_RULES = {
     "apps/dsa-web/src/pages/WatchlistPage.tsx": WATCHLIST_RETIRED_TERMINAL_SURFACE_RULES,
     "apps/dsa-web/src/pages/AdminCostObservabilityPage.tsx": ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES,
     "apps/dsa-web/src/pages/AdminEvidenceWorkflowPage.tsx": ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES,
+    "apps/dsa-web/src/pages/AdminLogsPage.tsx": ADMIN_LOGS_RETIRED_TERMINAL_SURFACE_RULES,
+    "apps/dsa-web/src/pages/AdminUsersPage.tsx": ADMIN_USERS_RETIRED_TERMINAL_SURFACE_RULES,
 }
 
 SOLID_WRAPPER_RE = re.compile(r"\bbg-(?:black|\[#000\]|\[#050505\]|gray-\S+|zinc-\S+|slate-\S+|neutral-\S+)")

@@ -201,3 +201,87 @@ def test_allows_admin_terminal_disclosure_after_migration():
     )
 
     assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_flags_admin_logs_retired_terminal_surface_regression():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminLogsPage.tsx",
+        "\n".join([
+            "import { ApiErrorAlert, Drawer, GlassCard } from '../components/common';",
+            "import { StatusBadge, getStatusLabel } from '../components/ui/StatusBadge';",
+            "const levelClass = LEVEL_CLASS.DEBUG;",
+            "const severity = severityClass('failed');",
+            "export default function Page() {",
+            "  return <GlassCard><details className='rounded-3xl border border-white/8 bg-white/[0.018] p-5'><summary className='cursor-pointer text-sm font-semibold text-foreground'>LLM 调用链</summary><StatusBadge status='failed' label='失败' variant='soft' size='sm' /></details></GlassCard>;",
+            "}",
+        ]),
+    )
+
+    assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_allows_admin_logs_terminal_primitives_with_status_utilities():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminLogsPage.tsx",
+        "\n".join([
+            "import { TerminalButton, TerminalChip, TerminalPanel } from '../components/terminal';",
+            "import { getStatusLabel, normalizeStatus, type UnifiedStatus } from '../components/ui/StatusBadge';",
+            "export default function Page() {",
+            "  const status = normalizeStatus('running') as UnifiedStatus;",
+            "  return <TerminalPanel><TerminalChip variant='info'>{getStatusLabel(status)}</TerminalChip><TerminalButton variant='secondary'>复制执行摘要</TerminalButton></TerminalPanel>;",
+            "}",
+        ]),
+    )
+
+    assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_flags_admin_users_retired_terminal_surface_regression():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminUsersPage.tsx",
+        "\n".join([
+            "import { Badge, Button, Disclosure, GlassCard } from '../components/common';",
+            "const badgeRow = ReadOnlyBadges;",
+            "const tile = SummaryTile;",
+            "const risk = riskTone('warning');",
+            "const status = statusTone('active');",
+            "export default function Page() {",
+            "  return <GlassCard><Badge variant='info'>只读</Badge><Button>刷新目录</Button><Disclosure summary='后续阶段占位'>原始数据库浏览器、原始 prompt、provider 载荷与堆栈明细不在本阶段展示。</Disclosure><details><summary>脱敏元数据</summary></details></GlassCard>;",
+            "}",
+        ]),
+    )
+
+    assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_flags_admin_users_raw_sensitive_operator_copy_regression():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminUsersPage.tsx",
+        '<p>响应不会返回密码、哈希、Cookie、token 或原始 session id。</p>',
+    )
+
+    assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_allows_admin_users_terminal_primitives_after_migration():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminUsersPage.tsx",
+        "\n".join([
+            "import { TerminalButton, TerminalChip, TerminalDisclosure, TerminalPanel } from '../components/terminal';",
+            "export default function Page() {",
+            "  return <TerminalPanel><TerminalChip variant='neutral'>敏感字段脱敏</TerminalChip><TerminalButton variant='secondary'>刷新目录</TerminalButton><TerminalDisclosure title='脱敏元数据' summary='默认收起'>默认只展示安全投影。</TerminalDisclosure></TerminalPanel>;",
+            "}",
+        ]),
+    )
+
+    assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
