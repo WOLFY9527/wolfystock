@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+import ast
 import importlib
 import importlib.util
 import json
-import re
 import subprocess
 import sys
+from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -75,17 +77,34 @@ LLM_HELPER_IMPORT_GUARD_CASES = (
         "allowed_implementation_prefixes": ("litellm",),
     },
 )
-EXPECTED_API_UPWARD_IMPORT_SERVICE_FILES = {
-    "src/services/admin_activity_service.py",
-    "src/services/admin_portfolio_service.py",
-    "src/services/admin_user_service.py",
-    "src/services/duplicate_cost_summary_service.py",
-    "src/services/options_lab_service.py",
+ARCH_REVIEW_MESSAGE = "new service-to-API upward imports require explicit architecture review."
+EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
+    "src/services/admin_activity_service.py": {"api.v1.schemas.admin_activity"},
+    "src/services/admin_portfolio_service.py": {"api.v1.schemas.admin_portfolio"},
+    "src/services/admin_user_service.py": {"api.v1.schemas.admin_users"},
+    "src/services/duplicate_cost_summary_service.py": {"api.v1.schemas.admin_cost"},
+    "src/services/options_lab_service.py": {"api.v1.schemas.options"},
 }
-API_UPWARD_IMPORT_PATTERN = re.compile(
-    r"^\s*(?:from|import)\s+api\.v1(?:\.schemas|\.endpoints|\b)",
-    re.MULTILINE,
+# These CurrentUser imports already exist on origin/main; keep the inventory
+# explicit until a separate architecture task moves them behind a lower layer.
+EXPECTED_LEGACY_API_DEPS_IMPORTS = {
+    "src/services/admin_governance_audit_service.py": {"api.deps"},
+    "src/services/admin_security_service.py": {"api.deps"},
+}
+EXPECTED_SERVICE_API_IMPORTS = {
+    **EXPECTED_API_SCHEMA_UPWARD_IMPORTS,
+    **EXPECTED_LEGACY_API_DEPS_IMPORTS,
+}
+FORBIDDEN_SERVICE_API_PREFIXES = (
+    "api.v1.endpoints",
 )
+
+
+@dataclass(frozen=True)
+class ApiImportRecord:
+    module: str
+    imported_names: tuple[str, ...]
+    wildcard: bool = False
 
 
 def _contracts_child_namespaces() -> set[str]:
@@ -140,12 +159,47 @@ def _has_loaded_prefix(loaded_modules: set[str], prefix: str) -> bool:
     return any(name == prefix or name.startswith(prefix + ".") for name in loaded_modules)
 
 
-def _services_with_api_upward_imports() -> set[str]:
-    matches: set[str] = set()
+@lru_cache(maxsize=1)
+def _service_api_import_records() -> dict[str, tuple[ApiImportRecord, ...]]:
+    matches: dict[str, tuple[ApiImportRecord, ...]] = {}
     for service_file in SERVICES_ROOT.rglob("*.py"):
-        if API_UPWARD_IMPORT_PATTERN.search(service_file.read_text(encoding="utf-8")):
-            matches.add(service_file.relative_to(REPO_ROOT).as_posix())
+        tree = ast.parse(service_file.read_text(encoding="utf-8"), filename=str(service_file))
+        records: list[ApiImportRecord] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "api" or alias.name.startswith("api."):
+                        records.append(ApiImportRecord(module=alias.name, imported_names=(alias.name,)))
+            elif isinstance(node, ast.ImportFrom):
+                module_name = node.module or ""
+                if node.level == 0 and (module_name == "api" or module_name.startswith("api.")):
+                    imported_names = tuple(alias.name for alias in node.names)
+                    records.append(
+                        ApiImportRecord(
+                            module=module_name,
+                            imported_names=imported_names,
+                            wildcard=any(name == "*" for name in imported_names),
+                        )
+                    )
+        if records:
+            matches[service_file.relative_to(REPO_ROOT).as_posix()] = tuple(records)
     return matches
+
+
+def _service_api_import_mapping() -> dict[str, set[str]]:
+    mapping: dict[str, set[str]] = {}
+    for service_file, records in _service_api_import_records().items():
+        mapping[service_file] = {record.module for record in records}
+    return mapping
+
+
+def _is_forbidden_api_surface(module_name: str) -> bool:
+    if any(
+        module_name == prefix or module_name.startswith(prefix + ".")
+        for prefix in FORBIDDEN_SERVICE_API_PREFIXES
+    ):
+        return True
+    return module_name == "api.v1" or module_name == "api.v1.schemas"
 
 
 def test_platform_and_domains_namespaces_are_not_active_yet() -> None:
@@ -209,11 +263,67 @@ def test_llm_helper_modules_stay_lightweight() -> None:
             )
 
 
-def test_api_schema_upward_import_inventory_is_explicit() -> None:
-    matched_files = _services_with_api_upward_imports()
+def test_api_schema_upward_import_mapping_is_explicit() -> None:
+    actual_mapping = {
+        service_file: modules
+        for service_file, modules in _service_api_import_mapping().items()
+        if any(module.startswith("api.v1.schemas.") for module in modules)
+    }
 
-    assert matched_files == EXPECTED_API_UPWARD_IMPORT_SERVICE_FILES, (
-        "New src.services -> api.v1 upward imports require explicit architecture review. "
-        f"Expected {sorted(EXPECTED_API_UPWARD_IMPORT_SERVICE_FILES)}, "
-        f"found {sorted(matched_files)}"
+    assert actual_mapping == EXPECTED_API_SCHEMA_UPWARD_IMPORTS, (
+        f"{ARCH_REVIEW_MESSAGE} "
+        f"Expected {EXPECTED_API_SCHEMA_UPWARD_IMPORTS}, found {actual_mapping}"
+    )
+
+
+def test_service_api_upward_import_inventory_is_frozen() -> None:
+    actual_mapping = _service_api_import_mapping()
+
+    assert actual_mapping == EXPECTED_SERVICE_API_IMPORTS, (
+        f"{ARCH_REVIEW_MESSAGE} "
+        f"Expected {EXPECTED_SERVICE_API_IMPORTS}, found {actual_mapping}"
+    )
+
+
+def test_services_do_not_import_forbidden_api_surfaces() -> None:
+    forbidden_imports = {
+        service_file: sorted(
+            {
+                record.module
+                for record in records
+                if _is_forbidden_api_surface(record.module)
+            }
+        )
+        for service_file, records in _service_api_import_records().items()
+    }
+    forbidden_imports = {
+        service_file: modules
+        for service_file, modules in forbidden_imports.items()
+        if modules
+    }
+
+    assert not forbidden_imports, (
+        f"{ARCH_REVIEW_MESSAGE} Forbidden API import surfaces: {forbidden_imports}"
+    )
+
+
+def test_services_do_not_use_api_schema_wildcard_imports() -> None:
+    wildcard_imports = {
+        service_file: sorted(
+            {
+                record.module
+                for record in records
+                if record.wildcard and record.module.startswith("api.v1.schemas")
+            }
+        )
+        for service_file, records in _service_api_import_records().items()
+    }
+    wildcard_imports = {
+        service_file: modules
+        for service_file, modules in wildcard_imports.items()
+        if modules
+    }
+
+    assert not wildcard_imports, (
+        f"{ARCH_REVIEW_MESSAGE} Wildcard schema imports are forbidden: {wildcard_imports}"
     )
