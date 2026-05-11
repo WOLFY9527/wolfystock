@@ -239,6 +239,23 @@ def test_flags_admin_cost_retired_terminal_surface_regression():
     assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
 
 
+def test_flags_admin_cost_statusbadge_button_and_disclosure_regression():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminCostObservabilityPage.tsx",
+        "\n".join([
+            "import { Button, Disclosure } from '../components/common';",
+            "import { StatusBadge } from '../components/ui/StatusBadge';",
+            "export default function Page() {",
+            "  return <><StatusBadge status='warn' label='告警' /><Button>刷新</Button><Disclosure summary='账本原始细节'>内容</Disclosure></>;",
+            "}",
+        ]),
+    )
+
+    assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
 def test_flags_admin_evidence_retired_terminal_surface_regression():
     guard = load_guard_module()
 
@@ -256,15 +273,65 @@ def test_flags_admin_evidence_retired_terminal_surface_regression():
     assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
 
 
-def test_allows_admin_terminal_disclosure_after_migration():
+def test_flags_admin_evidence_statusbadge_button_and_disclosure_regression():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminEvidenceWorkflowPage.tsx",
+        "\n".join([
+            "import { Button, Disclosure } from '../components/common';",
+            "import { StatusBadge } from '../components/ui/StatusBadge';",
+            "export default function Page() {",
+            "  return <><StatusBadge status='info' label='只读' /><Button>刷新</Button><Disclosure summary='字段结构'>内容</Disclosure></>;",
+            "}",
+        ]),
+    )
+
+    assert any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_allows_admin_cost_terminal_primitives_after_migration():
     guard = load_guard_module()
 
     result = guard.scan_text(
         "apps/dsa-web/src/pages/AdminCostObservabilityPage.tsx",
         "\n".join([
-            "import { TerminalChip, TerminalDisclosure, TerminalPanel } from '../components/terminal';",
+            "import { TerminalButton, TerminalChip, TerminalDisclosure, TerminalPanel } from '../components/terminal';",
             "export default function Page() {",
-            "  return <TerminalPanel><TerminalChip variant='info'>只读</TerminalChip><TerminalDisclosure title='细节' summary='默认折叠'>内容</TerminalDisclosure></TerminalPanel>;",
+            "  return <TerminalPanel><TerminalChip variant='info'>只读</TerminalChip><TerminalButton variant='secondary'>刷新</TerminalButton><TerminalDisclosure title='细节' summary='默认折叠'>内容</TerminalDisclosure></TerminalPanel>;",
+            "}",
+        ]),
+    )
+
+    assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_allows_admin_evidence_terminal_primitives_after_migration():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/AdminEvidenceWorkflowPage.tsx",
+        "\n".join([
+            "import { TerminalButton, TerminalChip, TerminalDisclosure, TerminalPanel } from '../components/terminal';",
+            "export default function Page() {",
+            "  return <TerminalPanel><TerminalChip variant='neutral'>脱敏状态</TerminalChip><TerminalButton variant='secondary'>刷新</TerminalButton><TerminalDisclosure title='字段结构' summary='默认收起'>内容</TerminalDisclosure></TerminalPanel>;",
+            "}",
+        ]),
+    )
+
+    assert not any(item.rule == "retired-local-terminal-primitive" for item in result.findings)
+
+
+def test_does_not_apply_admin_cost_evidence_retired_rules_to_non_target_pages():
+    guard = load_guard_module()
+
+    result = guard.scan_text(
+        "apps/dsa-web/src/pages/SettingsPage.tsx",
+        "\n".join([
+            "import { Button, Disclosure } from '../components/common';",
+            "import { StatusBadge } from '../components/ui/StatusBadge';",
+            "export default function Page() {",
+            "  return <><StatusBadge status='info' label='说明' /><Button>保存</Button><Disclosure summary='高级选项'>内容</Disclosure></>;",
             "}",
         ]),
     )

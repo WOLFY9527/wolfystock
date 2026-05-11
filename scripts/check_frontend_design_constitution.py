@@ -123,6 +123,34 @@ ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES = [
     ),
 ]
 
+ADMIN_COST_EVIDENCE_TERMINAL_SURFACE_RETIREMENT_RULES = [
+    *ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES,
+    (
+        re.compile(r"import\s*\{[^}]*\bStatusBadge\b[^}]*\}\s*from\s*['\"][^'\"]*StatusBadge['\"]"),
+        "Admin Cost/Admin Evidence migrated status chips must not re-import the retired StatusBadge component.",
+    ),
+    (
+        re.compile(r"<StatusBadge\b"),
+        "Admin Cost/Admin Evidence migrated status chips must keep using TerminalChip-based status pills instead of StatusBadge.",
+    ),
+    (
+        re.compile(r"import\s*\{[^}]*\bButton\b[^}]*\}\s*from\s*['\"][^'\"]*components/common['\"]"),
+        "Admin Cost/Admin Evidence migrated actions must not re-import the retired common Button surface.",
+    ),
+    (
+        re.compile(r"<Button\b"),
+        "Admin Cost/Admin Evidence migrated actions must keep using TerminalButton instead of the retired common Button surface.",
+    ),
+    (
+        re.compile(r"import\s*\{[^}]*\bDisclosure\b[^}]*\}\s*from\s*['\"][^'\"]*components/common['\"]"),
+        "Admin Cost/Admin Evidence migrated advanced details must not re-import the retired common Disclosure surface.",
+    ),
+    (
+        re.compile(r"<Disclosure\b"),
+        "Admin Cost/Admin Evidence migrated advanced details must keep using TerminalDisclosure instead of the retired common Disclosure surface.",
+    ),
+]
+
 ADMIN_LOGS_RETIRED_TERMINAL_SURFACE_RULES = [
     (
         re.compile(r"\bGlassCard\b"),
@@ -340,8 +368,8 @@ RETIRED_LOCAL_PRIMITIVE_RULES = {
         ),
     ],
     "apps/dsa-web/src/pages/WatchlistPage.tsx": WATCHLIST_RETIRED_TERMINAL_SURFACE_RULES,
-    "apps/dsa-web/src/pages/AdminCostObservabilityPage.tsx": ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES,
-    "apps/dsa-web/src/pages/AdminEvidenceWorkflowPage.tsx": ADMIN_TERMINAL_SURFACE_RETIREMENT_RULES,
+    "apps/dsa-web/src/pages/AdminCostObservabilityPage.tsx": ADMIN_COST_EVIDENCE_TERMINAL_SURFACE_RETIREMENT_RULES,
+    "apps/dsa-web/src/pages/AdminEvidenceWorkflowPage.tsx": ADMIN_COST_EVIDENCE_TERMINAL_SURFACE_RETIREMENT_RULES,
     "apps/dsa-web/src/pages/AdminLogsPage.tsx": ADMIN_LOGS_RETIRED_TERMINAL_SURFACE_RULES,
     "apps/dsa-web/src/pages/AdminNotificationsPage.tsx": ADMIN_NOTIFICATIONS_RETIRED_TERMINAL_SURFACE_RULES,
     "apps/dsa-web/src/pages/AdminUsersPage.tsx": ADMIN_USERS_RETIRED_TERMINAL_SURFACE_RULES,
