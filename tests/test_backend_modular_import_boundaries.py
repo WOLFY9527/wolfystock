@@ -202,7 +202,6 @@ EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
     "src/services/admin_activity_service.py": {"api.v1.schemas.admin_activity"},
     "src/services/admin_portfolio_service.py": {"api.v1.schemas.admin_portfolio"},
     "src/services/admin_user_service.py": {"api.v1.schemas.admin_users"},
-    "src/services/duplicate_cost_summary_service.py": {"api.v1.schemas.admin_cost"},
     "src/services/options_lab_service.py": {"api.v1.schemas.options"},
 }
 # These CurrentUser imports already exist on origin/main; keep the inventory

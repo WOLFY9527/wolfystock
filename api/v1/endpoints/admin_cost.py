@@ -75,11 +75,13 @@ def get_duplicate_cost_summary(
     _: CurrentUser = Depends(require_admin_capability("cost:observability:read")),
 ) -> DuplicateCostSummaryResponse:
     try:
-        return DuplicateCostSummaryService().build_summary(
-            window=window,
-            bucket=bucket,
-            area=area,
-            limit=limit,
+        return DuplicateCostSummaryResponse.model_validate(
+            DuplicateCostSummaryService().build_summary(
+                window=window,
+                bucket=bucket,
+                area=area,
+                limit=limit,
+            )
         )
     except ValueError as exc:
         raise HTTPException(
