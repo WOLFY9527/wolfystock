@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from src.repositories.stock_repo import StockRepository
@@ -59,6 +59,31 @@ class LocalDataPreflightService:
             "summary": summary,
             "items": items,
         }
+
+    def load_local_execution_bars(
+        self,
+        *,
+        symbol: str,
+        start_date: Optional[date],
+        end_date: Optional[date],
+        lookback_bars: int,
+        strategy_lookback_bars: int,
+    ) -> List[Any]:
+        load_count = max(
+            int(lookback_bars) + int(strategy_lookback_bars) + 20,
+            int(lookback_bars) + 30,
+        )
+        history_start_date = (
+            start_date - timedelta(days=max(int(strategy_lookback_bars) * 4, 120))
+            if start_date is not None
+            else None
+        )
+        return self._load_rows(
+            symbol=symbol,
+            start_date=history_start_date,
+            end_date=end_date,
+            required_bars=load_count,
+        )
 
     @staticmethod
     def normalize_symbols(symbols: List[str]) -> List[str]:

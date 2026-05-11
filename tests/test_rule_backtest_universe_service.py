@@ -252,6 +252,40 @@ class RuleBacktestUniverseServiceTestCase(unittest.TestCase):
         self.assertEqual(by_symbol["ZZZ"]["status"], "skipped")
         self.assertEqual(by_symbol["ZZZ"]["reason_code"], "blocked_missing_local_data")
 
+    def test_run_universe_job_sequential_routes_history_loading_through_local_preflight_service(self) -> None:
+        closes = [10.0 + (index * 0.2) + (0.4 if index % 7 == 0 else 0.0) for index in range(80)]
+        self._seed_history("AAPL", closes)
+        self._seed_history("MSFT", [20.0 + (index * 0.15) for index in range(80)])
+        service = RuleBacktestService(self.db)
+        job = service.create_universe_job(
+            symbols=["MSFT", "AAPL", "ZZZ"],
+            strategy_text="5日均线上穿20日均线买入，下穿卖出",
+            parsed_strategy=self._ma_strategy(),
+            start_date="2025-01-01",
+            end_date="2025-03-21",
+            lookback_bars=60,
+        )
+
+        with patch.object(RuleBacktestService, "_ensure_market_history") as ensure_mock, patch(
+            "src.services.rule_backtest_service.fetch_daily_history_with_local_us_fallback"
+        ) as fetch_mock, patch.object(
+            service.local_data_preflight,
+            "load_local_execution_bars",
+            wraps=service.local_data_preflight.load_local_execution_bars,
+        ) as load_local_bars_mock:
+            service.run_universe_job_sequential(job["id"])
+
+        ensure_mock.assert_not_called()
+        fetch_mock.assert_not_called()
+        self.assertEqual(load_local_bars_mock.call_count, 2)
+        self.assertEqual(
+            [call.kwargs["symbol"] for call in load_local_bars_mock.call_args_list],
+            ["AAPL", "MSFT"],
+        )
+        for call in load_local_bars_mock.call_args_list:
+            self.assertEqual(call.kwargs["lookback_bars"], 60)
+            self.assertEqual(call.kwargs["strategy_lookback_bars"], 20)
+
     def test_universe_job_diagnostics_reports_preflight_only_empty_local_coverage(self) -> None:
         service = RuleBacktestService(self.db)
         job = service.create_universe_job(

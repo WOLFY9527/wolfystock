@@ -1265,12 +1265,12 @@ class RuleBacktestService:
                 )
                 if parsed.needs_confirmation:
                     raise ValueError(_CONFIRMATION_REQUIRED_ERROR)
-                bars = self._load_universe_local_bars(
+                bars = self.local_data_preflight.load_local_execution_bars(
                     symbol=row.symbol,
-                    parsed=parsed,
                     start_date=normalized_start,
                     end_date=normalized_end,
                     lookback_bars=lookback_bars,
+                    strategy_lookback_bars=parsed.max_lookback,
                 )
                 if len(bars) < max(10, parsed.max_lookback + 2):
                     skipped_count += 1
@@ -1851,25 +1851,6 @@ class RuleBacktestService:
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
-
-    def _load_universe_local_bars(
-        self,
-        *,
-        symbol: str,
-        parsed: ParsedStrategy,
-        start_date: Optional[date],
-        end_date: Optional[date],
-        lookback_bars: int,
-    ) -> List[Any]:
-        load_count = max(int(lookback_bars) + parsed.max_lookback + 20, int(lookback_bars) + 30)
-        history_start_date = (
-            start_date - timedelta(days=max(parsed.max_lookback * 4, 120))
-            if start_date is not None
-            else None
-        )
-        if history_start_date is not None and end_date is not None:
-            return self.stock_repo.get_range(symbol, history_start_date, end_date)
-        return list(reversed(self.stock_repo.get_latest(symbol, days=load_count)))
 
     def _update_universe_symbol_result(
         self,
