@@ -8,7 +8,7 @@ import { PageBriefDrawer } from '../components/home-bento';
 import { useIsDesktopViewport } from '../components/layout/useIsDesktopViewport';
 import AIProviderConfig from '../components/settings/AIProviderConfig';
 import DataSourceConfig from '../components/settings/DataSourceConfig';
-import DataSourceLibraryDrawer, { DRAWER_GHOST_FORM_SCOPE_CLASS } from '../components/settings/DataSourceLibraryDrawer';
+import DataSourceLibraryDrawer from '../components/settings/DataSourceLibraryDrawer';
 import { NotificationChannelsConfig } from '../components/settings/NotificationChannelsConfig';
 import SystemControlPlane from '../components/settings/SystemControlPlane';
 import SystemLogsConfig from '../components/settings/SystemLogsConfig';
@@ -77,6 +77,7 @@ const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10
 const DRAWER_PANEL_CLASS = 'rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3';
 const DRAWER_SECTION_CLASS = 'rounded-xl border border-white/5 bg-white/[0.015] px-4 py-4';
 const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-6 flex cursor-pointer list-none items-center gap-1.5 border-t border-white/5 pt-4 text-xs text-white/30 transition-colors hover:text-white [&::-webkit-details-marker]:hidden';
+const SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS = '[&_.input-surface]:!rounded-lg [&_.input-surface]:!border-white/5 [&_.input-surface]:!bg-white/[0.02] [&_.input-surface]:!py-2 [&_.input-surface]:!text-sm [&_.input-surface]:!text-white [&_.input-surface]:!transition-all [&_.input-surface]:placeholder:!text-white/20 [&_.input-surface]:focus:!border-indigo-500/50 [&_.input-surface]:focus:!bg-white/[0.05] [&_.input-surface]:focus:!outline-none [&_.input-surface]:focus:!ring-1 [&_.input-surface]:focus:!ring-indigo-500/50 [&_.theme-field-label]:!mb-1.5 [&_.theme-field-label]:!block [&_.theme-field-label]:!text-[10px] [&_.theme-field-label]:!font-bold [&_.theme-field-label]:!uppercase [&_.theme-field-label]:!tracking-widest [&_.theme-field-label]:!text-white/40';
 
 type RoutingDraftState = {
   ai: {
@@ -2341,7 +2342,7 @@ const SettingsPage: React.FC = () => {
         title={activeDataRoutingGroup ? activeDataRoutingGroup.role : t('settings.dataRoutingCompactTitle')}
         width="max-w-[min(100vw,48rem)]"
         zIndex={77}
-        bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
+        bodyClassName={SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         {activeDataRoutingGroup ? (
           <div className="space-y-3">
@@ -2415,7 +2416,7 @@ const SettingsPage: React.FC = () => {
         title={t('settings.runtimeSummaryVisibilityTitle')}
         width="max-w-[min(100vw,36rem)]"
         zIndex={77}
-        bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
+        bodyClassName={SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         <div className="space-y-4">
           <GlassCard className="px-4 py-4">
@@ -2463,7 +2464,7 @@ const SettingsPage: React.FC = () => {
         title={rawFieldsSectionTitle}
         width="max-w-[min(100vw,48rem)]"
         zIndex={77}
-        bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
+        bodyClassName={SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         <div className="space-y-3">
           <div className={DRAWER_PANEL_CLASS}>
@@ -2494,7 +2495,7 @@ const SettingsPage: React.FC = () => {
         title={t('settings.aiRoutingDrawerTitle')}
         width="max-w-[min(100vw,54rem)]"
         zIndex={78}
-        bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
+        bodyClassName={SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         <div className="space-y-4">
           <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
@@ -3010,7 +3011,7 @@ const SettingsPage: React.FC = () => {
           : t('settings.aiProviderDrawerTitleFallback')}
         width="max-w-[min(100vw,34rem)]"
         zIndex={79}
-        bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
+        bodyClassName={SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         {quickProviderDrawerItem ? (
           <div className="space-y-3">
@@ -3117,7 +3118,7 @@ const SettingsPage: React.FC = () => {
         title={t('settings.aiAdvancedDrawerTitle')}
         width="max-w-[min(100vw,56rem)]"
         zIndex={80}
-        bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
+        bodyClassName={SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS}
       >
         <div className="space-y-4">
           <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
@@ -3204,6 +3205,7 @@ const SettingsPage: React.FC = () => {
         entry={dataSourceEditorEntry}
         mode={dataSourceEditorMode}
         managedBuiltinDraft={managedBuiltinDataSourceDraft}
+        bodyClassName={SETTINGS_DRAWER_GHOST_FORM_SCOPE_CLASS}
         onClose={closeDataSourceDrawer}
         onDeleteTargetChange={setDataSourceDeleteTargetId}
         onDraftChange={setDataSourceEditorDraft}

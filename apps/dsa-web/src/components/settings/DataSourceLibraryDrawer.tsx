@@ -19,7 +19,6 @@ const DRAWER_PANEL_CLASS = 'rounded-xl border border-white/5 bg-white/[0.02] px-
 const DRAWER_LABEL_CLASS = 'text-[10px] uppercase tracking-widest text-white/40 mb-1.5 font-bold block';
 const DRAWER_TEXTAREA_CLASS = 'min-h-[6rem] w-full resize-y rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-white transition-all placeholder:text-white/20 focus:border-indigo-500/50 focus:bg-white/[0.05] focus:outline-none focus:ring-1 focus:ring-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-60';
 const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-6 flex cursor-pointer list-none items-center gap-1.5 border-t border-white/5 pt-4 text-xs text-white/30 transition-colors hover:text-white [&::-webkit-details-marker]:hidden';
-export const DRAWER_GHOST_FORM_SCOPE_CLASS = '[&_.input-surface]:!rounded-lg [&_.input-surface]:!border-white/5 [&_.input-surface]:!bg-white/[0.02] [&_.input-surface]:!py-2 [&_.input-surface]:!text-sm [&_.input-surface]:!text-white [&_.input-surface]:!transition-all [&_.input-surface]:placeholder:!text-white/20 [&_.input-surface]:focus:!border-indigo-500/50 [&_.input-surface]:focus:!bg-white/[0.05] [&_.input-surface]:focus:!outline-none [&_.input-surface]:focus:!ring-1 [&_.input-surface]:focus:!ring-indigo-500/50 [&_.theme-field-label]:!mb-1.5 [&_.theme-field-label]:!block [&_.theme-field-label]:!text-[10px] [&_.theme-field-label]:!font-bold [&_.theme-field-label]:!uppercase [&_.theme-field-label]:!tracking-widest [&_.theme-field-label]:!text-white/40';
 
 type ManagedBuiltinDraft = {
   credential: string;
@@ -37,6 +36,7 @@ type DataSourceLibraryDrawerProps = {
   entry: DataSourceLibraryEntry | null;
   mode: DataSourceEditorMode;
   managedBuiltinDraft: ManagedBuiltinDraft;
+  bodyClassName?: string;
   onClose: () => void;
   onDeleteTargetChange: (value: string | null) => void;
   onDraftChange: React.Dispatch<React.SetStateAction<CustomDataSourceRecord>>;
@@ -58,6 +58,7 @@ const DataSourceLibraryDrawer: React.FC<DataSourceLibraryDrawerProps> = ({
   entry,
   mode,
   managedBuiltinDraft,
+  bodyClassName,
   onClose,
   onDeleteTargetChange,
   onDraftChange,
@@ -79,7 +80,7 @@ const DataSourceLibraryDrawer: React.FC<DataSourceLibraryDrawerProps> = ({
           : t('settings.dataSourceDrawerTitleFallback')}
       width="max-w-[min(100vw,44rem)]"
       zIndex={81}
-      bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
+      bodyClassName={bodyClassName}
     >
       {mode === 'view' && entry ? (
         <div className="space-y-3">
