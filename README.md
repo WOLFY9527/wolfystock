@@ -10,10 +10,6 @@ It is not positioned as a generic retail stock app or a thin LLM wrapper. The
 current project direction is a professional research terminal with explicit
 domain boundaries, focused validation, and AI-agent-assisted engineering.
 
-> GitHub About suggestion
-> Description: AI-assisted quantitative stock analysis terminal for market overview, screening, backtesting, portfolio risk, and admin observability.
-> Topics: `quantitative-finance`, `stock-analysis`, `trading-terminal`, `fastapi`, `react`, `typescript`, `backtesting`, `portfolio-management`, `ai-agent`, `market-data`, `fintech`
-
 ## Overview
 
 WolfyStock covers the full research loop:
