@@ -1,13 +1,13 @@
-import type { MouseEvent, ReactNode } from 'react';
 import { LineChart, TestTubeDiagonal } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { TerminalButton, TerminalChip } from '../terminal';
+import { TerminalChip } from '../terminal';
 import { buildLocalizedPath } from '../../utils/localeRouting';
 import type {
   ScannerBacktestBatchSource,
   ScannerBacktestItem,
 } from './useScannerBacktestLab';
 import { getScannerBacktestConfig } from './useScannerBacktestLab';
+import { ScannerActionButton } from './ScannerActionButton';
 
 type Language = 'zh' | 'en';
 
@@ -19,37 +19,6 @@ function formatPercent(value?: number | null): string {
 function formatMetricNumber(value?: number | null, digits = 2): string {
   if (value == null || !Number.isFinite(value)) return '--';
   return value.toFixed(digits);
-}
-
-function BacktestActionButton({
-  label,
-  icon,
-  onClick,
-  disabled = false,
-  variant = 'compact',
-}: {
-  label: string;
-  icon?: ReactNode;
-  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
-  disabled?: boolean;
-  variant?: 'secondary' | 'compact';
-}) {
-  const sizeClass = variant === 'secondary' ? 'px-3 py-1.5 text-xs' : 'px-2.5 py-1 text-xs';
-  return (
-    <TerminalButton
-      type="button"
-      variant={variant}
-      className={`min-w-0 ${sizeClass}`.trim()}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick?.(event);
-      }}
-      disabled={disabled}
-    >
-      {icon}
-      <span className="truncate">{label}</span>
-    </TerminalButton>
-  );
 }
 
 function BacktestFieldChip({ label, value }: { label: string; value: string }) {
@@ -137,10 +106,10 @@ export function ScannerBacktestLab({
           <BacktestFieldChip label={language === 'en' ? 'Strategy' : '策略'} value={language === 'en' ? 'Default MA deterministic template' : '默认均线确定性模板'} />
         </div>
         <div className="flex max-w-full flex-wrap gap-1.5">
-          <BacktestActionButton label={language === 'en' ? 'Official selected' : '回测官方入选'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('official_selected')} disabled={isRunning || counts.official_selected === 0} variant="secondary" />
-          <BacktestActionButton label={language === 'en' ? 'Preview selected' : '回测预览入选'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('preview_selected')} disabled={isRunning || counts.preview_selected === 0} />
-          <BacktestActionButton label={language === 'en' ? 'Top 5' : '回测前 5 名'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('top_5')} disabled={isRunning || counts.top_5 === 0} />
-          <BacktestActionButton label={language === 'en' ? 'Filtered' : '回测当前筛选'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('current_filter')} disabled={isRunning || counts.current_filter === 0} />
+          <ScannerActionButton label={language === 'en' ? 'Official selected' : '回测官方入选'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('official_selected')} disabled={isRunning || counts.official_selected === 0} variant="secondary" />
+          <ScannerActionButton label={language === 'en' ? 'Preview selected' : '回测预览入选'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('preview_selected')} disabled={isRunning || counts.preview_selected === 0} />
+          <ScannerActionButton label={language === 'en' ? 'Top 5' : '回测前 5 名'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('top_5')} disabled={isRunning || counts.top_5 === 0} />
+          <ScannerActionButton label={language === 'en' ? 'Filtered' : '回测当前筛选'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('current_filter')} disabled={isRunning || counts.current_filter === 0} />
         </div>
         <div className="rounded-lg border border-white/5 bg-black/20 px-3 py-2 font-mono text-[11px] text-white/45">{statusText}</div>
         {items.length ? (
