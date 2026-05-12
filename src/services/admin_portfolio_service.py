@@ -9,20 +9,6 @@ from typing import Any, Optional
 
 from sqlalchemy import and_, desc, func, or_, select
 
-from api.v1.schemas.admin_portfolio import (
-    AdminBrokerSyncSummary,
-    AdminHoldingListResponse,
-    AdminHoldingItem,
-    AdminLedgerCounts,
-    AdminMoneyAmount,
-    AdminPortfolioAccountDetailResponse,
-    AdminPortfolioAccountItem,
-    AdminPortfolioActivityItem,
-    AdminPortfolioActivityResponse,
-    AdminPortfolioBrokerConnectionItem,
-    AdminPortfolioSummaryResponse,
-    AdminPortfolioSyncState,
-)
 from src.repositories.auth_repo import AuthRepository
 from src.storage import (
     DatabaseManager,
@@ -63,6 +49,22 @@ def _broker_account_handle(value: Any) -> Optional[str]:
     return f"acct_{digest[:12]}"
 
 
+def _money_amount(amount: float, currency: Optional[str], *, rounded: bool = False) -> dict[str, Any]:
+    value = round(amount, 6) if rounded else amount
+    return {
+        "amount": value,
+        "currency": currency,
+    }
+
+
+def _empty_ledger_counts() -> dict[str, int]:
+    return {
+        "trades": 0,
+        "cash_events": 0,
+        "corporate_actions": 0,
+    }
+
+
 class AdminPortfolioService:
     """Build admin portfolio projections without mutating portfolio state."""
 
@@ -78,7 +80,7 @@ class AdminPortfolioService:
     def target_user_exists(self, user_id: str) -> bool:
         return self.auth_repo.get_app_user(str(user_id or "").strip()) is not None
 
-    def get_summary(self, *, user_id: str, include_inactive: bool = False) -> AdminPortfolioSummaryResponse:
+    def get_summary(self, *, user_id: str, include_inactive: bool = False) -> dict[str, Any]:
         user_id = str(user_id or "").strip()
         with self.db.get_session() as session:
             accounts = self._accounts(session, user_id=user_id, include_inactive=include_inactive)
@@ -112,30 +114,30 @@ class AdminPortfolioService:
                     if isinstance(synced_at, datetime) and (last_sync_at is None or synced_at > last_sync_at):
                         last_sync_at = synced_at
 
-            return AdminPortfolioSummaryResponse(
-                userId=user_id,
-                accountCount=len(accounts),
-                activeAccountCount=sum(1 for row in accounts if bool(row.is_active)),
-                baseCurrencies=sorted({str(row.base_currency).upper() for row in accounts if str(row.base_currency or "").strip()}),
-                accounts=[self._account_item(row, connections_by_account.get(int(row.id), [])) for row in accounts],
-                totalCash=AdminMoneyAmount(amount=round(total_cash, 6), currency=base_currency),
-                totalMarketValue=AdminMoneyAmount(amount=round(total_market_value, 6), currency=base_currency),
-                totalEquity=AdminMoneyAmount(amount=round(total_equity, 6), currency=base_currency),
-                realizedPnl=AdminMoneyAmount(amount=round(realized_pnl, 6), currency=base_currency),
-                unrealizedPnl=AdminMoneyAmount(amount=round(unrealized_pnl, 6), currency=base_currency),
-                ledgerCounts=ledger_counts,
-                brokerSyncSummary=AdminBrokerSyncSummary(
-                    connections=len(connections),
-                    statuses=dict(sorted(statuses.items())),
-                    lastSyncAt=_iso(last_sync_at),
-                    fxStale=fx_stale,
-                ),
-                limitations=[
+            return {
+                "user_id": user_id,
+                "account_count": len(accounts),
+                "active_account_count": sum(1 for row in accounts if bool(row.is_active)),
+                "base_currencies": sorted({str(row.base_currency).upper() for row in accounts if str(row.base_currency or "").strip()}),
+                "accounts": [self._account_item(row, connections_by_account.get(int(row.id), [])) for row in accounts],
+                "total_cash": _money_amount(total_cash, base_currency, rounded=True),
+                "total_market_value": _money_amount(total_market_value, base_currency, rounded=True),
+                "total_equity": _money_amount(total_equity, base_currency, rounded=True),
+                "realized_pnl": _money_amount(realized_pnl, base_currency, rounded=True),
+                "unrealized_pnl": _money_amount(unrealized_pnl, base_currency, rounded=True),
+                "ledger_counts": ledger_counts,
+                "broker_sync_summary": {
+                    "connections": len(connections),
+                    "statuses": dict(sorted(statuses.items())),
+                    "last_sync_at": _iso(last_sync_at),
+                    "fx_stale": fx_stale,
+                },
+                "limitations": [
                     "read_only_projection",
                     "raw_broker_payloads_excluded",
                     "raw_broker_refs_masked",
                 ],
-            )
+            }
 
     def list_holdings(
         self,
@@ -147,7 +149,7 @@ class AdminPortfolioService:
         include_zero: bool = False,
         limit: int = 50,
         offset: int = 0,
-    ) -> tuple[list[AdminHoldingItem], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         user_id = str(user_id or "").strip()
         with self.db.get_session() as session:
             accounts = self._accounts(session, user_id=user_id, include_inactive=True)
@@ -174,11 +176,11 @@ class AdminPortfolioService:
             filtered = [
                 item
                 for item in items
-                if (include_zero or abs(float(item.quantity or 0.0)) > 0)
-                and (not symbol or item.symbol.upper() == symbol.upper())
-                and (not market or str(item.market or "").lower() == market.lower())
+                if (include_zero or abs(float(item["quantity"] or 0.0)) > 0)
+                and (not symbol or item["symbol"].upper() == symbol.upper())
+                and (not market or str(item["market"] or "").lower() == market.lower())
             ]
-            filtered.sort(key=lambda item: (item.account_id, item.symbol, item.market or "", item.currency or ""))
+            filtered.sort(key=lambda item: (item["account_id"], item["symbol"], item["market"] or "", item["currency"] or ""))
             total = len(filtered)
             start = max(0, int(offset))
             return filtered[start:start + max(1, int(limit))], total
@@ -190,17 +192,17 @@ class AdminPortfolioService:
         account_id: int | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> tuple[list[AdminPortfolioActivityItem], int, AdminLedgerCounts]:
+    ) -> tuple[list[dict[str, Any]], int, dict[str, int]]:
         user_id = str(user_id or "").strip()
         with self.db.get_session() as session:
             accounts = self._accounts(session, user_id=user_id, include_inactive=True)
             if account_id is not None and int(account_id) not in {int(row.id) for row in accounts}:
-                return [], -1, AdminLedgerCounts()
+                return [], -1, _empty_ledger_counts()
             account_ids = [int(account_id)] if account_id is not None else [int(row.id) for row in accounts]
             account_name = {int(row.id): str(row.name) for row in accounts}
             summary = self._ledger_counts(session, account_ids=account_ids)
             window_size = max(0, int(offset)) + max(1, int(limit))
-            items: list[AdminPortfolioActivityItem] = []
+            items: list[dict[str, Any]] = []
             for row in self._bounded_activity_rows(
                 session,
                 model=PortfolioTrade,
@@ -210,20 +212,20 @@ class AdminPortfolioService:
                 extra_filter=or_(PortfolioTrade.is_active.is_(True), PortfolioTrade.is_active.is_(None)),
             ):
                 items.append(
-                    AdminPortfolioActivityItem(
-                        idHash=_hash_ref(f"trade:{row.id}"),
-                        type="trade",
-                        accountId=int(row.account_id),
-                        accountName=account_name.get(int(row.account_id), ""),
-                        eventDate=_iso(row.trade_date) or "",
-                        symbol=row.symbol,
-                        market=row.market,
-                        currency=row.currency,
-                        side=row.side,
-                        quantity=_float(row.quantity),
-                        price=_float(row.price),
-                        createdAt=_iso(row.created_at),
-                    )
+                    {
+                        "id_hash": _hash_ref(f"trade:{row.id}"),
+                        "type": "trade",
+                        "account_id": int(row.account_id),
+                        "account_name": account_name.get(int(row.account_id), ""),
+                        "event_date": _iso(row.trade_date) or "",
+                        "symbol": row.symbol,
+                        "market": row.market,
+                        "currency": row.currency,
+                        "side": row.side,
+                        "quantity": _float(row.quantity),
+                        "price": _float(row.price),
+                        "created_at": _iso(row.created_at),
+                    }
                 )
             for row in self._bounded_activity_rows(
                 session,
@@ -233,17 +235,17 @@ class AdminPortfolioService:
                 window_size=window_size,
             ):
                 items.append(
-                    AdminPortfolioActivityItem(
-                        idHash=_hash_ref(f"cash:{row.id}"),
-                        type="cash",
-                        accountId=int(row.account_id),
-                        accountName=account_name.get(int(row.account_id), ""),
-                        eventDate=_iso(row.event_date) or "",
-                        currency=row.currency,
-                        direction=row.direction,
-                        amount=_float(row.amount),
-                        createdAt=_iso(row.created_at),
-                    )
+                    {
+                        "id_hash": _hash_ref(f"cash:{row.id}"),
+                        "type": "cash",
+                        "account_id": int(row.account_id),
+                        "account_name": account_name.get(int(row.account_id), ""),
+                        "event_date": _iso(row.event_date) or "",
+                        "currency": row.currency,
+                        "direction": row.direction,
+                        "amount": _float(row.amount),
+                        "created_at": _iso(row.created_at),
+                    }
                 )
             for row in self._bounded_activity_rows(
                 session,
@@ -253,26 +255,26 @@ class AdminPortfolioService:
                 window_size=window_size,
             ):
                 items.append(
-                    AdminPortfolioActivityItem(
-                        idHash=_hash_ref(f"corporate_action:{row.id}"),
-                        type="corporate_action",
-                        accountId=int(row.account_id),
-                        accountName=account_name.get(int(row.account_id), ""),
-                        eventDate=_iso(row.effective_date) or "",
-                        symbol=row.symbol,
-                        market=row.market,
-                        currency=row.currency,
-                        actionType=row.action_type,
-                        amount=_float(row.cash_dividend_per_share) if row.cash_dividend_per_share is not None else None,
-                        createdAt=_iso(row.created_at),
-                    )
+                    {
+                        "id_hash": _hash_ref(f"corporate_action:{row.id}"),
+                        "type": "corporate_action",
+                        "account_id": int(row.account_id),
+                        "account_name": account_name.get(int(row.account_id), ""),
+                        "event_date": _iso(row.effective_date) or "",
+                        "symbol": row.symbol,
+                        "market": row.market,
+                        "currency": row.currency,
+                        "action_type": row.action_type,
+                        "amount": _float(row.cash_dividend_per_share) if row.cash_dividend_per_share is not None else None,
+                        "created_at": _iso(row.created_at),
+                    }
                 )
-            items.sort(key=lambda item: (item.event_date, item.id_hash), reverse=True)
-            total = summary.trades + summary.cash_events + summary.corporate_actions
+            items.sort(key=lambda item: (item["event_date"], item["id_hash"]), reverse=True)
+            total = summary["trades"] + summary["cash_events"] + summary["corporate_actions"]
             start = max(0, int(offset))
             return items[start:start + max(1, int(limit))], total, summary
 
-    def get_account_detail(self, *, user_id: str, account_id: int) -> Optional[AdminPortfolioAccountDetailResponse]:
+    def get_account_detail(self, *, user_id: str, account_id: int) -> Optional[dict[str, Any]]:
         user_id = str(user_id or "").strip()
         with self.db.get_session() as session:
             account = session.execute(
@@ -291,30 +293,30 @@ class AdminPortfolioService:
                 limit=200,
                 offset=0,
             )
-            return AdminPortfolioAccountDetailResponse(
-                userId=user_id,
-                account=self._account_item(account, connections),
-                brokerConnections=[self._connection_item(row) for row in connections],
-                syncState=self._sync_state_item(sync_by_account.get(int(account.id))),
-                holdings=AdminHoldingListResponse(
-                    items=holding_items,
-                    total=holding_total,
-                    limit=200,
-                    offset=0,
-                    hasMore=False,
-                    limitations=["raw_broker_payloads_excluded", "raw_broker_refs_masked"],
-                ),
-                activity=AdminPortfolioActivityResponse(
-                    items=activity_items,
-                    total=activity_total,
-                    limit=200,
-                    offset=0,
-                    hasMore=False,
-                    summary=activity_summary,
-                    limitations=["notes_and_raw_import_rows_excluded"],
-                ),
-                limitations=["read_only_projection", "raw_broker_payloads_excluded", "raw_broker_refs_masked"],
-            )
+            return {
+                "user_id": user_id,
+                "account": self._account_item(account, connections),
+                "broker_connections": [self._connection_item(row) for row in connections],
+                "sync_state": self._sync_state_item(sync_by_account.get(int(account.id))),
+                "holdings": {
+                    "items": holding_items,
+                    "total": holding_total,
+                    "limit": 200,
+                    "offset": 0,
+                    "has_more": False,
+                    "limitations": ["raw_broker_payloads_excluded", "raw_broker_refs_masked"],
+                },
+                "activity": {
+                    "items": activity_items,
+                    "total": activity_total,
+                    "limit": 200,
+                    "offset": 0,
+                    "has_more": False,
+                    "summary": activity_summary,
+                    "limitations": ["notes_and_raw_import_rows_excluded"],
+                },
+                "limitations": ["read_only_projection", "raw_broker_payloads_excluded", "raw_broker_refs_masked"],
+            }
 
     @staticmethod
     def _accounts(session: Any, *, user_id: str, include_inactive: bool) -> list[Any]:
@@ -413,18 +415,18 @@ class AdminPortfolioService:
         return latest
 
     @staticmethod
-    def _ledger_counts(session: Any, *, account_ids: list[int]) -> AdminLedgerCounts:
+    def _ledger_counts(session: Any, *, account_ids: list[int]) -> dict[str, int]:
         if not account_ids:
-            return AdminLedgerCounts()
+            return _empty_ledger_counts()
         active_trade = and_(
             PortfolioTrade.account_id.in_(account_ids),
             or_(PortfolioTrade.is_active.is_(True), PortfolioTrade.is_active.is_(None)),
         )
-        return AdminLedgerCounts(
-            trades=int(session.execute(select(func.count()).select_from(PortfolioTrade).where(active_trade)).scalar() or 0),
-            cashEvents=int(session.execute(select(func.count()).select_from(PortfolioCashLedger).where(PortfolioCashLedger.account_id.in_(account_ids))).scalar() or 0),
-            corporateActions=int(session.execute(select(func.count()).select_from(PortfolioCorporateAction).where(PortfolioCorporateAction.account_id.in_(account_ids))).scalar() or 0),
-        )
+        return {
+            "trades": int(session.execute(select(func.count()).select_from(PortfolioTrade).where(active_trade)).scalar() or 0),
+            "cash_events": int(session.execute(select(func.count()).select_from(PortfolioCashLedger).where(PortfolioCashLedger.account_id.in_(account_ids))).scalar() or 0),
+            "corporate_actions": int(session.execute(select(func.count()).select_from(PortfolioCorporateAction).where(PortfolioCorporateAction.account_id.in_(account_ids))).scalar() or 0),
+        }
 
     @staticmethod
     def _dominant_currency(accounts: list[Any], sync_by_account: dict[int, Any], snapshots_by_account: dict[int, Any]) -> Optional[str]:
@@ -443,55 +445,55 @@ class AdminPortfolioService:
         return None
 
     @staticmethod
-    def _account_item(row: Any, connections: list[Any]) -> AdminPortfolioAccountItem:
+    def _account_item(row: Any, connections: list[Any]) -> dict[str, Any]:
         handle = _broker_account_handle(getattr(connections[0], "broker_account_ref", None)) if connections else None
-        return AdminPortfolioAccountItem(
-            id=int(row.id),
-            name=str(row.name),
-            broker=row.broker,
-            market=row.market,
-            baseCurrency=row.base_currency,
-            isActive=bool(row.is_active),
-            brokerAccountHandle=handle,
-            createdAt=_iso(row.created_at),
-            updatedAt=_iso(row.updated_at),
-        )
+        return {
+            "id": int(row.id),
+            "name": str(row.name),
+            "broker": row.broker,
+            "market": row.market,
+            "base_currency": row.base_currency,
+            "is_active": bool(row.is_active),
+            "broker_account_handle": handle,
+            "created_at": _iso(row.created_at),
+            "updated_at": _iso(row.updated_at),
+        }
 
     @staticmethod
-    def _connection_item(row: Any) -> AdminPortfolioBrokerConnectionItem:
-        return AdminPortfolioBrokerConnectionItem(
-            id=int(row.id),
-            accountId=int(row.portfolio_account_id),
-            brokerType=str(row.broker_type),
-            brokerName=row.broker_name,
-            connectionName=str(row.connection_name),
-            brokerAccountHandle=_broker_account_handle(row.broker_account_ref),
-            importMode=row.import_mode,
-            status=str(row.status),
-            lastImportedAt=_iso(row.last_imported_at),
-            lastImportSource=row.last_import_source,
-            createdAt=_iso(row.created_at),
-            updatedAt=_iso(row.updated_at),
-        )
+    def _connection_item(row: Any) -> dict[str, Any]:
+        return {
+            "id": int(row.id),
+            "account_id": int(row.portfolio_account_id),
+            "broker_type": str(row.broker_type),
+            "broker_name": row.broker_name,
+            "connection_name": str(row.connection_name),
+            "broker_account_handle": _broker_account_handle(row.broker_account_ref),
+            "import_mode": row.import_mode,
+            "status": str(row.status),
+            "last_imported_at": _iso(row.last_imported_at),
+            "last_import_source": row.last_import_source,
+            "created_at": _iso(row.created_at),
+            "updated_at": _iso(row.updated_at),
+        }
 
     @staticmethod
-    def _sync_state_item(row: Any | None) -> AdminPortfolioSyncState | None:
+    def _sync_state_item(row: Any | None) -> dict[str, Any] | None:
         if row is None:
             return None
         currency = str(getattr(row, "base_currency", "") or "").upper() or None
-        return AdminPortfolioSyncState(
-            status=row.sync_status,
-            source=row.sync_source,
-            snapshotDate=_iso(row.snapshot_date),
-            syncedAt=_iso(row.synced_at),
-            baseCurrency=currency,
-            totalCash=AdminMoneyAmount(amount=_float(row.total_cash), currency=currency),
-            totalMarketValue=AdminMoneyAmount(amount=_float(row.total_market_value), currency=currency),
-            totalEquity=AdminMoneyAmount(amount=_float(row.total_equity), currency=currency),
-            realizedPnl=AdminMoneyAmount(amount=_float(row.realized_pnl), currency=currency),
-            unrealizedPnl=AdminMoneyAmount(amount=_float(row.unrealized_pnl), currency=currency),
-            fxStale=bool(row.fx_stale),
-        )
+        return {
+            "status": row.sync_status,
+            "source": row.sync_source,
+            "snapshot_date": _iso(row.snapshot_date),
+            "synced_at": _iso(row.synced_at),
+            "base_currency": currency,
+            "total_cash": _money_amount(_float(row.total_cash), currency),
+            "total_market_value": _money_amount(_float(row.total_market_value), currency),
+            "total_equity": _money_amount(_float(row.total_equity), currency),
+            "realized_pnl": _money_amount(_float(row.realized_pnl), currency),
+            "unrealized_pnl": _money_amount(_float(row.unrealized_pnl), currency),
+            "fx_stale": bool(row.fx_stale),
+        }
 
     @staticmethod
     def _synced_holding_items(
@@ -501,7 +503,7 @@ class AdminPortfolioService:
         account_ids: list[int],
         account_by_id: dict[int, Any],
         connection_by_account: dict[int, list[Any]],
-    ) -> list[AdminHoldingItem]:
+    ) -> list[dict[str, Any]]:
         if not account_ids:
             return []
         rows = session.execute(
@@ -513,7 +515,7 @@ class AdminPortfolioService:
                 )
             )
         ).scalars().all()
-        items: list[AdminHoldingItem] = []
+        items: list[dict[str, Any]] = []
         for row in rows:
             account = account_by_id.get(int(row.portfolio_account_id))
             if account is None:
@@ -521,23 +523,23 @@ class AdminPortfolioService:
             connections = connection_by_account.get(int(row.portfolio_account_id), [])
             handle = _broker_account_handle(getattr(connections[0], "broker_account_ref", None)) if connections else None
             items.append(
-                AdminHoldingItem(
-                    accountId=int(row.portfolio_account_id),
-                    accountName=str(account.name),
-                    broker=getattr(account, "broker", None),
-                    brokerAccountHandle=handle,
-                    symbol=str(row.symbol),
-                    market=row.market,
-                    currency=row.currency,
-                    quantity=_float(row.quantity),
-                    avgCost=_float(row.avg_cost),
-                    lastPrice=_float(row.last_price),
-                    marketValueBase=_float(row.market_value_base),
-                    unrealizedPnlBase=_float(row.unrealized_pnl_base),
-                    valuationCurrency=row.valuation_currency,
-                    fxStatus="stale" if False else "current",
-                    updatedAt=_iso(row.updated_at),
-                )
+                {
+                    "account_id": int(row.portfolio_account_id),
+                    "account_name": str(account.name),
+                    "broker": getattr(account, "broker", None),
+                    "broker_account_handle": handle,
+                    "symbol": str(row.symbol),
+                    "market": row.market,
+                    "currency": row.currency,
+                    "quantity": _float(row.quantity),
+                    "avg_cost": _float(row.avg_cost),
+                    "last_price": _float(row.last_price),
+                    "market_value_base": _float(row.market_value_base),
+                    "unrealized_pnl_base": _float(row.unrealized_pnl_base),
+                    "valuation_currency": row.valuation_currency,
+                    "fx_status": "stale" if False else "current",
+                    "updated_at": _iso(row.updated_at),
+                }
             )
         return items
 
@@ -548,13 +550,13 @@ class AdminPortfolioService:
         account_ids: list[int],
         account_by_id: dict[int, Any],
         connection_by_account: dict[int, list[Any]],
-    ) -> list[AdminHoldingItem]:
+    ) -> list[dict[str, Any]]:
         if not account_ids:
             return []
         rows = session.execute(
             select(PortfolioPosition).where(PortfolioPosition.account_id.in_(account_ids))
         ).scalars().all()
-        items: list[AdminHoldingItem] = []
+        items: list[dict[str, Any]] = []
         for row in rows:
             account = account_by_id.get(int(row.account_id))
             if account is None:
@@ -562,22 +564,22 @@ class AdminPortfolioService:
             connections = connection_by_account.get(int(row.account_id), [])
             handle = _broker_account_handle(getattr(connections[0], "broker_account_ref", None)) if connections else None
             items.append(
-                AdminHoldingItem(
-                    accountId=int(row.account_id),
-                    accountName=str(account.name),
-                    broker=getattr(account, "broker", None),
-                    brokerAccountHandle=handle,
-                    symbol=str(row.symbol),
-                    market=row.market,
-                    currency=row.currency,
-                    quantity=_float(row.quantity),
-                    avgCost=_float(row.avg_cost),
-                    lastPrice=_float(row.last_price),
-                    marketValueBase=_float(row.market_value_base),
-                    unrealizedPnlBase=_float(row.unrealized_pnl_base),
-                    valuationCurrency=row.valuation_currency,
-                    fxStatus="current",
-                    updatedAt=_iso(row.updated_at),
-                )
+                {
+                    "account_id": int(row.account_id),
+                    "account_name": str(account.name),
+                    "broker": getattr(account, "broker", None),
+                    "broker_account_handle": handle,
+                    "symbol": str(row.symbol),
+                    "market": row.market,
+                    "currency": row.currency,
+                    "quantity": _float(row.quantity),
+                    "avg_cost": _float(row.avg_cost),
+                    "last_price": _float(row.last_price),
+                    "market_value_base": _float(row.market_value_base),
+                    "unrealized_pnl_base": _float(row.unrealized_pnl_base),
+                    "valuation_currency": row.valuation_currency,
+                    "fx_status": "current",
+                    "updated_at": _iso(row.updated_at),
+                }
             )
         return items

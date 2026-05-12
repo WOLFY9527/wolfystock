@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -95,7 +95,9 @@ def get_admin_portfolio_summary(
     actor = _to_admin_actor(current_user)
     normalized_user_id = _normalize_user_id(user_id)
     service = _service_or_404(normalized_user_id)
-    response = service.get_summary(user_id=normalized_user_id, include_inactive=include_inactive)
+    response = AdminPortfolioSummaryResponse.model_validate(
+        service.get_summary(user_id=normalized_user_id, include_inactive=include_inactive)
+    )
     _record_audit(
         action="admin_portfolio.summary_viewed",
         actor=actor,
@@ -138,13 +140,15 @@ def list_admin_user_holdings(
     )
     if total < 0:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Portfolio account not found"})
-    response = AdminHoldingListResponse(
-        items=items,
-        total=total,
-        limit=limit,
-        offset=offset,
-        hasMore=offset + limit < total,
-        limitations=["raw_broker_payloads_excluded", "raw_broker_refs_masked"],
+    response = AdminHoldingListResponse.model_validate(
+        {
+            "items": items,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + limit < total,
+            "limitations": ["raw_broker_payloads_excluded", "raw_broker_refs_masked"],
+        }
     )
     _record_audit(
         action="admin_portfolio.holdings_viewed",
@@ -187,14 +191,16 @@ def list_admin_user_portfolio_activity(
     )
     if total < 0:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Portfolio account not found"})
-    response = AdminPortfolioActivityResponse(
-        items=items,
-        total=total,
-        limit=limit,
-        offset=offset,
-        hasMore=offset + limit < total,
-        summary=summary,
-        limitations=["notes_and_raw_import_rows_excluded"],
+    response = AdminPortfolioActivityResponse.model_validate(
+        {
+            "items": items,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + limit < total,
+            "summary": summary,
+            "limitations": ["notes_and_raw_import_rows_excluded"],
+        }
     )
     _record_audit(
         action="admin_portfolio.activity_viewed",
@@ -206,7 +212,7 @@ def list_admin_user_portfolio_activity(
             "offset": offset,
             "result_count": len(items),
             "total": total,
-            "summary": summary.model_dump(by_alias=True),
+            "summary": response.summary.model_dump(by_alias=True),
         },
     )
     return response
@@ -227,9 +233,10 @@ def get_admin_portfolio_account_detail(
     if account_id <= 0:
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "Invalid account_id"})
     service = _service_or_404(normalized_user_id)
-    response = service.get_account_detail(user_id=normalized_user_id, account_id=account_id)
-    if response is None:
+    payload = service.get_account_detail(user_id=normalized_user_id, account_id=account_id)
+    if payload is None:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Portfolio account not found"})
+    response = AdminPortfolioAccountDetailResponse.model_validate(payload)
     _record_audit(
         action="admin_portfolio.account_detail_viewed",
         actor=actor,

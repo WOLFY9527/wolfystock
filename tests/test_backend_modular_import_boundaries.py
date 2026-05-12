@@ -199,7 +199,6 @@ LLM_HELPER_IMPORT_GUARD_CASES = (
 )
 ARCH_REVIEW_MESSAGE = "new service-to-API upward imports require explicit architecture review."
 EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
-    "src/services/admin_portfolio_service.py": {"api.v1.schemas.admin_portfolio"},
     "src/services/options_lab_service.py": {"api.v1.schemas.options"},
 }
 # Transitional, owned upward imports from services into API schemas.
