@@ -219,6 +219,7 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
         "data_provider.realtime_types",
     },
     "src/services/crypto_realtime_service.py": {"src.services.market_cache"},
+    "src/services/liquidity_monitor_service.py": {"src.services.market_cache"},
     "src/services/market_overview_service.py": {"src.services.market_cache"},
     "src/services/market_provider_operations_service.py": {"src.services.market_cache"},
     "src/services/market_scanner_service.py": {"data_provider.base"},
