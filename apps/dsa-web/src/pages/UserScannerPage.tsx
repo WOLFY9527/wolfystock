@@ -1252,29 +1252,6 @@ function FieldChip({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ScannerRunSummaryCard({ summary }: { summary: ScannerRunSummary }) {
-  return (
-    <TerminalNestedBlock className="min-w-0 p-2.5" data-testid={`scanner-run-summary-${summary.title}`}>
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <span className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{summary.title}</span>
-        <TerminalChip variant="neutral" className="shrink-0 px-1.5 py-0.5 text-[10px] font-sans text-white/62">{summary.statusLabel}</TerminalChip>
-      </div>
-      <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px] sm:grid-cols-3">
-        <FieldChip label="最佳候选" value={summary.bestCandidate} />
-        <FieldChip label="候选数量" value={String(summary.candidateCount)} />
-        <FieldChip label="淘汰数量" value={String(summary.rejectedCount)} />
-        <FieldChip label="失败数量" value={String(summary.failedCount)} />
-        <FieldChip label="数据状态" value={summary.dataStatusLabel} />
-        <FieldChip label="耗时" value={summary.durationLabel} />
-      </div>
-      <p className="mt-2 truncate text-[11px] text-white/42">
-        运行时间：<span className="font-mono text-white/58">{summary.runTimeLabel}</span>
-        {summary.errorSummary ? <span className="text-rose-200/80"> · {summary.errorSummary}</span> : null}
-      </p>
-    </TerminalNestedBlock>
-  );
-}
-
 function ScannerResultHistorySummary({
   currentSummary,
   recentSummary,
@@ -1304,7 +1281,26 @@ function ScannerResultHistorySummary({
         </div>
         {visibleSummaries.length ? (
           <div className="grid gap-2 xl:grid-cols-3">
-            {visibleSummaries.map((summary) => <ScannerRunSummaryCard key={summary.title} summary={summary} />)}
+            {visibleSummaries.map((summary) => (
+              <TerminalNestedBlock key={summary.title} className="min-w-0 p-2.5" data-testid={`scanner-run-summary-${summary.title}`}>
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <span className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{summary.title}</span>
+                  <TerminalChip variant="neutral" className="shrink-0 px-1.5 py-0.5 text-[10px] font-sans text-white/62">{summary.statusLabel}</TerminalChip>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px] sm:grid-cols-3">
+                  <FieldChip label="最佳候选" value={summary.bestCandidate} />
+                  <FieldChip label="候选数量" value={String(summary.candidateCount)} />
+                  <FieldChip label="淘汰数量" value={String(summary.rejectedCount)} />
+                  <FieldChip label="失败数量" value={String(summary.failedCount)} />
+                  <FieldChip label="数据状态" value={summary.dataStatusLabel} />
+                  <FieldChip label="耗时" value={summary.durationLabel} />
+                </div>
+                <p className="mt-2 truncate text-[11px] text-white/42">
+                  运行时间：<span className="font-mono text-white/58">{summary.runTimeLabel}</span>
+                  {summary.errorSummary ? <span className="text-rose-200/80"> · {summary.errorSummary}</span> : null}
+                </p>
+              </TerminalNestedBlock>
+            ))}
           </div>
         ) : null}
         {!hasHistory && !currentSummary ? (
