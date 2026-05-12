@@ -225,7 +225,6 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
     "src/services/market_scanner_service.py": {"data_provider.base"},
     "src/services/portfolio_risk_board_lookup.py": {"data_provider.base"},
     "src/services/rule_backtest_service.py": {
-        "data_provider.base",
         "data_provider.us_index_mapping",
     },
     "src/services/stock_service.py": {
