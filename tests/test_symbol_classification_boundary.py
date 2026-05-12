@@ -20,6 +20,7 @@ from data_provider.base import (
     is_st_stock as provider_is_st_stock,
 )
 from data_provider.us_index_mapping import (
+    US_INDEX_MAPPING,
     is_us_stock_code as provider_is_us_stock_code,
 )
 from src.utils.symbol_classification import (
@@ -31,6 +32,13 @@ from src.utils.symbol_classification import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_provider_classification_exports_delegate_to_pure_utils() -> None:
+    assert provider_is_bse_code is is_bse_code
+    assert provider_is_kc_cy_stock is is_kc_cy_stock
+    assert provider_is_st_stock is is_st_stock
+    assert provider_is_us_stock_code is is_us_stock_code
 
 
 @pytest.mark.parametrize(
@@ -53,6 +61,12 @@ def test_is_us_stock_code_matches_provider_runtime_semantics(
 ) -> None:
     assert is_us_stock_code(raw) is expected
     assert is_us_stock_code(raw) == provider_is_us_stock_code(raw)
+
+
+def test_us_index_mapping_keys_remain_excluded_from_us_stock_classification() -> None:
+    for code in US_INDEX_MAPPING:
+        assert is_us_stock_code(code) is False
+        assert provider_is_us_stock_code(code) is False
 
 
 @pytest.mark.parametrize(

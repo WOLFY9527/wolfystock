@@ -17,6 +17,11 @@ from src.utils.symbol_normalization import (
 )
 
 
+def test_provider_normalization_exports_delegate_to_pure_utils() -> None:
+    assert provider_normalize_stock_code is normalize_stock_code
+    assert provider_canonical_stock_code is canonical_stock_code
+
+
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [

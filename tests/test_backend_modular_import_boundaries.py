@@ -495,6 +495,30 @@ def test_provider_runtime_import_inventory_is_explicit() -> None:
     )
 
 
+def test_provider_symbol_helpers_delegate_to_pure_utils() -> None:
+    actual_mapping = {
+        "data_provider/base.py": _imports_for_file(
+            DATA_PROVIDER_ROOT / "base.py",
+            (
+                "src.utils.symbol_normalization",
+                "src.utils.symbol_classification",
+            ),
+        ),
+        "data_provider/us_index_mapping.py": _imports_for_file(
+            DATA_PROVIDER_ROOT / "us_index_mapping.py",
+            ("src.utils.symbol_classification",),
+        ),
+    }
+
+    assert actual_mapping == {
+        "data_provider/base.py": {
+            "src.utils.symbol_normalization",
+            "src.utils.symbol_classification",
+        },
+        "data_provider/us_index_mapping.py": {"src.utils.symbol_classification"},
+    }
+
+
 def test_provider_primitives_stay_lightweight() -> None:
     tracked_prefixes = tuple(
         sorted(set(_existing_provider_primitive_modules()) | set(FORBIDDEN_PROVIDER_RUNTIME_PREFIXES))

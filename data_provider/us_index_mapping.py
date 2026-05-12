@@ -11,10 +11,7 @@
 美股指数在 Yahoo Finance 中需使用 ^ 前缀，与股票代码不同。
 """
 
-import re
-
-# 美股代码正则：1-5 个大写字母，可选 .X 后缀（如 BRK.B）
-_US_STOCK_PATTERN = re.compile(r'^[A-Z]{1,5}(\.[A-Z])?$')
+from src.utils.symbol_classification import is_us_stock_code
 
 
 # 用户输入 -> (Yahoo Finance 符号, 中文名称)
@@ -60,38 +57,6 @@ def is_us_index_code(code: str) -> bool:
         False
     """
     return (code or '').strip().upper() in US_INDEX_MAPPING
-
-
-def is_us_stock_code(code: str) -> bool:
-    """
-    判断代码是否为美股股票符号（排除美股指数）。
-
-    美股股票代码为 1-5 个大写字母，可选 .X 后缀如 BRK.B。
-    美股指数（SPX、DJI 等）明确排除。
-
-    Args:
-        code: 股票代码，如 'AAPL', 'TSLA', 'BRK.B'
-
-    Returns:
-        True 表示是美股股票符号，否则 False
-
-    Examples:
-        >>> is_us_stock_code('AAPL')
-        True
-        >>> is_us_stock_code('TSLA')
-        True
-        >>> is_us_stock_code('BRK.B')
-        True
-        >>> is_us_stock_code('SPX')
-        False
-        >>> is_us_stock_code('600519')
-        False
-    """
-    normalized = (code or '').strip().upper()
-    # 美股指数不是股票
-    if normalized in US_INDEX_MAPPING:
-        return False
-    return bool(_US_STOCK_PATTERN.match(normalized))
 
 
 def get_us_index_yf_symbol(code: str) -> tuple:
