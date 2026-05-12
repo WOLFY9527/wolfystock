@@ -21,15 +21,6 @@ function formatMetricNumber(value?: number | null, digits = 2): string {
   return value.toFixed(digits);
 }
 
-function BacktestFieldChip({ label, value }: { label: string; value: string }) {
-  return (
-    <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-      <span className="shrink-0 text-white/36">{label}</span>
-      <span className="min-w-0 truncate">{value}</span>
-    </TerminalChip>
-  );
-}
-
 export function ScannerBacktestResultStrip({
   item,
   language,
@@ -98,12 +89,19 @@ export function ScannerBacktestLab({
       </div>
       <div className="grid gap-3 text-xs">
         <div className="grid gap-2 rounded-xl border border-white/5 bg-black/20 p-3 sm:grid-cols-2 xl:grid-cols-4">
-          <BacktestFieldChip label={language === 'en' ? 'Mode' : '模式'} value={language === 'en' ? 'Candidate single-symbol backtest' : '候选单标的回测'} />
-          <BacktestFieldChip label={language === 'en' ? 'Range' : '区间'} value={`${config.startDate} - ${config.endDate}`} />
-          <BacktestFieldChip label={language === 'en' ? 'Capital' : '资金'} value={String(config.initialCapital)} />
-          <BacktestFieldChip label={language === 'en' ? 'Benchmark' : '基准'} value={config.benchmarkMode} />
-          <BacktestFieldChip label={language === 'en' ? 'Fee/slip' : '费用/滑点'} value={`${config.feeBps}/${config.slippageBps} bps`} />
-          <BacktestFieldChip label={language === 'en' ? 'Strategy' : '策略'} value={language === 'en' ? 'Default MA deterministic template' : '默认均线确定性模板'} />
+          {[
+            [language === 'en' ? 'Mode' : '模式', language === 'en' ? 'Candidate single-symbol backtest' : '候选单标的回测'],
+            [language === 'en' ? 'Range' : '区间', `${config.startDate} - ${config.endDate}`],
+            [language === 'en' ? 'Capital' : '资金', String(config.initialCapital)],
+            [language === 'en' ? 'Benchmark' : '基准', config.benchmarkMode],
+            [language === 'en' ? 'Fee/slip' : '费用/滑点', `${config.feeBps}/${config.slippageBps} bps`],
+            [language === 'en' ? 'Strategy' : '策略', language === 'en' ? 'Default MA deterministic template' : '默认均线确定性模板'],
+          ].map(([label, value]) => (
+            <TerminalChip key={`${label}-${value}`} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+              <span className="shrink-0 text-white/36">{label}</span>
+              <span className="min-w-0 truncate">{value}</span>
+            </TerminalChip>
+          ))}
         </div>
         <div className="flex max-w-full flex-wrap gap-1.5">
           <ScannerActionButton label={language === 'en' ? 'Official selected' : '回测官方入选'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('official_selected')} disabled={isRunning || counts.official_selected === 0} variant="secondary" />

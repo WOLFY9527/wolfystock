@@ -183,22 +183,6 @@ function getWatchlistActionTitle(
   return language === 'en' ? 'Save this candidate to your watchlist.' : '保存到你的观察名单。';
 }
 
-function ScannerEmptyState({
-  title,
-  body,
-  className = '',
-}: {
-  title: string;
-  body: string;
-  className?: string;
-}) {
-  return (
-    <TerminalEmptyState title={title} className={`w-full ${className}`.trim()}>
-      {body}
-    </TerminalEmptyState>
-  );
-}
-
 function normalizeLabel(label?: string | null): string {
   return (label || '').trim().toLowerCase();
 }
@@ -3339,10 +3323,12 @@ const UserScannerPage: React.FC = () => {
                       })}
                     </div>
                   ) : (
-                    <ScannerEmptyState
+                    <TerminalEmptyState
                       title={language === 'en' ? 'No candidates in this filter' : '当前过滤无候选'}
-                      body={language === 'en' ? 'Switch to Candidate pool or All to inspect the full submitted universe.' : '切换到候选池或全部查看完整提交范围。'}
-                    />
+                      className="w-full"
+                    >
+                      {language === 'en' ? 'Switch to Candidate pool or All to inspect the full submitted universe.' : '切换到候选池或全部查看完整提交范围。'}
+                    </TerminalEmptyState>
                   )
                 ) : sortedCandidates.length ? (
                   viewMode === 'cards' ? (
@@ -3700,12 +3686,14 @@ const UserScannerPage: React.FC = () => {
                   </div>
                 )
               ) : (
-                <ScannerEmptyState
+                <TerminalEmptyState
                   title={runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length ? (language === 'en' ? 'No selected candidates' : '本次无入选候选') : emptyStateTitle}
-                  body={runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length
+                  className="w-full"
+                >
+                  {runDetail?.summary?.selectedCount === 0 && diagnosticCandidates.length
                     ? (language === 'en' ? 'Open Candidate pool or All to inspect rejected and data-failed candidates.' : '切换到候选池或全部查看淘汰与数据失败原因。')
 	                    : pageErrorSummary || emptyStateBody}
-                />
+                </TerminalEmptyState>
               )}
                     {runDetail && inspectorCandidate ? (() => {
                       const mobileMarket = normalizeScannerMarket(runDetail.market || market);
@@ -3972,7 +3960,11 @@ const UserScannerPage: React.FC = () => {
                 ))}
               </div>
             ) : null}
-            {!isLoadingHistory && !historyItems.length ? <ScannerEmptyState title={emptyStateTitle} body={emptyStateBody} className="py-12" /> : null}
+            {!isLoadingHistory && !historyItems.length ? (
+              <TerminalEmptyState title={emptyStateTitle} className="w-full py-12">
+                {emptyStateBody}
+              </TerminalEmptyState>
+            ) : null}
             {totalHistoryPages > 1 ? <div className="pt-2"><Pagination currentPage={historyPage} totalPages={totalHistoryPages} onPageChange={(page) => void fetchHistory(page)} /></div> : null}
           </div>
         </div>
