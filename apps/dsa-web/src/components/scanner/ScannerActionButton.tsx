@@ -1,7 +1,7 @@
 import type { MouseEvent, ReactNode } from 'react';
 import { TerminalButton } from '../terminal';
 
-type ScannerActionButtonVariant = 'default' | 'primary' | 'secondary' | 'compact';
+type ScannerActionButtonVariant = 'primary' | 'secondary' | 'compact';
 
 export function ScannerActionButton({
   label,
@@ -20,7 +20,7 @@ export function ScannerActionButton({
   variant?: ScannerActionButtonVariant;
   testId?: string;
 }) {
-  const resolvedVariant = variant === 'default' ? 'compact' : variant === 'primary' ? 'secondary' : variant;
+  const resolvedVariant = variant === 'primary' ? 'secondary' : variant;
   const sizeClass = resolvedVariant === 'secondary' ? 'px-3 py-1.5 text-xs' : 'px-2.5 py-1 text-xs';
 
   return (
