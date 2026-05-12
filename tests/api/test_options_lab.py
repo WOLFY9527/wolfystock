@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.v1.endpoints import options
+from src.services.options_lab_service import OptionsLabService
 
 
 SAFETY_BLOCKED_MARKERS = [
@@ -704,6 +705,76 @@ def test_decision_endpoint_delayed_fixture_keeps_tradeability_cap() -> None:
         assert payload["decisionGrade"] is False
         assert payload["gateDecision"] in {"数据不足，禁止判断", "仅观察", "需人工复核"}
         assert all(item["decisionLabel"] != "有条件可交易" for item in payload["rankedAlternatives"])
+    finally:
+        client.close()
+
+
+def test_decision_endpoint_matches_service_alias_contract() -> None:
+    request_payload = {
+        "symbol": "TEM",
+        "strategy": "bull_call_spread",
+        "expiration": "2026-06-19",
+        "targetPrice": 65,
+        "targetDate": "2026-06-19",
+        "riskBudget": 600,
+    }
+
+    client = _client()
+    try:
+        response = client.post("/api/v1/options/decision/evaluate", json=request_payload)
+        assert response.status_code == 200
+
+        expected = OptionsLabService(
+            fixture_path=Path("tests/fixtures/options/tem_chain.json")
+        ).evaluate_decision(request_payload)
+        expected_payload = expected.model_dump(by_alias=True)
+        actual_payload = response.json()
+
+        assert actual_payload == expected_payload
+        assert actual_payload["rankedAlternatives"] == actual_payload["optimizer"]["alternatives"]
+    finally:
+        client.close()
+
+
+def test_decision_endpoint_no_trade_payload_matches_service_alias_contract(tmp_path: Path) -> None:
+    fixture = json.loads(Path("tests/fixtures/options/tem_chain.json").read_text(encoding="utf-8"))
+    for contract in fixture["contracts"]:
+        contract["volume"] = 0
+        contract["openInterest"] = 0
+        contract["bid"] = 0.1
+        contract["ask"] = 2.5
+        contract["impliedVolatility"] = 1.4
+    path = tmp_path / "tem_weak_candidates.json"
+    path.write_text(json.dumps(fixture), encoding="utf-8")
+
+    weak_service = OptionsLabService(fixture_path=path)
+    request_payload = {
+        "symbol": "TEM",
+        "strategy": "long_call",
+        "expiration": "2026-06-19",
+        "targetPrice": 52.5,
+        "targetDate": "2026-06-19",
+    }
+
+    client = _client()
+    try:
+        with patch.object(options, "_service", return_value=weak_service):
+            response = client.post("/api/v1/options/decision/evaluate", json=request_payload)
+
+        assert response.status_code == 200
+        expected_payload = weak_service.evaluate_decision(request_payload).model_dump(by_alias=True)
+        actual_payload = response.json()
+
+        assert actual_payload == expected_payload
+        assert set(actual_payload["optimizer"].keys()) == {
+            "preferredStrategyKey",
+            "optimizerLabel",
+            "alternatives",
+            "noTradeReason",
+        }
+        assert actual_payload["optimizer"]["preferredStrategyKey"] is None
+        assert actual_payload["optimizer"]["noTradeReason"] is not None
+        assert actual_payload["rankedAlternatives"] == actual_payload["optimizer"]["alternatives"]
     finally:
         client.close()
 
