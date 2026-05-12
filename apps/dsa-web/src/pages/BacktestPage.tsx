@@ -131,36 +131,6 @@ function parseScannerBacktestHandoff(search: string): ScannerBacktestHandoff | n
   };
 }
 
-const WORKBENCH_PANEL_TRANSITION = {
-  duration: 0.26,
-  ease: [0.22, 1, 0.36, 1] as const,
-};
-
-function WorkspaceStageLoadingFallback({ language }: { language: BacktestLanguage }) {
-  return (
-    <section
-      data-testid="backtest-workspace-loading"
-      aria-busy="true"
-      className="workspace-loading-panel border border-white/10 bg-white/[0.02] backdrop-blur-md"
-    >
-      <div className="workspace-loading-panel__header">
-        <span className="workspace-loading-panel__status">
-          {language === 'en' ? 'Loading workspace' : '加载工作区'}
-        </span>
-        <span className="text-xs text-white/45">
-          {language === 'en' ? 'Preparing backtest surface' : '正在准备回测界面'}
-        </span>
-      </div>
-      <div className="workspace-loading-panel__hero min-h-[240px]" />
-      <div className="workspace-loading-panel__lines" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
-    </section>
-  );
-}
-
 const BacktestPage: React.FC = () => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
@@ -1294,9 +1264,35 @@ const BacktestPage: React.FC = () => {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            transition={WORKBENCH_PANEL_TRANSITION}
+            transition={{
+              duration: 0.26,
+              ease: [0.22, 1, 0.36, 1] as const,
+            }}
           >
-            <Suspense fallback={<WorkspaceStageLoadingFallback language={language} />}>
+            <Suspense
+              fallback={(
+                <section
+                  data-testid="backtest-workspace-loading"
+                  aria-busy="true"
+                  className="workspace-loading-panel border border-white/10 bg-white/[0.02] backdrop-blur-md"
+                >
+                  <div className="workspace-loading-panel__header">
+                    <span className="workspace-loading-panel__status">
+                      {language === 'en' ? 'Loading workspace' : '加载工作区'}
+                    </span>
+                    <span className="text-xs text-white/45">
+                      {language === 'en' ? 'Preparing backtest surface' : '正在准备回测界面'}
+                    </span>
+                  </div>
+                  <div className="workspace-loading-panel__hero min-h-[240px]" />
+                  <div className="workspace-loading-panel__lines" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                </section>
+              )}
+            >
               {activeModule === 'historical' ? (
                 <HistoricalEvaluationPanel
                   normalizedCode={normalizedCode}
