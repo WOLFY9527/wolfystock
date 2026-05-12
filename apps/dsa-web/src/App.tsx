@@ -35,6 +35,7 @@ const PreviewFullReportDrawerPage = lazy(() => import('./pages/PreviewFullReport
 const ChatPage = lazy(() => import('./pages/ChatPage'));
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage'));
 const MarketOverviewPage = lazy(() => import('./pages/MarketOverviewPage'));
+const LiquidityMonitorPage = lazy(() => import('./pages/LiquidityMonitorPage'));
 const MarketRotationRadarPage = lazy(() => import('./pages/MarketRotationRadarPage'));
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'));
 const BacktestPage = lazy(() => import('./pages/BacktestPage'));
@@ -387,6 +388,7 @@ export const AppContent: React.FC = () => {
               <Route path="/chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
               <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
               <Route path="/market-overview" element={<RegisteredSurfaceRoute><MarketOverviewPage /></RegisteredSurfaceRoute>} />
+              <Route path="/market/liquidity-monitor" element={<LiquidityMonitorPage />} />
               <Route path="/market/rotation-radar" element={<MarketRotationRadarPage />} />
               <Route path="/watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
               <Route path="/backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
@@ -413,6 +415,7 @@ export const AppContent: React.FC = () => {
               <Route path="chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
               <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
               <Route path="market-overview" element={<RegisteredSurfaceRoute><MarketOverviewPage /></RegisteredSurfaceRoute>} />
+              <Route path="market/liquidity-monitor" element={<LiquidityMonitorPage />} />
               <Route path="market/rotation-radar" element={<MarketRotationRadarPage />} />
               <Route path="watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
               <Route path="backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />

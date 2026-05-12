@@ -154,9 +154,31 @@ describe('Shell', () => {
     expect(await within(primaryNav).findByRole('link', { name: translate('zh', 'nav.chat') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.portfolio') })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.marketOverview') })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('link', { name: '流动性监测' })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: '轮动雷达' })).toBeInTheDocument();
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
+  });
+
+  it('highlights the localized liquidity monitor nav item independently from market overview', async () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/market/liquidity-monitor']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
+    const liquidityLink = within(primaryNav).getByRole('link', { name: '流动性监测' });
+    const overviewLink = within(primaryNav).getByRole('link', { name: translate('zh', 'nav.marketOverview') });
+
+    expect(liquidityLink).toHaveAttribute('href', '/zh/market/liquidity-monitor');
+    expect(liquidityLink).toHaveClass('is-active');
+    expect(overviewLink).toHaveAttribute('href', '/zh/market-overview');
+    expect(overviewLink).not.toHaveClass('is-active');
   });
 
   it('highlights the localized rotation radar nav item independently from market overview', async () => {

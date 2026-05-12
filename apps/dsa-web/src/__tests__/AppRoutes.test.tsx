@@ -110,6 +110,10 @@ vi.mock('../pages/MarketRotationRadarPage', () => ({
   default: () => <div>market-rotation-radar-page</div>,
 }));
 
+vi.mock('../pages/LiquidityMonitorPage', () => ({
+  default: () => <div>liquidity-monitor-page</div>,
+}));
+
 vi.mock('../pages/BacktestPage', () => ({
   default: () => <div>backtest-page</div>,
 }));
@@ -653,6 +657,15 @@ describe('AppContent route flows', () => {
 
     expect(await screen.findByText('market-rotation-radar-page')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '轮动雷达' })).toHaveAttribute('href', '/zh/market/rotation-radar');
+  });
+
+  it('renders the localized liquidity monitor route', async () => {
+    languageState.value = 'zh';
+
+    renderAt('/zh/market/liquidity-monitor');
+
+    expect(await screen.findByText('liquidity-monitor-page')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '流动性监测' })).toHaveAttribute('href', '/zh/market/liquidity-monitor');
   });
 
   it('renders the rule backtest compare workbench route for signed-in users', async () => {
