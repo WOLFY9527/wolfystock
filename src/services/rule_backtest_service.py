@@ -15,13 +15,13 @@ from statistics import mean, pstdev
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
-from data_provider.us_index_mapping import is_us_index_code, is_us_stock_code
 from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
 from src.services.backtest_professional_readiness import build_backtest_professional_readiness
 from src.repositories.stock_repo import StockRepository
 from src.services.local_data_preflight_service import LocalDataPreflightService
 from src.services.rule_backtest_text_completion import RuleBacktestTextCompletion, create_rule_backtest_text_completion
+from src.utils.symbol_classification import is_us_index_code, is_us_stock_code
 from src.utils.symbol_normalization import normalize_stock_code
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
 from src.storage import (

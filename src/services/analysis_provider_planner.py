@@ -21,13 +21,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional
 
-from data_provider.us_index_mapping import is_us_index_code, is_us_stock_code
 from src.services.llm_instrumentation import emit_provider_event, hash_label_value
 from src.services.research_budget_profiles import (
     ResearchBudgetProfile,
     get_research_budget_profile,
 )
 from src.services.provider_usage_ledger import record_provider_usage_event
+from src.utils.symbol_classification import is_us_index_code, is_us_stock_code
 
 logger = logging.getLogger(__name__)
 

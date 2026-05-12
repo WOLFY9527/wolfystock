@@ -28,10 +28,15 @@ _US_INDEX_CODES = frozenset(
 )
 
 
+def is_us_index_code(code: str | None) -> bool:
+    """Return True when a symbol matches the provider-runtime US index rules."""
+    return (code or "").strip().upper() in _US_INDEX_CODES
+
+
 def is_us_stock_code(code: str | None) -> bool:
     """Return True when a symbol matches the provider-runtime US stock rules."""
     normalized = (code or "").strip().upper()
-    if normalized in _US_INDEX_CODES:
+    if is_us_index_code(normalized):
         return False
     return bool(_US_STOCK_PATTERN.match(normalized))
 

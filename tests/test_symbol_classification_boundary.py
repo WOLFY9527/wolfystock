@@ -21,12 +21,14 @@ from data_provider.base import (
 )
 from data_provider.us_index_mapping import (
     US_INDEX_MAPPING,
+    is_us_index_code as provider_is_us_index_code,
     is_us_stock_code as provider_is_us_stock_code,
 )
 from src.utils.symbol_classification import (
     is_bse_code,
     is_kc_cy_stock,
     is_st_stock,
+    is_us_index_code,
     is_us_stock_code,
 )
 
@@ -38,7 +40,20 @@ def test_provider_classification_exports_delegate_to_pure_utils() -> None:
     assert provider_is_bse_code is is_bse_code
     assert provider_is_kc_cy_stock is is_kc_cy_stock
     assert provider_is_st_stock is is_st_stock
+    assert provider_is_us_index_code is is_us_index_code
     assert provider_is_us_stock_code is is_us_stock_code
+
+
+def test_is_us_index_code_matches_provider_runtime_semantics() -> None:
+    for code in US_INDEX_MAPPING:
+        assert is_us_index_code(code) is True
+        assert is_us_index_code(code) == provider_is_us_index_code(code)
+
+
+@pytest.mark.parametrize("raw", ["AAPL", "ORCL", "SPY", "QQQ", "BRK.B", "", None])
+def test_is_us_index_code_rejects_representative_non_index_symbols(raw: str | None) -> None:
+    assert is_us_index_code(raw) is False
+    assert is_us_index_code(raw) == provider_is_us_index_code(raw)
 
 
 @pytest.mark.parametrize(

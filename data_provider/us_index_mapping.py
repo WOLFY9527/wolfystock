@@ -11,7 +11,7 @@
 美股指数在 Yahoo Finance 中需使用 ^ 前缀，与股票代码不同。
 """
 
-from src.utils.symbol_classification import is_us_stock_code
+from src.utils.symbol_classification import is_us_index_code, is_us_stock_code
 
 
 # 用户输入 -> (Yahoo Finance 符号, 中文名称)
@@ -38,26 +38,6 @@ US_INDEX_MAPPING = {
     'RUT': ('^RUT', '罗素2000指数'),
     '^RUT': ('^RUT', '罗素2000指数'),
 }
-
-
-def is_us_index_code(code: str) -> bool:
-    """
-    判断代码是否为美股指数符号。
-
-    Args:
-        code: 股票/指数代码，如 'SPX', 'DJI'
-
-    Returns:
-        True 表示是已知美股指数符号，否则 False
-
-    Examples:
-        >>> is_us_index_code('SPX')
-        True
-        >>> is_us_index_code('AAPL')
-        False
-    """
-    return (code or '').strip().upper() in US_INDEX_MAPPING
-
 
 def get_us_index_yf_symbol(code: str) -> tuple:
     """
