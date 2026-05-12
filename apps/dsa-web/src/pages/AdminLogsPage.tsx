@@ -23,7 +23,6 @@ import { describeAdminLogLevel } from '../utils/displayStatus';
 import { formatDateTime as formatDateTimeValue, formatDurationMs } from '../utils/format';
 
 type AdminLogsLanguage = 'zh' | 'en';
-type TranslateFn = (key: string, params?: Record<string, string | number | undefined>) => string;
 type OperationType = 'single_stock_analysis' | 'market_scan' | 'backtest' | 'system_operation' | 'other';
 type LogLevel = 'DEBUG' | 'INFO' | 'NOTICE' | 'WARNING' | 'ERROR' | 'CRITICAL';
 type LevelFilter = 'all' | 'warning_plus' | 'error_plus' | LogLevel;
@@ -50,14 +49,6 @@ function levelChipVariant(level: LogLevel): TerminalChipVariant {
   if (level === 'NOTICE') return 'info';
   if (level === 'WARNING') return 'caution';
   if (level === 'ERROR' || level === 'CRITICAL') return 'danger';
-  return 'neutral';
-}
-
-function actorChipVariant(value: unknown): TerminalChipVariant {
-  const actor = actorBadgeLabel(value);
-  if (actor === 'admin') return 'info';
-  if (actor === 'system') return 'success';
-  if (actor === 'guest' || actor === 'anonymous') return 'caution';
   return 'neutral';
 }
 
@@ -406,39 +397,12 @@ function sinceLabel(value: string, locale: AdminLogsLanguage): string {
   return (labels[value] || labels['24h'])[locale];
 }
 
-function roleLabel(role: unknown, t: TranslateFn): string {
-  const normalized = String(role || '').trim().toLowerCase();
-  if (normalized === 'admin') return t('adminLogs.role.admin');
-  if (normalized === 'user') return t('adminLogs.role.user');
-  return text(role, t('adminLogs.unavailable'));
-}
-
 function asRecordList(value: unknown): Array<Record<string, unknown>> {
   return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item)) : [];
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-function detailForSummary(summary: ExecutionLogSessionSummary): ExecutionLogSessionDetail {
-  const mockDetail = MOCK_WOLFY_LOG_DETAILS.find((item) => item.sessionId === summary.sessionId);
-  if (mockDetail) return mockDetail;
-  return {
-    ...summary,
-    events: [],
-    operationDetail: {
-      operationCategory: summary.readableSummary?.operationCategory,
-      operationType: summary.readableSummary?.operationType,
-      target: summary.readableSummary?.operationTarget || summary.code || summary.name,
-      status: summary.readableSummary?.operationStatus || summary.overallStatus,
-      keyMetric: summary.readableSummary?.keyMetric,
-      aiCalls: [],
-      dataSourceCalls: [],
-      timeline: [],
-      diagnostics: [],
-    },
-  };
 }
 
 function formatDateTime(value: unknown, locale: AdminLogsLanguage): string {
@@ -836,13 +800,6 @@ function sanitizeDisplayValue(value: unknown): unknown {
   return value;
 }
 
-function detailForBusinessEvent(event: BusinessEvent): BusinessEventDetail {
-  return {
-    ...event,
-    steps: [],
-  };
-}
-
 function JsonBlock({ value }: { value: unknown }) {
   if (value == null || value === '') return <span>--</span>;
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -1180,7 +1137,22 @@ const AdminLogsPage: React.FC = () => {
 
   const openDetail = useCallback(async (summary: ExecutionLogSessionSummary) => {
     setSelectedBusinessDetail(null);
-    setSelectedDetail(detailForSummary(summary));
+    const mockDetail = MOCK_WOLFY_LOG_DETAILS.find((item) => item.sessionId === summary.sessionId);
+    setSelectedDetail(mockDetail || {
+      ...summary,
+      events: [],
+      operationDetail: {
+        operationCategory: summary.readableSummary?.operationCategory,
+        operationType: summary.readableSummary?.operationType,
+        target: summary.readableSummary?.operationTarget || summary.code || summary.name,
+        status: summary.readableSummary?.operationStatus || summary.overallStatus,
+        keyMetric: summary.readableSummary?.keyMetric,
+        aiCalls: [],
+        dataSourceCalls: [],
+        timeline: [],
+        diagnostics: [],
+      },
+    });
     setIsDrawerOpen(true);
     setIsLoadingDetail(true);
     setDetailError(null);
@@ -1196,7 +1168,10 @@ const AdminLogsPage: React.FC = () => {
 
   const openBusinessDetail = useCallback(async (event: BusinessEvent) => {
     setSelectedDetail(null);
-    setSelectedBusinessDetail(detailForBusinessEvent(event));
+    setSelectedBusinessDetail({
+      ...event,
+      steps: [],
+    });
     setIsDrawerOpen(true);
     setIsLoadingDetail(true);
     setDetailError(null);
@@ -1238,6 +1213,7 @@ const AdminLogsPage: React.FC = () => {
   const businessSourceLabel = text([businessDetail?.provider, businessDetail?.source].filter(Boolean).join(' / '), locale === 'zh' ? '未记录' : 'Not recorded');
   const rawTraceValue = readable.traceId || readable.requestId || readable.actorRequestId || drawerDetail?.queryId;
   const rawRootCause = text(readable.errorSummary || readable.topFailureReason || readable.eventMessage || readable.summaryParagraph, locale === 'zh' ? '原因未确认' : 'Reason unknown');
+  const rawActorRole = String(readable.actorRole || '').trim().toLowerCase();
   const computedSummary = useMemo(() => {
     const emptySummary = {
       errorCount: 0,
@@ -1743,6 +1719,7 @@ const AdminLogsPage: React.FC = () => {
                 <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto no-scrollbar">
                   {businessEvents.map((item) => {
                     const status = normalizeStatus(item.status);
+                    const actorRole = actorBadgeLabel(item.actorType);
                     const actorType = actorBadgeDisplay(item.actorType, locale);
                     const actorSecondary = text(item.actorLabel || item.userId || item.requestId, locale === 'zh' ? '未记录' : 'Not recorded');
                     const contextPrimary = text(item.contextLabel || item.symbol || item.subject || item.event, locale === 'zh' ? '未记录' : 'Not recorded');
@@ -1777,7 +1754,7 @@ const AdminLogsPage: React.FC = () => {
                           <p className="mt-1 truncate text-[11px] text-muted-text" title={stepLabel}>{stepLabel}</p>
                         </div>
                         <div className="hidden min-w-0 xl:block">
-                          <TerminalChip variant={actorChipVariant(item.actorType)} className="w-fit font-semibold">{actorType}</TerminalChip>
+                          <TerminalChip variant={actorRole === 'admin' ? 'info' : actorRole === 'system' ? 'success' : actorRole === 'guest' || actorRole === 'anonymous' ? 'caution' : 'neutral'} className="w-fit font-semibold">{actorType}</TerminalChip>
                           <p className="mt-1 truncate text-[11px] text-muted-text" title={actorSecondary}>{actorSecondary}</p>
                         </div>
                         <div className="hidden min-w-0 xl:block">
@@ -1999,7 +1976,7 @@ const AdminLogsPage: React.FC = () => {
               </div>
               <div className="mt-5 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
                 <p className="text-secondary-text">{t('adminLogs.actor')}: <span className="text-foreground">{text(readable.actorDisplay || readable.actorUsername, 'admin')}</span></p>
-                <p className="text-secondary-text">{t('adminLogs.actorRole')}: <span className="text-foreground">{roleLabel(readable.actorRole, t)}</span></p>
+                <p className="text-secondary-text">{t('adminLogs.actorRole')}: <span className="text-foreground">{rawActorRole === 'admin' ? t('adminLogs.role.admin') : rawActorRole === 'user' ? t('adminLogs.role.user') : text(readable.actorRole, t('adminLogs.unavailable'))}</span></p>
                 <p className="text-secondary-text">{t('adminLogs.operationType')}: <span className="text-foreground">{text(operationDetail.operationType || readable.operationType || operationLabel(drawerOperationType, locale))}</span></p>
                 <p className="text-secondary-text">{t('adminLogs.keyMetric')}: <span className="text-foreground">{text(operationDetail.keyMetric || readable.keyMetric, t('adminLogs.unavailable'))}</span></p>
               </div>
