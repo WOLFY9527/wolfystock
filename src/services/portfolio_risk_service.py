@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.config import Config, get_config
 from src.repositories.portfolio_repo import PortfolioRepository
+from src.services.portfolio_risk_board_lookup import PortfolioRiskBoardLookup
 from src.services.portfolio_risk_diagnostics import build_portfolio_risk_diagnostics
 from src.services.portfolio_service import PortfolioService
 
@@ -25,8 +26,7 @@ class PortfolioRiskService:
         self.repo = repo or PortfolioRepository()
         self.portfolio_service = portfolio_service or PortfolioService(repo=self.repo)
         self.config = config or get_config()
-        self._data_manager = None
-        self._data_manager_init_error = ""
+        self._board_lookup = PortfolioRiskBoardLookup()
 
     def get_risk_report(
         self,
@@ -365,13 +365,7 @@ class PortfolioRiskService:
         return board_cache[cache_key]
 
     def _fetch_belong_boards(self, symbol: str) -> List[Dict[str, Any]]:
-        manager = self._get_data_manager()
-        if manager is None:
-            return []
-        result = manager.get_belong_boards(symbol)
-        if isinstance(result, list):
-            return result
-        return []
+        return self._board_lookup.fetch_belong_boards(symbol)
 
     @staticmethod
     def _pick_primary_board_name(boards: List[Dict[str, Any]]) -> Optional[str]:
@@ -393,20 +387,6 @@ class PortfolioRiskService:
                 preferred = name
                 break
         return preferred or fallback
-
-    def _get_data_manager(self):
-        if self._data_manager is not None:
-            return self._data_manager
-        if self._data_manager_init_error:
-            return None
-        try:
-            from data_provider import DataFetcherManager
-
-            self._data_manager = DataFetcherManager()
-            return self._data_manager
-        except Exception as exc:  # pragma: no cover - fail-open initialization
-            self._data_manager_init_error = str(exc)
-            return None
 
     def _build_drawdown(
         self,
