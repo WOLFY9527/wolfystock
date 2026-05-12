@@ -59,7 +59,6 @@ import type {
   RuleBacktestHistoryItem,
   RuleBacktestRunResponse,
   RuleBacktestStatusResponse,
-  StatusHistoryItem,
 } from '../types/backtest';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { translate, type UiLanguage } from '../i18n/core';
@@ -88,17 +87,6 @@ type ResultPageTabKey = 'overview' | 'audit' | 'trades' | 'parameters' | 'histor
 const RESULT_PAGE_TAB_KEYS: ResultPageTabKey[] = ['overview', 'audit', 'trades', 'parameters', 'history'];
 const BacktestAuditTables = lazy(() => import('../components/backtest/BacktestAuditTables'));
 
-function formatStatusHistoryLabel(item: StatusHistoryItem): string {
-  return `${String(item.status || '--')} · ${item.at ? formatDateTime(item.at) : '--'}`;
-}
-
-function formatSummaryLabel(key: string): string {
-  return key
-    .replaceAll(/([a-z])([A-Z])/g, '$1 $2')
-    .replaceAll('_', ' ')
-    .trim();
-}
-
 function formatWarningText(warning: Record<string, unknown>, index: number): string {
   const preferred = warning.message
     || warning.text
@@ -109,11 +97,6 @@ function formatWarningText(warning: Record<string, unknown>, index: number): str
 
   const serialized = JSON.stringify(warning);
   return serialized && serialized !== '{}' ? serialized : `warning #${index + 1}`;
-}
-
-function pctDrawdown(value?: number | null): string {
-  if (value == null || !Number.isFinite(value)) return pct(value);
-  return pct(value > 0 ? -value : value);
 }
 
 function escapeHtml(value: string): string {
@@ -639,7 +622,13 @@ const DeterministicBacktestResultPage: React.FC = () => {
     : resultPage('headerDescriptionEmpty');
   const parsedSummaryEntries = Object.entries(run?.parsedStrategy?.summary || {})
     .filter(([, value]) => typeof value === 'string' && value.trim())
-    .map(([key, value]) => ({ label: formatSummaryLabel(key), value: String(value) }));
+    .map(([key, value]) => ({
+      label: key
+        .replaceAll(/([a-z])([A-Z])/g, '$1 $2')
+        .replaceAll('_', ' ')
+        .trim(),
+      value: String(value),
+    }));
   const strategySummaryRows = useMemo(
     () => (run
       ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '', undefined, language)
@@ -714,7 +703,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
     },
     {
       label: resultPage('resultView.maxDrawdown'),
-      value: pctDrawdown(normalized.metrics.maxDrawdownPct),
+      value: normalized.metrics.maxDrawdownPct == null || !Number.isFinite(normalized.metrics.maxDrawdownPct)
+        ? pct(normalized.metrics.maxDrawdownPct)
+        : pct(normalized.metrics.maxDrawdownPct > 0 ? -normalized.metrics.maxDrawdownPct : normalized.metrics.maxDrawdownPct),
       tone: 'negative' as const,
       note: resultPage('resultView.drawdownFeel'),
     },
@@ -943,7 +934,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
               <div className="product-chip-list">
                 {run.statusHistory.map((item, index) => (
                   <span key={`${item.status}-${item.at || index}`} className="product-chip">
-                    {index + 1}. {formatStatusHistoryLabel(item)}
+                    {index + 1}. {`${String(item.status || '--')} · ${item.at ? formatDateTime(item.at) : '--'}`}
                   </span>
                 ))}
               </div>
