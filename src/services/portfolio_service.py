@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
-from data_provider.base import canonical_stock_code
 from src.config import get_config
 from src.repositories.portfolio_repo import (
     DuplicateBrokerConnectionRefError,
@@ -22,6 +21,7 @@ from src.repositories.portfolio_repo import (
 )
 from src.services.fx_rate_service import default_fx_rate_service
 from src.services.portfolio_risk_diagnostics import build_portfolio_risk_diagnostics
+from src.utils.symbol_normalization import canonical_stock_code
 from src.utils.security import sanitize_metadata
 
 logger = logging.getLogger(__name__)
