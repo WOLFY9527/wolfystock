@@ -27,9 +27,11 @@ import { watchlistApi } from '../api/watchlist';
 import {
   ScannerBacktestLab,
   ScannerBacktestResultStrip,
+} from '../components/scanner/ScannerBacktestLab';
+import {
   useScannerBacktestLab,
   type ScannerBacktestItem,
-} from '../components/scanner/ScannerBacktestLab';
+} from '../components/scanner/useScannerBacktestLab';
 import { ApiErrorAlert, Drawer, Pagination, PillBadge, SectionShell } from '../components/common';
 import {
   TerminalButton,

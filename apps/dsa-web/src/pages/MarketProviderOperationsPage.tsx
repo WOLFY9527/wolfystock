@@ -38,6 +38,9 @@ type StatusTone = 'live' | 'cache' | 'stale' | 'fallback' | 'partial' | 'unavail
 const STATUS_SET = new Set<StatusTone>(['live', 'cache', 'stale', 'fallback', 'partial', 'unavailable', 'error', 'refreshing']);
 const SENSITIVE_FRAGMENT_PATTERN = /((?:token|secret|cookie|session|password|authorization|bearer|api[_-]?key|set-cookie|x-api-key)\s*[:=]?\s*)([^,\s]+)/gi;
 const SENSITIVE_KEYWORD_PATTERN = /(token|secret|cookie|session|password|authorization|bearer|api[_-]?key|set-cookie|x-api-key)/i;
+const EMPTY_PROVIDER_ITEMS: MarketProviderOperationItem[] = [];
+const EMPTY_PROVIDER_CACHE_STATES: MarketProviderCacheState[] = [];
+const EMPTY_PROVIDER_EVENT_ROLLUPS: MarketProviderEventRollup[] = [];
 const SUMMARY_DEFAULTS: MarketProviderOperationsSummary = {
   totalItems: 0,
   liveCount: 0,
@@ -576,26 +579,26 @@ const MarketProviderOperationsPage: React.FC = () => {
     };
   }, []);
 
-  const items = response?.items || [];
-  const cacheStates = response?.cacheStates || [];
-  const eventRollups = response?.eventRollups || [];
-  const summary = useMemo(() => normalizeSummary(response?.summary || SUMMARY_DEFAULTS), [response?.summary]);
+  const items = response?.items ?? EMPTY_PROVIDER_ITEMS;
+  const cacheStates = response?.cacheStates ?? EMPTY_PROVIDER_CACHE_STATES;
+  const eventRollups = response?.eventRollups ?? EMPTY_PROVIDER_EVENT_ROLLUPS;
+  const summary = useMemo(() => normalizeSummary(response?.summary ?? SUMMARY_DEFAULTS), [response?.summary]);
   const degradedCount = summary.fallbackCount + summary.partialCount + summary.unavailableCount + summary.errorCount + summary.failureCount;
   const preferredProvider = useMemo(() => selectPreferredProvider(items), [items]);
 
-  useEffect(() => {
+  const effectiveSelectedProviderKey = useMemo(() => {
     if (!items.length) {
-      if (selectedProviderKey !== null) setSelectedProviderKey(null);
-      return;
+      return null;
     }
-    if (!selectedProviderKey || !items.some((item) => providerKey(item) === selectedProviderKey)) {
-      setSelectedProviderKey(providerKey(preferredProvider || items[0]));
+    if (selectedProviderKey && items.some((item) => providerKey(item) === selectedProviderKey)) {
+      return selectedProviderKey;
     }
+    return providerKey(preferredProvider || items[0]);
   }, [items, preferredProvider, selectedProviderKey]);
 
   const selectedItem = useMemo(
-    () => items.find((item) => providerKey(item) === selectedProviderKey) || preferredProvider || null,
-    [items, preferredProvider, selectedProviderKey],
+    () => items.find((item) => providerKey(item) === effectiveSelectedProviderKey) || preferredProvider || null,
+    [effectiveSelectedProviderKey, items, preferredProvider],
   );
 
   const topException = useMemo(() => {
@@ -670,7 +673,7 @@ const MarketProviderOperationsPage: React.FC = () => {
         {!isLoading && (response || !error) ? (
           <>
             <TerminalGrid>
-              <ProviderOperationsTable items={items} selectedKey={selectedProviderKey} onSelect={setSelectedProviderKey} />
+              <ProviderOperationsTable items={items} selectedKey={effectiveSelectedProviderKey} onSelect={setSelectedProviderKey} />
               <ProviderDetailsPanel item={selectedItem} />
               <EventRollupsPanel eventRollups={eventRollups} />
               <CacheStatesPanel cacheStates={cacheStates} />
