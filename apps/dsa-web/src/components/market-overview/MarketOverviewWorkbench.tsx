@@ -833,33 +833,6 @@ const MarketOverviewRow: React.FC<{
   </section>
 );
 
-const MarketOverviewFullWidthRow: React.FC<{
-  row: MarketOverviewLayoutRow;
-  children: React.ReactNode;
-}> = ({ row, children }) => (
-  <MarketOverviewRow row={{ ...row, columns: 1 }}>
-    {children}
-  </MarketOverviewRow>
-);
-
-const MarketOverviewTwoColumnRow: React.FC<{
-  row: MarketOverviewLayoutRow;
-  children: React.ReactNode;
-}> = ({ row, children }) => (
-  <MarketOverviewRow row={{ ...row, columns: 2 }}>
-    {children}
-  </MarketOverviewRow>
-);
-
-const MarketOverviewThreeColumnRow: React.FC<{
-  row: MarketOverviewLayoutRow;
-  children: React.ReactNode;
-}> = ({ row, children }) => (
-  <MarketOverviewRow row={{ ...row, columns: 3 }}>
-    {children}
-  </MarketOverviewRow>
-);
-
 const CnShortSentimentCard: React.FC<{
   data: CnShortSentimentResponse;
   loading?: boolean;
@@ -1482,14 +1455,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       ? { ...row, columns: 1 as const }
       : { ...row, columns: Math.min(row.columns, modules.length) as MarketOverviewRowColumns };
     const children = modules.map((moduleId, moduleIndex) => renderModule(moduleId, rowIndex * 10 + moduleIndex, row.tier));
-
-    if (plannedRow.columns === 1) {
-      return <MarketOverviewFullWidthRow key={row.id} row={plannedRow}>{children}</MarketOverviewFullWidthRow>;
-    }
-    if (plannedRow.columns === 3) {
-      return <MarketOverviewThreeColumnRow key={row.id} row={plannedRow}>{children}</MarketOverviewThreeColumnRow>;
-    }
-    return <MarketOverviewTwoColumnRow key={row.id} row={plannedRow}>{children}</MarketOverviewTwoColumnRow>;
+    return <MarketOverviewRow key={row.id} row={plannedRow}>{children}</MarketOverviewRow>;
   };
 
   const handleExportSummary = useCallback(async () => {
