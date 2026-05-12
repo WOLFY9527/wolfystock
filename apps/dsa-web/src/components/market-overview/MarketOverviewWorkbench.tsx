@@ -18,24 +18,32 @@ import { FundsFlowCard } from './FundsFlowCard';
 import { MarketSentimentCard } from './MarketSentimentCard';
 import { MarketOverviewCard } from './MarketOverviewCard';
 import { VolatilityCard } from './VolatilityCard';
+import {
+  MarketOverviewWorkbenchGrid,
+  type MarketOverviewActionHintView,
+  type MarketOverviewCoverageRailView,
+  type MarketOverviewExecutiveGroupView,
+  type MarketOverviewQualityRailView,
+  type MarketOverviewSignalWatchRailItem,
+} from './MarketOverviewWorkbenchGrid';
+import {
+  MarketOverviewWorkbenchTopSurface,
+  type MarketOverviewBriefingSummaryView,
+  type MarketOverviewCategoryTabView,
+  type MarketOverviewDataStateStripView,
+  type MarketOverviewDecisionChipView,
+  type MarketOverviewHeroAnchorView,
+  type MarketOverviewTemperatureSummaryView,
+} from './MarketOverviewWorkbenchTopSurface';
 import { resolveMarketOverviewDisplayLabel } from './marketOverviewLabels';
 import { formatMarketOverviewTimestamp } from './marketOverviewFormat';
 import {
-  DataFreshnessBadge,
   MarketOverviewCardFrame,
   MarketOverviewDenseQuoteItem,
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
-import {
-  TerminalChip,
-  TerminalDenseList,
-  TerminalGrid,
-  TerminalNotice,
-  TerminalPageShell,
-  TerminalPanel,
-  TerminalSectionHeader,
-} from '../terminal';
+import { TerminalPageShell } from '../terminal';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
 
@@ -89,11 +97,6 @@ type DataQualitySummary = {
   status: string;
   counts: Record<FreshnessCountKey, number>;
   hasConcern: boolean;
-};
-type DecisionChip = {
-  label: '风险' | '流动性' | '宽度' | '观察';
-  value: string;
-  variant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
 };
 
 const MODULE_COVERAGE_CARDS: Record<MarketOverviewModuleId, CardKey[]> = {
@@ -502,43 +505,6 @@ function buildMarketOverviewSummaryText(params: {
   return lines.join('\n');
 }
 
-const CrossAssetHeroRibbon: React.FC<{ anchors: HeroAnchor[] }> = ({ anchors }) => {
-  const { language } = useI18n();
-  return (
-    <TerminalPanel
-      as="section"
-      data-testid="market-overview-hero-ribbon"
-      data-mobile-order="pulse"
-      className="overflow-hidden p-0"
-      aria-label="Cross asset hero ribbon"
-    >
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(112px,1fr))] divide-x divide-y divide-white/5">
-        {anchors.map((anchor) => {
-          const displayLabel = anchor.item ? resolveMarketOverviewDisplayLabel(anchor.item, language) : { primary: anchor.label, secondary: anchor.key };
-          return (
-            <div
-              key={anchor.key}
-              data-testid={`market-overview-hero-${anchor.key}`}
-              className="min-w-0 bg-white/[0.02] px-4 py-3.5"
-            >
-              <p className="block truncate text-[10px] font-semibold uppercase tracking-widest text-white/50">
-                {displayLabel.primary}
-                {displayLabel.secondary ? <span className="ml-1 text-white/28">({displayLabel.secondary})</span> : null}
-              </p>
-              <p className="mt-1 truncate font-mono text-[22px] font-semibold leading-none text-white md:text-2xl">
-                {formatHeroValue(anchor.item?.value)}
-              </p>
-              <p className={`mt-1 font-mono text-xs font-semibold ${heroToneClass(anchor.item)}`}>
-                {formatHeroChange(anchor.item?.changePct)}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-    </TerminalPanel>
-  );
-};
-
 function formatNumber(value: number | null | undefined, digits = 2): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return '-';
@@ -723,7 +689,7 @@ function scoreStateLabel(score: MarketTemperatureScore, pressure = false): strin
   return score.label || (score.value >= 60 ? '偏强' : score.value <= 45 ? '偏弱' : '中性');
 }
 
-function buildDecisionChipVariant(value: number, pressure = false): DecisionChip['variant'] {
+function buildDecisionChipVariant(value: number, pressure = false): MarketOverviewDecisionChipView['variant'] {
   if (pressure) {
     return value >= 65 ? 'danger' : value >= 55 ? 'caution' : 'success';
   }
@@ -734,7 +700,7 @@ function buildMarketDecision(params: {
   activeCategory: MarketOverviewTab;
   panels: PanelState;
   dataQuality: DataQualitySummary;
-}): { text: string; chips: DecisionChip[] } {
+}): { text: string; chips: MarketOverviewDecisionChipView[] } {
   const { activeCategory, panels, dataQuality } = params;
   const temperature = panels.temperature;
   const reliable = isTemperatureReliable(temperature);
@@ -770,7 +736,7 @@ function buildMarketDecision(params: {
     .map((metricId) => findMetricItem(panels, metricId)?.symbol || metricId)
     .slice(0, 3)
     .join(' / ') || '实时源';
-  const chips: DecisionChip[] = [
+  const chips: MarketOverviewDecisionChipView[] = [
     { label: '风险', value: riskLabel, variant: reliable ? buildDecisionChipVariant(temperature.scores.overall.value) : 'caution' },
     { label: '流动性', value: liquidityLabel, variant: reliable ? buildDecisionChipVariant(temperature.scores.liquidity.value) : 'neutral' },
     { label: '宽度', value: breadthLabel, variant: reliable ? buildDecisionChipVariant(temperature.scores.cnMoneyEffect.value) : 'neutral' },
@@ -801,223 +767,6 @@ function buildMarketDecision(params: {
     chips,
   };
 }
-
-const MarketDecisionStrip: React.FC<{
-  activeCategory: MarketOverviewTab;
-  panels: PanelState;
-  dataQuality: DataQualitySummary;
-}> = ({ activeCategory, panels, dataQuality }) => {
-  const decision = buildMarketDecision({ activeCategory, panels, dataQuality });
-  const reliable = isTemperatureReliable(panels.temperature);
-  return (
-    <TerminalPanel
-      as="section"
-      data-testid="market-decision-strip"
-      data-command-bar="market-state"
-      data-mobile-order="decision"
-      data-market-research-flow="state"
-      className="relative overflow-hidden p-0 shadow-[0_0_24px_rgba(59,130,246,0.10)]"
-    >
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-blue-500/0 via-blue-400/45 to-purple-500/0" aria-hidden="true" />
-      <div className="flex min-w-0 flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
-        <div className="min-w-0">
-          <p className="text-[10px] font-bold tracking-widest text-white/40">市场状态</p>
-          <p data-testid="market-decision-text" className="mt-1 line-clamp-2 font-mono text-base font-semibold leading-6 text-white/88 md:truncate">
-            {decision.text}
-          </p>
-          {!reliable ? (
-            <p data-testid="market-command-safe-state" className="mt-1 truncate text-[11px] font-semibold text-amber-200/78">
-              当前不生成强判断，只显示可验证信号
-            </p>
-          ) : null}
-        </div>
-        <div data-testid="market-command-chips" className="ui-scroll-x-quiet -mx-1 flex min-w-0 max-w-full gap-2 px-1 md:mx-0 md:shrink-0 md:px-0">
-          {decision.chips.map((chip) => (
-            <TerminalChip
-              key={`${chip.label}-${chip.value}`}
-              variant={chip.variant}
-              className="shrink-0 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest"
-            >
-              <span className="text-white/36">{chip.label}</span>
-              <span className="max-w-[150px] truncate font-mono normal-case tracking-normal">{chip.value}</span>
-            </TerminalChip>
-          ))}
-        </div>
-      </div>
-    </TerminalPanel>
-  );
-};
-
-const CompactRailCard: React.FC<{
-  railKey: string;
-  testId: string;
-  eyebrow: string;
-  title: string;
-  value?: string;
-  tone?: string;
-  lines: React.ReactNode[];
-}> = ({ railKey, testId, eyebrow, title, value, tone = 'text-white', lines }) => (
-  <MarketOverviewCardFrame
-    size="rail"
-    testId="market-overview-compact-rail-card"
-    railKey={railKey}
-    className="min-w-0 overflow-hidden"
-  >
-    <div data-testid={testId} className="flex h-full min-w-0 flex-col gap-2">
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{eyebrow}</p>
-          <p className="mt-1 truncate text-sm font-semibold text-white/80">{title}</p>
-        </div>
-        {value ? <p className={cn('shrink-0 text-right font-mono text-lg font-semibold leading-none tabular-nums', tone)}>{value}</p> : null}
-      </div>
-      <div className="min-w-0 space-y-1 text-[11px] leading-4 text-white/46">
-        {lines.slice(0, 4).map((line, index) => (
-          <div key={index} className="truncate">{line}</div>
-        ))}
-      </div>
-    </div>
-  </MarketOverviewCardFrame>
-);
-
-const CategoryCoverageSummary: React.FC<{
-  label: string;
-  summary: Record<CardCoverageKind, number>;
-}> = ({ label, summary }) => (
-  <CompactRailCard
-    railKey="coverage"
-    testId="market-overview-rail-coverage"
-    eyebrow="覆盖"
-    title={`${label}数据覆盖`}
-    value={`${summary.real}/${summary.real + summary.mixed + summary.fallback}`}
-    lines={[
-      <span key="coverage" data-testid="market-overview-coverage-summary"><span className="text-white/62">{label}数据覆盖：</span><span className="font-mono">真实 {summary.real} · 混合 {summary.mixed} · 备用 {summary.fallback}</span></span>,
-    ]}
-  />
-);
-
-const SignalWatchRailCard: React.FC<{ panels: PanelState; activeCategory: MarketOverviewTab }> = ({ panels, activeCategory }) => {
-  const chips = MARKET_OVERVIEW_SIGNAL_WATCH[activeCategory]
-    .map((metricId) => [metricId, findMetricItem(panels, metricId) || missingMetricItem(metricId)] as const);
-
-  return (
-    <MarketOverviewCardFrame
-      size="rail"
-      testId="market-overview-compact-rail-card"
-      railKey="signal-watch"
-      className="min-w-0 overflow-hidden"
-    >
-      <div data-testid="market-overview-rail-signal-watch" className="flex h-full min-w-0 flex-col gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-[10px] font-bold tracking-widest text-white/40">信号观察</p>
-          <p className="mt-1 truncate text-sm font-semibold text-white/80">关键观测</p>
-        </div>
-        <div className="flex min-w-0 flex-wrap gap-1.5 overflow-hidden">
-          {chips.map(([label, item]) => (
-            <TerminalChip key={label} variant="neutral" className="max-w-full px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/48">
-              <span className="shrink-0">{label}</span>
-              <span className={cn('min-w-0 truncate font-mono tracking-normal', heroToneClass(item))}>
-                {formatHeroChange(item?.changePct)}
-              </span>
-            </TerminalChip>
-          ))}
-        </div>
-      </div>
-    </MarketOverviewCardFrame>
-  );
-};
-
-const ActionHintRailCard: React.FC<{ temperature: MarketTemperatureResponse }> = ({ temperature }) => {
-  const reliable = isTemperatureReliable(temperature);
-  return (
-    <CompactRailCard
-      railKey="action-hint"
-      testId="market-overview-rail-action-hint"
-      eyebrow="观察提示"
-      title={reliable ? '同步观察' : '安全状态'}
-      lines={[
-        reliable ? '优先观察风险、流动性、宽度是否同向变化' : '等待实时源补齐后再生成强判断',
-      ]}
-    />
-  );
-};
-
-const CompactStatusTile: React.FC<{
-  testId: string;
-  eyebrow: string;
-  title: string;
-  value: string;
-  meta: React.ReactNode;
-  tone?: string;
-}> = ({ testId, eyebrow, title, value, meta, tone = 'text-white' }) => (
-  <TerminalPanel
-    as="section"
-    dense
-    data-testid={testId}
-    className="min-w-0"
-  >
-    <TerminalSectionHeader
-      eyebrow={eyebrow}
-      title={title}
-      action={<p className={cn('shrink-0 text-right font-mono text-lg font-semibold leading-none tabular-nums', tone)}>{value}</p>}
-    />
-    <div className="mt-2 min-w-0 text-xs leading-5 text-white/45">{meta}</div>
-  </TerminalPanel>
-);
-
-const MarketTemperatureCompactSummary: React.FC<{ data: MarketTemperatureResponse }> = ({ data }) => {
-  const score = data.scores.overall;
-  const reliable = isTemperatureReliable(data);
-  return (
-    <CompactStatusTile
-      testId="market-overview-temperature-summary"
-      eyebrow="温度"
-      title="市场温度"
-      value={reliable ? formatNumber(score.value, 0) : 'N/A'}
-      tone={reliable ? scoreTone(score) : 'text-white/45'}
-      meta={(
-        <div data-testid="market-temperature-strip" className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="font-semibold text-white/68">{reliable ? score.label : '数据不足'}</span>
-          <span>信号可信：{confidenceLabel(data.confidence)}</span>
-          <span className="font-mono tabular-nums">真实 {data.reliableInputCount ?? 0} · 备用 {data.fallbackInputCount ?? 0} · 排除 {data.excludedInputCount ?? 0}</span>
-          {!reliable ? <span data-testid="market-temperature-unreliable-summary">真实输入不足，暂不生成综合判断</span> : null}
-        </div>
-      )}
-    />
-  );
-};
-
-const MarketBriefingCompactSummary: React.FC<{ data: MarketBriefingResponse }> = ({ data }) => {
-  const lead = data.items[0];
-  return (
-    <CompactStatusTile
-      testId="market-overview-briefing-summary"
-      eyebrow="简报"
-      title="今日市场解读"
-      value={confidenceLabel(data.confidence)}
-      tone={data.isReliable === false || data.isFallback ? 'text-amber-200' : 'text-white'}
-      meta={(
-        <div className="min-w-0">
-          <p data-testid="market-briefing-card" className="truncate text-white/55">{lead?.message || data.warning || '暂无简报'}</p>
-          {data.warning ? <p data-testid="market-briefing-warning" className="truncate text-amber-200/70">{data.warning}</p> : null}
-        </div>
-      )}
-    />
-  );
-};
-
-const MarketOverviewStatusStrip: React.FC<{
-  temperature: React.ReactNode;
-  briefing: React.ReactNode;
-}> = ({ temperature, briefing }) => (
-  <section
-    data-testid="market-overview-status-strip"
-    className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[1fr_1.35fr]"
-  >
-    {temperature}
-    {briefing}
-  </section>
-);
 
 function resolveProviderStatus(meta?: Partial<MarketDataMeta>): MarketProviderHealthStatus {
   if (meta?.providerHealth?.status) {
@@ -1065,87 +814,6 @@ function shouldSuppressRepeatedItemStatus(panel: MarketOverviewPanel, item: Mark
   return resolveProviderStatus(item) === panelStatus;
 }
 
-const MarketOverviewDataStateStrip: React.FC<{
-  localSnapshotSavedAt?: string;
-  loading: boolean;
-  refreshingPanel: PanelKey | null;
-  refreshErrorCount: number;
-  dataQuality: DataQualitySummary;
-  panels: PanelState;
-}> = ({ localSnapshotSavedAt, loading, refreshingPanel, refreshErrorCount, dataQuality, panels }) => {
-  const statuses = collectDataStateMeta(panels).map(resolveProviderStatus);
-  const hasFallback = dataQuality.counts.fallback + dataQuality.counts.mock > 0;
-  const unavailableCount = statuses.filter((status) => status === 'partial' || status === 'unavailable' || status === 'error').length + refreshErrorCount;
-  const hasUnavailable = unavailableCount > 0;
-  const needsRefresh = dataQuality.counts.stale > 0 || refreshErrorCount > 0 || !localSnapshotSavedAt;
-  const isRefreshing = loading || refreshingPanel !== null;
-  const summaryVariant = hasUnavailable || dataQuality.hasConcern
-    ? 'caution'
-    : isRefreshing
-      ? 'info'
-      : 'neutral';
-  const timestamp = formatMarketOverviewTimestamp(localSnapshotSavedAt) || '';
-  return (
-    <TerminalNotice
-      variant={summaryVariant}
-      data-testid="market-overview-cache-status"
-      data-market-research-flow="cache"
-      data-mobile-order="cache-status"
-      className="min-w-0"
-    >
-      <div
-        data-testid="market-overview-data-state-strip"
-        className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between"
-      >
-        <div className="min-w-0 flex-1">
-          <TerminalSectionHeader eyebrow="状态" title="数据状态" />
-          <TerminalDenseList
-            data-testid="market-overview-data-state-summary"
-            className="mt-2 min-w-0 text-[11px] leading-4 text-white/45"
-          >
-            <span className="truncate font-mono">
-              可用 {dataQuality.counts.live + dataQuality.counts.delayed + dataQuality.counts.cached} · 备用 {dataQuality.counts.fallback + dataQuality.counts.mock} · 过期 {dataQuality.counts.stale}
-              {hasUnavailable ? ` · 缺口 ${unavailableCount}` : ''}
-            </span>
-          </TerminalDenseList>
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 xl:max-w-[60%] xl:justify-end">
-          {isRefreshing || needsRefresh ? (
-            <TerminalChip
-              data-testid="market-overview-data-state-refresh-chip"
-              variant={isRefreshing ? 'info' : 'caution'}
-            >
-              {isRefreshing ? '刷新中' : '待刷新'}
-            </TerminalChip>
-          ) : null}
-          {hasFallback ? (
-            <TerminalChip
-              data-testid="market-overview-data-state-fallback-chip"
-              variant="caution"
-            >
-              备用数据
-            </TerminalChip>
-          ) : null}
-          {hasUnavailable ? (
-            <TerminalChip
-              data-testid="market-overview-data-state-unavailable-chip"
-              variant="caution"
-            >
-              部分外部数据暂不可用
-            </TerminalChip>
-          ) : null}
-          <TerminalChip
-            data-testid="market-overview-data-state-updated-chip"
-            variant={timestamp ? 'neutral' : 'info'}
-          >
-            {timestamp ? <>更新时间 <span className="font-mono">{timestamp}</span></> : '待刷新'}
-          </TerminalChip>
-        </div>
-      </div>
-    </TerminalNotice>
-  );
-};
-
 const MarketOverviewRow: React.FC<{
   row: MarketOverviewLayoutRow;
   children: React.ReactNode;
@@ -1190,89 +858,6 @@ const MarketOverviewThreeColumnRow: React.FC<{
   <MarketOverviewRow row={{ ...row, columns: 3 }}>
     {children}
   </MarketOverviewRow>
-);
-
-const MarketOverviewMainStack: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div data-testid="market-overview-main-stack" className="flex min-w-0 flex-col gap-4">
-    {children}
-  </div>
-);
-
-const ExecutiveSecondaryGroups: React.FC<{
-  panels: PanelState;
-}> = ({ panels }) => {
-  const groups: Array<{
-    id: string;
-    label: string;
-    cardKey: CardKey;
-    focus: string;
-    item?: MarketOverviewItem;
-  }> = [
-    { id: 'us', label: 'US', cardKey: 'indices', focus: 'SPX / VIX', item: findPanelItem(panels.indices, ['SPX']) },
-    { id: 'cn', label: 'CN/HK', cardKey: 'cnIndices', focus: 'CSI300 / HSI', item: findPanelItem(panels.cnIndices, ['CSI300', '000300.SH']) || findPanelItem(panels.cnIndices, ['HSI']) },
-    { id: 'macro', label: 'MACRO', cardKey: 'rates', focus: 'US10Y / DXY', item: findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.fxCommodities, ['DXY']) },
-    { id: 'crypto', label: 'CRYPTO', cardKey: 'crypto', focus: 'BTC / ETH', item: findPanelItem(panels.crypto, ['BTC']) },
-  ];
-
-  return (
-    <section
-      data-testid="market-overview-executive-secondary-groups"
-      className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
-    >
-      {groups.map((group) => {
-        const coverage = getCardCoverageKind(panels, group.cardKey);
-        const freshness = getCardMeta(panels, group.cardKey).freshness;
-        return (
-          <MarketOverviewCardFrame
-            key={group.id}
-            size="compact"
-            testId={`market-overview-secondary-group-${group.id}`}
-            className="h-full"
-          >
-            <div className="flex h-full min-w-0 flex-col justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{group.label}</p>
-                <p className="mt-1 truncate text-sm font-semibold text-white/80">{group.focus}</p>
-              </div>
-              <div className="flex min-w-0 items-end justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-lg font-semibold leading-none text-white">
-                    {formatHeroValue(group.item?.value)}
-                  </p>
-                  <p className={cn('mt-1 truncate font-mono text-[11px] font-bold', heroToneClass(group.item))}>
-                    {formatHeroChange(group.item?.changePct)}
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  <DataFreshnessBadge
-                    freshness={(freshness || (coverage === 'fallback' ? 'fallback' : 'cached')) as MarketOverviewPanel['freshness']}
-                    status={coverage === 'mixed' ? 'partial' : undefined}
-                    className="px-1.5 text-[9px]"
-                  />
-                  <span className="font-mono text-[10px] uppercase text-white/32">{coverage}</span>
-                </div>
-              </div>
-            </div>
-          </MarketOverviewCardFrame>
-        );
-      })}
-    </section>
-  );
-};
-
-const DataQualityCompactRailCard: React.FC<{ summary: DataQualitySummary }> = ({ summary }) => (
-  <CompactRailCard
-    railKey="quality"
-    testId="market-overview-rail-quality"
-    eyebrow="质量"
-    title={`数据质量：${summary.status}`}
-    value={`${summary.counts.live + summary.counts.delayed + summary.counts.cached}`}
-    tone={summary.hasConcern ? 'text-amber-200' : 'text-emerald-300'}
-    lines={[
-      <span key="quality" data-testid="market-data-quality">可用快照 · 备用 {summary.counts.fallback}</span>,
-      <span key="risk" className="font-mono">过期 {summary.counts.stale} · 缺失 {summary.counts.error}</span>,
-    ]}
-  />
 );
 
 const CnShortSentimentCard: React.FC<{
@@ -1427,7 +1012,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
   const [activeCategory, setActiveCategory] = useState<MarketOverviewTab>('all');
   const [exportSummaryFeedback, setExportSummaryFeedback] = useState<string | null>(null);
 
-  const categoryTabs = useMemo<Array<{ key: MarketOverviewTab; label: string }>>(() => [
+  const categoryTabs = useMemo<MarketOverviewCategoryTabView[]>(() => [
     { key: 'all', label: t('marketOverviewPage.categories.all') },
     { key: 'us', label: t('marketOverviewPage.categories.us') },
     { key: 'cn', label: t('marketOverviewPage.categories.cn') },
@@ -1912,44 +1497,104 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     setExportSummaryFeedback(language === 'en' ? 'Summary copied' : '已复制摘要');
   }, [exportSummaryText, language]);
 
-  const renderDeterministicGrid = () => (
-    <TerminalGrid data-testid="market-overview-main-grid" data-workbench-split="9:3" className="gap-4">
-      <section
-        data-testid="market-overview-primary-rail"
-        data-mobile-order="main"
-        className="flex min-w-0 flex-col gap-4 xl:col-span-9"
-      >
-        <MarketOverviewMainStack>
-          <section data-testid="market-overview-hero-lane" data-card-tier="hero" className="min-w-0">
-            {activeRows.filter((row) => row.tier === 'hero').map(renderPlannedRow)}
-          </section>
-          <section data-testid="market-overview-secondary-grid" data-card-tier="secondary" className="flex min-w-0 flex-col gap-4">
-            {activeRows.filter((row) => row.tier === 'secondary').map(renderPlannedRow)}
-          </section>
-        </MarketOverviewMainStack>
-      </section>
-      <aside data-testid="market-overview-side-rail" data-mobile-order="rail" className="flex min-w-0 flex-col gap-3 xl:col-span-3">
-        <div data-testid="market-overview-rail" className="flex min-w-0 flex-col gap-3">
-          {activeTabConfig.rail.includes('coverage') ? <CategoryCoverageSummary label={activeCategoryLabel} summary={coverageSummary} /> : null}
-          {activeTabConfig.rail.includes('quality') ? <DataQualityCompactRailCard summary={dataQuality} /> : null}
-          {activeTabConfig.rail.includes('signalWatch') ? <SignalWatchRailCard panels={panels} activeCategory={activeCategory} /> : null}
-          {activeTabConfig.rail.includes('actionHint') ? <ActionHintRailCard temperature={panels.temperature} /> : null}
-        </div>
-      </aside>
-      {activeRows.some((row) => row.tier === 'deep') || activeCategory === 'all' ? (
-        <section
-          data-testid="market-overview-deep-panels"
-          data-panel-grouping="deterministic-rows"
-          data-mobile-order="deep"
-          data-card-tier="deep"
-          className="flex min-w-0 flex-col gap-4 xl:col-span-9"
-        >
-          {activeRows.filter((row) => row.tier === 'deep').map(renderPlannedRow)}
-          {activeCategory === 'all' ? <ExecutiveSecondaryGroups panels={panels} /> : null}
-        </section>
-      ) : null}
-    </TerminalGrid>
-  );
+  const marketDecision = buildMarketDecision({ activeCategory, panels, dataQuality });
+  const decisionReliable = isTemperatureReliable(panels.temperature);
+  const dataStateStatuses = collectDataStateMeta(panels).map(resolveProviderStatus);
+  const fallbackCount = dataQuality.counts.fallback + dataQuality.counts.mock;
+  const unavailableCount = dataStateStatuses.filter((status) => status === 'partial' || status === 'unavailable' || status === 'error').length + refreshErrorCount;
+  const dataStateView: MarketOverviewDataStateStripView = {
+    availableCount: dataQuality.counts.live + dataQuality.counts.delayed + dataQuality.counts.cached,
+    fallbackCount,
+    staleCount: dataQuality.counts.stale,
+    hasUnavailable: unavailableCount > 0,
+    unavailableCount,
+    hasFallback: fallbackCount > 0,
+    needsRefresh: dataQuality.counts.stale > 0 || refreshErrorCount > 0 || !localSnapshotSavedAt,
+    isRefreshing: loading || refreshingPanel !== null,
+    updatedAtLabel: formatMarketOverviewTimestamp(localSnapshotSavedAt) || '',
+    variant: unavailableCount > 0 || dataQuality.hasConcern
+      ? 'caution'
+      : loading || refreshingPanel !== null
+        ? 'info'
+        : 'neutral',
+  };
+  const temperatureSummary: MarketOverviewTemperatureSummaryView = {
+    reliable: decisionReliable,
+    valueText: decisionReliable ? formatNumber(panels.temperature.scores.overall.value, 0) : 'N/A',
+    toneClass: decisionReliable ? scoreTone(panels.temperature.scores.overall) : 'text-white/45',
+    label: decisionReliable ? panels.temperature.scores.overall.label : '数据不足',
+    confidenceLabel: confidenceLabel(panels.temperature.confidence),
+    reliableInputCount: panels.temperature.reliableInputCount ?? 0,
+    fallbackInputCount: panels.temperature.fallbackInputCount ?? 0,
+    excludedInputCount: panels.temperature.excludedInputCount ?? 0,
+  };
+  const briefingSummary: MarketOverviewBriefingSummaryView = {
+    confidenceLabel: confidenceLabel(panels.briefing.confidence),
+    toneClass: panels.briefing.isReliable === false || panels.briefing.isFallback ? 'text-amber-200' : 'text-white',
+    leadMessage: panels.briefing.items[0]?.message || panels.briefing.warning || '暂无简报',
+    warning: panels.briefing.warning || undefined,
+  };
+  const heroAnchorViews = heroAnchors.map<MarketOverviewHeroAnchorView>((anchor) => {
+    const displayLabel = anchor.item
+      ? resolveMarketOverviewDisplayLabel(anchor.item, language)
+      : { primary: anchor.label, secondary: anchor.key };
+    return {
+      key: anchor.key,
+      primaryLabel: displayLabel.primary,
+      secondaryLabel: displayLabel.secondary,
+      valueText: formatHeroValue(anchor.item?.value),
+      changeText: formatHeroChange(anchor.item?.changePct),
+      changeToneClass: heroToneClass(anchor.item),
+    };
+  });
+  const coverageRail: MarketOverviewCoverageRailView = {
+    label: activeCategoryLabel,
+    real: coverageSummary.real,
+    mixed: coverageSummary.mixed,
+    fallback: coverageSummary.fallback,
+    total: coverageSummary.real + coverageSummary.mixed + coverageSummary.fallback,
+  };
+  const qualityRail: MarketOverviewQualityRailView = {
+    status: dataQuality.status,
+    availableCount: dataQuality.counts.live + dataQuality.counts.delayed + dataQuality.counts.cached,
+    fallbackCount: dataQuality.counts.fallback,
+    staleCount: dataQuality.counts.stale,
+    errorCount: dataQuality.counts.error,
+    hasConcern: dataQuality.hasConcern,
+  };
+  const signalWatchItems = MARKET_OVERVIEW_SIGNAL_WATCH[activeCategory].map<MarketOverviewSignalWatchRailItem>((metricId) => {
+    const item = findMetricItem(panels, metricId) || missingMetricItem(metricId);
+    return {
+      label: metricId,
+      changeText: formatHeroChange(item.changePct),
+      changeToneClass: heroToneClass(item),
+    };
+  });
+  const actionHint: MarketOverviewActionHintView = {
+    title: decisionReliable ? '同步观察' : '安全状态',
+    line: decisionReliable ? '优先观察风险、流动性、宽度是否同向变化' : '等待实时源补齐后再生成强判断',
+  };
+  const executiveGroups: MarketOverviewExecutiveGroupView[] = [
+    { id: 'us', label: 'US', focus: 'SPX / VIX', cardKey: 'indices', item: findPanelItem(panels.indices, ['SPX']) },
+    { id: 'cn', label: 'CN/HK', focus: 'CSI300 / HSI', cardKey: 'cnIndices', item: findPanelItem(panels.cnIndices, ['CSI300', '000300.SH']) || findPanelItem(panels.cnIndices, ['HSI']) },
+    { id: 'macro', label: 'MACRO', focus: 'US10Y / DXY', cardKey: 'rates', item: findPanelItem(panels.rates, ['US10Y']) || findPanelItem(panels.fxCommodities, ['DXY']) },
+    { id: 'crypto', label: 'CRYPTO', focus: 'BTC / ETH', cardKey: 'crypto', item: findPanelItem(panels.crypto, ['BTC']) },
+  ].map((group) => {
+    const coverage = getCardCoverageKind(panels, group.cardKey as CardKey);
+    return {
+      id: group.id,
+      label: group.label,
+      focus: group.focus,
+      valueText: formatHeroValue(group.item?.value),
+      changeText: formatHeroChange(group.item?.changePct),
+      changeToneClass: heroToneClass(group.item),
+      freshness: getCardMeta(panels, group.cardKey as CardKey).freshness as MarketOverviewPanel['freshness'],
+      coverage,
+    };
+  });
+  const heroRows = activeRows.filter((row) => row.tier === 'hero').map(renderPlannedRow).filter(Boolean) as React.ReactNode[];
+  const secondaryRows = activeRows.filter((row) => row.tier === 'secondary').map(renderPlannedRow).filter(Boolean) as React.ReactNode[];
+  const deepRows = activeRows.filter((row) => row.tier === 'deep').map(renderPlannedRow).filter(Boolean) as React.ReactNode[];
 
   return (
     <div
@@ -1958,73 +1603,39 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 bg-[#030303] text-white"
     >
       <TerminalPageShell data-testid="market-overview-workbench" className="flex min-h-0 flex-1">
-        <section data-testid="market-overview-pulse-header" className="flex w-full min-w-0 flex-col gap-4">
-          {heading}
-          <div data-testid="market-overview-top-stack" className="flex w-full min-w-0 flex-col gap-4">
-            <MarketDecisionStrip activeCategory={activeCategory} panels={panels} dataQuality={dataQuality} />
-            <MarketOverviewDataStateStrip
-              localSnapshotSavedAt={localSnapshotSavedAt}
-              loading={loading}
-              refreshingPanel={refreshingPanel}
-              refreshErrorCount={refreshErrorCount}
-              dataQuality={dataQuality}
-              panels={panels}
-            />
-            <section data-testid="market-overview-summary-band" data-mobile-order="summary" data-market-research-flow="trust" className="min-w-0">
-              <MarketOverviewStatusStrip
-                temperature={<MarketTemperatureCompactSummary data={panels.temperature} />}
-                briefing={<MarketBriefingCompactSummary data={panels.briefing} />}
-              />
-            </section>
-            <div data-market-research-flow="controls">
-              <div
-                data-testid="market-overview-category-tabs"
-                data-selector-position="static-safe"
-                data-mobile-order="controls"
-                className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-white/8 bg-white/[0.02] p-2 backdrop-blur-md md:flex-row md:items-center md:justify-between"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="shrink-0 rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[10px] font-semibold text-white/42">
-                    筛选
-                  </span>
-                  <div className="ui-scroll-x-quiet min-w-0">
-                    <div className="flex w-max gap-2">
-                      {categoryTabs.map((tab) => (
-                        <button
-                          key={tab.key}
-                          type="button"
-                          aria-pressed={activeCategory === tab.key}
-                          className={`ui-truncate shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition ${
-                            activeCategory === tab.key
-                              ? 'bg-white/10 text-white shadow-sm'
-                              : 'bg-transparent text-white/45 hover:text-white/75'
-                          }`}
-                          onClick={() => setActiveCategory(tab.key)}
-                        >
-                          {tab.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  data-testid="market-overview-export-summary"
-                  className="w-fit rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/62 transition hover:bg-white/[0.06] hover:text-white"
-                  onClick={() => {
-                    void handleExportSummary();
-                  }}
-                >
-                  {exportSummaryFeedback || (language === 'en' ? 'Export' : '复制摘要')}
-                </button>
-              </div>
-            </div>
-            <div data-market-research-flow="pulse">
-              <CrossAssetHeroRibbon anchors={heroAnchors} />
-            </div>
-          </div>
-        </section>
-        {renderDeterministicGrid()}
+        <MarketOverviewWorkbenchTopSurface
+          heading={heading}
+          decisionText={marketDecision.text}
+          decisionChips={marketDecision.chips}
+          decisionReliable={decisionReliable}
+          dataState={dataStateView}
+          temperatureSummary={temperatureSummary}
+          briefingSummary={briefingSummary}
+          categoryTabs={categoryTabs}
+          activeCategory={activeCategory}
+          onCategoryChange={setActiveCategory}
+          exportLabel={exportSummaryFeedback || (language === 'en' ? 'Export' : '复制摘要')}
+          onExportSummary={() => {
+            void handleExportSummary();
+          }}
+          heroAnchors={heroAnchorViews}
+        />
+        <MarketOverviewWorkbenchGrid
+          heroRows={heroRows}
+          secondaryRows={secondaryRows}
+          deepRows={deepRows}
+          showDeepSection={activeRows.some((row) => row.tier === 'deep') || activeCategory === 'all'}
+          showCoverageRail={activeTabConfig.rail.includes('coverage')}
+          showQualityRail={activeTabConfig.rail.includes('quality')}
+          showSignalWatchRail={activeTabConfig.rail.includes('signalWatch')}
+          showActionHintRail={activeTabConfig.rail.includes('actionHint')}
+          coverageRail={coverageRail}
+          qualityRail={qualityRail}
+          signalWatchItems={signalWatchItems}
+          actionHint={actionHint}
+          executiveGroups={executiveGroups}
+          showExecutiveGroups={activeCategory === 'all'}
+        />
       </TerminalPageShell>
     </div>
   );
