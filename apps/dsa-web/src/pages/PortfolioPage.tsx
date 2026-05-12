@@ -469,14 +469,6 @@ function formatExposureMarketLabel(row: PortfolioExposureItem | undefined | null
   return row.label || marketValue.toUpperCase();
 }
 
-function formatPositionContext(market: string, currency: string, language: PortfolioLanguage): string {
-  const marketLabel = formatAccountMarketLabel(market, language);
-  return translate(language, 'portfolio.positionContext', {
-    market: marketLabel,
-    currency: currency || '--',
-  });
-}
-
 function formatSignedMoney(value: number, currency: string): string {
   const formatted = formatMoney(Math.abs(value), currency);
   if (value > 0) return `+${formatted}`;
@@ -2461,7 +2453,14 @@ const PortfolioPage: React.FC = () => {
                                 <tr key={`${row.accountId}-${row.symbol}-${row.market}`} className="border-b border-white/5 text-white/62 transition-colors hover:bg-white/[0.03]">
                                   <td className="px-3 py-2">
                                     <div className="truncate font-mono text-sm text-white">{row.symbol}</div>
-                                    <div className="truncate text-[11px] text-white/35">{row.accountName} · {formatPositionContext(row.market, row.currency, language)}</div>
+                                    <div className="truncate text-[11px] text-white/35">
+                                      {row.accountName}
+                                      {' · '}
+                                      {translate(language, 'portfolio.positionContext', {
+                                        market: formatAccountMarketLabel(row.market, language),
+                                        currency: row.currency || '--',
+                                      })}
+                                    </div>
                                   </td>
                                   <td className="px-3 py-2 font-mono">{Number(row.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
                                   <td className="px-3 py-2 font-mono">{formatMoney(row.totalCost, row.currency)}</td>
