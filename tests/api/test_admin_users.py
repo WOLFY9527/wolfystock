@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -203,6 +204,81 @@ class AdminUsersApiTestCase(unittest.TestCase):
         self.assertNotIn("cookie", text.lower())
         self.assertNotIn("api_key", text.lower())
         self.assertNotIn("secret", text.lower())
+
+    def test_endpoint_validates_neutral_service_dicts_into_existing_public_schema(self) -> None:
+        self._as_admin()
+
+        projected_user = {
+            "id": "user-1",
+            "username": "alice",
+            "display_name": "Alice Analyst",
+            "role": "user",
+            "is_active": True,
+            "created_at": "2026-05-10T10:00:00",
+            "updated_at": "2026-05-11T10:00:00",
+            "password_state": "set",
+            "last_seen_at": "2026-05-12T09:30:00",
+            "session_summary": {
+                "active_count": 1,
+                "expired_count": 1,
+                "revoked_count": 1,
+                "last_seen_at": "2026-05-12T09:30:00",
+                "next_expires_at": "2026-05-12T12:30:00",
+            },
+            "risk_badges": [
+                {
+                    "code": "revoked_sessions_present",
+                    "label": "Revoked sessions present",
+                    "severity": "info",
+                    "source": "session",
+                }
+            ],
+            "links": {
+                "self": "/api/v1/admin/users/user-1",
+                "admin_logs": "/api/v1/admin/logs?user_id=user-1",
+                "activity": "/api/v1/admin/users/user-1/activity",
+                "portfolio": None,
+                "analysis": None,
+                "scanner": None,
+                "backtest": None,
+            },
+        }
+        projected_sessions = [
+            {
+                "session_handle": "sess_123456789abc",
+                "status": "active",
+                "created_at": "2026-05-12T07:30:00",
+                "last_seen_at": "2026-05-12T09:30:00",
+                "expires_at": "2026-05-12T12:30:00",
+                "revoked_at": None,
+            }
+        ]
+
+        from api.v1.endpoints import admin_users
+
+        with patch.object(admin_users.AdminUserService, "list_users", return_value=([projected_user], 1)):
+            list_response = self.client.get("/api/v1/admin/users")
+        with patch.object(admin_users.AdminUserService, "get_user_detail", return_value=(projected_user, projected_sessions)):
+            detail_response = self.client.get("/api/v1/admin/users/user-1")
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
+
+        list_item = list_response.json()["items"][0]
+        self.assertEqual(list_item["displayName"], "Alice Analyst")
+        self.assertEqual(list_item["isActive"], True)
+        self.assertEqual(list_item["passwordState"], "set")
+        self.assertEqual(list_item["sessionSummary"]["activeCount"], 1)
+        self.assertEqual(list_item["sessionSummary"]["expiredCount"], 1)
+        self.assertEqual(list_item["sessionSummary"]["revokedCount"], 1)
+        self.assertEqual(list_item["riskBadges"][0]["code"], "revoked_sessions_present")
+        self.assertEqual(list_item["links"]["adminLogs"], "/api/v1/admin/logs?user_id=user-1")
+
+        detail_payload = detail_response.json()
+        self.assertEqual(detail_payload["user"]["displayName"], "Alice Analyst")
+        self.assertEqual(detail_payload["sessions"][0]["sessionHandle"], "sess_123456789abc")
+        self.assertEqual(detail_payload["sessions"][0]["status"], "active")
+        self.assertEqual(detail_payload["dataLinks"]["activity"], "/api/v1/admin/users/user-1/activity")
 
     def test_user_detail_hides_raw_sessions_and_marks_inactive_unset_password(self) -> None:
         self._as_admin()

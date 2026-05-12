@@ -10,7 +10,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.deps import CurrentUser, require_admin_user
 from api.v1.schemas.admin_activity import AdminActivityEvent, AdminActivityResponse, AdminActivityWindow
-from api.v1.schemas.admin_users import AdminDataLinks, AdminUserDetailResponse, AdminUserListResponse
+from api.v1.schemas.admin_users import (
+    AdminDataLinks,
+    AdminSessionSummary,
+    AdminSessionSummaryCounts,
+    AdminUserDetailResponse,
+    AdminUserListItem,
+    AdminUserListResponse,
+    AdminUserRiskBadge,
+)
 from src.services.admin_activity_service import AdminActivityService
 from src.services.admin_user_service import AdminUserService
 
@@ -103,6 +111,27 @@ def _build_activity_response(
     )
 
 
+def _build_user_list_item(item: dict[str, Any]) -> AdminUserListItem:
+    session_summary = AdminSessionSummaryCounts.model_validate(item.get("session_summary") or {})
+    risk_badges = [
+        AdminUserRiskBadge.model_validate(badge)
+        for badge in item.get("risk_badges") or []
+    ]
+    links = AdminDataLinks.model_validate(item.get("links") or {})
+    return AdminUserListItem.model_validate(
+        {
+            **item,
+            "session_summary": session_summary,
+            "risk_badges": risk_badges,
+            "links": links,
+        }
+    )
+
+
+def _build_session_summary(item: dict[str, Any]) -> AdminSessionSummary:
+    return AdminSessionSummary.model_validate(item)
+
+
 @router.get(
     "/users",
     response_model=AdminUserListResponse,
@@ -144,8 +173,9 @@ def list_admin_users(
         limit=limit,
         offset=offset,
     )
+    validated_items = [_build_user_list_item(item) for item in items]
     return AdminUserListResponse(
-        items=items,
+        items=validated_items,
         total=total,
         limit=limit,
         offset=offset,
@@ -179,9 +209,11 @@ def get_admin_user_detail(
     )
     if user is None:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "User not found"})
+    validated_user = _build_user_list_item(user)
+    validated_sessions = [_build_session_summary(session) for session in sessions]
     return AdminUserDetailResponse(
-        user=user,
-        sessions=sessions,
+        user=validated_user,
+        sessions=validated_sessions,
         dataLinks=AdminDataLinks(
             self=f"/api/v1/admin/users/{normalized_user_id}",
             adminLogs=f"/api/v1/admin/logs?user_id={normalized_user_id}",

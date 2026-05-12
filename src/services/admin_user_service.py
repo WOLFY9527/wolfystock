@@ -7,13 +7,6 @@ import hashlib
 from datetime import datetime
 from typing import Any, Iterable, Optional
 
-from api.v1.schemas.admin_users import (
-    AdminDataLinks,
-    AdminSessionSummary,
-    AdminSessionSummaryCounts,
-    AdminUserListItem,
-    AdminUserRiskBadge,
-)
 from src.repositories.auth_repo import AuthRepository
 
 
@@ -60,7 +53,7 @@ class AdminUserService:
         sort: str = "created_at_desc",
         limit: int = 50,
         offset: int = 0,
-    ) -> tuple[list[AdminUserListItem], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         users = list(self.repo.list_app_users())
         sessions_by_user = self._sessions_by_user(self.repo.list_app_user_sessions())
         items = [
@@ -84,11 +77,20 @@ class AdminUserService:
         ]
         filtered.sort(key=self._sort_key(sort), reverse=sort.endswith("_desc"))
         if sort in {"username_asc", "username_desc"}:
-            filtered.sort(key=lambda item: (item.username.lower(), item.id), reverse=(sort == "username_desc"))
+            filtered.sort(
+                key=lambda item: (
+                    str(item.get("username") or "").lower(),
+                    str(item.get("id") or ""),
+                ),
+                reverse=(sort == "username_desc"),
+            )
         elif sort == "last_seen_asc":
-            filtered.sort(key=lambda item: (item.last_seen_at or "", item.id))
+            filtered.sort(key=lambda item: (str(item.get("last_seen_at") or ""), str(item.get("id") or "")))
         elif sort == "last_seen_desc":
-            filtered.sort(key=lambda item: (item.last_seen_at or "", item.id), reverse=True)
+            filtered.sort(
+                key=lambda item: (str(item.get("last_seen_at") or ""), str(item.get("id") or "")),
+                reverse=True,
+            )
         total = len(filtered)
         start = max(0, int(offset))
         return filtered[start:start + max(1, int(limit))], total
@@ -100,7 +102,7 @@ class AdminUserService:
         include_sessions: bool = True,
         session_limit: int = 20,
         session_status: str = "all",
-    ) -> tuple[AdminUserListItem | None, list[AdminSessionSummary]]:
+    ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
         user = self.repo.get_app_user(user_id)
         if user is None:
             return None, []
@@ -115,45 +117,45 @@ class AdminUserService:
         ]
         return item, summaries[:max(1, int(session_limit))]
 
-    def _project_user(self, user: Any, sessions: list[Any]) -> AdminUserListItem:
+    def _project_user(self, user: Any, sessions: list[Any]) -> dict[str, Any]:
         password_hash = str(getattr(user, "password_hash", "") or "")
         session_summary = self._session_summary(sessions)
         user_id = str(getattr(user, "id", ""))
-        return AdminUserListItem(
-            id=user_id,
-            username=str(getattr(user, "username", "")),
-            displayName=getattr(user, "display_name", None),
-            role=str(getattr(user, "role", "user")),
-            isActive=bool(getattr(user, "is_active", True)),
-            createdAt=_iso(getattr(user, "created_at", None)),
-            updatedAt=_iso(getattr(user, "updated_at", None)),
-            passwordState="set" if password_hash.strip() else "unset",
-            lastSeenAt=session_summary.last_seen_at,
-            sessionSummary=session_summary,
-            riskBadges=self._risk_badges(user, session_summary),
-            links=AdminDataLinks(
-                self=f"/api/v1/admin/users/{user_id}",
-                adminLogs=f"/api/v1/admin/logs?user_id={user_id}",
-                activity=f"/api/v1/admin/users/{user_id}/activity",
-                portfolio=None,
-                analysis=None,
-                scanner=None,
-                backtest=None,
-            ),
-        )
+        return {
+            "id": user_id,
+            "username": str(getattr(user, "username", "")),
+            "display_name": getattr(user, "display_name", None),
+            "role": str(getattr(user, "role", "user")),
+            "is_active": bool(getattr(user, "is_active", True)),
+            "created_at": _iso(getattr(user, "created_at", None)),
+            "updated_at": _iso(getattr(user, "updated_at", None)),
+            "password_state": "set" if password_hash.strip() else "unset",
+            "last_seen_at": session_summary.get("last_seen_at"),
+            "session_summary": session_summary,
+            "risk_badges": self._risk_badges(user, session_summary),
+            "links": {
+                "self": f"/api/v1/admin/users/{user_id}",
+                "admin_logs": f"/api/v1/admin/logs?user_id={user_id}",
+                "activity": f"/api/v1/admin/users/{user_id}/activity",
+                "portfolio": None,
+                "analysis": None,
+                "scanner": None,
+                "backtest": None,
+            },
+        }
 
-    def _project_session(self, session: Any) -> AdminSessionSummary:
+    def _project_session(self, session: Any) -> dict[str, Any]:
         status = _session_status(session, datetime.now())
-        return AdminSessionSummary(
-            sessionHandle=_session_handle(str(getattr(session, "session_id", ""))),
-            status=status,
-            createdAt=_iso(getattr(session, "created_at", None)),
-            lastSeenAt=_iso(getattr(session, "last_seen_at", None)),
-            expiresAt=_iso(getattr(session, "expires_at", None)),
-            revokedAt=_iso(getattr(session, "revoked_at", None)),
-        )
+        return {
+            "session_handle": _session_handle(str(getattr(session, "session_id", ""))),
+            "status": status,
+            "created_at": _iso(getattr(session, "created_at", None)),
+            "last_seen_at": _iso(getattr(session, "last_seen_at", None)),
+            "expires_at": _iso(getattr(session, "expires_at", None)),
+            "revoked_at": _iso(getattr(session, "revoked_at", None)),
+        }
 
-    def _session_summary(self, sessions: Iterable[Any]) -> AdminSessionSummaryCounts:
+    def _session_summary(self, sessions: Iterable[Any]) -> dict[str, Any]:
         now = datetime.now()
         active_count = 0
         expired_count = 0
@@ -174,29 +176,37 @@ class AdminUserService:
             seen = getattr(row, "last_seen_at", None)
             if isinstance(seen, datetime) and (last_seen_at is None or seen > last_seen_at):
                 last_seen_at = seen
-        return AdminSessionSummaryCounts(
-            activeCount=active_count,
-            expiredCount=expired_count,
-            revokedCount=revoked_count,
-            lastSeenAt=_iso(last_seen_at),
-            nextExpiresAt=_iso(next_expires_at),
-        )
+        return {
+            "active_count": active_count,
+            "expired_count": expired_count,
+            "revoked_count": revoked_count,
+            "last_seen_at": _iso(last_seen_at),
+            "next_expires_at": _iso(next_expires_at),
+        }
 
-    def _risk_badges(self, user: Any, summary: AdminSessionSummaryCounts) -> list[AdminUserRiskBadge]:
-        badges: list[AdminUserRiskBadge] = []
+    def _risk_badges(self, user: Any, summary: dict[str, Any]) -> list[dict[str, Any]]:
+        badges: list[dict[str, Any]] = []
         if str(getattr(user, "role", "")) == "admin":
-            badges.append(AdminUserRiskBadge(code="admin_account", label="Admin account", severity="info", source="auth"))
+            badges.append({"code": "admin_account", "label": "Admin account", "severity": "info", "source": "auth"})
         if not bool(getattr(user, "is_active", True)):
-            badges.append(AdminUserRiskBadge(code="inactive_account", label="Inactive account", severity="warning", source="auth"))
+            badges.append({"code": "inactive_account", "label": "Inactive account", "severity": "warning", "source": "auth"})
         if not str(getattr(user, "password_hash", "") or "").strip():
-            badges.append(AdminUserRiskBadge(code="password_unset", label="Password unset", severity="warning", source="auth"))
-        total_sessions = summary.active_count + summary.expired_count + summary.revoked_count
+            badges.append({"code": "password_unset", "label": "Password unset", "severity": "warning", "source": "auth"})
+        total_sessions = (
+            int(summary.get("active_count", 0))
+            + int(summary.get("expired_count", 0))
+            + int(summary.get("revoked_count", 0))
+        )
         if total_sessions == 0:
-            badges.append(AdminUserRiskBadge(code="sessionless", label="No sessions", severity="info", source="session"))
-        elif summary.active_count == 0 and summary.expired_count > 0:
-            badges.append(AdminUserRiskBadge(code="all_sessions_expired", label="All sessions expired", severity="info", source="session"))
-        if summary.revoked_count > 0:
-            badges.append(AdminUserRiskBadge(code="revoked_sessions_present", label="Revoked sessions present", severity="info", source="session"))
+            badges.append({"code": "sessionless", "label": "No sessions", "severity": "info", "source": "session"})
+        elif int(summary.get("active_count", 0)) == 0 and int(summary.get("expired_count", 0)) > 0:
+            badges.append(
+                {"code": "all_sessions_expired", "label": "All sessions expired", "severity": "info", "source": "session"}
+            )
+        if int(summary.get("revoked_count", 0)) > 0:
+            badges.append(
+                {"code": "revoked_sessions_present", "label": "Revoked sessions present", "severity": "info", "source": "session"}
+            )
         return badges
 
     @staticmethod
@@ -209,14 +219,14 @@ class AdminUserService:
     @staticmethod
     def _sort_key(sort: str):
         if sort.startswith("updated_at"):
-            return lambda item: (item.updated_at or "", item.id)
+            return lambda item: (str(item.get("updated_at") or ""), str(item.get("id") or ""))
         if sort.startswith("created_at"):
-            return lambda item: (item.created_at or "", item.id)
-        return lambda item: (item.created_at or "", item.id)
+            return lambda item: (str(item.get("created_at") or ""), str(item.get("id") or ""))
+        return lambda item: (str(item.get("created_at") or ""), str(item.get("id") or ""))
 
     @staticmethod
     def _matches_user(
-        item: AdminUserListItem,
+        item: dict[str, Any],
         *,
         q: str | None,
         role: str | None,
@@ -229,27 +239,37 @@ class AdminUserService:
     ) -> bool:
         if q:
             needle = q.lower()
-            haystack = " ".join([item.id, item.username, item.display_name or ""]).lower()
+            haystack = " ".join(
+                [
+                    str(item.get("id") or ""),
+                    str(item.get("username") or ""),
+                    str(item.get("display_name") or ""),
+                ]
+            ).lower()
             if needle not in haystack:
                 return False
-        if role and item.role != role:
+        if role and item.get("role") != role:
             return False
-        if active is not None and item.is_active is not active:
+        if active is not None and item.get("is_active") is not active:
             return False
-        if status == "active" and not item.is_active:
+        if status == "active" and not item.get("is_active"):
             return False
-        if status == "inactive" and item.is_active:
+        if status == "inactive" and item.get("is_active"):
             return False
-        if status == "needs_password" and item.password_state != "unset":
+        if status == "needs_password" and item.get("password_state") != "unset":
             return False
-        if status == "sessionless" and (
-            item.session_summary.active_count + item.session_summary.expired_count + item.session_summary.revoked_count
-        ) > 0:
+        summary = item.get("session_summary") if isinstance(item.get("session_summary"), dict) else {}
+        total_sessions = (
+            int(summary.get("active_count", 0))
+            + int(summary.get("expired_count", 0))
+            + int(summary.get("revoked_count", 0))
+        )
+        if status == "sessionless" and total_sessions > 0:
             return False
-        if status == "stale_session" and item.session_summary.active_count > 0:
+        if status == "stale_session" and int(summary.get("active_count", 0)) > 0:
             return False
-        created_at = _parse_iso(item.created_at)
-        last_seen = _parse_iso(item.last_seen_at)
+        created_at = _parse_iso(str(item.get("created_at") or "") or None)
+        last_seen = _parse_iso(str(item.get("last_seen_at") or "") or None)
         if created_from and created_at and created_at < created_from:
             return False
         if created_to and created_at and created_at > created_to:
