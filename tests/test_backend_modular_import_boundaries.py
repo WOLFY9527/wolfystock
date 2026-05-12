@@ -240,8 +240,6 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
         "data_provider.base",
         "data_provider.us_index_mapping",
     },
-    "src/services/portfolio_ibkr_sync_service.py": {"data_provider.base"},
-    "src/services/portfolio_import_service.py": {"data_provider.base"},
     # Portfolio risk currently initializes provider runtime lazily for drawdown
     # history. Keep explicit until a narrow portfolio/provider facade exists.
     "src/services/portfolio_risk_service.py": {"data_provider"},

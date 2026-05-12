@@ -13,9 +13,9 @@ from urllib.parse import urlparse, urlunparse
 
 import requests
 
-from data_provider.base import canonical_stock_code
 from src.services.portfolio_import_service import IBKR_BROKER
 from src.services.portfolio_service import PortfolioConflictError, PortfolioService
+from src.utils.symbol_normalization import canonical_stock_code
 
 logger = logging.getLogger(__name__)
 

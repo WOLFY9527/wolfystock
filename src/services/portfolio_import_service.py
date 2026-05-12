@@ -14,7 +14,6 @@ import xml.etree.ElementTree as ET
 
 import pandas as pd
 
-from data_provider.base import canonical_stock_code
 from src.repositories.portfolio_repo import PortfolioRepository
 from src.services.portfolio_service import (
     PortfolioBusyError,
@@ -22,6 +21,7 @@ from src.services.portfolio_service import (
     PortfolioOversellError,
     PortfolioService,
 )
+from src.utils.symbol_normalization import canonical_stock_code
 
 logger = logging.getLogger(__name__)
 
