@@ -16,6 +16,7 @@ from sqlalchemy import select
 
 from src.config import Config
 from src.core.rule_backtest_engine import RuleBacktestEngine, RuleBacktestParser
+from src.services.rule_backtest_text_completion import create_rule_backtest_text_completion
 from src.services.rule_backtest_service import RuleBacktestService, run_backtest_automated
 from src.storage import DatabaseManager, RuleBacktestTrade, StockDaily
 
@@ -4290,6 +4291,105 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(len(result.equity_curve), 1)
         self.assertEqual(result.metrics["trade_count"], 0)
         self.assertIn(result.no_result_reason, {"no_entry_signals", "no_trades"})
+
+    def test_text_completion_facade_forwards_call_text_arguments(self) -> None:
+        captured = {}
+
+        class FakeAdapter:
+            def call_text(self, messages, *, temperature, max_tokens):
+                captured["messages"] = messages
+                captured["temperature"] = temperature
+                captured["max_tokens"] = max_tokens
+                return SimpleNamespace(content="ok")
+
+        completion = create_rule_backtest_text_completion(adapter=FakeAdapter())
+        assert completion is not None
+
+        response = completion.call_text(
+            [{"role": "user", "content": "hello"}],
+            temperature=0.2,
+            max_tokens=700,
+        )
+
+        self.assertEqual(response.content, "ok")
+        self.assertEqual(captured["messages"], [{"role": "user", "content": "hello"}])
+        self.assertEqual(captured["temperature"], 0.2)
+        self.assertEqual(captured["max_tokens"], 700)
+
+    def test_text_completion_service_preserves_parser_and_summary_call_args(self) -> None:
+        parser_calls = []
+        summary_calls = []
+
+        class FakeTextCompletion:
+            def call_text(self, messages, *, temperature, max_tokens):
+                if temperature == 0 and max_tokens == 900:
+                    parser_calls.append(
+                        {
+                            "messages": messages,
+                            "temperature": temperature,
+                            "max_tokens": max_tokens,
+                        }
+                    )
+                    return SimpleNamespace(
+                        content=json.dumps(
+                            {
+                                "version": "v1",
+                                "timeframe": "daily",
+                                "entry": {
+                                    "type": "comparison",
+                                    "left": {"kind": "indicator", "indicator": "close"},
+                                    "compare": ">",
+                                    "right": {"kind": "indicator", "indicator": "ma", "period": 3},
+                                    "text": "Close > MA3",
+                                },
+                                "exit": {
+                                    "type": "comparison",
+                                    "left": {"kind": "indicator", "indicator": "close"},
+                                    "compare": "<",
+                                    "right": {"kind": "indicator", "indicator": "ma", "period": 3},
+                                    "text": "Close < MA3",
+                                },
+                                "confidence": 0.88,
+                                "needs_confirmation": False,
+                                "ambiguities": [],
+                                "summary": {
+                                    "entry": "买入条件：Close > MA3",
+                                    "exit": "卖出条件：Close < MA3",
+                                    "strategy": "价格突破均线",
+                                },
+                            },
+                            ensure_ascii=False,
+                        )
+                    )
+                if temperature == 0.2 and max_tokens == 700:
+                    summary_calls.append(
+                        {
+                            "messages": messages,
+                            "temperature": temperature,
+                            "max_tokens": max_tokens,
+                        }
+                    )
+                    return SimpleNamespace(content="LLM summary")
+                raise AssertionError(f"Unexpected text completion call: temperature={temperature}, max_tokens={max_tokens}")
+
+        service = RuleBacktestService(self.db, llm_adapter=FakeTextCompletion())
+        with patch.object(service.parser, "_parse_expression", return_value=(None, {"issues": [], "issue_count": 0})):
+            service.parse_strategy("Momentum breakout idea.", code="600519")
+        self.assertEqual(len(parser_calls), 1)
+        self.assertEqual(parser_calls[0]["temperature"], 0)
+        self.assertEqual(parser_calls[0]["max_tokens"], 900)
+
+        response = service.parse_and_run(
+            code="600519",
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            lookback_bars=20,
+            confirmed=True,
+        )
+
+        self.assertEqual(response["ai_summary"], "LLM summary")
+        self.assertEqual(len(summary_calls), 1)
+        self.assertEqual(summary_calls[0]["temperature"], 0.2)
+        self.assertEqual(summary_calls[0]["max_tokens"], 700)
 
     def test_service_generates_fallback_ai_summary_and_persists_runs(self) -> None:
         service = RuleBacktestService(self.db)

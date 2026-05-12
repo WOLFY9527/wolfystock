@@ -243,6 +243,16 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
     "src/services/task_queue.py": {"data_provider.base"},
     "src/services/us_history_helper.py": {"data_provider.base"},
 }
+RULE_BACKTEST_LLM_IMPORT_PREFIXES = (
+    "src.agent",
+    "src.config",
+)
+EXPECTED_RULE_BACKTEST_LLM_IMPORT_BOUNDARY = {
+    "src/services/rule_backtest_text_completion.py": {
+        "src.agent.llm_adapter",
+        "src.config",
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -363,6 +373,31 @@ def _import_mapping_for_prefixes(
             if modules:
                 matches[python_file.relative_to(REPO_ROOT).as_posix()] = modules
     return matches
+
+
+def _imports_for_file(python_file: Path, import_prefixes: tuple[str, ...]) -> set[str]:
+    tree = ast.parse(
+        python_file.read_text(encoding="utf-8"),
+        filename=str(python_file),
+    )
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                module_name = alias.name
+                if any(
+                    module_name == prefix or module_name.startswith(prefix + ".")
+                    for prefix in import_prefixes
+                ):
+                    modules.add(module_name)
+        elif isinstance(node, ast.ImportFrom):
+            module_name = node.module or ""
+            if node.level == 0 and any(
+                module_name == prefix or module_name.startswith(prefix + ".")
+                for prefix in import_prefixes
+            ):
+                modules.add(module_name)
+    return modules
 
 
 @lru_cache(maxsize=1)
@@ -505,6 +540,30 @@ def test_llm_helper_modules_stay_lightweight() -> None:
                 f"{module_name} unexpectedly imported runtime-heavy dependency "
                 f"{forbidden_prefix}"
             )
+
+
+def test_rule_backtest_llm_import_boundary_is_isolated() -> None:
+    actual_mapping = {
+        "src/services/rule_backtest_service.py": _imports_for_file(
+            SERVICES_ROOT / "rule_backtest_service.py",
+            RULE_BACKTEST_LLM_IMPORT_PREFIXES,
+        ),
+        "src/services/rule_backtest_text_completion.py": _imports_for_file(
+            SERVICES_ROOT / "rule_backtest_text_completion.py",
+            RULE_BACKTEST_LLM_IMPORT_PREFIXES,
+        ),
+    }
+    actual_mapping = {
+        path: modules
+        for path, modules in actual_mapping.items()
+        if modules
+    }
+
+    assert actual_mapping == EXPECTED_RULE_BACKTEST_LLM_IMPORT_BOUNDARY, (
+        "rule backtest text completion construction must stay isolated behind the "
+        f"dedicated facade. Expected {EXPECTED_RULE_BACKTEST_LLM_IMPORT_BOUNDARY}, "
+        f"found {actual_mapping}"
+    )
 
 
 def test_api_schema_upward_import_mapping_is_explicit() -> None:

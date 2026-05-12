@@ -17,13 +17,12 @@ from typing import Any, Dict, List, Optional
 
 from data_provider.base import normalize_stock_code
 from data_provider.us_index_mapping import is_us_index_code, is_us_stock_code
-from src.agent.llm_adapter import LLMToolAdapter
-from src.config import get_config
 from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
 from src.services.backtest_professional_readiness import build_backtest_professional_readiness
 from src.repositories.stock_repo import StockRepository
 from src.services.local_data_preflight_service import LocalDataPreflightService
+from src.services.rule_backtest_text_completion import RuleBacktestTextCompletion, create_rule_backtest_text_completion
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
 from src.storage import (
     DatabaseManager,
@@ -512,7 +511,7 @@ class RuleBacktestService:
     def __init__(
         self,
         db_manager: Optional[DatabaseManager] = None,
-        llm_adapter: Optional[LLMToolAdapter] = None,
+        llm_adapter: Optional[Any] = None,
         *,
         owner_id: Optional[str] = None,
         include_all_owners: bool = False,
@@ -6859,14 +6858,12 @@ class RuleBacktestService:
         suggestions = "下一步建议结合交易明细检查哪些触发最常导致回撤，再决定是否放宽阈值或调整均线/RSI 周期。"
         return " ".join([headline, performance, strengths, weaknesses, suggestions])
 
-    def _get_llm_adapter(self) -> Optional[LLMToolAdapter]:
+    def _get_llm_adapter(self) -> Optional[RuleBacktestTextCompletion]:
         if self._llm_adapter is not None:
+            if not isinstance(self._llm_adapter, RuleBacktestTextCompletion):
+                self._llm_adapter = create_rule_backtest_text_completion(adapter=self._llm_adapter)
             return self._llm_adapter
-        try:
-            self._llm_adapter = LLMToolAdapter(get_config())
-        except Exception as exc:
-            logger.warning("Failed to initialize LLM adapter for rule backtest: %s", exc)
-            self._llm_adapter = None
+        self._llm_adapter = create_rule_backtest_text_completion()
         return self._llm_adapter
 
     @staticmethod
