@@ -7,14 +7,6 @@ import hashlib
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from api.v1.schemas.admin_activity import (
-    AdminActivityActor,
-    AdminActivityEntity,
-    AdminActivityEvent,
-    AdminActivityLogLink,
-    AdminActivitySource,
-    AdminActivityTargetUser,
-)
 from src.repositories.auth_repo import AuthRepository
 from src.services.execution_log_service import ExecutionLogService
 from src.storage import AnalysisHistory, AppUserSession, DatabaseManager
@@ -93,10 +85,10 @@ class AdminActivityService:
         include_admin: bool = True,
         limit: int = 50,
         offset: int = 0,
-    ) -> tuple[list[AdminActivityEvent], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         date_to = date_to or datetime.now()
         date_from = date_from or (date_to - timedelta(days=1))
-        events: list[AdminActivityEvent] = []
+        events: list[dict[str, Any]] = []
         events.extend(self._execution_log_events(target_user_id=target_user_id, date_from=date_from, date_to=date_to))
         events.extend(self._analysis_events(target_user_id=target_user_id, date_from=date_from, date_to=date_to))
         if target_user_id:
@@ -116,7 +108,7 @@ class AdminActivityService:
                 include_admin=include_admin,
             )
         ]
-        filtered.sort(key=lambda item: (item.timestamp, item.id), reverse=True)
+        filtered.sort(key=lambda item: (str(item.get("timestamp") or ""), str(item.get("id") or "")), reverse=True)
         total = len(filtered)
         start = max(0, int(offset))
         return filtered[start:start + max(1, int(limit))], total
@@ -127,7 +119,7 @@ class AdminActivityService:
         target_user_id: str | None,
         date_from: datetime,
         date_to: datetime,
-    ) -> list[AdminActivityEvent]:
+    ) -> list[dict[str, Any]]:
         items, _ = self.execution_logs.list_business_events(
             user_id=target_user_id,
             date_from=date_from,
@@ -135,7 +127,7 @@ class AdminActivityService:
             limit=200,
             offset=0,
         )
-        events: list[AdminActivityEvent] = []
+        events: list[dict[str, Any]] = []
         for item in items:
             user_id = str(item.get("userId") or target_user_id or "").strip() or None
             if target_user_id and user_id != target_user_id:
@@ -150,32 +142,36 @@ class AdminActivityService:
             request_hash = hash_reference(item.get("requestId"))
             session_hash = hash_reference(raw_event_id)
             events.append(
-                AdminActivityEvent(
-                    id=hash_reference(f"execution:{raw_event_id}") or "sha256:unknown",
-                    timestamp=started_at,
-                    actor=AdminActivityActor(
-                        type=str(item.get("actorType") or "unknown"),
-                        userId=user_id if item.get("actorType") == "user" else None,
-                        label=item.get("actorLabel"),
-                        requestIdHash=request_hash,
-                    ),
-                    targetUser=AdminActivityTargetUser(id=user_id, label=None),
-                    family=family,
-                    action=action,
-                    entity=AdminActivityEntity(
-                        type=self._entity_type_from_business_event(item),
-                        idHash=hash_reference(item.get("recordId") or item.get("analysisType") or raw_event_id),
-                        label=sanitize_message(str(item.get("subject") or item.get("summary") or ""))[:160] or None,
-                        symbol=item.get("symbol"),
-                        market=item.get("market"),
-                        sourceTable="execution_log_sessions",
-                    ),
-                    status=normalized_status,
-                    outcome=_outcome(normalized_status, item.get("status")),
-                    requestIdHash=request_hash,
-                    sessionIdHash=session_hash,
-                    source=AdminActivitySource(kind="execution_log_business_event", table="execution_log_sessions", confidence="confirmed" if user_id else "unknown"),
-                    redactedMetadata=sanitize_metadata(
+                {
+                    "id": hash_reference(f"execution:{raw_event_id}") or "sha256:unknown",
+                    "timestamp": started_at,
+                    "actor": {
+                        "type": str(item.get("actorType") or "unknown"),
+                        "user_id": user_id if item.get("actorType") == "user" else None,
+                        "label": item.get("actorLabel"),
+                        "request_id_hash": request_hash,
+                    },
+                    "target_user": {"id": user_id, "label": None},
+                    "family": family,
+                    "action": action,
+                    "entity": {
+                        "type": self._entity_type_from_business_event(item),
+                        "id_hash": hash_reference(item.get("recordId") or item.get("analysisType") or raw_event_id),
+                        "label": sanitize_message(str(item.get("subject") or item.get("summary") or ""))[:160] or None,
+                        "symbol": item.get("symbol"),
+                        "market": item.get("market"),
+                        "source_table": "execution_log_sessions",
+                    },
+                    "status": normalized_status,
+                    "outcome": _outcome(normalized_status, item.get("status")),
+                    "request_id_hash": request_hash,
+                    "session_id_hash": session_hash,
+                    "source": {
+                        "kind": "execution_log_business_event",
+                        "table": "execution_log_sessions",
+                        "confidence": "confirmed" if user_id else "unknown",
+                    },
+                    "redacted_metadata": sanitize_metadata(
                         {
                             "provider": item.get("provider"),
                             "route": item.get("route"),
@@ -184,8 +180,8 @@ class AdminActivityService:
                             "metadata": item.get("metadata") if isinstance(item.get("metadata"), dict) else {},
                         }
                     ),
-                    logLinks=[AdminActivityLogLink(kind="admin_logs.business_event", idHash=session_hash)] if session_hash else [],
-                )
+                    "log_links": [{"kind": "admin_logs.business_event", "id_hash": session_hash}] if session_hash else [],
+                }
             )
         return events
 
@@ -195,7 +191,7 @@ class AdminActivityService:
         target_user_id: str | None,
         date_from: datetime,
         date_to: datetime,
-    ) -> list[AdminActivityEvent]:
+    ) -> list[dict[str, Any]]:
         with self.db.get_session() as session:
             conditions = [AnalysisHistory.created_at >= date_from, AnalysisHistory.created_at <= date_to]
             if target_user_id:
@@ -209,41 +205,45 @@ class AdminActivityService:
                 .limit(200)
             ).scalars().all()
 
-        events: list[AdminActivityEvent] = []
+        events: list[dict[str, Any]] = []
         for row in rows:
             owner_id = str(getattr(row, "owner_id", "") or "").strip() or None
             if target_user_id and owner_id != target_user_id:
                 continue
             summary = sanitize_message(str(getattr(row, "analysis_summary", "") or ""))[:160]
             events.append(
-                AdminActivityEvent(
-                    id=hash_reference(f"analysis:{getattr(row, 'id', '')}") or "sha256:unknown",
-                    timestamp=_iso(getattr(row, "created_at", None)) or datetime.now().isoformat(),
-                    actor=AdminActivityActor(type="user", userId=owner_id, label=None),
-                    targetUser=AdminActivityTargetUser(id=owner_id, label=None),
-                    family="analysis",
-                    action="analysis.completed",
-                    entity=AdminActivityEntity(
-                        type="analysis_history",
-                        idHash=hash_reference(getattr(row, "id", None)),
-                        label=f"{getattr(row, 'code', '')} {getattr(row, 'report_type', '')}".strip() or None,
-                        symbol=getattr(row, "code", None),
-                        sourceTable="analysis_history",
-                    ),
-                    status="success",
-                    outcome="ok",
-                    requestIdHash=hash_reference(getattr(row, "query_id", None)),
-                    sessionIdHash=None,
-                    source=AdminActivitySource(kind="analysis_history", table="analysis_history", confidence="confirmed"),
-                    redactedMetadata=sanitize_metadata(
+                {
+                    "id": hash_reference(f"analysis:{getattr(row, 'id', '')}") or "sha256:unknown",
+                    "timestamp": _iso(getattr(row, "created_at", None)) or datetime.now().isoformat(),
+                    "actor": {"type": "user", "user_id": owner_id, "label": None},
+                    "target_user": {"id": owner_id, "label": None},
+                    "family": "analysis",
+                    "action": "analysis.completed",
+                    "entity": {
+                        "type": "analysis_history",
+                        "id_hash": hash_reference(getattr(row, "id", None)),
+                        "label": f"{getattr(row, 'code', '')} {getattr(row, 'report_type', '')}".strip() or None,
+                        "symbol": getattr(row, "code", None),
+                        "source_table": "analysis_history",
+                    },
+                    "status": "success",
+                    "outcome": "ok",
+                    "request_id_hash": hash_reference(getattr(row, "query_id", None)),
+                    "session_id_hash": None,
+                    "source": {
+                        "kind": "analysis_history",
+                        "table": "analysis_history",
+                        "confidence": "confirmed",
+                    },
+                    "redacted_metadata": sanitize_metadata(
                         {
                             "reportType": getattr(row, "report_type", None),
                             "summary": summary,
                             "isTest": bool(getattr(row, "is_test", False)),
                         }
                     ),
-                    logLinks=[],
-                )
+                    "log_links": [],
+                }
             )
         return events
 
@@ -253,43 +253,47 @@ class AdminActivityService:
         target_user_id: str,
         date_from: datetime,
         date_to: datetime,
-    ) -> list[AdminActivityEvent]:
+    ) -> list[dict[str, Any]]:
         rows = [
             row
             for row in self.auth_repo.list_app_user_sessions(target_user_id)
             if isinstance(getattr(row, "created_at", None), datetime)
             and date_from <= getattr(row, "created_at") <= date_to
         ]
-        events: list[AdminActivityEvent] = []
+        events: list[dict[str, Any]] = []
         for row in rows:
             session_hash = hash_reference(getattr(row, "session_id", None))
             events.append(
-                AdminActivityEvent(
-                    id=hash_reference(f"auth_session:{getattr(row, 'session_id', '')}") or "sha256:unknown",
-                    timestamp=_iso(getattr(row, "created_at", None)) or datetime.now().isoformat(),
-                    actor=AdminActivityActor(type="user", userId=target_user_id, sessionIdHash=session_hash),
-                    targetUser=AdminActivityTargetUser(id=target_user_id, label=None),
-                    family="auth",
-                    action="auth.session.created",
-                    entity=AdminActivityEntity(
-                        type="auth_session",
-                        idHash=session_hash,
-                        label="Session created",
-                        sourceTable="app_user_sessions",
-                    ),
-                    status="success",
-                    outcome="ok",
-                    sessionIdHash=session_hash,
-                    source=AdminActivitySource(kind="auth_session_snapshot", table="app_user_sessions", confidence="confirmed"),
-                    redactedMetadata={},
-                    logLinks=[],
-                )
+                {
+                    "id": hash_reference(f"auth_session:{getattr(row, 'session_id', '')}") or "sha256:unknown",
+                    "timestamp": _iso(getattr(row, "created_at", None)) or datetime.now().isoformat(),
+                    "actor": {"type": "user", "user_id": target_user_id, "session_id_hash": session_hash},
+                    "target_user": {"id": target_user_id, "label": None},
+                    "family": "auth",
+                    "action": "auth.session.created",
+                    "entity": {
+                        "type": "auth_session",
+                        "id_hash": session_hash,
+                        "label": "Session created",
+                        "source_table": "app_user_sessions",
+                    },
+                    "status": "success",
+                    "outcome": "ok",
+                    "session_id_hash": session_hash,
+                    "source": {
+                        "kind": "auth_session_snapshot",
+                        "table": "app_user_sessions",
+                        "confidence": "confirmed",
+                    },
+                    "redacted_metadata": {},
+                    "log_links": [],
+                }
             )
         return events
 
     @staticmethod
     def _matches(
-        event: AdminActivityEvent,
+        event: dict[str, Any],
         *,
         family: str | None,
         status: str | None,
@@ -299,29 +303,33 @@ class AdminActivityService:
         include_system: bool,
         include_admin: bool,
     ) -> bool:
-        if not include_system and event.actor.type == "system":
+        actor = event.get("actor") if isinstance(event.get("actor"), dict) else {}
+        entity = event.get("entity") if isinstance(event.get("entity"), dict) else {}
+        source = event.get("source") if isinstance(event.get("source"), dict) else {}
+
+        if not include_system and actor.get("type") == "system":
             return False
-        if not include_admin and event.actor.type == "admin":
+        if not include_admin and actor.get("type") == "admin":
             return False
-        if family and event.family != family:
+        if family and event.get("family") != family:
             return False
-        if status and event.status != _status(status):
+        if status and event.get("status") != _status(status):
             return False
-        if entity_type and event.entity.type != entity_type:
+        if entity_type and entity.get("type") != entity_type:
             return False
-        if actor_type and event.actor.type != actor_type:
+        if actor_type and actor.get("type") != actor_type:
             return False
         if q:
             needle = q.lower()
             haystack = " ".join(
                 str(value or "")
                 for value in (
-                    event.family,
-                    event.action,
-                    event.entity.label,
-                    event.entity.symbol,
-                    event.source.kind,
-                    event.status,
+                    event.get("family"),
+                    event.get("action"),
+                    entity.get("label"),
+                    entity.get("symbol"),
+                    source.get("kind"),
+                    event.get("status"),
                 )
             ).lower()
             if needle not in haystack:

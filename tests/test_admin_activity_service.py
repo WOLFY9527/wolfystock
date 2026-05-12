@@ -7,6 +7,7 @@ import json
 import unittest
 from datetime import datetime
 
+from api.v1.schemas.admin_activity import AdminActivityEvent
 from src.storage import AnalysisHistory, DatabaseManager
 
 
@@ -49,7 +50,10 @@ class AdminActivityServiceTestCase(unittest.TestCase):
         items, total = AdminActivityService(db_manager=self.db).list_activity(target_user_id="user-1")
 
         self.assertEqual(total, 1)
-        text = json.dumps([item.to_dict() for item in items], ensure_ascii=False)
+        self.assertIsInstance(items[0], dict)
+        self.assertEqual(items[0]["target_user"]["id"], "user-1")
+        validated = [AdminActivityEvent.model_validate(item) for item in items]
+        text = json.dumps([item.to_dict() for item in validated], ensure_ascii=False)
         self.assertIn("AAPL", text)
         self.assertNotIn("raw-query-secret", text)
         self.assertNotIn("raw-token", text)

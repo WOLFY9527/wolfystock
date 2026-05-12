@@ -4,12 +4,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.deps import CurrentUser, require_admin_user
-from api.v1.schemas.admin_activity import AdminActivityResponse, AdminActivityWindow
+from api.v1.schemas.admin_activity import AdminActivityEvent, AdminActivityResponse, AdminActivityWindow
 from api.v1.schemas.admin_users import AdminDataLinks, AdminUserDetailResponse, AdminUserListResponse
 from src.services.admin_activity_service import AdminActivityService
 from src.services.admin_user_service import AdminUserService
@@ -77,6 +77,30 @@ def _default_activity_window(*, route: str, date_from: Optional[str], date_to: O
             detail={"error": "validation_error", "message": f"window exceeds {max_days} days"},
         )
     return start, end, max_days
+
+
+def _build_activity_response(
+    *,
+    items: list[dict[str, Any]],
+    total: int,
+    limit: int,
+    offset: int,
+    start: datetime,
+    end: datetime,
+    max_days: int,
+) -> AdminActivityResponse:
+    return AdminActivityResponse(
+        items=[AdminActivityEvent.model_validate(item) for item in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+        hasMore=offset + limit < total,
+        window=AdminActivityWindow(**{"from": start.isoformat(), "to": end.isoformat(), "maxDays": max_days}),
+        limitations=[
+            "scanner_backtest_portfolio_domain_projections_deferred",
+            "raw_payloads_excluded",
+        ],
+    )
 
 
 @router.get(
@@ -225,17 +249,14 @@ def list_admin_user_activity(
         limit=limit,
         offset=offset,
     )
-    return AdminActivityResponse(
+    return _build_activity_response(
         items=items,
         total=total,
         limit=limit,
         offset=offset,
-        hasMore=offset + limit < total,
-        window=AdminActivityWindow(**{"from": start.isoformat(), "to": end.isoformat(), "maxDays": max_days}),
-        limitations=[
-            "scanner_backtest_portfolio_domain_projections_deferred",
-            "raw_payloads_excluded",
-        ],
+        start=start,
+        end=end,
+        max_days=max_days,
     )
 
 
@@ -285,15 +306,12 @@ def list_admin_activity(
         limit=limit,
         offset=offset,
     )
-    return AdminActivityResponse(
+    return _build_activity_response(
         items=items,
         total=total,
         limit=limit,
         offset=offset,
-        hasMore=offset + limit < total,
-        window=AdminActivityWindow(**{"from": start.isoformat(), "to": end.isoformat(), "maxDays": max_days}),
-        limitations=[
-            "scanner_backtest_portfolio_domain_projections_deferred",
-            "raw_payloads_excluded",
-        ],
+        start=start,
+        end=end,
+        max_days=max_days,
     )

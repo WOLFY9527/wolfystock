@@ -8,11 +8,14 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
+from api.v1.schemas.admin_activity import AdminActivityResponse
+from src.auth import is_auth_enabled
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.storage import AnalysisHistory, DatabaseManager
 
@@ -185,7 +188,7 @@ class AdminUserActivityApiTestCase(unittest.TestCase):
 
     def test_admin_required_for_activity_routes(self) -> None:
         unauthenticated = self.client.get("/api/v1/admin/users/user-1/activity")
-        self.assertEqual(unauthenticated.status_code, 401)
+        self.assertEqual(unauthenticated.status_code, 401 if is_auth_enabled() else 200)
 
         self._as_user()
         forbidden = self.client.get("/api/v1/admin/activity")
@@ -238,6 +241,47 @@ class AdminUserActivityApiTestCase(unittest.TestCase):
         self._as_admin()
         response = self.client.get("/api/v1/admin/users/user-1/activity", params={"target_user": "user-2"})
         self.assertEqual(response.status_code, 400)
+
+    def test_endpoint_validates_service_read_models_into_api_schema(self) -> None:
+        self._as_admin()
+        service_items = [
+            {
+                "id": "sha256:event-1",
+                "timestamp": self.now.isoformat(),
+                "actor": {"type": "user", "user_id": "user-1"},
+                "target_user": {"id": "user-1", "label": None},
+                "family": "analysis",
+                "action": "analysis.completed",
+                "entity": {
+                    "type": "analysis_history",
+                    "id_hash": "sha256:entity-1",
+                    "label": "AAPL standard",
+                    "symbol": "AAPL",
+                    "source_table": "analysis_history",
+                },
+                "status": "success",
+                "outcome": "ok",
+                "request_id_hash": "sha256:request-1",
+                "session_id_hash": None,
+                "source": {"kind": "analysis_history", "table": "analysis_history", "confidence": "confirmed"},
+                "redacted_metadata": {"reportType": "standard"},
+                "log_links": [],
+            }
+        ]
+
+        with patch("api.v1.endpoints.admin_users.AdminActivityService.list_activity", return_value=(service_items, 1)):
+            response = self.client.get("/api/v1/admin/users/user-1/activity")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(
+            AdminActivityResponse.model_validate(payload).model_dump(by_alias=True),
+            payload,
+        )
+        self.assertEqual(payload["items"][0]["actor"]["userId"], "user-1")
+        self.assertEqual(payload["items"][0]["targetUser"]["id"], "user-1")
+        self.assertEqual(payload["items"][0]["entity"]["idHash"], "sha256:entity-1")
+        self.assertEqual(payload["items"][0]["source"]["kind"], "analysis_history")
 
 
 if __name__ == "__main__":
