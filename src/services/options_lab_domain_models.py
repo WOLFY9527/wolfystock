@@ -8,7 +8,7 @@ assessment layer. Public API DTOs remain defined in api.v1.schemas.options.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 
 @dataclass
@@ -96,3 +96,84 @@ class DecisionAlternativeModel:
     reason: str
     max_loss: Optional[float]
     risk_reward_ratio: Optional[float]
+
+
+@dataclass
+class AnalyzeSubScoresModel:
+    directional_fit: float
+    delta_fit: float
+    breakeven_difficulty: float
+    premium_efficiency: float
+    liquidity_score: float
+    spread_penalty: float
+    iv_risk: float
+    theta_risk: float
+    dte_fit: float
+    target_scenario_payoff: float
+    max_loss_budget_fit: float
+    oi_volume_confidence: float
+    data_freshness_confidence: float
+
+
+@dataclass
+class AnalyzeCandidateModel:
+    strategy: str
+    contract: Any
+    score: float
+    grade_label: str
+    premium_at_risk: float
+    breakeven: float
+    required_move_pct: float
+    target_payoff: float
+    sub_scores: AnalyzeSubScoresModel
+    top_positive_drivers: list[str] = field(default_factory=list)
+    top_risk_drivers: list[str] = field(default_factory=list)
+    assumptions_used: dict[str, Any] = field(default_factory=dict)
+    data_confidence: str = "low"
+    not_advice_disclosure: str = ""
+
+
+@dataclass
+class ScenarioPayoffRowModel:
+    label: str
+    underlying_price: float
+    gross_payoff: float
+    net_payoff: float
+    return_on_premium_pct: Optional[float] = None
+
+
+@dataclass
+class ScenarioRiskModel:
+    premium_at_risk: float
+    breakeven: float
+    required_move_pct: float
+    max_loss: float
+
+
+@dataclass
+class StrategyLegModel:
+    action: str
+    side: str
+    contract_symbol: str
+    expiration: str
+    strike: float
+    mid: float
+    quantity: int = 1
+
+
+@dataclass
+class StrategyComparisonModel:
+    strategy_type: str
+    legs: list[StrategyLegModel] = field(default_factory=list)
+    net_debit: float = 0.0
+    max_loss: float = 0.0
+    max_gain: Optional[float] = None
+    breakeven: float = 0.0
+    required_move_pct: float = 0.0
+    payoff_at_target: float = 0.0
+    risk_reward_ratio: Optional[float] = None
+    liquidity_warnings: list[str] = field(default_factory=list)
+    iv_theta_notes: list[str] = field(default_factory=list)
+    suitability_notes: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+    no_advice_disclosure: str = ""

@@ -51,6 +51,8 @@ from api.v1.schemas.options import (
 )
 from src.services.options_data_quality_gates import evaluate_options_data_quality_gates
 from src.services.options_lab_domain_models import (
+    AnalyzeCandidateModel,
+    AnalyzeSubScoresModel,
     BreakevenAssessment,
     DecisionAlternativeModel,
     DecisionDataQualityAssessment,
@@ -60,6 +62,10 @@ from src.services.options_lab_domain_models import (
     OptimizerCandidate,
     OptimizerResult,
     RiskRewardAssessment,
+    ScenarioPayoffRowModel,
+    ScenarioRiskModel,
+    StrategyComparisonModel,
+    StrategyLegModel,
 )
 from src.services.options_market_data_provider import (
     DEFAULT_OPTIONS_FIXTURE_PATH,
@@ -278,7 +284,7 @@ class OptionsLabService:
         target_date = self._parse_date(parsed.target_date)
         strategies = self._supported_strategies(parsed.strategies)
         candidate_sides = self._candidate_sides(parsed.direction, strategies)
-        candidates: List[OptionCandidateContract] = []
+        candidates: List[AnalyzeCandidateModel] = []
 
         for contract in contracts:
             strategy = "long_call" if contract.side == "call" else "long_put"
@@ -325,7 +331,7 @@ class OptionsLabService:
                 "putCount": len(puts),
                 "candidateCount": len(candidates),
             },
-            candidateContracts=candidates,
+            candidateContracts=[self._map_analyze_candidate(candidate) for candidate in candidates],
             risks=list(PHASE3_RISKS),
             limitations=list(PHASE3_LIMITATIONS),
             metadata=self._metadata(
@@ -361,18 +367,19 @@ class OptionsLabService:
             )
             for label, price in grid_prices
         ]
+        risk = ScenarioRiskModel(
+            premium_at_risk=premium_at_risk,
+            breakeven=breakeven,
+            required_move_pct=self._required_move_pct(underlying_price, breakeven),
+            max_loss=premium_at_risk,
+        )
         return OptionsScenarioResponse(
             symbol=fixture["symbol"],
             underlying=self._safe_underlying(fixture),
             strategy=parsed.strategy,
             contract=contract,
-            expirationPayoffGrid=rows,
-            risk=OptionScenarioRisk(
-                premiumAtRisk=premium_at_risk,
-                breakeven=breakeven,
-                requiredMovePct=self._required_move_pct(underlying_price, breakeven),
-                maxLoss=premium_at_risk,
-            ),
+            expirationPayoffGrid=[self._map_scenario_payoff_row(row) for row in rows],
+            risk=self._map_scenario_risk(risk),
             preExpirationTheoreticalPricing={
                 "available": False,
                 "reason": "phase3_expiration_payoff_only",
@@ -396,7 +403,7 @@ class OptionsLabService:
         contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
         underlying_price = float((fixture.get("underlying") or {}).get("price") or 0)
         target_date = self._parse_date(parsed.target_date)
-        comparisons: List[OptionsStrategyComparison] = []
+        comparisons: List[StrategyComparisonModel] = []
 
         for strategy in parsed.strategies:
             if strategy not in requested:
@@ -427,7 +434,7 @@ class OptionsLabService:
                 "contractMultiplier": CONTRACT_MULTIPLIER,
                 "pricingMode": "expiration_intrinsic_minus_mid_debit",
             },
-            strategies=comparisons,
+            strategies=[self._map_strategy_comparison(comparison) for comparison in comparisons],
             limitations=list(PHASE4_LIMITATIONS),
             metadata=self._metadata(
                 force_refresh=parsed.force_refresh,
@@ -563,6 +570,100 @@ class OptionsLabService:
         )
 
     @staticmethod
+    def _map_analyze_sub_scores(sub_scores: AnalyzeSubScoresModel) -> OptionScoringSubScores:
+        return OptionScoringSubScores(
+            directionalFit=sub_scores.directional_fit,
+            deltaFit=sub_scores.delta_fit,
+            breakevenDifficulty=sub_scores.breakeven_difficulty,
+            premiumEfficiency=sub_scores.premium_efficiency,
+            liquidityScore=sub_scores.liquidity_score,
+            spreadPenalty=sub_scores.spread_penalty,
+            ivRisk=sub_scores.iv_risk,
+            thetaRisk=sub_scores.theta_risk,
+            dteFit=sub_scores.dte_fit,
+            targetScenarioPayoff=sub_scores.target_scenario_payoff,
+            maxLossBudgetFit=sub_scores.max_loss_budget_fit,
+            oiVolumeConfidence=sub_scores.oi_volume_confidence,
+            dataFreshnessConfidence=sub_scores.data_freshness_confidence,
+        )
+
+    @classmethod
+    def _map_contract_scoring(cls, candidate: AnalyzeCandidateModel) -> OptionContractScoring:
+        return OptionContractScoring(
+            subScores=cls._map_analyze_sub_scores(candidate.sub_scores),
+            gradeLabel=candidate.grade_label,
+            topPositiveDrivers=list(candidate.top_positive_drivers),
+            topRiskDrivers=list(candidate.top_risk_drivers),
+            assumptionsUsed=dict(candidate.assumptions_used),
+            dataConfidence=candidate.data_confidence,
+            notAdviceDisclosure=candidate.not_advice_disclosure,
+        )
+
+    @classmethod
+    def _map_analyze_candidate(cls, candidate: AnalyzeCandidateModel) -> OptionCandidateContract:
+        return OptionCandidateContract(
+            strategy=candidate.strategy,
+            contract=candidate.contract,
+            score=candidate.score,
+            gradeLabel=candidate.grade_label,
+            premiumAtRisk=candidate.premium_at_risk,
+            breakeven=candidate.breakeven,
+            requiredMovePct=candidate.required_move_pct,
+            targetPayoff=candidate.target_payoff,
+            scoring=cls._map_contract_scoring(candidate),
+        )
+
+    @staticmethod
+    def _map_scenario_payoff_row(row: ScenarioPayoffRowModel) -> OptionScenarioPayoffRow:
+        return OptionScenarioPayoffRow(
+            label=row.label,
+            underlyingPrice=row.underlying_price,
+            grossPayoff=row.gross_payoff,
+            netPayoff=row.net_payoff,
+            returnOnPremiumPct=row.return_on_premium_pct,
+        )
+
+    @staticmethod
+    def _map_scenario_risk(risk: ScenarioRiskModel) -> OptionScenarioRisk:
+        return OptionScenarioRisk(
+            premiumAtRisk=risk.premium_at_risk,
+            breakeven=risk.breakeven,
+            requiredMovePct=risk.required_move_pct,
+            maxLoss=risk.max_loss,
+        )
+
+    @staticmethod
+    def _map_strategy_leg(leg: StrategyLegModel) -> OptionsStrategyLeg:
+        return OptionsStrategyLeg(
+            action=leg.action,
+            side=leg.side,
+            contractSymbol=leg.contract_symbol,
+            expiration=leg.expiration,
+            strike=leg.strike,
+            mid=leg.mid,
+            quantity=leg.quantity,
+        )
+
+    @classmethod
+    def _map_strategy_comparison(cls, comparison: StrategyComparisonModel) -> OptionsStrategyComparison:
+        return OptionsStrategyComparison(
+            strategyType=comparison.strategy_type,
+            legs=[cls._map_strategy_leg(leg) for leg in comparison.legs],
+            netDebit=comparison.net_debit,
+            maxLoss=comparison.max_loss,
+            maxGain=comparison.max_gain,
+            breakeven=comparison.breakeven,
+            requiredMovePct=comparison.required_move_pct,
+            payoffAtTarget=comparison.payoff_at_target,
+            riskRewardRatio=comparison.risk_reward_ratio,
+            liquidityWarnings=list(comparison.liquidity_warnings),
+            ivThetaNotes=list(comparison.iv_theta_notes),
+            suitabilityNotes=list(comparison.suitability_notes),
+            limitations=list(comparison.limitations),
+            noAdviceDisclosure=comparison.no_advice_disclosure,
+        )
+
+    @staticmethod
     def _map_decision_data_quality(data_quality: DecisionDataQualityAssessment) -> OptionsDecisionDataQuality:
         return OptionsDecisionDataQuality(
             dataQualityScore=data_quality.data_quality_score,
@@ -668,7 +769,7 @@ class OptionsLabService:
         contracts: Sequence[OptionContract],
         underlying_price: float,
         target_date: date,
-    ) -> OptionsStrategyComparison:
+    ) -> StrategyComparisonModel:
         if parsed.legs:
             selected = self._contracts_for_legs(parsed.legs, contracts, parsed.expiration)
             return self._comparison_from_selected_legs(parsed, selected, underlying_price)
@@ -691,27 +792,27 @@ class OptionsLabService:
         parsed: OptionsDecisionRequest,
         contracts: Sequence[OptionContract],
         underlying_price: float,
-    ) -> OptionsStrategyComparison:
+    ) -> StrategyComparisonModel:
         target_price = float(parsed.target_price or underlying_price)
         if parsed.strategy in {"long_call", "long_put"}:
             contract = contracts[0]
             net_debit = self._premium_at_risk(contract)
             breakeven = self._breakeven(contract)
-            return OptionsStrategyComparison(
-                strategyType=parsed.strategy,
+            return StrategyComparisonModel(
+                strategy_type=parsed.strategy,
                 legs=[self._strategy_leg("buy", contract)],
-                netDebit=net_debit,
-                maxLoss=net_debit,
-                maxGain=None,
+                net_debit=net_debit,
+                max_loss=net_debit,
+                max_gain=None,
                 breakeven=breakeven,
-                requiredMovePct=self._required_move_pct(underlying_price, breakeven),
-                payoffAtTarget=round(self._expiration_net_payoff(contract, target_price, net_debit), 2),
-                riskRewardRatio=None,
-                liquidityWarnings=self._strategy_liquidity_warnings([contract]),
-                ivThetaNotes=self._strategy_iv_theta_notes([contract]),
-                suitabilityNotes=self._strategy_suitability_notes(parsed.strategy, "", ""),
+                required_move_pct=self._required_move_pct(underlying_price, breakeven),
+                payoff_at_target=round(self._expiration_net_payoff(contract, target_price, net_debit), 2),
+                risk_reward_ratio=None,
+                liquidity_warnings=self._strategy_liquidity_warnings([contract]),
+                iv_theta_notes=self._strategy_iv_theta_notes([contract]),
+                suitability_notes=self._strategy_suitability_notes(parsed.strategy, "", ""),
                 limitations=list(PHASE4_LIMITATIONS),
-                noAdviceDisclosure=self._no_advice_disclosure(),
+                no_advice_disclosure=self._no_advice_disclosure(),
             )
         if len(contracts) < 2:
             raise ValueError("Defined-risk spread decision requires two supported legs.")
@@ -727,28 +828,28 @@ class OptionsLabService:
             if long_leg.side == "call"
             else round(long_leg.strike - net_debit / CONTRACT_MULTIPLIER, 2)
         )
-        return OptionsStrategyComparison(
-            strategyType=parsed.strategy,
+        return StrategyComparisonModel(
+            strategy_type=parsed.strategy,
             legs=[self._strategy_leg("buy", long_leg), self._strategy_leg("sell", short_leg)],
-            netDebit=net_debit,
-            maxLoss=net_debit,
-            maxGain=max_gain,
+            net_debit=net_debit,
+            max_loss=net_debit,
+            max_gain=max_gain,
             breakeven=breakeven,
-            requiredMovePct=self._required_move_pct(underlying_price, breakeven),
-            payoffAtTarget=self._debit_spread_payoff(long_leg.side, long_leg, short_leg, target_price, net_debit),
-            riskRewardRatio=round(max_gain / net_debit, 2) if net_debit > 0 and max_gain > 0 else None,
-            liquidityWarnings=self._strategy_liquidity_warnings([long_leg, short_leg]),
-            ivThetaNotes=self._strategy_iv_theta_notes([long_leg, short_leg]),
-            suitabilityNotes=self._strategy_suitability_notes(parsed.strategy, "", ""),
+            required_move_pct=self._required_move_pct(underlying_price, breakeven),
+            payoff_at_target=self._debit_spread_payoff(long_leg.side, long_leg, short_leg, target_price, net_debit),
+            risk_reward_ratio=round(max_gain / net_debit, 2) if net_debit > 0 and max_gain > 0 else None,
+            liquidity_warnings=self._strategy_liquidity_warnings([long_leg, short_leg]),
+            iv_theta_notes=self._strategy_iv_theta_notes([long_leg, short_leg]),
+            suitability_notes=self._strategy_suitability_notes(parsed.strategy, "", ""),
             limitations=list(PHASE4_LIMITATIONS),
-            noAdviceDisclosure=self._no_advice_disclosure(),
+            no_advice_disclosure=self._no_advice_disclosure(),
         )
 
     def _contracts_for_decision(
         self,
         parsed: OptionsDecisionRequest,
         contracts: Sequence[OptionContract],
-        comparison: OptionsStrategyComparison,
+        comparison: StrategyComparisonModel,
     ) -> List[OptionContract]:
         if parsed.legs:
             return self._contracts_for_legs(parsed.legs, contracts, parsed.expiration)
@@ -995,7 +1096,7 @@ class OptionsLabService:
     def _decision_breakeven(
         self,
         strategy: str,
-        comparison: OptionsStrategyComparison,
+        comparison: StrategyComparisonModel,
         contracts: Sequence[OptionContract],
         underlying_price: float,
         target_price: Optional[float],
@@ -1023,7 +1124,7 @@ class OptionsLabService:
 
     def _decision_risk_reward(
         self,
-        comparison: OptionsStrategyComparison,
+        comparison: StrategyComparisonModel,
         contracts: Sequence[OptionContract],
         risk_budget: Optional[float],
     ) -> RiskRewardAssessment:
@@ -1188,7 +1289,7 @@ class OptionsLabService:
         strategy: str,
         fixture: Dict[str, Any],
         contracts: Sequence[OptionContract],
-        comparison: OptionsStrategyComparison,
+        comparison: StrategyComparisonModel,
         underlying_price: float,
         target_price: Optional[float],
         risk_budget: Optional[float],
@@ -1366,7 +1467,7 @@ class OptionsLabService:
     def _decision_alternative(
         self,
         parsed: OptionsDecisionRequest,
-        current: OptionsStrategyComparison,
+        current: StrategyComparisonModel,
         fixture: Dict[str, Any],
         underlying_price: float,
         target_date: date,
@@ -1642,55 +1743,52 @@ class OptionsLabService:
         max_premium: Optional[float],
         risk_profile: str,
         underlying_price: float,
-    ) -> OptionCandidateContract:
+    ) -> AnalyzeCandidateModel:
         premium_at_risk = self._premium_at_risk(contract)
         breakeven = self._breakeven(contract)
         target_payoff = self._expiration_net_payoff(contract, target_price, premium_at_risk)
         required_move_pct = self._required_move_pct(underlying_price, breakeven)
-        sub_scores = OptionScoringSubScores(
-            directionalFit=self._directional_fit(contract.side, direction),
-            deltaFit=self._delta_fit(contract, risk_profile),
-            breakevenDifficulty=self._breakeven_score(contract, target_price, breakeven),
-            premiumEfficiency=self._premium_efficiency(target_payoff, premium_at_risk),
-            liquidityScore=self._liquidity_score(contract),
-            spreadPenalty=self._spread_score(contract.spread_pct),
-            ivRisk=self._iv_score(contract.implied_volatility),
-            thetaRisk=self._theta_score(contract, premium_at_risk),
-            dteFit=self._dte_fit(contract, target_date),
-            targetScenarioPayoff=self._target_payoff_score(target_payoff, premium_at_risk),
-            maxLossBudgetFit=self._budget_fit(premium_at_risk, max_premium),
-            oiVolumeConfidence=self._oi_volume_confidence(contract),
-            dataFreshnessConfidence=100,
+        sub_scores = AnalyzeSubScoresModel(
+            directional_fit=self._directional_fit(contract.side, direction),
+            delta_fit=self._delta_fit(contract, risk_profile),
+            breakeven_difficulty=self._breakeven_score(contract, target_price, breakeven),
+            premium_efficiency=self._premium_efficiency(target_payoff, premium_at_risk),
+            liquidity_score=self._liquidity_score(contract),
+            spread_penalty=self._spread_score(contract.spread_pct),
+            iv_risk=self._iv_score(contract.implied_volatility),
+            theta_risk=self._theta_score(contract, premium_at_risk),
+            dte_fit=self._dte_fit(contract, target_date),
+            target_scenario_payoff=self._target_payoff_score(target_payoff, premium_at_risk),
+            max_loss_budget_fit=self._budget_fit(premium_at_risk, max_premium),
+            oi_volume_confidence=self._oi_volume_confidence(contract),
+            data_freshness_confidence=100,
         )
         score = self._weighted_score(sub_scores)
         grade = self._grade_label(score)
-        return OptionCandidateContract(
+        return AnalyzeCandidateModel(
             strategy=strategy,
             contract=contract,
             score=score,
-            gradeLabel=grade,
-            premiumAtRisk=premium_at_risk,
+            grade_label=grade,
+            premium_at_risk=premium_at_risk,
             breakeven=breakeven,
-            requiredMovePct=required_move_pct,
-            targetPayoff=round(target_payoff, 2),
-            scoring=OptionContractScoring(
-                subScores=sub_scores,
-                gradeLabel=grade,
-                topPositiveDrivers=self._positive_drivers(sub_scores),
-                topRiskDrivers=self._risk_drivers(sub_scores),
-                assumptionsUsed={
-                    "direction": direction,
-                    "targetPrice": target_price,
-                    "targetDate": target_date.isoformat(),
-                    "riskProfile": risk_profile,
-                    "contractMultiplier": CONTRACT_MULTIPLIER,
-                    "pricingMode": "expiration_intrinsic_minus_mid_premium",
-                },
-                dataConfidence=self._data_confidence(sub_scores),
-                notAdviceDisclosure=(
-                    "Analytical ranking under explicit assumptions only; "
-                    "not investment advice or an instruction."
-                ),
+            required_move_pct=required_move_pct,
+            target_payoff=round(target_payoff, 2),
+            sub_scores=sub_scores,
+            top_positive_drivers=self._positive_drivers(sub_scores),
+            top_risk_drivers=self._risk_drivers(sub_scores),
+            assumptions_used={
+                "direction": direction,
+                "targetPrice": target_price,
+                "targetDate": target_date.isoformat(),
+                "riskProfile": risk_profile,
+                "contractMultiplier": CONTRACT_MULTIPLIER,
+                "pricingMode": "expiration_intrinsic_minus_mid_premium",
+            },
+            data_confidence=self._data_confidence(sub_scores),
+            not_advice_disclosure=(
+                "Analytical ranking under explicit assumptions only; "
+                "not investment advice or an instruction."
             ),
         )
 
@@ -1807,7 +1905,7 @@ class OptionsLabService:
         return round(oi * 0.6 + volume * 0.4, 2)
 
     @staticmethod
-    def _weighted_score(sub_scores: OptionScoringSubScores) -> float:
+    def _weighted_score(sub_scores: AnalyzeSubScoresModel) -> float:
         weights = {
             "directional_fit": 0.12,
             "delta_fit": 0.08,
@@ -1837,7 +1935,7 @@ class OptionsLabService:
         return "D"
 
     @staticmethod
-    def _positive_drivers(sub_scores: OptionScoringSubScores) -> List[str]:
+    def _positive_drivers(sub_scores: AnalyzeSubScoresModel) -> List[str]:
         rows = [
             ("directional_fit", sub_scores.directional_fit),
             ("target_scenario_payoff", sub_scores.target_scenario_payoff),
@@ -1848,7 +1946,7 @@ class OptionsLabService:
         return [name for name, _score in sorted(rows, key=lambda row: row[1], reverse=True)[:3]]
 
     @staticmethod
-    def _risk_drivers(sub_scores: OptionScoringSubScores) -> List[str]:
+    def _risk_drivers(sub_scores: AnalyzeSubScoresModel) -> List[str]:
         rows = [
             ("breakeven_difficulty", sub_scores.breakeven_difficulty),
             ("spread_penalty", sub_scores.spread_penalty),
@@ -1860,7 +1958,7 @@ class OptionsLabService:
         return [name for name, _score in sorted(rows, key=lambda row: row[1])[:3]]
 
     @staticmethod
-    def _data_confidence(sub_scores: OptionScoringSubScores) -> str:
+    def _data_confidence(sub_scores: AnalyzeSubScoresModel) -> str:
         average = (
             sub_scores.liquidity_score
             + sub_scores.oi_volume_confidence
@@ -1905,7 +2003,7 @@ class OptionsLabService:
         max_premium: Optional[float],
         risk_profile: str,
         underlying_price: float,
-    ) -> Optional[OptionsStrategyComparison]:
+    ) -> Optional[StrategyComparisonModel]:
         if strategy == "long_call":
             return self._long_option_comparison(
                 strategy=strategy,
@@ -1961,7 +2059,7 @@ class OptionsLabService:
         max_premium: Optional[float],
         risk_profile: str,
         underlying_price: float,
-    ) -> Optional[OptionsStrategyComparison]:
+    ) -> Optional[StrategyComparisonModel]:
         candidates = [contract for contract in contracts if contract.side == side]
         if max_premium is not None:
             candidates = [contract for contract in candidates if self._premium_at_risk(contract) <= max_premium]
@@ -1985,21 +2083,21 @@ class OptionsLabService:
         net_debit = self._premium_at_risk(contract)
         breakeven = self._breakeven(contract)
         payoff = round(self._expiration_net_payoff(contract, target_price, net_debit), 2)
-        return OptionsStrategyComparison(
-            strategyType=strategy,
+        return StrategyComparisonModel(
+            strategy_type=strategy,
             legs=[self._strategy_leg("buy", contract)],
-            netDebit=net_debit,
-            maxLoss=net_debit,
-            maxGain=None,
+            net_debit=net_debit,
+            max_loss=net_debit,
+            max_gain=None,
             breakeven=breakeven,
-            requiredMovePct=self._required_move_pct(underlying_price, breakeven),
-            payoffAtTarget=payoff,
-            riskRewardRatio=None,
-            liquidityWarnings=self._strategy_liquidity_warnings([contract]),
-            ivThetaNotes=self._strategy_iv_theta_notes([contract]),
-            suitabilityNotes=self._strategy_suitability_notes(strategy, direction, risk_profile),
+            required_move_pct=self._required_move_pct(underlying_price, breakeven),
+            payoff_at_target=payoff,
+            risk_reward_ratio=None,
+            liquidity_warnings=self._strategy_liquidity_warnings([contract]),
+            iv_theta_notes=self._strategy_iv_theta_notes([contract]),
+            suitability_notes=self._strategy_suitability_notes(strategy, direction, risk_profile),
             limitations=list(PHASE4_LIMITATIONS),
-            noAdviceDisclosure=self._no_advice_disclosure(),
+            no_advice_disclosure=self._no_advice_disclosure(),
         )
 
     def _debit_spread_comparison(
@@ -2010,9 +2108,9 @@ class OptionsLabService:
         target_price: float,
         max_premium: Optional[float],
         underlying_price: float,
-    ) -> Optional[OptionsStrategyComparison]:
+    ) -> Optional[StrategyComparisonModel]:
         pairs = self._debit_spread_pairs(strategy, side, contracts)
-        comparisons = []
+        comparisons: List[StrategyComparisonModel] = []
         for long_leg, short_leg in pairs:
             long_mid = float(long_leg.mid if long_leg.mid is not None else long_leg.last or 0)
             short_mid = float(short_leg.mid if short_leg.mid is not None else short_leg.last or 0)
@@ -2032,26 +2130,29 @@ class OptionsLabService:
             )
             payoff = self._debit_spread_payoff(side, long_leg, short_leg, target_price, net_debit)
             comparisons.append(
-                OptionsStrategyComparison(
-                    strategyType=strategy,
+                StrategyComparisonModel(
+                    strategy_type=strategy,
                     legs=[self._strategy_leg("buy", long_leg), self._strategy_leg("sell", short_leg)],
-                    netDebit=net_debit,
-                    maxLoss=net_debit,
-                    maxGain=max_gain,
+                    net_debit=net_debit,
+                    max_loss=net_debit,
+                    max_gain=max_gain,
                     breakeven=breakeven,
-                    requiredMovePct=self._required_move_pct(underlying_price, breakeven),
-                    payoffAtTarget=payoff,
-                    riskRewardRatio=round(max_gain / net_debit, 2),
-                    liquidityWarnings=self._strategy_liquidity_warnings([long_leg, short_leg]),
-                    ivThetaNotes=self._strategy_iv_theta_notes([long_leg, short_leg]),
-                    suitabilityNotes=self._strategy_suitability_notes(strategy, "", ""),
+                    required_move_pct=self._required_move_pct(underlying_price, breakeven),
+                    payoff_at_target=payoff,
+                    risk_reward_ratio=round(max_gain / net_debit, 2),
+                    liquidity_warnings=self._strategy_liquidity_warnings([long_leg, short_leg]),
+                    iv_theta_notes=self._strategy_iv_theta_notes([long_leg, short_leg]),
+                    suitability_notes=self._strategy_suitability_notes(strategy, "", ""),
                     limitations=list(PHASE4_LIMITATIONS),
-                    noAdviceDisclosure=self._no_advice_disclosure(),
+                    no_advice_disclosure=self._no_advice_disclosure(),
                 )
             )
         if not comparisons:
             return None
-        return sorted(comparisons, key=lambda item: (len(item.liquidity_warnings), item.net_debit, -float(item.max_gain or 0)))[0]
+        return sorted(
+            comparisons,
+            key=lambda item: (len(item.liquidity_warnings), item.net_debit, -float(item.max_gain or 0)),
+        )[0]
 
     @staticmethod
     def _debit_spread_pairs(
@@ -2075,12 +2176,12 @@ class OptionsLabService:
         return pairs
 
     @staticmethod
-    def _strategy_leg(action: str, contract: OptionContract) -> OptionsStrategyLeg:
+    def _strategy_leg(action: str, contract: OptionContract) -> StrategyLegModel:
         mid = float(contract.mid if contract.mid is not None else contract.last or 0)
-        return OptionsStrategyLeg(
+        return StrategyLegModel(
             action=action,
             side=contract.side,
-            contractSymbol=contract.contract_symbol,
+            contract_symbol=contract.contract_symbol,
             expiration=contract.expiration,
             strike=contract.strike,
             mid=round(mid, 4),
@@ -2172,17 +2273,17 @@ class OptionsLabService:
         terminal_price: float,
         contract: OptionContract,
         premium_at_risk: float,
-    ) -> OptionScenarioPayoffRow:
+    ) -> ScenarioPayoffRowModel:
         if contract.side == "call":
             gross = max(0.0, terminal_price - contract.strike) * CONTRACT_MULTIPLIER
         else:
             gross = max(0.0, contract.strike - terminal_price) * CONTRACT_MULTIPLIER
         net = gross - premium_at_risk
         return_pct = (net / premium_at_risk * 100) if premium_at_risk else None
-        return OptionScenarioPayoffRow(
+        return ScenarioPayoffRowModel(
             label=label,
-            underlyingPrice=round(terminal_price, 2),
-            grossPayoff=round(gross, 2),
-            netPayoff=round(net, 2),
-            returnOnPremiumPct=round(return_pct, 2) if return_pct is not None else None,
+            underlying_price=round(terminal_price, 2),
+            gross_payoff=round(gross, 2),
+            net_payoff=round(net, 2),
+            return_on_premium_pct=round(return_pct, 2) if return_pct is not None else None,
         )

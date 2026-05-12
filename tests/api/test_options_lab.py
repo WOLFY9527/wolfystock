@@ -379,6 +379,30 @@ def test_analyze_endpoint_returns_ranked_call_candidates() -> None:
         client.close()
 
 
+def test_analyze_endpoint_matches_service_alias_contract() -> None:
+    request_payload = {
+        "symbol": "TEM",
+        "direction": "bullish",
+        "targetPrice": 65,
+        "targetDate": "2026-08-21",
+        "riskProfile": "balanced",
+        "strategies": ["long_call"],
+        "forceRefresh": True,
+    }
+
+    client = _client()
+    try:
+        response = client.post("/api/v1/options/analyze", json=request_payload)
+        assert response.status_code == 200
+
+        expected_payload = OptionsLabService(
+            fixture_path=Path("tests/fixtures/options/tem_chain.json")
+        ).analyze(request_payload).model_dump(by_alias=True)
+        assert response.json() == expected_payload
+    finally:
+        client.close()
+
+
 def test_analyze_endpoint_filters_max_premium_and_does_not_call_external_paths() -> None:
     def forbidden(*_args, **_kwargs):
         raise AssertionError("forbidden runtime path was called")
@@ -442,6 +466,27 @@ def test_scenario_endpoint_returns_expiration_payoff_grid() -> None:
         client.close()
 
 
+def test_scenario_endpoint_matches_service_alias_contract() -> None:
+    request_payload = {
+        "symbol": "TEM",
+        "strategy": "long_put",
+        "contractSymbol": "TEM260619P00050000",
+        "targetPrice": 45,
+    }
+
+    client = _client()
+    try:
+        response = client.post("/api/v1/options/scenario", json=request_payload)
+        assert response.status_code == 200
+
+        expected_payload = OptionsLabService(
+            fixture_path=Path("tests/fixtures/options/tem_chain.json")
+        ).scenario(request_payload).model_dump(by_alias=True)
+        assert response.json() == expected_payload
+    finally:
+        client.close()
+
+
 def test_analyze_unsupported_symbol_returns_sanitized_error() -> None:
     client = _client()
     try:
@@ -492,6 +537,30 @@ def test_strategy_compare_endpoint_returns_defined_risk_structures() -> None:
         assert payload["metadata"]["forceRefreshIgnored"] is True
         assert payload["metadata"]["noBrokerConnection"] is True
         assert payload["metadata"]["noPortfolioMutation"] is True
+    finally:
+        client.close()
+
+
+def test_strategy_compare_endpoint_matches_service_alias_contract() -> None:
+    request_payload = {
+        "symbol": "TEM",
+        "direction": "bullish",
+        "targetPrice": 65,
+        "targetDate": "2026-06-19",
+        "riskProfile": "balanced",
+        "strategies": ["long_call", "long_put", "bull_call_spread", "bear_put_spread"],
+        "forceRefresh": True,
+    }
+
+    client = _client()
+    try:
+        response = client.post("/api/v1/options/strategies/compare", json=request_payload)
+        assert response.status_code == 200
+
+        expected_payload = OptionsLabService(
+            fixture_path=Path("tests/fixtures/options/tem_chain.json")
+        ).compare_strategies(request_payload).model_dump(by_alias=True)
+        assert response.json() == expected_payload
     finally:
         client.close()
 
