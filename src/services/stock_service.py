@@ -17,6 +17,7 @@ import pandas as pd
 
 from src.repositories.stock_repo import StockRepository
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
+from src.utils.yfinance_symbol import to_yfinance_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -243,10 +244,9 @@ class StockService:
         try:
             import yfinance as yf
             from data_provider.base import DataFetcherManager
-            from data_provider.yfinance_fetcher import YfinanceFetcher
 
             manager = DataFetcherManager()
-            symbol = YfinanceFetcher()._convert_stock_code(stock_code)
+            symbol = to_yfinance_symbol(stock_code)
             df = yf.download(
                 tickers=symbol,
                 period=range_period,

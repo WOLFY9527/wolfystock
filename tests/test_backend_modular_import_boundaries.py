@@ -228,11 +228,8 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
         "data_provider.base",
         "data_provider.us_index_mapping",
     },
-    # Stock lookup/intraday helpers are still provider-coupled; classify them as
-    # existing provider-runtime imports instead of silently normalizing the seam.
     "src/services/stock_service.py": {
         "data_provider.base",
-        "data_provider.yfinance_fetcher",
     },
     "src/services/us_history_helper.py": {"data_provider.base"},
 }

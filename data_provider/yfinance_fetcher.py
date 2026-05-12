@@ -31,9 +31,10 @@ from tenacity import (
     before_sleep_log,
 )
 
-from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS, is_bse_code
+from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS
 from .realtime_types import UnifiedRealtimeQuote, RealtimeSource
-from .us_index_mapping import get_us_index_yf_symbol, is_us_stock_code
+from src.utils.symbol_classification import is_us_stock_code
+from src.utils.yfinance_symbol import get_us_index_yf_symbol, to_yfinance_symbol
 
 # 可选导入本地股票映射补丁，若缺失则使用空字典兜底
 try:
@@ -103,52 +104,16 @@ class YfinanceFetcher(BaseFetcher):
             'AAPL'
         """
         code = stock_code.strip().upper()
-
-        # 美股指数：映射到 Yahoo Finance 符号（如 SPX -> ^GSPC）
-        yf_symbol, _ = get_us_index_yf_symbol(code)
-        if yf_symbol:
+        yf_symbol = to_yfinance_symbol(stock_code)
+        if yf_symbol != code and yf_symbol.startswith("^"):
             logger.debug(f"识别为美股指数: {code} -> {yf_symbol}")
-            return yf_symbol
-
-        # 美股：1-5 个大写字母（可选 .X 后缀），原样返回
-        if is_us_stock_code(code):
+        elif is_us_stock_code(code):
             logger.debug(f"识别为美股代码: {code}")
-            return code
-
-        # 港股：hk前缀 -> .HK后缀
-        if code.startswith('HK'):
-            hk_code = code[2:].lstrip('0') or '0'  # 去除前导0，但保留至少一个0
-            hk_code = hk_code.zfill(4)  # 补齐到4位
-            logger.debug(f"转换港股代码: {stock_code} -> {hk_code}.HK")
-            return f"{hk_code}.HK"
-
-        # 已经包含后缀的情况
-        if '.SS' in code or '.SZ' in code or '.HK' in code or '.BJ' in code:
-            return code
-
-        # 去除可能的 .SH 后缀
-        code = code.replace('.SH', '')
-
-        # ETF: Shanghai ETF (51xx, 52xx, 56xx, 58xx) -> .SS; Shenzhen ETF (15xx, 16xx, 18xx) -> .SZ
-        if len(code) == 6:
-            if code.startswith(('51', '52', '56', '58')):
-                return f"{code}.SS"
-            if code.startswith(('15', '16', '18')):
-                return f"{code}.SZ"
-
-        # BSE (Beijing Stock Exchange): 8xxxxx, 4xxxxx, 920xxx
-        if is_bse_code(code):
-            base = code.split('.')[0] if '.' in code else code
-            return f"{base}.BJ"
-
-        # A股：根据代码前缀判断市场
-        if code.startswith(('600', '601', '603', '688')):
-            return f"{code}.SS"
-        elif code.startswith(('000', '002', '300')):
-            return f"{code}.SZ"
-        else:
+        elif code.startswith("HK") and yf_symbol.endswith(".HK"):
+            logger.debug(f"转换港股代码: {stock_code} -> {yf_symbol}")
+        elif yf_symbol == f"{code}.SZ" and not code.startswith(("000", "002", "300")):
             logger.warning(f"无法确定股票 {code} 的市场，默认使用深市")
-            return f"{code}.SZ"
+        return yf_symbol
 
     @retry(
         stop=stop_after_attempt(3),
