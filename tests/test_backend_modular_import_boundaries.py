@@ -204,18 +204,9 @@ EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
     "src/services/admin_user_service.py": {"api.v1.schemas.admin_users"},
     "src/services/options_lab_service.py": {"api.v1.schemas.options"},
 }
-# These CurrentUser imports already exist on origin/main; keep the inventory
-# explicit until a separate architecture task moves them behind a lower layer.
-EXPECTED_LEGACY_API_DEPS_IMPORTS = {
-    "src/services/admin_governance_audit_service.py": {"api.deps"},
-    "src/services/admin_security_service.py": {"api.deps"},
-}
-# Transitional, owned upward imports from services into API schemas/deps.
+# Transitional, owned upward imports from services into API schemas.
 # These are inventory items, not a pattern to copy into new services.
-EXPECTED_SERVICE_API_IMPORTS = {
-    **EXPECTED_API_SCHEMA_UPWARD_IMPORTS,
-    **EXPECTED_LEGACY_API_DEPS_IMPORTS,
-}
+EXPECTED_SERVICE_API_IMPORTS = EXPECTED_API_SCHEMA_UPWARD_IMPORTS
 FORBIDDEN_SERVICE_API_PREFIXES = (
     "api.v1.endpoints",
 )

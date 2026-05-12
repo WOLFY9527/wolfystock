@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from api.deps import CurrentUser, require_admin_capability, require_recent_admin_reauth
 from api.v1.schemas.admin_security import AdminSecurityActionRequest, AdminSecurityActionResponse
 from src.auth import get_admin_reauth_max_age_seconds
+from src.auth_context import AdminActorContext
 from src.services.admin_security_service import AdminSecurityError, AdminSecurityResult, AdminSecurityService
 
 router = APIRouter()
@@ -30,6 +31,16 @@ def _response(result: AdminSecurityResult) -> AdminSecurityActionResponse:
         sessionsRevoked=result.sessions_revoked,
         auditEventId=result.audit_event_id,
         message=result.message,
+    )
+
+
+def _to_admin_actor(current_user: CurrentUser) -> AdminActorContext:
+    return AdminActorContext(
+        user_id=current_user.user_id,
+        username=current_user.username,
+        display_name=current_user.display_name,
+        role=current_user.role,
+        is_admin=current_user.is_admin,
     )
 
 
@@ -63,7 +74,7 @@ def disable_admin_user(
     try:
         result = AdminSecurityService().disable_user(
             target_user_id=user_id,
-            current_user=current_user,
+            actor=_to_admin_actor(current_user),
             reason=body.reason,
             revoke_sessions=body.revoke_sessions,
         )
@@ -86,7 +97,7 @@ def enable_admin_user(
     try:
         result = AdminSecurityService().enable_user(
             target_user_id=user_id,
-            current_user=current_user,
+            actor=_to_admin_actor(current_user),
             reason=body.reason,
         )
     except AdminSecurityError as exc:
@@ -110,7 +121,7 @@ def revoke_admin_user_sessions(
     try:
         result = AdminSecurityService().revoke_sessions(
             target_user_id=user_id,
-            current_user=current_user,
+            actor=_to_admin_actor(current_user),
             reason=body.reason,
         )
     except AdminSecurityError as exc:

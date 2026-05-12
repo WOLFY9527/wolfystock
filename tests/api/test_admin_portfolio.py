@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from datetime import date, datetime, timedelta
@@ -14,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import event
 
+import src.auth as auth
 from api.deps import CurrentUser, get_current_user
 from src.admin_rbac import OPS_ADMIN_ROLE
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
@@ -33,6 +35,16 @@ from src.storage import (
     PortfolioPosition,
     PortfolioTrade,
 )
+
+
+def _reset_auth_globals() -> None:
+    auth._auth_enabled = None
+    auth._session_secret = None
+    auth._password_hash_salt = None
+    auth._password_hash_stored = None
+    auth._password_hash_value = None
+    auth._rate_limit = {}
+    auth._admin_reauth_markers = {}
 
 
 def _admin_user(
@@ -73,12 +85,26 @@ def _regular_user() -> CurrentUser:
 
 class AdminPortfolioApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        _reset_auth_globals()
         DatabaseManager.reset_instance()
         self.temp_dir = tempfile.TemporaryDirectory()
         self.db_path = Path(self.temp_dir.name) / "admin_portfolio.db"
         self.db = DatabaseManager(db_url=f"sqlite:///{self.db_path}")
 
         from api.v1.endpoints import admin_portfolio
+
+        self.env_patch = patch.dict(
+            os.environ,
+            {
+                "DATABASE_PATH": str(self.db_path),
+                "ADMIN_AUTH_ENABLED": "true",
+            },
+            clear=False,
+        )
+        self.auth_enabled_patch = patch.object(auth, "_is_auth_enabled_from_env", return_value=True)
+        self.env_patch.start()
+        self.auth_enabled_patch.start()
+        auth._auth_enabled = True
 
         self.app = FastAPI()
         self.app.include_router(admin_portfolio.router, prefix="/api/v1/admin")
@@ -89,7 +115,10 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         self.client.close()
         self.app.dependency_overrides.clear()
+        self.auth_enabled_patch.stop()
+        self.env_patch.stop()
         DatabaseManager.reset_instance()
+        _reset_auth_globals()
         self.temp_dir.cleanup()
 
     def _seed_data(self) -> None:

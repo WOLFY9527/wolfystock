@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from api.deps import CurrentUser
+from src.auth_context import AdminActorContext
 from src.repositories.auth_repo import AuthRepository
 from src.services.admin_governance_audit_service import AdminGovernanceAuditService
 
@@ -45,7 +45,7 @@ class AdminSecurityService:
         self,
         *,
         target_user_id: str,
-        current_user: CurrentUser,
+        actor: AdminActorContext,
         reason: str,
         revoke_sessions: bool = False,
     ) -> AdminSecurityResult:
@@ -53,7 +53,7 @@ class AdminSecurityService:
             action="disable",
             event="admin_security.account_disabled",
             target_user_id=target_user_id,
-            current_user=current_user,
+            actor=actor,
             reason=reason,
             revoke_sessions=revoke_sessions,
         )
@@ -62,14 +62,14 @@ class AdminSecurityService:
         self,
         *,
         target_user_id: str,
-        current_user: CurrentUser,
+        actor: AdminActorContext,
         reason: str,
     ) -> AdminSecurityResult:
         return self._execute(
             action="enable",
             event="admin_security.account_enabled",
             target_user_id=target_user_id,
-            current_user=current_user,
+            actor=actor,
             reason=reason,
             revoke_sessions=False,
         )
@@ -78,14 +78,14 @@ class AdminSecurityService:
         self,
         *,
         target_user_id: str,
-        current_user: CurrentUser,
+        actor: AdminActorContext,
         reason: str,
     ) -> AdminSecurityResult:
         return self._execute(
             action="revoke_sessions",
             event="admin_security.sessions_revoked",
             target_user_id=target_user_id,
-            current_user=current_user,
+            actor=actor,
             reason=reason,
             revoke_sessions=True,
         )
@@ -96,7 +96,7 @@ class AdminSecurityService:
         action: Literal["disable", "enable", "revoke_sessions"],
         event: str,
         target_user_id: str,
-        current_user: CurrentUser,
+        actor: AdminActorContext,
         reason: str,
         revoke_sessions: bool,
     ) -> AdminSecurityResult:
@@ -106,7 +106,7 @@ class AdminSecurityService:
         if target_user is None:
             audit_id = self._record_audit(
                 event=event,
-                current_user=current_user,
+                actor=actor,
                 target_user_id=normalized_target,
                 reason=normalized_reason,
                 outcome="not_found",
@@ -121,14 +121,14 @@ class AdminSecurityService:
 
         try:
             if action == "disable":
-                self._guard_disable(target_user=target_user, current_user=current_user)
+                self._guard_disable(target_user=target_user, actor=actor)
                 was_active = bool(getattr(target_user, "is_active", True))
                 if was_active:
                     self._save_user(target_user, is_active=False)
                 revoked = self.repo.revoke_all_app_user_sessions(normalized_target) if revoke_sessions else 0
                 audit_id = self._record_audit(
                     event=event,
-                    current_user=current_user,
+                    actor=actor,
                     target_user_id=normalized_target,
                     reason=normalized_reason,
                     outcome="success",
@@ -151,7 +151,7 @@ class AdminSecurityService:
                     self._save_user(target_user, is_active=True)
                 audit_id = self._record_audit(
                     event=event,
-                    current_user=current_user,
+                    actor=actor,
                     target_user_id=normalized_target,
                     reason=normalized_reason,
                     outcome="success",
@@ -171,7 +171,7 @@ class AdminSecurityService:
             revoked = self.repo.revoke_all_app_user_sessions(normalized_target)
             audit_id = self._record_audit(
                 event=event,
-                current_user=current_user,
+                actor=actor,
                 target_user_id=normalized_target,
                 reason=normalized_reason,
                 outcome="success",
@@ -190,7 +190,7 @@ class AdminSecurityService:
         except AdminSecurityError as exc:
             self._record_audit(
                 event=event,
-                current_user=current_user,
+                actor=actor,
                 target_user_id=normalized_target,
                 reason=normalized_reason,
                 outcome=exc.error,
@@ -199,9 +199,9 @@ class AdminSecurityService:
             )
             raise
 
-    def _guard_disable(self, *, target_user: Any, current_user: CurrentUser) -> None:
+    def _guard_disable(self, *, target_user: Any, actor: AdminActorContext) -> None:
         target_user_id = str(getattr(target_user, "id", "") or "").strip()
-        if target_user_id == str(current_user.user_id or "").strip():
+        if target_user_id == str(actor.user_id or "").strip():
             raise AdminSecurityError(
                 status_code=403,
                 error="self_disable_blocked",
@@ -236,7 +236,7 @@ class AdminSecurityService:
         self,
         *,
         event: str,
-        current_user: CurrentUser,
+        actor: AdminActorContext,
         target_user_id: str,
         reason: str,
         outcome: str,
@@ -245,7 +245,7 @@ class AdminSecurityService:
     ) -> str | None:
         return self.audit.record_action(
             action=event,
-            current_user=current_user,
+            actor=actor,
             target_user_id=target_user_id,
             reason=reason,
             subsystem="security",

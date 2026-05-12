@@ -14,6 +14,7 @@ from api.v1.schemas.admin_portfolio import (
     AdminPortfolioActivityResponse,
     AdminPortfolioSummaryResponse,
 )
+from src.auth_context import AdminActorContext
 from src.services.admin_governance_audit_service import AdminGovernanceAuditService
 from src.services.admin_portfolio_service import AdminPortfolioService
 
@@ -56,16 +57,26 @@ def _service_or_404(user_id: str) -> AdminPortfolioService:
     return service
 
 
+def _to_admin_actor(current_user: CurrentUser) -> AdminActorContext:
+    return AdminActorContext(
+        user_id=current_user.user_id,
+        username=current_user.username,
+        display_name=current_user.display_name,
+        role=current_user.role,
+        is_admin=current_user.is_admin,
+    )
+
+
 def _record_audit(
     *,
     action: str,
-    current_user: CurrentUser,
+    actor: AdminActorContext,
     target_user_id: str,
     metadata: dict,
 ) -> None:
     AdminGovernanceAuditService().record_view(
         action=action,
-        current_user=current_user,
+        actor=actor,
         target_user_id=target_user_id,
         metadata=metadata,
     )
@@ -81,12 +92,13 @@ def get_admin_portfolio_summary(
     include_inactive: bool = Query(default=False),
     current_user: CurrentUser = Depends(require_admin_capability("users:portfolio:read")),
 ) -> AdminPortfolioSummaryResponse:
+    actor = _to_admin_actor(current_user)
     normalized_user_id = _normalize_user_id(user_id)
     service = _service_or_404(normalized_user_id)
     response = service.get_summary(user_id=normalized_user_id, include_inactive=include_inactive)
     _record_audit(
         action="admin_portfolio.summary_viewed",
-        current_user=current_user,
+        actor=actor,
         target_user_id=normalized_user_id,
         metadata={
             "include_inactive": bool(include_inactive),
@@ -112,6 +124,7 @@ def list_admin_user_holdings(
     offset: int = Query(default=0, ge=0, le=10000),
     current_user: CurrentUser = Depends(require_admin_capability("users:portfolio:read")),
 ) -> AdminHoldingListResponse:
+    actor = _to_admin_actor(current_user)
     normalized_user_id = _normalize_user_id(user_id)
     service = _service_or_404(normalized_user_id)
     items, total = service.list_holdings(
@@ -135,7 +148,7 @@ def list_admin_user_holdings(
     )
     _record_audit(
         action="admin_portfolio.holdings_viewed",
-        current_user=current_user,
+        actor=actor,
         target_user_id=normalized_user_id,
         metadata={
             "account_id": account_id,
@@ -163,6 +176,7 @@ def list_admin_user_portfolio_activity(
     offset: int = Query(default=0, ge=0, le=10000),
     current_user: CurrentUser = Depends(require_admin_capability("users:portfolio:read")),
 ) -> AdminPortfolioActivityResponse:
+    actor = _to_admin_actor(current_user)
     normalized_user_id = _normalize_user_id(user_id)
     service = _service_or_404(normalized_user_id)
     items, total, summary = service.list_activity(
@@ -184,7 +198,7 @@ def list_admin_user_portfolio_activity(
     )
     _record_audit(
         action="admin_portfolio.activity_viewed",
-        current_user=current_user,
+        actor=actor,
         target_user_id=normalized_user_id,
         metadata={
             "account_id": account_id,
@@ -208,6 +222,7 @@ def get_admin_portfolio_account_detail(
     account_id: int,
     current_user: CurrentUser = Depends(require_admin_capability("users:portfolio:read")),
 ) -> AdminPortfolioAccountDetailResponse:
+    actor = _to_admin_actor(current_user)
     normalized_user_id = _normalize_user_id(user_id)
     if account_id <= 0:
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "Invalid account_id"})
@@ -217,7 +232,7 @@ def get_admin_portfolio_account_detail(
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Portfolio account not found"})
     _record_audit(
         action="admin_portfolio.account_detail_viewed",
-        current_user=current_user,
+        actor=actor,
         target_user_id=normalized_user_id,
         metadata={
             "account_id": account_id,

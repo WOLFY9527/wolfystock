@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from api.deps import CurrentUser
+from src.auth_context import AdminActorContext
 from src.services.execution_log_service import ExecutionLogService
 from src.utils.security import sanitize_metadata, sanitize_message
 
@@ -33,7 +33,7 @@ class AdminGovernanceAuditService:
         self,
         *,
         action: str,
-        current_user: CurrentUser,
+        actor: AdminActorContext,
         target_user_id: str,
         metadata: dict[str, Any] | None = None,
     ) -> str | None:
@@ -46,18 +46,18 @@ class AdminGovernanceAuditService:
                 **(metadata or {}),
             }
         )
-        actor = {
-            "user_id": current_user.user_id,
-            "username": current_user.username,
-            "display_name": current_user.display_name,
-            "role": "admin" if current_user.is_admin else current_user.role,
-            "actor_type": "admin" if current_user.is_admin else "user",
+        actor_payload = {
+            "user_id": actor.user_id,
+            "username": actor.username,
+            "display_name": actor.display_name,
+            "role": "admin" if actor.is_admin else actor.role,
+            "actor_type": "admin" if actor.is_admin else "user",
         }
         try:
             return self.execution_logs.record_admin_action(
                 action=action,
                 message=sanitize_message(f"Admin portfolio view: {action}"),
-                actor=actor,
+                actor=actor_payload,
                 subsystem="portfolio",
                 destructive=False,
                 detail=safe_metadata,
@@ -76,7 +76,7 @@ class AdminGovernanceAuditService:
         self,
         *,
         action: str,
-        current_user: CurrentUser,
+        actor: AdminActorContext,
         target_user_id: str,
         reason: str,
         subsystem: str,
@@ -93,18 +93,18 @@ class AdminGovernanceAuditService:
                 **(metadata or {}),
             }
         )
-        actor = {
-            "user_id": current_user.user_id,
-            "username": current_user.username,
-            "display_name": current_user.display_name,
-            "role": "admin" if current_user.is_admin else current_user.role,
-            "actor_type": "admin" if current_user.is_admin else "user",
+        actor_payload = {
+            "user_id": actor.user_id,
+            "username": actor.username,
+            "display_name": actor.display_name,
+            "role": "admin" if actor.is_admin else actor.role,
+            "actor_type": "admin" if actor.is_admin else "user",
         }
         try:
             return self.execution_logs.record_admin_action(
                 action=action,
                 message=sanitize_message(f"Admin security action: {action}"),
-                actor=actor,
+                actor=actor_payload,
                 subsystem=subsystem,
                 destructive=destructive,
                 detail=safe_metadata,
