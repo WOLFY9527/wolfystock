@@ -16,7 +16,6 @@ const {
   getAccounts,
   getSnapshot,
   getRisk,
-  refreshFx,
   refreshFxRate,
   listBrokerConnections,
   listImportBrokers,
@@ -39,7 +38,6 @@ const {
   getAccounts: vi.fn(),
   getSnapshot: vi.fn(),
   getRisk: vi.fn(),
-  refreshFx: vi.fn(),
   refreshFxRate: vi.fn(),
   listBrokerConnections: vi.fn(),
   listImportBrokers: vi.fn(),
@@ -65,7 +63,6 @@ vi.mock('../../api/portfolio', () => ({
     getAccounts,
     getSnapshot,
     getRisk,
-    refreshFx,
     refreshFxRate,
     listBrokerConnections,
     listImportBrokers,
@@ -363,16 +360,6 @@ describe('PortfolioPage FX refresh', () => {
     getAccounts.mockResolvedValue(makeAccounts());
     getSnapshot.mockImplementation(async ({ accountId }: { accountId?: number } = {}) => makeSnapshot({ accountId, fxStale: true }));
     getRisk.mockResolvedValue(makeRisk());
-    refreshFx.mockResolvedValue({
-      asOf: '2026-03-19',
-      accountCount: 1,
-      refreshEnabled: true,
-      disabledReason: null,
-      pairCount: 1,
-      updatedCount: 1,
-      staleCount: 0,
-      errorCount: 0,
-    });
     refreshFxRate.mockResolvedValue({
       baseCurrency: 'USD',
       quoteCurrency: 'CNY',
@@ -501,9 +488,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('heading', { name: /总资产|Total Assets/ })).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveClass('text-white');
     expect(within(screen.getByTestId('portfolio-total-assets-card')).queryByLabelText('DISPLAY CURRENCY')).not.toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-display-currency-status')).toHaveTextContent('显示货币 CNY');
-    expect(screen.getByRole('link', { name: /在设置中修改/ })).toHaveAttribute('href', '/zh/settings');
-    expect(screen.getByTestId('portfolio-currency-breakdown')).toHaveTextContent('按币种：暂无资产');
+    expect(screen.queryByTestId('portfolio-row-macro')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('portfolio-account-status-strip')).getByText(translate('zh', 'portfolio.totalCash'))).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveTextContent('持仓数');
     expect(within(screen.getByTestId('portfolio-account-status-strip')).getByText(translate('zh', 'portfolio.positionUnrealized'))).toBeInTheDocument();
@@ -513,7 +498,6 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-exposure-card')).toHaveTextContent('暂无持仓，保存持仓流水后生成盈亏与资产配置。');
     expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('暂无持仓');
     expect(await screen.findByText(translate('zh', 'portfolio.fxStale'))).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '手工记账台' })).toBeInTheDocument();
     expect(screen.getAllByText('仅用于手工记账，不连接券商执行，也不发起外部委托。').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: '持仓流水' })).toBeInTheDocument();
@@ -959,15 +943,12 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(screen.queryByLabelText('DISPLAY CURRENCY')).not.toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-display-currency-status')).toHaveTextContent('显示货币 USD');
-    expect(screen.getByRole('link', { name: /在设置中修改/ })).toHaveAttribute('href', '/zh/settings');
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('USD 414.08');
-    expect(screen.getByText('≈ CNY 3,000.00')).toBeInTheDocument();
     expect(screen.getAllByText('USD 1,600.00').length).toBeGreaterThan(0);
-    expect(screen.queryByText('≈ USD 1,600.00')).not.toBeInTheDocument();
     expect(screen.getAllByText('+USD 100.00').length).toBeGreaterThan(0);
-    expect(screen.queryByText('≈ USD 100.00')).not.toBeInTheDocument();
-    expect(screen.getByTestId('portfolio-currency-breakdown')).toHaveTextContent('CNY 3,000.00');
+    expect(screen.queryByTestId('portfolio-row-macro')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /手工记账台|Trade Station/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '汇率' })).toBeInTheDocument();
   });
 
   it('migrates the legacy portfolio display currency key to the shared settings key', async () => {
@@ -979,7 +960,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     expect(window.localStorage.getItem(PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY)).toBe('HKD');
-    expect(screen.getByTestId('portfolio-display-currency-status')).toHaveTextContent('显示货币 HKD');
+    expect(screen.queryByTestId('portfolio-row-macro')).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveTextContent('HKD 3,257.33');
   });
 
@@ -1007,18 +988,6 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getAllByText('USD 1,600.00').length).toBeGreaterThan(0);
     expect(within(screen.getByTestId('portfolio-account-status-strip')).getAllByText('折算不可用').length).toBeGreaterThan(0);
     expect(screen.queryByText(/≈ CNY/)).not.toBeInTheDocument();
-  });
-
-  it('refreshes display FX from the portfolio refresh endpoint and reloads display data', async () => {
-    render(<PortfolioPage />);
-
-    await waitForInitialLoad();
-
-    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.refreshFx') }));
-
-    await waitFor(() => expect(refreshFx).toHaveBeenCalledWith({ accountId: undefined }));
-    await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText(translate('zh', 'portfolio.fxRefreshUpdated', { count: 1 }))).toBeInTheDocument();
   });
 
   it('refreshes portfolio data after trade submit, disables duplicate submit, and shows compact feedback', async () => {
@@ -1196,9 +1165,6 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText(/资产范围|ASSET SCOPE/);
-    fireEvent.change(accountSelect, { target: { value: '1' } });
-    await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 1, costMethod: 'fifo' }));
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(getLeftTabButton('同步'));
 
@@ -1245,8 +1211,6 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText(/资产范围|ASSET SCOPE/);
-    fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(getLeftTabButton('同步'));
 
@@ -1376,8 +1340,6 @@ describe('PortfolioPage FX refresh', () => {
 
     await waitForInitialLoad();
 
-    const accountSelect = screen.getByLabelText(/资产范围|ASSET SCOPE/);
-    fireEvent.change(accountSelect, { target: { value: '1' } });
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(1));
     fireEvent.click(getLeftTabButton('同步'));
 
@@ -1400,7 +1362,6 @@ describe('PortfolioPage FX refresh', () => {
     await waitFor(() => expect(getSnapshot.mock.calls.length).toBeGreaterThan(snapshotCallCount));
 
     expect(await screen.findByText(translate('zh', 'portfolio.syncResult'))).toBeInTheDocument();
-    expect(screen.getByText('AAPL')).toBeInTheDocument();
     expect(brokerSelect.value).toBe('ibkr');
     const syncResultCard = screen.getByText(translate('zh', 'portfolio.syncResult')).closest('div');
     expect(syncResultCard?.textContent || '').toContain(`${translate('zh', 'portfolio.positionsCountLabel')} 1`);
@@ -1408,22 +1369,14 @@ describe('PortfolioPage FX refresh', () => {
     expect(syncResultCard?.textContent || '').toContain('USD 6,600.00');
   });
 
-  it('refreshes FX for a single selected account and only reloads snapshot/risk', async () => {
+  it('refreshes FX from the visible FX surface and only reloads snapshot/risk', async () => {
     getSnapshot
       .mockResolvedValueOnce(makeSnapshot({ fxStale: true }))
-      .mockResolvedValueOnce(makeSnapshot({ accountId: 1, fxStale: true }))
-      .mockResolvedValueOnce(makeSnapshot({ accountId: 1, fxStale: false }));
+      .mockResolvedValueOnce(makeSnapshot({ fxStale: false }));
 
     render(<PortfolioPage />);
 
     await waitForInitialLoad();
-
-    const accountSelect = screen.getByLabelText(/资产范围|ASSET SCOPE/);
-    fireEvent.change(accountSelect, { target: { value: '1' } });
-
-    await waitFor(() => {
-      expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 1, costMethod: 'fifo' });
-    });
 
     const snapshotCallsBeforeRefresh = getSnapshot.mock.calls.length;
     const riskCallsBeforeRefresh = getRisk.mock.calls.length;
@@ -1440,7 +1393,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(listTrades).toHaveBeenCalledTimes(tradeCallsBeforeRefresh);
     expect(listCashLedger).not.toHaveBeenCalled();
     expect(listCorporateActions).not.toHaveBeenCalled();
-    expect(screen.getAllByText(translate('zh', 'portfolio.fxFresh')).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('portfolio-fx-rate-value')).toHaveTextContent('1 USD = 7.2468 CNY');
   });
 
   it('shows warning feedback when live FX refresh falls back to stale cache', async () => {
@@ -1513,62 +1466,6 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('无法加载最新持仓快照');
     await waitFor(() => expect(screen.queryByText(translate('zh', 'portfolio.fxRefreshUpdated', { count: 1 }))).not.toBeInTheDocument());
     await waitFor(() => expect(openFxPanel()).not.toBeDisabled());
-  });
-
-  it('drops late FX refresh results after switching to another account scope', async () => {
-    getAccounts.mockResolvedValueOnce(makeAccounts([{ id: 1, name: 'Main' }, { id: 2, name: 'Alt' }]));
-    getSnapshot.mockImplementation(async ({ accountId }: { accountId?: number } = {}) => {
-      if (accountId === 2) {
-        return makeSnapshot({ accountId: 2, fxStale: false });
-      }
-      return makeSnapshot({ accountId: accountId ?? 1, fxStale: true, accountCount: accountId ? 1 : 2 });
-    });
-
-    const pendingRefresh = deferredPromise<{
-      asOf: string;
-      accountCount: number;
-      pairCount: number;
-      updatedCount: number;
-      staleCount: number;
-      errorCount: number;
-    }>();
-    refreshFxRate.mockImplementationOnce(() => pendingRefresh.promise);
-
-    render(<PortfolioPage />);
-
-    await waitForInitialLoad();
-
-    const accountSelect = screen.getByLabelText(/资产范围|ASSET SCOPE/);
-    fireEvent.change(accountSelect, { target: { value: '1' } });
-    await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 1, costMethod: 'fifo' }));
-
-    fireEvent.click(openFxPanel());
-    await waitFor(() => {
-      expect(refreshFxRate).toHaveBeenCalledWith({ base: 'USD', quote: 'CNY' });
-    });
-
-    fireEvent.change(accountSelect, { target: { value: '2' } });
-    await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 2, costMethod: 'fifo' }));
-    await waitFor(() => expect(openFxPanel()).not.toBeDisabled());
-
-    const snapshotCallsAfterSwitch = getSnapshot.mock.calls.length;
-    const riskCallsAfterSwitch = getRisk.mock.calls.length;
-
-    await act(async () => {
-      pendingRefresh.resolve({
-        asOf: '2026-03-19',
-        accountCount: 1,
-        pairCount: 1,
-        updatedCount: 1,
-        staleCount: 0,
-        errorCount: 0,
-      });
-      await pendingRefresh.promise;
-    });
-
-    expect(getSnapshot).toHaveBeenCalledTimes(snapshotCallsAfterSwitch);
-    expect(getRisk).toHaveBeenCalledTimes(riskCallsAfterSwitch);
-    expect(screen.queryByText(translate('zh', 'portfolio.fxRefreshUpdated', { count: 1 }))).not.toBeInTheDocument();
   });
 
   it('drops late FX refresh results after switching cost method', async () => {

@@ -1,20 +1,11 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MoreHorizontal, PenSquare, Settings, RefreshCw, Trash2 } from 'lucide-react';
+import { MoreHorizontal, PenSquare, RefreshCw, Trash2 } from 'lucide-react';
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Drawer, Input, PillBadge, SectionShell, SegmentedControl, Select } from '../components/common';
 import { EvidenceChips } from '../components/evidence/EvidenceChips';
-import {
-  DensityRail,
-  GuidedDisclosure,
-  InsightStack,
-  MetricNarrativeCard,
-  SectionIntro,
-  type DensityRailItem,
-  type InsightItem,
-} from '../components/guidance';
 import {
   TerminalButton,
   TerminalChip,
@@ -35,7 +26,6 @@ import {
 import { translate } from '../i18n/core';
 import { normalizePortfolioRiskEvidence } from '../utils/evidenceDisplay';
 import { toDateInputValue } from '../utils/format';
-import { buildLocalizedPath } from '../utils/localeRouting';
 import {
   inferSettlementCurrency,
   LEGACY_PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY,
@@ -68,7 +58,6 @@ import type {
 } from '../types/portfolio';
 
 const HERO_PNL_POSITIVE_GLOW = '0 0 30px rgba(52, 211, 153, 0.4)';
-const PORTFOLIO_GLASS_CARD_CLASS = 'bg-white/[0.02] border border-white/5 backdrop-blur-md rounded-[16px] p-5 transition-all hover:border-white/10'; // design-constitution-allow: legacy constant retained while panels migrate to TerminalPanel.
 const PORTFOLIO_FIELD_LABEL_CLASS = '!mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40';
 const PORTFOLIO_FIELD_WRAPPER_CLASS = 'flex flex-col gap-1.5';
 const PORTFOLIO_FORM_GRID_CLASS = 'mt-4 grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2';
@@ -658,13 +647,6 @@ const PortfolioPage: React.FC = () => {
     : eventType === 'cash'
       ? cashEvents.length
       : corporateEvents.length;
-  const accountBaseCurrencies = useMemo(() => (
-    Array.from(new Set(
-      activeAccounts
-        .map((account) => account.baseCurrency?.toUpperCase())
-        .filter((currency): currency is string => Boolean(currency)),
-    ))
-  ), [activeAccounts]);
   const inferredTradeCurrency = useMemo(
     () => inferSettlementCurrency(tradeForm.symbol, writableAccount?.baseCurrency),
     [tradeForm.symbol, writableAccount?.baseCurrency],
@@ -678,7 +660,6 @@ const PortfolioPage: React.FC = () => {
   const tradeCurrencyHint = language === 'zh'
     ? '自动按标的市场推断，可手动覆盖；流水会保留该结算币种。'
     : 'Auto-inferred from the symbol market; manual override keeps the record settlement currency.';
-  const settingsPath = buildLocalizedPath('/settings', language);
   const editTradeTitle = language === 'zh' ? '编辑持仓流水' : 'Edit holding record';
   const saveTradeChangesLabel = language === 'zh' ? '保存修改' : 'Save Changes';
   const updateTradeSuccessLabel = language === 'zh' ? '持仓流水已更新 · 持仓已刷新' : 'Holding record updated · holdings refreshed';
@@ -1370,32 +1351,6 @@ const PortfolioPage: React.FC = () => {
     }
   };
 
-  const handleRefreshDisplayFx = async () => {
-    if (isLoading || fxRefreshing) {
-      return;
-    }
-    try {
-      setFxRefreshing(true);
-      setFxRefreshFeedback(null);
-      const result = await portfolioApi.refreshFx({ accountId: queryAccountId });
-      await loadSnapshotAndRisk();
-      setFxRefreshFeedback({
-        tone: result.errorCount > 0 || result.staleCount > 0 ? 'warning' : 'success',
-        text: result.errorCount > 0 || result.staleCount > 0
-          ? translate(language, 'portfolio.fxRefreshFallbackWarning', {
-            updatedCount: result.updatedCount,
-            staleCount: result.staleCount,
-            errorCount: result.errorCount,
-          })
-          : translate(language, 'portfolio.fxRefreshUpdated', { count: result.updatedCount }),
-      });
-    } catch (err) {
-      setError(getParsedApiError(err));
-    } finally {
-      setFxRefreshing(false);
-    }
-  };
-
   const snapshotCurrency = snapshot?.currency || 'CNY';
   const fxRateRows = useMemo<PortfolioFxRateItem[]>(() => snapshot?.fxRates || [], [snapshot?.fxRates]);
   const fxLastUpdated = useMemo(() => {
@@ -1467,17 +1422,6 @@ const PortfolioPage: React.FC = () => {
   const totalCashDisplay = convertMoney(totalCash, snapshotCurrency);
   const totalMarketValueDisplay = convertMoney(totalMarketValue, snapshotCurrency);
   const totalUnrealizedDisplay = convertMoney(totalUnrealizedPnl, snapshotCurrency);
-  const currencyBuckets = useMemo(() => {
-    const buckets = new Map<string, number>();
-    for (const account of snapshot?.accounts || []) {
-      const currency = (account.baseCurrency || snapshotCurrency || 'CNY').toUpperCase();
-      buckets.set(currency, (buckets.get(currency) || 0) + Number(account.totalEquity || 0));
-    }
-    return Array.from(buckets.entries())
-      .map(([currency, value]) => ({ currency, value }))
-      .filter((item) => item.value !== 0)
-      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
-  }, [snapshot?.accounts, snapshotCurrency]);
   const hasHoldings = positionRows.length > 0;
   const hasHistory = tradeEvents.length > 0 || cashEvents.length > 0 || corporateEvents.length > 0;
   const isEmptyPortfolio = !hasHoldings;
@@ -1494,20 +1438,10 @@ const PortfolioPage: React.FC = () => {
     || (!totalCashDisplay && totalCash !== 0)
     || (!totalMarketValueDisplay && totalMarketValue !== 0)
     || (!totalUnrealizedDisplay && totalUnrealizedPnl !== 0);
-  const fxFreshnessLabel = fxRateRows.some((item) => item.isStale || item.source === 'missing')
-    ? copy.fxStale
-    : copy.fxFresh;
-  const fxProviderLabel = fxRateRows.find((item) => item.source && item.source !== 'missing')?.source || 'frankfurter';
   const historyHasNextPage = currentEventCount >= DEFAULT_PAGE_SIZE;
   const totalAssetsTitle = language === 'zh' ? '总资产' : 'Total Assets';
   const historyDrawerTitle = language === 'en' ? 'Ledger History' : '历史记录';
-  const zeroAssetStatus = language === 'zh' ? '等待流水记录' : 'Awaiting ledger record';
-  const currencyBreakdownTitle = language === 'zh' ? '按币种' : 'By currency';
-  const currencyBreakdownEmpty = language === 'zh' ? '按币种：暂无资产' : 'By currency: no assets';
-  const displayCurrencyStatus = language === 'zh' ? `显示货币 ${displayCurrency}` : `Display ${displayCurrency}`;
-  const editDisplayCurrencyLabel = language === 'zh' ? '在设置中修改' : 'Change in Settings';
   const fxUnavailableLabel = language === 'zh' ? '折算不可用' : 'FX unavailable';
-  const accountCurrencyLabel = language === 'zh' ? '账户币种' : 'Account currencies';
   const noHoldingsHistoryNote = language === 'zh' ? '历史记录存在，当前无持仓' : 'History exists while current holdings are empty';
   const recentActivityTitle = language === 'zh' ? '近期活动' : 'Recent Activity';
   const emptyRecentActivityLabel = language === 'zh' ? '暂无历史记录' : 'No history yet';
@@ -1658,96 +1592,14 @@ const PortfolioPage: React.FC = () => {
       || portfolioEvidenceSummary.freshnessLabel != null
     ),
   );
-  const launchSurfaceTitle = language === 'zh' ? '资产台账总览' : 'Ledger Overview';
-  const launchSurfaceSubtitle = language === 'zh'
-    ? '先看账户状态、持仓、现金、敞口与关注项；流水记录与手工记账在下方作为次级录入口。'
-    : 'Account state, holdings, cash, exposure, and attention items come first. Manual ledger entry is secondary below.';
-  const holdingsSnapshotTitle = language === 'zh' ? '持仓状态' : 'Holdings State';
-  const cashSnapshotTitle = language === 'zh' ? '现金状态' : 'Cash State';
-  const exposureSnapshotTitle = language === 'zh' ? '敞口状态' : 'Exposure State';
-  const attentionSnapshotTitle = language === 'zh' ? '需要关注' : 'Needs Attention';
-  const noCashLabel = language === 'zh' ? '暂无现金流水' : 'No cash ledger yet';
-  const noAccountSelectedLabel = language === 'zh' ? '当前为全部账户视图' : 'All-account scope selected';
-  const accountSelectedLabel = language === 'zh' ? '已选择具体账户' : 'Specific account selected';
-  const manualPanelSecondaryTitle = language === 'zh' ? '次级：手工记账' : 'Secondary: Manual Ledger';
-  const manualPanelSecondaryHint = language === 'zh'
-    ? '仅在需要补录持仓、现金或公司行为流水时使用；不会连接券商执行。'
-    : 'Use only when recording holding, cash, or corporate-action ledger events. It never sends broker instructions.';
-  const manualPanelAnchor = language === 'zh' ? '下方保存记录' : 'Save records below';
   const holdingsPrimaryValue = hasHoldings
     ? (language === 'zh' ? `${positionRows.length} 项持仓` : `${positionRows.length} holdings`)
     : (language === 'zh' ? '无持仓' : 'No holdings');
-  const cashPrimaryValue = totalCash === 0 ? noCashLabel : formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency);
-  const exposurePrimaryValue = topPosition?.label || topCurrency?.label || topMarket?.label || (language === 'zh' ? '暂无敞口' : 'No exposure');
-  const attentionItems = [
-    !hasActiveAccounts ? (language === 'zh' ? '暂无账户' : 'No account') : null,
-    selectedAccount === 'all' && hasActiveAccounts ? noAccountSelectedLabel : accountSelectedLabel,
-    !hasHoldings ? (language === 'zh' ? '暂无持仓' : 'No holdings') : null,
-    totalCash === 0 ? noCashLabel : null,
-    hasFxUnavailable ? fxUnavailableLabel : null,
-    ...riskHintTexts.slice(0, 2),
-  ].filter(Boolean) as string[];
   const accountStateSummary = !hasActiveAccounts
     ? (language === 'zh' ? '暂无可用账户' : 'No available account')
     : selectedAccount === 'all'
       ? (language === 'zh' ? `${activeAccounts.length} 个活跃账户` : `${activeAccounts.length} active accounts`)
       : scopedAccount?.name || copy.allAccounts;
-  const sourceSyncState = ibkrConnection
-    ? (language === 'zh' ? '只读同步已配置' : 'Read-only sync configured')
-    : (language === 'zh' ? '手工台账优先' : 'Manual ledger first');
-  const portfolioRailItems: DensityRailItem[] = [
-    {
-      id: 'account-state',
-      label: language === 'zh' ? '账户状态' : 'Account state',
-      value: accountStateSummary,
-      helper: selectedAccount === 'all' ? noAccountSelectedLabel : accountSelectedLabel,
-      tone: hasActiveAccounts ? 'info' : 'caution',
-    },
-    {
-      id: 'source-sync',
-      label: language === 'zh' ? '来源 / 同步' : 'Source / sync',
-      value: sourceSyncState,
-      helper: language === 'zh' ? '不连接券商 / 不执行交易 / 仅手工记录' : 'No broker connection / no execution / manual records only',
-      tone: ibkrConnection ? 'positive' : 'neutral',
-    },
-    {
-      id: 'display-currency',
-      label: displayCurrencyStatus,
-      value: displayCurrency,
-      helper: `${fxProviderLabel.toUpperCase()} · ${fxFreshnessLabel} · ${fxLastUpdated}`,
-      tone: hasFxUnavailable ? 'caution' : 'positive',
-    },
-    {
-      id: 'base-currencies',
-      label: accountCurrencyLabel,
-      value: accountBaseCurrencies.join(' / ') || '--',
-      helper: language === 'zh' ? `可写账户 ${writableAccounts.length}` : `${writableAccounts.length} writable accounts`,
-      tone: 'neutral',
-    },
-  ];
-  const portfolioInsightItems: InsightItem[] = [
-    {
-      id: 'attention',
-      severity: attentionItems.some((item) => item === fxUnavailableLabel || item === noCashLabel) ? 'warning' : hasHoldings ? 'success' : 'info',
-      title: attentionSnapshotTitle,
-      explanation: (attentionItems.length ? attentionItems : [language === 'zh' ? '暂无需要处理项' : 'No attention items']).slice(0, 4).join(' · '),
-    },
-    {
-      id: 'concentration',
-      severity: topPositionPercent >= 50 ? 'critical' : topPositionPercent >= 20 ? 'warning' : hasHoldings ? 'success' : 'info',
-      title: language === 'zh' ? '集中度' : 'Concentration',
-      explanation: concentrationDescription,
-      detail: hasHoldings && topPosition ? `${topPosition.label || topPosition.key} · ${formatPercent(topPositionPercent)}` : undefined,
-    },
-    {
-      id: 'fx-readiness',
-      severity: hasFxUnavailable ? 'warning' : 'success',
-      title: language === 'zh' ? '折算可信度' : 'FX readiness',
-      explanation: hasFxUnavailable
-        ? (language === 'zh' ? '部分折算不可用，页面保留原币值并提示风险。' : 'Some conversions are unavailable; native values remain visible.')
-        : (language === 'zh' ? '汇率状态可用于当前资产展示。' : 'FX state is usable for the current asset view.'),
-    },
-  ];
   const compactNoHoldingText = language === 'zh'
     ? '暂无持仓。添加持仓或导入交易后显示组合状态。'
     : 'No holdings yet. Add holdings or import transactions to show portfolio state.';
@@ -2127,223 +1979,6 @@ const PortfolioPage: React.FC = () => {
                   </TerminalButton>
                 </div>
               </TerminalPanel>
-            </div>
-
-            <div data-testid="portfolio-row-macro" className="hidden">
-              <section
-                data-testid="portfolio-launch-priority-panel"
-                className="xl:col-span-8 flex min-w-0 flex-col gap-4"
-              >
-                <SectionIntro
-                  purpose={launchSurfaceTitle}
-                  summary={launchSurfaceSubtitle}
-                  nextStep={hasHoldings
-                    ? (language === 'zh' ? '先复核集中度、现金与汇率，再进入流水记录。' : 'Review concentration, cash, and FX before opening ledger records.')
-                    : (language === 'zh' ? '先确认账户与只读边界，再用下方手工记账补齐第一笔流水。' : 'Confirm account and read-only boundaries, then add the first ledger record below.')}
-                  status={{
-                    label: holdingsPrimaryValue,
-                    tone: hasHoldings ? 'ready' : 'watch',
-                  }}
-                />
-
-                <div
-                  data-testid="portfolio-total-assets-card-legacy"
-                  className={`${PORTFOLIO_GLASS_CARD_CLASS} grid shrink-0 gap-4 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:items-center`}
-                >
-                  <div className="min-w-0">
-                    <div className="mb-3 flex min-w-0 flex-wrap items-center gap-3">
-                      <div className="text-xs uppercase tracking-widest text-muted-text">{totalAssetsTitle}</div>
-                      {selectedAccount === 'all' ? (
-                        <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">{copy.allAccounts}</span>
-                      ) : scopedAccount ? (
-                        <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">{scopedAccount.name}</span>
-                      ) : null}
-                      <span className="rounded-md bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/35">
-                        {copy.costMethodLabel} {costMethod.toUpperCase()}
-                      </span>
-                      {hasFxUnavailable ? (
-                        <PillBadge variant="warning" className="text-amber-200">{fxUnavailableLabel}</PillBadge>
-                      ) : null}
-                    </div>
-                    <div
-                      data-testid="portfolio-total-assets-value-legacy"
-                      className="font-mono text-[2rem] font-bold leading-none text-foreground tabular-nums md:text-[2.8rem]"
-                      style={{ textShadow: HERO_PNL_POSITIVE_GLOW }}
-                    >
-                      {formatDisplayMoney(totalEquity, totalEquityDisplay, snapshotCurrency)}
-                    </div>
-                    {totalEquity === 0 ? (
-                      <div className="mt-2 text-xs text-white/35">{zeroAssetStatus}</div>
-                    ) : null}
-                    {snapshotCurrency !== displayCurrency ? (
-                      <div className="mt-2 font-mono text-xs text-white/35">≈ {formatMoney(totalEquity, snapshotCurrency)}</div>
-                    ) : null}
-                    <div data-testid="portfolio-ledger-disclosure" className="mt-3 max-w-2xl text-xs leading-5 text-white/45">
-                      {manualLedgerDisclosure}
-                    </div>
-	                  </div>
-	                  <div className="grid min-w-0 grid-cols-2 gap-2">
-	                    <TerminalMetric label={copy.totalMarketValue} value={formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)} valueClassName="text-sm tabular-nums" />
-	                    <TerminalMetric label={copy.totalCash} value={formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)} valueClassName="text-sm tabular-nums" />
-	                    <TerminalMetric
-	                      label={copy.positionUnrealized}
-	                      value={totalUnrealizedDisplay ? formatSignedMoney(totalUnrealizedDisplay.value, displayCurrency) : formatSignedMoney(0, displayCurrency)}
-	                      valueClassName={`text-sm tabular-nums ${totalUnrealizedPnl >= 0 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]' : 'text-rose-400 drop-shadow-[0_0_8px_rgba(251,113,133,0.4)]'}`}
-	                    />
-	                    <TerminalMetric label={copy.accountCount} value={snapshot?.accountCount ?? activeAccounts.length} valueClassName="text-sm tabular-nums" />
-	                  </div>
-	                </div>
-
-	                <TerminalPanel
-	                  data-testid="portfolio-mobile-priority-summary"
-	                  className="grid gap-2 p-3 md:hidden"
-	                >
-	                  <TerminalNestedBlock className="flex items-center justify-between gap-3 px-3 py-2.5">
-	                    <span className="text-[11px] text-white/42">{language === 'zh' ? '账户状态' : 'Account state'}</span>
-	                    <span className="min-w-0 truncate text-right text-sm font-semibold text-cyan-100">{accountStateSummary}</span>
-	                  </TerminalNestedBlock>
-	                  <div className="grid grid-cols-3 gap-2">
-	                    <TerminalMetric label={holdingsSnapshotTitle} value={holdingsPrimaryValue} className="min-w-0 px-2.5 py-2" valueClassName="truncate text-xs font-semibold" />
-	                    <TerminalMetric label={cashSnapshotTitle} value={cashPrimaryValue} className="min-w-0 px-2.5 py-2" valueClassName="truncate text-xs font-semibold" />
-	                    <TerminalMetric label={exposureSnapshotTitle} value={exposurePrimaryValue} className="min-w-0 px-2.5 py-2" valueClassName="truncate text-xs font-semibold" />
-	                  </div>
-	                  <TerminalNestedBlock className="px-3 py-2.5">
-	                    <div className="text-[10px] text-white/38">{language === 'zh' ? '关注与风险摘要' : 'Attention and Risk Summary'}</div>
-	                    <div className="mt-1 text-xs leading-5 text-white/66">
-		                      {(attentionItems.length ? attentionItems : [language === 'zh' ? '暂无需要处理项' : 'No attention items']).slice(0, 3).join(' · ')}
-		                    </div>
-	                  </TerminalNestedBlock>
-	                </TerminalPanel>
-
-                <div data-testid="portfolio-first-fold-primary-grid" className="hidden gap-3 md:grid md:grid-cols-3">
-                  <MetricNarrativeCard
-                    label={holdingsSnapshotTitle}
-                    value={holdingsPrimaryValue}
-                    meaning={hasHoldings
-                      ? `${topPosition?.label || positionRows[0]?.symbol || '--'} · ${formatPercent(topPosition?.percent)}`
-                      : (language === 'zh' ? '保存第一笔持仓流水后自动生成持仓。' : 'Save the first holding record to generate holdings.')}
-                    freshnessNote={accountStateSummary}
-                    tone={hasHoldings ? 'positive' : 'caution'}
-                    className="min-h-[184px]"
-                  />
-                  <MetricNarrativeCard
-                    label={cashSnapshotTitle}
-                    value={cashPrimaryValue}
-                    meaning={currencyBuckets.length
-                      ? currencyBuckets.slice(0, 2).map((item) => `${item.currency} ${formatMoney(item.value, item.currency)}`).join(' · ')
-                      : (language === 'zh' ? '录入资金流水后显示现金币种。' : 'Cash currencies appear after cash ledger records.')}
-                    freshnessNote={displayCurrencyStatus}
-                    tone={totalCash === 0 ? 'caution' : 'info'}
-                    className="min-h-[184px]"
-                  />
-                  <MetricNarrativeCard
-                    label={exposureSnapshotTitle}
-                    value={exposurePrimaryValue}
-                    meaning={hasHoldings
-                      ? `${language === 'zh' ? '最大敞口' : 'Largest exposure'} ${formatPercent(topPosition?.percent || topCurrency?.percent || topMarket?.percent)}`
-                      : (language === 'zh' ? '暂无配置数据，等待持仓生成。' : 'No exposure data yet.')}
-                    freshnessNote={fxFreshnessLabel}
-                    tone={hasFxUnavailable ? 'caution' : hasHoldings ? 'info' : 'neutral'}
-                    className="min-h-[184px]"
-                  />
-                </div>
-
-                <InsightStack
-                  insights={portfolioInsightItems}
-                  title={language === 'zh' ? '关注与风险摘要' : 'Attention and Risk Summary'}
-                  className="hidden min-h-0 md:block"
-                />
-              </section>
-
-              <aside data-testid="portfolio-secondary-zone" className="xl:col-span-4 flex min-w-0 flex-col gap-4">
-                <div className={`${PORTFOLIO_GLASS_CARD_CLASS} flex flex-col gap-3`}>
-                  <div className="flex min-w-0 flex-col gap-3">
-                    <Select
-                      label={language === 'zh' ? '资产范围' : 'ASSET SCOPE'}
-                      labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
-                      value={String(selectedAccount)}
-                      onChange={(value) => setSelectedAccount(value === 'all' ? 'all' : Number(value))}
-                      options={[
-                        { value: 'all', label: copy.allAccounts },
-                        ...activeAccounts.map((account) => ({ value: String(account.id), label: account.name })),
-                      ]}
-                      className={PORTFOLIO_SELECT_CLASS}
-                    />
-                    <div data-testid="portfolio-display-currency-status">
-                      <DensityRail
-                        title={language === 'zh' ? '账户与来源' : 'Account and Source'}
-                        items={portfolioRailItems}
-                        className="md:max-w-none"
-                      />
-                    </div>
-	                    <TerminalNestedBlock data-testid="portfolio-currency-breakdown" className="px-3 py-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{currencyBreakdownTitle}</span>
-                        <a
-                          href={settingsPath}
-                          className="inline-flex items-center gap-1 text-xs text-white/55 transition-colors hover:text-white"
-                        >
-                          <Settings className="h-3.5 w-3.5" aria-hidden="true" />
-                          {editDisplayCurrencyLabel}
-                        </a>
-                      </div>
-                      {currencyBuckets.length ? (
-                        <div className="mt-2 flex flex-col gap-1.5">
-                          {currencyBuckets.map((item) => (
-                            <div key={item.currency} className="flex items-center justify-between gap-3 text-xs">
-                              <span className="font-mono text-white/45">{item.currency}</span>
-                              <span className="font-mono text-white tabular-nums">{formatMoney(item.value, item.currency)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="mt-2 text-xs text-white/40">{currencyBreakdownEmpty}</div>
-                      )}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className={`${PORTFOLIO_TEXT_BUTTON_CLASS} mt-2 px-0`}
-                        onClick={() => void handleRefreshDisplayFx()}
-                        disabled={isLoading || fxRefreshing}
-                      >
-                        {copy.refreshFx}
-                      </Button>
-	                      {fxRefreshFeedback && leftTab !== 'fx' ? (
-	                        <div className={`mt-2 text-xs ${
-	                          fxRefreshFeedback.tone === 'success'
-	                            ? 'text-emerald-300'
-                            : fxRefreshFeedback.tone === 'warning'
-                              ? 'text-amber-200'
-                              : 'text-secondary-text'
-                        }`}>
-	                          {fxRefreshFeedback.text}
-	                        </div>
-	                      ) : null}
-	                    </TerminalNestedBlock>
-                  </div>
-                </div>
-                <div data-testid="portfolio-manual-secondary-callout">
-                  <GuidedDisclosure
-                    title={manualPanelSecondaryTitle}
-                    summary={manualPanelSecondaryHint}
-                    beginner={(
-                      <p>
-                        {language === 'zh'
-                          ? '资产台账先展示账户、持仓、现金、敞口和关注项；手工记账只用于补录流水。'
-                          : 'The ledger shows account, holdings, cash, exposure, and attention first; manual entry only records ledger events.'}
-                      </p>
-                    )}
-                    professional={(
-                      <p>
-                        {manualLedgerDisclosure}
-                        {' '}
-                        {manualPanelAnchor}
-                      </p>
-                    )}
-                    className="bg-white/[0.02]"
-                  />
-                </div>
-              </aside>
             </div>
 
             <div data-testid="portfolio-row-routing" className="order-3 grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
