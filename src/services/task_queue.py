@@ -27,11 +27,11 @@ from typing import Optional, Dict, List, Any, TYPE_CHECKING, Tuple, Literal, Cal
 if TYPE_CHECKING:
     from asyncio import Queue as AsyncQueue
 
-from data_provider.base import canonical_stock_code, normalize_stock_code
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.services.execution_log_service import ExecutionLogService
 from src.services.research_budget_profiles import normalize_research_mode
 from src.utils.analysis_metadata import SELECTION_SOURCES
+from src.utils.symbol_normalization import canonical_stock_code, normalize_stock_code
 
 logger = logging.getLogger(__name__)
 _WORKER_HINT_ENV_VARS = ("WEB_CONCURRENCY", "UVICORN_WORKERS", "GUNICORN_WORKERS")

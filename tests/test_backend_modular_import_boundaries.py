@@ -240,7 +240,6 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
         "data_provider.base",
         "data_provider.yfinance_fetcher",
     },
-    "src/services/task_queue.py": {"data_provider.base"},
     "src/services/us_history_helper.py": {"data_provider.base"},
 }
 RULE_BACKTEST_LLM_IMPORT_PREFIXES = (
