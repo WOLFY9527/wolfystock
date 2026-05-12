@@ -1,21 +1,25 @@
 import type React from 'react';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
-import { getApiErrorMessage, getParsedApiError } from '../api/error';
+import { getParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfig';
 import { ApiErrorAlert, Button, ConfirmDialog, Disclosure, Drawer, GlassCard, Input, Select } from '../components/common';
 import { PageBriefDrawer } from '../components/home-bento';
 import { useIsDesktopViewport } from '../components/layout/useIsDesktopViewport';
 import AIProviderConfig from '../components/settings/AIProviderConfig';
 import DataSourceConfig from '../components/settings/DataSourceConfig';
+import DataSourceLibraryDrawer, { DRAWER_GHOST_FORM_SCOPE_CLASS } from '../components/settings/DataSourceLibraryDrawer';
 import { NotificationChannelsConfig } from '../components/settings/NotificationChannelsConfig';
 import SystemControlPlane from '../components/settings/SystemControlPlane';
 import SystemLogsConfig from '../components/settings/SystemLogsConfig';
+import {
+  type DataRouteKey,
+} from '../components/settings/dataSourceLibraryShared';
+import { useDataSourceLibraryController } from '../components/settings/useDataSourceLibraryController';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useAuth, useSystemConfig } from '../hooks';
-import type { BuiltinDataSourceEndpointCheck, TestBuiltinDataSourceResponse, SystemConfigCategory } from '../types/systemConfig';
+import type { SystemConfigCategory } from '../types/systemConfig';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
-import { formatDateTime, formatDurationMs } from '../utils/format';
 import {
   GATEWAY_READINESS_NOTES,
   getGatewayModelOptions,
@@ -59,53 +63,6 @@ type AdvancedNavigationContext = {
   channelName?: string;
   hasChannel: boolean;
 };
-type DataRouteKey = 'market' | 'fundamentals' | 'news' | 'sentiment';
-type DataSourceCapability = DataRouteKey | 'local';
-type DataSourceCredentialSchema =
-  | 'none'
-  | 'single_key'
-  | 'key_secret';
-type DataSourceValidationState = 'not_configured' | 'configured_pending' | 'validated' | 'failed' | 'builtin' | 'loading' | 'partial' | 'missing_key' | 'unsupported';
-type DataSourceKind = 'builtin' | 'custom';
-type CustomDataSourceValidation = {
-  status: 'pending' | 'validated' | 'failed';
-  message?: string;
-  checkedAt?: string;
-};
-type DataSourceCredentialFieldName = 'credential' | 'secret';
-type DataSourceCredentialFieldDefinition = {
-  name: DataSourceCredentialFieldName;
-  labelKey: string;
-  hintKey: string;
-  placeholder?: string;
-};
-type DataSourceBuiltinExtraFieldDefinition = {
-  key: string;
-  envKey: string;
-  labelKey: string;
-  hintKey: string;
-  defaultValue: string;
-  options: Array<{ label: string; value: string }>;
-};
-type DataSourceBuiltinManagementDefinition = {
-  credentialSchema: DataSourceCredentialSchema;
-  credentialEnvKey?: string;
-  pluralCredentialEnvKey?: string;
-  secretEnvKey?: string;
-  fields: DataSourceCredentialFieldDefinition[];
-  extraField?: DataSourceBuiltinExtraFieldDefinition;
-};
-type CustomDataSourceRecord = {
-  id: string;
-  name: string;
-  credentialSchema: Exclude<DataSourceCredentialSchema, 'none'>;
-  credential: string;
-  secret: string;
-  baseUrl: string;
-  description: string;
-  capabilities: DataSourceCapability[];
-  validation?: CustomDataSourceValidation;
-};
 
 const LazyLLMChannelEditor = lazy(async () => {
   const module = await import('../components/settings/LLMChannelEditor');
@@ -119,33 +76,7 @@ const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] borde
 const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
 const DRAWER_PANEL_CLASS = 'rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3';
 const DRAWER_SECTION_CLASS = 'rounded-xl border border-white/5 bg-white/[0.015] px-4 py-4';
-const DRAWER_LABEL_CLASS = 'text-[10px] uppercase tracking-widest text-white/40 mb-1.5 font-bold block';
-const DRAWER_TEXTAREA_CLASS = 'min-h-[6rem] w-full resize-y rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-white transition-all placeholder:text-white/20 focus:border-indigo-500/50 focus:bg-white/[0.05] focus:outline-none focus:ring-1 focus:ring-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-60';
 const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-6 flex cursor-pointer list-none items-center gap-1.5 border-t border-white/5 pt-4 text-xs text-white/30 transition-colors hover:text-white [&::-webkit-details-marker]:hidden';
-const DRAWER_GHOST_FORM_SCOPE_CLASS = '[&_.input-surface]:!rounded-lg [&_.input-surface]:!border-white/5 [&_.input-surface]:!bg-white/[0.02] [&_.input-surface]:!py-2 [&_.input-surface]:!text-sm [&_.input-surface]:!text-white [&_.input-surface]:!transition-all [&_.input-surface]:placeholder:!text-white/20 [&_.input-surface]:focus:!border-indigo-500/50 [&_.input-surface]:focus:!bg-white/[0.05] [&_.input-surface]:focus:!outline-none [&_.input-surface]:focus:!ring-1 [&_.input-surface]:focus:!ring-indigo-500/50 [&_.theme-field-label]:!mb-1.5 [&_.theme-field-label]:!block [&_.theme-field-label]:!text-[10px] [&_.theme-field-label]:!font-bold [&_.theme-field-label]:!uppercase [&_.theme-field-label]:!tracking-widest [&_.theme-field-label]:!text-white/40';
-type DataSourceEditorMode = 'create' | 'edit' | 'view' | 'manage_builtin';
-type DataSourceLibraryEntry = {
-  key: string;
-  label: string;
-  kind: DataSourceKind;
-  builtin: boolean;
-  baseUrl: string;
-  configured: boolean;
-  usable: boolean;
-  validationState: DataSourceValidationState;
-  validationMessage: string;
-  routeUsage: DataRouteKey[];
-  capabilityKeys: DataSourceCapability[];
-  capabilityLabels: string[];
-  description: string;
-  credentialRequired: boolean;
-  credentialValue: string;
-  credentialSchema: DataSourceCredentialSchema;
-  management?: DataSourceBuiltinManagementDefinition;
-  customRecord?: CustomDataSourceRecord;
-};
-
-type BuiltinDataSourceValidationResult = TestBuiltinDataSourceResponse;
 
 type RoutingDraftState = {
   ai: {
@@ -193,7 +124,6 @@ const CATEGORY_TO_DOMAIN: Partial<Record<SystemConfigCategory, SettingsDomain>> 
 };
 
 const FALSE_VALUES = new Set(['', '0', 'false', 'no', 'off']);
-const CUSTOM_DATA_SOURCE_LIBRARY_KEY = 'CUSTOM_DATA_SOURCE_LIBRARY';
 const PROVIDER_LABEL_MAP: Record<string, string> = {
   aihubmix: 'AIHubMix',
   gemini: 'Gemini',
@@ -201,234 +131,6 @@ const PROVIDER_LABEL_MAP: Record<string, string> = {
   deepseek: 'DeepSeek',
   anthropic: 'Anthropic',
   zhipu: 'GLM / Zhipu',
-};
-
-function createSingleKeyDataSourceManagement(params: {
-  credentialEnvKey: string;
-  pluralCredentialEnvKey?: string;
-  hintKey?: string;
-}): DataSourceBuiltinManagementDefinition {
-  return {
-    credentialSchema: 'single_key',
-    credentialEnvKey: params.credentialEnvKey,
-    pluralCredentialEnvKey: params.pluralCredentialEnvKey,
-    fields: [
-      {
-        name: 'credential',
-        labelKey: 'settings.dataSourceFieldApiKey',
-        hintKey: params.hintKey || 'settings.dataSourceFieldApiKeyHint',
-      },
-    ],
-  };
-}
-
-const DATA_SOURCE_LIBRARY_ITEMS: Array<{
-  key: string;
-  routeKeys: DataRouteKey[];
-  capabilityKeys: DataSourceCapability[];
-  credentialPatterns: RegExp[];
-  builtin?: boolean;
-  requireCredential?: boolean;
-  credentialSchema?: DataSourceCredentialSchema;
-  management?: DataSourceBuiltinManagementDefinition;
-}> = [
-  {
-    key: 'alpha_vantage',
-    routeKeys: ['market'],
-    capabilityKeys: ['market'],
-    credentialPatterns: [/^ALPHA_VANTAGE_API_KEYS?$/i, /^ALPHAVANTAGE_API_KEYS?$/i],
-    requireCredential: true,
-    credentialSchema: 'single_key',
-    management: createSingleKeyDataSourceManagement({
-      credentialEnvKey:
-        'ALPHA_VANTAGE_API_KEY',
-      pluralCredentialEnvKey:
-        'ALPHA_VANTAGE_API_KEYS',
-    }),
-  },
-  {
-    key: 'finnhub',
-    routeKeys: ['market', 'fundamentals', 'news'],
-    capabilityKeys: ['market', 'fundamentals', 'news'],
-    credentialPatterns: [/^FINNHUB_API_KEYS?$/i],
-    requireCredential: true,
-    credentialSchema: 'single_key',
-    management: createSingleKeyDataSourceManagement({
-      credentialEnvKey: 'FINNHUB_API_KEY',
-      pluralCredentialEnvKey:
-        'FINNHUB_API_KEYS',
-    }),
-  },
-  {
-    key: 'yahoo',
-    routeKeys: ['market', 'fundamentals'],
-    capabilityKeys: ['market', 'fundamentals'],
-    credentialPatterns: [],
-    builtin: true,
-    credentialSchema: 'none',
-    management: {
-      credentialSchema: 'none',
-      fields: [],
-      extraField: {
-        key: 'priority',
-        envKey: 'YFINANCE_PRIORITY',
-        labelKey: 'settings.dataSourceFieldYahooPriority',
-        hintKey: 'settings.dataSourceFieldYahooPriorityHint',
-        defaultValue: '4',
-        options: [
-          { label: '0', value: '0' },
-          { label: '1', value: '1' },
-          { label: '2', value: '2' },
-          { label: '3', value: '3' },
-          { label: '4', value: '4' },
-          { label: '5', value: '5' },
-        ],
-      },
-    },
-  },
-  {
-    key: 'fmp',
-    routeKeys: ['fundamentals'],
-    capabilityKeys: ['fundamentals'],
-    credentialPatterns: [/^FMP_API_KEYS?$/i],
-    requireCredential: true,
-    credentialSchema: 'single_key',
-    management: createSingleKeyDataSourceManagement({
-      credentialEnvKey: 'FMP_API_KEY',
-      pluralCredentialEnvKey: 'FMP_API_KEYS',
-    }),
-  },
-  {
-    key: 'gnews',
-    routeKeys: ['news'],
-    capabilityKeys: ['news'],
-    credentialPatterns: [/^GNEWS_API_KEYS?$/i],
-    requireCredential: true,
-    credentialSchema: 'single_key',
-    management: createSingleKeyDataSourceManagement({
-      credentialEnvKey: 'GNEWS_API_KEY',
-      pluralCredentialEnvKey: 'GNEWS_API_KEYS',
-    }),
-  },
-  {
-    key: 'tavily',
-    routeKeys: ['news', 'sentiment'],
-    capabilityKeys: ['news', 'sentiment'],
-    credentialPatterns: [/^TAVILY_API_KEYS?$/i],
-    requireCredential: true,
-    credentialSchema: 'single_key',
-    management: createSingleKeyDataSourceManagement({
-      credentialEnvKey: 'TAVILY_API_KEY',
-      pluralCredentialEnvKey: 'TAVILY_API_KEYS',
-    }),
-  },
-  {
-    key: 'social_sentiment_service',
-    routeKeys: ['sentiment'],
-    capabilityKeys: ['sentiment'],
-    credentialPatterns: [/^SOCIAL_SENTIMENT_API_KEYS?$/i],
-    requireCredential: true,
-  },
-  {
-    key: 'alpaca',
-    routeKeys: ['market'],
-    capabilityKeys: ['market'],
-    credentialPatterns: [/^ALPACA_API_KEY_ID$/i, /^ALPACA_API_SECRET_KEY$/i],
-    requireCredential: true,
-    credentialSchema: 'key_secret',
-    management: {
-      credentialSchema: 'key_secret',
-      credentialEnvKey:
-        'ALPACA_API_KEY_ID',
-      secretEnvKey:
-        'ALPACA_API_SECRET_KEY',
-      fields: [
-        {
-          name: 'credential',
-          labelKey: 'settings.dataSourceFieldAlpacaKeyId',
-          hintKey: 'settings.dataSourceFieldAlpacaKeyIdHint',
-        },
-        {
-          name: 'secret',
-          labelKey: 'settings.dataSourceFieldSecretKey',
-          hintKey: 'settings.dataSourceFieldAlpacaSecretHint',
-        },
-      ],
-      extraField: {
-        key: 'feed',
-        envKey: 'ALPACA_DATA_FEED',
-        labelKey: 'settings.dataSourceFieldAlpacaFeed',
-        hintKey: 'settings.dataSourceFieldAlpacaFeedHint',
-        defaultValue: 'iex',
-        options: [
-          { label: 'IEX', value: 'iex' },
-          { label: 'SIP', value: 'sip' },
-        ],
-      },
-    },
-  },
-  {
-    key: 'twelve_data',
-    routeKeys: ['market'],
-    capabilityKeys: ['market'],
-    credentialPatterns: [/^TWELVE_DATA_API_KEY$/i, /^TWELVE_DATA_API_KEYS$/i, /^TWELVEDATA_API_KEY$/i, /^TWELVEDATA_API_KEYS$/i],
-    requireCredential: true,
-    credentialSchema: 'single_key',
-    management: {
-      credentialSchema: 'single_key',
-      credentialEnvKey:
-        'TWELVE_DATA_API_KEY',
-      pluralCredentialEnvKey:
-        'TWELVE_DATA_API_KEYS',
-      fields: [
-        {
-          name: 'credential',
-          labelKey: 'settings.dataSourceFieldApiKey',
-          hintKey: 'settings.dataSourceFieldTwelveDataKeyHint',
-        },
-      ],
-    },
-  },
-  {
-    key: 'local_inference',
-    routeKeys: ['sentiment'],
-    capabilityKeys: ['sentiment', 'local'],
-    credentialPatterns: [],
-    builtin: true,
-  },
-];
-
-const DATA_SOURCE_CAPABILITY_LABEL_KEYS: Record<DataSourceCapability, string> = {
-  market: 'settings.dataSourceCapability.market',
-  fundamentals: 'settings.dataSourceCapability.fundamentals',
-  news: 'settings.dataSourceCapability.news',
-  sentiment: 'settings.dataSourceCapability.sentiment',
-  local: 'settings.dataSourceCapability.local',
-};
-const DATA_SOURCE_CAPABILITY_OPTIONS: DataSourceCapability[] = ['market', 'fundamentals', 'news', 'sentiment', 'local'];
-const DATA_SOURCE_CUSTOM_SCHEMA_OPTIONS: Array<{
-  value: Exclude<DataSourceCredentialSchema, 'none'>;
-  labelKey: string;
-  descriptionKey: string;
-}> = [
-  {
-    value: 'single_key',
-    labelKey: 'settings.dataSourceSchemaSingleKey',
-    descriptionKey: 'settings.dataSourceSchemaSingleKeyDesc',
-  },
-  {
-    value: 'key_secret',
-    labelKey: 'settings.dataSourceSchemaKeySecret',
-    descriptionKey: 'settings.dataSourceSchemaKeySecretDesc',
-  },
-];
-
-const DATA_SOURCE_ROUTING_CAPABILITY_MAP: Record<DataSourceCapability, DataRouteKey | null> = {
-  market: 'market',
-  fundamentals: 'fundamentals',
-  news: 'news',
-  sentiment: 'sentiment',
-  local: 'sentiment',
 };
 
 const splitCsv = (value?: string): string[] => (value || '')
@@ -483,151 +185,6 @@ const providerLabel = (value: string): string => {
   return PROVIDER_LABEL_MAP[normalized] || prettySourceLabel(normalized);
 };
 
-const slugifyDataSourceId = (value: string): string => {
-  const normalized = normalizeLabel(value).toLowerCase();
-  const slug = normalized
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-  return slug || 'custom_source';
-};
-
-const parseDataSourceCapabilities = (value: unknown): DataSourceCapability[] => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  const seen = new Set<DataSourceCapability>();
-  const result: DataSourceCapability[] = [];
-  value.forEach((item) => {
-    const capability = String(item || '').trim().toLowerCase() as DataSourceCapability;
-    if (!capability || !Object.prototype.hasOwnProperty.call(DATA_SOURCE_CAPABILITY_LABEL_KEYS, capability) || seen.has(capability)) {
-      return;
-    }
-    seen.add(capability);
-    result.push(capability);
-  });
-  return result;
-};
-
-const normalizeDataSourceCredentialSchema = (value: unknown): Exclude<DataSourceCredentialSchema, 'none'> => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return normalized === 'key_secret' ? 'key_secret' : 'single_key';
-};
-
-const normalizeDataSourceValidationState = (value: unknown): CustomDataSourceValidation | undefined => {
-  if (!value || typeof value !== 'object') {
-    return undefined;
-  }
-  const raw = value as Record<string, unknown>;
-  const status = String(raw.status || '').trim().toLowerCase();
-  if (!['pending', 'validated', 'failed'].includes(status)) {
-    return undefined;
-  }
-  return {
-    status: status as CustomDataSourceValidation['status'],
-    message: String(raw.message || '').trim() || undefined,
-    checkedAt: String(raw.checkedAt || '').trim() || undefined,
-  };
-};
-
-const parseCustomDataSourceLibrary = (rawValue: string): CustomDataSourceRecord[] => {
-  const text = String(rawValue || '').trim();
-  if (!text) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(text);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return parsed.flatMap((item) => {
-      if (!item || typeof item !== 'object') {
-        return [];
-      }
-      const source = item as Record<string, unknown>;
-      const name = String(source.name || '').trim();
-      const id = slugifyDataSourceId(String(source.id || name));
-      if (!name) {
-        return [];
-      }
-      return [{
-        id,
-        name,
-        credentialSchema: normalizeDataSourceCredentialSchema(source.credentialSchema || source.credential_schema),
-        credential: String(source.credential || '').trim(),
-        secret: String(source.secret || source.secretKey || source.secret_key || '').trim(),
-        baseUrl: String(source.baseUrl || source.base_url || '').trim(),
-        description: String(source.description || '').trim(),
-        capabilities: parseDataSourceCapabilities(source.capabilities),
-        validation: normalizeDataSourceValidationState(source.validation),
-      }];
-    });
-  } catch {
-    return [];
-  }
-};
-
-const serializeCustomDataSourceLibrary = (items: CustomDataSourceRecord[]): string => JSON.stringify(items.map((item) => ({
-  id: item.id,
-  name: item.name,
-  credentialSchema: item.credentialSchema,
-  credential: item.credential,
-  secret: item.secret,
-  baseUrl: item.baseUrl,
-  description: item.description,
-  capabilities: item.capabilities,
-  validation: item.validation,
-})));
-
-const createEmptyCustomDataSource = (): CustomDataSourceRecord => ({
-  id: '',
-  name: '',
-  credentialSchema: 'single_key',
-  credential: '',
-  secret: '',
-  baseUrl: '',
-  description: '',
-  capabilities: [],
-  validation: { status: 'pending' },
-});
-
-const validateCustomDataSource = (record: CustomDataSourceRecord): { valid: boolean; issue?: 'name' | 'credential' | 'secret' | 'capabilities' | 'baseUrl' } => {
-  if (!record.name.trim()) {
-    return { valid: false, issue: 'name' };
-  }
-  if (!record.credential.trim()) {
-    return { valid: false, issue: 'credential' };
-  }
-  if (record.credentialSchema === 'key_secret' && !record.secret.trim()) {
-    return { valid: false, issue: 'secret' };
-  }
-  if (!record.capabilities.length) {
-    return { valid: false, issue: 'capabilities' };
-  }
-  if (record.baseUrl && !/^https?:\/\/[^\s]+$/i.test(record.baseUrl.trim())) {
-    return { valid: false, issue: 'baseUrl' };
-  }
-  return { valid: true };
-};
-
-const formatDataSourceCheckLine = (check: BuiltinDataSourceEndpointCheck): string => {
-  const httpStatus = check.httpStatus ? `HTTP ${check.httpStatus}` : check.errorType || '--';
-  const duration = formatDurationMs(check.durationMs);
-  return `${check.name}: ${check.ok ? 'OK' : httpStatus} · ${duration}`;
-};
-
-const makeUniqueDataSourceId = (baseId: string, existingIds: string[]): string => {
-  const normalized = slugifyDataSourceId(baseId || '');
-  const taken = new Set(existingIds.map((value) => slugifyDataSourceId(value)));
-  if (!taken.has(normalized)) {
-    return normalized;
-  }
-  let index = 2;
-  while (taken.has(`${normalized}_${index}`)) {
-    index += 1;
-  }
-  return `${normalized}_${index}`;
-};
-
 const inferRouteModelMode = (
   gateway: string,
   model: string,
@@ -657,13 +214,6 @@ const buildAdminLogsPath = (): string => {
   }
   const locale = parseLocaleFromPathname(window.location.pathname);
   return locale ? buildLocalizedPath('/admin/logs', locale) : '/admin/logs';
-};
-
-const sourceToneClass = (index: number): string => {
-  if (index === 0) return 'text-[var(--accent-primary)]';
-  if (index === 1) return 'text-[var(--accent-positive)]';
-  if (index === 2) return 'text-[var(--accent-warning)]';
-  return 'text-muted-text';
 };
 
 const findFirstKey = (keys: string[], patterns: RegExp[], fallbackKey: string): string => {
@@ -1097,17 +647,6 @@ const SettingsPage: React.FC = () => {
       : notificationSummary.configuredChannels;
   }, [allItemMap, dataPriorityKeys.notification, notificationSummary.configuredChannels, notificationSummary.enabledChannels]);
 
-  const [dataSourceValidationStatus, setDataSourceValidationStatus] = useState<Record<string, DataSourceValidationState>>({});
-  const [builtinDataSourceValidationResults, setBuiltinDataSourceValidationResults] = useState<Record<string, BuiltinDataSourceValidationResult>>({});
-  const customDataSourceLibrary = useMemo(
-    () => parseCustomDataSourceLibrary(allItemMap.get(CUSTOM_DATA_SOURCE_LIBRARY_KEY) || ''),
-    [allItemMap],
-  );
-  const [customDataSourceLibraryDraft, setCustomDataSourceLibraryDraft] = useState<CustomDataSourceRecord[]>(customDataSourceLibrary);
-  useEffect(() => {
-    setCustomDataSourceLibraryDraft(customDataSourceLibrary);
-  }, [customDataSourceLibrary]);
-
   const availableProviders = useMemo(() => {
     const hasAny = (...keys: string[]): boolean => keys.some((key) => hasConfigValue(allItemMap.get(key) || ''));
     const hasByPattern = (patterns: RegExp[]): boolean => {
@@ -1166,157 +705,6 @@ const SettingsPage: React.FC = () => {
     };
   }, [aiCredentialProviders.configuredChannels, aiSummary.backupChannel, aiSummary.backupModel, aiSummary.primaryChannel, aiSummary.primaryModel, allItemMap, notificationSummary.configuredChannels]);
 
-  const dataSourceLibrary = useMemo<DataSourceLibraryEntry[]>(() => {
-    const hasCredential = (patterns: RegExp[]): boolean => {
-      if (!patterns.length) {
-        return false;
-      }
-      for (const [key, value] of allItemMap.entries()) {
-        if (!hasConfigValue(value)) {
-          continue;
-        }
-        if (patterns.some((pattern) => pattern.test(key))) {
-          return true;
-        }
-      }
-      return false;
-    };
-
-    const builtInEntries = DATA_SOURCE_LIBRARY_ITEMS.map((source) => {
-      const credentialValue = hasCredential(source.credentialPatterns) ? 'configured' : '';
-      const configured = source.requireCredential ? Boolean(credentialValue) : true;
-      const runtimeValidation = dataSourceValidationStatus[source.key];
-      const remoteValidation = builtinDataSourceValidationResults[source.key];
-      const validationState = runtimeValidation || (
-      source.builtin && !source.requireCredential
-        ? 'builtin'
-        : configured
-          ? 'configured_pending'
-          : 'not_configured'
-      );
-      const capabilityLabels = source.capabilityKeys.map((capability) => t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability]));
-      const routeUsage = source.routeKeys.filter((routeKey) => dataSummary[routeKey].includes(source.key));
-      const usable = source.builtin && !source.requireCredential
-        ? true
-        : configured && validationState !== 'failed';
-      return {
-        key: source.key,
-        label: prettySourceLabel(source.key),
-        kind: 'builtin' as const,
-        builtin: true,
-        baseUrl: '',
-        configured,
-        usable,
-        validationState,
-        validationMessage: validationState === 'builtin'
-          ? t('settings.dataSourceValidationBuiltin')
-          : validationState === 'loading'
-            ? t('settings.dataSourceValidationChecking')
-          : validationState === 'partial'
-            ? (remoteValidation?.summary || t('settings.dataSourceValidationPartial'))
-          : validationState === 'missing_key'
-            ? (remoteValidation?.summary || t('settings.dataSourceValidationMissing'))
-          : validationState === 'unsupported'
-            ? (remoteValidation?.summary || t('settings.dataSourceValidationUnsupported'))
-          : validationState === 'validated'
-            ? (remoteValidation?.summary || t('settings.dataSourceValidationRemoteSuccess'))
-            : validationState === 'failed'
-              ? (remoteValidation?.summary || t('settings.dataSourceValidationRemoteFailed'))
-              : validationState === 'configured_pending'
-            ? t('settings.dataSourceValidationConfiguredOnly')
-            : t('settings.dataSourceValidationMissing'),
-        routeUsage,
-        capabilityKeys: source.capabilityKeys,
-        capabilityLabels,
-        description: source.management
-          ? t('settings.dataSourceCredentialDesc')
-          : t('settings.dataSourceBuiltinDesc'),
-        credentialRequired: Boolean(source.requireCredential),
-        credentialValue,
-        credentialSchema: source.credentialSchema || 'none',
-        management: source.management,
-      } satisfies DataSourceLibraryEntry;
-    });
-
-    const customEntries = customDataSourceLibraryDraft.map((record) => {
-      const normalizedValidation = record.validation?.status || 'pending';
-      const localValidation = dataSourceValidationStatus[record.id];
-      const validationState = localValidation || normalizedValidation;
-      const configured = Boolean(
-        record.name.trim()
-        && record.credential.trim()
-        && (record.credentialSchema !== 'key_secret' || record.secret.trim())
-        && record.capabilities.length,
-      );
-      const capabilityLabels = record.capabilities.map((capability) => t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability]));
-      const routeUsage = record.capabilities
-        .map((capability) => DATA_SOURCE_ROUTING_CAPABILITY_MAP[capability])
-        .filter((routeKey): routeKey is DataRouteKey => Boolean(routeKey))
-        .filter((routeKey) => dataSummary[routeKey].includes(record.id));
-      const usable = configured && validationState !== 'failed';
-      return {
-        key: record.id,
-        label: record.name,
-        kind: 'custom' as const,
-        builtin: false,
-        baseUrl: record.baseUrl,
-        configured,
-        usable,
-        validationState: validationState === 'validated' && configured ? 'validated' : validationState === 'failed'
-          ? 'failed'
-          : configured
-            ? 'configured_pending'
-            : 'not_configured',
-        validationMessage: validationState === 'validated'
-          ? t('settings.dataSourceValidationLocalSuccess')
-          : validationState === 'failed'
-            ? (record.validation?.message || t('settings.dataSourceValidationLocalFailed'))
-            : configured
-              ? t('settings.dataSourceValidationConfiguredOnly')
-              : t('settings.dataSourceValidationMissing'),
-        routeUsage,
-        capabilityKeys: record.capabilities,
-        capabilityLabels,
-        description: record.description || t('settings.dataSourceCustomDesc'),
-        credentialRequired: true,
-        credentialValue: record.credential,
-        credentialSchema: record.credentialSchema,
-        customRecord: record,
-      } satisfies DataSourceLibraryEntry;
-    });
-
-    return [...builtInEntries, ...customEntries];
-  }, [allItemMap, builtinDataSourceValidationResults, customDataSourceLibraryDraft, dataSourceValidationStatus, dataSummary, t]);
-  const dataSourceRouteOptions = useMemo(() => {
-    const grouped: Record<DataRouteKey, string[]> = {
-      market: [],
-      fundamentals: [],
-      news: [],
-      sentiment: [],
-    };
-
-    dataSourceLibrary.forEach((source) => {
-      if (!source.usable) {
-        return;
-      }
-      source.capabilityKeys.forEach((capability) => {
-        const routeKey = DATA_SOURCE_ROUTING_CAPABILITY_MAP[capability];
-        if (!routeKey) {
-          return;
-        }
-        if (!grouped[routeKey].includes(source.key)) {
-          grouped[routeKey].push(source.key);
-        }
-      });
-    });
-
-    return grouped;
-  }, [dataSourceLibrary]);
-  const dataSourceLibraryMap = useMemo(
-    () => new Map<string, DataSourceLibraryEntry>(dataSourceLibrary.map((entry) => [entry.key, entry])),
-    [dataSourceLibrary],
-  );
-
   const aiSavedModels = useMemo(
     () => uniqueValues([
       aiSummary.primaryModel,
@@ -1369,33 +757,14 @@ const SettingsPage: React.FC = () => {
   const [aiRoutingDrawerOpen, setAiRoutingDrawerOpen] = useState(false);
   const [quickProviderDrawerProvider, setQuickProviderDrawerProvider] = useState<QuickProviderKey | null>(null);
   const [aiAdvancedDrawerOpen, setAiAdvancedDrawerOpen] = useState(false);
-  const [dataSourceLibraryDrawerOpen, setDataSourceLibraryDrawerOpen] = useState(false);
   const [dataRoutingDrawerKey, setDataRoutingDrawerKey] = useState<DataRouteKey | null>(null);
   const [runtimeVisibilityDrawerOpen, setRuntimeVisibilityDrawerOpen] = useState(false);
   const [rawFieldsDrawerOpen, setRawFieldsDrawerOpen] = useState(false);
-  const [dataSourceEditorId, setDataSourceEditorId] = useState<string | null>(null);
-  const [dataSourceEditorDraft, setDataSourceEditorDraft] = useState<CustomDataSourceRecord>(createEmptyCustomDataSource());
-  const [managedBuiltinDataSourceDraft, setManagedBuiltinDataSourceDraft] = useState({
-    credential: '',
-    secret: '',
-    extraValue: '',
-  });
   const [adminActionDialog, setAdminActionDialog] = useState<'runtime_cache' | 'factory_reset' | null>(null);
   const [adminActionMessage, setAdminActionMessage] = useState<string | null>(null);
   const [adminActionTone, setAdminActionTone] = useState<'success' | 'error'>('success');
   const [isRunningAdminAction, setIsRunningAdminAction] = useState(false);
   const [factoryResetConfirmation, setFactoryResetConfirmation] = useState('');
-  const [dataSourceDeleteTargetId, setDataSourceDeleteTargetId] = useState<string | null>(null);
-  const dataSourceEditorEntry = useMemo(
-    () => (dataSourceEditorId && dataSourceEditorId !== 'new'
-      ? dataSourceLibraryMap.get(dataSourceEditorId) || null
-      : null),
-    [dataSourceEditorId, dataSourceLibraryMap],
-  );
-  const dataSourceDeleteTarget = useMemo(
-    () => (dataSourceDeleteTargetId ? dataSourceLibraryMap.get(dataSourceDeleteTargetId) || null : null),
-    [dataSourceDeleteTargetId, dataSourceLibraryMap],
-  );
 
   useEffect(() => {
     const primaryChannel = aiSummary.primaryChannel || '';
@@ -1471,13 +840,6 @@ const SettingsPage: React.FC = () => {
     void save();
   }, [save]);
 
-  const priorityLabel = useCallback((index: number): string => {
-    if (index === 0) return t('settings.sourcePrimary');
-    if (index === 1) return t('settings.sourceBackup');
-    if (index === 2) return t('settings.sourceSecondaryBackup');
-    return t('settings.sourceFinalFallback');
-  }, [t]);
-
   const setRouteTier = useCallback((
     section: 'market' | 'fundamentals' | 'news' | 'sentiment' | 'notification',
     tier: RoutingTier,
@@ -1518,6 +880,60 @@ const SettingsPage: React.FC = () => {
   }, []);
 
   const effectiveRoute = useCallback((values: Array<string | undefined | null>): string[] => uniqueValues(values), []);
+  const removeDataSourceFromRoutingDraft = useCallback((sourceId: string) => {
+    setRoutingDraft((prev) => ({
+      ...prev,
+      market: toRouteState(
+        effectiveRoute([prev.market.primary, prev.market.backup, prev.market.fallback].filter((value) => value !== sourceId)),
+        true,
+      ),
+      fundamentals: toRouteState(
+        effectiveRoute([prev.fundamentals.primary, prev.fundamentals.backup, prev.fundamentals.fallback].filter((value) => value !== sourceId)),
+        true,
+      ),
+      news: {
+        primary: prev.news.primary === sourceId ? '' : prev.news.primary,
+        backup: prev.news.backup === sourceId ? '' : prev.news.backup,
+      },
+      sentiment: {
+        primary: prev.sentiment.primary === sourceId ? '' : prev.sentiment.primary,
+        backup: prev.sentiment.backup === sourceId ? '' : prev.sentiment.backup,
+      },
+    }));
+  }, [effectiveRoute]);
+  const {
+    dataSourceDeleteTarget,
+    dataSourceEditorDraft,
+    dataSourceEditorEntry,
+    dataSourceEditorMode,
+    dataSourceEditorValidationResult,
+    dataSourceLibrary,
+    dataSourceLibraryDrawerOpen,
+    dataSourceRouteOptions,
+    managedBuiltinDataSourceDraft,
+    closeDataSourceDrawer,
+    deleteDataSourceEntry,
+    openCreateDataSourceDrawer,
+    openEditDataSourceDrawer,
+    saveDataSourceEditor,
+    setDataSourceDeleteTargetId,
+    setDataSourceEditorDraft,
+    setManagedBuiltinDataSourceDraft,
+    validateDataSourceEntry,
+  } = useDataSourceLibraryController({
+    allItemMap,
+    dataSummary,
+    dataPriorityKeys: {
+      market: dataPriorityKeys.market,
+      fundamentals: dataPriorityKeys.fundamentals,
+      news: dataPriorityKeys.news,
+      sentiment: dataPriorityKeys.sentiment,
+    },
+    saveExternalItems,
+    onDeleteSourceFromRoutes: removeDataSourceFromRoutingDraft,
+    prettySourceLabel,
+    t,
+  });
 
   const modelsForGateway = useCallback((gateway: string): string[] => (
     getGatewayModelOptions(
@@ -2361,366 +1777,6 @@ const SettingsPage: React.FC = () => {
     });
     setAiAdvancedDrawerOpen(true);
   }, []);
-  const openCreateDataSourceDrawer = useCallback(() => {
-    setDataSourceEditorId('new');
-    setDataSourceEditorDraft(createEmptyCustomDataSource());
-    setDataSourceLibraryDrawerOpen(true);
-  }, []);
-  const openEditDataSourceDrawer = useCallback((sourceId: string) => {
-    setDataSourceEditorId(sourceId);
-    setDataSourceLibraryDrawerOpen(true);
-  }, []);
-  const closeDataSourceDrawer = useCallback(() => {
-    setDataSourceLibraryDrawerOpen(false);
-    setDataSourceEditorId(null);
-  }, []);
-  const saveDataSourceEditor = useCallback(async () => {
-    if (dataSourceEditorEntry?.management) {
-      const { management } = dataSourceEditorEntry;
-      const requiresCredential = management.credentialSchema !== 'none';
-      const missingCredential = requiresCredential && !managedBuiltinDataSourceDraft.credential.trim();
-      const missingSecret = management.credentialSchema === 'key_secret' && !managedBuiltinDataSourceDraft.secret.trim();
-      const message = missingCredential
-        ? t('settings.dataSourceValidationMissingCredential')
-        : missingSecret
-          ? t('settings.dataSourceValidationMissingSecret')
-          : '';
-      if (message) {
-        setDataSourceValidationStatus((prev) => ({
-          ...prev,
-          [dataSourceEditorEntry.key]: 'failed',
-        }));
-        return;
-      }
-
-      const credentialValue = managedBuiltinDataSourceDraft.credential.trim();
-      const saveToPlural = Boolean(management.pluralCredentialEnvKey && credentialValue.includes(','));
-      const updatedItems: Array<{ key: string; value: string }> = [];
-      if (management.credentialEnvKey) {
-        updatedItems.push({ key: management.credentialEnvKey, value: saveToPlural ? '' : credentialValue });
-      }
-      if (management.pluralCredentialEnvKey) {
-        updatedItems.push({
-          key: management.pluralCredentialEnvKey,
-          value: saveToPlural ? credentialValue : '',
-        });
-      }
-      if (management.secretEnvKey) {
-        updatedItems.push({
-          key: management.secretEnvKey,
-          value: managedBuiltinDataSourceDraft.secret.trim(),
-        });
-      }
-      if (management.extraField) {
-        updatedItems.push({
-          key: management.extraField.envKey,
-          value: managedBuiltinDataSourceDraft.extraValue.trim() || management.extraField.defaultValue,
-        });
-      }
-
-      setDataSourceValidationStatus((prev) => ({
-        ...prev,
-        [dataSourceEditorEntry.key]: 'configured_pending',
-      }));
-      await saveExternalItems(updatedItems, t('settings.dataSourceSaved'));
-      return;
-    }
-
-    const validation = validateCustomDataSource(dataSourceEditorDraft);
-    if (!validation.valid) {
-      const message = validation.issue === 'name'
-        ? t('settings.dataSourceValidationMissingName')
-        : validation.issue === 'credential'
-          ? t('settings.dataSourceValidationMissingCredential')
-          : validation.issue === 'secret'
-            ? t('settings.dataSourceValidationMissingSecret')
-          : validation.issue === 'capabilities'
-            ? t('settings.dataSourceValidationMissingCapabilities')
-            : t('settings.dataSourceValidationInvalidBaseUrl');
-      setDataSourceValidationStatus((prev) => ({
-        ...prev,
-        [dataSourceEditorDraft.id || 'new']: 'failed',
-      }));
-      setDataSourceEditorDraft((prev) => ({
-        ...prev,
-        validation: { status: 'failed', message },
-      }));
-      return;
-    }
-    const currentId = dataSourceEditorId && dataSourceEditorId !== 'new'
-      ? dataSourceEditorId
-      : dataSourceEditorDraft.id || '';
-    const finalId = dataSourceEditorId === 'new'
-      ? makeUniqueDataSourceId(dataSourceEditorDraft.name || currentId || 'custom_source', [
-        ...dataSourceLibrary.map((source) => source.key),
-        currentId,
-      ])
-      : currentId;
-    const nextRecord: CustomDataSourceRecord = {
-      id: finalId,
-      name: dataSourceEditorDraft.name.trim(),
-      credentialSchema: dataSourceEditorDraft.credentialSchema,
-      credential: dataSourceEditorDraft.credential.trim(),
-      secret: dataSourceEditorDraft.secret.trim(),
-      baseUrl: dataSourceEditorDraft.baseUrl.trim(),
-      description: dataSourceEditorDraft.description.trim(),
-      capabilities: uniqueValues(dataSourceEditorDraft.capabilities).map((capability) => capability as DataSourceCapability),
-      validation: { status: 'pending' },
-    };
-    const nextLibrary = dataSourceEditorId === 'new'
-      ? [...customDataSourceLibraryDraft.filter((record) => record.id !== finalId), nextRecord]
-      : customDataSourceLibraryDraft.map((record) => (record.id === currentId ? nextRecord : record));
-    setCustomDataSourceLibraryDraft(nextLibrary);
-    setDataSourceEditorId(finalId);
-    setDataSourceValidationStatus((prev) => ({
-      ...prev,
-      [finalId]: 'configured_pending',
-    }));
-    setDataSourceEditorDraft((prev) => ({
-      ...prev,
-      id: finalId,
-      validation: { status: 'pending' },
-    }));
-    await saveExternalItems([
-      { key: CUSTOM_DATA_SOURCE_LIBRARY_KEY, value: serializeCustomDataSourceLibrary(nextLibrary) },
-    ], t('settings.dataSourceSaved'));
-  }, [customDataSourceLibraryDraft, dataSourceEditorDraft, dataSourceEditorEntry, dataSourceEditorId, dataSourceLibrary, managedBuiltinDataSourceDraft, saveExternalItems, t]);
-  const deleteDataSourceEntry = useCallback(async () => {
-    if (!dataSourceDeleteTargetId) {
-      return;
-    }
-
-    const source = dataSourceLibraryMap.get(dataSourceDeleteTargetId);
-    if (!source?.customRecord) {
-      setDataSourceDeleteTargetId(null);
-      return;
-    }
-
-    const nextLibrary = customDataSourceLibraryDraft.filter((record) => record.id !== dataSourceDeleteTargetId);
-    const cleanupByConfigKey = new Map<string, string>();
-    [
-      dataPriorityKeys.market,
-      dataPriorityKeys.fundamentals,
-      dataPriorityKeys.news,
-      dataPriorityKeys.sentiment,
-    ].forEach((configKey) => {
-      const currentRoute = splitCsv(allItemMap.get(configKey));
-      if (!currentRoute.includes(dataSourceDeleteTargetId)) {
-        return;
-      }
-      cleanupByConfigKey.set(
-        configKey,
-        currentRoute.filter((value) => value !== dataSourceDeleteTargetId).join(','),
-      );
-    });
-
-    setCustomDataSourceLibraryDraft(nextLibrary);
-    setDataSourceValidationStatus((prev) => {
-      if (!(dataSourceDeleteTargetId in prev)) {
-        return prev;
-      }
-      const nextStatus = { ...prev };
-      delete nextStatus[dataSourceDeleteTargetId];
-      return nextStatus;
-    });
-    setRoutingDraft((prev) => ({
-      ...prev,
-      market: toRouteState(
-        effectiveRoute([prev.market.primary, prev.market.backup, prev.market.fallback].filter((value) => value !== dataSourceDeleteTargetId)),
-        true,
-      ),
-      fundamentals: toRouteState(
-        effectiveRoute([prev.fundamentals.primary, prev.fundamentals.backup, prev.fundamentals.fallback].filter((value) => value !== dataSourceDeleteTargetId)),
-        true,
-      ),
-      news: {
-        primary: prev.news.primary === dataSourceDeleteTargetId ? '' : prev.news.primary,
-        backup: prev.news.backup === dataSourceDeleteTargetId ? '' : prev.news.backup,
-      },
-      sentiment: {
-        primary: prev.sentiment.primary === dataSourceDeleteTargetId ? '' : prev.sentiment.primary,
-        backup: prev.sentiment.backup === dataSourceDeleteTargetId ? '' : prev.sentiment.backup,
-      },
-    }));
-    setDataSourceLibraryDrawerOpen(false);
-    setDataSourceEditorId(null);
-    setDataSourceDeleteTargetId(null);
-
-    await saveExternalItems([
-      { key: CUSTOM_DATA_SOURCE_LIBRARY_KEY, value: serializeCustomDataSourceLibrary(nextLibrary) },
-      ...[...cleanupByConfigKey.entries()].map(([key, value]) => ({ key, value })),
-    ], t('settings.dataSourceDeleted'));
-  }, [
-    allItemMap,
-    customDataSourceLibraryDraft,
-    dataPriorityKeys.fundamentals,
-    dataPriorityKeys.market,
-    dataPriorityKeys.news,
-    dataPriorityKeys.sentiment,
-    dataSourceDeleteTargetId,
-    dataSourceLibraryMap,
-    effectiveRoute,
-    saveExternalItems,
-    t,
-  ]);
-  const validateDataSourceEntry = useCallback(async (sourceId: string) => {
-    const source = dataSourceLibraryMap.get(sourceId);
-    if (!source) {
-      return;
-    }
-    if (source.kind === 'custom' && source.customRecord) {
-      const validation = validateCustomDataSource(source.customRecord);
-      if (!validation.valid) {
-        const message = validation.issue === 'name'
-          ? t('settings.dataSourceValidationMissingName')
-          : validation.issue === 'credential'
-            ? t('settings.dataSourceValidationMissingCredential')
-            : validation.issue === 'secret'
-              ? t('settings.dataSourceValidationMissingSecret')
-            : validation.issue === 'capabilities'
-              ? t('settings.dataSourceValidationMissingCapabilities')
-              : t('settings.dataSourceValidationInvalidBaseUrl');
-        const nextLibrary = customDataSourceLibraryDraft.map((record) => (
-          record.id === sourceId
-            ? { ...record, validation: { status: 'failed' as const, message } }
-            : record
-        ));
-        setCustomDataSourceLibraryDraft(nextLibrary);
-        setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: 'failed' }));
-        await saveExternalItems([
-          { key: CUSTOM_DATA_SOURCE_LIBRARY_KEY, value: serializeCustomDataSourceLibrary(nextLibrary) },
-        ], message);
-        return;
-      }
-
-      const probe = await systemConfigApi.testCustomDataSource({
-        name: source.customRecord.name,
-        baseUrl: source.customRecord.baseUrl,
-        credentialSchema: source.customRecord.credentialSchema,
-        credential: source.customRecord.credential,
-        secret: source.customRecord.secret,
-        timeoutSeconds: 5,
-      });
-      const nextStatus: DataSourceValidationState = probe.success ? 'validated' : 'failed';
-      const parsedProbeError = getApiErrorMessage({
-        response: {
-          status: probe.statusCode ?? 400,
-          data: {
-            error: probe.error,
-            message: probe.message,
-            statusCode: probe.statusCode,
-            checkedUrl: probe.checkedUrl,
-            latencyMs: probe.latencyMs,
-          },
-          statusText: probe.error || probe.message || undefined,
-        },
-      }, t('settings.dataSourceValidationConnectivityFailed'));
-      const message = probe.success
-        ? probe.message || t('settings.dataSourceValidationConnectivitySuccess')
-        : parsedProbeError;
-      const nextLibrary = customDataSourceLibraryDraft.map((record) => (
-        record.id === sourceId
-          ? {
-            ...record,
-            validation: probe.success
-              ? { status: 'validated' as const, message }
-              : { status: 'failed' as const, message },
-          }
-          : record
-      ));
-      setCustomDataSourceLibraryDraft(nextLibrary);
-      setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: nextStatus }));
-      await saveExternalItems([
-        { key: CUSTOM_DATA_SOURCE_LIBRARY_KEY, value: serializeCustomDataSourceLibrary(nextLibrary) },
-      ], message);
-      return;
-    }
-
-    if (source.management) {
-      const sourceState = source.management.pluralCredentialEnvKey && hasConfigValue(allItemMap.get(source.management.pluralCredentialEnvKey) || '')
-        ? String(allItemMap.get(source.management.pluralCredentialEnvKey) || '')
-        : source.management.credentialEnvKey
-          ? String(allItemMap.get(source.management.credentialEnvKey) || '')
-          : '';
-      const draftAppliesToSource = dataSourceEditorEntry?.key === sourceId;
-      const credential = draftAppliesToSource && managedBuiltinDataSourceDraft.credential.trim()
-        ? managedBuiltinDataSourceDraft.credential.trim()
-        : sourceState.trim();
-      const secret = draftAppliesToSource && managedBuiltinDataSourceDraft.secret.trim()
-        ? managedBuiltinDataSourceDraft.secret.trim()
-        : source.management.secretEnvKey
-          ? String(allItemMap.get(source.management.secretEnvKey) || '').trim()
-          : '';
-      setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: 'loading' }));
-      try {
-        const result = await systemConfigApi.testBuiltinDataSource({
-          provider: sourceId,
-          symbol: 'MSFT',
-          credential,
-          secret,
-          timeoutSeconds: 5,
-        });
-        const nextStatus: DataSourceValidationState = result.status === 'success'
-          ? 'validated'
-          : result.status;
-        setBuiltinDataSourceValidationResults((prev) => ({ ...prev, [sourceId]: result }));
-        setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: nextStatus }));
-      } catch (error: unknown) {
-        const parsed = getParsedApiError(error);
-        const failedResult: BuiltinDataSourceValidationResult = {
-          provider: sourceId,
-          ok: false,
-          status: 'failed',
-          checkedAt: new Date().toISOString(),
-          durationMs: 0,
-          keyMasked: null,
-          checks: [],
-          summary: parsed.message || t('settings.dataSourceValidationRemoteFailed'),
-          suggestion: t('settings.dataSourceValidationRetrySuggestion'),
-        };
-        setBuiltinDataSourceValidationResults((prev) => ({ ...prev, [sourceId]: failedResult }));
-        setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: 'failed' }));
-      }
-      return;
-    }
-
-    if (source.kind === 'builtin') {
-      setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: 'loading' }));
-      try {
-        const result = await systemConfigApi.testBuiltinDataSource({
-          provider: sourceId,
-          symbol: 'MSFT',
-          timeoutSeconds: 5,
-        });
-        const nextStatus: DataSourceValidationState = result.status === 'success'
-          ? 'validated'
-          : result.status;
-        setBuiltinDataSourceValidationResults((prev) => ({ ...prev, [sourceId]: result }));
-        setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: nextStatus }));
-      } catch (error: unknown) {
-        const parsed = getParsedApiError(error);
-        setBuiltinDataSourceValidationResults((prev) => ({
-          ...prev,
-          [sourceId]: {
-            provider: sourceId,
-            ok: false,
-            status: 'failed',
-            checkedAt: new Date().toISOString(),
-            durationMs: 0,
-            keyMasked: null,
-            checks: [],
-            summary: parsed.message || t('settings.dataSourceValidationRemoteFailed'),
-            suggestion: t('settings.dataSourceValidationRetrySuggestion'),
-          },
-        }));
-        setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: 'failed' }));
-      }
-      return;
-    }
-
-    const nextStatus: DataSourceValidationState = source.usable ? 'validated' : 'failed';
-    setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: nextStatus }));
-  }, [allItemMap, customDataSourceLibraryDraft, dataSourceEditorEntry?.key, dataSourceLibraryMap, managedBuiltinDataSourceDraft.credential, managedBuiltinDataSourceDraft.secret, saveExternalItems, t]);
   const runResetRuntimeCaches = useCallback(async () => {
     setIsRunningAdminAction(true);
     setAdminActionMessage(null);
@@ -2764,59 +1820,6 @@ const SettingsPage: React.FC = () => {
     () => PROVIDER_LIBRARY_ITEMS.find((provider) => provider.key === quickProviderDrawerProvider) || null,
     [quickProviderDrawerProvider],
   );
-  const managedBuiltinSourceState = useMemo(() => {
-    if (!dataSourceEditorEntry?.management) {
-      return null;
-    }
-    const { management } = dataSourceEditorEntry;
-    const credentialValue = management.pluralCredentialEnvKey && hasConfigValue(allItemMap.get(management.pluralCredentialEnvKey) || '')
-      ? String(allItemMap.get(management.pluralCredentialEnvKey) || '')
-      : management.credentialEnvKey
-        ? String(allItemMap.get(management.credentialEnvKey) || '')
-        : '';
-    const secretValue = management.secretEnvKey
-      ? String(allItemMap.get(management.secretEnvKey) || '')
-      : '';
-    const extraValue = management.extraField
-      ? String(allItemMap.get(management.extraField.envKey) || management.extraField.defaultValue || '')
-      : '';
-    return {
-      credential: credentialValue,
-      secret: secretValue,
-      extraValue,
-    };
-  }, [allItemMap, dataSourceEditorEntry]);
-  const dataSourceEditorMode: DataSourceEditorMode = dataSourceEditorId === 'new'
-    ? 'create'
-    : dataSourceEditorEntry?.builtin && !dataSourceEditorEntry.management
-      ? 'view'
-      : dataSourceEditorEntry?.builtin
-        ? 'manage_builtin'
-      : 'edit';
-  const dataSourceEditorValidationResult = dataSourceEditorEntry
-    ? builtinDataSourceValidationResults[dataSourceEditorEntry.key]
-    : undefined;
-
-  useEffect(() => {
-    if (!dataSourceLibraryDrawerOpen) {
-      return;
-    }
-    if (dataSourceEditorId === 'new') {
-      setDataSourceEditorDraft(createEmptyCustomDataSource());
-      return;
-    }
-    if (dataSourceEditorEntry?.customRecord) {
-      setDataSourceEditorDraft(dataSourceEditorEntry.customRecord);
-      return;
-    }
-    if (managedBuiltinSourceState) {
-      setManagedBuiltinDataSourceDraft(managedBuiltinSourceState);
-      return;
-    }
-    if (dataSourceEditorEntry?.builtin) {
-      setDataSourceEditorDraft(createEmptyCustomDataSource());
-    }
-  }, [dataSourceEditorEntry, dataSourceEditorId, dataSourceLibraryDrawerOpen, managedBuiltinSourceState]);
 
   const primarySummaryModel = aiSummary.primaryChannel ? aiSummary.primaryModel : '';
   const backupSummaryModel = aiSummary.backupChannel ? aiSummary.backupModel : '';
@@ -3206,8 +2209,6 @@ const SettingsPage: React.FC = () => {
                       adminLocked={adminLocked}
                       isSaving={isSaving}
                       prettySourceLabel={prettySourceLabel}
-                      sourceToneClass={sourceToneClass}
-                      priorityLabel={priorityLabel}
                       onOpenDataRoutingDrawer={setDataRoutingDrawerKey}
                       onOpenCreateDataSourceDrawer={openCreateDataSourceDrawer}
                       onOpenEditDataSourceDrawer={openEditDataSourceDrawer}
@@ -4193,363 +3194,28 @@ const SettingsPage: React.FC = () => {
         </div>
       </Drawer>
 
-      <Drawer
+      <DataSourceLibraryDrawer
+        adminLocked={adminLocked}
         isOpen={dataSourceLibraryDrawerOpen}
+        isSaving={isSaving}
+        language={language}
+        deleteTarget={dataSourceDeleteTarget}
+        draft={dataSourceEditorDraft}
+        entry={dataSourceEditorEntry}
+        mode={dataSourceEditorMode}
+        managedBuiltinDraft={managedBuiltinDataSourceDraft}
         onClose={closeDataSourceDrawer}
-        title={dataSourceEditorMode === 'create'
-          ? t('settings.dataSourceDrawerTitleCreate')
-          : dataSourceEditorEntry
-            ? t('settings.dataSourceDrawerTitleEdit', { source: dataSourceEditorEntry.label })
-            : t('settings.dataSourceDrawerTitleFallback')}
-        width="max-w-[min(100vw,44rem)]"
-        zIndex={81}
-        bodyClassName={DRAWER_GHOST_FORM_SCOPE_CLASS}
-      >
-        {dataSourceEditorMode === 'view' && dataSourceEditorEntry ? (
-          <div className="space-y-3">
-            <div className={DRAWER_PANEL_CLASS}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{dataSourceEditorEntry.label}</p>
-                  <p className="mt-1 text-xs text-secondary-text">
-                    {dataSourceEditorEntry.builtin ? t('settings.dataSourceBuiltinKind') : t('settings.dataSourceCustomKind')}
-                  </p>
-                </div>
-                <span className={GHOST_TAG_CLASS}>
-                  {dataSourceEditorEntry.validationMessage}
-                </span>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {dataSourceEditorEntry.capabilityLabels.map((capability) => (
-                  <span
-                    key={`drawer-${dataSourceEditorEntry.key}-${capability}`}
-                    className={GHOST_TAG_CLASS}
-                  >
-                    {capability}
-                  </span>
-                ))}
-              </div>
-              <p className="mt-3 text-xs text-secondary-text">
-                {t('settings.dataSourceUsedByLabel')}: {dataSourceEditorEntry.routeUsage.length
-                  ? dataSourceEditorEntry.routeUsage.map((routeKey) => t(`settings.dataRouteName.${routeKey}`)).join(' · ')
-                  : t('settings.dataSourceNotRouted')}
-              </p>
-              <p className="mt-1 text-xs text-muted-text">{dataSourceEditorEntry.description}</p>
-            </div>
-            {dataSourceEditorValidationResult ? (
-              <div className={DRAWER_PANEL_CLASS} data-testid="builtin-data-source-validation-result">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-foreground">{dataSourceEditorValidationResult.summary}</p>
-                  <span className={GHOST_TAG_CLASS}>{dataSourceEditorValidationResult.status}</span>
-                </div>
-                <div className="mt-2 grid gap-1.5 text-xs text-secondary-text">
-                  <p>{t('settings.dataSourceValidationKeyMasked')}: {dataSourceEditorValidationResult.keyMasked || t('settings.dataSourceValidationPublicProvider')}</p>
-                  <p>{language === 'zh' ? '校验时间' : 'Checked at'}: {formatDateTime(dataSourceEditorValidationResult.checkedAt)}</p>
-                  <p>{t('settings.dataSourceValidationDuration')}: {formatDurationMs(dataSourceEditorValidationResult.durationMs)}</p>
-                  {dataSourceEditorValidationResult.checks.map((check) => (
-                    <p key={`${dataSourceEditorValidationResult.provider}-${check.name}`}>
-                      {formatDataSourceCheckLine(check)} · {check.message}
-                    </p>
-                  ))}
-                </div>
-                <p className="mt-2 text-xs text-muted-text">{dataSourceEditorValidationResult.suggestion}</p>
-              </div>
-            ) : null}
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                size="sm"
-                variant="settings-secondary"
-                className={CONTROL_GHOST_BUTTON_CLASS}
-                onClick={() => void validateDataSourceEntry(dataSourceEditorEntry.key)}
-                disabled={adminLocked || isSaving || !dataSourceEditorEntry.usable}
-              >
-                {t('settings.dataSourceValidateAction')}
-              </Button>
-            </div>
-          </div>
-        ) : dataSourceEditorMode === 'manage_builtin' && dataSourceEditorEntry?.management ? (
-          <div className="space-y-4">
-            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{dataSourceEditorEntry.label}</p>
-                  <p className="mt-1 text-xs text-secondary-text">{t('settings.dataSourceBuiltinManageDesc')}</p>
-                </div>
-                <span className={GHOST_TAG_CLASS}>
-                  {dataSourceEditorEntry.credentialSchema === 'key_secret'
-                    ? t('settings.dataSourceSchemaKeySecret')
-                    : dataSourceEditorEntry.credentialSchema === 'single_key'
-                      ? t('settings.dataSourceSchemaSingleKey')
-                      : t('settings.dataSourceSchemaNone')}
-                </span>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {dataSourceEditorEntry.capabilityLabels.map((capability) => (
-                  <span
-                    key={`builtin-${dataSourceEditorEntry.key}-${capability}`}
-                    className={GHOST_TAG_CLASS}
-                  >
-                    {capability}
-                  </span>
-                ))}
-              </div>
-              <p className="mt-3 text-xs text-secondary-text">
-                {t('settings.dataSourceUsedByLabel')}: {dataSourceEditorEntry.routeUsage.length
-                  ? dataSourceEditorEntry.routeUsage.map((routeKey) => t(`settings.dataRouteName.${routeKey}`)).join(' · ')
-                  : t('settings.dataSourceNotRouted')}
-              </p>
-              <p className="mt-1 text-xs text-muted-text">{dataSourceEditorEntry.description}</p>
-            </div>
-
-            <div className="space-y-3">
-              {dataSourceEditorEntry.management.fields.map((field) => (
-                <Input
-                  key={field.name}
-                  type="password"
-                  allowTogglePassword
-                  iconType="key"
-                  label={t(field.labelKey)}
-                  value={field.name === 'secret' ? managedBuiltinDataSourceDraft.secret : managedBuiltinDataSourceDraft.credential}
-                  onChange={(event) => setManagedBuiltinDataSourceDraft((prev) => ({
-                    ...prev,
-                    [field.name === 'secret' ? 'secret' : 'credential']: event.target.value,
-                  }))}
-                  disabled={isSaving}
-                  hint={t(field.hintKey)}
-                  placeholder={field.placeholder}
-                />
-              ))}
-              {dataSourceEditorEntry.management.extraField ? (
-                <details>
-                  <summary className={DRAWER_ADVANCED_SUMMARY_CLASS}>
-                    配置高级参数 (Advanced Settings) ▾
-                  </summary>
-                  <div className="mt-3 space-y-2">
-                    <Select
-                      label={t(dataSourceEditorEntry.management.extraField.labelKey)}
-                      value={managedBuiltinDataSourceDraft.extraValue || dataSourceEditorEntry.management.extraField.defaultValue}
-                      onChange={(value) => setManagedBuiltinDataSourceDraft((prev) => ({
-                        ...prev,
-                        extraValue: value,
-                      }))}
-                      options={dataSourceEditorEntry.management.extraField.options}
-                      disabled={isSaving}
-                    />
-                    <p className="text-xs text-muted-text">
-                      {t(dataSourceEditorEntry.management.extraField.hintKey)}
-                    </p>
-                  </div>
-                </details>
-              ) : null}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-secondary-text">{dataSourceEditorEntry.validationMessage}</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="settings-secondary"
-                  className={CONTROL_GHOST_BUTTON_CLASS}
-                  onClick={() => void validateDataSourceEntry(dataSourceEditorEntry.key)}
-                  disabled={isSaving}
-                >
-                  {t('settings.dataSourceValidateAction')}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="settings-primary"
-                  onClick={() => void saveDataSourceEditor()}
-                  disabled={isSaving}
-                >
-                  {t('settings.dataSourceEditorSaveAction')}
-                </Button>
-              </div>
-            </div>
-            {dataSourceEditorValidationResult ? (
-              <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3" data-testid="builtin-data-source-validation-result">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-foreground">{dataSourceEditorValidationResult.summary}</p>
-                  <span className={GHOST_TAG_CLASS}>{dataSourceEditorValidationResult.status}</span>
-                </div>
-                <div className="mt-2 grid gap-1.5 text-xs text-secondary-text">
-                  <p>{t('settings.dataSourceValidationKeyMasked')}: {dataSourceEditorValidationResult.keyMasked || t('settings.dataSourceValidationPublicProvider')}</p>
-                  <p>{language === 'zh' ? '校验时间' : 'Checked at'}: {formatDateTime(dataSourceEditorValidationResult.checkedAt)}</p>
-                  <p>{t('settings.dataSourceValidationDuration')}: {formatDurationMs(dataSourceEditorValidationResult.durationMs)}</p>
-                  {dataSourceEditorValidationResult.checks.map((check) => (
-                    <p key={`${dataSourceEditorValidationResult.provider}-${check.name}`}>
-                      {formatDataSourceCheckLine(check)} · {check.message}
-                    </p>
-                  ))}
-                </div>
-                <p className="mt-2 text-xs text-muted-text">{dataSourceEditorValidationResult.suggestion}</p>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className={DRAWER_PANEL_CLASS}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
-                    {dataSourceEditorId === 'new'
-                      ? t('settings.dataSourceEditorCreateTitle')
-                      : t('settings.dataSourceEditorEditTitle')}
-                  </p>
-                  <p className="mt-1 text-xs text-secondary-text">{t('settings.dataSourceEditorDesc')}</p>
-                </div>
-                <span className={GHOST_TAG_CLASS}>
-                  {dataSourceEditorDraft.capabilities.length
-                    ? t('settings.dataSourceConfiguredPending')
-                    : t('settings.notConfigured')}
-                </span>
-              </div>
-              <div className="mt-3 grid gap-2 md:grid-cols-2">
-                {DATA_SOURCE_CUSTOM_SCHEMA_OPTIONS.map((option) => {
-                  const active = dataSourceEditorDraft.credentialSchema === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={active
-                        ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-left shadow-[var(--glow-soft)]'
-                        : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-3 py-2 text-left'}
-                      onClick={() => setDataSourceEditorDraft((prev) => ({
-                        ...prev,
-                        credentialSchema: option.value,
-                        secret: option.value === 'key_secret' ? prev.secret : '',
-                      }))}
-                      disabled={isSaving}
-                    >
-                      <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
-                      <p className="mt-1 text-xs text-secondary-text">{t(option.descriptionKey)}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <Input
-                label={t('settings.dataSourceEditorName')}
-                value={dataSourceEditorDraft.name}
-                onChange={(event) => setDataSourceEditorDraft((prev) => ({ ...prev, name: event.target.value }))}
-                disabled={isSaving}
-              />
-              <Input
-                type="password"
-                allowTogglePassword
-                iconType="key"
-                label={t('settings.dataSourceFieldApiKey')}
-                value={dataSourceEditorDraft.credential}
-                onChange={(event) => setDataSourceEditorDraft((prev) => ({ ...prev, credential: event.target.value }))}
-                disabled={isSaving}
-                hint={t('settings.dataSourceEditorCredentialHint')}
-              />
-              {dataSourceEditorDraft.credentialSchema === 'key_secret' ? (
-                <Input
-                  type="password"
-                  allowTogglePassword
-                  iconType="key"
-                  label={t('settings.dataSourceFieldSecretKey')}
-                  value={dataSourceEditorDraft.secret}
-                  onChange={(event) => setDataSourceEditorDraft((prev) => ({ ...prev, secret: event.target.value }))}
-                  disabled={isSaving}
-                  hint={t('settings.dataSourceFieldSecretKeyHint')}
-                />
-              ) : null}
-              <details>
-                <summary className={DRAWER_ADVANCED_SUMMARY_CLASS}>
-                  配置高级参数 (Advanced Settings) ▾
-                </summary>
-                <div className="mt-3 space-y-3">
-                  <Input
-                    label={t('settings.dataSourceEditorBaseUrl')}
-                    value={dataSourceEditorDraft.baseUrl}
-                    onChange={(event) => setDataSourceEditorDraft((prev) => ({ ...prev, baseUrl: event.target.value }))}
-                    disabled={isSaving}
-                    hint={t('settings.dataSourceEditorBaseUrlHint')}
-                    placeholder="https://example.com/v1"
-                  />
-                  <div>
-                    <label className={DRAWER_LABEL_CLASS}>{t('settings.dataSourceEditorDescription')}</label>
-                    <textarea
-                      value={dataSourceEditorDraft.description}
-                      onChange={(event) => setDataSourceEditorDraft((prev) => ({ ...prev, description: event.target.value }))}
-                      disabled={isSaving}
-                      className={DRAWER_TEXTAREA_CLASS}
-                    />
-                  </div>
-                  <div>
-                    <p className={DRAWER_LABEL_CLASS}>{t('settings.dataSourceEditorCapabilities')}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {DATA_SOURCE_CAPABILITY_OPTIONS.map((capability) => {
-                        const active = dataSourceEditorDraft.capabilities.includes(capability);
-                        return (
-                          <button
-                            key={capability}
-                            type="button"
-                            className={active
-                              ? 'rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-medium text-white'
-                              : 'rounded-lg border border-white/5 bg-white/[0.03] px-3 py-1.5 text-xs text-white/40 hover:bg-white/10'}
-                            onClick={() => setDataSourceEditorDraft((prev) => {
-                              const nextCapabilities = active
-                                ? prev.capabilities.filter((item) => item !== capability)
-                                : [...prev.capabilities, capability];
-                              return { ...prev, capabilities: nextCapabilities };
-                            })}
-                            disabled={isSaving}
-                          >
-                            {t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability])}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </details>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-secondary-text">
-                {dataSourceEditorId === 'new'
-                  ? t('settings.dataSourceValidationAfterCreateHint')
-                  : dataSourceEditorDraft.validation?.status === 'failed'
-                  ? dataSourceEditorDraft.validation.message || t('settings.dataSourceValidationLocalFailed')
-                  : dataSourceEditorDraft.validation?.status === 'validated'
-                    ? t('settings.dataSourceValidationLocalSuccess')
-                    : t('settings.dataSourceValidationConfiguredOnly')}
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                {dataSourceEditorId !== 'new' ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="danger-subtle"
-                    onClick={() => setDataSourceDeleteTargetId(dataSourceEditorId)}
-                    disabled={isSaving}
-                  >
-                    {t('settings.dataSourceDeleteAction')}
-                  </Button>
-                ) : null}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="settings-primary"
-                  onClick={() => void saveDataSourceEditor()}
-                  disabled={isSaving}
-                >
-                  {dataSourceEditorId === 'new'
-                    ? t('settings.dataSourceEditorCreateAction')
-                    : t('settings.dataSourceEditorSaveAction')}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-      </Drawer>
+        onDeleteTargetChange={setDataSourceDeleteTargetId}
+        onDraftChange={setDataSourceEditorDraft}
+        onManagedBuiltinDraftChange={setManagedBuiltinDataSourceDraft}
+        onSave={() => void saveDataSourceEditor()}
+        onValidate={(sourceId) => {
+          void validateDataSourceEntry(sourceId);
+        }}
+        onConfirmDelete={() => void deleteDataSourceEntry()}
+        t={t}
+        validationResult={dataSourceEditorValidationResult}
+      />
 
       <ConfirmDialog
         isOpen={adminActionDialog !== null}
@@ -4574,16 +3240,6 @@ const SettingsPage: React.FC = () => {
           setAdminActionDialog(null);
           setFactoryResetConfirmation('');
         }}
-      />
-      <ConfirmDialog
-        isOpen={dataSourceDeleteTarget !== null}
-        title={t('settings.dataSourceDeleteConfirmTitle', { source: dataSourceDeleteTarget?.label || '' })}
-        message={t('settings.dataSourceDeleteConfirmBody', { source: dataSourceDeleteTarget?.label || '' })}
-        confirmText={t('settings.dataSourceDeleteAction')}
-        cancelText={t('common.cancel')}
-        isDanger
-        onConfirm={() => void deleteDataSourceEntry()}
-        onCancel={() => setDataSourceDeleteTargetId(null)}
       />
       <PageBriefDrawer
         isOpen={isBriefDrawerOpen}

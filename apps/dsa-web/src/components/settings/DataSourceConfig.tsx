@@ -3,31 +3,15 @@ import { Button, GlassCard } from '../common';
 import { StatusBadge } from '../ui/StatusBadge';
 import { ApiSourceCard } from './ApiSourceCard';
 import { SettingsSectionCard } from './SettingsSectionCard';
+import { sourceToneClass, type DataRouteKey, type DataSourceLibraryEntry, type DataSourceValidationState } from './dataSourceLibraryShared';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
-type DataRouteKey = 'market' | 'fundamentals' | 'news' | 'sentiment';
-type DataSourceCapability = DataRouteKey | 'local';
-type DataSourceValidationState = 'not_configured' | 'configured_pending' | 'validated' | 'failed' | 'builtin' | 'loading' | 'partial' | 'missing_key' | 'unsupported';
 
 type DataRoutingGroup = {
   key: DataRouteKey;
   role: string;
   values: string[];
   available: string[];
-};
-
-type DataSourceLibraryEntry = {
-  key: string;
-  label: string;
-  builtin: boolean;
-  configured: boolean;
-  usable: boolean;
-  validationState: DataSourceValidationState;
-  validationMessage: string;
-  routeUsage: DataRouteKey[];
-  capabilityKeys: DataSourceCapability[];
-  capabilityLabels: string[];
-  description: string;
 };
 
 type DataSourceConfigProps = {
@@ -37,8 +21,6 @@ type DataSourceConfigProps = {
   adminLocked: boolean;
   isSaving: boolean;
   prettySourceLabel: (value: string) => string;
-  sourceToneClass: (index: number) => string;
-  priorityLabel: (index: number) => string;
   onOpenDataRoutingDrawer: (key: DataRouteKey) => void;
   onOpenCreateDataSourceDrawer: () => void;
   onOpenEditDataSourceDrawer: (sourceId: string) => void;
@@ -49,6 +31,13 @@ const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] borde
 const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
 const SECTION_HEADER_CLASS = 'mt-8 mb-3 border-b border-white/10 pb-2 text-xs font-bold uppercase tracking-[0.2em] text-white/30 first:mt-0';
 const ROW_CLASS = 'flex items-center justify-between gap-4 border-b border-white/5 py-3 transition-colors hover:bg-white/[0.02]';
+
+const priorityLabel = (index: number): string => {
+  if (index === 0) return 'P1';
+  if (index === 1) return 'P2';
+  if (index === 2) return 'P3';
+  return `P${index + 1}`;
+};
 
 const DATA_SOURCE_LIBRARY_GROUPS: Array<{
   key: string;
@@ -115,8 +104,6 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
   adminLocked,
   isSaving,
   prettySourceLabel,
-  sourceToneClass,
-  priorityLabel,
   onOpenDataRoutingDrawer,
   onOpenCreateDataSourceDrawer,
   onOpenEditDataSourceDrawer,
