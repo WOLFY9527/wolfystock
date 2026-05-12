@@ -2,10 +2,12 @@ import { StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketOverviewPage from '../MarketOverviewPage';
+import { MarketOverviewWorkbench } from '../../components/market-overview/MarketOverviewWorkbench';
 import { MARKET_OVERVIEW_TAB_CONFIG } from '../MarketOverviewTabConfig';
 import { marketOverviewApi } from '../../api/marketOverview';
 import { marketApi } from '../../api/market';
 import { DataFreshnessBadge, MarketDataRow } from '../../components/market-overview/marketOverviewPrimitives';
+import { TerminalPageHeading } from '../../components/terminal';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { UI_LANGUAGE_STORAGE_KEY } from '../../i18n/core';
 
@@ -606,6 +608,24 @@ function renderMarketOverviewWithLanguage(language: 'zh' | 'en') {
   );
 }
 
+function renderMarketOverviewWorkbench() {
+  return render(
+    <UiLanguageProvider>
+      <MarketOverviewWorkbench
+        heading={<TerminalPageHeading data-testid="market-overview-page-heading" title="市场总览" />}
+        panels={localSnapshotPayload().payload}
+        loading={false}
+        localSnapshotSavedAt="2026-04-29T10:00:00"
+        refreshErrorCount={0}
+        refreshingPanel={null}
+        cryptoRealtimeStatus="snapshot"
+        isCnShortSentimentBootstrapping={false}
+        onRefreshPanel={() => {}}
+      />
+    </UiLanguageProvider>,
+  );
+}
+
 const primaryMarketPanelRequests = [
   marketOverviewApi.getIndices,
   marketOverviewApi.getVolatility,
@@ -773,6 +793,22 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getMarketBriefing).mockResolvedValue(briefingPayload());
     vi.mocked(marketApi.getFutures).mockResolvedValue(futuresPayload());
     vi.mocked(marketApi.getCnShortSentiment).mockResolvedValue(cnShortSentimentPayload());
+  });
+
+  it('renders the extracted market overview workbench boundary with stable controls', async () => {
+    renderMarketOverviewWorkbench();
+
+    expect(screen.getByTestId('market-overview-workbench')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-shell')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-hero-ribbon')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-main-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-side-rail')).toBeInTheDocument();
+
+    const usTab = screen.getByRole('button', { name: '美股' });
+    fireEvent.click(usTab);
+
+    expect(usTab).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('market-overview-export-summary')).toBeInTheDocument();
   });
 
   afterEach(() => {
