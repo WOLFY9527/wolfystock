@@ -349,55 +349,6 @@ const PageHeader: React.FC<{
   );
 };
 
-const FilterRail: React.FC<{
-  filters: AdminUserListParams;
-  onChange: (next: AdminUserListParams) => void;
-  onRefresh: () => void;
-}> = ({ filters, onChange, onRefresh }) => (
-  <TerminalPanel as="aside" dense className="sticky top-0">
-    <TerminalSectionHeader eyebrow="过滤" title="安全搜索" />
-    <div className="mt-4 grid gap-4">
-      <Input
-        label="关键词"
-        value={filters.q || ''}
-        placeholder="用户 ID / 用户名 / 展示名"
-        onChange={(event) => onChange({ ...filters, q: event.target.value, offset: 0 })}
-      />
-      <Select
-        label="角色"
-        value={filters.role || ''}
-        options={ROLE_OPTIONS}
-        onChange={(role) => onChange({ ...filters, role, offset: 0 })}
-      />
-      <Select
-        label="状态"
-        value={filters.status || 'all'}
-        options={USER_STATUS_OPTIONS}
-        onChange={(status) => onChange({ ...filters, status, offset: 0 })}
-      />
-      <Select
-        label="排序"
-        value={filters.sort || 'created_at_desc'}
-        options={[
-          { value: 'created_at_desc', label: '创建时间倒序' },
-          { value: 'created_at_asc', label: '创建时间正序' },
-          { value: 'updated_at_desc', label: '更新时间倒序' },
-          { value: 'username_asc', label: '用户名 A-Z' },
-          { value: 'last_seen_desc', label: '最近活动倒序' },
-        ]}
-        onChange={(sort) => onChange({ ...filters, sort, offset: 0 })}
-      />
-      <TerminalButton type="button" variant="secondary" className="h-10 text-sm" onClick={onRefresh}>
-        <Search className="h-4 w-4" aria-hidden="true" />
-        刷新目录
-      </TerminalButton>
-      <TerminalNotice variant="info">
-        查看目录只记录管理员访问范围，不记录搜索原文或凭证值。
-      </TerminalNotice>
-    </div>
-  </TerminalPanel>
-);
-
 const UserRow: React.FC<{ user: AdminUserListItem; locale: 'zh' | 'en'; canReadOpsLogs: boolean }> = ({ user, locale, canReadOpsLogs }) => {
   const href = locale === 'en' ? `/en/admin/users/${encodeURIComponent(user.id)}` : `/zh/admin/users/${encodeURIComponent(user.id)}`;
   const adminLogs = canReadOpsLogs ? adminLogHref(user.links?.adminLogs, locale) : null;
@@ -459,7 +410,48 @@ const DirectoryView: React.FC<{
   return (
     <TerminalGrid className="min-h-0">
       <div className="xl:col-span-3">
-        <FilterRail filters={filters} onChange={setFilters} onRefresh={reload} />
+        <TerminalPanel as="aside" dense className="sticky top-0">
+          <TerminalSectionHeader eyebrow="过滤" title="安全搜索" />
+          <div className="mt-4 grid gap-4">
+            <Input
+              label="关键词"
+              value={filters.q || ''}
+              placeholder="用户 ID / 用户名 / 展示名"
+              onChange={(event) => setFilters({ ...filters, q: event.target.value, offset: 0 })}
+            />
+            <Select
+              label="角色"
+              value={filters.role || ''}
+              options={ROLE_OPTIONS}
+              onChange={(role) => setFilters({ ...filters, role, offset: 0 })}
+            />
+            <Select
+              label="状态"
+              value={filters.status || 'all'}
+              options={USER_STATUS_OPTIONS}
+              onChange={(status) => setFilters({ ...filters, status, offset: 0 })}
+            />
+            <Select
+              label="排序"
+              value={filters.sort || 'created_at_desc'}
+              options={[
+                { value: 'created_at_desc', label: '创建时间倒序' },
+                { value: 'created_at_asc', label: '创建时间正序' },
+                { value: 'updated_at_desc', label: '更新时间倒序' },
+                { value: 'username_asc', label: '用户名 A-Z' },
+                { value: 'last_seen_desc', label: '最近活动倒序' },
+              ]}
+              onChange={(sort) => setFilters({ ...filters, sort, offset: 0 })}
+            />
+            <TerminalButton type="button" variant="secondary" className="h-10 text-sm" onClick={reload}>
+              <Search className="h-4 w-4" aria-hidden="true" />
+              刷新目录
+            </TerminalButton>
+            <TerminalNotice variant="info">
+              查看目录只记录管理员访问范围，不记录搜索原文或凭证值。
+            </TerminalNotice>
+          </div>
+        </TerminalPanel>
       </div>
       <div className="min-w-0 xl:col-span-9">
         <TerminalPanel as="section" dense className="min-h-0">
