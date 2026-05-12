@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
-from data_provider.us_index_mapping import is_us_stock_code
 from src.analyzer import AnalysisResult
 from src.config import get_config
 from src.report_language import (
@@ -35,6 +34,7 @@ from src.report_language import (
     localize_trend_prediction,
     normalize_report_language,
 )
+from src.utils.symbol_classification import is_us_stock_code
 
 logger = logging.getLogger(__name__)
 

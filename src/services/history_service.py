@@ -30,9 +30,9 @@ from src.report_language import (
     localize_trend_prediction,
     normalize_report_language,
 )
-from data_provider.us_index_mapping import is_us_stock_code
 from src.storage import DatabaseManager
 from src.utils.data_processing import normalize_model_used, parse_json_field
+from src.utils.symbol_classification import is_us_stock_code
 from src.utils.time_utils import to_beijing_iso8601
 
 if TYPE_CHECKING:

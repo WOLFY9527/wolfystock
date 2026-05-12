@@ -223,12 +223,10 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
     },
     "src/services/analysis_provider_planner.py": {"data_provider.us_index_mapping"},
     "src/services/crypto_realtime_service.py": {"src.services.market_cache"},
-    "src/services/history_service.py": {"data_provider.us_index_mapping"},
     "src/services/market_overview_service.py": {"src.services.market_cache"},
     "src/services/market_provider_operations_service.py": {"src.services.market_cache"},
     "src/services/market_scanner_service.py": {"data_provider.base"},
     "src/services/portfolio_risk_board_lookup.py": {"data_provider.base"},
-    "src/services/report_renderer.py": {"data_provider.us_index_mapping"},
     "src/services/rule_backtest_service.py": {
         "data_provider.base",
         "data_provider.us_index_mapping",
