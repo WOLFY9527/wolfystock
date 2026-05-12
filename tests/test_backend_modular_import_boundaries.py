@@ -217,7 +217,6 @@ PROVIDER_RUNTIME_IMPORT_PREFIXES = (
 # Transitional provider-runtime touch points. Owners are the domain listed in
 # the importing path plus provider-runtime; new entries need architecture review.
 EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
-    "api/v1/endpoints/analysis.py": {"data_provider.base"},
     "src/services/agent_stock_evidence_service.py": {
         "data_provider.base",
         "data_provider.realtime_types",

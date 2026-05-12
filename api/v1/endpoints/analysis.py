@@ -54,7 +54,6 @@ from api.v1.schemas.history import (
     ReportStrategy,
     ReportDetails,
 )
-from data_provider.base import canonical_stock_code, normalize_stock_code
 from src.config import Config
 from src.repositories.analysis_repo import AnalysisRepository
 from src.report_language import get_localized_stock_name, normalize_report_language
@@ -71,6 +70,7 @@ from src.utils.data_processing import (
     parse_json_field,
     extract_fundamental_detail_fields,
 )
+from src.utils.symbol_normalization import canonical_stock_code, normalize_stock_code
 
 logger = logging.getLogger(__name__)
 
