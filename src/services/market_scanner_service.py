@@ -14,13 +14,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
-from data_provider.base import (
-    DataFetcherManager,
-    is_bse_code,
-    is_kc_cy_stock,
-    is_st_stock,
-)
-from data_provider.us_index_mapping import is_us_stock_code
+from data_provider.base import DataFetcherManager
 from src.config import get_config
 from src.core.scanner_profile import ScannerMarketProfile, get_scanner_profile
 from src.core.scanner_theme_registry import ScannerTheme, get_scanner_theme
@@ -36,6 +30,12 @@ from src.storage import (
     DatabaseManager,
     MarketScannerCandidate,
     MarketScannerRun,
+)
+from src.utils.symbol_classification import (
+    is_bse_code,
+    is_kc_cy_stock,
+    is_st_stock,
+    is_us_stock_code,
 )
 from src.utils.symbol_normalization import normalize_stock_code
 

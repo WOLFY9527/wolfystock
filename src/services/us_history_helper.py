@@ -12,7 +12,7 @@ from typing import Optional, Tuple, Union
 import pandas as pd
 
 from data_provider.base import DataFetcherManager
-from data_provider.us_index_mapping import is_us_stock_code
+from src.utils.symbol_classification import is_us_stock_code
 
 
 DEFAULT_US_STOCK_PARQUET_DIR = "/root/us_test/data/normalized/us"

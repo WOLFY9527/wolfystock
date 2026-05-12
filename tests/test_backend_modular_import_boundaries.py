@@ -227,10 +227,7 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
     "src/services/history_service.py": {"data_provider.us_index_mapping"},
     "src/services/market_overview_service.py": {"src.services.market_cache"},
     "src/services/market_provider_operations_service.py": {"src.services.market_cache"},
-    "src/services/market_scanner_service.py": {
-        "data_provider.base",
-        "data_provider.us_index_mapping",
-    },
+    "src/services/market_scanner_service.py": {"data_provider.base"},
     # Portfolio risk currently initializes provider runtime lazily for drawdown
     # history. Keep explicit until a narrow portfolio/provider facade exists.
     "src/services/portfolio_risk_service.py": {"data_provider"},
@@ -246,10 +243,7 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
         "data_provider.yfinance_fetcher",
     },
     "src/services/task_queue.py": {"data_provider.base"},
-    "src/services/us_history_helper.py": {
-        "data_provider.base",
-        "data_provider.us_index_mapping",
-    },
+    "src/services/us_history_helper.py": {"data_provider.base"},
 }
 
 
