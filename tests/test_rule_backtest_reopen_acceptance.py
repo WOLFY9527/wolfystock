@@ -132,6 +132,8 @@ class RuleBacktestReopenAcceptanceTestCase(unittest.TestCase):
         self.assertEqual(status["readback_integrity"]["integrity_level"], "stored_complete")
         self.assertFalse(status["readback_integrity"]["used_legacy_fallback"])
         self.assertFalse(status["readback_integrity"]["used_live_storage_repair"])
+        self.assertFalse(status["readback_integrity"]["used_legacy_fallback"])
+        self.assertFalse(status["readback_integrity"]["used_live_storage_repair"])
 
     def test_reopen_acceptance_repaired_detail_and_history_share_repaired_domains_without_summary_drift(self) -> None:
         service, response, run_row = self._run_completed_backtest()
@@ -202,6 +204,62 @@ class RuleBacktestReopenAcceptanceTestCase(unittest.TestCase):
         self.assertEqual(item["summary"]["visualization"]["audit_rows"], [])
         self.assertEqual(item["summary"]["visualization"]["daily_return_series"], [])
         self.assertEqual(item["summary"]["visualization"]["exposure_curve"], [])
+
+    def test_reopen_acceptance_rebuilt_trace_stays_readback_only_without_engine_rerun(self) -> None:
+        service, _, run_row = self._run_completed_backtest()
+
+        summary = json.loads(run_row.summary_json)
+        summary.pop("execution_trace", None)
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        with patch.object(
+            service.engine,
+            "run",
+            side_effect=AssertionError("readback projections must not rerun stored strategy calculations"),
+        ) as engine_run_mock:
+            detail = service.get_run(run_row.id)
+            status = service.get_run_status(run_row.id)
+            history = service.list_runs(code="600519", page=1, limit=10)
+
+        assert detail is not None
+        assert status is not None
+        item = history["items"][0]
+        engine_run_mock.assert_not_called()
+
+        self.assertEqual(detail["execution_trace"]["source"], "rebuilt_from_stored_audit_rows")
+        self.assertTrue(detail["execution_trace"]["fallback"]["trace_rebuilt"])
+        self.assertEqual(
+            detail["result_authority"]["domains"]["execution_trace"],
+            {
+                "source": "rebuilt_from_stored_audit_rows",
+                "completeness": "legacy_rebuilt",
+                "state": "available",
+                "missing": ["stored_trace"],
+                "missing_kind": "fields",
+            },
+        )
+        self.assertEqual(item["summary"]["execution_trace"], {})
+        self.assertEqual(
+            item["result_authority"]["domains"]["execution_trace"],
+            {
+                "source": "omitted_without_detail_read",
+                "completeness": "omitted",
+                "state": "omitted",
+                "missing": [],
+                "missing_kind": "fields",
+            },
+        )
+        self.assertEqual(item["result_authority"]["execution_trace_source"], "omitted_without_detail_read")
+        self.assertEqual(item["result_authority"]["execution_trace_completeness"], "omitted")
+        self.assertEqual(item["result_authority"]["execution_trace_missing_fields"], [])
+        self.assertEqual(
+            status["readback_integrity"]["source"],
+            "derived_from_status_summary+live_storage_repair",
+        )
+        self.assertEqual(status["readback_integrity"]["integrity_level"], "drift_repaired")
+        self.assertTrue(status["readback_integrity"]["used_live_storage_repair"])
+        self.assertTrue(status["readback_integrity"]["has_summary_storage_drift"])
+        self.assertEqual(status["readback_integrity"]["drift_domains"], ["execution_trace"])
 
     def test_reopen_acceptance_legacy_fallback_surfaces_are_explicit_across_status_detail_history(self) -> None:
         service, _, run_row = self._run_completed_backtest()

@@ -668,6 +668,14 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 reproducibility_payload["execution_assumptions_fingerprint"]["hash_sha256"],
             )
             self.assertEqual(
+                manifest_response.result_authority["domains"]["execution_trace"],
+                manifest_payload["result_authority"]["domains"]["execution_trace"],
+            )
+            self.assertEqual(
+                reproducibility_response.result_authority["domains"]["execution_trace"],
+                reproducibility_payload["result_authority"]["domains"]["execution_trace"],
+            )
+            self.assertEqual(
                 [item.key for item in export_index_response.exports],
                 [
                     "support_bundle_manifest_json",
@@ -723,6 +731,14 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     export_index_response.exports[3].availability_reason,
                     "execution_trace_rows_missing",
                 )
+                self.assertEqual(
+                    manifest_response.result_authority["domains"]["execution_trace"]["state"],
+                    "unavailable",
+                )
+                self.assertEqual(
+                    reproducibility_response.result_authority["domains"]["execution_trace"]["state"],
+                    "unavailable",
+                )
             else:
                 trace_json_response = get_rule_backtest_execution_trace_json(123, db_manager=MagicMock())
                 trace_csv_response = get_rule_backtest_execution_trace_csv(123, db_manager=MagicMock())
@@ -735,6 +751,22 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 self.assertEqual(
                     reproducibility_response.result_authority["domains"]["execution_trace"]["completeness"],
                     trace_json_response.completeness,
+                )
+                self.assertEqual(
+                    manifest_response.result_authority["domains"]["execution_trace"]["source"],
+                    trace_json_response.source,
+                )
+                self.assertEqual(
+                    manifest_response.result_authority["domains"]["execution_trace"]["completeness"],
+                    trace_json_response.completeness,
+                )
+                self.assertEqual(
+                    manifest_response.result_authority["domains"]["execution_trace"]["state"],
+                    "available",
+                )
+                self.assertEqual(
+                    reproducibility_response.result_authority["domains"]["execution_trace"]["state"],
+                    "available",
                 )
                 self.assertEqual(
                     list(trace_json_response.model_dump().keys()),

@@ -282,6 +282,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 "support_bundle_reproducibility_manifest_json",
                 "execution_trace_json",
                 "execution_trace_csv",
+                "robustness_evidence_json",
             ],
         )
         self.assertEqual(
@@ -294,6 +295,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 ("json", "application/json", "api", "compact"),
                 ("json", "application/json", "api", "heavy"),
                 ("csv", "text/csv", "api", "heavy"),
+                ("json", "application/json", "api", "heavy"),
             ],
         )
 
@@ -330,8 +332,10 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
 
         trace_json_path = payloads["export_index"]["exports"][2]["endpoint_path"]
         trace_csv_path = payloads["export_index"]["exports"][3]["endpoint_path"]
+        robustness_path = payloads["export_index"]["exports"][4]["endpoint_path"]
         trace_json_response = self.client.get(trace_json_path)
         trace_csv_response = self.client.get(trace_csv_path)
+        robustness_response = self.client.get(robustness_path)
 
         if trace_available:
             self.assertEqual(service.get_execution_trace_export_json(run_id), trace_json_response.json())
@@ -344,6 +348,25 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 service.get_execution_trace_export_json(run_id)
             with self.assertRaisesRegex(ValueError, "has no audit rows to export"):
                 service.get_execution_trace_export_csv_text(run_id)
+
+        robustness_available = payloads["export_index"]["exports"][4]["available"]
+        if robustness_available:
+            service_payload = service.get_robustness_evidence_export_json(run_id)
+            http_payload = robustness_response.json()
+            self.assertEqual(http_payload["state"], service_payload["state"])
+            self.assertEqual(http_payload["seed"], service_payload["seed"])
+            self.assertEqual(http_payload["configuration"], service_payload["configuration"])
+            self.assertEqual(http_payload["walk_forward"], service_payload["walk_forward"])
+            self.assertEqual(http_payload["monte_carlo"], service_payload["monte_carlo"])
+            self.assertEqual(http_payload["stress_tests"], service_payload["stress_tests"])
+            self.assertEqual(http_payload["diagnostics"], service_payload["diagnostics"])
+            self.assertIn("profile", http_payload)
+            self.assertIn("source", http_payload)
+            self.assertIsNone(http_payload["profile"])
+            self.assertIsNone(http_payload["source"])
+        else:
+            with self.assertRaisesRegex(ValueError, "has no stored robustness evidence to export"):
+                service.get_robustness_evidence_export_json(run_id)
 
     def _assert_support_bundle_surface(
         self,
@@ -384,6 +407,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 f"/api/v1/backtest/rule/runs/{run_id}/support-bundle-reproducibility-manifest",
                 f"/api/v1/backtest/rule/runs/{run_id}/execution-trace.json",
                 f"/api/v1/backtest/rule/runs/{run_id}/execution-trace.csv",
+                f"/api/v1/backtest/rule/runs/{run_id}/robustness-evidence.json",
             ],
         )
         self.assertTrue(
@@ -397,8 +421,10 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
 
         trace_json_path = export_index["exports"][2]["endpoint_path"]
         trace_csv_path = export_index["exports"][3]["endpoint_path"]
+        robustness_path = export_index["exports"][4]["endpoint_path"]
         trace_json_response = self.client.get(trace_json_path)
         trace_csv_response = self.client.get(trace_csv_path)
+        robustness_response = self.client.get(robustness_path)
 
         if trace_available:
             self.assertTrue(export_index["exports"][2]["available"])
@@ -494,6 +520,30 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
             self.assertEqual(
                 reproducibility["result_authority"]["domains"]["execution_trace"]["state"],
                 "unavailable",
+            )
+
+        robustness_available = export_index["exports"][4]["available"]
+        if robustness_available:
+            self.assertEqual(
+                export_index["exports"][4]["availability_reason"],
+                "stored_robustness_analysis_present",
+            )
+            self.assertEqual(robustness_response.status_code, 200)
+            self.assertTrue(
+                robustness_response.headers.get("content-type", "").startswith(
+                    export_index["exports"][4]["media_type"]
+                )
+            )
+            payloads["robustness"] = robustness_response.json()
+        else:
+            self.assertEqual(
+                export_index["exports"][4]["availability_reason"],
+                "stored_robustness_analysis_missing",
+            )
+            self.assertEqual(robustness_response.status_code, 409)
+            self.assertEqual(self._error_code(robustness_response), "export_unavailable")
+            self.assertTrue(
+                robustness_response.headers.get("content-type", "").startswith("application/json")
             )
 
         return payloads

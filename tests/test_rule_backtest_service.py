@@ -2047,6 +2047,16 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "state": run["result_authority"]["domains"]["execution_trace"]["state"],
             },
         )
+        self.assertEqual(
+            manifest["result_authority"]["domains"]["execution_trace"],
+            {
+                "source": run["result_authority"]["domains"]["execution_trace"]["source"],
+                "completeness": run["result_authority"]["domains"]["execution_trace"]["completeness"],
+                "state": run["result_authority"]["domains"]["execution_trace"]["state"],
+                "missing": run["result_authority"]["domains"]["execution_trace"]["missing"],
+                "missing_kind": run["result_authority"]["domains"]["execution_trace"]["missing_kind"],
+            },
+        )
         execution_assumptions_payload = dict(
             (run.get("execution_assumptions_snapshot") or {}).get("payload")
             or run.get("execution_assumptions")
@@ -2213,6 +2223,18 @@ class RuleBacktestTestCase(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "has no audit rows to export"):
                 service.get_execution_trace_export_csv_text(run_id)
             self.assertEqual(
+                manifest["result_authority"]["domains"]["execution_trace"]["source"],
+                "unavailable",
+            )
+            self.assertEqual(
+                manifest["result_authority"]["domains"]["execution_trace"]["completeness"],
+                "unavailable",
+            )
+            self.assertEqual(
+                manifest["result_authority"]["domains"]["execution_trace"]["state"],
+                "unavailable",
+            )
+            self.assertEqual(
                 reproducibility["result_authority"]["domains"]["execution_trace"]["source"],
                 "unavailable",
             )
@@ -2263,16 +2285,82 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertGreater(deleted, 0)
 
         self._assert_support_bundle_export_contract(service=service, run_id=response["id"])
+
+    def test_support_bundle_readback_surfaces_keep_missing_trace_explicit_without_engine_rerun(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["execution_trace"] = {}
+        summary["visualization"] = dict(summary.get("visualization") or {})
+        summary["visualization"]["audit_rows"] = []
+        summary["visualization"]["daily_return_series"] = []
+        summary["visualization"]["exposure_curve"] = []
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        with patch.object(
+            service.engine,
+            "run",
+            side_effect=AssertionError("support-bundle readback must not rerun stored strategy calculations"),
+        ) as engine_run_mock:
+            manifest = service.get_support_bundle_manifest(response["id"])
+            reproducibility = service.get_support_bundle_reproducibility_manifest(response["id"])
+            export_index = service.get_support_export_index(response["id"])
+            with self.assertRaisesRegex(ValueError, "has no audit rows to export"):
+                service.get_execution_trace_export_json(response["id"])
+            with self.assertRaisesRegex(ValueError, "has no audit rows to export"):
+                service.get_execution_trace_export_csv_text(response["id"])
+
+        engine_run_mock.assert_not_called()
+        self.assertFalse(manifest["artifact_availability"]["has_execution_trace"])
+        self.assertEqual(manifest["artifact_counts"]["execution_trace_rows_count"], 0)
+        self.assertEqual(
+            manifest["result_authority"]["domains"]["execution_trace"],
+            {
+                "source": "unavailable",
+                "completeness": "unavailable",
+                "state": "unavailable",
+                "missing": ["rows"],
+                "missing_kind": "fields",
+            },
+        )
+        self.assertEqual(
+            reproducibility["result_authority"]["domains"]["execution_trace"],
+            {
+                "source": "unavailable",
+                "completeness": "unavailable",
+                "state": "unavailable",
+            },
+        )
+        self.assertEqual(
+            [
+                export_index["exports"][2]["availability_reason"],
+                export_index["exports"][3]["availability_reason"],
+            ],
+            ["execution_trace_rows_missing", "execution_trace_rows_missing"],
+        )
+        self.assertFalse(export_index["exports"][2]["available"])
+        self.assertFalse(export_index["exports"][3]["available"])
         repaired_run = service.get_run(response["id"])
         assert repaired_run is not None
-        self.assertFalse(repaired_run["artifact_availability"]["has_trade_rows"])
+        self.assertTrue(repaired_run["artifact_availability"]["has_trade_rows"])
+        self.assertFalse(repaired_run["artifact_availability"]["has_execution_trace"])
         self.assertEqual(
             repaired_run["artifact_availability"]["source"],
             "summary.artifact_availability+live_storage_repair",
         )
         self.assertTrue(repaired_run["readback_integrity"]["used_live_storage_repair"])
         self.assertEqual(repaired_run["readback_integrity"]["integrity_level"], "drift_repaired")
-        self.assertEqual(repaired_run["readback_integrity"]["drift_domains"], ["trade_rows"])
+        self.assertEqual(repaired_run["readback_integrity"]["drift_domains"], ["execution_trace"])
 
     def test_run_response_exposes_stored_first_result_authority(self) -> None:
         service = RuleBacktestService(self.db)

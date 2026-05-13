@@ -262,9 +262,12 @@ def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_bou
     assert manifest["manifest_kind"] == "rule_backtest_support_bundle"
     assert manifest["run"]["id"] == export_index["run_id"]
     assert manifest["result_authority"]["read_mode"] == "stored_first"
+    assert manifest["result_authority"]["domains"]["execution_trace"]["source"] == "summary.execution_trace"
+    assert manifest["result_authority"]["domains"]["execution_trace"]["state"] == "available"
     assert manifest["artifact_availability"]["has_summary"] is True
     assert manifest["readback_integrity"]["integrity_level"] == "stored_complete"
     assert manifest["artifact_counts"]["execution_trace_rows_count"] == 3
+    assert manifest["artifact_counts"]["execution_trace_rows_count"] > 0
     assert not ({"trades", "equity_curve", "audit_rows", "execution_trace"} & set(manifest))
 
     _assert_no_sensitive_public_payload(export_index)
@@ -396,9 +399,11 @@ def test_universe_job_golden_fixtures_freeze_local_only_diagnostics_and_compact_
     assert metadata["local_only"] is True
     assert metadata["live_provider_calls_executed"] is False
     assert metadata["concurrency_enabled"] is False
+    assert metadata["professionalReadiness"]["local_data_coverage_state"] == metadata["localDataCoverageState"]
     assert metadata["localDataCoverageState"] == "mixed"
     assert metadata["pointInTimeUniverse"] is False
     assert metadata["survivorshipBiasState"] == "uncontrolled"
+    assert metadata["professionalReadiness"]["provider_calls"] is False
     assert metadata["providerCalls"] is False
     assert metadata["professionalReadiness"]["overall_state"] == "research_prototype"
     assert metadata["professionalReadiness"]["professional_quant_ready"] is False
