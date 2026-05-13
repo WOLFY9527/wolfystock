@@ -198,6 +198,29 @@ LLM_HELPER_IMPORT_GUARD_CASES = (
     },
 )
 ARCH_REVIEW_MESSAGE = "new service-to-API upward imports require explicit architecture review."
+OPTIONS_LAB_SCHEMA_BOUNDARY_MESSAGE = (
+    "Options Lab public response DTO construction belongs in endpoint mappers. "
+    "Request DTO / OptionContract / OptionGreeks migration is deferred and requires an approved slice. "
+    "Broadening service schema imports is not allowed accidentally."
+)
+EXPECTED_OPTIONS_LAB_SERVICE_SCHEMA_IMPORT_NAMES = {
+    "OptionContract",
+    "OptionGreeks",
+    "OptionsAnalyzeRequest",
+    "OptionsDecisionLeg",
+    "OptionsDecisionRequest",
+    "OptionsScenarioRequest",
+    "OptionsStrategyCompareRequest",
+}
+EXPLICITLY_FORBIDDEN_OPTIONS_LAB_SCHEMA_IMPORT_NAMES = {
+    "OptionsMetadata",
+    "OptionsAnalyzeResponse",
+    "OptionsScenarioResponse",
+    "OptionsStrategyCompareResponse",
+    "OptionsDecisionResponse",
+    "OptionsGateIssue",
+    "OptionsStrategyGateSummary",
+}
 EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
     "src/services/options_lab_service.py": {"api.v1.schemas.options"},
 }
@@ -448,6 +471,20 @@ def _service_api_import_mapping() -> dict[str, set[str]]:
     return mapping
 
 
+def _api_imported_names_for_service(service_file: str, module_name: str) -> set[str]:
+    return {
+        name
+        for record in _service_api_import_records().get(service_file, ())
+        if record.module == module_name
+        for name in record.imported_names
+        if name != "*"
+    }
+
+
+def _is_options_public_response_dto(name: str) -> bool:
+    return name.startswith("Options") and name.endswith("Response")
+
+
 def _is_forbidden_api_surface(module_name: str) -> bool:
     if any(
         module_name == prefix or module_name.startswith(prefix + ".")
@@ -696,16 +733,60 @@ def test_service_api_upward_import_inventory_is_frozen() -> None:
     )
 
 
-def test_options_lab_service_no_longer_imports_public_options_metadata() -> None:
-    records = _service_api_import_records().get("src/services/options_lab_service.py", ())
-    imported_names = {
+def test_options_lab_service_public_options_schema_allowlist_is_frozen() -> None:
+    imported_names = _api_imported_names_for_service(
+        "src/services/options_lab_service.py",
+        "api.v1.schemas.options",
+    )
+
+    assert imported_names == EXPECTED_OPTIONS_LAB_SERVICE_SCHEMA_IMPORT_NAMES, (
+        f"{OPTIONS_LAB_SCHEMA_BOUNDARY_MESSAGE} "
+        "Only the approved residual request DTO / OptionContract / OptionGreeks "
+        "imports may remain in src/services/options_lab_service.py. "
+        f"Expected {sorted(EXPECTED_OPTIONS_LAB_SERVICE_SCHEMA_IMPORT_NAMES)}, "
+        f"found {sorted(imported_names)}."
+    )
+
+
+def test_options_lab_service_does_not_import_public_response_dtos() -> None:
+    imported_names = _api_imported_names_for_service(
+        "src/services/options_lab_service.py",
+        "api.v1.schemas.options",
+    )
+    forbidden_names = sorted(
         name
-        for record in records
-        if record.module == "api.v1.schemas.options"
-        for name in record.imported_names
+        for name in imported_names
+        if name in EXPLICITLY_FORBIDDEN_OPTIONS_LAB_SCHEMA_IMPORT_NAMES
+        or _is_options_public_response_dto(name)
+    )
+
+    assert not forbidden_names, (
+        f"{OPTIONS_LAB_SCHEMA_BOUNDARY_MESSAGE} "
+        "Found forbidden public response DTO imports in "
+        f"src/services/options_lab_service.py: {forbidden_names}."
+    )
+
+
+def test_options_lab_domain_layers_stay_free_of_public_options_schema_imports() -> None:
+    actual_imports = {
+        relative_path: sorted(_imports_for_file(REPO_ROOT / relative_path, ("api.v1.schemas.options",)))
+        for relative_path in (
+            "src/services/options_lab_domain_models.py",
+            "src/services/options_data_quality_gates.py",
+        )
+    }
+    actual_imports = {
+        relative_path: modules
+        for relative_path, modules in actual_imports.items()
+        if modules
     }
 
-    assert "OptionsMetadata" not in imported_names
+    assert not actual_imports, (
+        f"{OPTIONS_LAB_SCHEMA_BOUNDARY_MESSAGE} "
+        "response DTO construction belongs in endpoint mappers, so residual "
+        "schema imports must not spread into service/domain support files. "
+        f"Found {actual_imports}."
+    )
 
 
 def test_services_do_not_import_forbidden_api_surfaces() -> None:
