@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 from fastapi.testclient import TestClient
@@ -175,6 +175,61 @@ class PortfolioApiDiagnosticsContractTestCase(unittest.TestCase):
         self.assertIn("confidenceCap", payload)
         self.assertIn("benchmarkMappingState", payload)
         self.assertIn("factorMappingState", payload)
+
+    def test_risk_endpoint_provider_lookup_failure_stays_bounded_and_contract_compatible(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "CN", "broker": "Demo", "market": "cn", "base_currency": "CNY"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+
+        self.client.post(
+            "/api/v1/portfolio/cash-ledger",
+            json={
+                "account_id": account_id,
+                "event_date": "2026-05-10",
+                "direction": "in",
+                "amount": 1000.0,
+                "currency": "CNY",
+            },
+        )
+        self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "600519",
+                "trade_date": "2026-05-10",
+                "side": "buy",
+                "quantity": 10.0,
+                "price": 100.0,
+                "market": "cn",
+                "currency": "CNY",
+            },
+        )
+        self._save_close("600519", date(2026, 5, 10), 100.0)
+
+        with patch(
+            "src.services.portfolio_risk_service.PortfolioRiskService._fetch_belong_boards",
+            side_effect=ValueError("provider lookup failed"),
+        ):
+            response = self.client.get(
+                "/api/v1/portfolio/risk",
+                params={"account_id": account_id, "as_of": "2026-05-10", "cost_method": "fifo"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertIn("riskDiagnostics", payload)
+        self.assertIn("portfolioRiskEvidence", payload)
+        self.assertIn("confidenceCap", payload)
+        self.assertEqual(payload["industry_attribution"]["top_industries"][0]["industry"], "UNCLASSIFIED")
+        self.assertEqual(payload["sector_concentration"]["top_sectors"][0]["sector"], "UNCLASSIFIED")
+        self.assertEqual(payload["industry_attribution"]["coverage"]["failed_count"], 1)
+        self.assertEqual(payload["sector_concentration"]["coverage"]["failed_count"], 1)
+        self.assertIn("provider lookup failed", payload["industry_attribution"]["errors"][0])
+        self.assertIn("provider lookup failed", payload["sector_concentration"]["errors"][0])
 
 
 if __name__ == "__main__":

@@ -738,12 +738,24 @@ class AdminPortfolioApiTestCase(unittest.TestCase):
         self._as_admin()
         before = self._portfolio_counts()
 
-        matrix = {
-            "summary": self.client.get("/api/v1/admin/users/user-1/portfolio-summary"),
-            "holdings": self.client.get("/api/v1/admin/users/user-1/holdings", params={"limit": 200}),
-            "activity": self.client.get("/api/v1/admin/users/user-1/portfolio-activity", params={"limit": 200}),
-            "account_detail": self.client.get(f"/api/v1/admin/users/user-1/portfolio/accounts/{self.account_a_id}"),
-        }
+        with patch(
+            "src.services.portfolio_ibkr_sync_service.PortfolioIbkrSyncService.sync_read_only_account_state",
+            side_effect=AssertionError("sync called"),
+        ), patch(
+            "src.services.portfolio_import_service.PortfolioImportService.commit_import_records",
+            side_effect=AssertionError("import commit called"),
+        ), patch(
+            "src.services.portfolio_service.PortfolioService.refresh_fx_rates",
+            side_effect=AssertionError("fx refresh called"),
+        ):
+            matrix = {
+                "summary": self.client.get("/api/v1/admin/users/user-1/portfolio-summary"),
+                "holdings": self.client.get("/api/v1/admin/users/user-1/holdings", params={"limit": 200}),
+                "activity": self.client.get("/api/v1/admin/users/user-1/portfolio-activity", params={"limit": 200}),
+                "account_detail": self.client.get(
+                    f"/api/v1/admin/users/user-1/portfolio/accounts/{self.account_a_id}"
+                ),
+            }
 
         for surface, response in matrix.items():
             self.assertEqual(response.status_code, 200)

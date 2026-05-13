@@ -573,6 +573,26 @@ def test_provider_runtime_import_inventory_is_explicit() -> None:
     )
 
 
+def test_portfolio_risk_board_lookup_is_the_only_portfolio_risk_provider_runtime_import() -> None:
+    portfolio_risk_files = sorted(SERVICES_ROOT.glob("portfolio_risk*.py"))
+    actual_mapping = {
+        path.name: imports
+        for path in portfolio_risk_files
+        if (imports := _imports_for_file(path, PROVIDER_RUNTIME_IMPORT_PREFIXES))
+    }
+
+    assert actual_mapping == {
+        "portfolio_risk_board_lookup.py": {"data_provider.base"},
+    }, (
+        "portfolio risk board lookup must remain the only portfolio risk file "
+        "with provider-runtime imports"
+    )
+    assert _imports_for_file(
+        SERVICES_ROOT / "portfolio_risk_service.py",
+        PROVIDER_RUNTIME_IMPORT_PREFIXES,
+    ) == set(), "portfolio_risk_service.py must remain provider-runtime-free"
+
+
 def test_direct_provider_client_import_inventory_is_explicit() -> None:
     actual_mapping = _import_mapping_for_prefixes(
         (SERVICES_ROOT,),

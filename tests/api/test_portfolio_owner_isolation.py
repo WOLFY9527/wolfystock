@@ -9,7 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -316,14 +316,25 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
         self.assertEqual(bob_connection.status_code, 200)
         before = self._portfolio_counts()
 
-        export_reads = [
-            self.alice_client.get("/api/v1/portfolio/accounts", params={"include_inactive": True}),
-            self.alice_client.get("/api/v1/portfolio/trades", params={"page_size": 100}),
-            self.alice_client.get("/api/v1/portfolio/cash-ledger", params={"page_size": 100}),
-            self.alice_client.get("/api/v1/portfolio/corporate-actions", params={"page_size": 100}),
-            self.alice_client.get("/api/v1/portfolio/snapshot", params={"as_of": "2026-01-03"}),
-            self.alice_client.get("/api/v1/portfolio/broker-connections"),
-        ]
+        with patch(
+            "src.services.portfolio_ibkr_sync_service.PortfolioIbkrSyncService.sync_read_only_account_state",
+            side_effect=AssertionError("sync called"),
+        ), patch(
+            "src.services.portfolio_import_service.PortfolioImportService.commit_import_records",
+            side_effect=AssertionError("import commit called"),
+        ), patch(
+            "src.services.portfolio_service.PortfolioService.refresh_fx_rates",
+            side_effect=AssertionError("fx refresh called"),
+        ):
+            export_reads = [
+                self.alice_client.get("/api/v1/portfolio/accounts", params={"include_inactive": True}),
+                self.alice_client.get("/api/v1/portfolio/trades", params={"page_size": 100}),
+                self.alice_client.get("/api/v1/portfolio/cash-ledger", params={"page_size": 100}),
+                self.alice_client.get("/api/v1/portfolio/corporate-actions", params={"page_size": 100}),
+                self.alice_client.get("/api/v1/portfolio/snapshot", params={"as_of": "2026-01-03"}),
+                self.alice_client.get("/api/v1/portfolio/risk", params={"as_of": "2026-01-03"}),
+                self.alice_client.get("/api/v1/portfolio/broker-connections"),
+            ]
 
         for response in export_reads:
             self.assertEqual(response.status_code, 200)

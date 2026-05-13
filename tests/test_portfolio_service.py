@@ -686,6 +686,93 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(self.service.list_cash_ledger_events(account_id=aid)["total"], 1)
         self.assertEqual(self.service.list_corporate_action_events(account_id=aid)["total"], 1)
 
+    def test_snapshot_and_risk_reads_keep_ledger_rows_stable_across_risk_board_outcomes(self) -> None:
+        scenarios = (
+            ("success", [{"name": "白酒", "type": "行业"}], "白酒", 0, 0),
+            ("empty", [], "UNCLASSIFIED", 0, 0),
+            ("failure", ValueError("provider lookup failed"), "UNCLASSIFIED", 1, 1),
+        )
+
+        for offset, (label, board_result, expected_industry, expected_failed_count, expected_error_count) in enumerate(
+            scenarios
+        ):
+            as_of_date = date(2026, 4, 10 + offset)
+            account = self.service.create_account(
+                name=f"Board {label}",
+                broker="Demo",
+                market="cn",
+                base_currency="CNY",
+            )
+            aid = account["id"]
+            self.service.record_cash_ledger(
+                account_id=aid,
+                event_date=as_of_date,
+                direction="in",
+                amount=5000,
+                currency="CNY",
+            )
+            self.service.record_trade(
+                account_id=aid,
+                symbol="600519",
+                trade_date=as_of_date,
+                side="buy",
+                quantity=20,
+                price=100,
+                fee=2,
+                tax=0,
+                market="cn",
+                currency="CNY",
+            )
+            self.service.record_corporate_action(
+                account_id=aid,
+                symbol="600519",
+                effective_date=as_of_date,
+                action_type="cash_dividend",
+                market="cn",
+                currency="CNY",
+                cash_dividend_per_share=0.5,
+            )
+            self._save_close("600519", as_of_date, 105.0)
+            before = self._ledger_counts()
+
+            patch_kwargs = (
+                {"side_effect": board_result}
+                if isinstance(board_result, Exception)
+                else {"return_value": board_result}
+            )
+            with self.subTest(outcome=label), patch.object(PortfolioRiskService, "_fetch_belong_boards", **patch_kwargs):
+                snapshot = self.service.get_portfolio_snapshot(
+                    account_id=aid,
+                    as_of=as_of_date,
+                    cost_method="fifo",
+                )
+                report = PortfolioRiskService(portfolio_service=self.service).get_risk_report(
+                    account_id=aid,
+                    as_of=as_of_date,
+                    cost_method="fifo",
+                )
+
+            self.assertEqual(self._ledger_counts(), before)
+            self.assertEqual(self.service.list_trade_events(account_id=aid)["total"], 1)
+            self.assertEqual(self.service.list_cash_ledger_events(account_id=aid)["total"], 1)
+            self.assertEqual(self.service.list_corporate_action_events(account_id=aid)["total"], 1)
+            self.assertEqual(
+                snapshot["portfolio_attribution"]["industry_attribution"]["top_industries"][0]["industry"],
+                expected_industry,
+            )
+            self.assertEqual(report["industry_attribution"]["top_industries"][0]["industry"], expected_industry)
+            self.assertEqual(report["sector_concentration"]["top_sectors"][0]["sector"], expected_industry)
+            self.assertEqual(report["industry_attribution"]["coverage"]["failed_count"], expected_failed_count)
+            self.assertEqual(report["sector_concentration"]["coverage"]["failed_count"], expected_failed_count)
+            self.assertEqual(len(report["industry_attribution"]["errors"]), expected_error_count)
+            self.assertEqual(len(report["sector_concentration"]["errors"]), expected_error_count)
+            if expected_error_count:
+                self.assertIn("provider lookup failed", report["industry_attribution"]["errors"][0])
+                self.assertIn("provider lookup failed", report["sector_concentration"]["errors"][0])
+            else:
+                self.assertEqual(report["industry_attribution"]["errors"], [])
+                self.assertEqual(report["sector_concentration"]["errors"], [])
+
     def test_corporate_actions_dividend_and_split(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
         aid = account["id"]
