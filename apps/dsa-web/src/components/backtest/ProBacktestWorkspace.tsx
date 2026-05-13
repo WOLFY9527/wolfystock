@@ -52,6 +52,7 @@ const primaryButtonClass = 'inline-flex min-h-[42px] items-center justify-center
 const secondaryButtonClass = 'inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45';
 const chipButtonClass = 'inline-flex min-h-[34px] shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white';
 const activeChipButtonClass = 'inline-flex min-h-[34px] shrink-0 items-center gap-2 rounded-lg border border-blue-400/35 bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-100 shadow-[0_0_18px_rgba(59,130,246,0.12)]';
+const plannedCardClass = 'rounded-lg border border-dashed border-white/10 bg-black/20 p-3';
 
 function getParsedExecutable(parsed: RuleBacktestParseResponse | null): boolean {
   if (!parsed) return false;
@@ -77,11 +78,6 @@ function getFirstLine(value: string): string {
 function formatPercent(value: unknown): string {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? `${numeric.toFixed(2)}%` : '--';
-}
-
-function formatBoolean(value: boolean, language: BacktestLanguage): string {
-  if (language === 'en') return value ? 'On' : 'Off';
-  return value ? '开启' : '关闭';
 }
 
 function readRiskControls(parsed: RuleBacktestParseResponse | null) {
@@ -201,21 +197,6 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const [activeStep, setActiveStep] = useState<WorkspaceStep>('assets');
   const [ordersTab, setOrdersTab] = useState<OrdersTab>('routing');
   const [advancedTab, setAdvancedTab] = useState<AdvancedTab>('optimization');
-  const [portfolioMode, setPortfolioMode] = useState<'single' | 'multi'>('single');
-  const [rebalanceCadence, setRebalanceCadence] = useState('monthly');
-  const [eventDriven, setEventDriven] = useState(true);
-  const [enableStopLoss, setEnableStopLoss] = useState(true);
-  const [enableTakeProfit, setEnableTakeProfit] = useState(true);
-  const [enableTrailingStop, setEnableTrailingStop] = useState(false);
-  const [maxPositionPct, setMaxPositionPct] = useState('25');
-  const [maxExposurePct, setMaxExposurePct] = useState('80');
-  const [maxDrawdownPct, setMaxDrawdownPct] = useState('15');
-  const [perTradeRiskPct, setPerTradeRiskPct] = useState('2');
-  const [maxHoldings, setMaxHoldings] = useState('5');
-  const [enableGridSearch, setEnableGridSearch] = useState(false);
-  const [enableBayesianSearch, setEnableBayesianSearch] = useState(false);
-  const [enableWalkForward, setEnableWalkForward] = useState(false);
-  const [enableRobustness, setEnableRobustness] = useState(false);
   const [resultsOpen, setResultsOpen] = useState(false);
   const [catalogToast, setCatalogToast] = useState<string | null>(null);
   const [isCatalogDrawerOpen, setIsCatalogDrawerOpen] = useState(false);
@@ -324,9 +305,9 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const stepStatuses: Record<WorkspaceStep, StepStatusTone> = {
     assets: !symbolValid || !dateValid || !capitalValid || !benchmarkValid ? 'error' : 'done',
     strategy: parseStale ? 'error' : confirmed ? 'done' : parsedStrategy ? 'pending' : 'pending',
-    orders: enableStopLoss || enableTakeProfit || enableTrailingStop || eventDriven ? 'modified' : 'default',
+    orders: riskRows.length > 0 ? 'done' : 'default',
     costs: Number(feeBps) > 0 || Number(slippageBps) > 0 || benchmarkMode === 'custom_code' ? 'modified' : 'default',
-    advanced: enableGridSearch || enableBayesianSearch || enableWalkForward || enableRobustness ? 'modified' : 'off',
+    advanced: 'off',
   };
 
   const goToStep = (step: StepDefinition) => {
@@ -404,6 +385,26 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
       <span className={labelClass}>{label}</span>
       {control}
     </label>
+  );
+
+  const plannedCapabilityNote = language === 'en'
+    ? 'Planned. Not wired into the current backtest run.'
+    : '计划中，尚未接入当前回测执行。';
+
+  const renderPlannedCapability = (
+    title: string,
+    description: string,
+    testId?: string,
+  ) => (
+    <div data-testid={testId} className={plannedCardClass}>
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <p className="truncate text-sm font-semibold text-white/78">{title}</p>
+        <span className="shrink-0 rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-100">
+          {language === 'en' ? 'Planned' : '计划中'}
+        </span>
+      </div>
+      <p className="mt-2 text-sm text-white/52">{description}</p>
+    </div>
   );
 
   const renderStepHeader = (step: StepDefinition, chips: string[]) => (
@@ -497,21 +498,25 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         </div>
       </div>
       <details className={`${ghostCardClass} p-4`}>
-        <summary className="cursor-pointer text-sm font-semibold text-white/72">{language === 'en' ? 'Advanced portfolio settings' : '高级组合设置'}</summary>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {renderField(language === 'en' ? 'Asset scope' : '资产范围', (
-            <select className={`${fieldClass} appearance-none pr-10 truncate`} value={portfolioMode} onChange={(event) => setPortfolioMode(event.target.value as 'single' | 'multi')}>
-              <option value="single">{language === 'en' ? 'Single asset' : '单资产'}</option>
-              <option value="multi">{language === 'en' ? 'Portfolio shell' : '组合壳层'}</option>
-            </select>
-          ))}
-          {renderField(language === 'en' ? 'Rebalance cadence' : '再平衡频率', (
-            <select className={`${fieldClass} appearance-none pr-10 truncate`} value={rebalanceCadence} onChange={(event) => setRebalanceCadence(event.target.value)}>
-              <option value="monthly">{language === 'en' ? 'Monthly' : '每月'}</option>
-              <option value="weekly">{language === 'en' ? 'Weekly' : '每周'}</option>
-              <option value="quarterly">{language === 'en' ? 'Quarterly' : '每季度'}</option>
-            </select>
-          ))}
+        <summary className="cursor-pointer text-sm font-semibold text-white/72">
+          {language === 'en' ? 'Advanced portfolio settings (planned)' : '高级组合设置（计划中）'}
+        </summary>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {renderPlannedCapability(
+            language === 'en' ? 'Portfolio shell' : '组合壳层',
+            language === 'en'
+              ? 'Multi-asset portfolio execution is not wired here. Current runs still execute one parsed strategy per symbol.'
+              : '多资产组合执行尚未在此接线，当前运行仍按单标的已解析策略执行。',
+            'pro-planned-portfolio-shell',
+          )}
+          {renderPlannedCapability(
+            language === 'en' ? 'Rebalance cadence' : '再平衡频率',
+            language === 'en'
+              ? 'Rebalance scheduling is shown as a future capability and does not alter the current run payload.'
+              : '再平衡调度仅作为后续能力预留，当前不会改写运行 payload。',
+            'pro-planned-rebalance',
+          )}
+          <p className="md:col-span-2 text-xs text-white/42">{plannedCapabilityNote}</p>
         </div>
       </details>
     </section>
@@ -685,8 +690,10 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const renderOrdersStep = () => (
     <section data-testid="pro-step-orders" className="flex min-w-0 flex-col gap-4">
       {renderStepHeader(stepDefinitions[2], [
-        `${language === 'en' ? 'event-driven' : '事件驱动'} ${formatBoolean(eventDriven, language)}`,
-        `${language === 'en' ? 'risk' : '风险'} ${riskRows.length || 'default'}`,
+        language === 'en' ? 'parsed strategy execution' : '按解析策略执行',
+        riskRows.length > 0
+          ? `${language === 'en' ? 'parsed risk' : '解析风险'} ${riskRows.length}`
+          : (language === 'en' ? 'local overrides planned' : '本地覆盖计划中'),
       ])}
       <div className={`${ghostCardClass} p-4 md:p-5`}>
         <div className="flex min-w-0 flex-wrap gap-2">
@@ -709,43 +716,37 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         </div>
         {ordersTab === 'routing' ? (
           <div className="mt-5 grid gap-3 md:grid-cols-2">
-            {[
-              { label: language === 'en' ? 'Event-driven execution' : '事件驱动执行', value: eventDriven, setter: setEventDriven },
-              { label: language === 'en' ? 'Stop-loss route' : '止损路由', value: enableStopLoss, setter: setEnableStopLoss },
-              { label: language === 'en' ? 'Take-profit route' : '止盈路由', value: enableTakeProfit, setter: setEnableTakeProfit },
-            ].map((item) => (
-              <label key={item.label} className="flex items-center gap-2.5 rounded-lg border border-white/5 bg-black/20 p-3 text-sm text-white/70">
-                <input type="checkbox" className={checkboxClass} checked={item.value} onChange={(event) => item.setter(event.target.checked)} />
-                <span>{item.label}</span>
-              </label>
-            ))}
-            <details className="rounded-lg border border-white/5 bg-black/20 p-3 md:col-span-2">
-              <summary className="cursor-pointer text-sm font-semibold text-white/70">{language === 'en' ? 'Advanced route details' : '高级路由细节'}</summary>
-              <label className="mt-3 flex items-center gap-2.5 text-sm text-white/62">
-                <input type="checkbox" className={checkboxClass} checked={enableTrailingStop} onChange={(event) => setEnableTrailingStop(event.target.checked)} />
-                <span>{language === 'en' ? 'Trailing stop route' : '追踪止损路由'}</span>
-              </label>
-            </details>
+            {renderPlannedCapability(
+              language === 'en' ? 'Execution routing override' : '执行路由覆盖（计划中）',
+              language === 'en'
+                ? 'Event-driven routing, stop-loss routing, and take-profit routing are not wired into the current executor.'
+                : '事件驱动、止损路由、止盈路由尚未接入当前执行器。',
+              'pro-planned-routing-overrides',
+            )}
+            {renderPlannedCapability(
+              language === 'en' ? 'Trailing stop route' : '追踪止损路由（计划中）',
+              language === 'en'
+                ? 'Trailing-stop route configuration is reserved for a future execution lane and does not trigger backend behavior today.'
+                : '追踪止损路由仅为后续执行通道预留，当前不会触发后端行为。',
+              'pro-planned-trailing-route',
+            )}
           </div>
         ) : (
           <div className="mt-5 grid gap-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              {renderField(language === 'en' ? 'Max position' : '最大仓位', (
-                <input value={maxPositionPct} onChange={(event) => setMaxPositionPct(event.target.value)} className={fieldClass} />
-              ))}
-              {renderField(language === 'en' ? 'Max exposure' : '最大组合敞口', (
-                <input value={maxExposurePct} onChange={(event) => setMaxExposurePct(event.target.value)} className={fieldClass} />
-              ))}
-              {renderField(language === 'en' ? 'Max drawdown stop' : '最大回撤停止', (
-                <input value={maxDrawdownPct} onChange={(event) => setMaxDrawdownPct(event.target.value)} className={fieldClass} />
-              ))}
-              {renderField(language === 'en' ? 'Per-trade risk' : '单笔风险', (
-                <input value={perTradeRiskPct} onChange={(event) => setPerTradeRiskPct(event.target.value)} className={fieldClass} />
-              ))}
-              {renderField(language === 'en' ? 'Max concurrent holdings' : '最大同时持仓', (
-                <input value={maxHoldings} onChange={(event) => setMaxHoldings(event.target.value)} className={fieldClass} />
-              ), 'md:col-span-2')}
-            </div>
+            {renderPlannedCapability(
+              language === 'en' ? 'Portfolio-level guard overrides' : '组合级风控覆盖（计划中）',
+              language === 'en'
+                ? 'Max position, exposure, drawdown, and per-trade risk limits are not wired into this run payload.'
+                : '最大仓位、敞口、回撤、单笔风险等组合级限制尚未接入当前运行 payload。',
+              'pro-planned-portfolio-guards',
+            )}
+            {renderPlannedCapability(
+              language === 'en' ? 'Concurrent holdings cap' : '最大同时持仓（计划中）',
+              language === 'en'
+                ? 'Concurrent-holdings caps remain a planned control and do not change the current backend execution.'
+                : '最大同时持仓仍为计划中控件，当前不会改变后端执行。',
+              'pro-planned-max-holdings',
+            )}
           </div>
         )}
         <div data-testid="pro-risk-controls-summary" className="mt-4 rounded-lg border border-white/5 bg-black/20 p-3">
@@ -797,7 +798,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     <section data-testid="pro-step-advanced" className="flex min-w-0 flex-col gap-4">
       {renderStepHeader(stepDefinitions[4], [
         advancedTab === 'optimization' ? (language === 'en' ? 'optimization' : '优化') : (language === 'en' ? 'robustness' : '稳健性'),
-        stepStatuses.advanced === 'off' ? (language === 'en' ? 'off' : '关闭') : (language === 'en' ? 'modified' : '已修改'),
+        language === 'en' ? 'planned only' : '计划中',
       ])}
       <div className={`${ghostCardClass} p-4 md:p-5`}>
         <div className="flex min-w-0 flex-wrap gap-2">
@@ -805,41 +806,47 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           <button type="button" onClick={() => setAdvancedTab('robustness')} className={advancedTab === 'robustness' ? activeChipButtonClass : chipButtonClass}>{language === 'en' ? 'Robustness' : '稳健性'}</button>
         </div>
         <div className="mt-5 grid gap-3">
+          <div className={plannedCardClass}>
+            <p className="text-sm font-semibold text-white/78">
+              {language === 'en' ? 'Current truth label' : '当前能力说明'}
+            </p>
+            <p className="mt-2 text-sm text-white/52">
+              {language === 'en'
+                ? 'The current professional run only uses basic parameters plus the parsed executable strategy. The controls below remain planned placeholders.'
+                : '当前专业模式实际只会提交基础参数与已解析的可执行策略；以下控件仍是计划中的占位能力。'}
+            </p>
+          </div>
           {advancedTab === 'optimization' ? (
             <>
-              <details data-testid="pro-advanced-grid-search" className="rounded-lg border border-white/5 bg-black/20 p-3">
-                <summary className="cursor-pointer text-sm font-semibold text-white/70">{language === 'en' ? 'Grid Search' : '网格搜索'}</summary>
-                <label className="mt-3 flex items-center gap-2.5 text-sm text-white/62">
-                  <input aria-label={language === 'en' ? 'Enable Grid Search' : '启用网格搜索'} type="checkbox" className={checkboxClass} checked={enableGridSearch} onChange={(event) => setEnableGridSearch(event.target.checked)} />
-                  <span>{language === 'en' ? 'Enable Grid Search' : '启用网格搜索'}</span>
-                </label>
-                {enableGridSearch ? <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3 text-sm text-white/52">MA window / RSI threshold / risk grid</div> : null}
-              </details>
-              <details data-testid="pro-advanced-bayesian" className="rounded-lg border border-white/5 bg-black/20 p-3">
-                <summary className="cursor-pointer text-sm font-semibold text-white/70">{language === 'en' ? 'Bayesian Search' : '贝叶斯搜索'}</summary>
-                <label className="mt-3 flex items-center gap-2.5 text-sm text-white/62">
-                  <input aria-label={language === 'en' ? 'Enable Bayesian Search' : '启用贝叶斯搜索'} type="checkbox" className={checkboxClass} checked={enableBayesianSearch} onChange={(event) => setEnableBayesianSearch(event.target.checked)} />
-                  <span>{language === 'en' ? 'Enable Bayesian Search' : '启用贝叶斯搜索'}</span>
-                </label>
-                {enableBayesianSearch ? <div className="mt-3 rounded-lg border border-white/5 bg-white/[0.02] p-3 text-sm text-white/52">Trials / acquisition / bounds</div> : null}
-              </details>
+              {renderPlannedCapability(
+                language === 'en' ? 'Grid Search (planned)' : '网格搜索（计划中）',
+                language === 'en'
+                  ? 'Parameter sweeps are not wired into the current professional executor.'
+                  : '参数网格扫描尚未接入当前专业执行流。',
+                'pro-advanced-grid-search',
+              )}
+              {renderPlannedCapability(
+                language === 'en' ? 'Bayesian Search (planned)' : '贝叶斯搜索（计划中）',
+                language === 'en'
+                  ? 'Bayesian optimization remains a future capability and does not trigger backend actions today.'
+                  : '贝叶斯优化仍为后续能力，当前不会触发后端动作。',
+                'pro-advanced-bayesian',
+              )}
             </>
           ) : (
             <>
-              <details className="rounded-lg border border-white/5 bg-black/20 p-3">
-                <summary className="cursor-pointer text-sm font-semibold text-white/70">{language === 'en' ? 'Walk-forward' : '滚动样本外验证'}</summary>
-                <label className="mt-3 flex items-center gap-2.5 text-sm text-white/62">
-                  <input aria-label={language === 'en' ? 'Enable walk-forward validation' : '启用滚动样本外验证'} type="checkbox" className={checkboxClass} checked={enableWalkForward} onChange={(event) => setEnableWalkForward(event.target.checked)} />
-                  <span>{language === 'en' ? 'Enable walk-forward validation' : '启用滚动样本外验证'}</span>
-                </label>
-              </details>
-              <details className="rounded-lg border border-white/5 bg-black/20 p-3">
-                <summary className="cursor-pointer text-sm font-semibold text-white/70">{language === 'en' ? 'Robustness' : '稳健性扫描'}</summary>
-                <label className="mt-3 flex items-center gap-2.5 text-sm text-white/62">
-                  <input aria-label={language === 'en' ? 'Enable robustness sweep' : '启用稳健性扫描'} type="checkbox" className={checkboxClass} checked={enableRobustness} onChange={(event) => setEnableRobustness(event.target.checked)} />
-                  <span>{language === 'en' ? 'Enable robustness sweep' : '启用稳健性扫描'}</span>
-                </label>
-              </details>
+              {renderPlannedCapability(
+                language === 'en' ? 'Walk-forward validation (planned)' : '滚动样本外验证（计划中）',
+                language === 'en'
+                  ? 'Walk-forward validation is not wired into the current run path.'
+                  : '滚动样本外验证尚未接入当前运行路径。',
+              )}
+              {renderPlannedCapability(
+                language === 'en' ? 'Robustness sweep (planned)' : '稳健性扫描（计划中）',
+                language === 'en'
+                  ? 'Robustness sweeps remain planned UI placeholders; existing result diagnostics stay on the result route.'
+                  : '稳健性扫描仍是计划中的 UI 占位；现有结果诊断仍保留在结果页。',
+              )}
             </>
           )}
         </div>
@@ -898,10 +905,10 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         <p className={labelClass}>{language === 'en' ? 'RISK' : '风险'}</p>
         <div className="mt-3 grid gap-2 text-xs">
           {[
-            [language === 'en' ? 'STOP LOSS' : '止损', formatBoolean(enableStopLoss, language)],
-            [language === 'en' ? 'TAKE PROFIT' : '止盈', formatBoolean(enableTakeProfit, language)],
-            [language === 'en' ? 'TRAILING' : '移动止损', formatBoolean(enableTrailingStop, language)],
-            [language === 'en' ? 'LEVEL' : '风控层级', riskRows.length > 1 ? (language === 'en' ? 'guarded' : '护栏') : (language === 'en' ? 'default' : '默认')],
+            [language === 'en' ? 'SOURCE' : '来源', parsedStrategy ? (language === 'en' ? 'parsed strategy spec' : '解析策略规格') : (language === 'en' ? 'waiting for parse' : '等待解析')],
+            [language === 'en' ? 'PARSED RISK' : '解析风险', riskRows.length > 0 ? `${riskRows.length}` : (language === 'en' ? 'default only' : '仅默认值')],
+            [language === 'en' ? 'LOCAL OVERRIDES' : '本地覆盖', language === 'en' ? 'planned' : '计划中'],
+            [language === 'en' ? 'ROUTING CONTROLS' : '路由控件', language === 'en' ? 'not wired' : '未接线'],
           ].map(([label, value]) => (
             <div key={label} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 px-3 py-2">
               <span className="text-white/35">{label}</span>

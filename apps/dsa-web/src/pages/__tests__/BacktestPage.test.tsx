@@ -1111,17 +1111,48 @@ describe('BacktestPage', () => {
 
     fireEvent.click(screen.getByTestId('pro-workflow-step-advanced'));
     expect(await screen.findByTestId('pro-step-advanced')).toBeInTheDocument();
-    expect(screen.getByTestId('pro-advanced-grid-search')).not.toHaveAttribute('open');
-    expect(screen.getByTestId('pro-advanced-bayesian')).not.toHaveAttribute('open');
-    expect(screen.getByLabelText('启用网格搜索')).not.toBeChecked();
-    expect(screen.getByLabelText('启用贝叶斯搜索')).not.toBeChecked();
-    expect(screen.getByText('网格搜索')).toBeInTheDocument();
-    expect(screen.getByText('贝叶斯搜索')).toBeInTheDocument();
+    expect(screen.getByText('当前能力说明')).toBeInTheDocument();
+    expect(screen.getByText('网格搜索（计划中）')).toBeInTheDocument();
+    expect(screen.getByText('贝叶斯搜索（计划中）')).toBeInTheDocument();
+    expect(screen.queryByLabelText('启用网格搜索')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('启用贝叶斯搜索')).not.toBeInTheDocument();
     expect(screen.queryByText('Grid Search')).not.toBeInTheDocument();
     expect(screen.queryByText('Bayesian Search')).not.toBeInTheDocument();
     expect(screen.queryByText('为什么改成折叠')).not.toBeInTheDocument();
     expect(screen.queryByText('执行通道说明')).not.toBeInTheDocument();
     expect(screen.queryByText('控制策略')).not.toBeInTheDocument();
+  });
+
+  it('truth-labels non-wired professional controls instead of presenting them as executable toggles', async () => {
+    renderBacktestRoutes();
+
+    await switchToProfessionalMode();
+
+    expect(screen.getByText('高级组合设置（计划中）')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('高级组合设置（计划中）'));
+    expect(await screen.findByText('组合壳层')).toBeInTheDocument();
+    expect(screen.getByText('计划中，尚未接入当前回测执行。')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('pro-workflow-step-orders'));
+    const ordersStep = await screen.findByTestId('pro-step-orders');
+    expect(within(ordersStep).getByText('执行路由覆盖（计划中）')).toBeInTheDocument();
+    expect(within(ordersStep).queryByLabelText('事件驱动执行')).not.toBeInTheDocument();
+    expect(within(ordersStep).queryByLabelText('止损路由')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('pro-workflow-step-advanced'));
+    const advancedStep = await screen.findByTestId('pro-step-advanced');
+    expect(within(advancedStep).getByText('网格搜索（计划中）')).toBeInTheDocument();
+    expect(within(advancedStep).getByText('贝叶斯搜索（计划中）')).toBeInTheDocument();
+    expect(within(advancedStep).queryByLabelText('启用网格搜索')).not.toBeInTheDocument();
+    expect(within(advancedStep).queryByLabelText('启用贝叶斯搜索')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '稳健性' }));
+    expect(within(advancedStep).getByText('滚动样本外验证（计划中）')).toBeInTheDocument();
+    expect(within(advancedStep).getByText('稳健性扫描（计划中）')).toBeInTheDocument();
+    expect(within(advancedStep).queryByLabelText('启用滚动样本外验证')).not.toBeInTheDocument();
+    expect(within(advancedStep).queryByLabelText('启用稳健性扫描')).not.toBeInTheDocument();
+
+    expect(screen.getAllByRole('button', { name: '执行回测任务' }).length).toBeGreaterThan(0);
   });
 
   it('marks parsed strategy stale after setup changes', async () => {
