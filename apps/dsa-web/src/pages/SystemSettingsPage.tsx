@@ -1,37 +1,65 @@
 import type React from 'react';
+import {
+  TerminalChip,
+  TerminalMetric,
+  TerminalPageHeading,
+} from '../components/terminal/TerminalPrimitives';
 import SettingsPage from './SettingsPage';
+
+const SYSTEM_SETTINGS_OVERVIEW = [
+  {
+    label: '当前状态',
+    value: '等待配置快照',
+    note: '由下方控制台加载系统健康、路由与凭证摘要',
+  },
+  {
+    label: '需关注',
+    value: '凭证、调度、缓存、危险动作',
+    note: '危险动作在二级区域并带确认流程',
+  },
+  {
+    label: '下一步',
+    value: '先看总览，再进入具体域',
+    note: '原始配置字段默认通过抽屉处理',
+  },
+] as const;
 
 const SystemSettingsPage: React.FC = () => {
   return (
-    <div data-testid="system-settings-page" className="flex min-h-0 w-full flex-1 flex-col gap-5 overflow-hidden bg-[#050505] text-white">
-      <section className="mx-4 mt-4 rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-5 backdrop-blur-md md:mx-6 md:px-6 xl:mx-8">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-200/70">系统风险总览</p>
-            <h1 className="mt-3 text-2xl font-semibold tracking-normal text-white md:text-3xl">系统设置</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-white/58">
-              先确认全局风险、待处理配置和下一步安全动作；深层配置、原始字段和危险系统动作留在下方控制台。
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="rounded-full border border-cyan-300/20 bg-cyan-400/8 px-3 py-1 text-xs font-semibold text-cyan-100">管理员只读入口优先</span>
-            <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-100">变更需保存确认</span>
+    <div data-testid="system-settings-page" className="flex min-h-0 w-full flex-1 flex-col gap-5 overflow-hidden text-white">
+      <div
+        data-testid="system-settings-shell-header"
+        className="mx-auto w-full max-w-[1600px] px-4 pt-4 md:px-6 xl:px-8"
+      >
+        <div className="flex flex-col gap-4">
+          <TerminalPageHeading
+            data-testid="system-settings-heading"
+            eyebrow="系统风险总览"
+            title="系统设置"
+            action={(
+              <div className="flex flex-wrap gap-2">
+                <TerminalChip variant="info">管理员只读入口优先</TerminalChip>
+                <TerminalChip variant="caution">变更需保存确认</TerminalChip>
+              </div>
+            )}
+          />
+          <p className="max-w-3xl text-sm leading-6 text-white/58">
+            先确认全局风险、待处理配置和下一步安全动作；深层配置、原始字段和危险系统动作留在下方控制台。
+          </p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {SYSTEM_SETTINGS_OVERVIEW.map(({ label, value, note }) => (
+              <TerminalMetric
+                key={label}
+                label={label}
+                value={value}
+                subvalue={note}
+                className="min-w-0"
+                valueClassName="text-sm font-semibold tracking-normal"
+              />
+            ))}
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-          {[
-            ['当前状态', '等待配置快照', '由下方控制台加载系统健康、路由与凭证摘要'],
-            ['需关注', '凭证、调度、缓存、危险动作', '危险动作在二级区域并带确认流程'],
-            ['下一步', '先看总览，再进入具体域', '原始配置字段默认通过抽屉处理'],
-          ].map(([label, value, note]) => (
-            <div key={label} className="min-w-0 rounded-2xl border border-white/5 bg-black/20 px-4 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/34">{label}</p>
-              <p className="mt-2 text-sm font-semibold text-white">{value}</p>
-              <p className="mt-1 text-xs leading-5 text-white/42">{note}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      </div>
       <div className="min-h-0 flex-1">
         <SettingsPage />
       </div>
