@@ -181,6 +181,17 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getByText('正在读取市场数据源运维快照')).toBeInTheDocument();
   });
 
+  it('lets the shared shell own the page background instead of locking a local pure-black slab', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+
+    render(<MarketProviderOperationsPage />);
+
+    const pageRoot = screen.getByTestId('market-provider-operations-page');
+    expect(await screen.findByRole('heading', { name: '数据源运维' })).toBeInTheDocument();
+    expect(pageRoot.className).not.toContain('bg-[#050505]');
+    expect(pageRoot.className).not.toContain('bg-black');
+  });
+
   it('renders Chinese-first operator hierarchy and keeps diagnostics available without exposing raw secrets', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 

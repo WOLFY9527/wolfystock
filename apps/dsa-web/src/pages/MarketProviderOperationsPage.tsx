@@ -630,8 +630,8 @@ const MarketProviderOperationsPage: React.FC = () => {
   }, [cacheStates, degradedCount, eventRollups.length, items.length, summary, topException]);
 
   return (
-    <div data-testid="market-provider-operations-page" className="market-provider-operations-page flex min-h-0 w-full flex-1 flex-col overflow-y-auto no-scrollbar bg-[#050505] px-4 py-5 text-white md:px-6 xl:px-8">
-      <TerminalPageShell>
+    <div data-testid="market-provider-operations-page" className="market-provider-operations-page flex min-h-0 w-full flex-1 flex-col overflow-y-auto no-scrollbar text-white">
+      <TerminalPageShell className="py-5 md:py-6">
         <TerminalPanel as="section" className="relative overflow-hidden">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/50 to-transparent" />
           <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
