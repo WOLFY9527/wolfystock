@@ -1697,7 +1697,7 @@ const ChatPage: React.FC = () => {
     <div
       data-testid="chat-bento-page"
       data-bento-surface="true"
-      className="gemini-bento-page bento-surface-root gemini-bento-page--chat flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-[#030303]"
+      className="gemini-bento-page bento-surface-root gemini-bento-page--chat flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
     >
       <div
         data-testid="chat-workspace"
