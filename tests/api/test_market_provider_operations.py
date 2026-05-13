@@ -353,6 +353,43 @@ def test_admin_logs_drill_through_query_model_is_structured_and_safe() -> None:
     assert "token" not in str(drill).lower()
 
 
+def test_all_admin_log_drill_through_links_remain_read_only_queries() -> None:
+    events = [
+        {
+            "id": "failed-1",
+            "event": "MarketProviderRefreshFailed",
+            "eventType": "MarketProviderRefreshFailed",
+            "category": "data_source",
+            "status": "failed",
+            "summary": "MarketProviderRefreshFailed",
+            "endpoint": "/api/v1/market/sentiment",
+            "provider": "cnn",
+            "component": "MarketSentimentCard",
+            "reason": "provider_error",
+            "startedAt": "2026-05-06T10:10:00+08:00",
+        },
+    ]
+
+    payload = _service(events).get_operations(window="24h")
+    drills = [
+        payload["adminLogDrillThrough"],
+        payload["items"][0]["adminLogDrillThrough"],
+        payload["eventRollups"][0]["adminLogDrillThrough"],
+    ]
+
+    for drill in drills:
+        assert drill["route"] == "/zh/admin/logs"
+        assert set(drill["query"]).issubset({"since", "category", "provider", "query"})
+        assert "mode" not in drill["query"]
+        assert "dryRun" not in drill["query"]
+        assert "useRetention" not in drill["query"]
+        assert "delete" not in str(drill).lower()
+        assert "cleanup" not in str(drill).lower()
+
+    assert payload["adminLogDrillThrough"]["query"] == {"since": "24h", "query": "market provider"}
+    assert payload["eventRollups"][0]["adminLogDrillThrough"]["eventId"] == "failed-1"
+
+
 def test_unavailable_cache_metadata_is_represented_honestly() -> None:
     payload = _service([]).get_operations(window="24h")
 

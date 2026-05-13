@@ -529,6 +529,138 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(metadata["nested"]["connection_string"], "***")
         self.assertEqual(metadata["nested"]["safeLabel"], "visible")
 
+    def test_session_detail_keeps_actor_session_attribution_and_readable_summary_fields_explicit(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="TSLA",
+                summary="Guest analysis TSLA token=SECRET",
+                subject="TSLA",
+                symbol="TSLA",
+                request_id="guest:session-42:req-42",
+                metadata={"api_key": "SECRET", "safeLabel": "ok"},
+                actor={
+                    "actor_type": "guest",
+                    "role": "guest",
+                    "session_id": "session-42",
+                    "request_id": "guest:session-42:req-42",
+                },
+            )
+            service.start_step(
+                execution_id,
+                "fetch_quote",
+                "获取行情",
+                category="data_source",
+                provider="fmp",
+                endpoint="/api/v1/market/quote?api_key=SECRET",
+            )
+            service.finish_step_failed(
+                execution_id,
+                "fetch_quote",
+                provider="fmp",
+                error_type="HTTPError",
+                error_message="GET https://x.test?q=1&token=SECRET failed",
+                reason="timeout",
+                metadata={"accessToken": "SECRET", "safeDetail": "visible"},
+                endpoint="/api/v1/market/quote?api_key=SECRET",
+            )
+            service.finish_execution(
+                execution_id,
+                status="partial",
+                metadata={"password": "SECRET", "safeResult": "kept"},
+            )
+
+            payload = admin_logs.get_execution_log_session_detail(execution_id, _=_admin_user())
+
+        dumped = payload.model_dump()
+        readable = dumped["readable_summary"]
+        failed_event = next(event for event in dumped["events"] if event["step"] == "fetch_quote" and event["status"] == "failed")
+
+        self.assertEqual(dumped["summary"]["meta"]["actor_type"], "guest")
+        self.assertEqual(dumped["summary"]["meta"]["actor_session_id"], "session-42")
+        self.assertEqual(dumped["summary"]["meta"]["actor_request_id"], "guest:session-42:req-42")
+        self.assertEqual(readable["actor_type"], "guest")
+        self.assertEqual(readable["actor_session_id"], "session-42")
+        self.assertEqual(readable["session_kind"], "business_event")
+        self.assertEqual(readable["subsystem"], "analysis")
+        self.assertEqual(readable["operation_category"], "single_stock_analysis")
+        self.assertEqual(readable["operation_type"], "Single Stock Analysis")
+        self.assertEqual(readable["operation_status"], "partial fail")
+        self.assertIn("Top failure reason:", readable["summary_paragraph"])
+        self.assertEqual(dumped["summary"]["business_event"]["metadata"]["api_key"], "***")
+        self.assertEqual(dumped["summary"]["business_event"]["metadata"]["password"], "***")
+        self.assertEqual(dumped["summary"]["business_event"]["metadata"]["safeLabel"], "ok")
+        self.assertEqual(dumped["summary"]["business_event"]["metadata"]["safeResult"], "kept")
+        self.assertEqual(failed_event["detail"]["metadata"]["accessToken"], "***")
+        self.assertEqual(failed_event["detail"]["metadata"]["safeDetail"], "visible")
+        self.assertNotIn("SECRET", str(dumped))
+
+    def test_business_event_projection_keeps_request_actor_and_sanitized_step_metadata(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            execution_id = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="TSLA",
+                summary="Guest analysis TSLA",
+                subject="TSLA",
+                symbol="TSLA",
+                request_id="guest:session-9:req-1",
+                metadata={"databaseDsn": "postgresql://reader:SECRET@db.example/logs", "safeLabel": "ok"},
+                actor={
+                    "actor_type": "guest",
+                    "role": "guest",
+                    "session_id": "session-9",
+                    "request_id": "guest:session-9:req-1",
+                },
+            )
+            service.start_step(
+                execution_id,
+                "fetch_quote",
+                "获取行情",
+                category="data_source",
+                provider="fmp",
+                endpoint="/api/v1/market/quote?api_key=SECRET",
+            )
+            service.finish_step_failed(
+                execution_id,
+                "fetch_quote",
+                provider="fmp",
+                error_type="HTTPError",
+                error_message="GET https://x.test?q=1&token=SECRET failed",
+                reason="timeout",
+                metadata={"sessionToken": "SECRET", "safeDetail": "visible"},
+                endpoint="/api/v1/market/quote?api_key=SECRET",
+            )
+            service.finish_execution(execution_id, status="partial")
+
+            payload = admin_logs.list_execution_logs_root(query="TSLA", limit=10, _=_admin_user())
+            detail = admin_logs.get_business_event_detail(execution_id, _=_admin_user())
+
+        self.assertEqual(payload.total, 1)
+        item = payload.items[0]
+        self.assertEqual(item.id, execution_id)
+        self.assertEqual(item.actorType, "guest")
+        self.assertEqual(item.requestId, "guest:session-9:req-1")
+        self.assertTrue(item.stepTraceAvailable)
+        self.assertEqual(item.provider, "fmp")
+        self.assertEqual(item.reason, "timeout")
+        self.assertEqual(item.metadata["databaseDsn"], "***")
+        self.assertEqual(item.metadata["safeLabel"], "ok")
+        self.assertNotIn("SECRET", str(item.model_dump()))
+
+        failed_step = next(step for step in detail.steps if step.name == "fetch_quote")
+        self.assertEqual(detail.actorType, "guest")
+        self.assertEqual(detail.requestId, "guest:session-9:req-1")
+        self.assertEqual(detail.endpoint, "/api/v1/market/quote?api_key=***")
+        self.assertEqual(detail.metadata["databaseDsn"], "***")
+        self.assertEqual(detail.metadata["safeLabel"], "ok")
+        self.assertEqual(failed_step.metadata["sessionToken"], "***")
+        self.assertEqual(failed_step.metadata["safeDetail"], "visible")
+        self.assertNotIn("SECRET", str(detail.model_dump()))
+
     def test_root_filters_generic_business_execution_fields(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()
@@ -878,6 +1010,54 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.capacity_cleanup_plan["estimated_candidate_sessions"], 1)
         self.assertEqual(remaining.total_log_count, 1)
 
+    def test_storage_summary_capacity_cleanup_plan_keeps_preview_metadata_explicit(self) -> None:
+        now = datetime.now()
+        self._record_event(
+            session_id="old-error",
+            event_name="AnalysisFailed",
+            level="ERROR",
+            category="analysis",
+            message="old failure",
+            status="failed",
+            event_at=now - timedelta(days=120),
+        )
+
+        with (
+            patch("src.services.admin_logs_service.get_db", return_value=self.db),
+            patch(
+                "src.services.admin_logs_service.get_config",
+                return_value=_admin_logs_config(
+                    admin_logs_storage_soft_limit_mb=1,
+                    admin_logs_storage_hard_limit_mb=2,
+                    admin_logs_cleanup_batch_size=250,
+                    admin_logs_auto_cleanup_enabled=False,
+                ),
+            ),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_measurement", return_value=_storage_measurement(3 * 1024 * 1024)),
+        ):
+            payload = admin_logs.get_log_storage_summary(_=_admin_user())
+
+        plan = payload.capacity_cleanup_plan
+        self.assertEqual(plan["mode"], "capacity")
+        self.assertEqual(plan["current_storage_bytes"], 3 * 1024 * 1024)
+        self.assertEqual(plan["target_storage_bytes"], 1 * 1024 * 1024)
+        self.assertEqual(plan["soft_limit_bytes"], 1 * 1024 * 1024)
+        self.assertEqual(plan["hard_limit_bytes"], 2 * 1024 * 1024)
+        self.assertTrue(plan["hard_limit_exceeded"])
+        self.assertTrue(plan["cleanup_safe"])
+        self.assertTrue(plan["storage_size_available"])
+        self.assertEqual(plan["measurement_scope"], "postgres_tables")
+        self.assertEqual(plan["measurement_status"], "available")
+        self.assertIsNone(plan["measurement_reason"])
+        self.assertEqual(plan["estimated_candidate_sessions"], 1)
+        self.assertEqual(plan["estimated_candidate_events"], 1)
+        self.assertEqual(plan["batch_size"], 250)
+        self.assertIsNotNone(plan["oldest_deletable_cutoff"])
+        self.assertIsNotNone(plan["estimated_bytes_per_session"])
+        self.assertIsNotNone(plan["estimated_reclaimable_bytes"])
+        self.assertNotIn("deleted_log_count", plan)
+        self.assertNotIn("deleted_event_count", plan)
+
     def test_storage_summary_capacity_plan_refuses_cleanup_when_storage_size_unavailable(self) -> None:
         self._record_event(
             session_id="old-error",
@@ -900,6 +1080,48 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertFalse(payload.capacity_cleanup_plan["cleanup_safe"])
         self.assertEqual(payload.capacity_cleanup_plan["reason"], "storage_size_unavailable")
         self.assertEqual(payload.capacity_cleanup_plan["estimated_candidate_sessions"], 1)
+
+    def test_storage_summary_notification_payload_stays_bounded_and_cleanup_free(self) -> None:
+        self._record_event(
+            session_id="old-secret-error",
+            event_name="AnalysisFailed",
+            level="ERROR",
+            category="analysis",
+            message="old failure token=SECRET",
+            status="failed",
+            event_at=datetime.now() - timedelta(days=120),
+        )
+
+        with (
+            patch("src.services.admin_logs_service.get_db", return_value=self.db),
+            patch(
+                "src.services.admin_logs_service.get_config",
+                return_value=_admin_logs_config(
+                    admin_logs_storage_soft_limit_mb=1,
+                    admin_logs_storage_hard_limit_mb=2,
+                    admin_logs_auto_cleanup_enabled=False,
+                ),
+            ),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._storage_measurement", return_value=_storage_measurement(3 * 1024 * 1024)),
+            patch("src.services.admin_logs_service.AdminLogsRetentionService._emit_notification_event") as emit_event,
+        ):
+            payload = admin_logs.get_log_storage_summary(_=_admin_user())
+
+        emit_event.assert_called_once()
+        _, kwargs = emit_event.call_args
+        self.assertEqual(kwargs["event_type"], "admin_logs.storage")
+        self.assertEqual(kwargs["severity"], payload.status)
+        self.assertEqual(kwargs["payload"]["status"], payload.status)
+        self.assertEqual(kwargs["payload"]["status_reasons"], payload.status_reasons)
+        self.assertEqual(kwargs["payload"]["total_log_count"], payload.total_log_count)
+        self.assertEqual(kwargs["payload"]["total_event_count"], payload.total_event_count)
+        self.assertEqual(kwargs["payload"]["storage_size_bytes"], payload.storage_size_bytes)
+        self.assertEqual(kwargs["payload"]["capacity_cleanup_recommended"], payload.capacity_cleanup_recommended)
+        self.assertIn("admin_logs.storage", kwargs["fingerprint"])
+        self.assertNotIn("deleted_log_count", kwargs["payload"])
+        self.assertNotIn("deleted_event_count", kwargs["payload"])
+        self.assertNotIn("retention_tiers", kwargs["payload"])
+        self.assertNotIn("SECRET", str(kwargs))
 
     def test_storage_summary_handles_empty_logs_table(self) -> None:
         with patch("src.services.admin_logs_service.get_db", return_value=self.db):

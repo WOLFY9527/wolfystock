@@ -21,6 +21,8 @@ ADMIN_CAPABILITIES_TS = REPO_ROOT / "apps" / "dsa-web" / "src" / "utils" / "admi
 APP_ROUTES_TEST_TSX = REPO_ROOT / "apps" / "dsa-web" / "src" / "__tests__" / "AppRoutes.test.tsx"
 AUTH_GUARD_TEST_TSX = REPO_ROOT / "apps" / "dsa-web" / "src" / "components" / "auth" / "__tests__" / "AuthGuardOverlay.test.tsx"
 AUTH_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "auth.py"
+ADMIN_LOGS_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "admin_logs.py"
+MARKET_PROVIDER_OPERATIONS_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "market_provider_operations.py"
 
 BACKEND_FIXTURE = FIXTURE_DIR / "backend_route_capability_inventory.json"
 FRONTEND_FIXTURE = FIXTURE_DIR / "frontend_route_capability_inventory.json"
@@ -49,6 +51,13 @@ ADMIN_CAPABILITY_CASES = {
     "/admin/market-providers": "canReadProviders",
     "/admin/provider-circuits": "canReadProviders",
     "/admin/cost-observability": "canReadCostObservability",
+}
+EXPLICIT_AUTHENTICATED_ROUTE_EXCEPTIONS = {
+    ("GET", "/api/v1/backtest/rule/runs/{run_id}/robustness-evidence.json"): {
+        "auth_dependency_label": "authenticated_user",
+        "capability_label": None,
+        "note": "Backtest robustness evidence is authenticated-user scoped outside the admin control-plane inventory.",
+    },
 }
 
 
@@ -205,6 +214,12 @@ def test_backend_route_capability_inventory_covers_current_dependency_guarded_ro
 
     unmatched_routes = []
     for route in protected_live_routes:
+        route_key = (route["method"], route["path"])
+        if route_key in EXPLICIT_AUTHENTICATED_ROUTE_EXCEPTIONS:
+            expected = EXPLICIT_AUTHENTICATED_ROUTE_EXCEPTIONS[route_key]
+            assert route["auth_dependency_label"] == expected["auth_dependency_label"]
+            assert route["capability_label"] == expected["capability_label"]
+            continue
         matched_group = next((group for group in fixture["protected_groups"] if _route_matches_group(route, group)), None)
         if matched_group is None:
             unmatched_routes.append(route)
@@ -221,6 +236,16 @@ def test_backend_route_capability_inventory_covers_current_dependency_guarded_ro
         assert matches, f"inventory group no longer matches any live route: {group['route_id']}"
 
 
+def test_authenticated_route_exceptions_remain_explicit_and_narrow() -> None:
+    live_routes = _collect_live_routes()
+
+    for route_key, expected in EXPLICIT_AUTHENTICATED_ROUTE_EXCEPTIONS.items():
+        live = live_routes[route_key]
+        assert live["auth_dependency_label"] == expected["auth_dependency_label"]
+        assert live["capability_label"] == expected["capability_label"]
+        assert "admin control-plane" in expected["note"].lower()
+
+
 def test_backend_public_and_optional_user_routes_are_not_mislabeled_as_admin_only() -> None:
     fixture = _load_json(BACKEND_FIXTURE)
     live_routes = _collect_live_routes()
@@ -233,6 +258,31 @@ def test_backend_public_and_optional_user_routes_are_not_mislabeled_as_admin_onl
         else:
             assert live["auth_dependency_label"] == expected
         assert live["capability_label"] is None
+
+
+def test_admin_observability_route_inventory_keeps_capabilities_and_transitional_gaps_explicit() -> None:
+    fixture = _load_json(BACKEND_FIXTURE)
+    groups = {group["route_id"]: group for group in fixture["protected_groups"]}
+
+    admin_logs_read = groups["admin.logs.read"]
+    admin_logs_write = groups["admin.logs.write"]
+    market_provider_ops = groups["admin.market_providers.operations"]
+
+    assert admin_logs_read["auth_dependency_label"] == "admin_capability"
+    assert admin_logs_read["capability_label"] == "ops:logs:read"
+    assert admin_logs_write["auth_dependency_label"] == "admin_capability"
+    assert admin_logs_write["capability_label"] == "ops:logs:write"
+    assert market_provider_ops["auth_dependency_label"] == "admin_user"
+    assert market_provider_ops["capability_label"] is None
+    assert "dedicated read capability" in market_provider_ops["transitional_note"].lower()
+
+    admin_logs_source = ADMIN_LOGS_ENDPOINT_TS.read_text(encoding="utf-8")
+    market_provider_source = MARKET_PROVIDER_OPERATIONS_ENDPOINT_TS.read_text(encoding="utf-8")
+
+    assert 'require_admin_capability("ops:logs:read")' in admin_logs_source
+    assert 'require_admin_capability("ops:logs:write")' in admin_logs_source
+    assert "require_admin_user" in market_provider_source
+    assert 'require_admin_capability(' not in market_provider_source
 
 
 def test_request_guarded_auth_routes_remain_explicit_in_auth_endpoint_source() -> None:

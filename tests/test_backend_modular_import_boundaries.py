@@ -95,6 +95,7 @@ ARCHITECTURE_DOMAIN_CLASSIFICATIONS = {
         "api.v1.endpoints.provider_usage_ledger",
         "src.services.admin_activity_service",
         "src.services.admin_logs_service",
+        "src.services.execution_log_service",
     },
     "shared contracts": {
         "api.v1.schemas",
@@ -138,6 +139,7 @@ EXPECTED_RUNTIME_HEAVY_DOMAIN_CLASSIFICATIONS = {
     "api.middlewares.auth": "auth / RBAC",
     "src.services.admin_security_service": "auth / RBAC",
     "src.services.admin_activity_service": "admin observability",
+    "src.services.execution_log_service": "admin observability",
     "src.services.admin_logs_service": "admin observability",
     "api.v1.endpoints.admin_logs": "admin observability",
     "api.v1.schemas": "shared contracts",
@@ -288,6 +290,27 @@ EXPECTED_RULE_BACKTEST_LLM_IMPORT_BOUNDARY = {
     "src/services/rule_backtest_text_completion.py": {
         "src.agent.llm_adapter",
         "src.config",
+    },
+}
+CONTROL_PLANE_SERVICE_IMPORT_PREFIXES = (
+    "api",
+    "data_provider",
+    "src.services.system_config_service",
+    "src.services.execution_log_service",
+    "src.services.admin_logs_service",
+    "src.services.market_provider_operations_service",
+    "src.services.market_cache",
+    "src.services.market_overview_service",
+    "src.services.notification_service",
+)
+EXPECTED_CONTROL_PLANE_SERVICE_BOUNDARY_IMPORTS = {
+    "src/services/system_config_service.py": {"src.services.execution_log_service"},
+    "src/services/execution_log_service.py": set(),
+    "src/services/admin_logs_service.py": {"src.services.notification_service"},
+    "src/services/market_provider_operations_service.py": {
+        "src.services.execution_log_service",
+        "src.services.market_cache",
+        "src.services.market_overview_service",
     },
 }
 
@@ -730,6 +753,20 @@ def test_service_api_upward_import_inventory_is_frozen() -> None:
     assert actual_mapping == EXPECTED_SERVICE_API_IMPORTS, (
         f"{ARCH_REVIEW_MESSAGE} "
         f"Expected {EXPECTED_SERVICE_API_IMPORTS}, found {actual_mapping}"
+    )
+
+
+def test_admin_control_plane_service_import_boundaries_are_explicit() -> None:
+    actual_mapping = {
+        relative_path: _imports_for_file(REPO_ROOT / relative_path, CONTROL_PLANE_SERVICE_IMPORT_PREFIXES)
+        for relative_path in EXPECTED_CONTROL_PLANE_SERVICE_BOUNDARY_IMPORTS
+    }
+
+    assert actual_mapping == EXPECTED_CONTROL_PLANE_SERVICE_BOUNDARY_IMPORTS, (
+        "system_config_service, execution_log_service, admin_logs_service, and "
+        "market_provider_operations_service must keep their current control-plane "
+        "boundary imports explicit. Do not add API, provider runtime, or sibling "
+        f"service reach-through without an approved boundary review. Found {actual_mapping}"
     )
 
 
