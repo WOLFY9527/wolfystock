@@ -4,7 +4,7 @@
 import os
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -900,6 +900,113 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertFalse(payload["success"])
         self.assertIsNone(payload["status_code"])
         self.assertIn("dns", payload["message"].lower())
+
+    @patch("src.services.system_config_service.requests.request")
+    def test_test_custom_data_source_is_diagnostic_only_and_does_not_touch_config_or_reset_paths(self, mock_request) -> None:
+        mock_request.return_value = SimpleNamespace(status_code=200, headers={}, close=lambda: None)
+        before_env = self.env_path.read_text(encoding="utf-8")
+
+        with patch.object(self.manager, "apply_updates", side_effect=AssertionError("apply_updates must not run")) as mock_apply, \
+                patch.object(SystemConfigService, "_sync_phase_g_config_shadow", side_effect=AssertionError("shadow sync must not run")) as mock_sync, \
+                patch.object(Config, "reset_instance", side_effect=AssertionError("Config.reset_instance must not run")) as mock_reset, \
+                patch.object(SystemConfigService, "_reload_runtime_singletons", side_effect=AssertionError("runtime reload must not run")) as mock_reload, \
+                patch("src.services.system_config_service.setup_env", side_effect=AssertionError("setup_env must not run")) as mock_setup, \
+                patch.object(SystemConfigService, "factory_reset_system", side_effect=AssertionError("factory reset must not run")) as mock_factory_reset:
+            payload = self.service.test_custom_data_source(
+                name="Demo API",
+                base_url="https://demo.example.com/v1",
+                credential_schema="single_key",
+                credential="demo-key",
+                secret="",
+                timeout_seconds=5.0,
+            )
+
+        self.assertTrue(payload["success"])
+        self.assertEqual(self.env_path.read_text(encoding="utf-8"), before_env)
+        mock_apply.assert_not_called()
+        mock_sync.assert_not_called()
+        mock_reset.assert_not_called()
+        mock_reload.assert_not_called()
+        mock_setup.assert_not_called()
+        mock_factory_reset.assert_not_called()
+
+    @patch("src.services.system_config_service.requests.request")
+    def test_test_custom_data_source_response_does_not_leak_submitted_credentials(self, mock_request) -> None:
+        mock_request.return_value = SimpleNamespace(status_code=401, headers={}, close=lambda: None)
+
+        payload = self.service.test_custom_data_source(
+            name="Secret API",
+            base_url="https://demo.example.com/v1",
+            credential_schema="key_secret",
+            credential="demo-key-secret",
+            secret="demo-secret-secret",
+            timeout_seconds=5.0,
+        )
+
+        serialized = str(payload)
+        self.assertNotIn("demo-key-secret", serialized)
+        self.assertNotIn("demo-secret-secret", serialized)
+        self.assertEqual(payload["status_code"], 401)
+
+    def test_test_builtin_data_source_is_diagnostic_only_and_preserves_public_fields(self) -> None:
+        before_env = self.env_path.read_text(encoding="utf-8")
+        provider_result = SimpleNamespace(
+            status=SimpleNamespace(value="success"),
+            reason=None,
+            metadata={
+                "status": "success",
+                "checks": [
+                    {
+                        "name": "quote",
+                        "endpoint": "/api/v3/quote/MSFT",
+                        "ok": True,
+                        "http_status": 200,
+                        "duration_ms": 12,
+                        "error_type": None,
+                        "message": "quote endpoint returned 200.",
+                    }
+                ],
+            },
+            finishedAt=datetime(2026, 5, 14, 0, 0, tzinfo=timezone.utc),
+            durationMs=12,
+        )
+
+        with patch("src.services.system_config_service.validate_provider_connection", return_value=provider_result) as mock_validate, \
+                patch.object(self.manager, "apply_updates", side_effect=AssertionError("apply_updates must not run")) as mock_apply, \
+                patch.object(SystemConfigService, "_sync_phase_g_config_shadow", side_effect=AssertionError("shadow sync must not run")) as mock_sync, \
+                patch.object(Config, "reset_instance", side_effect=AssertionError("Config.reset_instance must not run")) as mock_reset, \
+                patch.object(SystemConfigService, "_reload_runtime_singletons", side_effect=AssertionError("runtime reload must not run")) as mock_reload, \
+                patch("src.services.system_config_service.setup_env", side_effect=AssertionError("setup_env must not run")) as mock_setup, \
+                patch.object(SystemConfigService, "factory_reset_system", side_effect=AssertionError("factory reset must not run")) as mock_factory_reset:
+            payload = self.service.test_builtin_data_source(
+                provider="fmp",
+                symbol="MSFT",
+                credential="full-secret-fmp-key",
+            )
+
+        self.assertEqual(
+            set(payload.keys()),
+            {"provider", "ok", "status", "checked_at", "duration_ms", "key_masked", "checks", "summary", "suggestion"},
+        )
+        self.assertEqual(payload["provider"], "fmp")
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["status"], "success")
+        self.assertEqual(payload["checked_at"], "2026-05-14T00:00:00+00:00")
+        self.assertEqual(payload["duration_ms"], 12)
+        self.assertEqual(payload["key_masked"], "full...-key")
+        self.assertEqual(self.env_path.read_text(encoding="utf-8"), before_env)
+        mock_validate.assert_called_once_with(
+            "fmp",
+            "MSFT",
+            credential="full-secret-fmp-key",
+            timeout_seconds=5.0,
+        )
+        mock_apply.assert_not_called()
+        mock_sync.assert_not_called()
+        mock_reset.assert_not_called()
+        mock_reload.assert_not_called()
+        mock_setup.assert_not_called()
+        mock_factory_reset.assert_not_called()
 
     @patch.object(SystemConfigService, "_reload_runtime_singletons")
     def test_update_with_reload_resets_runtime_singletons(
