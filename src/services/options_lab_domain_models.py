@@ -49,6 +49,41 @@ class OptionContractSnapshot:
 
 
 @dataclass
+class OptionUnderlyingSummaryResultModel:
+    symbol: str
+    market: str
+    currency: str = "USD"
+    underlying: dict[str, Any] = field(default_factory=dict)
+    options_availability: dict[str, Any] = field(default_factory=dict)
+    as_of: str = ""
+    source: str = ""
+    warnings: list[str] = field(default_factory=list)
+    metadata: Any = None
+
+
+@dataclass
+class OptionExpirationModel:
+    date: str
+    dte: int
+    type: str = "unknown"
+    chain_available: bool = True
+    as_of: str = ""
+    source: str = ""
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class OptionExpirationsResultModel:
+    symbol: str
+    market: str
+    expirations: list[OptionExpirationModel] = field(default_factory=list)
+    as_of: str = ""
+    source: str = ""
+    warnings: list[str] = field(default_factory=list)
+    metadata: Any = None
+
+
+@dataclass
 class DecisionDataQualityAssessment:
     data_quality_score: float
     data_quality_tier: str

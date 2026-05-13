@@ -17,8 +17,6 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 from api.v1.schemas.options import (
     OptionChainResponse,
     OptionContract,
-    OptionExpirationItem,
-    OptionExpirationsResponse,
     OptionGreeks,
     OptionsMetadata,
     OptionsAnalyzeRequest,
@@ -26,7 +24,6 @@ from api.v1.schemas.options import (
     OptionsDecisionRequest,
     OptionsScenarioRequest,
     OptionsStrategyCompareRequest,
-    OptionUnderlyingSummaryResponse,
 )
 from src.services.options_data_quality_gates import evaluate_options_data_quality_gates
 from src.services.options_lab_domain_models import (
@@ -42,7 +39,10 @@ from src.services.options_lab_domain_models import (
     IvGreeksAssessment,
     LiquidityAssessment,
     OptionContractSnapshot,
+    OptionExpirationModel,
+    OptionExpirationsResultModel,
     OptionGreeksSnapshot,
+    OptionUnderlyingSummaryResultModel,
     OptimizerCandidate,
     OptimizerResult,
     RiskRewardAssessment,
@@ -158,22 +158,22 @@ class OptionsLabService:
         symbol: str,
         force_refresh: bool = False,
         market_data_provider: Optional[str] = None,
-    ) -> OptionUnderlyingSummaryResponse:
+    ) -> OptionUnderlyingSummaryResultModel:
         fixture = self._fixture_for_symbol(symbol, market_data_provider=market_data_provider)
         metadata = self._metadata(force_refresh=force_refresh, fixture=fixture)
         underlying = self._safe_underlying(fixture)
-        return OptionUnderlyingSummaryResponse(
+        return OptionUnderlyingSummaryResultModel(
             symbol=fixture["symbol"],
             market=fixture["market"],
             currency=fixture.get("currency", "USD"),
             underlying=underlying,
-            optionsAvailability={
+            options_availability={
                 "supported": True,
                 "provider": fixture.get("providerName") or fixture.get("source") or "unknown",
                 "providerCapabilities": fixture.get("providerCapabilities") or {},
                 "limitations": ["fixture_only", "provider_validation_required_later"],
             },
-            asOf=fixture["chainAsOf"],
+            as_of=fixture["chainAsOf"],
             source=fixture["source"],
             warnings=list(PHASE1_WARNING_CODES),
             metadata=metadata,
@@ -184,25 +184,25 @@ class OptionsLabService:
         symbol: str,
         force_refresh: bool = False,
         market_data_provider: Optional[str] = None,
-    ) -> OptionExpirationsResponse:
+    ) -> OptionExpirationsResultModel:
         fixture = self._fixture_for_symbol(symbol, market_data_provider=market_data_provider)
         expirations = [
-            OptionExpirationItem(
+            OptionExpirationModel(
                 date=str(item["date"]),
                 dte=int(item["dte"]),
                 type=str(item.get("type") or "unknown"),
-                chainAvailable=bool(item.get("chainAvailable", True)),
-                asOf=str(item.get("asOf") or fixture["chainAsOf"]),
+                chain_available=bool(item.get("chainAvailable", True)),
+                as_of=str(item.get("asOf") or fixture["chainAsOf"]),
                 source=str(item.get("source") or fixture["source"]),
                 warnings=list(item.get("warnings") or []),
             )
             for item in sorted(fixture.get("expirations") or [], key=lambda row: str(row.get("date") or ""))
         ]
-        return OptionExpirationsResponse(
+        return OptionExpirationsResultModel(
             symbol=fixture["symbol"],
             market=fixture["market"],
             expirations=expirations,
-            asOf=fixture["chainAsOf"],
+            as_of=fixture["chainAsOf"],
             source=fixture["source"],
             warnings=list(PHASE1_WARNING_CODES),
             metadata=self._metadata(force_refresh=force_refresh, fixture=fixture),

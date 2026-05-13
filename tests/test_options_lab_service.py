@@ -21,8 +21,11 @@ from src.services.options_lab_domain_models import (
     ExpectedMoveEstimate,
     IvGreeksAssessment,
     LiquidityAssessment,
+    OptionExpirationModel,
+    OptionExpirationsResultModel,
     OptionContractSnapshot,
     OptionGreeksSnapshot,
+    OptionUnderlyingSummaryResultModel,
     OptimizerCandidate,
     OptimizerResult,
     RiskRewardAssessment,
@@ -87,6 +90,7 @@ def _json_text(payload) -> str:
 def test_tem_summary_uses_synthetic_fixture_and_risk_metadata() -> None:
     summary = _service().get_summary("tem", force_refresh=True)
 
+    assert isinstance(summary, OptionUnderlyingSummaryResultModel)
     assert summary.symbol == "TEM"
     assert summary.market == "us"
     assert summary.underlying["price"] == 52.4
@@ -95,15 +99,16 @@ def test_tem_summary_uses_synthetic_fixture_and_risk_metadata() -> None:
     assert summary.metadata.no_external_calls is True
     assert summary.metadata.no_order_placement is True
     assert summary.metadata.read_only is True
-    assert summary.limitations.options_are_high_risk is True
-    assert summary.limitations.long_options_can_lose_100_percent_premium is True
-    assert summary.limitations.analytical_only_not_investment_advice is True
+    assert "synthetic_fixture_data" in summary.warnings
+    assert "analytical_only_not_investment_advice" in summary.warnings
 
 
 def test_tem_expirations_are_normalized_and_sorted() -> None:
     response = _service().get_expirations("TEM")
 
+    assert isinstance(response, OptionExpirationsResultModel)
     assert [item.date for item in response.expirations] == ["2026-06-19", "2026-08-21"]
+    assert isinstance(response.expirations[0], OptionExpirationModel)
     assert response.expirations[0].dte == 44
     assert response.expirations[0].chain_available is True
     assert response.metadata.fixture_backed is True

@@ -9,6 +9,7 @@ from api.v1.schemas.options import (
     OptionChainResponse,
     OptionCandidateContract,
     OptionContractScoring,
+    OptionExpirationItem,
     OptionExpirationsResponse,
     OptionScenarioPayoffRow,
     OptionScenarioRisk,
@@ -48,6 +49,9 @@ from src.services.options_lab_domain_models import (
     ExpectedMoveEstimate,
     IvGreeksAssessment,
     LiquidityAssessment,
+    OptionExpirationModel,
+    OptionExpirationsResultModel,
+    OptionUnderlyingSummaryResultModel,
     OptimizerCandidate,
     OptimizerResult,
     RiskRewardAssessment,
@@ -99,6 +103,44 @@ def _map_decision_data_quality(data_quality: DecisionDataQualityAssessment) -> O
         asOfAgeMinutes=data_quality.as_of_age_minutes,
         blockingReasons=list(data_quality.blocking_reasons),
         warnings=list(data_quality.warnings),
+    )
+
+
+def _map_underlying_summary_response(result: OptionUnderlyingSummaryResultModel) -> OptionUnderlyingSummaryResponse:
+    return OptionUnderlyingSummaryResponse(
+        symbol=result.symbol,
+        market=result.market,
+        currency=result.currency,
+        underlying=dict(result.underlying),
+        optionsAvailability=dict(result.options_availability),
+        asOf=result.as_of,
+        source=result.source,
+        warnings=list(result.warnings),
+        metadata=result.metadata,
+    )
+
+
+def _map_expiration_item(expiration: OptionExpirationModel) -> OptionExpirationItem:
+    return OptionExpirationItem(
+        date=expiration.date,
+        dte=expiration.dte,
+        type=expiration.type,
+        chainAvailable=expiration.chain_available,
+        asOf=expiration.as_of,
+        source=expiration.source,
+        warnings=list(expiration.warnings),
+    )
+
+
+def _map_expirations_response(result: OptionExpirationsResultModel) -> OptionExpirationsResponse:
+    return OptionExpirationsResponse(
+        symbol=result.symbol,
+        market=result.market,
+        expirations=[_map_expiration_item(item) for item in result.expirations],
+        asOf=result.as_of,
+        source=result.source,
+        warnings=list(result.warnings),
+        metadata=result.metadata,
     )
 
 
@@ -379,10 +421,12 @@ def get_options_underlying_summary(
     market_data_provider: str = Query(default="synthetic_fixture", alias="marketDataProvider"),
 ) -> OptionUnderlyingSummaryResponse:
     try:
-        return _service().get_summary(
-            symbol,
-            force_refresh=force_refresh,
-            market_data_provider=market_data_provider,
+        return _map_underlying_summary_response(
+            _service().get_summary(
+                symbol,
+                force_refresh=force_refresh,
+                market_data_provider=market_data_provider,
+            )
         )
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
@@ -401,10 +445,12 @@ def get_options_expirations(
     market_data_provider: str = Query(default="synthetic_fixture", alias="marketDataProvider"),
 ) -> OptionExpirationsResponse:
     try:
-        return _service().get_expirations(
-            symbol,
-            force_refresh=force_refresh,
-            market_data_provider=market_data_provider,
+        return _map_expirations_response(
+            _service().get_expirations(
+                symbol,
+                force_refresh=force_refresh,
+                market_data_provider=market_data_provider,
+            )
         )
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc

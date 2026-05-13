@@ -24,6 +24,9 @@ from src.services.options_lab_domain_models import (
     ExpectedMoveEstimate,
     IvGreeksAssessment,
     LiquidityAssessment,
+    OptionExpirationModel,
+    OptionExpirationsResultModel,
+    OptionUnderlyingSummaryResultModel,
     OptimizerCandidate,
     OptimizerResult,
     RiskRewardAssessment,
@@ -123,6 +126,114 @@ def test_expirations_endpoint_returns_fixture_expirations() -> None:
         assert payload["expirations"][0]["chainAvailable"] is True
     finally:
         client.close()
+
+
+def test_summary_and_expirations_endpoint_mappers_preserve_alias_contracts() -> None:
+    summary_result = OptionUnderlyingSummaryResultModel(
+        symbol="TEM",
+        market="us",
+        currency="USD",
+        underlying={"symbol": "TEM", "price": 52.4},
+        options_availability={
+            "supported": True,
+            "provider": "synthetic_fixture",
+            "providerCapabilities": {"expirations": True, "chain": True},
+            "limitations": ["fixture_only", "provider_validation_required_later"],
+        },
+        as_of="2026-05-06T14:30:00Z",
+        source="synthetic_fixture",
+        warnings=["synthetic_fixture_data", "options_are_high_risk"],
+        metadata=OptionsMetadata(providerName="synthetic_fixture"),
+    )
+    assert options._map_underlying_summary_response(summary_result).model_dump(by_alias=True) == {
+        "symbol": "TEM",
+        "market": "us",
+        "currency": "USD",
+        "underlying": {"symbol": "TEM", "price": 52.4},
+        "optionsAvailability": {
+            "supported": True,
+            "provider": "synthetic_fixture",
+            "providerCapabilities": {"expirations": True, "chain": True},
+            "limitations": ["fixture_only", "provider_validation_required_later"],
+        },
+        "asOf": "2026-05-06T14:30:00Z",
+        "source": "synthetic_fixture",
+        "warnings": ["synthetic_fixture_data", "options_are_high_risk"],
+        "limitations": {
+            "optionsAreHighRisk": True,
+            "longOptionsCanLose100PercentPremium": True,
+            "dataMayBeDelayedOrStale": True,
+            "analyticalOnlyNotInvestmentAdvice": True,
+            "noOrderPlacement": True,
+            "noBrokerExecution": True,
+        },
+        "metadata": summary_result.metadata.model_dump(by_alias=True),
+    }
+
+    expirations_result = OptionExpirationsResultModel(
+        symbol="TEM",
+        market="us",
+        expirations=[
+            OptionExpirationModel(
+                date="2026-06-19",
+                dte=44,
+                type="monthly",
+                chain_available=True,
+                as_of="2026-05-06T14:30:00Z",
+                source="synthetic_fixture",
+                warnings=["synthetic_fixture_data"],
+            ),
+            OptionExpirationModel(
+                date="2026-08-21",
+                dte=107,
+                type="monthly",
+                chain_available=True,
+                as_of="2026-05-06T14:30:00Z",
+                source="synthetic_fixture",
+                warnings=[],
+            ),
+        ],
+        as_of="2026-05-06T14:30:00Z",
+        source="synthetic_fixture",
+        warnings=["synthetic_fixture_data", "options_are_high_risk"],
+        metadata=OptionsMetadata(providerName="synthetic_fixture"),
+    )
+    assert options._map_expirations_response(expirations_result).model_dump(by_alias=True) == {
+        "symbol": "TEM",
+        "market": "us",
+        "expirations": [
+            {
+                "date": "2026-06-19",
+                "dte": 44,
+                "type": "monthly",
+                "chainAvailable": True,
+                "asOf": "2026-05-06T14:30:00Z",
+                "source": "synthetic_fixture",
+                "warnings": ["synthetic_fixture_data"],
+            },
+            {
+                "date": "2026-08-21",
+                "dte": 107,
+                "type": "monthly",
+                "chainAvailable": True,
+                "asOf": "2026-05-06T14:30:00Z",
+                "source": "synthetic_fixture",
+                "warnings": [],
+            },
+        ],
+        "asOf": "2026-05-06T14:30:00Z",
+        "source": "synthetic_fixture",
+        "warnings": ["synthetic_fixture_data", "options_are_high_risk"],
+        "limitations": {
+            "optionsAreHighRisk": True,
+            "longOptionsCanLose100PercentPremium": True,
+            "dataMayBeDelayedOrStale": True,
+            "analyticalOnlyNotInvestmentAdvice": True,
+            "noOrderPlacement": True,
+            "noBrokerExecution": True,
+        },
+        "metadata": expirations_result.metadata.model_dump(by_alias=True),
+    }
 
 
 def test_chain_endpoint_filters_side_expiration_liquidity_and_spread() -> None:
