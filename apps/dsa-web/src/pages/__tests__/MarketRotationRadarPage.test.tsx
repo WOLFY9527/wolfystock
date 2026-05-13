@@ -362,6 +362,8 @@ describe('MarketRotationRadarPage', () => {
     const page = await screen.findByTestId('market-rotation-radar-page');
     expect(page).toHaveTextContent('资金轮动雷达');
     expect(page).toHaveAttribute('data-bento-surface', 'true');
+    expect(page.className).not.toContain('bg-[#030303]');
+    expect(page.querySelector('[data-terminal-primitive="page-shell"]')).not.toBeNull();
     expect(screen.getByTestId('rotation-radar-summary-band')).toHaveTextContent('Top-N');
     expect(screen.getByTestId('rotation-radar-mode-controls')).toHaveTextContent('US');
     expect(screen.getByTestId('rotation-market-tab-US')).toHaveAttribute('aria-pressed', 'true');

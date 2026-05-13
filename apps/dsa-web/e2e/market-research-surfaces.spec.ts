@@ -107,6 +107,10 @@ test.describe('market research surfaces IA', () => {
         await signIn(page, route.path);
 
         await expect(page.getByTestId(route.root)).toBeVisible({ timeout: 15_000 });
+        if (route.root === 'market-rotation-radar-page') {
+          expect((await page.getByTestId(route.root).getAttribute('class')) || '').not.toContain('bg-[#030303]');
+          await expect(page.getByTestId('rotation-theme-detail-panel')).toBeVisible();
+        }
         for (const testId of route.first) {
           await expect(page.getByTestId(testId)).toBeVisible();
         }

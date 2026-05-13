@@ -695,7 +695,7 @@ const MarketRotationRadarPage: React.FC = () => {
     <div
       data-testid="market-rotation-radar-page"
       data-bento-surface="true"
-      className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden no-scrollbar bg-[#030303] text-white"
+      className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden no-scrollbar text-white"
     >
       <TerminalPageShell className="flex min-h-0 flex-1 py-5">
         <TerminalPanel as="section" dense className="relative shrink-0 overflow-hidden">
