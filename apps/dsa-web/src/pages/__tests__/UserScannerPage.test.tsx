@@ -1877,6 +1877,9 @@ describe('UserScannerPage', () => {
     fireEvent.click(within(riotRow).getByRole('button', { name: /更多|More/i }));
     fireEvent.click(await within(riotRow).findByRole('button', { name: /复制|Copy/i }));
 
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith('RIOT');
+    });
     expect(screen.getByTestId('scanner-candidate-inspector')).toHaveTextContent('MARA');
   });
 

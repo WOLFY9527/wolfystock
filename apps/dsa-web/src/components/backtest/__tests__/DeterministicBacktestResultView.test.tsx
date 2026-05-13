@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { UiLanguageProvider } from '../../../contexts/UiLanguageContext';
@@ -153,7 +153,9 @@ describe('DeterministicBacktestResultView', () => {
     expect(workspace).toHaveAttribute('data-chart-engine', 'echarts');
 
     Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1024 });
-    window.dispatchEvent(new Event('resize'));
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
   });
 
   it('renders the new sidebar and meta strip workspace shell', async () => {

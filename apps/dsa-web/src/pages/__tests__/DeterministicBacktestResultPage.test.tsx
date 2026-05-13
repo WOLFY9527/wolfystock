@@ -1581,15 +1581,7 @@ describe('DeterministicBacktestResultPage', () => {
 
   it('runs lightweight scenario variants and exports the summary report', async () => {
     const currentRun = makeResultRun({ id: 99 });
-    const scenarioRun = makeResultRun({
-      id: 201,
-      totalReturnPct: 5.6,
-      excessReturnVsBenchmarkPct: 2.3,
-      maxDrawdownPct: 2.1,
-      tradeCount: 2,
-      winRatePct: 100,
-      status: 'completed',
-    });
+    let nextScenarioRunId = 201;
 
     getRuleBacktestRun.mockResolvedValue(currentRun);
     getRuleBacktestRuns.mockResolvedValue({
@@ -1598,7 +1590,17 @@ describe('DeterministicBacktestResultPage', () => {
       limit: 10,
       items: [currentRun],
     });
-    runRuleBacktest.mockResolvedValue(scenarioRun);
+    runRuleBacktest.mockImplementation(async () =>
+      makeResultRun({
+        id: nextScenarioRunId++,
+        totalReturnPct: 5.6,
+        excessReturnVsBenchmarkPct: 2.3,
+        maxDrawdownPct: 2.1,
+        tradeCount: 2,
+        winRatePct: 100,
+        status: 'completed',
+      }),
+    );
 
     const createObjectUrlMock = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test-summary');
     const revokeObjectUrlMock = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
