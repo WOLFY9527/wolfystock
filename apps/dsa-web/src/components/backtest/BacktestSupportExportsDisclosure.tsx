@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { backtestApi } from '../../api/backtest';
 import { getApiErrorMessage } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
@@ -111,7 +111,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<SupportExportDefinition['id'] | null>(null);
 
-  const loadIndex = async () => {
+  const loadIndex = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
     try {
@@ -122,11 +122,11 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [runId, t]);
 
   useEffect(() => {
     void loadIndex();
-  }, [runId]);
+  }, [loadIndex]);
 
   const handleDownload = async (definition: SupportExportDefinition) => {
     setDownloadError(null);
