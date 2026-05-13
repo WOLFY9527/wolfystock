@@ -15,7 +15,7 @@ import {
   type OptionsUnderlyingSummaryResponse,
 } from '../api/optionsLab';
 import { EvidenceChips } from '../components/evidence/EvidenceChips';
-import { TerminalPageHeading } from '../components/terminal';
+import { TerminalPageHeading, TerminalPageShell } from '../components/terminal';
 import { cn } from '../utils/cn';
 import { normalizeOptionsEvidence } from '../utils/evidenceDisplay';
 import { formatNumber, formatPercent } from '../utils/format';
@@ -886,20 +886,22 @@ export class OptionsLabErrorBoundary extends React.Component<{ children: React.R
     }
 
     return (
-      <main className="min-h-screen w-full bg-[#050505] px-4 py-5 text-white md:px-8 xl:px-10">
-        <section className="mx-auto flex w-full max-w-[920px] flex-col gap-4 rounded-[24px] border border-rose-300/20 bg-white/[0.02] p-5 backdrop-blur-md md:p-6">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-1 h-5 w-5 shrink-0 text-amber-200" aria-hidden="true" />
-            <div className="min-w-0">
-              <p className={labelClass}>期权实验室</p>
-              <h1 className="mt-2 text-xl font-semibold text-white">{OPTIONS_LAB_CRASH_FALLBACK}</h1>
-              <p className="mt-3 text-sm leading-6 text-white/58">基础工作区仍保持只读。此处仅显示已清理的错误类别，不展示堆栈或供应商载荷。</p>
+      <main className="w-full overflow-x-hidden py-4 text-white">
+        <TerminalPageShell>
+          <section className="mx-auto flex w-full max-w-[920px] flex-col gap-4 rounded-[24px] border border-rose-300/20 bg-white/[0.02] p-5 backdrop-blur-md md:p-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-1 h-5 w-5 shrink-0 text-amber-200" aria-hidden="true" />
+              <div className="min-w-0">
+                <p className={labelClass}>期权实验室</p>
+                <h1 className="mt-2 text-xl font-semibold text-white">{OPTIONS_LAB_CRASH_FALLBACK}</h1>
+                <p className="mt-3 text-sm leading-6 text-white/58">基础工作区仍保持只读。此处仅显示已清理的错误类别，不展示堆栈或供应商载荷。</p>
+              </div>
             </div>
-          </div>
-          <div className="rounded-2xl border border-white/5 bg-black/20 p-4 text-sm text-white/55">
-            数据说明：暂时无法完成渲染，页面已隐藏内部错误详情。
-          </div>
-        </section>
+            <div className="rounded-2xl border border-white/5 bg-black/20 p-4 text-sm text-white/55">
+              数据说明：暂时无法完成渲染，页面已隐藏内部错误详情。
+            </div>
+          </section>
+        </TerminalPageShell>
       </main>
     );
   }
@@ -1162,7 +1164,7 @@ const OptionsLabPageContent: React.FC = () => {
 
   return (
     <main className="w-full overflow-x-hidden py-4 text-white">
-      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 xl:px-8" data-testid="options-lab-page-root">
+      <TerminalPageShell data-testid="options-lab-page-root">
         <TerminalPageHeading
           data-testid="options-lab-page-heading"
           title="期权实验室"
@@ -1230,7 +1232,7 @@ const OptionsLabPageContent: React.FC = () => {
 
           <MethodologyDisclosure state={state} targetPrice={targetPrice} targetDate={targetDate} riskBudget={riskBudget} />
         </div>
-      </div>
+      </TerminalPageShell>
     </main>
   );
 };

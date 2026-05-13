@@ -366,6 +366,7 @@ describe('OptionsLabPage', () => {
     expect(screen.queryByText(/教程|如何使用|从这里开始/)).not.toBeInTheDocument();
     expect(screen.queryByText(/provider_timeout|MarketCache|generatedCandidates|failedCandidates/i)).not.toBeInTheDocument();
     const pageRoot = screen.getByTestId('options-lab-page-root');
+    expect(pageRoot).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(pageRoot).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6');
     expect(pageRoot.className).not.toMatch(/\bbg-(black|\[#000\]|\[#050505\]|gray-|zinc-|slate-|neutral-)/);
     const snapshotPanel = screen.getByTestId('options-lab-snapshot-panel');
@@ -808,6 +809,10 @@ describe('OptionsLabPage', () => {
 
     expect(screen.getByText('期权实验室暂时无法加载，请刷新或稍后重试。')).toBeInTheDocument();
     expect(screen.queryByTestId('options-lab-crash-developer-details')).not.toBeInTheDocument();
+    const crashShell = screen.getByText('期权实验室暂时无法加载，请刷新或稍后重试。').closest('main');
+    expect(crashShell).not.toBeNull();
+    expect(crashShell?.className).not.toContain('min-h-screen');
+    expect(crashShell?.className).not.toContain('bg-[#050505]');
     const domText = document.body.textContent || '';
     expect(domText).not.toContain('TypeError');
     expect(domText).not.toContain('provider exploded');
