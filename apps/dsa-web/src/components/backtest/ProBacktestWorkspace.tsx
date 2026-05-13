@@ -18,6 +18,7 @@ import { RULE_BACKTEST_PRESET_STORAGE_KEY } from './ruleBacktestP6';
 import {
   RULE_BENCHMARK_OPTIONS,
   getBenchmarkModeLabel,
+  parsePositiveInt,
   getStrategyPreviewSpec,
   getStrategySpecValue,
   type RuleBenchmarkMode,
@@ -60,6 +61,9 @@ const secondaryButtonClass = 'inline-flex min-h-[38px] items-center justify-cent
 const chipButtonClass = 'inline-flex min-h-[34px] shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white';
 const activeChipButtonClass = 'inline-flex min-h-[34px] shrink-0 items-center gap-2 rounded-lg border border-blue-400/35 bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-100 shadow-[0_0_18px_rgba(59,130,246,0.12)]';
 const plannedCardClass = 'rounded-lg border border-dashed border-white/10 bg-black/20 p-3';
+const monteCarloSimulationDefault = 12;
+const monteCarloSimulationMin = 1;
+const monteCarloSimulationMax = 64;
 
 function getParsedExecutable(parsed: RuleBacktestParseResponse | null): boolean {
   if (!parsed) return false;
@@ -80,6 +84,18 @@ function getSetupSourceLabel(parsed: RuleBacktestParseResponse | null, language:
 
 function getFirstLine(value: string): string {
   return value.trim().split(/\n+/)[0]?.trim() || '';
+}
+
+function clampInteger(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function getSubmittedMonteCarloSimulationCount(value: string): number {
+  return clampInteger(
+    parsePositiveInt(value, monteCarloSimulationDefault, monteCarloSimulationMin),
+    monteCarloSimulationMin,
+    monteCarloSimulationMax,
+  );
 }
 
 function formatPercent(value: unknown): string {
@@ -296,6 +312,19 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const strategyReady = Boolean(parsedStrategy && parsedExecutable && !parseStale && confirmed);
   const canRun = symbolValid && dateValid && capitalValid && costValid && benchmarkValid && strategyReady;
   const robustnessEnabled = monteCarloEnabled || walkForwardPresetEnabled;
+  const submittedMonteCarloSimulationCount = getSubmittedMonteCarloSimulationCount(monteCarloSimulationCount);
+  const robustnessSummaryItems = !robustnessEnabled
+    ? [language === 'en' ? 'No optional robustness diagnostics' : '本次不附加额外稳健性诊断']
+    : [
+      ...(monteCarloEnabled
+        ? [language === 'en'
+          ? `Monte Carlo · ${submittedMonteCarloSimulationCount} simulations`
+          : `Monte Carlo · ${submittedMonteCarloSimulationCount} 次仿真`]
+        : []),
+      ...(walkForwardPresetEnabled
+        ? [language === 'en' ? 'Walk-forward · fixed-window preset' : '滚动样本外 · 固定窗口预设']
+        : []),
+    ];
 
   const readiness = [
     { key: 'symbol', label: language === 'en' ? 'symbol valid' : 'symbol valid', ready: symbolValid },
@@ -858,6 +887,28 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             </>
           ) : (
             <>
+              <div
+                data-testid="pro-robustness-selection-summary"
+                className="rounded-lg border border-white/5 bg-white/[0.02] p-3"
+              >
+                <p className="text-sm font-semibold text-white/78">
+                  {language === 'en' ? 'Diagnostics included with this professional run' : '将随本次专业回测提交的诊断配置'}
+                </p>
+                <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+                  {robustnessSummaryItems.map((item) => (
+                    <span
+                      key={item}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                        robustnessEnabled
+                          ? 'border-blue-400/25 bg-blue-400/10 text-blue-100'
+                          : 'border-white/10 bg-white/[0.03] text-white/55'
+                      }`}
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
               <details className={plannedCardClass} data-testid="pro-robustness-monte-carlo-panel">
                 <summary className="cursor-pointer text-sm font-semibold text-white/78">
                   {language === 'en' ? 'Monte Carlo robustness diagnostics' : 'Monte Carlo 稳健性诊断'}

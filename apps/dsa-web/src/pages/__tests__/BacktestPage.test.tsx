@@ -1149,6 +1149,9 @@ describe('BacktestPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '稳健性' }));
     expect(within(advancedStep).getByText('Monte Carlo 稳健性诊断')).toBeInTheDocument();
     expect(within(advancedStep).getByText('滚动样本外稳健性预设')).toBeInTheDocument();
+    const robustnessSummary = within(advancedStep).getByTestId('pro-robustness-selection-summary');
+    expect(within(robustnessSummary).getByText('将随本次专业回测提交的诊断配置')).toBeInTheDocument();
+    expect(within(robustnessSummary).getByText('本次不附加额外稳健性诊断')).toBeInTheDocument();
     expect(within(advancedStep).getByLabelText('启用 Monte Carlo 稳健性诊断')).not.toBeChecked();
     expect(within(advancedStep).getByLabelText('启用滚动样本外稳健性预设')).not.toBeChecked();
     expect(within(advancedStep).queryByLabelText('Monte Carlo 仿真次数')).not.toBeInTheDocument();
@@ -1169,6 +1172,43 @@ describe('BacktestPage', () => {
     expect(within(advancedStep).queryByText('24 / 12 / 12 / 4')).not.toBeInTheDocument();
 
     expect(screen.getAllByRole('button', { name: '执行回测任务' }).length).toBeGreaterThan(0);
+  });
+
+  it('summarizes professional robustness selections without exposing hidden diagnostics', async () => {
+    renderBacktestRoutes();
+
+    await parseDeterministicStrategy();
+
+    fireEvent.click(screen.getByTestId('pro-workflow-step-advanced'));
+
+    const advancedStep = await screen.findByTestId('pro-step-advanced');
+    fireEvent.click(within(advancedStep).getByRole('button', { name: '稳健性' }));
+
+    const summary = within(advancedStep).getByTestId('pro-robustness-selection-summary');
+    expect(within(summary).getByText('本次不附加额外稳健性诊断')).toBeInTheDocument();
+    expect(within(summary).queryByText(/seed/i)).not.toBeInTheDocument();
+    expect(within(summary).queryByText(/noise\s*scale/i)).not.toBeInTheDocument();
+    expect(within(summary).queryByText(/24 \/ 12 \/ 12 \/ 4/i)).not.toBeInTheDocument();
+
+    fireEvent.click(within(advancedStep).getByText('Monte Carlo 稳健性诊断'));
+    fireEvent.click(await within(advancedStep).findByLabelText('启用 Monte Carlo 稳健性诊断'));
+
+    expect(within(summary).queryByText('本次不附加额外稳健性诊断')).not.toBeInTheDocument();
+    expect(within(summary).getByText('Monte Carlo · 12 次仿真')).toBeInTheDocument();
+
+    const simulationCountInput = await within(advancedStep).findByLabelText('Monte Carlo 仿真次数');
+    fireEvent.change(simulationCountInput, { target: { value: '24' } });
+    expect(within(summary).getByText('Monte Carlo · 24 次仿真')).toBeInTheDocument();
+
+    fireEvent.click(within(advancedStep).getByText('滚动样本外稳健性预设'));
+    fireEvent.click(await within(advancedStep).findByLabelText('启用滚动样本外稳健性预设'));
+
+    expect(within(summary).getByText('Monte Carlo · 24 次仿真')).toBeInTheDocument();
+    expect(within(summary).getByText('滚动样本外 · 固定窗口预设')).toBeInTheDocument();
+
+    fireEvent.click(within(advancedStep).getByLabelText('启用 Monte Carlo 稳健性诊断'));
+    expect(within(summary).queryByText('Monte Carlo · 24 次仿真')).not.toBeInTheDocument();
+    expect(within(summary).getByText('滚动样本外 · 固定窗口预设')).toBeInTheDocument();
   });
 
   it('marks parsed strategy stale after setup changes', async () => {
