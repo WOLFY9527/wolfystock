@@ -58,6 +58,21 @@ export const backtestApi = {
     if (params.slippageBps != null) requestData.slippage_bps = params.slippageBps;
     if (params.benchmarkMode) requestData.benchmark_mode = params.benchmarkMode;
     if (params.benchmarkCode) requestData.benchmark_code = params.benchmarkCode;
+    if (params.robustnessConfig?.monteCarlo) {
+      const monteCarloConfig: Record<string, unknown> = {};
+      if (params.robustnessConfig.monteCarlo.simulationCount != null) {
+        monteCarloConfig.simulation_count = params.robustnessConfig.monteCarlo.simulationCount;
+      }
+      if (params.robustnessConfig.monteCarlo.seed != null) {
+        monteCarloConfig.seed = params.robustnessConfig.monteCarlo.seed;
+      }
+      if (params.robustnessConfig.monteCarlo.noiseScale != null) {
+        monteCarloConfig.noise_scale = params.robustnessConfig.monteCarlo.noiseScale;
+      }
+      if (Object.keys(monteCarloConfig).length > 0) {
+        requestData.robustness_config = { monte_carlo: monteCarloConfig };
+      }
+    }
     if (params.waitForCompletion != null) requestData.wait_for_completion = params.waitForCompletion;
 
     const response = await apiClient.post<Record<string, unknown>>(

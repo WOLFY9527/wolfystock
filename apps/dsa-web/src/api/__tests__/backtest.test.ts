@@ -14,6 +14,132 @@ describe('backtestApi support export contract exposure', () => {
     vi.clearAllMocks();
   });
 
+  it('serializes monte carlo robustness config to backend snake_case request fields', async () => {
+    vi.mocked(apiClient.post).mockResolvedValueOnce({
+      data: {
+        id: 91,
+        code: 'AAPL',
+        strategy_text: 'buy when close > sma(20)',
+        parsed_strategy: {
+          version: 'rule_v1',
+          timeframe: '1d',
+          source_text: 'buy when close > sma(20)',
+          normalized_text: 'buy when close > sma(20)',
+          entry: { type: 'comparison' },
+          exit: { type: 'comparison' },
+          confidence: 0.91,
+          needs_confirmation: false,
+          ambiguities: [],
+          summary: {},
+          max_lookback: 20,
+        },
+        strategy_hash: 'abc',
+        timeframe: '1d',
+        lookback_bars: 252,
+        initial_capital: 100000,
+        fee_bps: 0,
+        slippage_bps: 0,
+        needs_confirmation: false,
+        warnings: [],
+        status: 'queued',
+        status_history: [],
+        trade_count: 0,
+        win_count: 0,
+        loss_count: 0,
+        summary: {},
+        execution_assumptions: {},
+        benchmark_curve: [],
+        benchmark_summary: {},
+        daily_return_series: [],
+        exposure_curve: [],
+        equity_curve: [],
+        trades: [],
+      },
+    } as never);
+
+    await backtestApi.runRuleBacktest({
+      code: 'AAPL',
+      strategyText: 'buy when close > sma(20)',
+      confirmed: true,
+      robustnessConfig: {
+        monteCarlo: {
+          simulationCount: 32,
+          seed: 12345,
+          noiseScale: 1.25,
+        },
+      },
+    } as never);
+
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/backtest/rule/run', {
+      code: 'AAPL',
+      strategy_text: 'buy when close > sma(20)',
+      confirmed: true,
+      robustness_config: {
+        monte_carlo: {
+          simulation_count: 32,
+          seed: 12345,
+          noise_scale: 1.25,
+        },
+      },
+    });
+  });
+
+  it('omits robustness_config when no robustness config is provided', async () => {
+    vi.mocked(apiClient.post).mockResolvedValueOnce({
+      data: {
+        id: 92,
+        code: 'AAPL',
+        strategy_text: 'buy when close > sma(20)',
+        parsed_strategy: {
+          version: 'rule_v1',
+          timeframe: '1d',
+          source_text: 'buy when close > sma(20)',
+          normalized_text: 'buy when close > sma(20)',
+          entry: { type: 'comparison' },
+          exit: { type: 'comparison' },
+          confidence: 0.91,
+          needs_confirmation: false,
+          ambiguities: [],
+          summary: {},
+          max_lookback: 20,
+        },
+        strategy_hash: 'def',
+        timeframe: '1d',
+        lookback_bars: 252,
+        initial_capital: 100000,
+        fee_bps: 0,
+        slippage_bps: 0,
+        needs_confirmation: false,
+        warnings: [],
+        status: 'queued',
+        status_history: [],
+        trade_count: 0,
+        win_count: 0,
+        loss_count: 0,
+        summary: {},
+        execution_assumptions: {},
+        benchmark_curve: [],
+        benchmark_summary: {},
+        daily_return_series: [],
+        exposure_curve: [],
+        equity_curve: [],
+        trades: [],
+      },
+    } as never);
+
+    await backtestApi.runRuleBacktest({
+      code: 'AAPL',
+      strategyText: 'buy when close > sma(20)',
+      confirmed: false,
+    });
+
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/backtest/rule/run', {
+      code: 'AAPL',
+      strategy_text: 'buy when close > sma(20)',
+      confirmed: false,
+    });
+  });
+
   it('loads the rule backtest support export index with camel-cased fields', async () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({
       data: {

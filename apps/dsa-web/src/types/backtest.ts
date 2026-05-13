@@ -481,6 +481,16 @@ export interface RuleBacktestParseResponse {
   maxLookback: number;
 }
 
+export interface RuleBacktestMonteCarloRobustnessConfig {
+  simulationCount?: number;
+  seed?: number;
+  noiseScale?: number;
+}
+
+export interface RuleBacktestRobustnessConfig {
+  monteCarlo?: RuleBacktestMonteCarloRobustnessConfig;
+}
+
 export interface RuleBacktestRunRequest {
   code: string;
   strategyText: string;
@@ -493,6 +503,7 @@ export interface RuleBacktestRunRequest {
   slippageBps?: number;
   benchmarkMode?: string;
   benchmarkCode?: string;
+  robustnessConfig?: RuleBacktestRobustnessConfig;
   confirmed?: boolean;
   waitForCompletion?: boolean;
 }
