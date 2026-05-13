@@ -1,11 +1,12 @@
 import type React from 'react';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Card, Disclosure, WorkspacePageHeader } from '../components/common';
 import { TerminalChip, TerminalEmptyState, TerminalNestedBlock, TerminalSectionHeader } from '../components/terminal';
+import RuleBacktestCompareHeatmapProjectionPanel from '../components/backtest/RuleBacktestCompareHeatmapProjectionPanel';
 import {
   Banner,
   SummaryStrip,
@@ -15,7 +16,6 @@ import {
 } from '../components/backtest/shared';
 import type {
   RuleBacktestCompareHighlightItem,
-  RuleBacktestCompareHeatmapProjection,
   RuleBacktestCompareMetricDelta,
   RuleBacktestCompareParameterComparison,
   RuleBacktestCompareParameterDetail,
@@ -505,36 +505,6 @@ function buildCompareCostSlippagePanelData({
     sourceLabels,
     signals,
   };
-}
-
-function createHeatmapCellKey(xValue: unknown, yValue: unknown): string {
-  return JSON.stringify([xValue ?? null, yValue ?? null]);
-}
-
-function formatHeatmapAxisLabel(axisKey?: string | null, axisLabel?: string | null): string {
-  if (axisKey) return formatSensitivityLabel(axisKey);
-  if (axisLabel) return formatSensitivityLabel(axisLabel);
-  return '参数';
-}
-
-function getHeatmapCellLabel(state?: string | null): string {
-  const normalized = String(state || '').toLowerCase();
-  if (normalized === 'available') return '可用';
-  if (normalized === 'missing') return '不可用';
-  if (normalized === 'ambiguous') return '歧义';
-  return formatCompareStateWithRaw(state);
-}
-
-function getHeatmapCellTone(state?: string | null): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
-  const normalized = String(state || '').toLowerCase();
-  if (normalized === 'available') return 'success';
-  if (normalized === 'ambiguous') return 'caution';
-  if (normalized === 'missing') return 'danger';
-  return getTerminalChipVariantFromState(state || undefined);
-}
-
-function formatHeatmapMetricValue(value?: number | null): string {
-  return value == null || Number.isNaN(value) ? '--' : pct(value);
 }
 
 function DiagnosticChipList({ diagnostics }: { diagnostics?: string[] }) {
@@ -1168,135 +1138,6 @@ function CompareCostSlippagePanel({
   );
 }
 
-function CompareHeatmapProjectionPanel({
-  projection,
-}: {
-  projection?: RuleBacktestCompareHeatmapProjection | null;
-}) {
-  if (!projection) {
-    return (
-      <TerminalEmptyState title="参数热力投影" className="mt-4" data-testid="compare-heatmap-empty">
-        当前比较未提供已存储的参数热力投影。
-      </TerminalEmptyState>
-    );
-  }
-
-  const xAxis = projection.axes?.x;
-  const yAxis = projection.axes?.y;
-  const xValues = xAxis?.values || [];
-  const yValues = yAxis?.values || [];
-  const cells = projection.cells || [];
-
-  if (!xValues.length || !yValues.length || !cells.length) {
-    return (
-      <TerminalEmptyState title="参数热力投影" className="mt-4" data-testid="compare-heatmap-empty">
-        当前比较没有可渲染的已存储投影单元。
-      </TerminalEmptyState>
-    );
-  }
-
-  const cellMap = new Map(cells.map((cell) => [createHeatmapCellKey(cell.xValue, cell.yValue), cell]));
-  const xAxisLabel = formatHeatmapAxisLabel(xAxis.axisKey, xAxis.axisLabel);
-  const yAxisLabel = formatHeatmapAxisLabel(yAxis.axisKey, yAxis.axisLabel);
-  const executionCount = projection.authority?.executionCount;
-  const providerCallsExecuted = projection.authority?.providerCallsExecuted;
-
-  return (
-    <TerminalNestedBlock className="mt-4 space-y-3 min-w-0" data-testid="compare-heatmap-panel">
-      <TerminalSectionHeader
-        eyebrow="存储对比投影"
-        title="参数热力投影"
-        action={<TerminalChip variant="info">存储投影</TerminalChip>}
-      />
-      <p className="product-footnote">基于已完成回测的存储对比生成，不重新执行回测。</p>
-
-      <div className="flex flex-wrap gap-2">
-        <TerminalChip variant="neutral">存储投影</TerminalChip>
-        <TerminalChip variant={executionCount === 0 ? 'success' : 'caution'}>{`执行次数 ${executionCount ?? '--'}`}</TerminalChip>
-        <TerminalChip variant={providerCallsExecuted === false ? 'success' : 'caution'}>
-          {providerCallsExecuted === false ? '未触发数据调用' : '涉及数据调用'}
-        </TerminalChip>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <TerminalChip variant="neutral">{`横轴 ${xAxisLabel}`}</TerminalChip>
-        <TerminalChip variant="neutral">{`纵轴 ${yAxisLabel}`}</TerminalChip>
-      </div>
-
-      <div className="overflow-x-auto no-scrollbar">
-        <div
-          className="grid gap-2 min-w-[32rem]"
-          style={{ gridTemplateColumns: `minmax(7rem, 1.05fr) repeat(${xValues.length}, minmax(8rem, 1fr))` }}
-        >
-          <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-            <p className="metric-card__label">{yAxisLabel}</p>
-            <p className="product-footnote">{`横向 ${xAxisLabel}`}</p>
-          </div>
-          {xValues.map((xValue, xIndex) => (
-            <div
-              key={`compare-heatmap-x-${xIndex}`}
-              className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3"
-            >
-              <p className="metric-card__label">{xAxisLabel}</p>
-              <p className="preview-card__text">{formatSensitivityValue(xValue)}</p>
-            </div>
-          ))}
-
-          {yValues.map((yValue, yIndex) => (
-            <Fragment key={`compare-heatmap-y-${yIndex}`}>
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-                <p className="metric-card__label">{yAxisLabel}</p>
-                <p className="preview-card__text">{formatSensitivityValue(yValue)}</p>
-              </div>
-              {xValues.map((xValue, xIndex) => {
-                const cell = cellMap.get(createHeatmapCellKey(xValue, yValue));
-                const state = cell?.availabilityState;
-                const totalReturnMetric = cell?.metrics?.totalReturnPct;
-                const maxDrawdownMetric = cell?.metrics?.maxDrawdownPct;
-                const totalReturnAvailable = state === 'available' && totalReturnMetric?.value != null;
-                const maxDrawdownAvailable = state === 'available' && maxDrawdownMetric?.value != null;
-
-                return (
-                  <div
-                    key={`compare-heatmap-cell-${yIndex}-${xIndex}`}
-                    className="rounded-xl border border-white/[0.06] bg-black/20 p-3"
-                    data-state={state || 'missing_cell'}
-                    data-testid={`compare-heatmap-cell-${yIndex}-${xIndex}`}
-                  >
-                    {cell ? (
-                      <div className="space-y-2">
-                        <TerminalChip variant={getHeatmapCellTone(state)}>{getHeatmapCellLabel(state)}</TerminalChip>
-                        {state === 'available' ? (
-                          <div className="space-y-1">
-                            <p className="product-footnote">{`总收益 ${formatHeatmapMetricValue(totalReturnMetric?.value)}`}</p>
-                            <p className="product-footnote">{`最大回撤 ${formatHeatmapMetricValue(maxDrawdownMetric?.value)}`}</p>
-                            {!totalReturnAvailable && !maxDrawdownAvailable ? (
-                              <p className="product-footnote">该单元未附带可展示指标。</p>
-                            ) : null}
-                          </div>
-                        ) : state === 'ambiguous' ? (
-                          <p className="product-footnote">存在多条来源运行，当前单元不直接展示指标。</p>
-                        ) : (
-                          <p className="product-footnote">当前参数组合没有可展示的已存储结果。</p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <TerminalChip variant="neutral">未提供</TerminalChip>
-                        <p className="product-footnote">后端未返回该坐标单元。</p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </Fragment>
-          ))}
-        </div>
-      </div>
-    </TerminalNestedBlock>
-  );
-}
-
 const RuleBacktestComparePage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1621,7 +1462,7 @@ const RuleBacktestComparePage: React.FC = () => {
                   highlights={comparisonHighlights?.highlights || {}}
                   metricDeltas={comparisonSummary?.metricDeltas || {}}
                 />
-                <CompareHeatmapProjectionPanel projection={response.heatmapProjection} />
+                <RuleBacktestCompareHeatmapProjectionPanel projection={response.heatmapProjection} />
                 <CompareSensitivityGrid
                   items={orderedItems}
                   baselineRunId={baselineRunId}
