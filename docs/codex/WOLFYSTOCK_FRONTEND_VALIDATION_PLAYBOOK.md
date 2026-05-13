@@ -43,13 +43,28 @@ npm --prefix apps/dsa-web run check:design
 python3 scripts/check_frontend_design_constitution.py
 ```
 
+Worker default:
+
+```text
+- focused tests
+- build
+- design guard
+- focused Playwright on the touched route(s)
+```
+
 Run TypeScript check when the task changes types/routes/shared interfaces or build is not sufficient:
 
 ```bash
 npx --prefix apps/dsa-web tsc --noEmit --pretty false --project apps/dsa-web/tsconfig.app.json
 ```
 
+Avoid duplicate `tsc --noEmit` + build unless that extra signal is actually needed.
+
 Run file-scoped lint when available and useful. Do not treat unrelated global lint failures as task failures if the touched files lint cleanly; report the unrelated blocker.
+
+`./scripts/ci_gate_fast.sh` is optional worker-iteration feedback. It does not replace the focused frontend checks above, and it is not landing proof.
+
+Reserve full `./scripts/ci_gate.sh` for landing, release, or frontend changes that also widened into shared/high-risk runtime territory.
 
 ## Design guard expectations
 
@@ -69,7 +84,6 @@ In a clean isolated workspace:
 ```bash
 git diff --name-status
 git diff --check
-./scripts/release_secret_scan.sh
 ```
 
 Before commit:
@@ -77,7 +91,10 @@ Before commit:
 ```bash
 git diff --cached --name-only
 git diff --cached --check
+bash scripts/release_secret_scan.sh
 ```
+
+For write tasks, run `bash scripts/release_secret_scan.sh` before commit/push or landing. Skip it for docs-only/tests-only read-only audits.
 
 When working in shared main with foreign dirty files, use `WOLFYSTOCK_SHARED_MAIN_WORKTREE_PROTOCOL.md`.
 
@@ -97,6 +114,8 @@ Inspect common ports first:
 - frontend/dev/preview: `5173`, `4173`, `4177`, `4178`, `4179`, `4180`, `5174`, `5175`, `5176`
 
 Leave shared `5173` untouched unless the task owns it. Use a task-owned preview port where possible.
+
+For worker tasks, keep Playwright focused on the touched routes and assertions. Do not substitute a broad route sweep for the scoped browser proof the task actually needs.
 
 ## Playwright invocation rule
 

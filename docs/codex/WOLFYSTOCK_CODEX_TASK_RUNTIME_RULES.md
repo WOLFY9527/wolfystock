@@ -362,6 +362,21 @@ For tests-only guards:
 
 Run focused validation first. Run broader validation when the task touches shared frontend/backend infrastructure or when the prompt requires it.
 
+### Worker vs landing validation matrix
+
+`scripts/ci_gate_fast.sh` is worker-iteration evidence only. It is useful for quick local feedback, but it does not replace task-scoped checks or landing proof.
+
+`./scripts/ci_gate.sh` is for landing, release, or high-risk code-bearing backend changes. Do not treat it as the default gate for docs-only, tests-only, or narrow frontend worker tasks.
+
+| Task class | Worker default | Landing / pre-push escalation |
+| --- | --- | --- |
+| frontend shell | focused page/component tests; `npm --prefix apps/dsa-web run build`; `npm --prefix apps/dsa-web run check:design`; focused Playwright on touched route(s); `git diff --check`; optional `./scripts/ci_gate_fast.sh` for iteration | run `bash scripts/release_secret_scan.sh` before commit/push; add `tsc --noEmit` only if routes/types/shared interfaces changed or build is not enough; use full `./scripts/ci_gate.sh` only if the slice also touched shared/high-risk runtime or landing policy explicitly requires it |
+| backend tests-only guard | focused `pytest` on touched tests/fixtures/guards; `git diff --check`; optional `./scripts/ci_gate_fast.sh` for quick iteration | run `bash scripts/release_secret_scan.sh` before commit/push; do not jump to full `./scripts/ci_gate.sh` unless the task stopped being tests-only or landing policy requires it |
+| backend endpoint mapping | `python3 -m py_compile <changed python files>`; focused `pytest -q` contract/boundary coverage; `git diff --check`; optional `./scripts/ci_gate_fast.sh` while iterating | run `bash scripts/release_secret_scan.sh` before commit/push; run full `./scripts/ci_gate.sh` before claiming the backend change is ready to land |
+| provider/runtime audit | read-only commands only; inspect current code/tests/docs; no secret scan for pure read-only audit; no `ci_gate_fast.sh` / `ci_gate.sh` by default | if the audit becomes a write task, re-scope it first; provider/runtime landing work is high-risk and should use `bash scripts/release_secret_scan.sh` plus full `./scripts/ci_gate.sh` |
+| scanner/backtest protected domains | stay route- or file-scoped; run only the focused tests/browser checks needed for the touched seam; avoid unrelated broad suites; use focused Playwright when a worker changed UI on a touched route | run `bash scripts/release_secret_scan.sh` before commit/push; use full `./scripts/ci_gate.sh` when landing code-bearing scanner/backtest changes or when protected-domain risk widened beyond a narrow seam |
+| docs-only | verify command/file-name consistency; `git diff --check` | for docs write tasks, run `bash scripts/release_secret_scan.sh` before commit/push or landing; for read-only audits, skip secret scan and do not run `ci_gate_fast.sh` / `ci_gate.sh` |
+
 ### Frontend validation
 
 ```bash
@@ -373,6 +388,14 @@ npm --prefix apps/dsa-web run check:design
 /Users/yehengli/daily_stock_analysis/.venv/bin/python scripts/check_frontend_design_constitution.py
 git diff --check
 bash scripts/release_secret_scan.sh
+```
+
+Notes:
+
+```text
+- Route-focused Playwright is the worker default for frontend browser proof.
+- Avoid duplicate `tsc --noEmit` + build unless the task changed routes, shared types/interfaces, or build output is not enough to prove safety.
+- Use `bash scripts/release_secret_scan.sh` before commit/push or landing for write tasks, not for pure read-only audits.
 ```
 
 ### Backend validation

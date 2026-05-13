@@ -24,6 +24,21 @@ Read and obey:
 - docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md
 ```
 
+## Validation profile shortcuts
+
+Use the smallest validation profile that matches the task. Escalate only when the task or landing boundary requires it.
+
+| Task class | Worker default | Landing / pre-push escalation |
+| --- | --- | --- |
+| frontend shell | focused tests + build + design guard + focused route Playwright | `bash scripts/release_secret_scan.sh`; add `tsc --noEmit` only if routes/types/shared interfaces changed or build is not enough; full `./scripts/ci_gate.sh` only for landing/high-risk/shared runtime changes |
+| backend tests-only guard | focused `pytest` guard coverage + `git diff --check` | `bash scripts/release_secret_scan.sh`; full `./scripts/ci_gate.sh` only if the task stopped being tests-only or landing policy requires it |
+| backend endpoint mapping | `python3 -m py_compile` + focused `pytest -q` + `git diff --check` | `bash scripts/release_secret_scan.sh` + full `./scripts/ci_gate.sh` |
+| provider/runtime audit | read-only inspection only | if re-scoped into a write task, treat as high-risk and require `bash scripts/release_secret_scan.sh` + full `./scripts/ci_gate.sh` |
+| scanner/backtest protected domains | stay seam-scoped; only focused tests/browser checks for the touched route/domain | `bash scripts/release_secret_scan.sh`; full `./scripts/ci_gate.sh` for landing code-bearing changes |
+| docs-only | command/file-name consistency + `git diff --check` | `bash scripts/release_secret_scan.sh` before commit/push or landing; skip secret scan for read-only audits |
+
+`./scripts/ci_gate_fast.sh` is optional worker-iteration evidence. It does not replace task-scoped checks and it is not landing proof.
+
 ## Read-only decision task
 
 ```text
@@ -100,7 +115,9 @@ Validation:
 - npm --prefix apps/dsa-web run test -- <focused tests>
 - npm --prefix apps/dsa-web run build
 - npm --prefix apps/dsa-web run check:design
-- ./scripts/release_secret_scan.sh
+- `npx --prefix apps/dsa-web tsc --noEmit --pretty false --project apps/dsa-web/tsconfig.app.json` only if routes/types/shared interfaces changed or build is not enough
+- `./scripts/ci_gate_fast.sh` only as optional worker-iteration feedback
+- ./scripts/release_secret_scan.sh before commit/push
 - browser verification routes/viewports: <routes>, 1440x1000 and 390x844
 
 Commit:
@@ -144,7 +161,8 @@ Validation:
 - python3 -m py_compile <changed python files, if source touched>
 - python3 -m pytest -q <focused tests>
 - git diff --check
-- ./scripts/release_secret_scan.sh
+- ./scripts/release_secret_scan.sh before commit/push
+- ./scripts/ci_gate.sh when landing or when the task is high-risk/code-bearing beyond a narrow guard
 
 Commit:
 - Stage only task-related files.
@@ -176,7 +194,8 @@ Do not change:
 Validation:
 - <focused docs/test commands>
 - git diff --check
-- ./scripts/release_secret_scan.sh
+- ./scripts/release_secret_scan.sh before commit/push or landing for write tasks
+- skip secret scan in pure read-only audits
 
 Commit:
 - Stage only task files.
