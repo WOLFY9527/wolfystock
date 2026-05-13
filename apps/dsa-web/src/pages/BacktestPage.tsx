@@ -44,6 +44,9 @@ import { TerminalPageHeading } from '../components/terminal';
 const HISTORICAL_PAGE_SIZE = 20;
 const HISTORY_PAGE_SIZE = 10;
 const RULE_HISTORY_PAGE_SIZE = 10;
+const PRO_MONTE_CARLO_SIMULATION_DEFAULT = '12';
+const PRO_MONTE_CARLO_SIMULATION_MIN = 1;
+const PRO_MONTE_CARLO_SIMULATION_MAX = 64;
 const HistoricalEvaluationPanel = lazy(() => import('../components/backtest/HistoricalEvaluationPanel'));
 const ProBacktestWorkspace = lazy(() => import('../components/backtest/ProBacktestWorkspace'));
 
@@ -111,6 +114,10 @@ function normalizeBacktestMarket(value?: string | null): ScannerBacktestHandoff[
 function parsePositiveInteger(value?: string | null): number | null {
   const parsed = Number.parseInt(String(value || '').trim(), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function clampInteger(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
 function parseScannerBacktestHandoff(search: string): ScannerBacktestHandoff | null {
@@ -194,6 +201,8 @@ const BacktestPage: React.FC = () => {
   const [ruleSlippageBps, setRuleSlippageBps] = useState('0');
   const [ruleBenchmarkMode, setRuleBenchmarkMode] = useState<RuleBenchmarkMode>('auto');
   const [ruleBenchmarkCode, setRuleBenchmarkCode] = useState('');
+  const [proMonteCarloEnabled, setProMonteCarloEnabled] = useState(false);
+  const [proMonteCarloSimulationCount, setProMonteCarloSimulationCount] = useState('');
   const [ruleParsedStrategy, setRuleParsedStrategy] = useState<RuleBacktestParseResponse | null>(null);
   const [ruleConfirmed, setRuleConfirmed] = useState(false);
   const [isParsingRuleStrategy, setIsParsingRuleStrategy] = useState(false);
@@ -960,7 +969,22 @@ const BacktestPage: React.FC = () => {
     setIsSubmittingRuleBacktest(true);
     setRuleRunError(null);
     try {
-      const response = await backtestApi.runRuleBacktest({
+      const robustnessConfig = proMonteCarloEnabled
+        ? {
+          monteCarlo: {
+            simulationCount: clampInteger(
+              parsePositiveInt(
+                proMonteCarloSimulationCount,
+                Number.parseInt(PRO_MONTE_CARLO_SIMULATION_DEFAULT, 10),
+                PRO_MONTE_CARLO_SIMULATION_MIN,
+              ),
+              PRO_MONTE_CARLO_SIMULATION_MIN,
+              PRO_MONTE_CARLO_SIMULATION_MAX,
+            ),
+          },
+        }
+        : undefined;
+      const requestPayload = {
         code: resolvedCode,
         strategyText: ruleStrategyText,
         parsedStrategy: ruleParsedStrategy.parsedStrategy,
@@ -976,7 +1000,12 @@ const BacktestPage: React.FC = () => {
           : undefined,
         confirmed: true,
         waitForCompletion: false,
-      });
+      };
+      const response = await backtestApi.runRuleBacktest(
+        robustnessConfig
+          ? { ...requestPayload, robustnessConfig }
+          : requestPayload,
+      );
       setSelectedRuleRunId(response.id);
       void fetchRuleHistory(1, resolvedCode);
       navigate(`/backtest/results/${response.id}`, { state: { initialRun: response, resultMode: 'professional' } });
@@ -1143,6 +1172,39 @@ const BacktestPage: React.FC = () => {
     void fetchRuleHistory(1, nextCode || undefined);
   };
 
+  const handleToggleProMonteCarlo = useCallback((nextEnabled: boolean) => {
+    setProMonteCarloEnabled(nextEnabled);
+    if (nextEnabled) {
+      setProMonteCarloSimulationCount((current) => current.trim() || PRO_MONTE_CARLO_SIMULATION_DEFAULT);
+    }
+  }, []);
+
+  const handleProMonteCarloSimulationCountChange = useCallback((value: string) => {
+    if (!value.trim()) {
+      setProMonteCarloSimulationCount('');
+      return;
+    }
+    const digitsOnly = value.replace(/[^\d]/g, '');
+    if (!digitsOnly) {
+      setProMonteCarloSimulationCount('');
+      return;
+    }
+    setProMonteCarloSimulationCount(String(clampInteger(
+      Number.parseInt(digitsOnly, 10),
+      PRO_MONTE_CARLO_SIMULATION_MIN,
+      PRO_MONTE_CARLO_SIMULATION_MAX,
+    )));
+  }, []);
+
+  const handleProMonteCarloSimulationCountBlur = useCallback(() => {
+    if (!proMonteCarloEnabled) return;
+    setProMonteCarloSimulationCount((current) => {
+      const parsed = Number.parseInt(current, 10);
+      if (!Number.isFinite(parsed)) return PRO_MONTE_CARLO_SIMULATION_DEFAULT;
+      return String(clampInteger(parsed, PRO_MONTE_CARLO_SIMULATION_MIN, PRO_MONTE_CARLO_SIMULATION_MAX));
+    });
+  }, [proMonteCarloEnabled]);
+
   const resetRuleFlow = useCallback(() => {
     setRuleParsedStrategy(null);
     setRuleConfirmed(false);
@@ -1153,6 +1215,8 @@ const BacktestPage: React.FC = () => {
     setAppliedRewriteText(null);
     setRuleBenchmarkMode('auto');
     setRuleBenchmarkCode('');
+    setProMonteCarloEnabled(false);
+    setProMonteCarloSimulationCount('');
   }, []);
   const moduleTabs = (
     <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.moduleTabsLabel')}>
@@ -1404,6 +1468,11 @@ const BacktestPage: React.FC = () => {
                     onBenchmarkModeChange={setRuleBenchmarkMode}
                     benchmarkCode={ruleBenchmarkCode}
                     onBenchmarkCodeChange={setRuleBenchmarkCode}
+                    monteCarloEnabled={proMonteCarloEnabled}
+                    onToggleMonteCarloEnabled={handleToggleProMonteCarlo}
+                    monteCarloSimulationCount={proMonteCarloSimulationCount}
+                    onMonteCarloSimulationCountChange={handleProMonteCarloSimulationCountChange}
+                    onMonteCarloSimulationCountBlur={handleProMonteCarloSimulationCountBlur}
                     parsedStrategy={ruleParsedStrategy}
                     confirmed={ruleConfirmed}
                     onToggleConfirmed={setRuleConfirmed}

@@ -1148,9 +1148,15 @@ describe('BacktestPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '稳健性' }));
     expect(within(advancedStep).getByText('滚动样本外验证（计划中）')).toBeInTheDocument();
-    expect(within(advancedStep).getByText('稳健性扫描（计划中）')).toBeInTheDocument();
-    expect(within(advancedStep).queryByLabelText('启用滚动样本外验证')).not.toBeInTheDocument();
-    expect(within(advancedStep).queryByLabelText('启用稳健性扫描')).not.toBeInTheDocument();
+    expect(within(advancedStep).getByText('Monte Carlo 稳健性诊断')).toBeInTheDocument();
+    expect(within(advancedStep).getByLabelText('启用 Monte Carlo 稳健性诊断')).not.toBeChecked();
+    expect(within(advancedStep).queryByLabelText('Monte Carlo 仿真次数')).not.toBeInTheDocument();
+    expect(within(advancedStep).queryByText(/seed/i)).not.toBeInTheDocument();
+    expect(within(advancedStep).queryByText(/noise\s*scale/i)).not.toBeInTheDocument();
+
+    fireEvent.click(within(advancedStep).getByText('Monte Carlo 稳健性诊断'));
+    expect(await within(advancedStep).findByLabelText('启用 Monte Carlo 稳健性诊断')).toBeInTheDocument();
+    expect(within(advancedStep).queryByLabelText('Monte Carlo 仿真次数')).not.toBeInTheDocument();
 
     expect(screen.getAllByRole('button', { name: '执行回测任务' }).length).toBeGreaterThan(0);
   });
@@ -1309,16 +1315,16 @@ describe('BacktestPage', () => {
     fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
 
     expect(runRuleBacktest).toHaveBeenCalledTimes(1);
-    expect(runRuleBacktest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        code: 'ORCL',
-        startDate: '2025-01-01',
-        endDate: '2025-12-31',
-        benchmarkMode: 'auto',
-        waitForCompletion: false,
-        confirmed: true,
-      }),
-    );
+    const payload = vi.mocked(runRuleBacktest).mock.calls[0]?.[0];
+    expect(payload).toEqual(expect.objectContaining({
+      code: 'ORCL',
+      startDate: '2025-01-01',
+      endDate: '2025-12-31',
+      benchmarkMode: 'auto',
+      waitForCompletion: false,
+      confirmed: true,
+    }));
+    expect(payload).not.toHaveProperty('robustnessConfig');
 
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
     expect(screen.getByTestId('deterministic-result-page-hero')).toHaveTextContent('ORCL');
@@ -1356,6 +1362,7 @@ describe('BacktestPage', () => {
 
     await waitFor(() => expect(parseRuleStrategy).toHaveBeenCalledTimes(1));
     expect(runRuleBacktest).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(runRuleBacktest).mock.calls[0]?.[0]).not.toHaveProperty('robustnessConfig');
 
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-result-report')).toHaveAttribute('data-report-mode', 'simple');
@@ -1365,6 +1372,49 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-report-advanced-details')).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-report-ledger-table')).not.toBeInTheDocument();
   }, 10000);
+
+  it('sends monte carlo simulation count only when robustness diagnostics are enabled in professional mode', async () => {
+    runRuleBacktest.mockResolvedValueOnce(makeRuleRunResponse({
+      status: 'completed',
+      completedAt: '2026-04-07T08:02:00Z',
+      statusMessage: '规则回测已完成。',
+      tradeCount: 1,
+    }));
+
+    renderBacktestRoutes();
+
+    await parseDeterministicStrategy();
+
+    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
+    fireEvent.click(screen.getByTestId('pro-workflow-step-advanced'));
+
+    const advancedStep = await screen.findByTestId('pro-step-advanced');
+    fireEvent.click(within(advancedStep).getByRole('button', { name: '稳健性' }));
+    fireEvent.click(within(advancedStep).getByText('Monte Carlo 稳健性诊断'));
+
+    const toggle = await within(advancedStep).findByLabelText('启用 Monte Carlo 稳健性诊断');
+    fireEvent.click(toggle);
+
+    const simulationCountInput = await within(advancedStep).findByLabelText('Monte Carlo 仿真次数');
+    expect(simulationCountInput).toHaveValue(12);
+
+    fireEvent.change(simulationCountInput, { target: { value: '24' } });
+    expect(simulationCountInput).toHaveValue(24);
+
+    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
+
+    await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(runRuleBacktest).mock.calls[0]?.[0];
+    expect(payload).toEqual(expect.objectContaining({
+      robustnessConfig: {
+        monteCarlo: {
+          simulationCount: 24,
+        },
+      },
+    }));
+    expect(payload?.robustnessConfig?.monteCarlo).not.toHaveProperty('seed');
+    expect(payload?.robustnessConfig?.monteCarlo).not.toHaveProperty('noiseScale');
+  });
 
   it('reveals the right-side KPI console after a historical run starts', async () => {
     renderBacktestRoutes();

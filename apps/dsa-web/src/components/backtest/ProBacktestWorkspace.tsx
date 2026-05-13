@@ -42,6 +42,11 @@ type StepDefinition = {
 
 type ProBacktestWorkspaceProps = Omit<FlowProps, 'panelMode'> & {
   language: BacktestLanguage;
+  monteCarloEnabled: boolean;
+  onToggleMonteCarloEnabled: (nextEnabled: boolean) => void;
+  monteCarloSimulationCount: string;
+  onMonteCarloSimulationCountChange: (value: string) => void;
+  onMonteCarloSimulationCountBlur: () => void;
 };
 
 const ghostCardClass = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md transition-all hover:border-white/10';
@@ -170,6 +175,11 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   onBenchmarkModeChange,
   benchmarkCode,
   onBenchmarkCodeChange,
+  monteCarloEnabled,
+  onToggleMonteCarloEnabled,
+  monteCarloSimulationCount,
+  onMonteCarloSimulationCountChange,
+  onMonteCarloSimulationCountBlur,
   parsedStrategy,
   confirmed,
   onToggleConfirmed,
@@ -307,7 +317,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     strategy: parseStale ? 'error' : confirmed ? 'done' : parsedStrategy ? 'pending' : 'pending',
     orders: riskRows.length > 0 ? 'done' : 'default',
     costs: Number(feeBps) > 0 || Number(slippageBps) > 0 || benchmarkMode === 'custom_code' ? 'modified' : 'default',
-    advanced: 'off',
+    advanced: monteCarloEnabled ? 'modified' : 'off',
   };
 
   const goToStep = (step: StepDefinition) => {
@@ -798,7 +808,11 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     <section data-testid="pro-step-advanced" className="flex min-w-0 flex-col gap-4">
       {renderStepHeader(stepDefinitions[4], [
         advancedTab === 'optimization' ? (language === 'en' ? 'optimization' : '优化') : (language === 'en' ? 'robustness' : '稳健性'),
-        language === 'en' ? 'planned only' : '计划中',
+        advancedTab === 'optimization'
+          ? (language === 'en' ? 'planned only' : '计划中')
+          : monteCarloEnabled
+            ? (language === 'en' ? 'diagnostics enabled' : '诊断已启用')
+            : (language === 'en' ? 'diagnostics optional' : '诊断可选'),
       ])}
       <div className={`${ghostCardClass} p-4 md:p-5`}>
         <div className="flex min-w-0 flex-wrap gap-2">
@@ -811,9 +825,13 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               {language === 'en' ? 'Current truth label' : '当前能力说明'}
             </p>
             <p className="mt-2 text-sm text-white/52">
-              {language === 'en'
-                ? 'The current professional run only uses basic parameters plus the parsed executable strategy. The controls below remain planned placeholders.'
-                : '当前专业模式实际只会提交基础参数与已解析的可执行策略；以下控件仍是计划中的占位能力。'}
+              {advancedTab === 'optimization'
+                ? (language === 'en'
+                  ? 'The current professional run only uses basic parameters plus the parsed executable strategy. Optimization controls below remain planned placeholders.'
+                  : '当前专业模式实际只会提交基础参数与已解析的可执行策略；下方优化控件仍是计划中的占位能力。')
+                : (language === 'en'
+                  ? 'Robustness diagnostics are opt-in. When disabled, no extra diagnostics config is sent. When enabled, only Monte Carlo simulation count is added and the primary strategy logic is unchanged.'
+                  : '稳健性诊断为可选项。关闭时不会附加额外诊断参数；启用后仅增加 Monte Carlo 仿真次数，不会改动主策略逻辑。')}
             </p>
           </div>
           {advancedTab === 'optimization' ? (
@@ -835,17 +853,73 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             </>
           ) : (
             <>
+              <details className={plannedCardClass} data-testid="pro-robustness-monte-carlo-panel">
+                <summary className="cursor-pointer text-sm font-semibold text-white/78">
+                  {language === 'en' ? 'Monte Carlo robustness diagnostics' : 'Monte Carlo 稳健性诊断'}
+                </summary>
+                <div className="mt-4 grid gap-4">
+                  <label className="flex items-start gap-3 rounded-lg border border-white/5 bg-white/[0.02] p-3 text-sm text-white/72">
+                    <input
+                      type="checkbox"
+                      className={checkboxClass}
+                      checked={monteCarloEnabled}
+                      onChange={(event) => onToggleMonteCarloEnabled(event.target.checked)}
+                      aria-label={language === 'en' ? 'Enable Monte Carlo robustness diagnostics' : '启用 Monte Carlo 稳健性诊断'}
+                      data-testid="pro-robustness-monte-carlo-toggle"
+                    />
+                    <span className="min-w-0">
+                      <span className="block font-semibold text-white/82">
+                        {language === 'en' ? 'Opt in to Monte Carlo diagnostics' : '按需启用 Monte Carlo 诊断'}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-white/48">
+                        {language === 'en'
+                          ? 'Used only for robustness diagnostics in Professional mode. It does not require re-parsing and does not change the primary execution logic.'
+                          : '仅用于专业模式下的稳健性诊断，不需要重新解析策略，也不会改变主执行逻辑。'}
+                      </span>
+                    </span>
+                  </label>
+                  {monteCarloEnabled ? (
+                    <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+                      {renderField(language === 'en' ? 'Simulation count' : '仿真次数', (
+                        <input
+                          type="number"
+                          min={1}
+                          max={64}
+                          step={1}
+                          inputMode="numeric"
+                          className={`${fieldClass} font-mono`}
+                          value={monteCarloSimulationCount}
+                          onChange={(event) => onMonteCarloSimulationCountChange(event.target.value)}
+                          onBlur={onMonteCarloSimulationCountBlur}
+                          aria-label={language === 'en' ? 'Monte Carlo simulation count' : 'Monte Carlo 仿真次数'}
+                          data-testid="pro-robustness-simulation-count-input"
+                        />
+                      ))}
+                      <div className="rounded-lg border border-white/5 bg-black/20 p-3 text-sm text-white/58">
+                        <p className="font-semibold text-white/74">
+                          {language === 'en' ? 'Diagnostic scope' : '诊断范围'}
+                        </p>
+                        <p className="mt-2 leading-6">
+                          {language === 'en'
+                            ? 'Range 1-64. This first release exposes simulation count only; other Monte Carlo diagnostics remain hidden.'
+                            : '范围 1-64。首个版本只暴露仿真次数，其余 Monte Carlo 诊断项暂不开放。'}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-white/42">
+                      {language === 'en'
+                        ? 'Disabled by default. The professional run request stays unchanged until you opt in.'
+                        : '默认关闭；未启用前，专业模式运行请求保持不变。'}
+                    </p>
+                  )}
+                </div>
+              </details>
               {renderPlannedCapability(
                 language === 'en' ? 'Walk-forward validation (planned)' : '滚动样本外验证（计划中）',
                 language === 'en'
                   ? 'Walk-forward validation is not wired into the current run path.'
                   : '滚动样本外验证尚未接入当前运行路径。',
-              )}
-              {renderPlannedCapability(
-                language === 'en' ? 'Robustness sweep (planned)' : '稳健性扫描（计划中）',
-                language === 'en'
-                  ? 'Robustness sweeps remain planned UI placeholders; existing result diagnostics stay on the result route.'
-                  : '稳健性扫描仍是计划中的 UI 占位；现有结果诊断仍保留在结果页。',
               )}
             </>
           )}
