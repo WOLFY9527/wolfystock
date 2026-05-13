@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import tempfile
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,6 +16,10 @@ from data_provider.realtime_types import RealtimeSource, UnifiedRealtimeQuote
 from src.repositories.stock_repo import StockRepository
 from src.services.agent_stock_evidence_service import StockEvidenceService
 from src.services.market_scanner_service import MarketScannerService
+from src.services.stock_evidence_quote_adapter import (
+    StockEvidenceQuoteAdapter,
+    StockEvidenceQuoteSnapshot,
+)
 from src.services.stock_service import StockService
 from src.services.us_history_helper import (
     LOCAL_US_PARQUET_SOURCE,
@@ -421,6 +426,48 @@ def test_stock_evidence_quote_preserves_available_provider_source() -> None:
     }
 
 
+def test_stock_evidence_quote_adapter_returns_inert_snapshot_for_basic_quote() -> None:
+    adapter = StockEvidenceQuoteAdapter(
+        fetcher_manager=SimpleNamespace(
+            get_realtime_quote=lambda symbol: UnifiedRealtimeQuote(
+                code=symbol,
+                name="Apple",
+                source=RealtimeSource.ALPACA,
+                price=214.55,
+                change_pct=1.23,
+                total_mv=3210000000.0,
+                pe_ratio=30.2,
+                pb_ratio=12.1,
+                market_timestamp="2026-05-13T08:30:00Z",
+            )
+        )
+    )
+
+    snapshot = adapter.get_quote_snapshot("AAPL")
+
+    assert snapshot == StockEvidenceQuoteSnapshot(
+        source="alpaca",
+        price=214.55,
+        change_pct=1.23,
+        total_mv=3210000000.0,
+        pe_ratio=30.2,
+        pb_ratio=12.1,
+        market_timestamp="2026-05-13T08:30:00Z",
+    )
+
+
+def test_stock_evidence_service_keeps_fetcher_manager_constructor_compatibility() -> None:
+    fetcher_manager = SimpleNamespace(get_realtime_quote=lambda symbol: None)
+    service = StockEvidenceService(
+        fetcher_manager=fetcher_manager,
+        stock_repo=MagicMock(),
+        analysis_repo=MagicMock(),
+    )
+
+    assert service.fetcher_manager is fetcher_manager
+    assert service.quote_adapter.fetcher_manager is fetcher_manager
+
+
 def test_stock_evidence_quote_rejects_partial_or_non_basic_quotes_as_unknown() -> None:
     service = StockEvidenceService(
         fetcher_manager=SimpleNamespace(
@@ -463,6 +510,8 @@ def test_stock_evidence_quote_surfaces_runtime_errors_as_error_status() -> None:
 def test_cn_scanner_degraded_snapshot_preserves_labels_and_provider_diagnostics() -> None:
     db = _in_memory_db()
     stock_repo = StockRepository(db)
+    temp_dir = tempfile.TemporaryDirectory()
+    cache_path = Path(temp_dir.name) / "scanner_cn_universe_cache.csv"
     manager = StructuredScannerDataManager(
         snapshot_result={
             "success": False,
@@ -489,23 +538,29 @@ def test_cn_scanner_degraded_snapshot_preserves_labels_and_provider_diagnostics(
     for code, history in manager.histories.items():
         stock_repo.save_dataframe(history.copy(), code, data_source="LocalWarmCache")
 
-    result = MarketScannerService(db, data_manager=manager).run_scan(
+    result = MarketScannerService(
+        db,
+        data_manager=manager,
+        local_universe_cache_path=str(cache_path),
+    ).run_scan(
         market="cn",
         shortlist_size=3,
         universe_limit=50,
         detail_limit=10,
     )
+    temp_dir.cleanup()
 
     scanner_data = result["diagnostics"]["scanner_data"]
     provider_diagnostics = result["diagnostics"]["provider_diagnostics"]
 
     assert scanner_data["degraded_mode_used"] is True
-    assert scanner_data["universe_resolution"]["source"] == "local_universe_cache"
+    assert scanner_data["universe_resolution"]["source"] == "FakeListSource"
     assert scanner_data["snapshot_resolution"]["source"] == "local_history_degraded"
     assert provider_diagnostics["snapshot_source_used"] == "local_history_degraded"
     assert provider_diagnostics["history_source_used"] == "local_db"
     assert provider_diagnostics["fallback_occurred"] is True
-    assert provider_diagnostics["fallback_count"] == 1
+    assert provider_diagnostics["fallback_count"] == 2
+    assert "local_universe_cache failed (local_universe_cache_missing)" in provider_diagnostics["provider_warnings"]
     assert "AkshareFetcher failed (akshare_snapshot_fetch_failed)" in provider_diagnostics["provider_warnings"]
     assert "snapshot=local_history_degraded" in result["source_summary"]
     assert "history=local_first" in result["source_summary"]

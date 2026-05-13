@@ -8,10 +8,9 @@ import math
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
-from data_provider.base import DataFetcherManager
-from data_provider.realtime_types import UnifiedRealtimeQuote
 from src.repositories.analysis_repo import AnalysisRepository
 from src.repositories.stock_repo import StockRepository
+from src.services.stock_evidence_quote_adapter import StockEvidenceQuoteAdapter
 
 
 EvidencePayload = Dict[str, Any]
@@ -129,12 +128,13 @@ class StockEvidenceService:
     def __init__(
         self,
         *,
-        fetcher_manager: Optional[DataFetcherManager] = None,
+        fetcher_manager: Optional[Any] = None,
         stock_repo: Optional[StockRepository] = None,
         analysis_repo: Optional[AnalysisRepository] = None,
         owner_id: Optional[str] = None,
     ) -> None:
-        self.fetcher_manager = fetcher_manager or DataFetcherManager()
+        self.quote_adapter = StockEvidenceQuoteAdapter(fetcher_manager=fetcher_manager)
+        self.fetcher_manager = self.quote_adapter.fetcher_manager
         self.stock_repo = stock_repo or StockRepository()
         self.analysis_repo = analysis_repo or AnalysisRepository(owner_id=owner_id)
 
@@ -163,18 +163,17 @@ class StockEvidenceService:
 
     def _quote(self, symbol: str) -> EvidencePayload:
         try:
-            quote = self.fetcher_manager.get_realtime_quote(symbol)
+            quote = self.quote_adapter.get_quote_snapshot(symbol)
         except Exception as exc:
             return {"status": "error", "provider": "realtime_quote", "error": str(exc)[:120]}
-        if not isinstance(quote, UnifiedRealtimeQuote) or not quote.has_basic_data():
+        if quote is None:
             return {"status": "unknown", "provider": "realtime_quote"}
-        source = getattr(getattr(quote, "source", None), "value", None) or str(getattr(quote, "source", "") or "")
         payload: EvidencePayload = {
             "status": "available",
             "price": _compact_number(quote.price),
             "changePct": _compact_number(quote.change_pct),
             "currency": "USD" if _infer_market(symbol) == "US" else "CNY" if _infer_market(symbol) == "CN" else "HKD",
-            "provider": source or "realtime_quote",
+            "provider": quote.source or "realtime_quote",
             "updatedAt": quote.market_timestamp,
         }
         for target, attr in (

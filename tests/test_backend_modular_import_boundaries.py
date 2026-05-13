@@ -214,10 +214,6 @@ PROVIDER_RUNTIME_IMPORT_PREFIXES = (
 # Transitional provider-runtime touch points. Owners are the domain listed in
 # the importing path plus provider-runtime; new entries need architecture review.
 EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
-    "src/services/agent_stock_evidence_service.py": {
-        "data_provider.base",
-        "data_provider.realtime_types",
-    },
     "src/services/crypto_realtime_service.py": {"src.services.market_cache"},
     "src/services/liquidity_monitor_service.py": {"src.services.market_cache"},
     "src/services/market_overview_service.py": {"src.services.market_cache"},
@@ -226,6 +222,10 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
     "src/services/portfolio_risk_board_lookup.py": {"data_provider.base"},
     "src/services/stock_service.py": {
         "data_provider.base",
+    },
+    "src/services/stock_evidence_quote_adapter.py": {
+        "data_provider.base",
+        "data_provider.realtime_types",
     },
     "src/services/us_history_helper.py": {"data_provider.base"},
 }
