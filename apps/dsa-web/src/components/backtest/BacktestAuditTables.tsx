@@ -16,6 +16,7 @@ import {
   DeterministicAuditTable,
   DeterministicTradeEventTable,
 } from './DeterministicBacktestResultView';
+import BacktestSupportExportsDisclosure from './BacktestSupportExportsDisclosure';
 import {
   formatRuleNormalizationStateLabel,
   getRuleStrategySpecSourceLabel,
@@ -185,6 +186,7 @@ const BacktestAuditTables: React.FC<BacktestAuditTablesProps> = ({
         aria-labelledby="deterministic-result-tab-audit"
       >
         <ExecutionTracePanel run={run} />
+        <BacktestSupportExportsDisclosure runId={run.id} code={run.code} />
         <DeterministicAuditTable run={run} rows={normalized.rows} />
       </section>
     );
