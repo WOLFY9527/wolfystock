@@ -219,7 +219,16 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
         add_resp = self.client.post(
             "/api/v1/watchlist/items",
-            json={"symbol": "WULF", "market": "us", "source": "scanner", "scanner_score": 60},
+            json={
+                "symbol": "WULF",
+                "market": "us",
+                "source": "scanner",
+                "scanner_run_id": 5,
+                "scanner_rank": 8,
+                "scanner_score": 60,
+                "theme_id": "crypto_miners",
+                "universe_type": "theme",
+            },
         )
         self.assertEqual(add_resp.status_code, 200)
 
@@ -244,6 +253,7 @@ class WatchlistApiTestCase(unittest.TestCase):
         with self.db.get_session() as session:
             session.add(run)
             session.flush()
+            run_id = run.id
             candidate.run_id = run.id
             session.add(candidate)
             session.commit()
@@ -253,13 +263,20 @@ class WatchlistApiTestCase(unittest.TestCase):
         payload = refresh_resp.json()
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["updated_count"], 1)
+        self.assertEqual(payload["results"][0]["status"], "fresh")
 
         list_resp = self.client.get("/api/v1/watchlist/items")
         self.assertEqual(list_resp.status_code, 200)
         item = list_resp.json()["items"][0]
+        self.assertEqual(item["scanner_run_id"], run_id)
         self.assertEqual(item["scanner_score"], 71.5)
         self.assertEqual(item["scanner_rank"], 2)
+        self.assertEqual(item["score_source"], "scanner_run")
+        self.assertEqual(item["score_profile"], "us_preopen_v1")
+        self.assertEqual(item["score_reason"], "Scanner score refreshed.")
         self.assertEqual(item["score_status"], "fresh")
+        self.assertEqual(item["theme_id"], "crypto_miners")
+        self.assertEqual(item["universe_type"], "theme")
         self.assertTrue(item["last_scored_at"])
 
     def test_watchlist_items_include_read_only_intelligence_from_saved_records(self) -> None:

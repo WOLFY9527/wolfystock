@@ -317,6 +317,18 @@ class FakeScannerAiService:
         }
 
 
+class RecordingScannerAiService(FakeScannerAiService):
+    def __init__(self) -> None:
+        self.received_signature: list[tuple[str, int, float]] = []
+
+    def interpret_shortlist(self, *, profile, candidates):  # noqa: ANN001
+        self.received_signature = [
+            (str(candidate["symbol"]), int(candidate["rank"]), float(candidate["score"]))
+            for candidate in candidates
+        ]
+        return super().interpret_shortlist(profile=profile, candidates=candidates)
+
+
 class FakeUsScannerDataManager(FakeScannerDataManager):
     def __init__(self):
         super().__init__()
@@ -766,6 +778,10 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertNotIn("600001", self.data_manager.daily_history_calls)
 
         shortlist = result["shortlist"]
+        shortlist_signature = [
+            (item["symbol"], item["rank"], round(float(item["score"]), 4))
+            for item in shortlist
+        ]
         self.assertEqual(shortlist[0]["symbol"], "600001")
         self.assertEqual(shortlist[0]["rank"], 1)
         self.assertTrue(shortlist[0]["reason_summary"])
@@ -773,16 +789,70 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertGreaterEqual(len(shortlist[0]["risk_notes"]), 1)
         self.assertGreaterEqual(len(shortlist[0]["watch_context"]), 3)
         self.assertIn("AI算力", shortlist[0]["boards"])
+        self.assertEqual(
+            [item["rank"] for item in shortlist],
+            list(range(1, len(shortlist) + 1)),
+        )
+        self.assertEqual(
+            [round(float(item["score"]), 4) for item in shortlist],
+            sorted(
+                [round(float(item["score"]), 4) for item in shortlist],
+                reverse=True,
+            ),
+        )
 
         history = self.service.list_runs(market="cn", page=1, limit=10)
         self.assertEqual(history["total"], 1)
         self.assertEqual(history["items"][0]["id"], result["id"])
-        self.assertIn("600001", history["items"][0]["top_symbols"])
+        self.assertEqual(
+            history["items"][0]["top_symbols"],
+            [item["symbol"] for item in shortlist],
+        )
 
         detail = self.service.get_run_detail(result["id"])
         self.assertIsNotNone(detail)
         self.assertEqual(detail["shortlist"][0]["symbol"], "600001")
         self.assertEqual(detail["shortlist"][0]["appeared_in_recent_runs"], 0)
+        self.assertEqual(
+            [
+                (item["symbol"], item["rank"], round(float(item["score"]), 4))
+                for item in detail["shortlist"]
+            ],
+            shortlist_signature,
+        )
+
+    def test_prepare_shortlist_sorts_by_score_then_symbol_and_assigns_rank_before_ai(self) -> None:
+        ai_service = RecordingScannerAiService()
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeScannerDataManager(),
+            ai_interpretation_service=ai_service,
+        )
+
+        ranked_candidates, shortlist, _ = service._prepare_shortlist(
+            profile_config=get_scanner_profile(market="us", profile="us_preopen_v1"),
+            evaluated_candidates=[
+                {"symbol": "NVDA", "score": 91.0},
+                {"symbol": "PLTR", "score": 88.5},
+                {"symbol": "AAPL", "score": 91.0},
+            ],
+            resolved_shortlist_size=3,
+        )
+
+        expected_signature = [
+            ("AAPL", 1, 91.0),
+            ("NVDA", 2, 91.0),
+            ("PLTR", 3, 88.5),
+        ]
+        self.assertEqual(
+            [(item["symbol"], item["rank"], float(item["score"])) for item in shortlist],
+            expected_signature,
+        )
+        self.assertEqual(
+            [(item["symbol"], item["rank"], float(item["score"])) for item in ranked_candidates],
+            expected_signature,
+        )
+        self.assertEqual(ai_service.received_signature, expected_signature)
 
     def test_finalize_completed_scan_reuses_common_persistence_and_response_flow(self) -> None:
         service = MarketScannerService(
@@ -1117,8 +1187,31 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertFalse(result["summary"]["limited_by_result_cap"])
         self.assertEqual(len(result["candidates"]), 11)
         self.assertEqual(result["selected"], result["shortlist"])
+        self.assertTrue(
+            {
+                "coverage_summary",
+                "provider_diagnostics",
+                "scanner_data",
+                "universe_selection",
+            }
+            <= set(result["diagnostics"])
+        )
 
         candidate_map = {item["symbol"]: item for item in result["candidates"]}
+        for symbol in ("WULF", "HIVE", "CIFR"):
+            self.assertTrue(
+                {
+                    "rank",
+                    "status",
+                    "score",
+                    "provider",
+                    "reason",
+                    "failed_rules",
+                    "missing_fields",
+                    "metrics",
+                }
+                <= set(candidate_map[symbol])
+            )
         self.assertEqual(candidate_map["WULF"]["status"], "selected")
         self.assertEqual(candidate_map["WULF"]["provider"], "alpaca")
         self.assertEqual(candidate_map["CIFR"]["status"], "data_failed")

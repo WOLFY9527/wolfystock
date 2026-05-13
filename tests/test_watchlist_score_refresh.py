@@ -73,17 +73,26 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
             market="us",
             scanner_score=60,
             scanner_rank=8,
+            scanner_run_id=5,
+            theme_id="crypto_miners",
+            universe_type="theme",
         )
         self._save_scanner_candidate(symbol="WULF", market="us", score=72.5, rank=3)
 
         result = self.service.refresh_scores(owner_id="user-1", market="us")
 
         self.assertEqual(result["updated_count"], 1)
+        self.assertEqual(result["results"][0]["status"], "fresh")
         item = self.service.list_items(owner_id="user-1")[0]
+        self.assertIsNotNone(item["scanner_run_id"])
         self.assertEqual(item["scanner_score"], 72.5)
         self.assertEqual(item["scanner_rank"], 3)
+        self.assertEqual(item["score_profile"], "us_preopen_v1")
+        self.assertEqual(item["score_reason"], "Latest scanner score.")
         self.assertEqual(item["score_status"], "fresh")
         self.assertEqual(item["score_source"], "scanner_run")
+        self.assertEqual(item["theme_id"], "crypto_miners")
+        self.assertEqual(item["universe_type"], "theme")
         self.assertTrue(item["last_scored_at"])
 
     def test_refresh_preserves_candidate_when_scanner_data_is_missing(self) -> None:
@@ -115,6 +124,30 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
 
         self.assertEqual(result["updated_count"], 2)
         self.assertEqual(sorted(result["markets"]), ["hk", "us"])
+
+    def test_refresh_is_owner_scoped_when_other_users_hold_same_symbol(self) -> None:
+        self.db.create_or_update_app_user(
+            user_id="user-2",
+            username="bob",
+            role="user",
+            display_name="Bob",
+        )
+        self.service.add_item(owner_id="user-1", symbol="WULF", market="us", scanner_score=60, scanner_rank=8)
+        self.service.add_item(owner_id="user-2", symbol="WULF", market="us", scanner_score=55, scanner_rank=9)
+        self._save_scanner_candidate(symbol="WULF", market="us", score=72.5, rank=3)
+
+        result = self.service.refresh_scores(owner_id="user-1", market="us")
+
+        self.assertEqual(result["updated_count"], 1)
+        user_one_item = self.service.list_items(owner_id="user-1")[0]
+        user_two_item = self.service.list_items(owner_id="user-2")[0]
+        self.assertEqual(user_one_item["scanner_score"], 72.5)
+        self.assertEqual(user_one_item["scanner_rank"], 3)
+        self.assertEqual(user_one_item["score_status"], "fresh")
+        self.assertEqual(user_two_item["scanner_score"], 55.0)
+        self.assertEqual(user_two_item["scanner_rank"], 9)
+        self.assertIsNone(user_two_item["score_source"])
+        self.assertIsNone(user_two_item["last_scored_at"])
 
     def test_refresh_does_not_overlap_existing_refresh(self) -> None:
         locked = WatchlistService._refresh_lock.acquire(blocking=False)

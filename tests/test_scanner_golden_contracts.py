@@ -176,9 +176,7 @@ def test_scanner_to_backtest_handoff_fixture_is_prefill_contract_only() -> None:
     payload = _load_fixture("scanner_to_backtest_handoff_dto.json")
     query = payload["query"]
     prefill = payload["prefill"]
-
-    assert payload["route"] == "/backtest"
-    assert query == {
+    expected_query = {
         "source": "scanner",
         "symbol": "NVDA",
         "market": "US",
@@ -188,7 +186,7 @@ def test_scanner_to_backtest_handoff_fixture_is_prefill_contract_only() -> None:
         "themeId": "ai_semiconductors_us",
         "universeType": "theme",
     }
-    assert prefill == {
+    expected_prefill = {
         "symbol": "NVDA",
         "market": "US",
         "source": "scanner",
@@ -198,6 +196,12 @@ def test_scanner_to_backtest_handoff_fixture_is_prefill_contract_only() -> None:
         "theme_id": "ai_semiconductors_us",
         "universe_type": "theme",
     }
+
+    assert payload["route"] == "/backtest"
+    assert set(query) == set(expected_query), "scanner handoff query must keep the stable /backtest prefill keys"
+    assert query == expected_query
+    assert set(prefill) == set(expected_prefill), "scanner handoff prefill must keep only the stable scanner context fields"
+    assert prefill == expected_prefill
     assert not ({"engine_version", "calculation_engine", "trade_rows", "equity_curve", "backtest_run_id"} & set(prefill))
     _assert_no_sensitive_public_payload(payload)
 
