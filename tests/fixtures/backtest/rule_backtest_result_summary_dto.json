@@ -164,6 +164,12 @@
         "exit_timing": "next_bar_open"
       },
       "robustness_config": {
+        "walk_forward": {
+          "train_window": 36,
+          "test_window": 18,
+          "step": 9,
+          "max_windows": 3
+        },
         "monte_carlo": {
           "simulation_count": 16,
           "seed": 4242,
@@ -215,6 +221,12 @@
     "profile": "single_symbol_fixture",
     "seed": 4242,
     "configuration": {
+      "walk_forward": {
+        "train_window": 36,
+        "test_window": 18,
+        "step": 9,
+        "max_windows": 3
+      },
       "monte_carlo": {
         "simulation_count": 16,
         "seed": 4242,

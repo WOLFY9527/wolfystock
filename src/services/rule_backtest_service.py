@@ -206,6 +206,14 @@ DEFAULT_ROBUSTNESS_WALK_FORWARD_TRAIN_BARS = 24
 DEFAULT_ROBUSTNESS_WALK_FORWARD_TEST_BARS = 12
 DEFAULT_ROBUSTNESS_WALK_FORWARD_STEP_BARS = 12
 DEFAULT_ROBUSTNESS_WALK_FORWARD_MAX_WINDOWS = 4
+MIN_ROBUSTNESS_WALK_FORWARD_TRAIN_BARS = 4
+MAX_ROBUSTNESS_WALK_FORWARD_TRAIN_BARS = 252
+MIN_ROBUSTNESS_WALK_FORWARD_TEST_BARS = 2
+MAX_ROBUSTNESS_WALK_FORWARD_TEST_BARS = 126
+MIN_ROBUSTNESS_WALK_FORWARD_STEP_BARS = 1
+MAX_ROBUSTNESS_WALK_FORWARD_STEP_BARS = 126
+MIN_ROBUSTNESS_WALK_FORWARD_MAX_WINDOWS = 1
+MAX_ROBUSTNESS_WALK_FORWARD_MAX_WINDOWS = 24
 DEFAULT_ROBUSTNESS_MONTE_CARLO_SIMULATION_COUNT = 12
 DEFAULT_ROBUSTNESS_MONTE_CARLO_NOISE_SCALE = 0.75
 MIN_ROBUSTNESS_MONTE_CARLO_SIMULATION_COUNT = 1
@@ -2138,6 +2146,7 @@ class RuleBacktestService:
             initial_capital=initial_capital,
         )
         resolved_robustness_config = self._sanitize_robustness_config(robustness_config)
+        walk_forward_config = dict(resolved_robustness_config.get("walk_forward") or {})
         monte_carlo_config = dict(resolved_robustness_config.get("monte_carlo") or {})
         configured_seed = monte_carlo_config.get("seed")
         resolved_seed = int(configured_seed) if configured_seed is not None else derived_seed
@@ -2151,10 +2160,10 @@ class RuleBacktestService:
             lookback_bars=lookback_bars,
             benchmark_mode=benchmark_mode,
             benchmark_code=benchmark_code,
-            train_bars=DEFAULT_ROBUSTNESS_WALK_FORWARD_TRAIN_BARS,
-            test_bars=DEFAULT_ROBUSTNESS_WALK_FORWARD_TEST_BARS,
-            step_bars=DEFAULT_ROBUSTNESS_WALK_FORWARD_STEP_BARS,
-            max_windows=DEFAULT_ROBUSTNESS_WALK_FORWARD_MAX_WINDOWS,
+            train_bars=int(walk_forward_config.get("train_window", DEFAULT_ROBUSTNESS_WALK_FORWARD_TRAIN_BARS)),
+            test_bars=int(walk_forward_config.get("test_window", DEFAULT_ROBUSTNESS_WALK_FORWARD_TEST_BARS)),
+            step_bars=int(walk_forward_config.get("step", DEFAULT_ROBUSTNESS_WALK_FORWARD_STEP_BARS)),
+            max_windows=int(walk_forward_config.get("max_windows", DEFAULT_ROBUSTNESS_WALK_FORWARD_MAX_WINDOWS)),
         )
         monte_carlo = self._build_monte_carlo_analysis(
             code=code,
@@ -2200,12 +2209,7 @@ class RuleBacktestService:
             "state": overall_state,
             "seed": resolved_seed,
             "configuration": {
-                "walk_forward": {
-                    "train_bars": DEFAULT_ROBUSTNESS_WALK_FORWARD_TRAIN_BARS,
-                    "test_bars": DEFAULT_ROBUSTNESS_WALK_FORWARD_TEST_BARS,
-                    "step_bars": DEFAULT_ROBUSTNESS_WALK_FORWARD_STEP_BARS,
-                    "max_windows": DEFAULT_ROBUSTNESS_WALK_FORWARD_MAX_WINDOWS,
-                },
+                "walk_forward": walk_forward_config,
                 "monte_carlo": monte_carlo_config,
                 "stress_tests": {
                     "scenario_keys": ["single_day_shock_down_15", "volatility_whipsaw"],
@@ -2655,6 +2659,39 @@ class RuleBacktestService:
         else:
             raise ValueError("robustness_config must be an object.")
 
+        walk_forward_raw = config_payload.get("walk_forward")
+        if walk_forward_raw is None:
+            walk_forward_payload: Dict[str, Any] = {}
+        elif isinstance(walk_forward_raw, dict):
+            walk_forward_payload = dict(walk_forward_raw)
+        else:
+            raise ValueError("robustness_config.walk_forward must be an object.")
+
+        train_window = cls._validate_bounded_int(
+            walk_forward_payload.get("train_window", DEFAULT_ROBUSTNESS_WALK_FORWARD_TRAIN_BARS),
+            field_name="robustness_config.walk_forward.train_window",
+            minimum=MIN_ROBUSTNESS_WALK_FORWARD_TRAIN_BARS,
+            maximum=MAX_ROBUSTNESS_WALK_FORWARD_TRAIN_BARS,
+        )
+        test_window = cls._validate_bounded_int(
+            walk_forward_payload.get("test_window", DEFAULT_ROBUSTNESS_WALK_FORWARD_TEST_BARS),
+            field_name="robustness_config.walk_forward.test_window",
+            minimum=MIN_ROBUSTNESS_WALK_FORWARD_TEST_BARS,
+            maximum=MAX_ROBUSTNESS_WALK_FORWARD_TEST_BARS,
+        )
+        step = cls._validate_bounded_int(
+            walk_forward_payload.get("step", DEFAULT_ROBUSTNESS_WALK_FORWARD_STEP_BARS),
+            field_name="robustness_config.walk_forward.step",
+            minimum=MIN_ROBUSTNESS_WALK_FORWARD_STEP_BARS,
+            maximum=MAX_ROBUSTNESS_WALK_FORWARD_STEP_BARS,
+        )
+        max_windows = cls._validate_bounded_int(
+            walk_forward_payload.get("max_windows", DEFAULT_ROBUSTNESS_WALK_FORWARD_MAX_WINDOWS),
+            field_name="robustness_config.walk_forward.max_windows",
+            minimum=MIN_ROBUSTNESS_WALK_FORWARD_MAX_WINDOWS,
+            maximum=MAX_ROBUSTNESS_WALK_FORWARD_MAX_WINDOWS,
+        )
+
         monte_carlo_raw = config_payload.get("monte_carlo")
         if monte_carlo_raw is None:
             monte_carlo_payload: Dict[str, Any] = {}
@@ -2685,6 +2722,12 @@ class RuleBacktestService:
             )
 
         return {
+            "walk_forward": {
+                "train_window": train_window,
+                "test_window": test_window,
+                "step": step,
+                "max_windows": max_windows,
+            },
             "monte_carlo": {
                 "simulation_count": simulation_count,
                 "seed": seed,

@@ -414,12 +414,25 @@ class RuleBacktestMonteCarloRobustnessConfig(BaseModel):
     noise_scale: Optional[float] = Field(None, description="Monte Carlo 收益扰动强度")
 
 
+class RuleBacktestWalkForwardRobustnessConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    train_window: Optional[int] = Field(None, description="Walk-forward 训练窗口 bars")
+    test_window: Optional[int] = Field(None, description="Walk-forward 测试窗口 bars")
+    step: Optional[int] = Field(None, description="Walk-forward 滚动步长 bars")
+    max_windows: Optional[int] = Field(None, description="Walk-forward 最大窗口数")
+
+
 class RuleBacktestRobustnessConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    walk_forward: Optional[RuleBacktestWalkForwardRobustnessConfig] = Field(
+        None,
+        description="Walk-forward 稳健性分析配置。",
+    )
     monte_carlo: Optional[RuleBacktestMonteCarloRobustnessConfig] = Field(
         None,
-        description="稳健性分析配置；当前仅支持 Monte Carlo。",
+        description="Monte Carlo 稳健性分析配置。",
     )
 
 

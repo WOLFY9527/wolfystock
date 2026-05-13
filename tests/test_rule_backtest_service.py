@@ -1327,9 +1327,19 @@ class RuleBacktestTestCase(unittest.TestCase):
             end_date=date(2024, 5, 31),
         )
 
+        self.assertEqual(
+            payload["configuration"]["walk_forward"],
+            {
+                "train_window": 24,
+                "test_window": 12,
+                "step": 12,
+                "max_windows": 4,
+            },
+        )
         self.assertEqual(payload["configuration"]["monte_carlo"]["simulation_count"], 12)
         self.assertEqual(payload["configuration"]["monte_carlo"]["noise_scale"], 0.75)
         self.assertIsNone(payload["configuration"]["monte_carlo"]["seed"])
+        self.assertGreater(payload["walk_forward"]["window_count"], 0)
         self.assertEqual(payload["monte_carlo"]["simulation_count"], 12)
         self.assertEqual(
             payload["seed"],
@@ -1358,6 +1368,12 @@ class RuleBacktestTestCase(unittest.TestCase):
                 lookback_bars=20,
                 confirmed=True,
                 robustness_config={
+                    "walk_forward": {
+                        "train_window": 36,
+                        "test_window": 18,
+                        "step": 9,
+                        "max_windows": 3,
+                    },
                     "monte_carlo": {
                         "simulation_count": 8,
                         "seed": 4242,
@@ -1372,16 +1388,52 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(response["robustness_analysis"]["seed"], 4242)
         self.assertEqual(response["robustness_analysis"]["monte_carlo"]["simulation_count"], 8)
         self.assertEqual(
+            response["robustness_analysis"]["configuration"]["walk_forward"],
+            {
+                "train_window": 36,
+                "test_window": 18,
+                "step": 9,
+                "max_windows": 3,
+            },
+        )
+        self.assertEqual(
             response["robustness_analysis"]["configuration"]["monte_carlo"],
             {"simulation_count": 8, "seed": 4242, "noise_scale": 0.5},
+        )
+        self.assertEqual(
+            detail["summary"]["request"]["robustness_config"]["walk_forward"],
+            {
+                "train_window": 36,
+                "test_window": 18,
+                "step": 9,
+                "max_windows": 3,
+            },
         )
         self.assertEqual(
             detail["summary"]["request"]["robustness_config"]["monte_carlo"],
             {"simulation_count": 8, "seed": 4242, "noise_scale": 0.5},
         )
         self.assertEqual(
+            detail["robustness_analysis"]["configuration"]["walk_forward"],
+            {
+                "train_window": 36,
+                "test_window": 18,
+                "step": 9,
+                "max_windows": 3,
+            },
+        )
+        self.assertEqual(
             detail["robustness_analysis"]["configuration"]["monte_carlo"],
             {"simulation_count": 8, "seed": 4242, "noise_scale": 0.5},
+        )
+        self.assertEqual(
+            history["items"][0]["summary"]["request"]["robustness_config"]["walk_forward"],
+            {
+                "train_window": 36,
+                "test_window": 18,
+                "step": 9,
+                "max_windows": 3,
+            },
         )
         self.assertEqual(
             history["items"][0]["summary"]["request"]["robustness_config"]["monte_carlo"],
@@ -1402,6 +1454,24 @@ class RuleBacktestTestCase(unittest.TestCase):
                 robustness_config={
                     "monte_carlo": {
                         "simulation_count": 0,
+                    }
+                },
+            )
+
+    def test_run_backtest_rejects_out_of_bounds_walk_forward_train_window(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "robustness_config\\.walk_forward\\.train_window",
+        ):
+            service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                confirmed=True,
+                robustness_config={
+                    "walk_forward": {
+                        "train_window": 3,
                     }
                 },
             )
