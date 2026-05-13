@@ -92,6 +92,19 @@ function moneyLabel(value: number | null | undefined): string {
   return value.toFixed(2);
 }
 
+function numberLabel(value: number | null | undefined, digits = 0): string {
+  if (value == null || !Number.isFinite(value)) return '--';
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+function drawdownPctLabel(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '--';
+  return pctLabel(value > 0 ? -value : value);
+}
+
 function dedupeVariants(variants: RuleScenarioVariant[]): RuleScenarioVariant[] {
   const seen = new Set<string>();
   return variants.filter((variant) => {
@@ -219,6 +232,191 @@ function getQualityLabel(
   return language === 'en' ? 'Quality needs more samples' : '质量待结合更多样本观察';
 }
 
+function asObjectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null;
+}
+
+function getObjectField(record: Record<string, unknown> | null, key: string): unknown {
+  return record ? record[key] : undefined;
+}
+
+function hasObjectFields(record: Record<string, unknown> | null): boolean {
+  return Boolean(record && Object.keys(record).length > 0);
+}
+
+function getFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeRobustnessState(value: unknown): 'available' | 'partial' | 'unavailable' | 'insufficient_history' | null {
+  const normalized = String(value || '').trim().toLowerCase().replaceAll('-', '_');
+  if (normalized === 'available' || normalized === 'partial' || normalized === 'unavailable' || normalized === 'insufficient_history') {
+    return normalized;
+  }
+  return null;
+}
+
+function getRobustnessStateText(value: unknown, language: BacktestLanguage = 'zh'): string {
+  const normalized = normalizeRobustnessState(value);
+  if (normalized === 'available') return language === 'en' ? 'available' : '可用';
+  if (normalized === 'partial') return language === 'en' ? 'partial' : '部分可用';
+  if (normalized === 'unavailable') return language === 'en' ? 'unavailable' : '不可用';
+  if (normalized === 'insufficient_history') return language === 'en' ? 'insufficient history' : '样本不足';
+  return language === 'en' ? 'unavailable' : '不可用';
+}
+
+function getStressScenarioFriendlyLabel(
+  scenarioKey: unknown,
+  rawLabel: unknown,
+  language: BacktestLanguage = 'zh',
+  fallbackIndex?: number,
+): string {
+  const normalized = String(scenarioKey || '').trim().toLowerCase();
+  if (normalized === 'single_day_shock_down_15') return language === 'en' ? 'Single-day shock down 15%' : '单日冲击下跌 15%';
+  if (normalized === 'volatility_whipsaw') return language === 'en' ? 'Volatility whipsaw' : '波动率来回扫';
+  if (normalized === 'gap_down_open') return language === 'en' ? 'Gap-down open' : '跳空低开';
+
+  const text = trimText(rawLabel);
+  if (text) return text;
+  if (typeof fallbackIndex === 'number') {
+    return language === 'en' ? `Stress scenario ${fallbackIndex + 1}` : `压力场景 ${fallbackIndex + 1}`;
+  }
+  return language === 'en' ? 'Stress scenario' : '压力场景';
+}
+
+function buildRobustnessAppendix(
+  run: Pick<RuleBacktestRunResponse, 'robustnessAnalysis'>,
+  language: BacktestLanguage = 'zh',
+): string[] | null {
+  const robustnessAnalysis = asObjectRecord(run.robustnessAnalysis);
+  if (!robustnessAnalysis) return null;
+
+  const walkForward = asObjectRecord(getObjectField(robustnessAnalysis, 'walkForward'));
+  const walkForwardAggregate = asObjectRecord(getObjectField(walkForward, 'aggregateMetrics'));
+  const monteCarlo = asObjectRecord(getObjectField(robustnessAnalysis, 'monteCarlo'));
+  const monteCarloAggregate = asObjectRecord(getObjectField(monteCarlo, 'aggregateMetrics'));
+  const stressTests = asObjectRecord(getObjectField(robustnessAnalysis, 'stressTests'));
+  const worstScenario = asObjectRecord(getObjectField(stressTests, 'worstScenario'));
+  const stressScenarios = Array.isArray(getObjectField(stressTests, 'scenarios'))
+    ? getObjectField(stressTests, 'scenarios') as unknown[]
+    : [];
+  const hasRobustnessData = Boolean(
+    getObjectField(robustnessAnalysis, 'state')
+    || hasObjectFields(walkForward)
+    || hasObjectFields(monteCarlo)
+    || hasObjectFields(stressTests),
+  );
+
+  if (!hasRobustnessData) return null;
+
+  const lines: string[] = [
+    language === 'en' ? '## Robustness appendix' : '## 稳健性附录',
+    '',
+  ];
+
+  const walkForwardState = getRobustnessStateText(getObjectField(walkForward, 'state') ?? getObjectField(robustnessAnalysis, 'state'), language);
+  const walkForwardWindowCount = getFiniteNumber(getObjectField(walkForward, 'windowCount'));
+  const walkForwardMeanReturn = getFiniteNumber(getObjectField(walkForwardAggregate, 'meanTotalReturnPct'));
+  const walkForwardDrawdown = getFiniteNumber(
+    getObjectField(walkForwardAggregate, 'maxDrawdownPct')
+    ?? getObjectField(walkForwardAggregate, 'meanMaxDrawdownPct'),
+  );
+  lines.push(language === 'en' ? '- Walk-forward / out-of-sample' : '- Walk-forward / 样本外检验');
+  lines.push(`  - ${language === 'en' ? 'State' : '状态'}：${walkForwardState}`);
+  if (walkForwardWindowCount != null) lines.push(`  - ${language === 'en' ? 'Window count' : '窗口数'}：${numberLabel(walkForwardWindowCount, 0)}`);
+  if (walkForwardMeanReturn != null) lines.push(`  - ${language === 'en' ? 'Mean return' : '平均收益'}：${pctLabel(walkForwardMeanReturn)}`);
+  if (walkForwardDrawdown != null) lines.push(`  - ${language === 'en' ? 'Drawdown' : '回撤'}：${drawdownPctLabel(walkForwardDrawdown)}`);
+  if (
+    walkForwardState === (language === 'en' ? 'insufficient history' : '样本不足')
+    && walkForwardWindowCount == null
+    && walkForwardMeanReturn == null
+    && walkForwardDrawdown == null
+  ) {
+    lines.push(`  - ${language === 'en' ? 'Insufficient history to show detail' : '样本不足，暂无可展示的明细。'}`);
+  }
+
+  const monteCarloState = getRobustnessStateText(getObjectField(monteCarlo, 'state') ?? getObjectField(robustnessAnalysis, 'state'), language);
+  const p05Return = getFiniteNumber(getObjectField(monteCarloAggregate, 'p05TotalReturnPct'));
+  const medianReturn = getFiniteNumber(getObjectField(monteCarloAggregate, 'medianTotalReturnPct'));
+  const p95Return = getFiniteNumber(getObjectField(monteCarloAggregate, 'p95TotalReturnPct'));
+  const meanReturn = getFiniteNumber(getObjectField(monteCarloAggregate, 'meanTotalReturnPct'));
+  const worstMaxDrawdown = getFiniteNumber(getObjectField(monteCarloAggregate, 'worstMaxDrawdownPct'));
+  const simulationCount = getFiniteNumber(getObjectField(monteCarlo, 'simulationCount'));
+  const seed = getFiniteNumber(getObjectField(monteCarlo, 'seed'));
+  lines.push(language === 'en' ? '- Monte Carlo distribution' : '- 蒙特卡洛分布');
+  lines.push(`  - ${language === 'en' ? 'State' : '状态'}：${monteCarloState}`);
+  if (p05Return != null || medianReturn != null || p95Return != null || meanReturn != null) {
+    lines.push(`  - ${language === 'en' ? 'P05 / median / P95 / mean total return' : 'P05 / 中位 / P95 / 平均总收益'}：${[
+      p05Return,
+      medianReturn,
+      p95Return,
+      meanReturn,
+    ].map((value) => pctLabel(value)).join(' / ')}`);
+  }
+  if (worstMaxDrawdown != null) lines.push(`  - ${language === 'en' ? 'Worst max drawdown' : '最差最大回撤'}：${drawdownPctLabel(worstMaxDrawdown)}`);
+  if (simulationCount != null) lines.push(`  - ${language === 'en' ? 'Simulation count' : '模拟次数'}：${numberLabel(simulationCount, 0)}`);
+  if (seed != null) lines.push(`  - ${language === 'en' ? 'Seed' : '随机种子'}：${numberLabel(seed, 0)}`);
+  if (
+    p05Return == null
+    && medianReturn == null
+    && p95Return == null
+    && meanReturn == null
+    && worstMaxDrawdown == null
+    && simulationCount == null
+    && seed == null
+  ) {
+    lines.push(`  - ${language === 'en' ? 'No distributable summary is available yet' : '当前结果未提供可展示的分布摘要。'}`);
+  }
+
+  const stressState = getRobustnessStateText(getObjectField(stressTests, 'state') ?? getObjectField(robustnessAnalysis, 'state'), language);
+  const scenarioCount = getFiniteNumber(getObjectField(stressTests, 'scenarioCount'));
+  const worstScenarioLabel = getStressScenarioFriendlyLabel(
+    getObjectField(worstScenario, 'scenarioKey'),
+    getObjectField(worstScenario, 'label'),
+    language,
+  );
+  lines.push(language === 'en' ? '- Stress scenarios' : '- 压力场景');
+  lines.push(`  - ${language === 'en' ? 'State' : '状态'}：${stressState}`);
+  if (scenarioCount != null) lines.push(`  - ${language === 'en' ? 'Scenario count' : '场景数'}：${numberLabel(scenarioCount, 0)}`);
+  if (scenarioCount != null && scenarioCount > 0) lines.push(`  - ${language === 'en' ? 'Worst scenario' : '最差场景'}：${worstScenarioLabel}`);
+
+  const scenarioDetailLines = stressScenarios
+    .map((scenario, index) => {
+      const record = asObjectRecord(scenario);
+      const metrics = asObjectRecord(getObjectField(record, 'metrics'));
+      const totalReturn = getFiniteNumber(getObjectField(metrics, 'totalReturnPct'));
+      const sharpe = getFiniteNumber(getObjectField(metrics, 'sharpeRatio'));
+      const drawdown = getFiniteNumber(getObjectField(metrics, 'maxDrawdownPct'));
+      const detailParts = [
+        totalReturn != null ? `${language === 'en' ? 'return' : '收益'} ${pctLabel(totalReturn)}` : null,
+        sharpe != null ? `Sharpe ${numberLabel(sharpe, 2)}` : null,
+        drawdown != null ? `${language === 'en' ? 'drawdown' : '回撤'} ${drawdownPctLabel(drawdown)}` : null,
+      ].filter(Boolean);
+      if (detailParts.length === 0) return null;
+      const label = getStressScenarioFriendlyLabel(
+        getObjectField(record, 'scenarioKey'),
+        getObjectField(record, 'label'),
+        language,
+        index,
+      );
+      return `  - ${label}：${detailParts.join(' · ')}`;
+    })
+    .filter((line): line is string => Boolean(line));
+
+  if (scenarioDetailLines.length > 0) {
+    lines.push(...scenarioDetailLines);
+  } else {
+    lines.push(`  - ${language === 'en' ? 'No stress detail is available yet' : '样本不足，暂无可展示的压力场景明细。'}`);
+  }
+
+  return lines;
+}
+
 export function describeRuleRunNarrative(
   run: Pick<RuleBacktestRunResponse, 'benchmarkMode' | 'benchmarkCode' | 'benchmarkReturnPct' | 'buyAndHoldReturnPct' | 'excessReturnVsBenchmarkPct' | 'excessReturnVsBuyAndHoldPct' | 'maxDrawdownPct' | 'tradeCount' | 'winRatePct' | 'avgTradeReturnPct' | 'code'>,
   language: BacktestLanguage = 'zh',
@@ -328,6 +526,7 @@ export function buildRuleRunReportMarkdown(args: {
         : `- ${label} · 超额 ${pctLabel(item.excessReturnVsBenchmarkPct ?? item.excessReturnVsBuyAndHoldPct)} · 回撤 ${pctLabel(item.maxDrawdownPct)}`;
     }).join('\n')
     : (language === 'en' ? '- No additional comparison runs attached yet' : '- 暂未附加其他比较对象');
+  const robustnessAppendix = buildRobustnessAppendix(run, language);
 
   return language === 'en' ? [
     `# Deterministic Backtest Summary #${run.id}`,
@@ -371,6 +570,7 @@ export function buildRuleRunReportMarkdown(args: {
     '',
     '- The detailed execution trace still lives in CSV / JSON exports.',
     '- For chart interpretation, start with cumulative return, drawdown, and benchmark comparison.',
+    ...(robustnessAppendix ? ['', ...robustnessAppendix] : []),
   ].join('\n') : [
     `# 确定性回测决策摘要 #${run.id}`,
     '',
@@ -413,6 +613,7 @@ export function buildRuleRunReportMarkdown(args: {
     '',
     '- 详细执行轨迹仍以 CSV / JSON 导出为准。',
     '- 图表解读优先查看收益曲线、回撤曲线和基准对照。',
+    ...(robustnessAppendix ? ['', ...robustnessAppendix] : []),
   ].join('\n');
 }
 

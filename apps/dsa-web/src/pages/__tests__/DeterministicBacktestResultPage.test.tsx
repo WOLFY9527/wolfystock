@@ -1579,8 +1579,50 @@ describe('DeterministicBacktestResultPage', () => {
     expect(await screen.findByText('至少需要 2 条已完成运行才能打开比较工作台。')).toBeInTheDocument();
   });
 
-  it('runs lightweight scenario variants and exports the summary report', async () => {
-    const currentRun = makeResultRun({ id: 99 });
+  it('runs lightweight scenario variants and exports the summary report with a robustness appendix', async () => {
+    const currentRun = makeResultRun({
+      id: 99,
+      robustnessAnalysis: {
+        state: 'available',
+        walkForward: {
+          state: 'available',
+          windowCount: 4,
+          aggregateMetrics: {
+            meanTotalReturnPct: 6.2,
+            maxDrawdownPct: -3.1,
+          },
+        },
+        monteCarlo: {
+          state: 'available',
+          simulationCount: 200,
+          seed: 20260423,
+          aggregateMetrics: {
+            p05TotalReturnPct: -3.6,
+            medianTotalReturnPct: 8.4,
+            p95TotalReturnPct: 16.8,
+            meanTotalReturnPct: 7.1,
+            worstMaxDrawdownPct: 12.5,
+          },
+        },
+        stressTests: {
+          state: 'available',
+          scenarioCount: 1,
+          scenarios: [
+            {
+              scenarioKey: 'single_day_shock_down_15',
+              metrics: {
+                totalReturnPct: -18.4,
+                sharpeRatio: -1.1,
+                maxDrawdownPct: 21.3,
+              },
+            },
+          ],
+          worstScenario: {
+            scenarioKey: 'single_day_shock_down_15',
+          },
+        },
+      },
+    });
     let nextScenarioRunId = 201;
 
     getRuleBacktestRun.mockResolvedValue(currentRun);
@@ -1629,6 +1671,25 @@ describe('DeterministicBacktestResultPage', () => {
       expect(clickMock).toHaveBeenCalled();
       expect(revokeObjectUrlMock).toHaveBeenCalled();
     });
+
+    const markdownBlob = createObjectUrlMock.mock.calls[0]?.[0] as Blob;
+    const markdownText = await markdownBlob.text();
+    expect(markdownText).toContain('## 稳健性附录');
+    expect(markdownText).toContain('Walk-forward / 样本外检验');
+    expect(markdownText).toContain('模拟次数：200');
+    expect(markdownText).toContain('单日冲击下跌 15%：收益 -18.40% · Sharpe -1.10 · 回撤 -21.30%');
+
+    fireEvent.click(screen.getByRole('button', { name: '导出 HTML' }));
+
+    await waitFor(() => {
+      expect(createObjectUrlMock).toHaveBeenCalledTimes(2);
+    });
+
+    const htmlBlob = createObjectUrlMock.mock.calls[1]?.[0] as Blob;
+    const htmlText = await htmlBlob.text();
+    expect(htmlText).toContain('<pre>');
+    expect(htmlText).toContain('## 稳健性附录');
+    expect(htmlText).toContain('蒙特卡洛分布');
   });
 
   it('renders localized English result-shell actions and tabs', async () => {

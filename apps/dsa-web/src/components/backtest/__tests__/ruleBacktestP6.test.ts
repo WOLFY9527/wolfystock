@@ -244,6 +244,111 @@ describe('ruleBacktestP6', () => {
     expect(markdown).toContain('#502');
   });
 
+  it('appends a robustness appendix when stored robustness evidence exists', () => {
+    const baseRun = makeRun({
+      robustnessAnalysis: {
+        state: 'available',
+        walkForward: {
+          state: 'available',
+          windowCount: 4,
+          aggregateMetrics: {
+            meanTotalReturnPct: 6.2,
+            maxDrawdownPct: -3.1,
+          },
+        },
+        monteCarlo: {
+          state: 'available',
+          simulationCount: 200,
+          seed: 20260423,
+          aggregateMetrics: {
+            p05TotalReturnPct: -3.6,
+            medianTotalReturnPct: 8.4,
+            p95TotalReturnPct: 16.8,
+            meanTotalReturnPct: 7.1,
+            worstMaxDrawdownPct: 12.5,
+          },
+        },
+        stressTests: {
+          state: 'available',
+          scenarioCount: 3,
+          scenarios: [
+            {
+              scenarioKey: 'single_day_shock_down_15',
+              metrics: {
+                totalReturnPct: -18.4,
+                sharpeRatio: -1.1,
+                maxDrawdownPct: 21.3,
+              },
+            },
+            {
+              scenarioKey: 'volatility_whipsaw',
+              metrics: {
+                totalReturnPct: -6.5,
+                sharpeRatio: -0.4,
+                maxDrawdownPct: 12.6,
+              },
+            },
+          ],
+          worstScenario: {
+            scenarioKey: 'single_day_shock_down_15',
+          },
+        },
+      },
+    });
+
+    const markdown = buildRuleRunReportMarkdown({
+      run: baseRun,
+      normalized: normalizeDeterministicBacktestResult(baseRun),
+    });
+
+    expect(markdown).toContain('## 稳健性附录');
+    expect(markdown).toContain('Walk-forward / 样本外检验');
+    expect(markdown).toContain('状态：可用');
+    expect(markdown).toContain('窗口数：4');
+    expect(markdown).toContain('平均收益：6.20%');
+    expect(markdown).toContain('回撤：-3.10%');
+    expect(markdown).toContain('蒙特卡洛分布');
+    expect(markdown).toContain('P05 / 中位 / P95 / 平均总收益：-3.60% / 8.40% / 16.80% / 7.10%');
+    expect(markdown).toContain('最差最大回撤：-12.50%');
+    expect(markdown).toContain('模拟次数：200');
+    expect(markdown).toContain('随机种子：20,260,423');
+    expect(markdown).toContain('压力场景');
+    expect(markdown).toContain('场景数：3');
+    expect(markdown).toContain('最差场景：单日冲击下跌 15%');
+    expect(markdown).toContain('单日冲击下跌 15%：收益 -18.40% · Sharpe -1.10 · 回撤 -21.30%');
+    expect(markdown).toContain('波动率来回扫：收益 -6.50% · Sharpe -0.40 · 回撤 -12.60%');
+    expect(markdown).not.toContain('single_day_shock_down_15');
+  });
+
+  it('keeps the appendix compact when robustness fields are unavailable or insufficient', () => {
+    const baseRun = makeRun({
+      robustnessAnalysis: {
+        state: 'insufficient_history',
+        walkForward: {
+          state: 'insufficient_history',
+        },
+        monteCarlo: {
+          state: 'partial',
+        },
+        stressTests: {
+          state: 'insufficient_history',
+          scenarioCount: 0,
+        },
+      },
+    });
+
+    const markdown = buildRuleRunReportMarkdown({
+      run: baseRun,
+      normalized: normalizeDeterministicBacktestResult(baseRun),
+    });
+
+    expect(markdown).toContain('## 稳健性附录');
+    expect(markdown).toContain('Walk-forward / 样本外检验');
+    expect(markdown).toContain('状态：样本不足');
+    expect(markdown).toContain('当前结果未提供可展示的分布摘要。');
+    expect(markdown).toContain('样本不足，暂无可展示的压力场景明细。');
+  });
+
   it('creates scenario plans for supported strategies', () => {
     const plans = getRuleScenarioPlans(makeRun());
     const labels = plans.map((plan) => plan.label);
@@ -271,4 +376,3 @@ describe('ruleBacktestP6', () => {
     expect(stored[0]?.name).toBeTruthy();
   });
 });
-
