@@ -1,0 +1,101 @@
+{
+  "contract_kind": "rule_backtest_compare_heatmap_projection",
+  "contract_version": "v1",
+  "source": "stored_compare_projection",
+  "read_mode": "stored_projection_only",
+  "authority": {
+    "projection_basis": "stored_compare_payloads",
+    "comparison_source": "stored_rule_backtest_runs",
+    "execution_mode": "no_reexecution",
+    "execution_count": 0,
+    "provider_calls_executed": false,
+    "compare_payload_reused": true,
+    "authority_scope": "stored_compare_derived_heatmap_only"
+  },
+  "requested_compare_run_ids": [7001, 7002, 7003, 7999],
+  "resolved_compare_run_ids": [7001, 7002, 7003],
+  "source_run_ids": [7001, 7002, 7003],
+  "missing_run_ids": [7999],
+  "axes": {
+    "x": {
+      "axis_key": "strategy_spec.signal.fast_period",
+      "axis_label": "fast_period",
+      "value_type": "integer",
+      "values": [5, 10]
+    },
+    "y": {
+      "axis_key": "strategy_spec.signal.slow_period",
+      "axis_label": "slow_period",
+      "value_type": "integer_or_missing",
+      "values": [20, 50, null]
+    }
+  },
+  "metric_keys": ["total_return_pct", "max_drawdown_pct"],
+  "cell_availability_states": ["available", "missing", "ambiguous"],
+  "cells": [
+    {
+      "x_value": 5,
+      "y_value": 20,
+      "availability_state": "available",
+      "source_run_ids": [7001],
+      "metrics": {
+        "total_return_pct": {
+          "state": "available",
+          "value": 12.4
+        },
+        "max_drawdown_pct": {
+          "state": "available",
+          "value": 5.2
+        }
+      }
+    },
+    {
+      "x_value": 10,
+      "y_value": 50,
+      "availability_state": "available",
+      "source_run_ids": [7002],
+      "metrics": {
+        "total_return_pct": {
+          "state": "available",
+          "value": 14.6
+        },
+        "max_drawdown_pct": {
+          "state": "available",
+          "value": 6.0
+        }
+      }
+    },
+    {
+      "x_value": 5,
+      "y_value": 50,
+      "availability_state": "missing",
+      "source_run_ids": [],
+      "metrics": {
+        "total_return_pct": {
+          "state": "missing",
+          "value": null
+        },
+        "max_drawdown_pct": {
+          "state": "missing",
+          "value": null
+        }
+      }
+    },
+    {
+      "x_value": 10,
+      "y_value": null,
+      "availability_state": "ambiguous",
+      "source_run_ids": [7002, 7003],
+      "metrics": {
+        "total_return_pct": {
+          "state": "ambiguous",
+          "value": null
+        },
+        "max_drawdown_pct": {
+          "state": "ambiguous",
+          "value": null
+        }
+      }
+    }
+  ]
+}

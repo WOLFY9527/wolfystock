@@ -303,6 +303,64 @@ def test_compare_golden_fixture_is_stored_first_and_contains_no_recalculation_se
     _assert_no_live_provider_authority(compare)
 
 
+def test_compare_heatmap_golden_fixture_freezes_stored_compare_projection_vocabulary() -> None:
+    heatmap = _load_fixture("rule_backtest_compare_heatmap_dto.json")
+
+    assert heatmap["contract_kind"] == "rule_backtest_compare_heatmap_projection"
+    assert heatmap["contract_version"] == "v1"
+    assert heatmap["source"] == "stored_compare_projection"
+    assert heatmap["read_mode"] == "stored_projection_only"
+
+    authority = heatmap["authority"]
+    assert authority["projection_basis"] == "stored_compare_payloads"
+    assert authority["execution_mode"] == "no_reexecution"
+    assert authority["execution_count"] == 0
+    assert authority["provider_calls_executed"] is False
+    assert authority["compare_payload_reused"] is True
+
+    assert heatmap["source_run_ids"] == [7001, 7002, 7003]
+    assert heatmap["requested_compare_run_ids"] == [7001, 7002, 7003, 7999]
+    assert heatmap["resolved_compare_run_ids"] == [7001, 7002, 7003]
+    assert heatmap["missing_run_ids"] == [7999]
+    assert heatmap["metric_keys"] == ["total_return_pct", "max_drawdown_pct"]
+
+    x_axis = heatmap["axes"]["x"]
+    y_axis = heatmap["axes"]["y"]
+    assert x_axis["axis_key"] == "strategy_spec.signal.fast_period"
+    assert x_axis["values"] == [5, 10]
+    assert y_axis["axis_key"] == "strategy_spec.signal.slow_period"
+    assert y_axis["values"] == [20, 50, None]
+
+    cells = heatmap["cells"]
+    assert len(cells) == 4
+    states = {(cell["x_value"], cell["y_value"]): cell["availability_state"] for cell in cells}
+    assert states[(5, 20)] == "available"
+    assert states[(10, 50)] == "available"
+    assert states[(5, 50)] == "missing"
+    assert states[(10, None)] == "ambiguous"
+
+    available_cell = next(cell for cell in cells if cell["x_value"] == 5 and cell["y_value"] == 20)
+    assert available_cell["source_run_ids"] == [7001]
+    assert available_cell["metrics"]["total_return_pct"]["value"] == 12.4
+    assert available_cell["metrics"]["max_drawdown_pct"]["value"] == 5.2
+
+    missing_cell = next(cell for cell in cells if cell["availability_state"] == "missing")
+    assert missing_cell["source_run_ids"] == []
+    assert missing_cell["metrics"]["total_return_pct"]["state"] == "missing"
+    assert missing_cell["metrics"]["max_drawdown_pct"]["state"] == "missing"
+
+    ambiguous_cell = next(cell for cell in cells if cell["availability_state"] == "ambiguous")
+    assert ambiguous_cell["source_run_ids"] == [7002, 7003]
+    assert ambiguous_cell["metrics"]["total_return_pct"]["state"] == "ambiguous"
+    assert ambiguous_cell["metrics"]["max_drawdown_pct"]["state"] == "ambiguous"
+
+    forbidden_compact_terms = {"trades", "equity_curve", "audit_rows", "execution_trace", "provider_payload"}
+    assert not forbidden_compact_terms & set(heatmap)
+
+    _assert_no_sensitive_public_payload(heatmap)
+    _assert_no_live_provider_authority(heatmap)
+
+
 def test_universe_job_golden_fixtures_freeze_local_only_diagnostics_and_compact_rows() -> None:
     diagnostics = RuleBacktestUniverseJobDiagnostics(
         **_load_fixture("rule_backtest_universe_job_diagnostics_dto.json")
@@ -372,6 +430,7 @@ def test_all_backtest_golden_fixtures_are_sanitized_and_explicitly_enumerated() 
 
     assert {path.name for path in fixture_paths} == {
         "rule_backtest_compare_dto.json",
+        "rule_backtest_compare_heatmap_dto.json",
         "rule_backtest_execution_trace_dto.json",
         "rule_backtest_export_index_dto.json",
         "rule_backtest_robustness_evidence_dto.json",
