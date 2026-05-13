@@ -211,6 +211,7 @@ PROVIDER_RUNTIME_IMPORT_PREFIXES = (
     "data_provider",
     "src.services.market_cache",
 )
+DIRECT_PROVIDER_CLIENT_IMPORT_PREFIXES = ("yfinance",)
 # Transitional provider-runtime touch points. Owners are the domain listed in
 # the importing path plus provider-runtime; new entries need architecture review.
 EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
@@ -231,6 +232,10 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
         "data_provider.realtime_types",
     },
     "src/services/us_history_helper.py": {"data_provider.base"},
+}
+EXPECTED_DIRECT_PROVIDER_CLIENT_IMPORTS = {
+    "src/services/market_overview_service.py": {"yfinance"},
+    "src/services/stock_service.py": {"yfinance"},
 }
 RULE_BACKTEST_LLM_IMPORT_PREFIXES = (
     "src.agent",
@@ -485,6 +490,19 @@ def test_provider_runtime_import_inventory_is_explicit() -> None:
         "provider-runtime / MarketCache imports outside provider facades are "
         f"transitional inventory items. Expected {EXPECTED_PROVIDER_RUNTIME_IMPORTS}, "
         f"found {actual_mapping}"
+    )
+
+
+def test_direct_provider_client_import_inventory_is_explicit() -> None:
+    actual_mapping = _import_mapping_for_prefixes(
+        (SERVICES_ROOT,),
+        DIRECT_PROVIDER_CLIENT_IMPORT_PREFIXES,
+    )
+
+    assert actual_mapping == EXPECTED_DIRECT_PROVIDER_CLIENT_IMPORTS, (
+        "direct provider client imports in backend services must stay explicitly "
+        "inventoried. Expected importer->module mapping "
+        f"{EXPECTED_DIRECT_PROVIDER_CLIENT_IMPORTS}, found {actual_mapping}"
     )
 
 
