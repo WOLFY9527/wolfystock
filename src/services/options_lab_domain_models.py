@@ -136,6 +136,56 @@ class DecisionAlternativeModel:
 
 
 @dataclass
+class DecisionFreshnessModel:
+    source: str
+    freshness: str
+    as_of: Optional[str] = None
+
+
+@dataclass
+class DecisionEvaluationResult:
+    symbol: str
+    strategy: str
+    data_quality: DecisionDataQualityAssessment
+    liquidity: LiquidityAssessment
+    iv_greeks: IvGreeksAssessment
+    expected_move: ExpectedMoveEstimate
+    optimizer: OptimizerResult
+    breakeven: BreakevenAssessment
+    risk_reward: RiskRewardAssessment
+    trade_quality_score: float
+    decision_label: str
+    primary_reasons: list[str] = field(default_factory=list)
+    risk_warnings: list[str] = field(default_factory=list)
+    data_quality_gates: Optional[dict[str, Any]] = None
+    liquidity_gates: Optional[dict[str, Any]] = None
+    gate_decision: Optional[str] = None
+    gate_issues: list[dict[str, Any]] = field(default_factory=list)
+    decision_grade: Optional[bool] = None
+    fail_closed_reason_codes: list[str] = field(default_factory=list)
+    better_alternative: Optional[DecisionAlternativeModel] = None
+    no_advice_disclosure: str = ""
+    freshness: Optional[DecisionFreshnessModel] = None
+    metadata: Any = None
+
+    @property
+    def iv_rank(self) -> Optional[float]:
+        return self.iv_greeks.iv_rank
+
+    @property
+    def iv_percentile(self) -> Optional[float]:
+        return self.iv_greeks.iv_percentile
+
+    @property
+    def iv_rank_status(self) -> str:
+        return self.iv_greeks.iv_rank_status
+
+    @property
+    def ranked_alternatives(self) -> list[OptimizerCandidate]:
+        return self.optimizer.alternatives
+
+
+@dataclass
 class AnalyzeSubScoresModel:
     directional_fit: float
     delta_fit: float

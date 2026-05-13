@@ -10,13 +10,37 @@ from api.v1.schemas.options import (
     OptionExpirationsResponse,
     OptionsAnalyzeRequest,
     OptionsAnalyzeResponse,
+    OptionsDecisionAlternative,
+    OptionsDecisionBreakeven,
+    OptionsDecisionDataQuality,
+    OptionsDecisionFreshness,
+    OptionsDecisionIvGreeks,
+    OptionsDecisionLiquidity,
+    OptionsDecisionOptimizer,
     OptionsDecisionRequest,
     OptionsDecisionResponse,
+    OptionsDecisionRiskReward,
+    OptionsExpectedMove,
+    OptionsGateIssue,
+    OptionsOptimizerAlternative,
     OptionsScenarioRequest,
     OptionsScenarioResponse,
+    OptionsStrategyGateSummary,
     OptionsStrategyCompareRequest,
     OptionsStrategyCompareResponse,
     OptionUnderlyingSummaryResponse,
+)
+from src.services.options_lab_domain_models import (
+    BreakevenAssessment,
+    DecisionAlternativeModel,
+    DecisionDataQualityAssessment,
+    DecisionEvaluationResult,
+    ExpectedMoveEstimate,
+    IvGreeksAssessment,
+    LiquidityAssessment,
+    OptimizerCandidate,
+    OptimizerResult,
+    RiskRewardAssessment,
 )
 from src.services.options_lab_service import (
     OptionsLabProviderUnavailable,
@@ -48,6 +72,151 @@ def _provider_unavailable_response(exc: OptionsLabProviderUnavailable) -> HTTPEx
             "error": exc.code,
             "message": "Requested Options Lab provider is fixture-only, disabled, or not implemented.",
         },
+    )
+
+
+def _map_decision_data_quality(data_quality: DecisionDataQualityAssessment) -> OptionsDecisionDataQuality:
+    return OptionsDecisionDataQuality(
+        dataQualityScore=data_quality.data_quality_score,
+        dataQualityTier=data_quality.data_quality_tier,
+        sourceType=data_quality.source_type,
+        asOfAgeMinutes=data_quality.as_of_age_minutes,
+        blockingReasons=list(data_quality.blocking_reasons),
+        warnings=list(data_quality.warnings),
+    )
+
+
+def _map_decision_liquidity(liquidity: LiquidityAssessment) -> OptionsDecisionLiquidity:
+    return OptionsDecisionLiquidity(
+        liquidityScore=liquidity.liquidity_score,
+        spreadPct=liquidity.spread_pct,
+        liquidityWarnings=list(liquidity.liquidity_warnings),
+    )
+
+
+def _map_decision_iv_greeks(iv_greeks: IvGreeksAssessment) -> OptionsDecisionIvGreeks:
+    return OptionsDecisionIvGreeks(
+        ivReadiness=iv_greeks.iv_readiness,
+        ivRankStatus=iv_greeks.iv_rank_status,
+        ivRank=iv_greeks.iv_rank,
+        ivPercentile=iv_greeks.iv_percentile,
+        ivRankSource=iv_greeks.iv_rank_source,
+        ivRankConfidence=iv_greeks.iv_rank_confidence,
+        warnings=list(iv_greeks.warnings),
+        dteBucket=iv_greeks.dte_bucket,
+    )
+
+
+def _map_decision_breakeven(breakeven: BreakevenAssessment) -> OptionsDecisionBreakeven:
+    return OptionsDecisionBreakeven(
+        breakeven=breakeven.breakeven,
+        requiredMovePct=breakeven.required_move_pct,
+        targetPriceStatus=breakeven.target_price_status,
+        score=breakeven.score,
+    )
+
+
+def _map_decision_risk_reward(risk_reward: RiskRewardAssessment) -> OptionsDecisionRiskReward:
+    return OptionsDecisionRiskReward(
+        maxLoss=risk_reward.max_loss,
+        maxGain=risk_reward.max_gain,
+        riskRewardRatio=risk_reward.risk_reward_ratio,
+        score=risk_reward.score,
+        warnings=list(risk_reward.warnings),
+    )
+
+
+def _map_expected_move(expected_move: ExpectedMoveEstimate) -> OptionsExpectedMove:
+    return OptionsExpectedMove(
+        expectedMoveAbs=expected_move.expected_move_abs,
+        expectedMovePct=expected_move.expected_move_pct,
+        expectedMoveSource=expected_move.expected_move_source,
+        expectedMoveWarnings=list(expected_move.expected_move_warnings),
+    )
+
+
+def _map_optimizer_candidate(candidate: OptimizerCandidate) -> OptionsOptimizerAlternative:
+    return OptionsOptimizerAlternative(
+        strategyKey=candidate.strategy_key,
+        dataQualityTier=candidate.data_quality_tier,
+        liquidityScore=candidate.liquidity_score,
+        breakevenPressure=candidate.breakeven_pressure,
+        maxLoss=candidate.max_loss,
+        maxGain=candidate.max_gain,
+        riskRewardRatio=candidate.risk_reward_ratio,
+        expectedMoveAlignment=candidate.expected_move_alignment,
+        ivReadiness=candidate.iv_readiness,
+        tradeQualityScore=candidate.trade_quality_score,
+        decisionLabel=candidate.decision_label,
+        primaryReasons=list(candidate.primary_reasons),
+        riskWarnings=list(candidate.risk_warnings),
+    )
+
+
+def _map_decision_optimizer(optimizer: OptimizerResult) -> OptionsDecisionOptimizer:
+    return OptionsDecisionOptimizer(
+        preferredStrategyKey=optimizer.preferred_strategy_key,
+        optimizerLabel=optimizer.optimizer_label,
+        alternatives=[_map_optimizer_candidate(item) for item in optimizer.alternatives],
+        noTradeReason=optimizer.no_trade_reason,
+    )
+
+
+def _map_decision_alternative(
+    alternative: DecisionAlternativeModel | None,
+) -> OptionsDecisionAlternative | None:
+    if alternative is None:
+        return None
+    return OptionsDecisionAlternative(
+        strategyType=alternative.strategy_type,
+        reason=alternative.reason,
+        maxLoss=alternative.max_loss,
+        riskRewardRatio=alternative.risk_reward_ratio,
+    )
+
+
+def _map_decision_response(result: DecisionEvaluationResult) -> OptionsDecisionResponse:
+    optimizer = _map_decision_optimizer(result.optimizer)
+    return OptionsDecisionResponse(
+        symbol=result.symbol,
+        strategy=result.strategy,
+        dataQuality=_map_decision_data_quality(result.data_quality),
+        liquidity=_map_decision_liquidity(result.liquidity),
+        ivGreeks=_map_decision_iv_greeks(result.iv_greeks),
+        ivRank=result.iv_greeks.iv_rank,
+        ivPercentile=result.iv_greeks.iv_percentile,
+        ivRankStatus=result.iv_greeks.iv_rank_status,
+        expectedMove=_map_expected_move(result.expected_move),
+        optimizer=optimizer,
+        rankedAlternatives=list(optimizer.alternatives),
+        breakeven=_map_decision_breakeven(result.breakeven),
+        riskReward=_map_decision_risk_reward(result.risk_reward),
+        tradeQualityScore=result.trade_quality_score,
+        decisionLabel=result.decision_label,
+        primaryReasons=list(result.primary_reasons),
+        riskWarnings=list(result.risk_warnings),
+        dataQualityGates=(
+            OptionsStrategyGateSummary.model_validate(result.data_quality_gates)
+            if result.data_quality_gates is not None
+            else None
+        ),
+        liquidityGates=(
+            OptionsStrategyGateSummary.model_validate(result.liquidity_gates)
+            if result.liquidity_gates is not None
+            else None
+        ),
+        gateDecision=result.gate_decision,
+        gateIssues=[OptionsGateIssue.model_validate(item) for item in result.gate_issues],
+        decisionGrade=result.decision_grade,
+        failClosedReasonCodes=list(result.fail_closed_reason_codes),
+        betterAlternative=_map_decision_alternative(result.better_alternative),
+        noAdviceDisclosure=result.no_advice_disclosure,
+        freshness=OptionsDecisionFreshness(
+            source=result.freshness.source if result.freshness is not None else "unknown",
+            freshness=result.freshness.freshness if result.freshness is not None else "unknown",
+            asOf=result.freshness.as_of if result.freshness is not None else None,
+        ),
+        metadata=result.metadata,
     )
 
 
@@ -152,7 +321,7 @@ def analyze_options(request: OptionsAnalyzeRequest) -> OptionsAnalyzeResponse:
 )
 def evaluate_options_decision(request: OptionsDecisionRequest) -> OptionsDecisionResponse:
     try:
-        return _service().evaluate_decision(request)
+        return _map_decision_response(_service().evaluate_decision(request))
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
     except OptionsLabProviderUnavailable as exc:

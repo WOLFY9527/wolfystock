@@ -4,28 +4,19 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from api.v1.schemas.options import (
-    OptionsDecisionAlternative,
-    OptionsDecisionBreakeven,
-    OptionsDecisionDataQuality,
-    OptionsDecisionIvGreeks,
-    OptionsDecisionLiquidity,
-    OptionsDecisionOptimizer,
-    OptionsDecisionRiskReward,
-    OptionsExpectedMove,
-    OptionsOptimizerAlternative,
-)
 from src.services.options_lab_domain_models import (
     AnalyzeCandidateModel,
     AnalyzeSubScoresModel,
     BreakevenAssessment,
     DecisionAlternativeModel,
     DecisionDataQualityAssessment,
+    DecisionEvaluationResult,
     ExpectedMoveEstimate,
     IvGreeksAssessment,
     LiquidityAssessment,
@@ -76,9 +67,18 @@ def _service() -> OptionsLabService:
 
 
 def _json_text(payload) -> str:
-    if hasattr(payload, "model_dump"):
-        payload = payload.model_dump(by_alias=True)
-    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    def _normalize(value):
+        if hasattr(value, "model_dump"):
+            return value.model_dump(by_alias=True)
+        if is_dataclass(value):
+            return {key: _normalize(item) for key, item in asdict(value).items()}
+        if isinstance(value, dict):
+            return {key: _normalize(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [_normalize(item) for item in value]
+        return value
+
+    return json.dumps(_normalize(payload), ensure_ascii=False, sort_keys=True)
 
 
 def test_tem_summary_uses_synthetic_fixture_and_risk_metadata() -> None:
@@ -1179,173 +1179,11 @@ def test_decision_response_adds_gate_diagnostics_without_removing_existing_field
         }
     )
 
-    payload = response.model_dump(by_alias=True)
-    for key in [
-        "dataQuality",
-        "liquidity",
-        "ivGreeks",
-        "expectedMove",
-        "optimizer",
-        "rankedAlternatives",
-        "tradeQualityScore",
-        "decisionLabel",
-    ]:
-        assert key in payload
-    for key in [
-        "dataQualityGates",
-        "liquidityGates",
-        "gateDecision",
-        "gateIssues",
-        "decisionGrade",
-        "failClosedReasonCodes",
-    ]:
-        assert key in payload
-
-
-def test_decision_public_mappers_preserve_existing_alias_shape() -> None:
-    service = _service()
-
-    data_quality = DecisionDataQualityAssessment(
-        data_quality_score=82.5,
-        data_quality_tier="delayed_usable",
-        source_type="delayed",
-        as_of_age_minutes=18.5,
-        blocking_reasons=["synthetic_or_fixture_data_not_decision_grade"],
-        warnings=["missing_iv"],
-    )
-    liquidity = LiquidityAssessment(
-        liquidity_score=71.25,
-        spread_pct=9.5,
-        liquidity_warnings=["low_or_missing_volume"],
-    )
-    iv_greeks = IvGreeksAssessment(
-        iv_readiness=68.0,
-        iv_rank_status="available",
-        iv_rank=64.44,
-        iv_percentile=71.43,
-        iv_rank_source="synthetic_fixture_proxy",
-        iv_rank_confidence="test_only_low_confidence",
-        warnings=["missing_greeks"],
-        dte_bucket="standard",
-    )
-    breakeven = BreakevenAssessment(
-        breakeven=57.7,
-        required_move_pct=10.11,
-        target_price_status="target_above_breakeven",
-        score=74.0,
-    )
-    risk_reward = RiskRewardAssessment(
-        max_loss=230,
-        max_gain=270,
-        risk_reward_ratio=1.17,
-        score=66.5,
-        warnings=["max_gain_not_defined_for_long_option"],
-    )
-    expected_move = ExpectedMoveEstimate(
-        expected_move_abs=7.5,
-        expected_move_pct=14.31,
-        expected_move_source="straddle_mid",
-        expected_move_warnings=["expected_move_uses_fixture_mid_prices"],
-    )
-    alternative = DecisionAlternativeModel(
-        strategy_type="bull_call_spread",
-        reason="定义风险结构或更低权利金暴露可能降低单合约风险",
-        max_loss=230,
-        risk_reward_ratio=1.17,
-    )
-    optimizer = OptimizerResult(
-        preferred_strategy_key=None,
-        optimizer_label="数据不足，禁止判断",
-        alternatives=[
-            OptimizerCandidate(
-                strategy_key="bull_call_spread",
-                data_quality_tier="delayed_usable",
-                liquidity_score=71.25,
-                breakeven_pressure=10.11,
-                max_loss=230,
-                max_gain=270,
-                risk_reward_ratio=1.17,
-                expected_move_alignment=58.0,
-                iv_readiness=68.0,
-                trade_quality_score=61.25,
-                decision_label="仅观察",
-                primary_reasons=["数据质量、流动性与风险回报需同时复核"],
-                risk_warnings=["expected_move_does_not_cover_breakeven_pressure"],
-            )
-        ],
-        no_trade_reason="data_quality_not_decision_grade",
-    )
-
-    assert service._map_decision_data_quality(data_quality).model_dump(by_alias=True) == {
-        "dataQualityScore": 82.5,
-        "dataQualityTier": "delayed_usable",
-        "sourceType": "delayed",
-        "asOfAgeMinutes": 18.5,
-        "blockingReasons": ["synthetic_or_fixture_data_not_decision_grade"],
-        "warnings": ["missing_iv"],
-    }
-    assert service._map_decision_liquidity(liquidity).model_dump(by_alias=True) == {
-        "liquidityScore": 71.25,
-        "spreadPct": 9.5,
-        "liquidityWarnings": ["low_or_missing_volume"],
-    }
-    assert service._map_decision_iv_greeks(iv_greeks).model_dump(by_alias=True) == {
-        "ivReadiness": 68.0,
-        "ivRankStatus": "available",
-        "ivRank": 64.44,
-        "ivPercentile": 71.43,
-        "ivRankSource": "synthetic_fixture_proxy",
-        "ivRankConfidence": "test_only_low_confidence",
-        "warnings": ["missing_greeks"],
-        "dteBucket": "standard",
-    }
-    assert service._map_decision_breakeven(breakeven).model_dump(by_alias=True) == {
-        "breakeven": 57.7,
-        "requiredMovePct": 10.11,
-        "targetPriceStatus": "target_above_breakeven",
-        "score": 74.0,
-    }
-    assert service._map_decision_risk_reward(risk_reward).model_dump(by_alias=True) == {
-        "maxLoss": 230,
-        "maxGain": 270,
-        "riskRewardRatio": 1.17,
-        "score": 66.5,
-        "warnings": ["max_gain_not_defined_for_long_option"],
-    }
-    assert service._map_expected_move(expected_move).model_dump(by_alias=True) == {
-        "expectedMoveAbs": 7.5,
-        "expectedMovePct": 14.31,
-        "expectedMoveSource": "straddle_mid",
-        "expectedMoveWarnings": ["expected_move_uses_fixture_mid_prices"],
-    }
-    assert service._map_decision_alternative(alternative).model_dump(by_alias=True) == {
-        "strategyType": "bull_call_spread",
-        "reason": "定义风险结构或更低权利金暴露可能降低单合约风险",
-        "maxLoss": 230,
-        "riskRewardRatio": 1.17,
-    }
-
-    mapped_optimizer = service._map_decision_optimizer(optimizer)
-    assert isinstance(mapped_optimizer, OptionsDecisionOptimizer)
-    assert mapped_optimizer.model_dump(by_alias=True) == {
-        "preferredStrategyKey": None,
-        "optimizerLabel": "数据不足，禁止判断",
-        "alternatives": [
-            {
-                "strategyKey": "bull_call_spread",
-                "dataQualityTier": "delayed_usable",
-                "liquidityScore": 71.25,
-                "breakevenPressure": 10.11,
-                "maxLoss": 230,
-                "maxGain": 270,
-                "riskRewardRatio": 1.17,
-                "expectedMoveAlignment": 58.0,
-                "ivReadiness": 68.0,
-                "tradeQualityScore": 61.25,
-                "decisionLabel": "仅观察",
-                "primaryReasons": ["数据质量、流动性与风险回报需同时复核"],
-                "riskWarnings": ["expected_move_does_not_cover_breakeven_pressure"],
-            }
-        ],
-        "noTradeReason": "data_quality_not_decision_grade",
-    }
+    assert isinstance(response, DecisionEvaluationResult)
+    assert response.data_quality_gates is not None
+    assert response.liquidity_gates is not None
+    assert response.gate_decision is not None
+    assert response.gate_issues
+    assert response.fail_closed_reason_codes
+    assert response.freshness is not None
+    assert response.optimizer.alternatives

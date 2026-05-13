@@ -28,19 +28,8 @@ from api.v1.schemas.options import (
     OptionsMetadata,
     OptionsAnalyzeRequest,
     OptionsAnalyzeResponse,
-    OptionsDecisionAlternative,
-    OptionsDecisionBreakeven,
-    OptionsDecisionDataQuality,
-    OptionsDecisionFreshness,
-    OptionsDecisionIvGreeks,
     OptionsDecisionLeg,
-    OptionsDecisionLiquidity,
-    OptionsDecisionOptimizer,
     OptionsDecisionRequest,
-    OptionsDecisionResponse,
-    OptionsDecisionRiskReward,
-    OptionsExpectedMove,
-    OptionsOptimizerAlternative,
     OptionsScenarioRequest,
     OptionsScenarioResponse,
     OptionsStrategyCompareRequest,
@@ -56,6 +45,8 @@ from src.services.options_lab_domain_models import (
     BreakevenAssessment,
     DecisionAlternativeModel,
     DecisionDataQualityAssessment,
+    DecisionEvaluationResult,
+    DecisionFreshnessModel,
     ExpectedMoveEstimate,
     IvGreeksAssessment,
     LiquidityAssessment,
@@ -446,7 +437,7 @@ class OptionsLabService:
             ),
         )
 
-    def evaluate_decision(self, request: OptionsDecisionRequest | Dict[str, Any]) -> OptionsDecisionResponse:
+    def evaluate_decision(self, request: OptionsDecisionRequest | Dict[str, Any]) -> DecisionEvaluationResult:
         parsed = self._parse_decision_request(request)
         fixture = self._fixture_for_symbol(parsed.symbol, market_data_provider=parsed.market_data_provider)
         contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
@@ -520,48 +511,36 @@ class OptionsLabService:
             target_date=target_date,
             expected_move=expected_move,
         )
-        data_quality_dto = self._map_decision_data_quality(data_quality)
-        liquidity_dto = self._map_decision_liquidity(liquidity)
-        iv_greeks_dto = self._map_decision_iv_greeks(iv_greeks)
-        expected_move_dto = self._map_expected_move(expected_move)
-        optimizer_dto = self._map_decision_optimizer(optimizer)
-        breakeven_dto = self._map_decision_breakeven(breakeven)
-        risk_reward_dto = self._map_decision_risk_reward(risk_reward)
-        alternative_dto = self._map_decision_alternative(alternative)
         underlying = self._safe_underlying(fixture)
-        return OptionsDecisionResponse(
+        return DecisionEvaluationResult(
             symbol=fixture["symbol"],
             strategy=parsed.strategy,
-            dataQuality=data_quality_dto,
-            liquidity=liquidity_dto,
-            ivGreeks=iv_greeks_dto,
-            ivRank=iv_greeks.iv_rank,
-            ivPercentile=iv_greeks.iv_percentile,
-            ivRankStatus=iv_greeks.iv_rank_status,
-            expectedMove=expected_move_dto,
-            optimizer=optimizer_dto,
-            rankedAlternatives=list(optimizer_dto.alternatives),
-            breakeven=breakeven_dto,
-            riskReward=risk_reward_dto,
-            tradeQualityScore=score,
-            decisionLabel=label,
-            primaryReasons=reasons,
-            riskWarnings=warnings,
-            dataQualityGates=gate_diagnostics.data_quality_gates.to_dict(),
-            liquidityGates=gate_diagnostics.liquidity_gates.to_dict(),
-            gateDecision=gate_diagnostics.gate_decision,
-            gateIssues=[item.to_dict() for item in gate_diagnostics.gate_issues],
-            decisionGrade=gate_diagnostics.decision_grade,
-            failClosedReasonCodes=list(gate_diagnostics.fail_closed_reason_codes),
-            betterAlternative=alternative_dto,
-            noAdviceDisclosure=(
+            data_quality=data_quality,
+            liquidity=liquidity,
+            iv_greeks=iv_greeks,
+            expected_move=expected_move,
+            optimizer=optimizer,
+            breakeven=breakeven,
+            risk_reward=risk_reward,
+            trade_quality_score=score,
+            decision_label=label,
+            primary_reasons=reasons,
+            risk_warnings=warnings,
+            data_quality_gates=gate_diagnostics.data_quality_gates.to_dict(),
+            liquidity_gates=gate_diagnostics.liquidity_gates.to_dict(),
+            gate_decision=gate_diagnostics.gate_decision,
+            gate_issues=[item.to_dict() for item in gate_diagnostics.gate_issues],
+            decision_grade=gate_diagnostics.decision_grade,
+            fail_closed_reason_codes=list(gate_diagnostics.fail_closed_reason_codes),
+            better_alternative=alternative,
+            no_advice_disclosure=(
                 "Analytical output under explicit assumptions only; not personalized financial advice "
                 "and not an instruction to trade."
             ),
-            freshness=OptionsDecisionFreshness(
+            freshness=DecisionFreshnessModel(
                 source=str(fixture.get("source") or "unknown"),
                 freshness=str(underlying.get("freshness") or "unknown"),
-                asOf=str(fixture.get("chainAsOf") or underlying.get("asOf") or ""),
+                as_of=str(fixture.get("chainAsOf") or underlying.get("asOf") or ""),
             ),
             metadata=self._metadata(
                 force_refresh=parsed.force_refresh,
@@ -704,106 +683,6 @@ class OptionsLabService:
             suitabilityNotes=list(comparison.suitability_notes),
             limitations=list(comparison.limitations),
             noAdviceDisclosure=comparison.no_advice_disclosure,
-        )
-
-    @staticmethod
-    def _map_decision_data_quality(data_quality: DecisionDataQualityAssessment) -> OptionsDecisionDataQuality:
-        return OptionsDecisionDataQuality(
-            dataQualityScore=data_quality.data_quality_score,
-            dataQualityTier=data_quality.data_quality_tier,
-            sourceType=data_quality.source_type,
-            asOfAgeMinutes=data_quality.as_of_age_minutes,
-            blockingReasons=list(data_quality.blocking_reasons),
-            warnings=list(data_quality.warnings),
-        )
-
-    @staticmethod
-    def _map_decision_liquidity(liquidity: LiquidityAssessment) -> OptionsDecisionLiquidity:
-        return OptionsDecisionLiquidity(
-            liquidityScore=liquidity.liquidity_score,
-            spreadPct=liquidity.spread_pct,
-            liquidityWarnings=list(liquidity.liquidity_warnings),
-        )
-
-    @staticmethod
-    def _map_decision_iv_greeks(iv_greeks: IvGreeksAssessment) -> OptionsDecisionIvGreeks:
-        return OptionsDecisionIvGreeks(
-            ivReadiness=iv_greeks.iv_readiness,
-            ivRankStatus=iv_greeks.iv_rank_status,
-            ivRank=iv_greeks.iv_rank,
-            ivPercentile=iv_greeks.iv_percentile,
-            ivRankSource=iv_greeks.iv_rank_source,
-            ivRankConfidence=iv_greeks.iv_rank_confidence,
-            warnings=list(iv_greeks.warnings),
-            dteBucket=iv_greeks.dte_bucket,
-        )
-
-    @staticmethod
-    def _map_decision_breakeven(breakeven: BreakevenAssessment) -> OptionsDecisionBreakeven:
-        return OptionsDecisionBreakeven(
-            breakeven=breakeven.breakeven,
-            requiredMovePct=breakeven.required_move_pct,
-            targetPriceStatus=breakeven.target_price_status,
-            score=breakeven.score,
-        )
-
-    @staticmethod
-    def _map_decision_risk_reward(risk_reward: RiskRewardAssessment) -> OptionsDecisionRiskReward:
-        return OptionsDecisionRiskReward(
-            maxLoss=risk_reward.max_loss,
-            maxGain=risk_reward.max_gain,
-            riskRewardRatio=risk_reward.risk_reward_ratio,
-            score=risk_reward.score,
-            warnings=list(risk_reward.warnings),
-        )
-
-    @staticmethod
-    def _map_expected_move(expected_move: ExpectedMoveEstimate) -> OptionsExpectedMove:
-        return OptionsExpectedMove(
-            expectedMoveAbs=expected_move.expected_move_abs,
-            expectedMovePct=expected_move.expected_move_pct,
-            expectedMoveSource=expected_move.expected_move_source,
-            expectedMoveWarnings=list(expected_move.expected_move_warnings),
-        )
-
-    @staticmethod
-    def _map_optimizer_candidate(candidate: OptimizerCandidate) -> OptionsOptimizerAlternative:
-        return OptionsOptimizerAlternative(
-            strategyKey=candidate.strategy_key,
-            dataQualityTier=candidate.data_quality_tier,
-            liquidityScore=candidate.liquidity_score,
-            breakevenPressure=candidate.breakeven_pressure,
-            maxLoss=candidate.max_loss,
-            maxGain=candidate.max_gain,
-            riskRewardRatio=candidate.risk_reward_ratio,
-            expectedMoveAlignment=candidate.expected_move_alignment,
-            ivReadiness=candidate.iv_readiness,
-            tradeQualityScore=candidate.trade_quality_score,
-            decisionLabel=candidate.decision_label,
-            primaryReasons=list(candidate.primary_reasons),
-            riskWarnings=list(candidate.risk_warnings),
-        )
-
-    @classmethod
-    def _map_decision_optimizer(cls, optimizer: OptimizerResult) -> OptionsDecisionOptimizer:
-        return OptionsDecisionOptimizer(
-            preferredStrategyKey=optimizer.preferred_strategy_key,
-            optimizerLabel=optimizer.optimizer_label,
-            alternatives=[cls._map_optimizer_candidate(item) for item in optimizer.alternatives],
-            noTradeReason=optimizer.no_trade_reason,
-        )
-
-    @staticmethod
-    def _map_decision_alternative(
-        alternative: Optional[DecisionAlternativeModel],
-    ) -> Optional[OptionsDecisionAlternative]:
-        if alternative is None:
-            return None
-        return OptionsDecisionAlternative(
-            strategyType=alternative.strategy_type,
-            reason=alternative.reason,
-            maxLoss=alternative.max_loss,
-            riskRewardRatio=alternative.risk_reward_ratio,
         )
 
     def _comparison_for_decision(
