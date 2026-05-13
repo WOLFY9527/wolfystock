@@ -237,6 +237,7 @@ PROVIDER_RUNTIME_IMPORT_PREFIXES = (
     "src.services.market_cache",
 )
 DIRECT_PROVIDER_CLIENT_IMPORT_PREFIXES = ("yfinance",)
+MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORT_PREFIXES = ("requests", "yfinance")
 # Transitional provider-runtime touch points. Owners are the domain listed in
 # the importing path plus provider-runtime; new entries need architecture review.
 EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
@@ -277,6 +278,20 @@ KNOWN_PROVIDER_RUNTIME_HOTSPOTS = {
         "provider_runtime": {"data_provider.base"},
         "direct_provider_clients": set(),
     },
+}
+MARKET_OVERVIEW_RUNTIME_FILES = (
+    "api/v1/endpoints/market.py",
+    "api/v1/endpoints/market_overview.py",
+    "src/services/crypto_realtime_service.py",
+    "src/services/market_overview_service.py",
+    "src/services/market_rotation_radar_service.py",
+)
+EXPECTED_MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORTS = {
+    "api/v1/endpoints/market.py": set(),
+    "api/v1/endpoints/market_overview.py": set(),
+    "src/services/crypto_realtime_service.py": set(),
+    "src/services/market_overview_service.py": {"requests", "yfinance"},
+    "src/services/market_rotation_radar_service.py": set(),
 }
 STOCK_SERVICE_TRANSITIONAL_PROVIDER_BOUNDARY = {
     "provider_runtime": {"data_provider.base"},
@@ -641,6 +656,23 @@ def test_known_provider_runtime_hotspots_remain_explicit() -> None:
         "high-risk provider/runtime hotspots. Do not refactor them during "
         "generic service cleanup; any change needs an approved provider "
         f"adapter slice and an updated explicit inventory. Found {actual_mapping}"
+    )
+
+
+def test_market_overview_runtime_direct_provider_imports_stay_frozen() -> None:
+    actual_mapping = {
+        relative_path: _imports_for_file(
+            REPO_ROOT / relative_path,
+            MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORT_PREFIXES,
+        )
+        for relative_path in MARKET_OVERVIEW_RUNTIME_FILES
+    }
+
+    assert actual_mapping == EXPECTED_MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORTS, (
+        "Market Overview runtime files should keep direct requests/yfinance "
+        "imports isolated to src/services/market_overview_service.py until an "
+        "approved adapter slice exists. "
+        f"Expected {EXPECTED_MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORTS}, found {actual_mapping}"
     )
 
 

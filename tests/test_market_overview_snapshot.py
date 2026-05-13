@@ -63,6 +63,31 @@ def test_successful_fetch_saves_persistent_snapshot() -> None:
     assert row["freshness"] == "live"
 
 
+def test_cached_payload_uses_stale_while_revalidate_contract() -> None:
+    service = MarketOverviewService()
+    cache = Mock()
+    expected_payload = {"source": "fallback", "items": [], "freshness": "fallback", "isFallback": True}
+    cache.get_or_refresh.return_value = expected_payload
+    service._market_cache = cache
+
+    payload = service._cached_payload(
+        "indices",
+        Mock(return_value=_live_payload()),
+        Mock(return_value={"source": "fallback", "items": [], "freshness": "fallback", "isFallback": True}),
+    )
+
+    assert payload is expected_payload
+    cache.get_or_refresh.assert_called_once()
+    args, kwargs = cache.get_or_refresh.call_args
+    assert args[0] == "indices"
+    assert args[1] == service._ttl_for_cache_key("indices")
+    assert callable(args[2])
+    assert callable(kwargs["fallback_factory"])
+    assert kwargs["allow_stale"] is True
+    assert kwargs["background_refresh"] is True
+    assert kwargs["cold_start_timeout_seconds"] == service.MARKET_COLD_START_TIMEOUT_SECONDS
+
+
 def test_failed_fetch_returns_previous_snapshot_as_stale() -> None:
     service = MarketOverviewService()
     service._cached_payload(
@@ -80,7 +105,10 @@ def test_failed_fetch_returns_previous_snapshot_as_stale() -> None:
     )
 
     assert payload["items"][0]["symbol"] == "SPX"
+    assert payload["source"] == "yahoo"
+    assert payload["sourceLabel"] == "Yahoo Finance"
     assert payload["isStale"] is True
+    assert payload["isFallback"] is False
     assert payload["isFromSnapshot"] is True
     assert payload["freshness"] == "stale"
     assert payload["items"][0]["freshness"] == "stale"
@@ -147,5 +175,7 @@ def test_fallback_snapshot_returned_after_failure_is_not_marked_live() -> None:
 
     assert payload["isFromSnapshot"] is True
     assert payload["isFallback"] is True
+    assert payload["freshness"] == "fallback"
     assert payload["freshness"] != "live"
     assert payload["items"][0]["isFallback"] is True
+    assert payload["items"][0]["freshness"] == "fallback"

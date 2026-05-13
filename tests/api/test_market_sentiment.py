@@ -109,6 +109,46 @@ class MarketSentimentApiTestCase(unittest.TestCase):
         self.assertEqual(second["items"][0]["price"], first["items"][0]["price"])
         self.assertIn("isRefreshing", second)
 
+    def test_sentiment_prefers_cnn_before_alternative(self) -> None:
+        service = MarketOverviewService()
+
+        with patch.object(
+            service,
+            "_fetch_cnn_fear_greed_snapshot",
+            return_value={"history": [{"value": 20}, {"value": 30}, {"value": 40}], "source": "cnn"},
+        ) as cnn_fetch, patch.object(
+            service,
+            "_fetch_alternative_fear_greed_snapshot",
+            side_effect=AssertionError("Alternative.me should not run when CNN succeeds"),
+        ) as alternative_fetch:
+            payload = service._fetch_market_sentiment_snapshot()
+
+        cnn_fetch.assert_called_once_with()
+        alternative_fetch.assert_not_called()
+        self.assertEqual(payload["source"], "cnn")
+        self.assertIsNone(payload["error"])
+        self.assertTrue(all(item["source"] == "cnn" for item in payload["items"]))
+
+    def test_sentiment_uses_alternative_only_after_cnn_failure(self) -> None:
+        service = MarketOverviewService()
+
+        with patch.object(
+            service,
+            "_fetch_cnn_fear_greed_snapshot",
+            side_effect=RuntimeError("cnn unavailable"),
+        ) as cnn_fetch, patch.object(
+            service,
+            "_fetch_alternative_fear_greed_snapshot",
+            return_value={"history": [{"value": 22}, {"value": 24}, {"value": 35}], "source": "alternative_me"},
+        ) as alternative_fetch:
+            payload = service._fetch_market_sentiment_snapshot()
+
+        cnn_fetch.assert_called_once_with()
+        alternative_fetch.assert_called_once_with()
+        self.assertEqual(payload["source"], "alternative_me")
+        self.assertEqual(payload["error"], "cnn unavailable")
+        self.assertTrue(all(item["source"] == "alternative_me" for item in payload["items"]))
+
 
 if __name__ == "__main__":
     unittest.main()
