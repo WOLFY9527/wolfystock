@@ -632,13 +632,42 @@ describe('DeterministicBacktestResultPage', () => {
           },
         },
         monteCarlo: {
+          state: 'available',
           simulationCount: 200,
+          seed: 20260423,
           aggregateMetrics: {
+            p05TotalReturnPct: -3.6,
+            meanTotalReturnPct: 7.1,
             medianTotalReturnPct: 8.4,
+            p95TotalReturnPct: 16.8,
+            worstMaxDrawdownPct: 12.5,
           },
         },
         stressTests: {
+          state: 'available',
           scenarioCount: 3,
+          scenarios: [
+            {
+              scenarioKey: 'single_day_shock_down_15',
+              label: 'Single-day shock down 15%',
+              state: 'completed',
+              metrics: {
+                totalReturnPct: -18.4,
+                sharpeRatio: -1.1,
+                maxDrawdownPct: 21.3,
+              },
+            },
+            {
+              scenarioKey: 'volatility_whipsaw',
+              label: 'Volatility whipsaw regime',
+              state: 'completed',
+              metrics: {
+                totalReturnPct: -6.5,
+                sharpeRatio: -0.4,
+                maxDrawdownPct: 12.6,
+              },
+            },
+          ],
           worstScenario: {
             scenarioKey: 'single_day_shock_down_15',
           },
@@ -659,29 +688,86 @@ describe('DeterministicBacktestResultPage', () => {
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
-    expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
+    const parametersPanel = await screen.findByTestId('deterministic-result-tab-panel-parameters');
+    const panelWithin = within(parametersPanel);
+    const robustnessSummary = panelWithin.getByText(translate('zh', 'backtest.resultPage.riskControls.robustnessDisclosure'));
+    const robustnessDisclosure = robustnessSummary.closest('details');
 
-    expect(screen.getByText(translate('zh', 'backtest.resultPage.riskControls.robustnessDisclosure'))).toBeInTheDocument();
-    expect(screen.getAllByText('可用').length).toBeGreaterThan(0);
-    expect(screen.getByText('Walk-forward 窗口')).toBeInTheDocument();
-    expect(screen.getByText('4')).toBeInTheDocument();
-    expect(screen.getByText('蒙特卡洛模拟')).toBeInTheDocument();
-    expect(screen.getByText('200')).toBeInTheDocument();
-    expect(screen.getByText('压力场景')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument();
-    expect(screen.getByText('Walk-forward 平均收益')).toBeInTheDocument();
-    expect(screen.getByText('6.20%')).toBeInTheDocument();
-    expect(screen.getByText('蒙特卡洛中位收益')).toBeInTheDocument();
-    expect(screen.getByText('8.40%')).toBeInTheDocument();
-    expect(screen.getByText('最差场景')).toBeInTheDocument();
-    expect(screen.getByText('single_day_shock_down_15')).toBeInTheDocument();
-    expect(screen.getByTestId('robustness-lens')).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'backtest.resultPage.riskControls.robustnessLens'))).toBeInTheDocument();
-    expect(screen.getByTestId('robustness-coverage-overview')).toBeInTheDocument();
-    expect(screen.getByText(translate('zh', 'backtest.resultPage.riskControls.coverageTrack'))).toBeInTheDocument();
-    expect(screen.getByTestId('robustness-lens-row-walk-forward')).toHaveTextContent('4 窗口');
-    expect(screen.getByTestId('robustness-lens-row-monte-carlo')).toHaveTextContent('200 路径');
-    expect(screen.getByTestId('robustness-lens-row-stress-tests')).toHaveTextContent('3 场景');
+    expect(robustnessDisclosure).not.toHaveAttribute('open');
+    expect(panelWithin.getAllByText('可用').length).toBeGreaterThan(0);
+    expect(panelWithin.getByText('Walk-forward 窗口')).toBeInTheDocument();
+    expect(panelWithin.getByText('4')).toBeInTheDocument();
+    expect(panelWithin.getAllByText('蒙特卡洛模拟').length).toBeGreaterThan(0);
+    expect(panelWithin.getAllByText('200').length).toBeGreaterThan(0);
+    expect(panelWithin.getAllByText('压力场景').length).toBeGreaterThan(0);
+    expect(panelWithin.getAllByText('3').length).toBeGreaterThan(0);
+    expect(panelWithin.getByText('Walk-forward 平均收益')).toBeInTheDocument();
+    expect(panelWithin.getAllByText('6.20%').length).toBeGreaterThan(0);
+    expect(panelWithin.getByText('蒙特卡洛中位收益')).toBeInTheDocument();
+    expect(panelWithin.getAllByText('8.40%').length).toBeGreaterThan(0);
+    expect(panelWithin.getAllByText('最差场景').length).toBeGreaterThan(0);
+    expect(panelWithin.getAllByText('单日冲击下跌 15%').length).toBeGreaterThan(0);
+    expect(panelWithin.queryByText('single_day_shock_down_15')).not.toBeInTheDocument();
+    expect(panelWithin.getByText('蒙特卡洛分布')).toBeInTheDocument();
+    expect(panelWithin.getByText('P05 总收益')).toBeInTheDocument();
+    expect(panelWithin.getByText('-3.60%')).toBeInTheDocument();
+    expect(panelWithin.getByText('平均总收益')).toBeInTheDocument();
+    expect(panelWithin.getByText('7.10%')).toBeInTheDocument();
+    expect(panelWithin.getByText('P95 总收益')).toBeInTheDocument();
+    expect(panelWithin.getByText('16.80%')).toBeInTheDocument();
+    expect(panelWithin.getByText('最差最大回撤')).toBeInTheDocument();
+    expect(panelWithin.getByText('-12.50%')).toBeInTheDocument();
+    expect(panelWithin.getByText('随机种子')).toBeInTheDocument();
+    expect(panelWithin.getByText('20,260,423')).toBeInTheDocument();
+    expect(panelWithin.getByText('压力场景明细')).toBeInTheDocument();
+    expect(panelWithin.getByText('波动率来回扫')).toBeInTheDocument();
+    expect(panelWithin.getByText(/收益 -18\.40%/)).toBeInTheDocument();
+    expect(panelWithin.getByText(/Sharpe -1\.10/)).toBeInTheDocument();
+    expect(panelWithin.getByText(/回撤 -21\.30%/)).toBeInTheDocument();
+    expect(panelWithin.getAllByText('最差场景').length).toBeGreaterThan(0);
+    expect(panelWithin.getByTestId('robustness-lens')).toBeInTheDocument();
+    expect(panelWithin.getByText(translate('zh', 'backtest.resultPage.riskControls.robustnessLens'))).toBeInTheDocument();
+    expect(panelWithin.getByTestId('robustness-coverage-overview')).toBeInTheDocument();
+    expect(panelWithin.getByText(translate('zh', 'backtest.resultPage.riskControls.coverageTrack'))).toBeInTheDocument();
+    expect(panelWithin.getByTestId('robustness-lens-row-walk-forward')).toHaveTextContent('4 窗口');
+    expect(panelWithin.getByTestId('robustness-lens-row-monte-carlo')).toHaveTextContent('200 路径');
+    expect(panelWithin.getByTestId('robustness-lens-row-stress-tests')).toHaveTextContent('3 场景');
+  });
+
+  it('renders compact Monte Carlo and stress placeholders when robustness details are missing', async () => {
+    const currentRun = makeResultRun({
+      robustnessAnalysis: {
+        state: 'partial',
+        monteCarlo: {
+          state: 'partial',
+        },
+        stressTests: {
+          state: 'insufficient_history',
+          scenarioCount: 0,
+        },
+      },
+    });
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
+    const parametersPanel = await screen.findByTestId('deterministic-result-tab-panel-parameters');
+    const panelWithin = within(parametersPanel);
+
+    expect(panelWithin.getByText('蒙特卡洛分布')).toBeInTheDocument();
+    expect(panelWithin.getByText('现有结果未提供可展示的蒙特卡洛分布摘要。')).toBeInTheDocument();
+    expect(panelWithin.getByText('压力场景明细')).toBeInTheDocument();
+    expect(panelWithin.getByText('样本不足，暂无可展示的压力场景明细。')).toBeInTheDocument();
   });
 
   it('renders compact walk-forward diagnostics in the overview tab from existing robustness analysis', async () => {

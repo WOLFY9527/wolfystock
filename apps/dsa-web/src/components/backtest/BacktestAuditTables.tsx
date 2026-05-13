@@ -45,6 +45,21 @@ type StrategySummaryRow = {
   value: string;
 };
 
+type RobustnessMetricRow = {
+  label: string;
+  value: string;
+};
+
+type StressScenarioDetail = {
+  key: string;
+  label: string;
+  stateLabel: string | null;
+  totalReturn: string | null;
+  sharpe: string | null;
+  maxDrawdown: string | null;
+  isWorst: boolean;
+};
+
 type ScenarioPlan = {
   id: string;
   label: string;
@@ -83,7 +98,11 @@ type BacktestAuditTablesProps = {
   stressScenarioCount: string;
   walkForwardMeanReturn: string;
   monteCarloMedianReturn: string;
-  worstScenarioKey: string;
+  worstScenarioLabel: string;
+  monteCarloDetailRows: RobustnessMetricRow[];
+  monteCarloDetailEmptyText: string;
+  stressScenarioRows: StressScenarioDetail[];
+  stressScenarioDetailEmptyText: string;
   strategySummaryRows: StrategySummaryRow[];
   parsedSummaryEntries: Array<{ label: string; value: string }>;
   strategyWarningEntries: string[];
@@ -133,7 +152,11 @@ const BacktestAuditTables: React.FC<BacktestAuditTablesProps> = ({
   stressScenarioCount,
   walkForwardMeanReturn,
   monteCarloMedianReturn,
-  worstScenarioKey,
+  worstScenarioLabel,
+  monteCarloDetailRows,
+  monteCarloDetailEmptyText,
+  stressScenarioRows,
+  stressScenarioDetailEmptyText,
   strategySummaryRows,
   parsedSummaryEntries,
   strategyWarningEntries,
@@ -295,8 +318,57 @@ const BacktestAuditTables: React.FC<BacktestAuditTablesProps> = ({
                     </div>
                     <div className="preview-card">
                       <p className="metric-card__label">{backtestCopy('resultPage.riskControls.worstScenario')}</p>
-                      <p className="preview-card__text">{worstScenarioKey}</p>
+                      <p className="preview-card__text">{worstScenarioLabel}</p>
                     </div>
+                  </div>
+                  <div className="summary-block">
+                    <div className="summary-block__header">
+                      <div>
+                        <h3 className="summary-block__title">{backtestCopy('resultPage.riskControls.monteCarloDetailsTitle')}</h3>
+                      </div>
+                    </div>
+                    {monteCarloDetailRows.length ? (
+                      <dl className="audit-grid">
+                        {monteCarloDetailRows.map((row) => (
+                          <div key={`${row.label}-${row.value}`} className="audit-grid__row">
+                            <dt className="audit-grid__label">{row.label}</dt>
+                            <dd className="audit-grid__value">{row.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : (
+                      <p className="product-empty-note">{monteCarloDetailEmptyText}</p>
+                    )}
+                  </div>
+                  <div className="summary-block">
+                    <div className="summary-block__header">
+                      <div>
+                        <h3 className="summary-block__title">{backtestCopy('resultPage.riskControls.stressScenarioDetailsTitle')}</h3>
+                      </div>
+                    </div>
+                    {stressScenarioRows.length ? (
+                      <div className="preview-grid">
+                        {stressScenarioRows.map((row) => (
+                          <div key={row.key} className="preview-card">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="metric-card__label">{backtestCopy('resultPage.riskControls.stressScenarioCardLabel')}</p>
+                                <p className="preview-card__text">{row.label}</p>
+                              </div>
+                              {row.isWorst ? <span className="product-chip">{backtestCopy('resultPage.riskControls.worstScenario')}</span> : null}
+                            </div>
+                            <div className="product-chip-list product-chip-list--tight mt-3">
+                              {row.totalReturn ? <span className="product-chip">{backtestCopy('resultPage.riskControls.stressScenarioReturnLabel', { value: row.totalReturn })}</span> : null}
+                              {row.sharpe ? <span className="product-chip">{backtestCopy('resultPage.riskControls.stressScenarioSharpeLabel', { value: row.sharpe })}</span> : null}
+                              {row.maxDrawdown ? <span className="product-chip">{backtestCopy('resultPage.riskControls.stressScenarioDrawdownLabel', { value: row.maxDrawdown })}</span> : null}
+                              {row.stateLabel ? <span className="product-chip">{row.stateLabel}</span> : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="product-empty-note">{stressScenarioDetailEmptyText}</p>
+                    )}
                   </div>
                   <div className="summary-block mt-4" data-testid="robustness-lens">
                     <div className="summary-block__header">

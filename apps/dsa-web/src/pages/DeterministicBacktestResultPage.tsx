@@ -83,6 +83,21 @@ type ScenarioRunState = {
   error: string | null;
 };
 
+type RobustnessMetricRow = {
+  label: string;
+  value: string;
+};
+
+type StressScenarioDetail = {
+  key: string;
+  label: string;
+  stateLabel: string | null;
+  totalReturn: string | null;
+  sharpe: string | null;
+  maxDrawdown: string | null;
+  isWorst: boolean;
+};
+
 type ResultPageTabKey = 'overview' | 'audit' | 'trades' | 'parameters' | 'history';
 
 const RESULT_PAGE_TAB_KEYS: ResultPageTabKey[] = ['overview', 'audit', 'trades', 'parameters', 'history'];
@@ -167,6 +182,21 @@ function formatDrawdownPct(value: unknown): string | null {
   const numeric = getFiniteNumber(value);
   if (numeric == null) return null;
   return pct(numeric > 0 ? -numeric : numeric);
+}
+
+function getStringValue(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function getStressScenarioLabel(scenarioKey: unknown, language: UiLanguage, fallbackIndex?: number): string {
+  const normalized = String(scenarioKey || '').trim().toLowerCase();
+  if (normalized === 'single_day_shock_down_15') return btr(language, 'riskControls.stressScenarioLabels.singleDayShockDown15');
+  if (normalized === 'volatility_whipsaw') return btr(language, 'riskControls.stressScenarioLabels.volatilityWhipsaw');
+  if (normalized === 'gap_down_open') return btr(language, 'riskControls.stressScenarioLabels.gapDownOpen');
+  if (typeof fallbackIndex === 'number') return btr(language, 'riskControls.stressScenarioFallbackLabel', { index: fallbackIndex + 1 });
+  return btr(language, 'riskControls.stressScenarioUnknown');
 }
 
 function getRiskControlVisualRows(
@@ -273,6 +303,17 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const stressTests = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'stressTests')), [robustnessAnalysis]);
   const stressTestsConfig = useMemo(() => asObjectRecord(getObjectField(robustnessConfiguration, 'stressTests')), [robustnessConfiguration]);
   const worstScenario = useMemo(() => asObjectRecord(getObjectField(stressTests, 'worstScenario')), [stressTests]);
+  const stressScenarios = useMemo(
+    () => {
+      const value = getObjectField(stressTests, 'scenarios');
+      return Array.isArray(value) ? value : [];
+    },
+    [stressTests],
+  );
+  const worstScenarioLabel = useMemo(
+    () => getStressScenarioLabel(getObjectField(worstScenario, 'scenarioKey'), language),
+    [language, worstScenario],
+  );
   const hasRobustnessAnalysis = useMemo(
     () => Boolean(
       getObjectField(robustnessAnalysis, 'state')
@@ -312,7 +353,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
         key: 'stress-tests',
         label: btr(language, 'riskControls.stressTestsLabel'),
         summary: stressScenarioCount == null ? '--' : btr(language, 'riskControls.stressScenarios', { count: formatNumber(stressScenarioCount, 0) }),
-        detail: btr(language, 'riskControls.worst', { value: String(getObjectField(worstScenario, 'scenarioKey') || '--') }),
+        detail: btr(language, 'riskControls.worst', { value: worstScenarioLabel }),
         state: getRobustnessStateLabel(getObjectField(stressTests, 'state') ?? getObjectField(robustnessAnalysis, 'state'), language),
         ratio: clampRatio(stressScenarioCount != null && stressScenarioMax ? stressScenarioCount / stressScenarioMax : (hasObjectFields(stressTests) ? 1 : 0)),
       },
@@ -328,8 +369,72 @@ const DeterministicBacktestResultPage: React.FC = () => {
     walkForward,
     walkForwardAggregate,
     walkForwardConfig,
-    worstScenario,
+    worstScenarioLabel,
   ]);
+  const monteCarloDetailRows = useMemo<RobustnessMetricRow[]>(() => {
+    const rows: RobustnessMetricRow[] = [];
+    const p05Return = getFiniteNumber(getObjectField(monteCarloAggregate, 'p05TotalReturnPct'));
+    const medianReturn = getFiniteNumber(getObjectField(monteCarloAggregate, 'medianTotalReturnPct'));
+    const p95Return = getFiniteNumber(getObjectField(monteCarloAggregate, 'p95TotalReturnPct'));
+    const meanReturn = getFiniteNumber(getObjectField(monteCarloAggregate, 'meanTotalReturnPct'));
+    const worstMaxDrawdown = formatDrawdownPct(getObjectField(monteCarloAggregate, 'worstMaxDrawdownPct'));
+    const simulationCount = getFiniteNumber(getObjectField(monteCarlo, 'simulationCount'));
+    const seed = getFiniteNumber(getObjectField(monteCarlo, 'seed'));
+    const monteCarloState = normalizeRobustnessState(getObjectField(monteCarlo, 'state'));
+
+    if (p05Return != null) rows.push({ label: btr(language, 'riskControls.p05TotalReturn'), value: pct(p05Return) });
+    if (medianReturn != null) rows.push({ label: btr(language, 'riskControls.medianTotalReturn'), value: pct(medianReturn) });
+    if (p95Return != null) rows.push({ label: btr(language, 'riskControls.p95TotalReturn'), value: pct(p95Return) });
+    if (meanReturn != null) rows.push({ label: btr(language, 'riskControls.meanTotalReturn'), value: pct(meanReturn) });
+    if (worstMaxDrawdown != null) rows.push({ label: btr(language, 'riskControls.worstMaxDrawdown'), value: worstMaxDrawdown });
+    if (simulationCount != null) rows.push({ label: btr(language, 'riskControls.monteCarloSimulation'), value: formatNumber(simulationCount, 0) });
+    if (seed != null) rows.push({ label: btr(language, 'riskControls.randomSeed'), value: formatNumber(seed, 0) });
+    if (rows.length > 0 && monteCarloState) {
+      rows.push({ label: btr(language, 'riskControls.status'), value: getRobustnessStateLabel(monteCarloState, language) });
+    }
+
+    return rows;
+  }, [language, monteCarlo, monteCarloAggregate]);
+  const stressScenarioRows = useMemo<StressScenarioDetail[]>(
+    () => stressScenarios
+      .map((scenario, index) => {
+        const record = asObjectRecord(scenario);
+        const metrics = asObjectRecord(getObjectField(record, 'metrics'));
+        const scenarioKey = getStringValue(getObjectField(record, 'scenarioKey')) || `stress-scenario-${index}`;
+        const rawLabel = getStringValue(getObjectField(record, 'label'));
+        const totalReturn = getFiniteNumber(getObjectField(metrics, 'totalReturnPct'));
+        const sharpe = getFiniteNumber(getObjectField(metrics, 'sharpeRatio'));
+        const maxDrawdown = formatDrawdownPct(getObjectField(metrics, 'maxDrawdownPct'));
+
+        return {
+          key: scenarioKey,
+          label: rawLabel && language === 'en'
+            ? rawLabel
+            : getStressScenarioLabel(getObjectField(record, 'scenarioKey') || rawLabel, language, index),
+          stateLabel: normalizeRobustnessState(getObjectField(record, 'state'))
+            ? getRobustnessStateLabel(getObjectField(record, 'state'), language)
+            : null,
+          totalReturn: totalReturn == null ? null : pct(totalReturn),
+          sharpe: sharpe == null ? null : formatNumber(sharpe),
+          maxDrawdown,
+          isWorst: getStringValue(getObjectField(worstScenario, 'scenarioKey')) === scenarioKey,
+        };
+      })
+      .filter((row) => row.totalReturn != null || row.sharpe != null || row.maxDrawdown != null),
+    [language, stressScenarios, worstScenario],
+  );
+  const monteCarloDetailEmptyText = useMemo(() => {
+    const state = normalizeRobustnessState(getObjectField(monteCarlo, 'state'));
+    return state === 'insufficient_history'
+      ? btr(language, 'riskControls.monteCarloDetailsEmptyInsufficient')
+      : btr(language, 'riskControls.monteCarloDetailsEmpty');
+  }, [language, monteCarlo]);
+  const stressScenarioDetailEmptyText = useMemo(() => {
+    const state = normalizeRobustnessState(getObjectField(stressTests, 'state'));
+    return state === 'insufficient_history'
+      ? btr(language, 'riskControls.stressScenarioDetailsEmptyInsufficient')
+      : btr(language, 'riskControls.stressScenarioDetailsEmpty');
+  }, [language, stressTests]);
   const walkForwardOverview = useMemo<BacktestWalkForwardOverview>(() => {
     const walkForwardState = normalizeRobustnessState(getObjectField(walkForward, 'state'));
     const robustnessState = normalizeRobustnessState(getObjectField(robustnessAnalysis, 'state'));
@@ -1064,7 +1169,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
           stressScenarioCount={formatNumber(getObjectField(stressTests, 'scenarioCount') as number | null | undefined, 0)}
           walkForwardMeanReturn={pct(getObjectField(walkForwardAggregate, 'meanTotalReturnPct') as number | null | undefined)}
           monteCarloMedianReturn={pct(getObjectField(monteCarloAggregate, 'medianTotalReturnPct') as number | null | undefined)}
-          worstScenarioKey={String(getObjectField(worstScenario, 'scenarioKey') || '--')}
+          worstScenarioLabel={worstScenarioLabel}
+          monteCarloDetailRows={monteCarloDetailRows}
+          monteCarloDetailEmptyText={monteCarloDetailEmptyText}
+          stressScenarioRows={stressScenarioRows}
+          stressScenarioDetailEmptyText={stressScenarioDetailEmptyText}
           strategySummaryRows={strategySummaryRows}
           parsedSummaryEntries={parsedSummaryEntries}
           strategyWarningEntries={strategyWarningEntries}
