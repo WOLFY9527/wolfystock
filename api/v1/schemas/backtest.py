@@ -1225,6 +1225,16 @@ class RuleBacktestExecutionTraceExportResponse(BaseModel):
     fallback: Dict[str, Any] = Field(default_factory=dict)
 
 
+class RuleBacktestRobustnessEvidenceExportResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    state: Optional[str] = None
+    profile: Optional[str] = None
+    source: Optional[str] = None
+    seed: Optional[int] = None
+    configuration: Dict[str, Any] = Field(default_factory=dict)
+
+
 class RuleBacktestSupportExportIndexItem(BaseModel):
     key: str
     available: bool

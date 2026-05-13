@@ -11,6 +11,7 @@ from typing import Any, Iterable
 from api.v1.schemas.backtest import (
     RuleBacktestCompareResponse,
     RuleBacktestExecutionTraceExportResponse,
+    RuleBacktestRobustnessEvidenceExportResponse,
     RuleBacktestRunResponse,
     RuleBacktestSupportBundleManifestResponse,
     RuleBacktestSupportExportIndexResponse,
@@ -62,6 +63,7 @@ EXPORT_KEYS = [
     "support_bundle_reproducibility_manifest_json",
     "execution_trace_json",
     "execution_trace_csv",
+    "robustness_evidence_json",
 ]
 
 
@@ -205,6 +207,31 @@ def test_execution_trace_export_fixture_freezes_compact_public_trace_shape() -> 
     _assert_no_live_provider_authority(trace)
 
 
+def test_robustness_evidence_export_fixture_freezes_stored_payload_shape() -> None:
+    payload = _load_fixture("rule_backtest_robustness_evidence_dto.json")
+
+    evidence = RuleBacktestRobustnessEvidenceExportResponse(**payload).model_dump()
+
+    assert evidence["state"] == "research_prototype"
+    assert evidence["profile"] == "single_symbol_fixture"
+    assert evidence["source"] == "summary.robustness_analysis"
+    assert evidence["seed"] == 4242
+    assert evidence["configuration"]["walk_forward"] == {
+        "train_window": 36,
+        "test_window": 18,
+        "step": 9,
+        "max_windows": 3,
+    }
+    assert evidence["configuration"]["monte_carlo"] == {
+        "simulation_count": 16,
+        "seed": 4242,
+        "noise_scale": 0.5,
+    }
+
+    _assert_no_sensitive_public_payload(evidence)
+    _assert_no_live_provider_authority(evidence)
+
+
 def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_boundary() -> None:
     export_index = RuleBacktestSupportExportIndexResponse(
         **_load_fixture("rule_backtest_export_index_dto.json")
@@ -216,7 +243,7 @@ def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_bou
     assert export_index["run_id"] == 7001
     assert export_index["status"] == "completed"
     assert [item["key"] for item in export_index["exports"]] == EXPORT_KEYS
-    assert [item["payload_class"] for item in export_index["exports"]] == ["compact", "compact", "heavy", "heavy"]
+    assert [item["payload_class"] for item in export_index["exports"]] == ["compact", "compact", "heavy", "heavy", "heavy"]
     for item in export_index["exports"]:
         assert item["delivery_mode"] == "api"
         assert item["endpoint_path"].startswith("/api/v1/backtest/rule/runs/7001/")
@@ -226,6 +253,8 @@ def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_bou
     assert export_index["exports"][2]["availability_reason"] == "execution_trace_rows_missing"
     assert export_index["exports"][3]["available"] is False
     assert export_index["exports"][3]["availability_reason"] == "execution_trace_rows_missing"
+    assert export_index["exports"][4]["available"] is True
+    assert export_index["exports"][4]["availability_reason"] == "stored_robustness_analysis_present"
 
     assert manifest["manifest_kind"] == "rule_backtest_support_bundle"
     assert manifest["run"]["id"] == export_index["run_id"]
@@ -345,6 +374,7 @@ def test_all_backtest_golden_fixtures_are_sanitized_and_explicitly_enumerated() 
         "rule_backtest_compare_dto.json",
         "rule_backtest_execution_trace_dto.json",
         "rule_backtest_export_index_dto.json",
+        "rule_backtest_robustness_evidence_dto.json",
         "rule_backtest_result_summary_dto.json",
         "rule_backtest_support_bundle_manifest_dto.json",
         "rule_backtest_universe_job_diagnostics_dto.json",

@@ -21,6 +21,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     create_rule_backtest_universe_job,
     get_backtest_performance,
     get_backtest_stock_performance,
+    get_rule_backtest_robustness_evidence_json,
     get_rule_backtest_execution_trace_csv,
     get_rule_backtest_execution_trace_json,
     get_rule_backtest_support_bundle_reproducibility_manifest,
@@ -53,6 +54,7 @@ from api.v1.schemas.backtest import (  # noqa: E402
     RuleBacktestUniverseJobResponse,
     RuleBacktestUniverseResultsResponse,
     RuleBacktestExecutionTraceExportResponse,
+    RuleBacktestRobustnessEvidenceExportResponse,
     RuleBacktestSupportExportIndexResponse,
     RuleBacktestSupportBundleManifestResponse,
     RuleBacktestSupportBundleReproducibilityManifestResponse,
@@ -520,8 +522,30 @@ class BacktestApiContractTestCase(unittest.TestCase):
             },
         }
 
+    @staticmethod
+    def _robustness_evidence_payload() -> dict:
+        return {
+            "state": "research_prototype",
+            "profile": "single_symbol_fixture",
+            "source": "summary.robustness_analysis",
+            "seed": 4242,
+            "configuration": {
+                "walk_forward": {
+                    "train_window": 36,
+                    "test_window": 18,
+                    "step": 9,
+                    "max_windows": 3,
+                },
+                "monte_carlo": {
+                    "simulation_count": 16,
+                    "seed": 4242,
+                    "noise_scale": 0.5,
+                },
+            },
+        }
+
     @classmethod
-    def _support_export_index_payload(cls, *, status: str = "completed") -> dict:
+    def _support_export_index_payload(cls, *, status: str = "completed", robustness_available: bool = True) -> dict:
         run_payload = cls._rule_run_payload(status=status)
         run_id = int(run_payload["id"])
         return {
@@ -568,6 +592,20 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "endpoint_path": f"/api/v1/backtest/rule/runs/{run_id}/execution-trace.csv",
                     "payload_class": "heavy",
                 },
+                {
+                    "key": "robustness_evidence_json",
+                    "available": robustness_available,
+                    "availability_reason": (
+                        "stored_robustness_analysis_present"
+                        if robustness_available
+                        else "stored_robustness_analysis_missing"
+                    ),
+                    "format": "json",
+                    "media_type": "application/json",
+                    "delivery_mode": "api",
+                    "endpoint_path": f"/api/v1/backtest/rule/runs/{run_id}/robustness-evidence.json",
+                    "payload_class": "heavy",
+                },
             ],
         }
 
@@ -580,6 +618,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
         export_index_payload: dict,
         trace_json_payload: dict | None,
         trace_csv_text: str | None,
+        robustness_payload: dict | None,
     ) -> None:
         service.get_support_bundle_manifest.return_value = manifest_payload
         service.get_support_bundle_reproducibility_manifest.return_value = reproducibility_payload
@@ -592,6 +631,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
             service.get_execution_trace_export_csv_text.side_effect = ValueError("Run 123 has no audit rows to export.")
         else:
             service.get_execution_trace_export_csv_text.return_value = trace_csv_text
+        if robustness_payload is None:
+            service.get_robustness_evidence_export_json.side_effect = ValueError(
+                "Run 123 has no stored robustness evidence to export."
+            )
+        else:
+            service.get_robustness_evidence_export_json.return_value = robustness_payload
 
         with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
             manifest_response = get_rule_backtest_support_bundle_manifest(123, db_manager=MagicMock())
@@ -629,6 +674,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "support_bundle_reproducibility_manifest_json",
                     "execution_trace_json",
                     "execution_trace_csv",
+                    "robustness_evidence_json",
                 ],
             )
             self.assertEqual(
@@ -638,6 +684,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     "/api/v1/backtest/rule/runs/123/support-bundle-reproducibility-manifest",
                     "/api/v1/backtest/rule/runs/123/execution-trace.json",
                     "/api/v1/backtest/rule/runs/123/execution-trace.csv",
+                    "/api/v1/backtest/rule/runs/123/robustness-evidence.json",
                 ],
             )
             self.assertEqual(
@@ -650,6 +697,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     ("json", "application/json", "api", "compact"),
                     ("json", "application/json", "api", "heavy"),
                     ("csv", "text/csv", "api", "heavy"),
+                    ("json", "application/json", "api", "heavy"),
                 ],
             )
             self.assertEqual(manifest_response.manifest_kind, "rule_backtest_support_bundle")
@@ -718,6 +766,24 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     trace_json_response.benchmark_summary,
                     trace_json_payload["benchmark_summary"],
                 )
+
+            if robustness_payload is None:
+                with self.assertRaises(HTTPException) as robustness_ctx:
+                    get_rule_backtest_robustness_evidence_json(123, db_manager=MagicMock())
+                self.assertEqual(robustness_ctx.exception.status_code, 409)
+                self.assertFalse(export_index_response.exports[4].available)
+                self.assertEqual(
+                    export_index_response.exports[4].availability_reason,
+                    "stored_robustness_analysis_missing",
+                )
+            else:
+                robustness_response = get_rule_backtest_robustness_evidence_json(123, db_manager=MagicMock())
+                self.assertTrue(export_index_response.exports[4].available)
+                self.assertEqual(
+                    export_index_response.exports[4].availability_reason,
+                    "stored_robustness_analysis_present",
+                )
+                self.assertEqual(robustness_response.model_dump(), robustness_payload)
 
     def test_run_rule_backtest_async_path_enqueues_background_processing(self) -> None:
         request = RuleBacktestRunRequest(
@@ -2076,7 +2142,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertIsInstance(response, RuleBacktestSupportExportIndexResponse)
         self.assertEqual(response.run_id, 123)
         self.assertEqual(response.status, "completed")
-        self.assertEqual(len(response.exports), 4)
+        self.assertEqual(len(response.exports), 5)
         self.assertEqual(response.exports[0].key, "support_bundle_manifest_json")
         self.assertTrue(response.exports[0].available)
         self.assertEqual(response.exports[0].delivery_mode, "api")
@@ -2106,6 +2172,14 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(
             response.exports[3].endpoint_path,
             "/api/v1/backtest/rule/runs/123/execution-trace.csv",
+        )
+        self.assertEqual(response.exports[4].key, "robustness_evidence_json")
+        self.assertTrue(response.exports[4].available)
+        self.assertEqual(response.exports[4].payload_class, "heavy")
+        self.assertEqual(response.exports[4].delivery_mode, "api")
+        self.assertEqual(
+            response.exports[4].endpoint_path,
+            "/api/v1/backtest/rule/runs/123/robustness-evidence.json",
         )
         service.get_support_export_index.assert_called_once_with(123)
 
@@ -2144,6 +2218,32 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.detail["error"], "export_unavailable")
         service.get_execution_trace_export_json.assert_called_once_with(123)
+
+    def test_get_rule_backtest_robustness_evidence_json_returns_stored_payload(self) -> None:
+        service = MagicMock()
+        service.get_robustness_evidence_export_json.return_value = self._robustness_evidence_payload()
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_robustness_evidence_json(123, db_manager=MagicMock())
+
+        self.assertIsInstance(response, RuleBacktestRobustnessEvidenceExportResponse)
+        self.assertEqual(response.model_dump()["source"], "summary.robustness_analysis")
+        self.assertEqual(response.model_dump()["seed"], 4242)
+        service.get_robustness_evidence_export_json.assert_called_once_with(123)
+
+    def test_get_rule_backtest_robustness_evidence_json_returns_unavailable_when_missing(self) -> None:
+        service = MagicMock()
+        service.get_robustness_evidence_export_json.side_effect = ValueError(
+            "Run 123 has no stored robustness evidence to export."
+        )
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            with self.assertRaises(HTTPException) as ctx:
+                get_rule_backtest_robustness_evidence_json(123, db_manager=MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail["error"], "export_unavailable")
+        service.get_robustness_evidence_export_json.assert_called_once_with(123)
 
     def test_get_rule_backtest_execution_trace_csv_returns_csv_response(self) -> None:
         service = MagicMock()
@@ -2185,6 +2285,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertTrue(response.exports[1].available)
         self.assertFalse(response.exports[2].available)
         self.assertFalse(response.exports[3].available)
+        self.assertTrue(response.exports[4].available)
         self.assertEqual(response.exports[2].availability_reason, "execution_trace_rows_missing")
         self.assertEqual(response.exports[3].availability_reason, "execution_trace_rows_missing")
 
@@ -2253,6 +2354,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "策略累计收益率,基准累计收益率,买入持有累计收益率,仓位,手续费,滑点,备注,assumptions,fallback\r\n"
                 "2024-01-02,10.2,10.1,Close > MA3,买,10.3,100,90000,1030,91030,30,0.0003,0.0103,0.0088,0.0091,0.0113,1.2,0.5,,next bar open / long only,\r\n"
             ),
+            robustness_payload=self._robustness_evidence_payload(),
         )
 
     def test_support_bundle_api_surface_preserves_live_storage_repair_signals(self) -> None:
@@ -2342,6 +2444,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "策略累计收益率,基准累计收益率,买入持有累计收益率,仓位,手续费,滑点,备注,assumptions,fallback\r\n"
                 "2024-01-02,10.2,10.1,Close > MA3,买,10.3,100,90000,1030,91030,30,0.0003,0.0103,0.0088,0.0091,0.0113,1.2,0.5,,next bar open / long only,\r\n"
             ),
+            robustness_payload=self._robustness_evidence_payload(),
         )
 
     def test_support_bundle_api_surface_truthfully_closes_missing_trace_contract(self) -> None:
@@ -2376,8 +2479,72 @@ class BacktestApiContractTestCase(unittest.TestCase):
             export_index_payload=export_index_payload,
             trace_json_payload=None,
             trace_csv_text=None,
+            robustness_payload=self._robustness_evidence_payload(),
         )
         service.get_support_export_index.assert_called_once_with(123)
+
+    def test_support_bundle_api_surface_truthfully_closes_missing_robustness_contract(self) -> None:
+        service = MagicMock()
+        manifest_payload = self._support_bundle_manifest_payload(status="completed")
+        reproducibility_payload = self._support_bundle_reproducibility_manifest_payload(status="completed")
+        export_index_payload = self._support_export_index_payload(
+            status="completed",
+            robustness_available=False,
+        )
+        manifest_payload["artifact_counts"]["execution_trace_rows_count"] = 1
+
+        self._assert_support_bundle_api_surface(
+            service=service,
+            manifest_payload=manifest_payload,
+            reproducibility_payload=reproducibility_payload,
+            export_index_payload=export_index_payload,
+            trace_json_payload={
+                "version": "v1",
+                "source": "summary.execution_trace",
+                "completeness": "complete",
+                "missing_fields": [],
+                "trace_rows": [
+                    {
+                        "日期": "2024-01-02",
+                        "标的收盘价": "10.2",
+                        "基准收盘价": "10.1",
+                        "信号摘要": "Close > MA3",
+                        "动作": "买",
+                        "成交价": "10.3",
+                        "持股数": "100",
+                        "现金": "90000",
+                        "持仓市值": "1030",
+                        "总资产": "91030",
+                        "当日盈亏": "30",
+                        "当日收益率": "0.0003",
+                        "策略累计收益率": "0.0103",
+                        "基准累计收益率": "0.0088",
+                        "买入持有累计收益率": "0.0091",
+                        "仓位": "0.0113",
+                        "手续费": "1.2",
+                        "滑点": "0.5",
+                        "备注": "",
+                        "assumptions": "next bar open / long only",
+                        "fallback": ""
+                    }
+                ],
+                "assumptions": {"summary_text": "next bar open / long only"},
+                "execution_model": {"entry_timing": "next_bar_open"},
+                "execution_assumptions": {"position_sizing": "all_available_capital"},
+                "benchmark_summary": {
+                    "method": "same_symbol_buy_and_hold",
+                    "requested_mode": "auto",
+                    "resolved_mode": "same_symbol_buy_and_hold",
+                },
+                "fallback": {"trace_rebuilt": False},
+            },
+            trace_csv_text=(
+                "日期,标的收盘价,基准收盘价,信号摘要,动作,成交价,持股数,现金,持仓市值,总资产,当日盈亏,当日收益率,"
+                "策略累计收益率,基准累计收益率,买入持有累计收益率,仓位,手续费,滑点,备注,assumptions,fallback\r\n"
+                "2024-01-02,10.2,10.1,Close > MA3,买,10.3,100,90000,1030,91030,30,0.0003,0.0103,0.0088,0.0091,0.0113,1.2,0.5,,next bar open / long only,\r\n"
+            ),
+            robustness_payload=None,
+        )
 
     def test_cancel_rule_backtest_run_returns_cancel_contract(self) -> None:
         service = MagicMock()

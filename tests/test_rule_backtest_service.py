@@ -18,7 +18,7 @@ from src.config import Config
 from src.core.rule_backtest_engine import RuleBacktestEngine, RuleBacktestParser
 from src.services.rule_backtest_text_completion import create_rule_backtest_text_completion
 from src.services.rule_backtest_service import RuleBacktestService, run_backtest_automated
-from src.storage import DatabaseManager, RuleBacktestTrade, StockDaily
+from src.storage import DatabaseManager, RuleBacktestRun, RuleBacktestTrade, StockDaily
 
 EXPECTED_TRACE_EXPORT_JSON_KEYS = [
     "version",
@@ -1782,6 +1782,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "support_bundle_reproducibility_manifest_json",
                 "execution_trace_json",
                 "execution_trace_csv",
+                "robustness_evidence_json",
             ],
         )
         manifest_item = export_index["exports"][0]
@@ -1800,7 +1801,7 @@ class RuleBacktestTestCase(unittest.TestCase):
             f"/api/v1/backtest/rule/runs/{response['id']}/support-bundle-reproducibility-manifest",
         )
         self.assertEqual(reproducibility_item["payload_class"], "compact")
-        for item in export_index["exports"][2:]:
+        for item in export_index["exports"][2:4]:
             self.assertTrue(item["available"])
             self.assertEqual(item["availability_reason"], "execution_trace_rows_present")
             self.assertEqual(item["payload_class"], "heavy")
@@ -1814,7 +1815,88 @@ class RuleBacktestTestCase(unittest.TestCase):
             export_index["exports"][3]["endpoint_path"],
             f"/api/v1/backtest/rule/runs/{response['id']}/execution-trace.csv",
         )
+        robustness_item = export_index["exports"][4]
+        self.assertTrue(robustness_item["available"])
+        self.assertEqual(robustness_item["availability_reason"], "stored_robustness_analysis_present")
+        self.assertEqual(robustness_item["delivery_mode"], "api")
+        self.assertEqual(
+            robustness_item["endpoint_path"],
+            f"/api/v1/backtest/rule/runs/{response['id']}/robustness-evidence.json",
+        )
+        self.assertEqual(robustness_item["payload_class"], "heavy")
         self._assert_public_backtest_text_is_analytical(json.dumps(export_index, ensure_ascii=False, sort_keys=True))
+
+    def test_service_exports_stored_robustness_evidence_json(self) -> None:
+        service = RuleBacktestService(self.db)
+        self._seed_history(
+            "000001",
+            [100.0 + (index * 0.3) + ((-1) ** index) * 1.1 for index in range(96)],
+            start=date(2024, 1, 1),
+        )
+
+        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="000001",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                robustness_config={
+                    "walk_forward": {
+                        "train_window": 36,
+                        "test_window": 18,
+                        "step": 9,
+                        "max_windows": 3,
+                    },
+                    "monte_carlo": {
+                        "simulation_count": 16,
+                        "seed": 4242,
+                        "noise_scale": 0.5,
+                    },
+                },
+                confirmed=True,
+            )
+
+        export_index = service.get_support_export_index(response["id"])
+        robustness_item = export_index["exports"][4]
+        payload = service.get_robustness_evidence_export_json(response["id"])
+
+        self.assertTrue(robustness_item["available"])
+        self.assertEqual(robustness_item["availability_reason"], "stored_robustness_analysis_present")
+        self.assertEqual(payload, response["robustness_analysis"])
+        self.assertEqual(payload["seed"], 4242)
+        self.assertEqual(payload["configuration"]["walk_forward"]["train_window"], 36)
+        self.assertEqual(payload["configuration"]["monte_carlo"]["simulation_count"], 16)
+        self._assert_public_backtest_text_is_analytical(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+    def test_service_marks_robustness_evidence_export_unavailable_when_stored_payload_missing(self) -> None:
+        service = RuleBacktestService(self.db)
+        self._seed_history(
+            "000001",
+            [100.0 + (index * 0.3) + ((-1) ** index) * 1.1 for index in range(96)],
+            start=date(2024, 1, 1),
+        )
+
+        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="000001",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        with self.db.get_session() as session:
+            row = session.execute(select(RuleBacktestRun).where(RuleBacktestRun.id == response["id"])).scalar_one()
+            summary = json.loads(row.summary_json or "{}")
+            summary.pop("robustness_analysis", None)
+            row.summary_json = json.dumps(summary, ensure_ascii=False)
+            session.commit()
+
+        export_index = service.get_support_export_index(response["id"])
+        robustness_item = export_index["exports"][4]
+
+        self.assertFalse(robustness_item["available"])
+        self.assertEqual(robustness_item["availability_reason"], "stored_robustness_analysis_missing")
+        with self.assertRaisesRegex(ValueError, "has no stored robustness evidence to export"):
+            service.get_robustness_evidence_export_json(response["id"])
 
     def _assert_support_bundle_export_contract(
         self,
@@ -1838,6 +1920,7 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "support_bundle_reproducibility_manifest_json",
                 "execution_trace_json",
                 "execution_trace_csv",
+                "robustness_evidence_json",
             ],
         )
 
@@ -1916,6 +1999,12 @@ class RuleBacktestTestCase(unittest.TestCase):
         expected_trace_reason = (
             "execution_trace_rows_present" if expected_trace_available else "execution_trace_rows_missing"
         )
+        expected_robustness_available = bool(dict(run.get("robustness_analysis") or {}))
+        expected_robustness_reason = (
+            "stored_robustness_analysis_present"
+            if expected_robustness_available
+            else "stored_robustness_analysis_missing"
+        )
         expected_exports = [
             (
                 "support_bundle_manifest_json",
@@ -1955,6 +2044,16 @@ class RuleBacktestTestCase(unittest.TestCase):
                 "text/csv",
                 "api",
                 f"/api/v1/backtest/rule/runs/{run_id}/execution-trace.csv",
+                "heavy",
+            ),
+            (
+                "robustness_evidence_json",
+                expected_robustness_available,
+                expected_robustness_reason,
+                "json",
+                "application/json",
+                "api",
+                f"/api/v1/backtest/rule/runs/{run_id}/robustness-evidence.json",
                 "heavy",
             ),
         ]
@@ -2030,6 +2129,16 @@ class RuleBacktestTestCase(unittest.TestCase):
                 reproducibility["result_authority"]["domains"]["execution_trace"]["state"],
                 "unavailable",
             )
+
+        if expected_robustness_available:
+            robustness_payload = service.get_robustness_evidence_export_json(run_id)
+            self.assertEqual(robustness_payload, run["robustness_analysis"])
+            self._assert_public_backtest_text_is_analytical(
+                json.dumps(robustness_payload, ensure_ascii=False, sort_keys=True)
+            )
+        else:
+            with self.assertRaisesRegex(ValueError, "has no stored robustness evidence to export"):
+                service.get_robustness_evidence_export_json(run_id)
 
     def test_support_bundle_artifact_exports_form_coherent_handoff_surface(self) -> None:
         service = RuleBacktestService(self.db)

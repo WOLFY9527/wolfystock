@@ -41,6 +41,16 @@
       "delivery_mode": "api",
       "endpoint_path": "/api/v1/backtest/rule/runs/7001/execution-trace.csv",
       "payload_class": "heavy"
+    },
+    {
+      "key": "robustness_evidence_json",
+      "available": true,
+      "availability_reason": "stored_robustness_analysis_present",
+      "format": "json",
+      "media_type": "application/json",
+      "delivery_mode": "api",
+      "endpoint_path": "/api/v1/backtest/rule/runs/7001/robustness-evidence.json",
+      "payload_class": "heavy"
     }
   ]
 }

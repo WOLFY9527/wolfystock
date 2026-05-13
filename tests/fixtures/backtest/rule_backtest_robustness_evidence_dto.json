@@ -1,0 +1,19 @@
+{
+  "state": "research_prototype",
+  "profile": "single_symbol_fixture",
+  "source": "summary.robustness_analysis",
+  "seed": 4242,
+  "configuration": {
+    "walk_forward": {
+      "train_window": 36,
+      "test_window": 18,
+      "step": 9,
+      "max_windows": 3
+    },
+    "monte_carlo": {
+      "simulation_count": 16,
+      "seed": 4242,
+      "noise_scale": 0.5
+    }
+  }
+}

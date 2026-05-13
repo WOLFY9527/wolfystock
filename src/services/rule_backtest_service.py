@@ -10321,6 +10321,19 @@ class RuleBacktestService:
             "result_authority": self._build_reproducibility_authority_summary(result_authority),
         }
 
+    @staticmethod
+    def _resolve_stored_robustness_evidence_payload(run: Dict[str, Any]) -> Dict[str, Any]:
+        summary = dict(run.get("summary") or {}) if isinstance(run.get("summary"), dict) else {}
+        summary_payload = summary.get("robustness_analysis")
+        if isinstance(summary_payload, dict) and summary_payload:
+            return dict(summary_payload)
+
+        run_payload = run.get("robustness_analysis")
+        if isinstance(run_payload, dict) and run_payload:
+            return dict(run_payload)
+
+        return {}
+
     def get_support_export_index(self, run_id: int) -> Dict[str, Any]:
         run = self.get_run(run_id)
         if run is None:
@@ -10330,6 +10343,13 @@ class RuleBacktestService:
         trace_rows = list((dict(run.get("execution_trace") or {})).get("rows") or [])
         trace_available = bool(trace_rows)
         trace_reason = "execution_trace_rows_present" if trace_available else "execution_trace_rows_missing"
+        robustness_evidence = self._resolve_stored_robustness_evidence_payload(run)
+        robustness_available = bool(robustness_evidence)
+        robustness_reason = (
+            "stored_robustness_analysis_present"
+            if robustness_available
+            else "stored_robustness_analysis_missing"
+        )
         return {
             "run_id": resolved_run_id,
             "status": str(run.get("status") or ""),
@@ -10372,6 +10392,16 @@ class RuleBacktestService:
                     "media_type": "text/csv",
                     "delivery_mode": "api",
                     "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/execution-trace.csv",
+                    "payload_class": "heavy",
+                },
+                {
+                    "key": "robustness_evidence_json",
+                    "available": robustness_available,
+                    "availability_reason": robustness_reason,
+                    "format": "json",
+                    "media_type": "application/json",
+                    "delivery_mode": "api",
+                    "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/robustness-evidence.json",
                     "payload_class": "heavy",
                 },
             ],
@@ -10422,6 +10452,17 @@ class RuleBacktestService:
             "benchmark_summary": dict(run.get("benchmark_summary") or {}),
             "fallback": dict(execution_trace.get("fallback") or {}),
         }
+
+    def get_robustness_evidence_export_json(self, run_id: int) -> Dict[str, Any]:
+        run = self.get_run(run_id)
+        if run is None:
+            raise ValueError(f"Run {run_id} not found.")
+
+        payload = self._resolve_stored_robustness_evidence_payload(run)
+        if not payload:
+            raise ValueError(f"Run {run_id} has no stored robustness evidence to export.")
+
+        return payload
 
     def parse_and_run_automated(
         self,
