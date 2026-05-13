@@ -1313,8 +1313,8 @@ const AdminUsersPage: React.FC = () => {
   }, [activeDetailTab, activityFilters, activityState, canReadOpsLogs, canReadUserActivity, canReadUserPortfolio, canReadUsers, canWriteUserSecurity, detailState, directoryPath, filters, holdingsState, language, loadActivity, loadUsers, mode, navigate, portfolioActivityState, portfolioSummaryState, securityActionState, submitSecurityAction, updateSecurityAction, userId, usersState]);
 
   return (
-    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto no-scrollbar py-5 md:py-6">
-      <TerminalPageShell data-testid="admin-users-page-shell" className="min-h-0 flex-1 gap-5 overflow-x-hidden px-4 md:px-6 xl:px-8">
+    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto no-scrollbar">
+      <TerminalPageShell data-testid="admin-users-page-shell" className="min-h-0 flex-1 overflow-x-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {userId ? (
             <TerminalButton type="button" variant="secondary" className="px-3 text-xs" onClick={() => navigate(directoryPath)}>

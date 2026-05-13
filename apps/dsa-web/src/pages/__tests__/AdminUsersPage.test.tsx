@@ -294,6 +294,11 @@ describe('AdminUsersPage', () => {
 
     renderAt('/zh/admin/users');
 
+    const shell = screen.getByTestId('admin-users-page-shell');
+    expect(shell).toHaveAttribute('data-terminal-primitive', 'page-shell');
+    expect(shell).toHaveClass('px-4', 'xl:px-8');
+    expect(shell).not.toHaveClass('md:px-6', 'gap-5', 'py-5', 'md:py-6');
+    expect(shell.parentElement).not.toHaveClass('py-5', 'md:py-6');
     expect(screen.getAllByRole('heading', { name: '用户目录' }).length).toBeGreaterThan(0);
     expect(await screen.findByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('安全搜索')).toBeInTheDocument();
