@@ -66,6 +66,7 @@ test.describe('admin evidence workflow read-only regression', () => {
       await expect(workflowPage.getByRole('link', { name: launchApprovalAffordancePattern })).toHaveCount(0);
       await expect(workflowPage.locator('[contenteditable="true"]')).toHaveCount(0);
       await expect(workflowPage.locator('[class*="bg-gray-"], [class*="bg-zinc-"], [class*="bg-slate-"], [class*="bg-neutral-"]')).toHaveCount(0);
+      await expect(workflowPage).not.toHaveClass(/bg-\[#050505\]/);
       await expect(workflowPage).toHaveClass(/overflow-x-hidden/);
       await expect(workflowPage).toHaveClass(/no-scrollbar/);
 

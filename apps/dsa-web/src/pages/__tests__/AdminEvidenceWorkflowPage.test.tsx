@@ -288,7 +288,8 @@ describe('AdminEvidenceWorkflowPage', () => {
     const commandGrid = screen.getByTestId('admin-evidence-command-snippets').querySelector('.grid');
     const runbookGrid = screen.getByTestId('admin-evidence-runbook-references').querySelector('.grid');
 
-    expect(page).toHaveClass('overflow-y-auto', 'overflow-x-hidden', 'no-scrollbar', 'bg-[#050505]');
+    expect(page).toHaveClass('overflow-y-auto', 'overflow-x-hidden', 'no-scrollbar');
+    expect(page.className).not.toContain('bg-[#050505]');
     expect(page.querySelector('[data-terminal-primitive="page-shell"]')).not.toBeNull();
     expect(page.querySelectorAll('[data-terminal-primitive="panel"]').length).toBeGreaterThan(5);
     expect(page.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThan(5);
