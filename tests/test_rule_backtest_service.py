@@ -16,6 +16,14 @@ from sqlalchemy import select
 
 from src.config import Config
 from src.core.rule_backtest_engine import RuleBacktestEngine, RuleBacktestParser
+from src.services.rule_backtest_support_exports import (
+    build_execution_assumptions_fingerprint,
+    build_execution_trace_export_csv_text,
+    build_execution_trace_export_json_payload,
+    build_reproducibility_authority_summary,
+    build_support_bundle_manifest,
+    build_support_export_index,
+)
 from src.services.rule_backtest_text_completion import create_rule_backtest_text_completion
 from src.services.rule_backtest_service import RuleBacktestService, run_backtest_automated
 from src.storage import DatabaseManager, RuleBacktestRun, RuleBacktestTrade, StockDaily
@@ -1920,6 +1928,157 @@ class RuleBacktestTestCase(unittest.TestCase):
         )
         self.assertEqual(robustness_item["payload_class"], "heavy")
         self._assert_public_backtest_text_is_analytical(json.dumps(export_index, ensure_ascii=False, sort_keys=True))
+
+    def test_support_export_helpers_project_materialized_run_payloads_purely(self) -> None:
+        trace_export_columns = [
+            ("date", "日期"),
+            ("symbol_close", "标的收盘价"),
+            ("benchmark_close", "基准收盘价"),
+            ("signal_summary", "信号摘要"),
+            ("action_display", "动作"),
+            ("fill_price", "成交价"),
+            ("shares", "持股数"),
+            ("cash", "现金"),
+            ("holdings_value", "持仓市值"),
+            ("total_portfolio_value", "总资产"),
+            ("daily_pnl", "当日盈亏"),
+            ("daily_return", "当日收益率"),
+            ("cumulative_return", "策略累计收益率"),
+            ("benchmark_cumulative_return", "基准累计收益率"),
+            ("buy_hold_cumulative_return", "买入持有累计收益率"),
+            ("position", "仓位"),
+            ("fees", "手续费"),
+            ("slippage", "滑点"),
+            ("notes", "备注"),
+            ("assumptions_defaults", "assumptions"),
+            ("fallback", "fallback"),
+        ]
+        run = {
+            "id": 321,
+            "code": "600519",
+            "status": "completed",
+            "status_message": "done",
+            "run_at": "2024-01-01T00:00:00",
+            "completed_at": "2024-01-01T00:05:00",
+            "strategy_hash": "hash321",
+            "timeframe": "daily",
+            "lookback_bars": 20,
+            "period_start": "2024-01-01",
+            "period_end": "2024-01-31",
+            "benchmark_mode": "auto",
+            "benchmark_code": None,
+            "trade_count": 1,
+            "total_return_pct": 1.2,
+            "sharpe_ratio": 0.8,
+            "max_drawdown_pct": 0.3,
+            "final_equity": 101200.0,
+            "no_result_reason": None,
+            "no_result_message": None,
+            "run_timing": {"finished_at": "2024-01-01T00:05:00"},
+            "run_diagnostics": {"current_status": "completed"},
+            "artifact_availability": {"has_execution_trace": True},
+            "readback_integrity": {"integrity_level": "stored_complete"},
+            "result_authority": {
+                "contract_version": "v1",
+                "read_mode": "stored_first",
+                "domains": {
+                    "execution_trace": {
+                        "source": "summary.execution_trace",
+                        "completeness": "complete",
+                        "state": "available",
+                        "missing": [],
+                        "missing_kind": "fields",
+                    },
+                    "execution_assumptions_snapshot": {
+                        "source": "summary.execution_assumptions_snapshot",
+                        "completeness": "complete",
+                        "state": "available",
+                    },
+                },
+            },
+            "status_history": [{"status": "completed"}],
+            "warnings": [],
+            "trades": [{"id": 1}],
+            "equity_curve": [{"date": "2024-01-01"}],
+            "audit_rows": [{"date": "2024-01-01"}],
+            "daily_return_series": [{"date": "2024-01-01"}],
+            "exposure_curve": [{"date": "2024-01-01"}],
+            "execution_trace": {
+                "version": "v1",
+                "source": "summary.execution_trace",
+                "completeness": "complete",
+                "missing_fields": [],
+                "assumptions_defaults": {"summary_text": "baseline"},
+                "execution_model": {"fill_model": "next_open"},
+                "execution_assumptions": {"summary_text": "baseline"},
+                "fallback": {"trace_rebuilt": False},
+                "rows": [
+                    {
+                        "date": "2024-01-02",
+                        "symbol_close": 10.5,
+                        "benchmark_close": 9.8,
+                        "signal_summary": "ma cross",
+                        "event_type": "action",
+                        "action": "buy",
+                        "action_display": "买",
+                        "fill_price": 10.6,
+                        "shares": 100,
+                        "cash": 8940,
+                        "holdings_value": 1060,
+                        "total_portfolio_value": 10000,
+                        "daily_pnl": 0,
+                        "daily_return": 0,
+                        "cumulative_return": 0,
+                        "benchmark_cumulative_return": 0,
+                        "buy_hold_cumulative_return": 0,
+                        "position": 1,
+                        "fees": 0,
+                        "slippage": 0,
+                        "notes": "",
+                        "assumptions_defaults": "baseline",
+                        "fallback": "none",
+                    }
+                ],
+            },
+            "execution_assumptions_snapshot": {
+                "source": "summary.execution_assumptions_snapshot",
+                "completeness": "complete",
+                "payload": {"summary_text": "baseline", "fill_model": "next_open"},
+            },
+            "execution_assumptions": {"summary_text": "baseline", "fill_model": "next_open"},
+            "benchmark_summary": {"requested_mode": "auto"},
+            "summary": {"robustness_analysis": {"state": "research_prototype", "seed": 7}},
+            "robustness_analysis": {"state": "research_prototype", "seed": 99},
+        }
+
+        authority = build_reproducibility_authority_summary(run["result_authority"])
+        fingerprint = build_execution_assumptions_fingerprint(
+            run["execution_assumptions_snapshot"],
+            run["execution_assumptions"],
+        )
+        manifest = build_support_bundle_manifest(run)
+        export_index = build_support_export_index(run)
+        trace_json = build_execution_trace_export_json_payload(
+            run,
+            trace_export_columns,
+            action_formatter=lambda action: {"buy": "买"}.get(action, action),
+        )
+        trace_csv = build_execution_trace_export_csv_text(
+            run,
+            trace_export_columns,
+            action_formatter=lambda action: {"buy": "买"}.get(action, action),
+        )
+
+        self.assertEqual(authority["domains"]["execution_trace"]["state"], "available")
+        self.assertEqual(fingerprint["source"], "summary.execution_assumptions_snapshot")
+        self.assertTrue(fingerprint["hash_sha256"])
+        self.assertEqual(manifest["artifact_counts"]["execution_trace_rows_count"], 1)
+        self.assertEqual(export_index["run_id"], 321)
+        self.assertTrue(export_index["exports"][2]["available"])
+        self.assertEqual(export_index["exports"][4]["availability_reason"], "stored_robustness_analysis_present")
+        self.assertEqual(trace_json["trace_rows"][0]["动作"], "买")
+        self.assertEqual(trace_json["benchmark_summary"]["requested_mode"], "auto")
+        self.assertEqual(trace_csv.splitlines()[0].split(","), EXPECTED_TRACE_EXPORT_FIELD_LABELS)
 
     def test_service_exports_stored_robustness_evidence_json(self) -> None:
         service = RuleBacktestService(self.db)

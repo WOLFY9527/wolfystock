@@ -20,6 +20,15 @@ from src.repositories.rule_backtest_repo import RuleBacktestRepository
 from src.services.backtest_professional_readiness import build_backtest_professional_readiness
 from src.repositories.stock_repo import StockRepository
 from src.services.local_data_preflight_service import LocalDataPreflightService
+from src.services.rule_backtest_support_exports import (
+    build_execution_trace_export_csv_text,
+    build_execution_trace_export_json_payload,
+    build_execution_trace_export_rows,
+    build_support_bundle_manifest,
+    build_support_bundle_reproducibility_manifest,
+    build_support_export_index,
+    resolve_stored_robustness_evidence_payload,
+)
 from src.services.rule_backtest_text_completion import RuleBacktestTextCompletion, create_rule_backtest_text_completion
 from src.utils.symbol_classification import is_us_index_code, is_us_stock_code
 from src.utils.symbol_normalization import normalize_stock_code
@@ -7078,24 +7087,12 @@ class RuleBacktestService:
             list(unavailable_trace.get("missing_fields") or []),
         )
 
-    @staticmethod
-    def _stringify_execution_trace_value(value: Any) -> str:
-        if value is None:
-            return ""
-        return str(value)
-
     def _build_execution_trace_export_rows(self, execution_trace: Dict[str, Any]) -> List[Dict[str, str]]:
-        rows = list(execution_trace.get("rows") or [])
-        export_rows: List[Dict[str, str]] = []
-        for row in rows:
-            export_row: Dict[str, str] = {}
-            for key, label in TRACE_EXPORT_COLUMNS:
-                value = row.get(key)
-                if key == "action_display":
-                    value = value or self._format_execution_trace_action(str(row.get("event_type") or row.get("action") or "hold"))
-                export_row[label] = self._stringify_execution_trace_value(value)
-            export_rows.append(export_row)
-        return export_rows
+        return build_execution_trace_export_rows(
+            execution_trace,
+            TRACE_EXPORT_COLUMNS,
+            action_formatter=self._format_execution_trace_action,
+        )
 
     @staticmethod
     def _build_exposure_curve(
@@ -10571,227 +10568,29 @@ class RuleBacktestService:
         run = self.get_run(run_id)
         if run is None:
             raise ValueError(f"Run {run_id} not found.")
-
-        execution_trace = dict(run.get("execution_trace") or {})
-        export_rows = self._build_execution_trace_export_rows(execution_trace)
-        if not export_rows:
-            raise ValueError(f"Run {run_id} has no audit rows to export.")
-
-        import csv
-        import io
-
-        fieldnames = [label for _, label in TRACE_EXPORT_COLUMNS]
-        buffer = io.StringIO()
-        writer = csv.DictWriter(buffer, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(export_rows)
-        return buffer.getvalue()
+        return build_execution_trace_export_csv_text(
+            run,
+            TRACE_EXPORT_COLUMNS,
+            action_formatter=self._format_execution_trace_action,
+        )
 
     def get_support_bundle_manifest(self, run_id: int) -> Dict[str, Any]:
         run = self.get_run(run_id)
         if run is None:
             raise ValueError(f"Run {run_id} not found.")
-
-        execution_trace = dict(run.get("execution_trace") or {})
-        result_authority = dict(run.get("result_authority") or {})
-        return {
-            "manifest_version": "v1",
-            "manifest_kind": "rule_backtest_support_bundle",
-            "run": {
-                "id": run.get("id"),
-                "code": run.get("code"),
-                "status": run.get("status"),
-                "status_message": run.get("status_message"),
-                "run_at": run.get("run_at"),
-                "completed_at": run.get("completed_at"),
-                "strategy_hash": run.get("strategy_hash"),
-                "timeframe": run.get("timeframe"),
-                "lookback_bars": run.get("lookback_bars"),
-                "period_start": run.get("period_start"),
-                "period_end": run.get("period_end"),
-                "benchmark_mode": run.get("benchmark_mode"),
-                "benchmark_code": run.get("benchmark_code"),
-                "trade_count": run.get("trade_count"),
-                "total_return_pct": run.get("total_return_pct"),
-                "sharpe_ratio": run.get("sharpe_ratio"),
-                "max_drawdown_pct": run.get("max_drawdown_pct"),
-                "final_equity": run.get("final_equity"),
-                "no_result_reason": run.get("no_result_reason"),
-                "no_result_message": run.get("no_result_message"),
-            },
-            "run_timing": dict(run.get("run_timing") or {}),
-            "run_diagnostics": dict(run.get("run_diagnostics") or {}),
-            "artifact_availability": dict(run.get("artifact_availability") or {}),
-            "readback_integrity": dict(run.get("readback_integrity") or {}),
-            "result_authority": {
-                "contract_version": result_authority.get("contract_version"),
-                "read_mode": result_authority.get("read_mode"),
-                "domains": dict(result_authority.get("domains") or {}),
-            },
-            "artifact_counts": {
-                "status_history_count": len(list(run.get("status_history") or [])),
-                "warning_count": len(list(run.get("warnings") or [])),
-                "trade_rows_count": len(list(run.get("trades") or [])),
-                "equity_curve_points": len(list(run.get("equity_curve") or [])),
-                "audit_rows_count": len(list(run.get("audit_rows") or [])),
-                "daily_return_series_count": len(list(run.get("daily_return_series") or [])),
-                "exposure_curve_count": len(list(run.get("exposure_curve") or [])),
-                "execution_trace_rows_count": len(list(execution_trace.get("rows") or [])),
-            },
-        }
-
-    @staticmethod
-    def _build_reproducibility_authority_summary(result_authority: Dict[str, Any]) -> Dict[str, Any]:
-        domains = dict(result_authority.get("domains") or {})
-        summarized_domains: Dict[str, Any] = {}
-        for domain_name, domain_payload in domains.items():
-            domain = dict(domain_payload or {})
-            summarized_domains[str(domain_name)] = {
-                "source": domain.get("source"),
-                "completeness": domain.get("completeness"),
-                "state": domain.get("state"),
-            }
-        return {
-            "contract_version": result_authority.get("contract_version"),
-            "read_mode": result_authority.get("read_mode"),
-            "domains": summarized_domains,
-        }
-
-    @staticmethod
-    def _build_execution_assumptions_fingerprint(
-        execution_assumptions_snapshot: Dict[str, Any],
-        execution_assumptions: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        payload = dict(execution_assumptions_snapshot.get("payload") or execution_assumptions or {})
-        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        return {
-            "source": execution_assumptions_snapshot.get("source"),
-            "completeness": execution_assumptions_snapshot.get("completeness"),
-            "summary_text": payload.get("summary_text"),
-            "hash_sha256": hashlib.sha256(serialized.encode("utf-8")).hexdigest() if payload else None,
-        }
+        return build_support_bundle_manifest(run)
 
     def get_support_bundle_reproducibility_manifest(self, run_id: int) -> Dict[str, Any]:
         run = self.get_run(run_id)
         if run is None:
             raise ValueError(f"Run {run_id} not found.")
-
-        result_authority = dict(run.get("result_authority") or {})
-        execution_assumptions_snapshot = dict(run.get("execution_assumptions_snapshot") or {})
-        execution_assumptions = dict(run.get("execution_assumptions") or {})
-        return {
-            "manifest_version": "v1",
-            "manifest_kind": "rule_backtest_reproducibility_manifest",
-            "run": {
-                "id": run.get("id"),
-                "code": run.get("code"),
-                "status": run.get("status"),
-                "run_at": run.get("run_at"),
-                "completed_at": run.get("completed_at"),
-                "strategy_hash": run.get("strategy_hash"),
-                "timeframe": run.get("timeframe"),
-                "lookback_bars": run.get("lookback_bars"),
-                "period_start": run.get("period_start"),
-                "period_end": run.get("period_end"),
-                "benchmark_mode": run.get("benchmark_mode"),
-                "benchmark_code": run.get("benchmark_code"),
-            },
-            "run_diagnostics": dict(run.get("run_diagnostics") or {}),
-            "run_timing": dict(run.get("run_timing") or {}),
-            "artifact_availability": dict(run.get("artifact_availability") or {}),
-            "readback_integrity": dict(run.get("readback_integrity") or {}),
-            "execution_assumptions_fingerprint": self._build_execution_assumptions_fingerprint(
-                execution_assumptions_snapshot=execution_assumptions_snapshot,
-                execution_assumptions=execution_assumptions,
-            ),
-            "result_authority": self._build_reproducibility_authority_summary(result_authority),
-        }
-
-    @staticmethod
-    def _resolve_stored_robustness_evidence_payload(run: Dict[str, Any]) -> Dict[str, Any]:
-        summary = dict(run.get("summary") or {}) if isinstance(run.get("summary"), dict) else {}
-        summary_payload = summary.get("robustness_analysis")
-        if isinstance(summary_payload, dict) and summary_payload:
-            return dict(summary_payload)
-
-        run_payload = run.get("robustness_analysis")
-        if isinstance(run_payload, dict) and run_payload:
-            return dict(run_payload)
-
-        return {}
+        return build_support_bundle_reproducibility_manifest(run)
 
     def get_support_export_index(self, run_id: int) -> Dict[str, Any]:
         run = self.get_run(run_id)
         if run is None:
             raise ValueError(f"Run {run_id} not found.")
-
-        resolved_run_id = int(run.get("id") or run_id)
-        trace_rows = list((dict(run.get("execution_trace") or {})).get("rows") or [])
-        trace_available = bool(trace_rows)
-        trace_reason = "execution_trace_rows_present" if trace_available else "execution_trace_rows_missing"
-        robustness_evidence = self._resolve_stored_robustness_evidence_payload(run)
-        robustness_available = bool(robustness_evidence)
-        robustness_reason = (
-            "stored_robustness_analysis_present"
-            if robustness_available
-            else "stored_robustness_analysis_missing"
-        )
-        return {
-            "run_id": resolved_run_id,
-            "status": str(run.get("status") or ""),
-            "exports": [
-                {
-                    "key": "support_bundle_manifest_json",
-                    "available": True,
-                    "availability_reason": "run_exists",
-                    "format": "json",
-                    "media_type": "application/json",
-                    "delivery_mode": "api",
-                    "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/support-bundle-manifest",
-                    "payload_class": "compact",
-                },
-                {
-                    "key": "support_bundle_reproducibility_manifest_json",
-                    "available": True,
-                    "availability_reason": "run_exists",
-                    "format": "json",
-                    "media_type": "application/json",
-                    "delivery_mode": "api",
-                    "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/support-bundle-reproducibility-manifest",
-                    "payload_class": "compact",
-                },
-                {
-                    "key": "execution_trace_json",
-                    "available": trace_available,
-                    "availability_reason": trace_reason,
-                    "format": "json",
-                    "media_type": "application/json",
-                    "delivery_mode": "api",
-                    "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/execution-trace.json",
-                    "payload_class": "heavy",
-                },
-                {
-                    "key": "execution_trace_csv",
-                    "available": trace_available,
-                    "availability_reason": trace_reason,
-                    "format": "csv",
-                    "media_type": "text/csv",
-                    "delivery_mode": "api",
-                    "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/execution-trace.csv",
-                    "payload_class": "heavy",
-                },
-                {
-                    "key": "robustness_evidence_json",
-                    "available": robustness_available,
-                    "availability_reason": robustness_reason,
-                    "format": "json",
-                    "media_type": "application/json",
-                    "delivery_mode": "api",
-                    "endpoint_path": f"/api/v1/backtest/rule/runs/{resolved_run_id}/robustness-evidence.json",
-                    "payload_class": "heavy",
-                },
-            ],
-        }
+        return build_support_export_index(run)
 
     def export_support_bundle_manifest_json(self, run_id: int, output_path: str) -> str:
         destination = Path(output_path)
@@ -10820,31 +10619,18 @@ class RuleBacktestService:
         run = self.get_run(run_id)
         if run is None:
             raise ValueError(f"Run {run_id} not found.")
-
-        execution_trace = dict(run.get("execution_trace") or {})
-        export_rows = self._build_execution_trace_export_rows(execution_trace)
-        if not export_rows:
-            raise ValueError(f"Run {run_id} has no audit rows to export.")
-
-        return {
-            "version": execution_trace.get("version"),
-            "source": execution_trace.get("source"),
-            "completeness": execution_trace.get("completeness"),
-            "missing_fields": list(execution_trace.get("missing_fields") or []),
-            "trace_rows": export_rows,
-            "assumptions": dict(execution_trace.get("assumptions_defaults") or {}),
-            "execution_model": dict(execution_trace.get("execution_model") or {}),
-            "execution_assumptions": dict(execution_trace.get("execution_assumptions") or {}),
-            "benchmark_summary": dict(run.get("benchmark_summary") or {}),
-            "fallback": dict(execution_trace.get("fallback") or {}),
-        }
+        return build_execution_trace_export_json_payload(
+            run,
+            TRACE_EXPORT_COLUMNS,
+            action_formatter=self._format_execution_trace_action,
+        )
 
     def get_robustness_evidence_export_json(self, run_id: int) -> Dict[str, Any]:
         run = self.get_run(run_id)
         if run is None:
             raise ValueError(f"Run {run_id} not found.")
 
-        payload = self._resolve_stored_robustness_evidence_payload(run)
+        payload = resolve_stored_robustness_evidence_payload(run)
         if not payload:
             raise ValueError(f"Run {run_id} has no stored robustness evidence to export.")
 
