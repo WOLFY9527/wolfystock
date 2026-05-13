@@ -470,14 +470,15 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const workspace = screen.getByTestId('portfolio-workspace-grid');
-    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6');
+    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6', 'flex-1', 'min-w-0', 'min-h-0');
     expect(workspace).toHaveAttribute('data-terminal-primitive', 'grid');
     expect(workspace).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-12', 'gap-6', 'items-start');
     expect(screen.getByTestId('portfolio-bento-page')).toHaveAttribute('data-bento-surface', 'true');
-    expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-5', 'min-h-0');
-    expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar');
+    expect(screen.getByTestId('portfolio-bento-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'min-h-0');
+    expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('gap-5', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'overflow-y-auto', 'no-scrollbar');
     expect(screen.getByTestId('portfolio-bento-page')).not.toHaveClass('max-w-[1920px]', 'mx-auto', 'px-4', 'py-2');
     expect(screen.queryByTestId('portfolio-bento-hero')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-row-status')).toHaveClass('col-span-12', 'xl:col-span-12', 'min-w-0');
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('xl:col-span-12');
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(screen.getByTestId('portfolio-total-assets-card')).toHaveClass('min-w-0');
@@ -583,6 +584,7 @@ describe('PortfolioPage FX refresh', () => {
 
     expect(screen.getByTestId('portfolio-row-routing')).toHaveClass(
       'col-span-12',
+      'xl:col-span-12',
       'min-w-0',
       'grid',
       'xl:grid-cols-12',
@@ -647,7 +649,7 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const workspace = screen.getByTestId('portfolio-workspace-grid');
-    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8');
+    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex-1', 'min-w-0', 'min-h-0');
     expect(workspace).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-12', 'gap-6', 'items-start');
     expect(screen.getByTestId('portfolio-bento-page').className).not.toMatch(/\bbg-(black|\[#050505\]|gray-|zinc-|slate-|neutral-)/);
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('xl:col-span-12');
@@ -672,7 +674,8 @@ describe('PortfolioPage FX refresh', () => {
     const secondaryLane = screen.getByTestId('portfolio-secondary-lane');
     const activityLane = screen.getByTestId('portfolio-activity-lane');
     const manualLane = screen.getByTestId('portfolio-manual-lane');
-    expect(workspaceLanes).toHaveClass('order-4', 'col-span-12', 'grid', 'grid-cols-1', 'gap-4', 'xl:grid-cols-12', 'items-start');
+    expect(screen.getByTestId('portfolio-row-status')).toHaveClass('col-span-12', 'xl:col-span-12', 'min-w-0');
+    expect(workspaceLanes).toHaveClass('order-4', 'col-span-12', 'xl:col-span-12', 'grid', 'grid-cols-1', 'gap-4', 'xl:grid-cols-12', 'items-start');
     expect(primaryLane).toHaveClass('xl:col-span-8', 'min-w-0', 'flex', 'flex-col', 'gap-4');
     expect(secondaryLane).toHaveClass('xl:col-span-4', 'min-w-0', 'flex', 'flex-col', 'gap-4');
     expect(activityLane).toHaveClass('xl:col-span-8', 'min-w-0', 'flex', 'flex-col', 'gap-4');

@@ -1896,18 +1896,6 @@ const PortfolioPage: React.FC = () => {
 
   return (
     <>
-      {error ? <ApiErrorAlert error={error} onDismiss={() => setError(null)} /> : null}
-      {riskWarning ? (
-        <div className="rounded-xl border border-[hsl(var(--accent-warning-hsl)/0.35)] bg-[hsl(var(--accent-warning-hsl)/0.1)] px-4 py-3 text-[hsl(var(--accent-warning-hsl))] text-sm">
-          {copy.riskDegraded}: {riskWarning}
-        </div>
-      ) : null}
-      {writeWarning ? (
-        <div className="rounded-xl border border-[hsl(var(--accent-warning-hsl)/0.35)] bg-[hsl(var(--accent-warning-hsl)/0.1)] px-4 py-3 text-[hsl(var(--accent-warning-hsl))] text-sm">
-          {copy.actionHint}: {writeWarning}
-        </div>
-      ) : null}
-
       <div
         ref={surfaceRef}
         data-testid="portfolio-bento-page"
@@ -1916,12 +1904,28 @@ const PortfolioPage: React.FC = () => {
         aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
         className={getSafariReadySurfaceClassName(
           isSafariReady,
-          'w-full flex-1 flex flex-col gap-5 min-h-0 min-w-0 bg-transparent text-white/72',
+          'w-full flex-1 flex flex-col min-h-0 min-w-0 bg-transparent text-white/72',
         )}
       >
-        <TerminalPageShell>
+        <TerminalPageShell className="flex-1 min-w-0 min-h-0">
           <TerminalGrid data-testid="portfolio-workspace-grid">
-            <div data-testid="portfolio-row-status" className="order-1 xl:col-span-12">
+            {error || riskWarning || writeWarning ? (
+              <div data-testid="portfolio-row-alerts" className="order-0 col-span-12 xl:col-span-12 min-w-0 flex flex-col gap-3">
+                {error ? <ApiErrorAlert error={error} onDismiss={() => setError(null)} /> : null}
+                {riskWarning ? (
+                  <div className="rounded-xl border border-[hsl(var(--accent-warning-hsl)/0.35)] bg-[hsl(var(--accent-warning-hsl)/0.1)] px-4 py-3 text-[hsl(var(--accent-warning-hsl))] text-sm">
+                    {copy.riskDegraded}: {riskWarning}
+                  </div>
+                ) : null}
+                {writeWarning ? (
+                  <div className="rounded-xl border border-[hsl(var(--accent-warning-hsl)/0.35)] bg-[hsl(var(--accent-warning-hsl)/0.1)] px-4 py-3 text-[hsl(var(--accent-warning-hsl))] text-sm">
+                    {copy.actionHint}: {writeWarning}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div data-testid="portfolio-row-status" className="order-1 col-span-12 xl:col-span-12 min-w-0">
               <TerminalPanel
                 as="section"
                 dense
@@ -1981,7 +1985,7 @@ const PortfolioPage: React.FC = () => {
               </TerminalPanel>
             </div>
 
-            <div data-testid="portfolio-row-routing" className="order-3 col-span-12 min-w-0 grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
+            <div data-testid="portfolio-row-routing" className="order-3 col-span-12 xl:col-span-12 min-w-0 grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
               <TerminalPanel
                 as="section"
                 data-testid="portfolio-pnl-summary"
@@ -2053,7 +2057,7 @@ const PortfolioPage: React.FC = () => {
 
             </div>
 
-            <div data-testid="portfolio-workspace-lanes" className="order-4 col-span-12 grid grid-cols-1 gap-4 xl:grid-cols-12 2xl:gap-5 items-start">
+            <div data-testid="portfolio-workspace-lanes" className="order-4 col-span-12 xl:col-span-12 min-w-0 grid grid-cols-1 gap-4 xl:grid-cols-12 2xl:gap-5 items-start">
               <div data-testid="portfolio-primary-lane" className="xl:col-span-8 min-w-0 flex flex-col gap-4">
                 <div data-testid="portfolio-summary-and-holdings-row" className="min-w-0 grid grid-cols-1 gap-4 items-start">
 		              <TerminalPanel
