@@ -3344,6 +3344,10 @@ class RuleBacktestService:
             trace_rebuilt=False,
         )
         robustness_analysis_payload = dict(getattr(result, "robustness_analysis", {}) or {})
+        drawdown_regime_attribution_payload = self._build_drawdown_regime_attribution_payload(
+            audit_rows=audit_rows,
+            source="summary.drawdown_regime_attribution",
+        )
         summary_patch = self._update_summary_payload(
             {},
             request_payload=self._build_request_payload(
@@ -3367,6 +3371,7 @@ class RuleBacktestService:
             visualization=visualization_payload,
             execution_trace=execution_trace_payload,
             robustness_analysis=robustness_analysis_payload,
+            drawdown_regime_attribution=drawdown_regime_attribution_payload,
             no_result_reason=result.no_result_reason,
             no_result_message=result.no_result_message,
             ai_summary=ai_summary,
@@ -3423,6 +3428,7 @@ class RuleBacktestService:
                 visualization=summary_patch.get("visualization"),
                 execution_trace=summary_patch.get("execution_trace"),
                 robustness_analysis=summary_patch.get("robustness_analysis"),
+                drawdown_regime_attribution=summary_patch.get("drawdown_regime_attribution"),
                 no_result_reason=result.no_result_reason,
                 no_result_message=result.no_result_message,
                 ai_summary=ai_summary,
@@ -5726,6 +5732,96 @@ class RuleBacktestService:
         ]
 
     @staticmethod
+    def _build_drawdown_regime_attribution_payload(
+        audit_rows: List[Dict[str, Any]],
+        *,
+        source: str,
+    ) -> Dict[str, Any]:
+        bucket_definitions = {
+            "peak": {"min_depth_pct": 0.0, "max_depth_pct": 0.0, "rule": "depth_pct == 0"},
+            "shallow": {"min_depth_pct": 0.0, "max_depth_pct": 5.0, "rule": "0 < depth_pct <= 5"},
+            "moderate": {"min_depth_pct": 5.0, "max_depth_pct": 10.0, "rule": "5 < depth_pct <= 10"},
+            "deep": {"min_depth_pct": 10.0, "max_depth_pct": 20.0, "rule": "10 < depth_pct <= 20"},
+            "severe": {"min_depth_pct": 20.0, "max_depth_pct": None, "rule": "depth_pct > 20"},
+            "unknown": {
+                "min_depth_pct": None,
+                "max_depth_pct": None,
+                "rule": "missing, non-numeric, or outside defined ranges",
+            },
+        }
+        bucket_order = ["peak", "shallow", "moderate", "deep", "severe", "unknown"]
+        bucket_depths: Dict[str, List[float]] = {bucket: [] for bucket in bucket_order}
+        total_rows = len(list(audit_rows or []))
+        classified_rows = 0
+        missing_rows = 0
+
+        for row in list(audit_rows or []):
+            depth_raw = _safe_float((dict(row or {})).get("drawdown_pct"))
+            bucket = "unknown"
+            if depth_raw is not None:
+                depth_pct = abs(float(depth_raw))
+                if depth_pct == 0:
+                    bucket = "peak"
+                elif depth_pct <= 5:
+                    bucket = "shallow"
+                elif depth_pct <= 10:
+                    bucket = "moderate"
+                elif depth_pct <= 20:
+                    bucket = "deep"
+                elif depth_pct > 20:
+                    bucket = "severe"
+                if bucket != "unknown":
+                    classified_rows += 1
+                    bucket_depths[bucket].append(round(depth_pct, 4))
+                    continue
+            missing_rows += 1
+            bucket_depths["unknown"].append(0.0)
+
+        bucket_counts: Dict[str, Dict[str, Any]] = {}
+        for bucket in bucket_order:
+            depths = list(bucket_depths.get(bucket) or [])
+            count = len(depths)
+            bucket_counts[bucket] = {
+                "count": count,
+                "share_pct": round((count / total_rows) * 100.0, 4) if total_rows else 0.0,
+                "avg_depth_pct": round(mean(depths), 4) if bucket != "unknown" and depths else None,
+                "worst_depth_pct": round(max(depths), 4) if bucket != "unknown" and depths else None,
+            }
+
+        if total_rows <= 0:
+            resolved_source = "unavailable"
+            state = "unavailable"
+            unavailable_reason = "stored_audit_rows_missing"
+        elif classified_rows <= 0:
+            resolved_source = "unavailable"
+            state = "unavailable"
+            unavailable_reason = "usable_drawdown_values_missing"
+        else:
+            resolved_source = str(source or "summary.visualization.audit_rows")
+            state = "partial" if missing_rows > 0 else "available"
+            unavailable_reason = None
+
+        return {
+            "version": "v1",
+            "source": resolved_source,
+            "state": state,
+            "bucket_definitions": bucket_definitions,
+            "bucket_counts": bucket_counts,
+            "contribution_summaries": {
+                "classified_rows": {
+                    "count": classified_rows,
+                    "share_pct": round((classified_rows / total_rows) * 100.0, 4) if total_rows else 0.0,
+                },
+                "missing_rows": {
+                    "count": missing_rows,
+                    "share_pct": round((missing_rows / total_rows) * 100.0, 4) if total_rows else 0.0,
+                },
+                "causality_note": "Observational only from stored audit-row drawdown depths. No PnL or return causality.",
+            },
+            "unavailable_reason": unavailable_reason,
+        }
+
+    @staticmethod
     def _build_benchmark_comparison_metrics(
         *,
         total_return_pct: Any,
@@ -6786,6 +6882,7 @@ class RuleBacktestService:
         visualization: Any = _UNSET,
         execution_trace: Any = _UNSET,
         robustness_analysis: Any = _UNSET,
+        drawdown_regime_attribution: Any = _UNSET,
         no_result_reason: Any = _UNSET,
         no_result_message: Any = _UNSET,
         ai_summary: Any = _UNSET,
@@ -6822,6 +6919,8 @@ class RuleBacktestService:
             payload["execution_trace"] = execution_trace
         if robustness_analysis is not _UNSET:
             payload["robustness_analysis"] = robustness_analysis
+        if drawdown_regime_attribution is not _UNSET:
+            payload["drawdown_regime_attribution"] = dict(drawdown_regime_attribution or {})
         if no_result_reason is not _UNSET:
             payload["no_result_reason"] = no_result_reason
         if no_result_message is not _UNSET:
@@ -9463,6 +9562,7 @@ class RuleBacktestService:
             if isinstance(stored_visualization_raw, dict)
             else {}
         )
+        stored_drawdown_regime_attribution = stored_payload.get("drawdown_regime_attribution")
 
         resolved_payload = dict(stored_payload)
         resolved_payload["request"] = request_payload
@@ -9488,6 +9588,13 @@ class RuleBacktestService:
         )
         resolved_payload["execution_trace"] = dict(execution_trace or {})
         resolved_payload["robustness_analysis"] = dict(stored_payload.get("robustness_analysis") or {})
+        if isinstance(stored_drawdown_regime_attribution, dict) and stored_drawdown_regime_attribution:
+            resolved_payload["drawdown_regime_attribution"] = dict(stored_drawdown_regime_attribution)
+        else:
+            resolved_payload["drawdown_regime_attribution"] = self._build_drawdown_regime_attribution_payload(
+                audit_rows=list(stored_visualization.get("audit_rows") or []),
+                source="summary.visualization.audit_rows",
+            )
         resolved_payload["no_result_reason"] = stored_payload.get("no_result_reason", row.no_result_reason)
         resolved_payload["no_result_message"] = stored_payload.get("no_result_message", row.no_result_message)
         resolved_payload["ai_summary"] = stored_payload.get("ai_summary", ai_summary)

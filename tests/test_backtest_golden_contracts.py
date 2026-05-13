@@ -135,6 +135,9 @@ def test_backtest_result_summary_golden_fixture_matches_public_readback_contract
         "seed": 4242,
         "noise_scale": 0.5,
     }
+    assert result["summary"]["drawdown_regime_attribution"]["state"] == "unavailable"
+    assert result["summary"]["drawdown_regime_attribution"]["source"] == "unavailable"
+    assert result["summary"]["drawdown_regime_attribution"]["unavailable_reason"] == "stored_audit_rows_missing"
     assert result["robustness_analysis"]["seed"] == 4242
     assert result["robustness_analysis"]["configuration"]["walk_forward"] == {
         "train_window": 36,

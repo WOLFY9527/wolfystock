@@ -185,6 +185,93 @@
       "trade_count": 4,
       "final_equity": 112400.0
     },
+    "drawdown_regime_attribution": {
+      "version": "v1",
+      "source": "unavailable",
+      "state": "unavailable",
+      "bucket_definitions": {
+        "peak": {
+          "min_depth_pct": 0.0,
+          "max_depth_pct": 0.0,
+          "rule": "depth_pct == 0"
+        },
+        "shallow": {
+          "min_depth_pct": 0.0,
+          "max_depth_pct": 5.0,
+          "rule": "0 < depth_pct <= 5"
+        },
+        "moderate": {
+          "min_depth_pct": 5.0,
+          "max_depth_pct": 10.0,
+          "rule": "5 < depth_pct <= 10"
+        },
+        "deep": {
+          "min_depth_pct": 10.0,
+          "max_depth_pct": 20.0,
+          "rule": "10 < depth_pct <= 20"
+        },
+        "severe": {
+          "min_depth_pct": 20.0,
+          "max_depth_pct": null,
+          "rule": "depth_pct > 20"
+        },
+        "unknown": {
+          "min_depth_pct": null,
+          "max_depth_pct": null,
+          "rule": "missing, non-numeric, or outside defined ranges"
+        }
+      },
+      "bucket_counts": {
+        "peak": {
+          "count": 0,
+          "share_pct": 0.0,
+          "avg_depth_pct": null,
+          "worst_depth_pct": null
+        },
+        "shallow": {
+          "count": 0,
+          "share_pct": 0.0,
+          "avg_depth_pct": null,
+          "worst_depth_pct": null
+        },
+        "moderate": {
+          "count": 0,
+          "share_pct": 0.0,
+          "avg_depth_pct": null,
+          "worst_depth_pct": null
+        },
+        "deep": {
+          "count": 0,
+          "share_pct": 0.0,
+          "avg_depth_pct": null,
+          "worst_depth_pct": null
+        },
+        "severe": {
+          "count": 0,
+          "share_pct": 0.0,
+          "avg_depth_pct": null,
+          "worst_depth_pct": null
+        },
+        "unknown": {
+          "count": 0,
+          "share_pct": 0.0,
+          "avg_depth_pct": null,
+          "worst_depth_pct": null
+        }
+      },
+      "contribution_summaries": {
+        "classified_rows": {
+          "count": 0,
+          "share_pct": 0.0
+        },
+        "missing_rows": {
+          "count": 0,
+          "share_pct": 0.0
+        },
+        "causality_note": "Observational only from stored audit-row drawdown depths. No PnL or return causality."
+      },
+      "unavailable_reason": "stored_audit_rows_missing"
+    },
     "artifact_availability": {
       "version": "v1",
       "source": "summary.artifact_availability",

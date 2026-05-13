@@ -1539,6 +1539,101 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(history["items"][0]["robustness_analysis"]["state"], "available")
         self.assertEqual(detail["summary"]["robustness_analysis"], detail["robustness_analysis"])
 
+    def test_build_drawdown_regime_attribution_payload_available_from_stored_audit_rows(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        payload = service._build_drawdown_regime_attribution_payload(
+            [
+                {"date": "2024-01-01", "drawdown_pct": 0},
+                {"date": "2024-01-02", "drawdown_pct": -4.2},
+                {"date": "2024-01-03", "drawdown_pct": "-8.5"},
+                {"date": "2024-01-04", "drawdown_pct": -12.0},
+                {"date": "2024-01-05", "drawdown_pct": -24.0},
+            ],
+            source="summary.visualization.audit_rows",
+        )
+
+        self.assertEqual(payload["version"], "v1")
+        self.assertEqual(payload["source"], "summary.visualization.audit_rows")
+        self.assertEqual(payload["state"], "available")
+        self.assertEqual(payload["bucket_counts"]["peak"]["count"], 1)
+        self.assertEqual(payload["bucket_counts"]["shallow"]["worst_depth_pct"], 4.2)
+        self.assertEqual(payload["bucket_counts"]["moderate"]["avg_depth_pct"], 8.5)
+        self.assertEqual(payload["bucket_counts"]["deep"]["count"], 1)
+        self.assertEqual(payload["bucket_counts"]["severe"]["count"], 1)
+        self.assertEqual(payload["bucket_counts"]["unknown"]["count"], 0)
+        self.assertEqual(payload["contribution_summaries"]["classified_rows"]["share_pct"], 100.0)
+        self.assertEqual(payload["contribution_summaries"]["missing_rows"]["share_pct"], 0.0)
+        self.assertIsNone(payload["unavailable_reason"])
+
+    def test_build_drawdown_regime_attribution_payload_partial_when_audit_rows_are_missing_drawdown(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        payload = service._build_drawdown_regime_attribution_payload(
+            [
+                {"date": "2024-01-01", "drawdown_pct": 0},
+                {"date": "2024-01-02", "drawdown_pct": -6.25},
+                {"date": "2024-01-03", "drawdown_pct": None},
+                {"date": "2024-01-04", "drawdown_pct": "bad-data"},
+            ],
+            source="summary.visualization.audit_rows",
+        )
+
+        self.assertEqual(payload["source"], "summary.visualization.audit_rows")
+        self.assertEqual(payload["state"], "partial")
+        self.assertEqual(payload["bucket_counts"]["peak"]["count"], 1)
+        self.assertEqual(payload["bucket_counts"]["moderate"]["count"], 1)
+        self.assertEqual(payload["bucket_counts"]["unknown"]["count"], 2)
+        self.assertEqual(payload["bucket_counts"]["unknown"]["share_pct"], 50.0)
+        self.assertEqual(payload["contribution_summaries"]["classified_rows"]["count"], 2)
+        self.assertEqual(payload["contribution_summaries"]["missing_rows"]["count"], 2)
+        self.assertIsNone(payload["unavailable_reason"])
+
+    def test_build_drawdown_regime_attribution_payload_unavailable_without_stored_audit_rows(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        payload = service._build_drawdown_regime_attribution_payload(
+            [],
+            source="summary.visualization.audit_rows",
+        )
+
+        self.assertEqual(payload["source"], "unavailable")
+        self.assertEqual(payload["state"], "unavailable")
+        self.assertEqual(payload["unavailable_reason"], "stored_audit_rows_missing")
+        self.assertEqual(payload["bucket_counts"]["peak"]["count"], 0)
+        self.assertEqual(payload["bucket_counts"]["unknown"]["count"], 0)
+        self.assertEqual(payload["contribution_summaries"]["classified_rows"]["count"], 0)
+        self.assertEqual(payload["contribution_summaries"]["missing_rows"]["count"], 0)
+
+    def test_service_readback_keeps_stored_drawdown_regime_attribution_payload(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        stored_payload = service._build_drawdown_regime_attribution_payload(
+            [{"date": "2024-01-01", "drawdown_pct": -3.5}],
+            source="summary.drawdown_regime_attribution",
+        )
+        stored_payload["contribution_summaries"]["causality_note"] = "stored payload sentinel"
+
+        with self.db.get_session() as session:
+            row = session.execute(select(RuleBacktestRun).where(RuleBacktestRun.id == response["id"])).scalar_one()
+            summary = json.loads(row.summary_json or "{}")
+            summary["drawdown_regime_attribution"] = stored_payload
+            row.summary_json = json.dumps(summary, ensure_ascii=False)
+            session.commit()
+
+        detail = service.get_run(response["id"])
+
+        self.assertIn("drawdown_regime_attribution", response["summary"])
+        self.assertEqual(detail["summary"]["drawdown_regime_attribution"], stored_payload)
+
     def test_auto_benchmark_falls_back_to_same_symbol_when_external_series_unavailable(self) -> None:
         service = RuleBacktestService(self.db)
         parser = RuleBacktestParser()
