@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from api.v1.schemas.options import (
-    OptionChainResponse,
     OptionContract,
     OptionGreeks,
     OptionsMetadata,
@@ -38,6 +37,7 @@ from src.services.options_lab_domain_models import (
     ExpectedMoveEstimate,
     IvGreeksAssessment,
     LiquidityAssessment,
+    OptionChainResultModel,
     OptionContractSnapshot,
     OptionExpirationModel,
     OptionExpirationsResultModel,
@@ -218,7 +218,7 @@ class OptionsLabService:
         include_greeks: bool = True,
         force_refresh: bool = False,
         market_data_provider: Optional[str] = None,
-    ) -> OptionChainResponse:
+    ) -> OptionChainResultModel:
         fixture = self._fixture_for_symbol(symbol, market_data_provider=market_data_provider)
         normalized_side = (side or "both").strip().lower()
         if normalized_side not in {"call", "put", "both"}:
@@ -242,14 +242,14 @@ class OptionsLabService:
 
         calls = [contract for contract in contracts if contract.side == "call" and normalized_side in {"call", "both"}]
         puts = [contract for contract in contracts if contract.side == "put" and normalized_side in {"put", "both"}]
-        return OptionChainResponse(
+        return OptionChainResultModel(
             symbol=fixture["symbol"],
             market=fixture["market"],
             underlying=self._safe_underlying(fixture),
             expiration=expiration,
             calls=calls,
             puts=puts,
-            filtersApplied={
+            filters_applied={
                 "expiration": expiration,
                 "side": normalized_side,
                 "minOpenInterest": min_open_interest,
@@ -257,7 +257,7 @@ class OptionsLabService:
                 "includeGreeks": include_greeks,
                 "forceRefresh": force_refresh,
             },
-            chainAsOf=fixture["chainAsOf"],
+            chain_as_of=fixture["chainAsOf"],
             source=fixture["source"],
             warnings=list(PHASE1_WARNING_CODES),
             metadata=self._metadata(force_refresh=force_refresh, fixture=fixture),

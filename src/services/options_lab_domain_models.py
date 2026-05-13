@@ -84,6 +84,21 @@ class OptionExpirationsResultModel:
 
 
 @dataclass
+class OptionChainResultModel:
+    symbol: str
+    market: str
+    underlying: dict[str, Any]
+    expiration: Optional[str] = None
+    calls: list[Any] = field(default_factory=list)
+    puts: list[Any] = field(default_factory=list)
+    filters_applied: dict[str, Any] = field(default_factory=dict)
+    chain_as_of: str = ""
+    source: str = ""
+    warnings: list[str] = field(default_factory=list)
+    metadata: Any = None
+
+
+@dataclass
 class DecisionDataQualityAssessment:
     data_quality_score: float
     data_quality_tier: str

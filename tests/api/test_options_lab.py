@@ -24,6 +24,7 @@ from src.services.options_lab_domain_models import (
     ExpectedMoveEstimate,
     IvGreeksAssessment,
     LiquidityAssessment,
+    OptionChainResultModel,
     OptionExpirationModel,
     OptionExpirationsResultModel,
     OptionUnderlyingSummaryResultModel,
@@ -310,8 +311,9 @@ def test_chain_endpoint_matches_service_alias_contract() -> None:
             max_spread_pct=20,
             include_greeks=False,
             force_refresh=True,
-        ).model_dump(by_alias=True)
-        assert response.json() == expected_payload
+        )
+        assert isinstance(expected_payload, OptionChainResultModel)
+        assert response.json() == options._map_chain_response(expected_payload).model_dump(by_alias=True)
     finally:
         client.close()
 

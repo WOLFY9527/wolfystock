@@ -23,6 +23,7 @@ from src.services.options_lab_domain_models import (
     LiquidityAssessment,
     OptionExpirationModel,
     OptionExpirationsResultModel,
+    OptionChainResultModel,
     OptionContractSnapshot,
     OptionGreeksSnapshot,
     OptionUnderlyingSummaryResultModel,
@@ -118,6 +119,7 @@ def test_tem_expirations_are_normalized_and_sorted() -> None:
 def test_tem_chain_returns_calls_puts_and_safe_derived_fields() -> None:
     response = _service().get_chain("TEM", expiration="2026-06-19", side="both", include_greeks=True)
 
+    assert isinstance(response, OptionChainResultModel)
     assert response.symbol == "TEM"
     assert response.expiration == "2026-06-19"
     assert [contract.side for contract in response.calls] == ["call", "call", "call"]
@@ -132,7 +134,6 @@ def test_tem_chain_returns_calls_puts_and_safe_derived_fields() -> None:
     assert response.calls[0].freshness == "synthetic_delayed"
     assert response.calls[0].provider_quality == "synthetic_demo_only"
     assert response.calls[0].data_quality["tradeable"] is False
-    assert response.limitations.no_order_placement is True
     assert response.metadata.provider_name == "synthetic_fixture"
     assert response.metadata.live_provider_enabled is False
 
@@ -147,6 +148,7 @@ def test_chain_filters_side_expiration_liquidity_spread_and_greeks() -> None:
         include_greeks=False,
     )
 
+    assert isinstance(response, OptionChainResultModel)
     assert [contract.contract_symbol for contract in response.calls] == [
         "TEM260619C00050000",
         "TEM260619C00055000",

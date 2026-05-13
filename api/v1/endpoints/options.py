@@ -49,6 +49,7 @@ from src.services.options_lab_domain_models import (
     ExpectedMoveEstimate,
     IvGreeksAssessment,
     LiquidityAssessment,
+    OptionChainResultModel,
     OptionExpirationModel,
     OptionExpirationsResultModel,
     OptionUnderlyingSummaryResultModel,
@@ -138,6 +139,22 @@ def _map_expirations_response(result: OptionExpirationsResultModel) -> OptionExp
         market=result.market,
         expirations=[_map_expiration_item(item) for item in result.expirations],
         asOf=result.as_of,
+        source=result.source,
+        warnings=list(result.warnings),
+        metadata=result.metadata,
+    )
+
+
+def _map_chain_response(result: OptionChainResultModel) -> OptionChainResponse:
+    return OptionChainResponse(
+        symbol=result.symbol,
+        market=result.market,
+        underlying=dict(result.underlying),
+        expiration=result.expiration,
+        calls=list(result.calls),
+        puts=list(result.puts),
+        filtersApplied=dict(result.filters_applied),
+        chainAsOf=result.chain_as_of,
         source=result.source,
         warnings=list(result.warnings),
         metadata=result.metadata,
@@ -474,15 +491,17 @@ def get_options_chain(
     market_data_provider: str = Query(default="synthetic_fixture", alias="marketDataProvider"),
 ) -> OptionChainResponse:
     try:
-        return _service().get_chain(
-            symbol,
-            expiration=expiration,
-            side=side,
-            min_open_interest=min_open_interest,
-            max_spread_pct=max_spread_pct,
-            include_greeks=include_greeks,
-            force_refresh=force_refresh,
-            market_data_provider=market_data_provider,
+        return _map_chain_response(
+            _service().get_chain(
+                symbol,
+                expiration=expiration,
+                side=side,
+                min_open_interest=min_open_interest,
+                max_spread_pct=max_spread_pct,
+                include_greeks=include_greeks,
+                force_refresh=force_refresh,
+                market_data_provider=market_data_provider,
+            )
         )
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
