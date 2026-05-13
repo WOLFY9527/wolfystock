@@ -7,7 +7,12 @@ from fastapi import APIRouter, HTTPException, Query
 
 from api.v1.schemas.options import (
     OptionChainResponse,
+    OptionCandidateContract,
+    OptionContractScoring,
     OptionExpirationsResponse,
+    OptionScenarioPayoffRow,
+    OptionScenarioRisk,
+    OptionScoringSubScores,
     OptionsAnalyzeRequest,
     OptionsAnalyzeResponse,
     OptionsDecisionAlternative,
@@ -25,12 +30,17 @@ from api.v1.schemas.options import (
     OptionsOptimizerAlternative,
     OptionsScenarioRequest,
     OptionsScenarioResponse,
+    OptionsStrategyComparison,
     OptionsStrategyGateSummary,
     OptionsStrategyCompareRequest,
     OptionsStrategyCompareResponse,
+    OptionsStrategyLeg,
     OptionUnderlyingSummaryResponse,
 )
 from src.services.options_lab_domain_models import (
+    AnalyzeCandidateModel,
+    AnalyzeResultModel,
+    AnalyzeSubScoresModel,
     BreakevenAssessment,
     DecisionAlternativeModel,
     DecisionDataQualityAssessment,
@@ -41,6 +51,12 @@ from src.services.options_lab_domain_models import (
     OptimizerCandidate,
     OptimizerResult,
     RiskRewardAssessment,
+    ScenarioPayoffRowModel,
+    ScenarioResultModel,
+    ScenarioRiskModel,
+    StrategyCompareResultModel,
+    StrategyComparisonModel,
+    StrategyLegModel,
 )
 from src.services.options_lab_service import (
     OptionsLabProviderUnavailable,
@@ -83,6 +99,138 @@ def _map_decision_data_quality(data_quality: DecisionDataQualityAssessment) -> O
         asOfAgeMinutes=data_quality.as_of_age_minutes,
         blockingReasons=list(data_quality.blocking_reasons),
         warnings=list(data_quality.warnings),
+    )
+
+
+def _map_analyze_sub_scores(sub_scores: AnalyzeSubScoresModel) -> OptionScoringSubScores:
+    return OptionScoringSubScores(
+        directionalFit=sub_scores.directional_fit,
+        deltaFit=sub_scores.delta_fit,
+        breakevenDifficulty=sub_scores.breakeven_difficulty,
+        premiumEfficiency=sub_scores.premium_efficiency,
+        liquidityScore=sub_scores.liquidity_score,
+        spreadPenalty=sub_scores.spread_penalty,
+        ivRisk=sub_scores.iv_risk,
+        thetaRisk=sub_scores.theta_risk,
+        dteFit=sub_scores.dte_fit,
+        targetScenarioPayoff=sub_scores.target_scenario_payoff,
+        maxLossBudgetFit=sub_scores.max_loss_budget_fit,
+        oiVolumeConfidence=sub_scores.oi_volume_confidence,
+        dataFreshnessConfidence=sub_scores.data_freshness_confidence,
+    )
+
+
+def _map_contract_scoring(candidate: AnalyzeCandidateModel) -> OptionContractScoring:
+    return OptionContractScoring(
+        subScores=_map_analyze_sub_scores(candidate.sub_scores),
+        gradeLabel=candidate.grade_label,
+        topPositiveDrivers=list(candidate.top_positive_drivers),
+        topRiskDrivers=list(candidate.top_risk_drivers),
+        assumptionsUsed=dict(candidate.assumptions_used),
+        dataConfidence=candidate.data_confidence,
+        notAdviceDisclosure=candidate.not_advice_disclosure,
+    )
+
+
+def _map_analyze_candidate(candidate: AnalyzeCandidateModel) -> OptionCandidateContract:
+    return OptionCandidateContract(
+        strategy=candidate.strategy,
+        contract=candidate.contract,
+        score=candidate.score,
+        gradeLabel=candidate.grade_label,
+        premiumAtRisk=candidate.premium_at_risk,
+        breakeven=candidate.breakeven,
+        requiredMovePct=candidate.required_move_pct,
+        targetPayoff=candidate.target_payoff,
+        scoring=_map_contract_scoring(candidate),
+    )
+
+
+def _map_analyze_response(result: AnalyzeResultModel) -> OptionsAnalyzeResponse:
+    return OptionsAnalyzeResponse(
+        symbol=result.symbol,
+        underlying=result.underlying,
+        assumptions=dict(result.assumptions),
+        optionChainSummary=dict(result.option_chain_summary),
+        candidateContracts=[_map_analyze_candidate(candidate) for candidate in result.candidate_contracts],
+        risks=list(result.risks),
+        limitations=list(result.limitations),
+        metadata=result.metadata,
+    )
+
+
+def _map_scenario_payoff_row(row: ScenarioPayoffRowModel) -> OptionScenarioPayoffRow:
+    return OptionScenarioPayoffRow(
+        label=row.label,
+        underlyingPrice=row.underlying_price,
+        grossPayoff=row.gross_payoff,
+        netPayoff=row.net_payoff,
+        returnOnPremiumPct=row.return_on_premium_pct,
+    )
+
+
+def _map_scenario_risk(risk: ScenarioRiskModel) -> OptionScenarioRisk:
+    return OptionScenarioRisk(
+        premiumAtRisk=risk.premium_at_risk,
+        breakeven=risk.breakeven,
+        requiredMovePct=risk.required_move_pct,
+        maxLoss=risk.max_loss,
+    )
+
+
+def _map_scenario_response(result: ScenarioResultModel) -> OptionsScenarioResponse:
+    return OptionsScenarioResponse(
+        symbol=result.symbol,
+        underlying=result.underlying,
+        strategy=result.strategy,
+        contract=result.contract,
+        expirationPayoffGrid=[_map_scenario_payoff_row(row) for row in result.expiration_payoff_grid],
+        risk=_map_scenario_risk(result.risk),
+        preExpirationTheoreticalPricing=dict(result.pre_expiration_theoretical_pricing),
+        limitations=list(result.limitations),
+        metadata=result.metadata,
+    )
+
+
+def _map_strategy_leg(leg: StrategyLegModel) -> OptionsStrategyLeg:
+    return OptionsStrategyLeg(
+        action=leg.action,
+        side=leg.side,
+        contractSymbol=leg.contract_symbol,
+        expiration=leg.expiration,
+        strike=leg.strike,
+        mid=leg.mid,
+        quantity=leg.quantity,
+    )
+
+
+def _map_strategy_comparison(comparison: StrategyComparisonModel) -> OptionsStrategyComparison:
+    return OptionsStrategyComparison(
+        strategyType=comparison.strategy_type,
+        legs=[_map_strategy_leg(leg) for leg in comparison.legs],
+        netDebit=comparison.net_debit,
+        maxLoss=comparison.max_loss,
+        maxGain=comparison.max_gain,
+        breakeven=comparison.breakeven,
+        requiredMovePct=comparison.required_move_pct,
+        payoffAtTarget=comparison.payoff_at_target,
+        riskRewardRatio=comparison.risk_reward_ratio,
+        liquidityWarnings=list(comparison.liquidity_warnings),
+        ivThetaNotes=list(comparison.iv_theta_notes),
+        suitabilityNotes=list(comparison.suitability_notes),
+        limitations=list(comparison.limitations),
+        noAdviceDisclosure=comparison.no_advice_disclosure,
+    )
+
+
+def _map_strategy_compare_response(result: StrategyCompareResultModel) -> OptionsStrategyCompareResponse:
+    return OptionsStrategyCompareResponse(
+        symbol=result.symbol,
+        underlying=result.underlying,
+        assumptions=dict(result.assumptions),
+        strategies=[_map_strategy_comparison(item) for item in result.strategies],
+        limitations=list(result.limitations),
+        metadata=result.metadata,
     )
 
 
@@ -305,7 +453,7 @@ def get_options_chain(
 )
 def analyze_options(request: OptionsAnalyzeRequest) -> OptionsAnalyzeResponse:
     try:
-        return _service().analyze(request)
+        return _map_analyze_response(_service().analyze(request))
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
     except OptionsLabProviderUnavailable as exc:
@@ -337,7 +485,7 @@ def evaluate_options_decision(request: OptionsDecisionRequest) -> OptionsDecisio
 )
 def analyze_options_scenario(request: OptionsScenarioRequest) -> OptionsScenarioResponse:
     try:
-        return _service().scenario(request)
+        return _map_scenario_response(_service().scenario(request))
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
     except OptionsLabProviderUnavailable as exc:
@@ -353,7 +501,7 @@ def analyze_options_scenario(request: OptionsScenarioRequest) -> OptionsScenario
 )
 def compare_options_strategies(request: OptionsStrategyCompareRequest) -> OptionsStrategyCompareResponse:
     try:
-        return _service().compare_strategies(request)
+        return _map_strategy_compare_response(_service().compare_strategies(request))
     except OptionsLabUnsupportedSymbol as exc:
         raise _unsupported_response(exc) from exc
     except OptionsLabProviderUnavailable as exc:

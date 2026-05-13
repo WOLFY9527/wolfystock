@@ -221,6 +221,18 @@ class AnalyzeCandidateModel:
 
 
 @dataclass
+class AnalyzeResultModel:
+    symbol: str
+    underlying: dict[str, Any]
+    assumptions: dict[str, Any]
+    option_chain_summary: dict[str, Any]
+    candidate_contracts: list[AnalyzeCandidateModel] = field(default_factory=list)
+    risks: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+    metadata: Any = None
+
+
+@dataclass
 class ScenarioPayoffRowModel:
     label: str
     underlying_price: float
@@ -235,6 +247,19 @@ class ScenarioRiskModel:
     breakeven: float
     required_move_pct: float
     max_loss: float
+
+
+@dataclass
+class ScenarioResultModel:
+    symbol: str
+    underlying: dict[str, Any]
+    strategy: str
+    contract: Any
+    expiration_payoff_grid: list[ScenarioPayoffRowModel] = field(default_factory=list)
+    risk: ScenarioRiskModel | None = None
+    pre_expiration_theoretical_pricing: dict[str, Any] = field(default_factory=dict)
+    limitations: list[str] = field(default_factory=list)
+    metadata: Any = None
 
 
 @dataclass
@@ -264,3 +289,13 @@ class StrategyComparisonModel:
     suitability_notes: list[str] = field(default_factory=list)
     limitations: list[str] = field(default_factory=list)
     no_advice_disclosure: str = ""
+
+
+@dataclass
+class StrategyCompareResultModel:
+    symbol: str
+    underlying: dict[str, Any]
+    assumptions: dict[str, Any]
+    strategies: list[StrategyComparisonModel] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+    metadata: Any = None

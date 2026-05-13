@@ -13,6 +13,9 @@ from fastapi.testclient import TestClient
 from api.v1.endpoints import options
 from api.v1.schemas.options import OptionsMetadata
 from src.services.options_lab_domain_models import (
+    AnalyzeCandidateModel,
+    AnalyzeResultModel,
+    AnalyzeSubScoresModel,
     BreakevenAssessment,
     DecisionAlternativeModel,
     DecisionDataQualityAssessment,
@@ -24,6 +27,12 @@ from src.services.options_lab_domain_models import (
     OptimizerCandidate,
     OptimizerResult,
     RiskRewardAssessment,
+    ScenarioPayoffRowModel,
+    ScenarioResultModel,
+    ScenarioRiskModel,
+    StrategyCompareResultModel,
+    StrategyComparisonModel,
+    StrategyLegModel,
 )
 from src.services.options_lab_service import OptionsLabService
 
@@ -440,9 +449,9 @@ def test_analyze_endpoint_matches_service_alias_contract() -> None:
         response = client.post("/api/v1/options/analyze", json=request_payload)
         assert response.status_code == 200
 
-        expected_payload = OptionsLabService(
-            fixture_path=Path("tests/fixtures/options/tem_chain.json")
-        ).analyze(request_payload).model_dump(by_alias=True)
+        expected_payload = options._map_analyze_response(
+            OptionsLabService(fixture_path=Path("tests/fixtures/options/tem_chain.json")).analyze(request_payload)
+        ).model_dump(by_alias=True)
         assert response.json() == expected_payload
     finally:
         client.close()
@@ -524,9 +533,9 @@ def test_scenario_endpoint_matches_service_alias_contract() -> None:
         response = client.post("/api/v1/options/scenario", json=request_payload)
         assert response.status_code == 200
 
-        expected_payload = OptionsLabService(
-            fixture_path=Path("tests/fixtures/options/tem_chain.json")
-        ).scenario(request_payload).model_dump(by_alias=True)
+        expected_payload = options._map_scenario_response(
+            OptionsLabService(fixture_path=Path("tests/fixtures/options/tem_chain.json")).scenario(request_payload)
+        ).model_dump(by_alias=True)
         assert response.json() == expected_payload
     finally:
         client.close()
@@ -602,12 +611,313 @@ def test_strategy_compare_endpoint_matches_service_alias_contract() -> None:
         response = client.post("/api/v1/options/strategies/compare", json=request_payload)
         assert response.status_code == 200
 
-        expected_payload = OptionsLabService(
-            fixture_path=Path("tests/fixtures/options/tem_chain.json")
-        ).compare_strategies(request_payload).model_dump(by_alias=True)
+        expected_payload = options._map_strategy_compare_response(
+            OptionsLabService(fixture_path=Path("tests/fixtures/options/tem_chain.json")).compare_strategies(
+                request_payload
+            )
+        ).model_dump(by_alias=True)
         assert response.json() == expected_payload
     finally:
         client.close()
+
+
+def test_analyze_scenario_and_compare_endpoint_mappers_preserve_alias_contracts() -> None:
+    service = OptionsLabService(fixture_path=Path("tests/fixtures/options/tem_chain.json"))
+    contract = service.get_chain("TEM", expiration="2026-06-19", side="call").calls[1]
+
+    analyze_result = AnalyzeResultModel(
+        symbol="TEM",
+        underlying={"symbol": "TEM", "price": 52.4},
+        assumptions={
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskProfile": "balanced",
+            "contractMultiplier": 100,
+        },
+        option_chain_summary={
+            "source": "synthetic_fixture",
+            "chainAsOf": "2026-05-06T14:30:00Z",
+            "expirationCount": 2,
+            "callCount": 3,
+            "putCount": 2,
+            "candidateCount": 1,
+        },
+        candidate_contracts=[
+            AnalyzeCandidateModel(
+                strategy="long_call",
+                contract=contract,
+                score=78.25,
+                grade_label="B",
+                premium_at_risk=270.0,
+                breakeven=57.7,
+                required_move_pct=10.11,
+                target_payoff=730.0,
+                sub_scores=AnalyzeSubScoresModel(
+                    directional_fit=100.0,
+                    delta_fit=88.5,
+                    breakeven_difficulty=84.2,
+                    premium_efficiency=92.0,
+                    liquidity_score=76.5,
+                    spread_penalty=82.0,
+                    iv_risk=64.0,
+                    theta_risk=58.0,
+                    dte_fit=90.0,
+                    target_scenario_payoff=95.0,
+                    max_loss_budget_fit=100.0,
+                    oi_volume_confidence=72.5,
+                    data_freshness_confidence=100.0,
+                ),
+                top_positive_drivers=["directional_fit", "target_scenario_payoff", "premium_efficiency"],
+                top_risk_drivers=["theta_risk", "iv_risk", "oi_volume_confidence"],
+                assumptions_used={
+                    "direction": "bullish",
+                    "targetPrice": 65,
+                    "targetDate": "2026-06-19",
+                    "riskProfile": "balanced",
+                    "contractMultiplier": 100,
+                    "pricingMode": "expiration_intrinsic_minus_mid_premium",
+                },
+                data_confidence="high",
+                not_advice_disclosure=(
+                    "Analytical ranking under explicit assumptions only; not investment advice or an instruction."
+                ),
+            )
+        ],
+        risks=["options_are_high_risk"],
+        limitations=["synthetic_fixture_data_only"],
+        metadata=OptionsMetadata(scoringEngine="deterministic_fixture_scoring_v1"),
+    )
+    assert options._map_analyze_response(analyze_result).model_dump(by_alias=True) == {
+        "symbol": "TEM",
+        "underlying": {"symbol": "TEM", "price": 52.4},
+        "assumptions": {
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskProfile": "balanced",
+            "contractMultiplier": 100,
+        },
+        "optionChainSummary": {
+            "source": "synthetic_fixture",
+            "chainAsOf": "2026-05-06T14:30:00Z",
+            "expirationCount": 2,
+            "callCount": 3,
+            "putCount": 2,
+            "candidateCount": 1,
+        },
+        "candidateContracts": [
+            {
+                "strategy": "long_call",
+                "contract": contract.model_dump(by_alias=True),
+                "score": 78.25,
+                "gradeLabel": "B",
+                "premiumAtRisk": 270.0,
+                "breakeven": 57.7,
+                "requiredMovePct": 10.11,
+                "targetPayoff": 730.0,
+                "scoring": {
+                    "subScores": {
+                        "directionalFit": 100.0,
+                        "deltaFit": 88.5,
+                        "breakevenDifficulty": 84.2,
+                        "premiumEfficiency": 92.0,
+                        "liquidityScore": 76.5,
+                        "spreadPenalty": 82.0,
+                        "ivRisk": 64.0,
+                        "thetaRisk": 58.0,
+                        "dteFit": 90.0,
+                        "targetScenarioPayoff": 95.0,
+                        "maxLossBudgetFit": 100.0,
+                        "oiVolumeConfidence": 72.5,
+                        "dataFreshnessConfidence": 100.0,
+                    },
+                    "gradeLabel": "B",
+                    "topPositiveDrivers": ["directional_fit", "target_scenario_payoff", "premium_efficiency"],
+                    "topRiskDrivers": ["theta_risk", "iv_risk", "oi_volume_confidence"],
+                    "assumptionsUsed": {
+                        "direction": "bullish",
+                        "targetPrice": 65,
+                        "targetDate": "2026-06-19",
+                        "riskProfile": "balanced",
+                        "contractMultiplier": 100,
+                        "pricingMode": "expiration_intrinsic_minus_mid_premium",
+                    },
+                    "dataConfidence": "high",
+                    "notAdviceDisclosure": (
+                        "Analytical ranking under explicit assumptions only; "
+                        "not investment advice or an instruction."
+                    ),
+                },
+            }
+        ],
+        "risks": ["options_are_high_risk"],
+        "limitations": ["synthetic_fixture_data_only"],
+        "metadata": analyze_result.metadata.model_dump(by_alias=True),
+    }
+
+    scenario_result = ScenarioResultModel(
+        symbol="TEM",
+        underlying={"symbol": "TEM", "price": 52.4},
+        strategy="long_put",
+        contract=contract.model_copy(update={"side": "put", "contractSymbol": "TEM260619P00050000"}),
+        expiration_payoff_grid=[
+            ScenarioPayoffRowModel(
+                label="custom_target",
+                underlying_price=65.0,
+                gross_payoff=1000.0,
+                net_payoff=730.0,
+                return_on_premium_pct=270.37,
+            )
+        ],
+        risk=ScenarioRiskModel(
+            premium_at_risk=270.0,
+            breakeven=57.7,
+            required_move_pct=10.11,
+            max_loss=270.0,
+        ),
+        pre_expiration_theoretical_pricing={
+            "available": False,
+            "reason": "phase3_expiration_payoff_only",
+        },
+        limitations=["synthetic_fixture_data_only"],
+        metadata=OptionsMetadata(strategyEngine="expiration_payoff_v1"),
+    )
+    assert options._map_scenario_response(scenario_result).model_dump(by_alias=True) == {
+        "symbol": "TEM",
+        "underlying": {"symbol": "TEM", "price": 52.4},
+        "strategy": "long_put",
+        "contract": scenario_result.contract.model_dump(by_alias=True),
+        "expirationPayoffGrid": [
+            {
+                "label": "custom_target",
+                "underlyingPrice": 65.0,
+                "grossPayoff": 1000.0,
+                "netPayoff": 730.0,
+                "returnOnPremiumPct": 270.37,
+            }
+        ],
+        "risk": {
+            "premiumAtRisk": 270.0,
+            "breakeven": 57.7,
+            "requiredMovePct": 10.11,
+            "maxLoss": 270.0,
+        },
+        "preExpirationTheoreticalPricing": {
+            "available": False,
+            "reason": "phase3_expiration_payoff_only",
+        },
+        "limitations": ["synthetic_fixture_data_only"],
+        "metadata": scenario_result.metadata.model_dump(by_alias=True),
+    }
+
+    compare_result = StrategyCompareResultModel(
+        symbol="TEM",
+        underlying={"symbol": "TEM", "price": 52.4},
+        assumptions={
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskProfile": "balanced",
+        },
+        strategies=[
+            StrategyComparisonModel(
+                strategy_type="bull_call_spread",
+                legs=[
+                    StrategyLegModel(
+                        action="buy",
+                        side="call",
+                        contract_symbol="TEM260619C00050000",
+                        expiration="2026-06-19",
+                        strike=50.0,
+                        mid=5.0,
+                    ),
+                    StrategyLegModel(
+                        action="sell",
+                        side="call",
+                        contract_symbol="TEM260619C00055000",
+                        expiration="2026-06-19",
+                        strike=55.0,
+                        mid=2.7,
+                    ),
+                ],
+                net_debit=230.0,
+                max_loss=230.0,
+                max_gain=270.0,
+                breakeven=52.3,
+                required_move_pct=-0.19,
+                payoff_at_target=270.0,
+                risk_reward_ratio=1.17,
+                liquidity_warnings=[],
+                iv_theta_notes=["iv_and_theta_can_change_strategy_value_before_expiration"],
+                suitability_notes=[
+                    "comparison_uses_user_assumptions_and_fixture_mid_prices",
+                    "defined_risk_debit_spread_caps_loss_and_gain",
+                ],
+                limitations=["synthetic_fixture_data_only"],
+                no_advice_disclosure=(
+                    "Analytical comparison under explicit assumptions only; not investment advice or an instruction."
+                ),
+            )
+        ],
+        limitations=["synthetic_fixture_data_only"],
+        metadata=OptionsMetadata(strategyEngine="defined_risk_strategy_compare_v1"),
+    )
+    assert options._map_strategy_compare_response(compare_result).model_dump(by_alias=True) == {
+        "symbol": "TEM",
+        "underlying": {"symbol": "TEM", "price": 52.4},
+        "assumptions": {
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskProfile": "balanced",
+        },
+        "strategies": [
+            {
+                "strategyType": "bull_call_spread",
+                "legs": [
+                    {
+                        "action": "buy",
+                        "side": "call",
+                        "contractSymbol": "TEM260619C00050000",
+                        "expiration": "2026-06-19",
+                        "strike": 50.0,
+                        "mid": 5.0,
+                        "quantity": 1,
+                    },
+                    {
+                        "action": "sell",
+                        "side": "call",
+                        "contractSymbol": "TEM260619C00055000",
+                        "expiration": "2026-06-19",
+                        "strike": 55.0,
+                        "mid": 2.7,
+                        "quantity": 1,
+                    },
+                ],
+                "netDebit": 230.0,
+                "maxLoss": 230.0,
+                "maxGain": 270.0,
+                "breakeven": 52.3,
+                "requiredMovePct": -0.19,
+                "payoffAtTarget": 270.0,
+                "riskRewardRatio": 1.17,
+                "liquidityWarnings": [],
+                "ivThetaNotes": ["iv_and_theta_can_change_strategy_value_before_expiration"],
+                "suitabilityNotes": [
+                    "comparison_uses_user_assumptions_and_fixture_mid_prices",
+                    "defined_risk_debit_spread_caps_loss_and_gain",
+                ],
+                "limitations": ["synthetic_fixture_data_only"],
+                "noAdviceDisclosure": (
+                    "Analytical comparison under explicit assumptions only; "
+                    "not investment advice or an instruction."
+                ),
+            }
+        ],
+        "limitations": ["synthetic_fixture_data_only"],
+        "metadata": compare_result.metadata.model_dump(by_alias=True),
+    }
 
 
 def test_strategy_compare_endpoint_filters_max_premium_and_rejects_unsupported_strategy() -> None:

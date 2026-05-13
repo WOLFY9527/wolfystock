@@ -16,31 +16,22 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from api.v1.schemas.options import (
     OptionChainResponse,
-    OptionCandidateContract,
     OptionContract,
-    OptionContractScoring,
     OptionExpirationItem,
     OptionExpirationsResponse,
     OptionGreeks,
-    OptionScenarioPayoffRow,
-    OptionScenarioRisk,
-    OptionScoringSubScores,
     OptionsMetadata,
     OptionsAnalyzeRequest,
-    OptionsAnalyzeResponse,
     OptionsDecisionLeg,
     OptionsDecisionRequest,
     OptionsScenarioRequest,
-    OptionsScenarioResponse,
     OptionsStrategyCompareRequest,
-    OptionsStrategyCompareResponse,
-    OptionsStrategyComparison,
-    OptionsStrategyLeg,
     OptionUnderlyingSummaryResponse,
 )
 from src.services.options_data_quality_gates import evaluate_options_data_quality_gates
 from src.services.options_lab_domain_models import (
     AnalyzeCandidateModel,
+    AnalyzeResultModel,
     AnalyzeSubScoresModel,
     BreakevenAssessment,
     DecisionAlternativeModel,
@@ -56,7 +47,9 @@ from src.services.options_lab_domain_models import (
     OptimizerResult,
     RiskRewardAssessment,
     ScenarioPayoffRowModel,
+    ScenarioResultModel,
     ScenarioRiskModel,
+    StrategyCompareResultModel,
     StrategyComparisonModel,
     StrategyLegModel,
 )
@@ -270,7 +263,7 @@ class OptionsLabService:
             metadata=self._metadata(force_refresh=force_refresh, fixture=fixture),
         )
 
-    def analyze(self, request: OptionsAnalyzeRequest | Dict[str, Any]) -> OptionsAnalyzeResponse:
+    def analyze(self, request: OptionsAnalyzeRequest | Dict[str, Any]) -> AnalyzeResultModel:
         parsed = self._parse_analyze_request(request)
         fixture = self._fixture_for_symbol(parsed.symbol, market_data_provider=parsed.market_data_provider)
         contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
@@ -304,7 +297,7 @@ class OptionsLabService:
         )
         calls = [contract for contract in contracts if contract.side == "call"]
         puts = [contract for contract in contracts if contract.side == "put"]
-        return OptionsAnalyzeResponse(
+        return AnalyzeResultModel(
             symbol=fixture["symbol"],
             underlying=self._safe_underlying(fixture),
             assumptions={
@@ -316,7 +309,7 @@ class OptionsLabService:
                 "strategies": list(parsed.strategies),
                 "contractMultiplier": CONTRACT_MULTIPLIER,
             },
-            optionChainSummary={
+            option_chain_summary={
                 "source": fixture["source"],
                 "chainAsOf": fixture["chainAsOf"],
                 "expirationCount": len(fixture.get("expirations") or []),
@@ -324,7 +317,7 @@ class OptionsLabService:
                 "putCount": len(puts),
                 "candidateCount": len(candidates),
             },
-            candidateContracts=[self._map_analyze_candidate(candidate) for candidate in candidates],
+            candidate_contracts=list(candidates),
             risks=list(PHASE3_RISKS),
             limitations=list(PHASE3_LIMITATIONS),
             metadata=self._metadata(
@@ -335,7 +328,7 @@ class OptionsLabService:
             ),
         )
 
-    def scenario(self, request: OptionsScenarioRequest | Dict[str, Any]) -> OptionsScenarioResponse:
+    def scenario(self, request: OptionsScenarioRequest | Dict[str, Any]) -> ScenarioResultModel:
         parsed = self._parse_scenario_request(request)
         fixture = self._fixture_for_symbol(parsed.symbol, market_data_provider=parsed.market_data_provider)
         contracts = list(self._contracts_for_fixture(fixture, include_greeks=True))
@@ -366,14 +359,14 @@ class OptionsLabService:
             required_move_pct=self._required_move_pct(underlying_price, breakeven),
             max_loss=premium_at_risk,
         )
-        return OptionsScenarioResponse(
+        return ScenarioResultModel(
             symbol=fixture["symbol"],
             underlying=self._safe_underlying(fixture),
             strategy=parsed.strategy,
             contract=contract,
-            expirationPayoffGrid=[self._map_scenario_payoff_row(row) for row in rows],
-            risk=self._map_scenario_risk(risk),
-            preExpirationTheoreticalPricing={
+            expiration_payoff_grid=rows,
+            risk=risk,
+            pre_expiration_theoretical_pricing={
                 "available": False,
                 "reason": "phase3_expiration_payoff_only",
                 "requiredInputs": ["pricing_model", "risk_free_rate", "dividends", "iv_surface", "time_to_expiration"],
@@ -389,7 +382,7 @@ class OptionsLabService:
 
     def compare_strategies(
         self, request: OptionsStrategyCompareRequest | Dict[str, Any]
-    ) -> OptionsStrategyCompareResponse:
+    ) -> StrategyCompareResultModel:
         parsed = self._parse_strategy_compare_request(request)
         requested = self._validate_compare_strategies(parsed.strategies)
         fixture = self._fixture_for_symbol(parsed.symbol, market_data_provider=parsed.market_data_provider)
@@ -414,7 +407,7 @@ class OptionsLabService:
             if comparison is not None:
                 comparisons.append(comparison)
 
-        return OptionsStrategyCompareResponse(
+        return StrategyCompareResultModel(
             symbol=fixture["symbol"],
             underlying=self._safe_underlying(fixture),
             assumptions={
@@ -427,7 +420,7 @@ class OptionsLabService:
                 "contractMultiplier": CONTRACT_MULTIPLIER,
                 "pricingMode": "expiration_intrinsic_minus_mid_debit",
             },
-            strategies=[self._map_strategy_comparison(comparison) for comparison in comparisons],
+            strategies=comparisons,
             limitations=list(PHASE4_LIMITATIONS),
             metadata=self._metadata(
                 force_refresh=parsed.force_refresh,
@@ -551,69 +544,6 @@ class OptionsLabService:
         )
 
     @staticmethod
-    def _map_analyze_sub_scores(sub_scores: AnalyzeSubScoresModel) -> OptionScoringSubScores:
-        return OptionScoringSubScores(
-            directionalFit=sub_scores.directional_fit,
-            deltaFit=sub_scores.delta_fit,
-            breakevenDifficulty=sub_scores.breakeven_difficulty,
-            premiumEfficiency=sub_scores.premium_efficiency,
-            liquidityScore=sub_scores.liquidity_score,
-            spreadPenalty=sub_scores.spread_penalty,
-            ivRisk=sub_scores.iv_risk,
-            thetaRisk=sub_scores.theta_risk,
-            dteFit=sub_scores.dte_fit,
-            targetScenarioPayoff=sub_scores.target_scenario_payoff,
-            maxLossBudgetFit=sub_scores.max_loss_budget_fit,
-            oiVolumeConfidence=sub_scores.oi_volume_confidence,
-            dataFreshnessConfidence=sub_scores.data_freshness_confidence,
-        )
-
-    @classmethod
-    def _map_contract_scoring(cls, candidate: AnalyzeCandidateModel) -> OptionContractScoring:
-        return OptionContractScoring(
-            subScores=cls._map_analyze_sub_scores(candidate.sub_scores),
-            gradeLabel=candidate.grade_label,
-            topPositiveDrivers=list(candidate.top_positive_drivers),
-            topRiskDrivers=list(candidate.top_risk_drivers),
-            assumptionsUsed=dict(candidate.assumptions_used),
-            dataConfidence=candidate.data_confidence,
-            notAdviceDisclosure=candidate.not_advice_disclosure,
-        )
-
-    @classmethod
-    def _map_analyze_candidate(cls, candidate: AnalyzeCandidateModel) -> OptionCandidateContract:
-        return OptionCandidateContract(
-            strategy=candidate.strategy,
-            contract=candidate.contract,
-            score=candidate.score,
-            gradeLabel=candidate.grade_label,
-            premiumAtRisk=candidate.premium_at_risk,
-            breakeven=candidate.breakeven,
-            requiredMovePct=candidate.required_move_pct,
-            targetPayoff=candidate.target_payoff,
-            scoring=cls._map_contract_scoring(candidate),
-        )
-
-    @staticmethod
-    def _map_scenario_payoff_row(row: ScenarioPayoffRowModel) -> OptionScenarioPayoffRow:
-        return OptionScenarioPayoffRow(
-            label=row.label,
-            underlyingPrice=row.underlying_price,
-            grossPayoff=row.gross_payoff,
-            netPayoff=row.net_payoff,
-            returnOnPremiumPct=row.return_on_premium_pct,
-        )
-
-    @staticmethod
-    def _map_scenario_risk(risk: ScenarioRiskModel) -> OptionScenarioRisk:
-        return OptionScenarioRisk(
-            premiumAtRisk=risk.premium_at_risk,
-            breakeven=risk.breakeven,
-            requiredMovePct=risk.required_move_pct,
-            maxLoss=risk.max_loss,
-        )
-
-    @staticmethod
     def _map_greeks_snapshot_to_api_greeks(greeks: Optional[OptionGreeksSnapshot]) -> Optional[OptionGreeks]:
         if greeks is None:
             return None
@@ -652,37 +582,6 @@ class OptionsLabService:
             providerQuality=contract.provider_quality,
             dataQuality=dict(contract.data_quality),
             warnings=list(contract.warnings),
-        )
-
-    @staticmethod
-    def _map_strategy_leg(leg: StrategyLegModel) -> OptionsStrategyLeg:
-        return OptionsStrategyLeg(
-            action=leg.action,
-            side=leg.side,
-            contractSymbol=leg.contract_symbol,
-            expiration=leg.expiration,
-            strike=leg.strike,
-            mid=leg.mid,
-            quantity=leg.quantity,
-        )
-
-    @classmethod
-    def _map_strategy_comparison(cls, comparison: StrategyComparisonModel) -> OptionsStrategyComparison:
-        return OptionsStrategyComparison(
-            strategyType=comparison.strategy_type,
-            legs=[cls._map_strategy_leg(leg) for leg in comparison.legs],
-            netDebit=comparison.net_debit,
-            maxLoss=comparison.max_loss,
-            maxGain=comparison.max_gain,
-            breakeven=comparison.breakeven,
-            requiredMovePct=comparison.required_move_pct,
-            payoffAtTarget=comparison.payoff_at_target,
-            riskRewardRatio=comparison.risk_reward_ratio,
-            liquidityWarnings=list(comparison.liquidity_warnings),
-            ivThetaNotes=list(comparison.iv_theta_notes),
-            suitabilityNotes=list(comparison.suitability_notes),
-            limitations=list(comparison.limitations),
-            noAdviceDisclosure=comparison.no_advice_disclosure,
         )
 
     def _comparison_for_decision(

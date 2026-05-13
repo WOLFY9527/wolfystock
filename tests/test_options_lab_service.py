@@ -12,6 +12,7 @@ import pytest
 
 from src.services.options_lab_domain_models import (
     AnalyzeCandidateModel,
+    AnalyzeResultModel,
     AnalyzeSubScoresModel,
     BreakevenAssessment,
     DecisionAlternativeModel,
@@ -26,7 +27,9 @@ from src.services.options_lab_domain_models import (
     OptimizerResult,
     RiskRewardAssessment,
     ScenarioPayoffRowModel,
+    ScenarioResultModel,
     ScenarioRiskModel,
+    StrategyCompareResultModel,
     StrategyComparisonModel,
     StrategyLegModel,
 )
@@ -240,7 +243,7 @@ def test_analyze_bullish_tem_returns_ranked_call_candidates() -> None:
     scores = [candidate.score for candidate in response.candidate_contracts]
     assert scores == sorted(scores, reverse=True)
     assert response.candidate_contracts[0].strategy == "long_call"
-    assert response.candidate_contracts[0].scoring.sub_scores.directional_fit == 100
+    assert response.candidate_contracts[0].sub_scores.directional_fit == 100
     assert response.metadata.scoring_engine == "deterministic_fixture_scoring_v1"
     assert "phase4_spreads_deferred" in response.limitations
 
@@ -304,9 +307,9 @@ def test_analyze_penalizes_wide_spread_and_low_oi() -> None:
         for candidate in response.candidate_contracts
         if candidate.contract.contract_symbol == "TEM260619C00055000"
     )
-    assert thin.scoring.sub_scores.liquidity_score < liquid.scoring.sub_scores.liquidity_score
-    assert thin.scoring.sub_scores.oi_volume_confidence < liquid.scoring.sub_scores.oi_volume_confidence
-    assert thin.scoring.sub_scores.spread_penalty < liquid.scoring.sub_scores.spread_penalty
+    assert thin.sub_scores.liquidity_score < liquid.sub_scores.liquidity_score
+    assert thin.sub_scores.oi_volume_confidence < liquid.sub_scores.oi_volume_confidence
+    assert thin.sub_scores.spread_penalty < liquid.sub_scores.spread_penalty
     assert thin.score < liquid.score
 
 
@@ -539,196 +542,54 @@ def test_strategy_compare_response_excludes_raw_advice_and_order_fields() -> Non
     assert "rawproviderpayload" not in text
 
 
-def test_analyze_scenario_and_compare_mappers_preserve_alias_contracts() -> None:
+def test_analyze_scenario_and_compare_return_internal_models() -> None:
     service = _service()
-    contract = service.get_chain("TEM", expiration="2026-06-19", side="call").calls[1]
-
-    analyze_candidate = AnalyzeCandidateModel(
-        strategy="long_call",
-        contract=contract,
-        score=78.25,
-        grade_label="B",
-        premium_at_risk=270.0,
-        breakeven=57.7,
-        required_move_pct=10.11,
-        target_payoff=730.0,
-        sub_scores=AnalyzeSubScoresModel(
-            directional_fit=100.0,
-            delta_fit=88.5,
-            breakeven_difficulty=84.2,
-            premium_efficiency=92.0,
-            liquidity_score=76.5,
-            spread_penalty=82.0,
-            iv_risk=64.0,
-            theta_risk=58.0,
-            dte_fit=90.0,
-            target_scenario_payoff=95.0,
-            max_loss_budget_fit=100.0,
-            oi_volume_confidence=72.5,
-            data_freshness_confidence=100.0,
-        ),
-        top_positive_drivers=["directional_fit", "target_scenario_payoff", "premium_efficiency"],
-        top_risk_drivers=["theta_risk", "iv_risk", "oi_volume_confidence"],
-        assumptions_used={
+    analyze = service.analyze(
+        {
+            "symbol": "TEM",
             "direction": "bullish",
             "targetPrice": 65,
             "targetDate": "2026-06-19",
             "riskProfile": "balanced",
-            "contractMultiplier": 100,
-            "pricingMode": "expiration_intrinsic_minus_mid_premium",
-        },
-        data_confidence="high",
-        not_advice_disclosure="Analytical ranking under explicit assumptions only; not investment advice or an instruction.",
+            "strategies": ["long_call"],
+            "forceRefresh": True,
+        }
     )
-    assert service._map_analyze_candidate(analyze_candidate).model_dump(by_alias=True) == {
-        "strategy": "long_call",
-        "contract": contract.model_dump(by_alias=True),
-        "score": 78.25,
-        "gradeLabel": "B",
-        "premiumAtRisk": 270.0,
-        "breakeven": 57.7,
-        "requiredMovePct": 10.11,
-        "targetPayoff": 730.0,
-        "scoring": {
-            "subScores": {
-                "directionalFit": 100.0,
-                "deltaFit": 88.5,
-                "breakevenDifficulty": 84.2,
-                "premiumEfficiency": 92.0,
-                "liquidityScore": 76.5,
-                "spreadPenalty": 82.0,
-                "ivRisk": 64.0,
-                "thetaRisk": 58.0,
-                "dteFit": 90.0,
-                "targetScenarioPayoff": 95.0,
-                "maxLossBudgetFit": 100.0,
-                "oiVolumeConfidence": 72.5,
-                "dataFreshnessConfidence": 100.0,
-            },
-            "gradeLabel": "B",
-            "topPositiveDrivers": ["directional_fit", "target_scenario_payoff", "premium_efficiency"],
-            "topRiskDrivers": ["theta_risk", "iv_risk", "oi_volume_confidence"],
-            "assumptionsUsed": {
-                "direction": "bullish",
-                "targetPrice": 65,
-                "targetDate": "2026-06-19",
-                "riskProfile": "balanced",
-                "contractMultiplier": 100,
-                "pricingMode": "expiration_intrinsic_minus_mid_premium",
-            },
-            "dataConfidence": "high",
-            "notAdviceDisclosure": (
-                "Analytical ranking under explicit assumptions only; "
-                "not investment advice or an instruction."
-            ),
-        },
-    }
+    assert isinstance(analyze, AnalyzeResultModel)
+    assert analyze.option_chain_summary["candidateCount"] == len(analyze.candidate_contracts)
+    assert analyze.candidate_contracts
+    assert isinstance(analyze.candidate_contracts[0], AnalyzeCandidateModel)
+    assert analyze.candidate_contracts[0].contract.contract_symbol == "TEM260619C00055000"
 
-    payoff_row = ScenarioPayoffRowModel(
-        label="custom_target",
-        underlying_price=65.0,
-        gross_payoff=1000.0,
-        net_payoff=730.0,
-        return_on_premium_pct=270.37,
+    scenario = service.scenario(
+        {
+            "symbol": "TEM",
+            "strategy": "long_put",
+            "contractSymbol": "TEM260619P00050000",
+            "targetPrice": 45,
+        }
     )
-    assert service._map_scenario_payoff_row(payoff_row).model_dump(by_alias=True) == {
-        "label": "custom_target",
-        "underlyingPrice": 65.0,
-        "grossPayoff": 1000.0,
-        "netPayoff": 730.0,
-        "returnOnPremiumPct": 270.37,
-    }
+    assert isinstance(scenario, ScenarioResultModel)
+    assert scenario.contract.contract_symbol == "TEM260619P00050000"
+    assert scenario.expiration_payoff_grid
+    assert isinstance(scenario.expiration_payoff_grid[0], ScenarioPayoffRowModel)
+    assert isinstance(scenario.risk, ScenarioRiskModel)
 
-    scenario_risk = ScenarioRiskModel(
-        premium_at_risk=270.0,
-        breakeven=57.7,
-        required_move_pct=10.11,
-        max_loss=270.0,
+    compare = service.compare_strategies(
+        {
+            "symbol": "TEM",
+            "direction": "bullish",
+            "targetPrice": 65,
+            "targetDate": "2026-06-19",
+            "riskProfile": "balanced",
+            "strategies": ["long_call", "bull_call_spread"],
+            "forceRefresh": True,
+        }
     )
-    assert service._map_scenario_risk(scenario_risk).model_dump(by_alias=True) == {
-        "premiumAtRisk": 270.0,
-        "breakeven": 57.7,
-        "requiredMovePct": 10.11,
-        "maxLoss": 270.0,
-    }
-
-    comparison = StrategyComparisonModel(
-        strategy_type="bull_call_spread",
-        legs=[
-            StrategyLegModel(
-                action="buy",
-                side="call",
-                contract_symbol="TEM260619C00050000",
-                expiration="2026-06-19",
-                strike=50.0,
-                mid=5.0,
-            ),
-            StrategyLegModel(
-                action="sell",
-                side="call",
-                contract_symbol="TEM260619C00055000",
-                expiration="2026-06-19",
-                strike=55.0,
-                mid=2.7,
-            ),
-        ],
-        net_debit=230.0,
-        max_loss=230.0,
-        max_gain=270.0,
-        breakeven=52.3,
-        required_move_pct=-0.19,
-        payoff_at_target=270.0,
-        risk_reward_ratio=1.17,
-        liquidity_warnings=[],
-        iv_theta_notes=["iv_and_theta_can_change_strategy_value_before_expiration"],
-        suitability_notes=[
-            "comparison_uses_user_assumptions_and_fixture_mid_prices",
-            "defined_risk_debit_spread_caps_loss_and_gain",
-        ],
-        limitations=["synthetic_fixture_data_only"],
-        no_advice_disclosure="Analytical comparison under explicit assumptions only; not investment advice or an instruction.",
-    )
-    assert service._map_strategy_comparison(comparison).model_dump(by_alias=True) == {
-        "strategyType": "bull_call_spread",
-        "legs": [
-            {
-                "action": "buy",
-                "side": "call",
-                "contractSymbol": "TEM260619C00050000",
-                "expiration": "2026-06-19",
-                "strike": 50.0,
-                "mid": 5.0,
-                "quantity": 1,
-            },
-            {
-                "action": "sell",
-                "side": "call",
-                "contractSymbol": "TEM260619C00055000",
-                "expiration": "2026-06-19",
-                "strike": 55.0,
-                "mid": 2.7,
-                "quantity": 1,
-            },
-        ],
-        "netDebit": 230.0,
-        "maxLoss": 230.0,
-        "maxGain": 270.0,
-        "breakeven": 52.3,
-        "requiredMovePct": -0.19,
-        "payoffAtTarget": 270.0,
-        "riskRewardRatio": 1.17,
-        "liquidityWarnings": [],
-        "ivThetaNotes": ["iv_and_theta_can_change_strategy_value_before_expiration"],
-        "suitabilityNotes": [
-            "comparison_uses_user_assumptions_and_fixture_mid_prices",
-            "defined_risk_debit_spread_caps_loss_and_gain",
-        ],
-        "limitations": ["synthetic_fixture_data_only"],
-        "noAdviceDisclosure": (
-            "Analytical comparison under explicit assumptions only; "
-            "not investment advice or an instruction."
-        ),
-    }
+    assert isinstance(compare, StrategyCompareResultModel)
+    assert [item.strategy_type for item in compare.strategies] == ["long_call", "bull_call_spread"]
+    assert isinstance(compare.strategies[0], StrategyComparisonModel)
+    assert isinstance(compare.strategies[0].legs[0], StrategyLegModel)
 
 
 def test_decision_synthetic_fixture_forces_demo_only_insufficient_label() -> None:
