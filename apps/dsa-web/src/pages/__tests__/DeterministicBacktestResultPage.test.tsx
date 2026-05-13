@@ -580,6 +580,170 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByText('同标的历史回测')).toBeInTheDocument();
   }, 10000);
 
+  it('renders stored drawdown phase attribution in audit order without recomputing from audit rows', async () => {
+    const currentRun = makeResultRun({
+      summary: {
+        drawdownRegimeAttribution: {
+          version: 'v1',
+          source: 'summary.drawdown_regime_attribution',
+          state: 'available',
+          bucketCounts: {
+            peak: {
+              count: 1,
+              sharePct: 33.3333,
+              avgDepthPct: null,
+              worstDepthPct: null,
+            },
+            moderate: {
+              count: 2,
+              sharePct: 66.6667,
+              avgDepthPct: 8.5,
+              worstDepthPct: 9.2,
+            },
+          },
+          contributionSummaries: {
+            classifiedRows: {
+              count: 3,
+              sharePct: 100,
+            },
+            missingRows: {
+              count: 0,
+              sharePct: 0,
+            },
+          },
+          unavailableReason: null,
+        },
+      },
+    });
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '审计明细' }));
+    const auditPanel = await screen.findByTestId('deterministic-result-tab-panel-audit');
+    const traceHeading = within(auditPanel).getByText('执行轨迹');
+    const supportExportsHeading = within(auditPanel).getByText('技术支持导出');
+    const attributionPanel = within(auditPanel).getByTestId('backtest-drawdown-attribution-panel');
+    const attributionHeading = within(attributionPanel).getByText('回撤阶段归因');
+    const auditTableHeading = within(auditPanel).getByText('日级审计 / 对账');
+
+    expect(traceHeading.compareDocumentPosition(supportExportsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(supportExportsHeading.compareDocumentPosition(attributionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(attributionHeading.compareDocumentPosition(auditTableHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    expect(attributionPanel).toHaveTextContent('基于已存审计行的回撤区间汇总，用于解释回撤来源；不改变收益、回撤、交易或报告结论口径。');
+    expect(attributionPanel).toHaveTextContent('可用');
+    expect(attributionPanel).toHaveTextContent('已存审计行汇总');
+    expect(attributionPanel).toHaveTextContent('2 / 3');
+    expect(attributionPanel).toHaveTextContent('100.00%');
+    expect(attributionPanel).toHaveTextContent('0.00%');
+    expect(attributionPanel).toHaveTextContent('高点区间');
+    expect(attributionPanel).toHaveTextContent('中度回撤');
+    expect(attributionPanel).toHaveTextContent('8.50%');
+    expect(attributionPanel).toHaveTextContent('9.20%');
+    expect(attributionPanel).not.toHaveTextContent(/drawdown_regime_attribution|regimeAttribution|payload|schema|stored_audit_rows|market regime/i);
+  });
+
+  it('renders the partial drawdown phase attribution coverage copy from stored summary fields', async () => {
+    const currentRun = makeResultRun({
+      summary: {
+        drawdownRegimeAttribution: {
+          version: 'v1',
+          source: 'summary.drawdown_regime_attribution',
+          state: 'partial',
+          bucketCounts: {
+            peak: {
+              count: 1,
+              sharePct: 25,
+              avgDepthPct: null,
+              worstDepthPct: null,
+            },
+            moderate: {
+              count: 1,
+              sharePct: 25,
+              avgDepthPct: 6.25,
+              worstDepthPct: 6.25,
+            },
+            unknown: {
+              count: 2,
+              sharePct: 50,
+              avgDepthPct: null,
+              worstDepthPct: null,
+            },
+          },
+          contributionSummaries: {
+            classifiedRows: {
+              count: 2,
+              sharePct: 50,
+            },
+            missingRows: {
+              count: 2,
+              sharePct: 50,
+            },
+          },
+          unavailableReason: null,
+        },
+      },
+    });
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '审计明细' }));
+    const attributionPanel = within(await screen.findByTestId('deterministic-result-tab-panel-audit'))
+      .getByTestId('backtest-drawdown-attribution-panel');
+
+    expect(attributionPanel).toHaveTextContent('部分可用');
+    expect(attributionPanel).toHaveTextContent('仅展示已存审计行覆盖到的区间；缺失区间不补算、不推断。');
+    expect(attributionPanel).toHaveTextContent('3 / 2');
+    expect(attributionPanel).toHaveTextContent('50.00%');
+    expect(attributionPanel).toHaveTextContent('未归类');
+  });
+
+  it('renders a compact unavailable drawdown phase attribution state when no stored summary is provided', async () => {
+    const currentRun = makeResultRun({
+      summary: {},
+    });
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '审计明细' }));
+    const attributionPanel = within(await screen.findByTestId('deterministic-result-tab-panel-audit'))
+      .getByTestId('backtest-drawdown-attribution-panel');
+
+    expect(attributionPanel).toHaveTextContent('未提供');
+    expect(attributionPanel).toHaveTextContent('当前结果未提供回撤阶段归因。最大回撤、收益曲线与审计表仍是主要查看口径；前端不会重算归因。');
+    expect(attributionPanel).toHaveTextContent('当前未提供');
+  });
+
   it('aligns result-page strategy wording with the confirmation-page canonical spec language', async () => {
     const currentRun = makeResultRun();
 

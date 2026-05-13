@@ -979,6 +979,36 @@ export interface RuleBacktestCompareResponse {
   items: RuleBacktestCompareRunItem[];
 }
 
+export interface RuleBacktestDrawdownRegimeBucketSummary {
+  count?: number | null;
+  sharePct?: number | null;
+  avgDepthPct?: number | null;
+  worstDepthPct?: number | null;
+}
+
+export interface RuleBacktestDrawdownRegimeContributionSummary {
+  count?: number | null;
+  sharePct?: number | null;
+}
+
+export interface RuleBacktestDrawdownRegimeAttribution {
+  version?: string | null;
+  source?: string | null;
+  state?: string | null;
+  bucketCounts?: Record<string, RuleBacktestDrawdownRegimeBucketSummary> | null;
+  contributionSummaries?: {
+    classifiedRows?: RuleBacktestDrawdownRegimeContributionSummary | null;
+    missingRows?: RuleBacktestDrawdownRegimeContributionSummary | null;
+    causalityNote?: string | null;
+  } | null;
+  unavailableReason?: string | null;
+}
+
+export interface RuleBacktestRunSummary {
+  drawdownRegimeAttribution?: RuleBacktestDrawdownRegimeAttribution | null;
+  [key: string]: unknown;
+}
+
 export interface RuleBacktestRunResponse {
   id: number;
   code: string;
@@ -1023,7 +1053,7 @@ export interface RuleBacktestRunResponse {
   avgHoldingBars?: number | null;
   avgHoldingCalendarDays?: number | null;
   finalEquity?: number | null;
-  summary: Record<string, unknown>;
+  summary: RuleBacktestRunSummary;
   dataQuality?: BacktestDataQuality;
   robustnessAnalysis?: Record<string, unknown>;
   executionModel?: RuleBacktestExecutionModel;

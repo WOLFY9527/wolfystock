@@ -31,6 +31,7 @@ import {
 } from './BacktestChartWorkspace';
 import type { ParsedApiError } from '../../api/error';
 import type {
+  RuleBacktestDrawdownRegimeAttribution,
   RuleBacktestHistoryItem,
   RuleBacktestRunResponse,
 } from '../../types/backtest';
@@ -75,6 +76,28 @@ type ScenarioRunState = {
   status: string;
   result: RuleBacktestRunResponse | null;
   error: string | null;
+};
+
+type DrawdownAttributionState = 'available' | 'partial' | 'unavailable';
+type DrawdownAttributionBucketKey = 'peak' | 'shallow' | 'moderate' | 'deep' | 'severe' | 'unknown';
+
+type DrawdownAttributionBucketRow = {
+  key: string;
+  label: string;
+  count: string;
+  share: string;
+  avgDepth: string;
+  worstDepth: string;
+};
+
+type DrawdownAttributionPanelModel = {
+  stateLabel: string;
+  sourceLabel: string;
+  description: string;
+  bucketCountSummary: string;
+  classifiedShare: string;
+  missingShare: string;
+  bucketRows: DrawdownAttributionBucketRow[];
 };
 
 type BacktestAuditTablesProps = {
@@ -131,6 +154,105 @@ type BacktestAuditTablesProps = {
   onOpenScenarioRun: (runId: number) => void;
 };
 
+const DRAWDOWN_ATTRIBUTION_STATES = new Set<DrawdownAttributionState>(['available', 'partial', 'unavailable']);
+const DRAWDOWN_ATTRIBUTION_BUCKET_ORDER: DrawdownAttributionBucketKey[] = [
+  'peak',
+  'shallow',
+  'moderate',
+  'deep',
+  'severe',
+  'unknown',
+];
+
+function isDrawdownAttributionPayload(value: unknown): value is RuleBacktestDrawdownRegimeAttribution {
+  return value != null && typeof value === 'object';
+}
+
+function getStoredDrawdownAttribution(run: RuleBacktestRunResponse): RuleBacktestDrawdownRegimeAttribution | null {
+  const attribution = run.summary?.drawdownRegimeAttribution;
+  return isDrawdownAttributionPayload(attribution) ? attribution : null;
+}
+
+function normalizeDrawdownAttributionState(value: string | null | undefined): DrawdownAttributionState {
+  const normalized = String(value || '').trim().toLowerCase();
+  return DRAWDOWN_ATTRIBUTION_STATES.has(normalized as DrawdownAttributionState)
+    ? normalized as DrawdownAttributionState
+    : 'unavailable';
+}
+
+function formatDrawdownAttributionCount(value: number | null | undefined): string {
+  return value == null ? '--' : formatNumber(value, 0);
+}
+
+function formatDrawdownAttributionPercent(value: number | null | undefined): string {
+  return value == null ? '--' : pct(value);
+}
+
+function getDrawdownAttributionSourceLabel(
+  source: string | null | undefined,
+  state: DrawdownAttributionState,
+  resultPage: TranslateFn,
+): string {
+  if (state === 'unavailable' || String(source || '').trim().toLowerCase() === 'unavailable') {
+    return resultPage('drawdownAttribution.sources.unavailable');
+  }
+  return resultPage('drawdownAttribution.sources.storedAuditRows');
+}
+
+function getDrawdownAttributionBucketLabel(key: string, resultPage: TranslateFn): string {
+  const translation = resultPage(`drawdownAttribution.buckets.${key}`);
+  return translation === `backtest.resultPage.drawdownAttribution.buckets.${key}` ? key : translation;
+}
+
+function getOrderedDrawdownAttributionBuckets(
+  attribution: RuleBacktestDrawdownRegimeAttribution | null,
+): Array<[string, NonNullable<RuleBacktestDrawdownRegimeAttribution['bucketCounts']>[string]]> {
+  const bucketCounts = attribution?.bucketCounts;
+  if (!bucketCounts || typeof bucketCounts !== 'object') {
+    return [];
+  }
+
+  const ordered = DRAWDOWN_ATTRIBUTION_BUCKET_ORDER
+    .filter((key) => isDrawdownAttributionPayload(bucketCounts[key]))
+    .map((key) => [key, bucketCounts[key]!] as [string, NonNullable<RuleBacktestDrawdownRegimeAttribution['bucketCounts']>[string]]);
+
+  const remaining = Object.entries(bucketCounts)
+    .filter(([key, value]) => !DRAWDOWN_ATTRIBUTION_BUCKET_ORDER.includes(key as DrawdownAttributionBucketKey) && isDrawdownAttributionPayload(value))
+    .map(([key, value]) => [key, value] as [string, NonNullable<RuleBacktestDrawdownRegimeAttribution['bucketCounts']>[string]]);
+
+  return [...ordered, ...remaining];
+}
+
+function buildDrawdownAttributionPanelModel(
+  run: RuleBacktestRunResponse,
+  resultPage: TranslateFn,
+): DrawdownAttributionPanelModel {
+  const attribution = getStoredDrawdownAttribution(run);
+  const state = normalizeDrawdownAttributionState(attribution?.state);
+  const classifiedRows = attribution?.contributionSummaries?.classifiedRows;
+  const missingRows = attribution?.contributionSummaries?.missingRows;
+  const bucketRows = getOrderedDrawdownAttributionBuckets(attribution).map(([key, bucket]) => ({
+    key,
+    label: getDrawdownAttributionBucketLabel(key, resultPage),
+    count: formatDrawdownAttributionCount(bucket.count),
+    share: formatDrawdownAttributionPercent(bucket.sharePct),
+    avgDepth: formatDrawdownAttributionPercent(bucket.avgDepthPct),
+    worstDepth: formatDrawdownAttributionPercent(bucket.worstDepthPct),
+  }));
+
+  return {
+    stateLabel: resultPage(`drawdownAttribution.states.${state}`),
+    sourceLabel: getDrawdownAttributionSourceLabel(attribution?.source, state, resultPage),
+    description: resultPage(`drawdownAttribution.descriptions.${state}`),
+    bucketCountSummary: attribution
+      ? `${formatDrawdownAttributionCount(bucketRows.length)} / ${formatDrawdownAttributionCount(classifiedRows?.count)}`
+      : '--',
+    classifiedShare: attribution ? formatDrawdownAttributionPercent(classifiedRows?.sharePct) : '--',
+    missingShare: attribution ? formatDrawdownAttributionPercent(missingRows?.sharePct) : '--',
+    bucketRows,
+  };
+}
+
 const BacktestAuditTables: React.FC<BacktestAuditTablesProps> = ({
   activeTab,
   resultPage,
@@ -184,6 +306,7 @@ const BacktestAuditTables: React.FC<BacktestAuditTablesProps> = ({
   onSavePreset,
   onOpenScenarioRun,
 }) => {
+  const drawdownAttribution = buildDrawdownAttributionPanelModel(run, resultPage);
   const denseParameterItems = [
     { label: resultPage('parameters.metricInitialCapital'), value: formatNumber(run.initialCapital) },
     { label: resultPage('parameters.metricLookback'), value: String(run.lookbackBars) },
@@ -210,6 +333,39 @@ const BacktestAuditTables: React.FC<BacktestAuditTablesProps> = ({
       >
         <ExecutionTracePanel run={run} />
         <BacktestSupportExportsDisclosure runId={run.id} code={run.code} />
+        <div className="summary-block mt-4" data-testid="backtest-drawdown-attribution-panel">
+          <div className="summary-block__header">
+            <div>
+              <h3 className="summary-block__title">{resultPage('drawdownAttribution.title')}</h3>
+              <p className="product-section-copy">{drawdownAttribution.description}</p>
+            </div>
+          </div>
+          <SummaryStrip
+            items={[
+              { label: resultPage('drawdownAttribution.summary.state'), value: drawdownAttribution.stateLabel },
+              { label: resultPage('drawdownAttribution.summary.source'), value: drawdownAttribution.sourceLabel },
+              { label: resultPage('drawdownAttribution.summary.bucketCount'), value: drawdownAttribution.bucketCountSummary },
+              { label: resultPage('drawdownAttribution.summary.classifiedShare'), value: drawdownAttribution.classifiedShare },
+              { label: resultPage('drawdownAttribution.summary.missingShare'), value: drawdownAttribution.missingShare },
+            ]}
+          />
+          {drawdownAttribution.bucketRows.length ? (
+            <div className="preview-grid mt-4">
+              {drawdownAttribution.bucketRows.map((row) => (
+                <div key={row.key} className="preview-card">
+                  <p className="metric-card__label">{resultPage('drawdownAttribution.bucketLabel')}</p>
+                  <p className="preview-card__text">{row.label}</p>
+                  <div className="product-chip-list product-chip-list--tight mt-3">
+                    <span className="product-chip">{resultPage('drawdownAttribution.bucketMetrics.count', { value: row.count })}</span>
+                    <span className="product-chip">{resultPage('drawdownAttribution.bucketMetrics.share', { value: row.share })}</span>
+                    <span className="product-chip">{resultPage('drawdownAttribution.bucketMetrics.avgDepth', { value: row.avgDepth })}</span>
+                    <span className="product-chip">{resultPage('drawdownAttribution.bucketMetrics.worstDepth', { value: row.worstDepth })}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
         <DeterministicAuditTable run={run} rows={normalized.rows} />
       </section>
     );

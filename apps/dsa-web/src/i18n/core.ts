@@ -1267,6 +1267,45 @@ const RESOURCES = {
             },
           },
         },
+        drawdownAttribution: {
+          title: '回撤阶段归因',
+          bucketLabel: '区间',
+          descriptions: {
+            available: '基于已存审计行的回撤区间汇总，用于解释回撤来源；不改变收益、回撤、交易或报告结论口径。',
+            partial: '仅展示已存审计行覆盖到的区间；缺失区间不补算、不推断。',
+            unavailable: '当前结果未提供回撤阶段归因。最大回撤、收益曲线与审计表仍是主要查看口径；前端不会重算归因。',
+          },
+          states: {
+            available: '可用',
+            partial: '部分可用',
+            unavailable: '未提供',
+          },
+          sources: {
+            storedAuditRows: '已存审计行汇总',
+            unavailable: '当前未提供',
+          },
+          summary: {
+            state: '状态',
+            source: '来源',
+            bucketCount: '区间数 / 已归类行数',
+            classifiedShare: '已归类占比',
+            missingShare: '缺失占比',
+          },
+          bucketMetrics: {
+            count: '行数 {value}',
+            share: '占比 {value}',
+            avgDepth: '平均深度 {value}',
+            worstDepth: '最深深度 {value}',
+          },
+          buckets: {
+            peak: '高点区间',
+            shallow: '轻度回撤',
+            moderate: '中度回撤',
+            deep: '深度回撤',
+            severe: '极深回撤',
+            unknown: '未归类',
+          },
+        },
         tradeEventTable: {
           title: '交易 / 事件日志',
           subtitle: '交易表同样只读 normalized tradeEvents',
@@ -4228,6 +4267,45 @@ This memo is for research discussion and does not constitute investment advice.`
               description: 'Exports a spreadsheet-friendly execution trace CSV for review and handoff.',
               action: 'Download execution trace CSV',
             },
+          },
+        },
+        drawdownAttribution: {
+          title: 'Drawdown phase attribution',
+          bucketLabel: 'Band',
+          descriptions: {
+            available: 'Summarizes drawdown bands from stored audit rows to explain where drawdowns came from. It does not change the authority of returns, drawdowns, trades, or the report conclusion.',
+            partial: 'Shows only the bands covered by stored audit rows. Missing bands are not backfilled or inferred.',
+            unavailable: 'This result does not include drawdown phase attribution. Maximum drawdown, the equity curve, and the audit table remain the primary read path, and the frontend will not recompute attribution.',
+          },
+          states: {
+            available: 'Available',
+            partial: 'Partial',
+            unavailable: 'Unavailable',
+          },
+          sources: {
+            storedAuditRows: 'Stored audit-row summary',
+            unavailable: 'Not provided',
+          },
+          summary: {
+            state: 'State',
+            source: 'Source',
+            bucketCount: 'Bands / classified rows',
+            classifiedShare: 'Classified share',
+            missingShare: 'Missing share',
+          },
+          bucketMetrics: {
+            count: 'Rows {value}',
+            share: 'Share {value}',
+            avgDepth: 'Average depth {value}',
+            worstDepth: 'Worst depth {value}',
+          },
+          buckets: {
+            peak: 'Peak',
+            shallow: 'Shallow',
+            moderate: 'Moderate',
+            deep: 'Deep',
+            severe: 'Severe',
+            unknown: 'Unclassified',
           },
         },
         tradeEventTable: {
