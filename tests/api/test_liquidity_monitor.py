@@ -55,6 +55,8 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
 
     assert response.status_code == 200
     body = response.json()
+    assert set(body) == {"endpoint", "generatedAt", "score", "freshness", "indicators", "advisoryDisclosure", "sourceMetadata"}
     assert body["endpoint"] == "/api/v1/market/liquidity-monitor"
     assert body["score"]["regime"] == "supportive"
+    assert set(body["sourceMetadata"]) == {"externalProviderCalls", "providerRuntimeChanged", "marketCacheMutation"}
     assert body["sourceMetadata"]["externalProviderCalls"] is False
