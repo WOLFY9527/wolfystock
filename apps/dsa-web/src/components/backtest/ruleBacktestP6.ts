@@ -1,4 +1,5 @@
 import type {
+  RuleBacktestDrawdownRegimeAttribution,
   RuleBacktestParseResponse,
   RuleBacktestParsedStrategy,
   RuleBacktestRunRequest,
@@ -9,6 +10,16 @@ import { getAutoBenchmarkMode, getBenchmarkModeLabel, getStrategySpecValue } fro
 import { getRuleStrategyTypeLabel } from './strategyInspectability';
 
 type BacktestLanguage = 'zh' | 'en';
+type DrawdownAttributionState = 'available' | 'partial' | 'unavailable';
+
+const DRAWDOWN_ATTRIBUTION_BUCKET_ORDER = [
+  'peak',
+  'shallow',
+  'moderate',
+  'deep',
+  'severe',
+  'unknown',
+] as const;
 
 export type RuleScenarioPlanId =
   | 'benchmark_modes'
@@ -289,6 +300,120 @@ function getStressScenarioFriendlyLabel(
   return language === 'en' ? 'Stress scenario' : '压力场景';
 }
 
+function getStoredDrawdownAttribution(
+  run: Pick<RuleBacktestRunResponse, 'summary'>,
+): RuleBacktestDrawdownRegimeAttribution | null {
+  const summary = asObjectRecord(run.summary);
+  const attribution = asObjectRecord(getObjectField(summary, 'drawdownRegimeAttribution'));
+  return attribution as RuleBacktestDrawdownRegimeAttribution | null;
+}
+
+function normalizeDrawdownAttributionState(value: unknown): DrawdownAttributionState {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'available' || normalized === 'partial' || normalized === 'unavailable') {
+    return normalized;
+  }
+  return 'unavailable';
+}
+
+function getDrawdownAttributionStateText(
+  state: DrawdownAttributionState,
+  language: BacktestLanguage = 'zh',
+): string {
+  if (state === 'available') return language === 'en' ? 'Available' : '可用';
+  if (state === 'partial') return language === 'en' ? 'Partial' : '部分可用';
+  return language === 'en' ? 'Not provided' : '未提供';
+}
+
+function getDrawdownAttributionSourceText(
+  source: unknown,
+  state: DrawdownAttributionState,
+  language: BacktestLanguage = 'zh',
+): string {
+  if (state === 'unavailable' || String(source || '').trim().toLowerCase() === 'unavailable') {
+    return language === 'en' ? 'Not provided' : '当前未提供';
+  }
+  return language === 'en' ? 'Stored audit-row summary' : '已存审计行汇总';
+}
+
+function getDrawdownAttributionBucketLabel(
+  key: string,
+  language: BacktestLanguage = 'zh',
+): string {
+  if (key === 'peak') return language === 'en' ? 'Peak' : '高点区间';
+  if (key === 'shallow') return language === 'en' ? 'Shallow' : '浅度回撤';
+  if (key === 'moderate') return language === 'en' ? 'Moderate' : '中度回撤';
+  if (key === 'deep') return language === 'en' ? 'Deep' : '深度回撤';
+  if (key === 'severe') return language === 'en' ? 'Severe' : '严重回撤';
+  return language === 'en' ? 'Unclassified' : '未归类';
+}
+
+function getOrderedDrawdownAttributionBuckets(
+  attribution: RuleBacktestDrawdownRegimeAttribution | null,
+): Array<[string, NonNullable<RuleBacktestDrawdownRegimeAttribution['bucketCounts']>[string]]> {
+  const bucketCounts = attribution?.bucketCounts;
+  if (!bucketCounts || typeof bucketCounts !== 'object') {
+    return [];
+  }
+
+  return DRAWDOWN_ATTRIBUTION_BUCKET_ORDER
+    .filter((key) => asObjectRecord(bucketCounts[key]))
+    .map((key) => [key, bucketCounts[key]!] as [string, NonNullable<RuleBacktestDrawdownRegimeAttribution['bucketCounts']>[string]]);
+}
+
+function buildDrawdownAttributionAppendix(
+  run: Pick<RuleBacktestRunResponse, 'summary'>,
+  language: BacktestLanguage = 'zh',
+): string[] {
+  const attribution = getStoredDrawdownAttribution(run);
+  const state = normalizeDrawdownAttributionState(attribution?.state);
+  const classifiedRows = attribution?.contributionSummaries?.classifiedRows;
+  const missingRows = attribution?.contributionSummaries?.missingRows;
+  const bucketRows = getOrderedDrawdownAttributionBuckets(attribution);
+  const authorityLine = language === 'en'
+    ? 'Summarizes drawdown phases from stored audit rows only. It explains drawdown sources and does not change return, max drawdown, trade, chart, or report-conclusion authority.'
+    : '基于已存审计行的回撤阶段汇总，仅用于解释回撤来源；不改变收益、最大回撤、交易、图表或报告结论口径。';
+  const lines: string[] = [
+    language === 'en' ? '## Drawdown phase attribution appendix' : '## 回撤阶段归因附录',
+    '',
+    `- ${authorityLine}`,
+    `- ${language === 'en' ? 'State' : '状态'}：${getDrawdownAttributionStateText(state, language)}`,
+    `- ${language === 'en' ? 'Source' : '来源'}：${getDrawdownAttributionSourceText(attribution?.source, state, language)}`,
+  ];
+
+  if (!attribution) {
+    lines.push(`- ${language === 'en' ? 'This result does not include drawdown phase attribution.' : '当前结果未提供回撤阶段归因。'}`);
+    return lines;
+  }
+
+  if (classifiedRows?.count != null || bucketRows.length > 0) {
+    lines.push(
+      `- ${language === 'en' ? 'Classified rows / buckets' : '已归类行 / 桶数'}：${numberLabel(classifiedRows?.count, 0)} / ${numberLabel(bucketRows.length, 0)}`,
+    );
+  }
+  if (classifiedRows?.sharePct != null) {
+    lines.push(`- ${language === 'en' ? 'Classified share' : '已归类占比'}：${pctLabel(classifiedRows.sharePct)}`);
+  }
+  if (missingRows?.sharePct != null) {
+    lines.push(`- ${language === 'en' ? 'Missing share' : '缺失占比'}：${pctLabel(missingRows.sharePct)}`);
+  }
+
+  if (bucketRows.length === 0) {
+    lines.push(`- ${language === 'en' ? 'No drawdown-phase bucket detail is available.' : '当前结果未提供可展示的回撤阶段分桶明细。'}`);
+    return lines;
+  }
+
+  bucketRows.forEach(([key, bucket]) => {
+    lines.push(
+      `- ${getDrawdownAttributionBucketLabel(key, language)}：${language === 'en'
+        ? `rows ${numberLabel(bucket.count, 0)} · share ${pctLabel(bucket.sharePct)} · average depth ${drawdownPctLabel(bucket.avgDepthPct)} · worst depth ${drawdownPctLabel(bucket.worstDepthPct)}`
+        : `行数 ${numberLabel(bucket.count, 0)} · 占比 ${pctLabel(bucket.sharePct)} · 平均深度 ${drawdownPctLabel(bucket.avgDepthPct)} · 最深回撤 ${drawdownPctLabel(bucket.worstDepthPct)}`}`,
+    );
+  });
+
+  return lines;
+}
+
 function buildRobustnessAppendix(
   run: Pick<RuleBacktestRunResponse, 'robustnessAnalysis'>,
   language: BacktestLanguage = 'zh',
@@ -527,6 +652,7 @@ export function buildRuleRunReportMarkdown(args: {
     }).join('\n')
     : (language === 'en' ? '- No additional comparison runs attached yet' : '- 暂未附加其他比较对象');
   const robustnessAppendix = buildRobustnessAppendix(run, language);
+  const drawdownAttributionAppendix = buildDrawdownAttributionAppendix(run, language);
 
   return language === 'en' ? [
     `# Deterministic Backtest Summary #${run.id}`,
@@ -571,6 +697,8 @@ export function buildRuleRunReportMarkdown(args: {
     '- The detailed execution trace still lives in CSV / JSON exports.',
     '- For chart interpretation, start with cumulative return, drawdown, and benchmark comparison.',
     ...(robustnessAppendix ? ['', ...robustnessAppendix] : []),
+    '',
+    ...drawdownAttributionAppendix,
   ].join('\n') : [
     `# 确定性回测决策摘要 #${run.id}`,
     '',
@@ -614,6 +742,8 @@ export function buildRuleRunReportMarkdown(args: {
     '- 详细执行轨迹仍以 CSV / JSON 导出为准。',
     '- 图表解读优先查看收益曲线、回撤曲线和基准对照。',
     ...(robustnessAppendix ? ['', ...robustnessAppendix] : []),
+    '',
+    ...drawdownAttributionAppendix,
   ].join('\n');
 }
 

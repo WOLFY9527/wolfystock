@@ -349,6 +349,87 @@ describe('ruleBacktestP6', () => {
     expect(markdown).toContain('样本不足，暂无可展示的压力场景明细。');
   });
 
+  it('appends a drawdown phase attribution appendix from stored summary fields', () => {
+    const baseRun = makeRun({
+      summary: {
+        drawdownRegimeAttribution: {
+          version: 'v1',
+          source: 'summary.drawdown_regime_attribution',
+          state: 'partial',
+          bucketCounts: {
+            peak: {
+              count: 1,
+              sharePct: 25,
+              avgDepthPct: null,
+              worstDepthPct: null,
+            },
+            moderate: {
+              count: 1,
+              sharePct: 25,
+              avgDepthPct: 6.25,
+              worstDepthPct: 6.25,
+            },
+            unknown: {
+              count: 2,
+              sharePct: 50,
+              avgDepthPct: null,
+              worstDepthPct: null,
+            },
+          },
+          contributionSummaries: {
+            classifiedRows: {
+              count: 2,
+              sharePct: 50,
+            },
+            missingRows: {
+              count: 2,
+              sharePct: 50,
+            },
+          },
+        },
+      },
+    });
+
+    const markdown = buildRuleRunReportMarkdown({
+      run: baseRun,
+      normalized: normalizeDeterministicBacktestResult(baseRun),
+    });
+
+    expect(markdown).toContain('## 回撤阶段归因附录');
+    expect(markdown).toContain('基于已存审计行的回撤阶段汇总，仅用于解释回撤来源；不改变收益、最大回撤、交易、图表或报告结论口径。');
+    expect(markdown).toContain('状态：部分可用');
+    expect(markdown).toContain('来源：已存审计行汇总');
+    expect(markdown).toContain('已归类行 / 桶数：2 / 3');
+    expect(markdown).toContain('已归类占比：50.00%');
+    expect(markdown).toContain('缺失占比：50.00%');
+    expect(markdown).toContain('高点区间：行数 1 · 占比 25.00% · 平均深度 -- · 最深回撤 --');
+    expect(markdown).toContain('中度回撤：行数 1 · 占比 25.00% · 平均深度 -6.25% · 最深回撤 -6.25%');
+    expect(markdown).toContain('未归类：行数 2 · 占比 50.00% · 平均深度 -- · 最深回撤 --');
+    expect(markdown).not.toContain('drawdown_regime_attribution');
+    expect(markdown).not.toContain('regimeAttribution');
+    expect(markdown).not.toContain('market regime');
+    expect(markdown).not.toContain('schema');
+    expect(markdown).not.toContain('payload');
+    expect(markdown).not.toContain('stored_audit_rows');
+  });
+
+  it('keeps the drawdown phase attribution appendix compact when stored summary is absent', () => {
+    const baseRun = makeRun({
+      summary: {},
+    });
+
+    const markdown = buildRuleRunReportMarkdown({
+      run: baseRun,
+      normalized: normalizeDeterministicBacktestResult(baseRun),
+    });
+
+    expect(markdown).toContain('## 回撤阶段归因附录');
+    expect(markdown).toContain('状态：未提供');
+    expect(markdown).toContain('来源：当前未提供');
+    expect(markdown).toContain('当前结果未提供回撤阶段归因。');
+    expect(markdown).not.toContain('drawdown_regime_attribution');
+  });
+
   it('creates scenario plans for supported strategies', () => {
     const plans = getRuleScenarioPlans(makeRun());
     const labels = plans.map((plan) => plan.label);

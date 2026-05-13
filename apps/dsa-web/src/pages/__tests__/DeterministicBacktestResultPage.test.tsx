@@ -1746,6 +1746,38 @@ describe('DeterministicBacktestResultPage', () => {
   it('runs lightweight scenario variants and exports the summary report with a robustness appendix', async () => {
     const currentRun = makeResultRun({
       id: 99,
+      summary: {
+        drawdownRegimeAttribution: {
+          version: 'v1',
+          source: 'summary.drawdown_regime_attribution',
+          state: 'available',
+          bucketCounts: {
+            peak: {
+              count: 1,
+              sharePct: 33.3333,
+              avgDepthPct: null,
+              worstDepthPct: null,
+            },
+            moderate: {
+              count: 2,
+              sharePct: 66.6667,
+              avgDepthPct: 8.5,
+              worstDepthPct: 9.2,
+            },
+          },
+          contributionSummaries: {
+            classifiedRows: {
+              count: 3,
+              sharePct: 100,
+            },
+            missingRows: {
+              count: 0,
+              sharePct: 0,
+            },
+          },
+          unavailableReason: null,
+        },
+      },
       robustnessAnalysis: {
         state: 'available',
         walkForward: {
@@ -1839,9 +1871,13 @@ describe('DeterministicBacktestResultPage', () => {
     const markdownBlob = createObjectUrlMock.mock.calls[0]?.[0] as Blob;
     const markdownText = await markdownBlob.text();
     expect(markdownText).toContain('## 稳健性附录');
+    expect(markdownText).toContain('## 回撤阶段归因附录');
     expect(markdownText).toContain('Walk-forward / 样本外检验');
     expect(markdownText).toContain('模拟次数：200');
     expect(markdownText).toContain('单日冲击下跌 15%：收益 -18.40% · Sharpe -1.10 · 回撤 -21.30%');
+    expect(markdownText).toContain('来源：已存审计行汇总');
+    expect(markdownText).toContain('中度回撤：行数 2 · 占比 66.67% · 平均深度 -8.50% · 最深回撤 -9.20%');
+    expect(markdownText).not.toMatch(/drawdown_regime_attribution|regimeAttribution|market regime|schema|payload|stored_audit_rows/i);
 
     fireEvent.click(screen.getByRole('button', { name: '导出 HTML' }));
 
@@ -1853,7 +1889,9 @@ describe('DeterministicBacktestResultPage', () => {
     const htmlText = await htmlBlob.text();
     expect(htmlText).toContain('<pre>');
     expect(htmlText).toContain('## 稳健性附录');
+    expect(htmlText).toContain('## 回撤阶段归因附录');
     expect(htmlText).toContain('蒙特卡洛分布');
+    expect(htmlText).toContain('高点区间：行数 1 · 占比 33.33% · 平均深度 -- · 最深回撤 --');
   });
 
   it('renders localized English result-shell actions and tabs', async () => {
