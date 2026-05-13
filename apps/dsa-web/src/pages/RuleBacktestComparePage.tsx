@@ -5,7 +5,13 @@ import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Card, Disclosure, WorkspacePageHeader } from '../components/common';
-import { TerminalChip, TerminalEmptyState, TerminalNestedBlock, TerminalSectionHeader } from '../components/terminal';
+import {
+  TerminalChip,
+  TerminalEmptyState,
+  TerminalNestedBlock,
+  TerminalPageShell,
+  TerminalSectionHeader,
+} from '../components/terminal';
 import RuleBacktestCompareHeatmapProjectionPanel from '../components/backtest/RuleBacktestCompareHeatmapProjectionPanel';
 import {
   Banner,
@@ -1262,61 +1268,60 @@ const RuleBacktestComparePage: React.FC = () => {
   }, [runIds, searchParams, setSearchParams]);
 
   return (
-    <div className="theme-page-transition backtest-v1-page workspace-page--backtest" data-testid="rule-backtest-compare-page">
-      <WorkspacePageHeader
-        eyebrow="WolfyStock"
-        title="规则回测比较工作台"
-        description={`按请求顺序对比已完成规则回测运行。当前 runIds: ${runIds.length ? runIds.join(', ') : '--'}`}
-        className="backtest-v1-header"
-        contentClassName="backtest-v1-header__layout"
-        descriptionClassName="backtest-v1-header__description"
-        actions={(
-          <div className="product-action-row">
-            <Button variant="ghost" onClick={() => navigate('/backtest')}>
-              返回回测工作区
-            </Button>
-            <Button variant="secondary" onClick={() => void fetchCompare()} disabled={runIds.length < 2}>
-              {isLoading ? '刷新中…' : '刷新比较'}
-            </Button>
-          </div>
-        )}
-      />
+    <main className="w-full overflow-x-hidden py-4 text-white">
+      <TerminalPageShell data-testid="rule-backtest-compare-page">
+        <div className="workspace-page--backtest flex min-h-0 min-w-0 flex-col gap-6">
+          <WorkspacePageHeader
+            eyebrow="WolfyStock"
+            title="规则回测比较工作台"
+            description={`按请求顺序对比已完成规则回测运行。当前 runIds: ${runIds.length ? runIds.join(', ') : '--'}`}
+            actions={(
+              <div className="product-action-row">
+                <Button variant="ghost" onClick={() => navigate('/backtest')}>
+                  返回回测工作区
+                </Button>
+                <Button variant="secondary" onClick={() => void fetchCompare()} disabled={runIds.length < 2}>
+                  {isLoading ? '刷新中…' : '刷新比较'}
+                </Button>
+              </div>
+            )}
+          />
 
-      {runIds.length < 2 ? (
-        <section className="backtest-display-section">
-          <Card title="比较工作台未就绪" subtitle="需要至少两条运行记录" className="product-section-card product-section-card--backtest-result">
-            <div className="product-empty-state product-empty-state--compact">至少需要 2 条已完成运行才能打开比较工作台。</div>
-          </Card>
-        </section>
-      ) : null}
+          {runIds.length < 2 ? (
+            <section className="backtest-display-section">
+              <Card title="比较工作台未就绪" subtitle="需要至少两条运行记录" className="product-section-card product-section-card--backtest-result">
+                <div className="product-empty-state product-empty-state--compact">至少需要 2 条已完成运行才能打开比较工作台。</div>
+              </Card>
+            </section>
+          ) : null}
 
-      {runIds.length >= 2 && isLoading && !response ? (
-        <section className="backtest-display-section">
-          <Card title="加载比较结果" subtitle="正在调用存储优先比较接口" className="product-section-card product-section-card--backtest-result">
-            <div className="product-empty-state product-empty-state--compact">正在拉取比较结果…</div>
-          </Card>
-        </section>
-      ) : null}
+          {runIds.length >= 2 && isLoading && !response ? (
+            <section className="backtest-display-section">
+              <Card title="加载比较结果" subtitle="正在调用存储优先比较接口" className="product-section-card product-section-card--backtest-result">
+                <div className="product-empty-state product-empty-state--compact">正在拉取比较结果…</div>
+              </Card>
+            </section>
+          ) : null}
 
-      {runIds.length >= 2 && error ? (
-        <section className="backtest-display-section">
-          <Card title="比较加载失败" subtitle="比较接口返回了错误" className="product-section-card product-section-card--backtest-result">
-            <ApiErrorAlert error={error} />
-          </Card>
-        </section>
-      ) : null}
+          {runIds.length >= 2 && error ? (
+            <section className="backtest-display-section">
+              <Card title="比较加载失败" subtitle="比较接口返回了错误" className="product-section-card product-section-card--backtest-result">
+                <ApiErrorAlert error={error} />
+              </Card>
+            </section>
+          ) : null}
 
-      {runIds.length >= 2 && response ? (
-        <>
-          <div className="compare-section-nav-shell">
-            <nav className="compare-section-nav" aria-label="比较区块导航">
-              {COMPARE_SECTION_LINKS.map((item) => (
-                <a key={item.id} className="product-chip product-chip--interactive compare-section-nav__link" href={`#${item.id}`}>
-                  {item.label}
-                </a>
-              ))}
-            </nav>
-          </div>
+          {runIds.length >= 2 && response ? (
+            <>
+              <div className="compare-section-nav-shell">
+                <nav className="compare-section-nav" aria-label="比较区块导航">
+                  {COMPARE_SECTION_LINKS.map((item) => (
+                    <a key={item.id} className="product-chip product-chip--interactive compare-section-nav__link" href={`#${item.id}`}>
+                      {item.label}
+                    </a>
+                  ))}
+                </nav>
+              </div>
 
           <section id="compare-summary" className="backtest-display-section">
             <Card title="比较摘要" subtitle="先看整体上下文，再决定是否相信单项领先" className="product-section-card product-section-card--backtest-result">
@@ -1584,9 +1589,11 @@ const RuleBacktestComparePage: React.FC = () => {
               </Disclosure>
             </Card>
           </section>
-        </>
-      ) : null}
-    </div>
+            </>
+          ) : null}
+        </div>
+      </TerminalPageShell>
+    </main>
   );
 };
 

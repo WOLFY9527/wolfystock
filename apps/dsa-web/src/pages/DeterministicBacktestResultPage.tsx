@@ -62,6 +62,7 @@ import type {
 } from '../types/backtest';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { translate, type UiLanguage } from '../i18n/core';
+import { TerminalPageShell } from '../components/terminal';
 import { StatusBadge } from '../components/ui/StatusBadge';
 
 const RULE_POLL_INTERVAL_MS = 1800;
@@ -1300,151 +1301,155 @@ const DeterministicBacktestResultPage: React.FC = () => {
   };
 
   return (
-    <div
-      className="theme-page-transition backtest-v1-page workspace-page--backtest backtest-result-page"
-      data-testid="deterministic-backtest-result-page"
-      data-density={density.mode}
-      style={getDeterministicResultDensityCssVars(density)}
-    >
-      {run?.status === 'completed' && normalized ? renderCompletedHero() : (
-        <section className="backtest-result-page__hero" data-testid="deterministic-result-page-hero">
-          <div className="backtest-result-page__hero-copy">
-            <p className="backtest-result-page__hero-eyebrow">WolfyStock</p>
-            <h1 className="backtest-result-page__hero-title">
-              {hasValidRunId
-                ? `${backtestCopy('resultPage.documentTitle')} #${parsedRunId}`
-                : backtestCopy('resultPage.documentTitle')}
-            </h1>
-            <p className="backtest-result-page__hero-meta">{headerDescription}</p>
-          </div>
-          <div className="backtest-result-page__hero-actions">
-            <Button variant="ghost" size={density.buttonSize} onClick={() => navigate('/backtest')}>
-              {resultPage('hero.backToConfig')}
-            </Button>
-            {run ? (
-              <Button
-                variant="secondary"
-                size={density.buttonSize}
-                onClick={() => navigate('/backtest', { state: { draftRun: run } })}
-              >
-                {resultPage('hero.rerunSameParameters')}
-              </Button>
-            ) : null}
-            {run ? (
-              <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
-                {resultPage('hero.savePreset')}
-              </Button>
-            ) : null}
-            <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
-              {resultPage('hero.refreshResult')}
-            </Button>
-          </div>
-        </section>
-      )}
+    <main className="w-full overflow-x-hidden py-4 text-white">
+      <TerminalPageShell
+        className="min-h-0"
+        data-testid="deterministic-backtest-result-page"
+        data-density={density.mode}
+        style={getDeterministicResultDensityCssVars(density)}
+      >
+        <div className="workspace-page--backtest backtest-result-page flex min-h-0 min-w-0 flex-col">
+          {run?.status === 'completed' && normalized ? renderCompletedHero() : (
+            <section className="backtest-result-page__hero" data-testid="deterministic-result-page-hero">
+              <div className="backtest-result-page__hero-copy">
+                <p className="backtest-result-page__hero-eyebrow">WolfyStock</p>
+                <h1 className="backtest-result-page__hero-title">
+                  {hasValidRunId
+                    ? `${backtestCopy('resultPage.documentTitle')} #${parsedRunId}`
+                    : backtestCopy('resultPage.documentTitle')}
+                </h1>
+                <p className="backtest-result-page__hero-meta">{headerDescription}</p>
+              </div>
+              <div className="backtest-result-page__hero-actions">
+                <Button variant="ghost" size={density.buttonSize} onClick={() => navigate('/backtest')}>
+                  {resultPage('hero.backToConfig')}
+                </Button>
+                {run ? (
+                  <Button
+                    variant="secondary"
+                    size={density.buttonSize}
+                    onClick={() => navigate('/backtest', { state: { draftRun: run } })}
+                  >
+                    {resultPage('hero.rerunSameParameters')}
+                  </Button>
+                ) : null}
+                {run ? (
+                  <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
+                    {resultPage('hero.savePreset')}
+                  </Button>
+                ) : null}
+                <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>
+                  {resultPage('hero.refreshResult')}
+                </Button>
+              </div>
+            </section>
+          )}
 
-      {!hasValidRunId ? (
-        <section className="backtest-display-section">
-          <Card title={resultPage('invalidRun.title')} subtitle={resultPage('invalidRun.subtitle')} className="product-section-card product-section-card--backtest-result">
-            <div className="product-empty-state product-empty-state--compact">{resultPage('invalidRun.body')}</div>
-          </Card>
-        </section>
-      ) : null}
+          {!hasValidRunId ? (
+            <section className="backtest-display-section">
+              <Card title={resultPage('invalidRun.title')} subtitle={resultPage('invalidRun.subtitle')} className="product-section-card product-section-card--backtest-result">
+                <div className="product-empty-state product-empty-state--compact">{resultPage('invalidRun.body')}</div>
+              </Card>
+            </section>
+          ) : null}
 
-      {run?.status === 'completed' && normalized ? null : renderRunStatusSection()}
+          {run?.status === 'completed' && normalized ? null : renderRunStatusSection()}
 
-      {run?.status === 'completed' && normalized ? (
-        <>
-          <Suspense
-            fallback={(
-              <section
-                className="backtest-display-section"
-                data-testid="deterministic-result-report-lazy-fallback"
-                role="status"
-                aria-live="polite"
-              >
-                <div className="rounded-[16px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
-                        WolfyStock
-                      </p>
-                      <p className="truncate text-sm text-white/78">{run.code}</p>
-                    </div>
-                    <span
-                      className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
-                      aria-hidden="true"
-                    />
-                  </div>
-                  <p className="mt-2 text-xs text-white/45">正在加载完整回测报告。</p>
-                  <div className="sr-only">
-                    <section data-testid="backtest-result-report" data-report-mode={resultMode}>
-                      <div data-testid="backtest-report-summary" />
-                      <div data-testid="backtest-readiness-chips">
-                        {resultMode === 'professional' ? '研究级回测' : '标准回测'}
+          {run?.status === 'completed' && normalized ? (
+            <>
+              <Suspense
+                fallback={(
+                  <section
+                    className="backtest-display-section"
+                    data-testid="deterministic-result-report-lazy-fallback"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <div className="rounded-[16px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
+                            WolfyStock
+                          </p>
+                          <p className="truncate text-sm text-white/78">{run.code}</p>
+                        </div>
+                        <span
+                          className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
+                          aria-hidden="true"
+                        />
                       </div>
-                      <div data-testid="backtest-report-key-metrics" />
-                      <div data-testid="backtest-report-chart" />
-                      <div data-testid="backtest-report-trade-table" />
-                      <div data-testid="backtest-report-advanced-details" />
-                    </section>
-                    <div data-testid="deterministic-backtest-result-view" data-run-id={String(run.id)}>
-                      <div
-                        data-testid="deterministic-backtest-chart-workspace"
-                        data-row-count={String(normalized.rows.length)}
-                      >
-                        <div aria-label={backtestCopy('resultPage.chartWorkspace.cumulativeReturnChartAria')} />
+                      <p className="mt-2 text-xs text-white/45">正在加载完整回测报告。</p>
+                      <div className="sr-only">
+                        <section data-testid="backtest-result-report" data-report-mode={resultMode}>
+                          <div data-testid="backtest-report-summary" />
+                          <div data-testid="backtest-readiness-chips">
+                            {resultMode === 'professional' ? '研究级回测' : '标准回测'}
+                          </div>
+                          <div data-testid="backtest-report-key-metrics" />
+                          <div data-testid="backtest-report-chart" />
+                          <div data-testid="backtest-report-trade-table" />
+                          <div data-testid="backtest-report-advanced-details" />
+                        </section>
+                        <div data-testid="deterministic-backtest-result-view" data-run-id={String(run.id)}>
+                          <div
+                            data-testid="deterministic-backtest-chart-workspace"
+                            data-row-count={String(normalized.rows.length)}
+                          >
+                            <div aria-label={backtestCopy('resultPage.chartWorkspace.cumulativeReturnChartAria')} />
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              </section>
-            )}
-          >
-            <BacktestResultReport
-              run={run}
-              mode={resultMode}
-              normalized={normalized}
-              densityConfig={density}
-              chartNode={(
-                <BacktestChartWorkspace
+                  </section>
+                )}
+              >
+                <BacktestResultReport
                   run={run}
+                  mode={resultMode}
                   normalized={normalized}
                   densityConfig={density}
-                  hasRobustnessAnalysis={hasRobustnessAnalysis}
-                  robustnessLensRows={robustnessLensRows}
-                  riskControlRows={riskControlRows}
-                  activeRobustnessKey={activeRobustnessKey}
-                  activeRiskControlKey={activeRiskControlKey}
-                  onActiveRobustnessChange={setActiveRobustnessKey}
-                  onActiveRiskControlChange={setActiveRiskControlKey}
+                  chartNode={(
+                    <BacktestChartWorkspace
+                      run={run}
+                      normalized={normalized}
+                      densityConfig={density}
+                      hasRobustnessAnalysis={hasRobustnessAnalysis}
+                      robustnessLensRows={robustnessLensRows}
+                      riskControlRows={riskControlRows}
+                      activeRobustnessKey={activeRobustnessKey}
+                      activeRiskControlKey={activeRiskControlKey}
+                      onActiveRobustnessChange={setActiveRobustnessKey}
+                      onActiveRiskControlChange={setActiveRiskControlKey}
+                    />
+                  )}
                 />
-              )}
-            />
-          </Suspense>
+              </Suspense>
 
-          <section className="backtest-display-section backtest-result-page__tabs-stage" data-testid="deterministic-result-page-tabs">
-            <div className="backtest-mode-toggle backtest-result-page__tabs" role="tablist" aria-label={backtestCopy('resultPage.tabsAria')}>
-              {tabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  id={`deterministic-result-tab-${tab.key}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === tab.key}
-                  aria-controls={`deterministic-result-tab-panel-${tab.key}`}
-                  className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${activeTab === tab.key ? ' is-active' : ''}`}
-                  onClick={() => setActiveTab(tab.key)}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </section>
+              <section className="backtest-display-section backtest-result-page__tabs-stage" data-testid="deterministic-result-page-tabs">
+                <div className="backtest-mode-toggle backtest-result-page__tabs" role="tablist" aria-label={backtestCopy('resultPage.tabsAria')}>
+                  {tabs.map((tab) => (
+                    <button
+                      key={tab.key}
+                      id={`deterministic-result-tab-${tab.key}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTab === tab.key}
+                      aria-controls={`deterministic-result-tab-panel-${tab.key}`}
+                      className={`backtest-mode-toggle__button !min-h-[36px] md:!min-h-[32px]${activeTab === tab.key ? ' is-active' : ''}`}
+                      onClick={() => setActiveTab(tab.key)}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </section>
 
-          {renderCompletedTabPanel()}
-        </>
-      ) : null}
-    </div>
+              {renderCompletedTabPanel()}
+            </>
+          ) : null}
+        </div>
+      </TerminalPageShell>
+    </main>
   );
 };
 
