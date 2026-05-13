@@ -20,6 +20,10 @@ from src.services.stock_evidence_quote_adapter import (
     StockEvidenceQuoteAdapter,
     StockEvidenceQuoteSnapshot,
 )
+from src.services.stock_service_provider_adapter import (
+    StockServiceProviderAdapter,
+    StockServiceQuoteSnapshot,
+)
 from src.services.stock_service import StockService
 from src.services.us_history_helper import (
     LOCAL_US_PARQUET_SOURCE,
@@ -396,6 +400,43 @@ def test_validate_ticker_exists_accepts_meaningful_quote_name_after_placeholder_
         "exists": True,
         "stock_name": "NVIDIA",
     }
+
+
+def test_stock_service_provider_adapter_returns_service_facing_quote_snapshot() -> None:
+    adapter = StockServiceProviderAdapter(
+        manager_factory=lambda: SimpleNamespace(
+            get_realtime_quote=lambda symbol: UnifiedRealtimeQuote(
+                code=symbol,
+                name="Apple",
+                source=RealtimeSource.ALPACA,
+                price=214.55,
+                change_amount=2.35,
+                change_pct=1.11,
+                open_price=213.0,
+                high=215.0,
+                low=212.5,
+                pre_close=212.2,
+                volume=1000.0,
+                amount=214550.0,
+            )
+        )
+    )
+
+    snapshot = adapter.get_quote_snapshot("AAPL")
+
+    assert snapshot == StockServiceQuoteSnapshot(
+        stock_code="AAPL",
+        stock_name="Apple",
+        current_price=214.55,
+        change=2.35,
+        change_percent=1.11,
+        open=213.0,
+        high=215.0,
+        low=212.5,
+        prev_close=212.2,
+        volume=1000.0,
+        amount=214550.0,
+    )
 
 
 def test_stock_evidence_quote_preserves_available_provider_source() -> None:

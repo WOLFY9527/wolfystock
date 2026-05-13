@@ -223,6 +223,9 @@ EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
     "src/services/stock_service.py": {
         "data_provider.base",
     },
+    "src/services/stock_service_provider_adapter.py": {
+        "data_provider.base",
+    },
     "src/services/stock_evidence_quote_adapter.py": {
         "data_provider.base",
         "data_provider.realtime_types",

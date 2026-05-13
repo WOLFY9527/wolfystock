@@ -16,6 +16,7 @@ from typing import Optional, Dict, Any, List
 import pandas as pd
 
 from src.repositories.stock_repo import StockRepository
+from src.services.stock_service_provider_adapter import StockServiceProviderAdapter
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
 from src.utils.yfinance_symbol import to_yfinance_symbol
 
@@ -56,10 +57,8 @@ class StockService:
             return {"stock_code": normalized_code, "exists": False, "stock_name": None}
 
         try:
-            from data_provider.base import DataFetcherManager
-
-            manager = DataFetcherManager()
-            stock_name = manager.get_stock_name(normalized_code, allow_realtime=False)
+            adapter = StockServiceProviderAdapter()
+            stock_name = adapter.get_stock_name(normalized_code, allow_realtime=False)
             if _is_meaningful_stock_name(stock_name, normalized_code):
                 return {
                     "stock_code": normalized_code,
@@ -67,8 +66,8 @@ class StockService:
                     "stock_name": str(stock_name).strip(),
                 }
 
-            quote = manager.get_realtime_quote(normalized_code)
-            quote_name = getattr(quote, "name", None) if quote is not None else None
+            quote = adapter.get_quote_snapshot(normalized_code)
+            quote_name = quote.stock_name if quote is not None else None
             if _is_meaningful_stock_name(quote_name, normalized_code):
                 return {
                     "stock_code": normalized_code,
@@ -93,41 +92,25 @@ class StockService:
             实时行情数据字典
         """
         try:
-            # 调用数据获取器获取实时行情
-            from data_provider.base import DataFetcherManager
-            
-            manager = DataFetcherManager()
-            quote = manager.get_realtime_quote(stock_code)
+            adapter = StockServiceProviderAdapter()
+            quote = adapter.get_quote_snapshot(stock_code)
             
             if quote is None:
                 logger.warning(f"获取 {stock_code} 实时行情失败")
                 return None
-            
-            # UnifiedRealtimeQuote 是 dataclass，使用 getattr 安全访问字段
-            # 字段映射: UnifiedRealtimeQuote -> API 响应
-            # - code -> stock_code
-            # - name -> stock_name
-            # - price -> current_price
-            # - change_amount -> change
-            # - change_pct -> change_percent
-            # - open_price -> open
-            # - high -> high
-            # - low -> low
-            # - pre_close -> prev_close
-            # - volume -> volume
-            # - amount -> amount
+
             return {
-                "stock_code": getattr(quote, "code", stock_code),
-                "stock_name": getattr(quote, "name", None),
-                "current_price": getattr(quote, "price", 0.0) or 0.0,
-                "change": getattr(quote, "change_amount", None),
-                "change_percent": getattr(quote, "change_pct", None),
-                "open": getattr(quote, "open_price", None),
-                "high": getattr(quote, "high", None),
-                "low": getattr(quote, "low", None),
-                "prev_close": getattr(quote, "pre_close", None),
-                "volume": getattr(quote, "volume", None),
-                "amount": getattr(quote, "amount", None),
+                "stock_code": quote.stock_code,
+                "stock_name": quote.stock_name,
+                "current_price": quote.current_price,
+                "change": quote.change,
+                "change_percent": quote.change_percent,
+                "open": quote.open,
+                "high": quote.high,
+                "low": quote.low,
+                "prev_close": quote.prev_close,
+                "volume": quote.volume,
+                "amount": quote.amount,
                 "update_time": datetime.now().isoformat(),
             }
             
