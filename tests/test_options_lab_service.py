@@ -29,6 +29,8 @@ from src.services.options_lab_domain_models import (
     ExpectedMoveEstimate,
     IvGreeksAssessment,
     LiquidityAssessment,
+    OptionContractSnapshot,
+    OptionGreeksSnapshot,
     OptimizerCandidate,
     OptimizerResult,
     RiskRewardAssessment,
@@ -146,6 +148,22 @@ def test_chain_filters_side_expiration_liquidity_spread_and_greeks() -> None:
     assert response.filters_applied["side"] == "call"
     assert response.filters_applied["minOpenInterest"] == 100
     assert response.filters_applied["maxSpreadPct"] == 20
+
+
+def test_contract_snapshots_map_back_to_identical_api_contracts() -> None:
+    service = _service()
+    fixture = service._fixture_for_symbol("TEM")
+
+    snapshots = list(service._contract_snapshots_for_fixture(fixture, include_greeks=True))
+    mapped_contracts = [service._map_contract_snapshot_to_api_contract(snapshot) for snapshot in snapshots]
+    expected_contracts = list(service._contracts_for_fixture(fixture, include_greeks=True))
+
+    assert snapshots
+    assert isinstance(snapshots[0], OptionContractSnapshot)
+    assert isinstance(snapshots[0].greeks, OptionGreeksSnapshot)
+    assert [contract.model_dump(by_alias=True) for contract in mapped_contracts] == [
+        contract.model_dump(by_alias=True) for contract in expected_contracts
+    ]
 
 
 def test_unsupported_symbol_and_market_are_rejected_without_provider_calls() -> None:

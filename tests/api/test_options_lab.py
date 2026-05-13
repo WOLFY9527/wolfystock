@@ -151,6 +151,37 @@ def test_chain_endpoint_can_return_puts_only() -> None:
         client.close()
 
 
+def test_chain_endpoint_matches_service_alias_contract() -> None:
+    request_params = {
+        "expiration": "2026-06-19",
+        "side": "call",
+        "minOpenInterest": 100,
+        "maxSpreadPct": 20,
+        "includeGreeks": "false",
+        "forceRefresh": "true",
+    }
+
+    client = _client()
+    try:
+        response = client.get("/api/v1/options/underlyings/TEM/chain", params=request_params)
+        assert response.status_code == 200
+
+        expected_payload = OptionsLabService(
+            fixture_path=Path("tests/fixtures/options/tem_chain.json")
+        ).get_chain(
+            "TEM",
+            expiration="2026-06-19",
+            side="call",
+            min_open_interest=100,
+            max_spread_pct=20,
+            include_greeks=False,
+            force_refresh=True,
+        ).model_dump(by_alias=True)
+        assert response.json() == expected_payload
+    finally:
+        client.close()
+
+
 def test_unsupported_symbol_returns_sanitized_error() -> None:
     client = _client()
     try:

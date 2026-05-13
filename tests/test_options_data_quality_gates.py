@@ -140,6 +140,47 @@ def test_missing_iv_greeks_and_iv_rank_block_recommendation_grade_output() -> No
     }.issubset(_issue_codes(diagnostics))
 
 
+def test_snapshot_mapped_contract_preserves_gate_decision() -> None:
+    service = _service()
+    fixture = service._fixture_for_symbol("TEM")
+    snapshot = next(
+        contract
+        for contract in service._contract_snapshots_for_fixture(fixture, include_greeks=True)
+        if contract.contract_symbol == "TEM260619C00055000"
+    )
+    updates = {
+        "source": "approved_live_chain",
+        "freshness": "fresh",
+        "provider_quality": "decision_grade_candidate",
+        "data_quality": {"tradeable": True, "tier": "live_usable", "hints": []},
+    }
+    direct_contract = _decision_grade_contract("TEM260619C00055000")
+    snapshot_contract = service._map_contract_snapshot_to_api_contract(snapshot).model_copy(update=updates)
+
+    direct_diagnostics = evaluate_options_data_quality_gates(
+        strategy_key="long_call",
+        contracts=[direct_contract],
+        chain_as_of="2026-05-06T13:45:00Z",
+        source_type="live",
+        iv_rank_status="available",
+        iv_rank_source="approved_live_iv_history",
+        iv_percentile=68.0,
+        expected_move_source="straddle_mid",
+    )
+    snapshot_diagnostics = evaluate_options_data_quality_gates(
+        strategy_key="long_call",
+        contracts=[snapshot_contract],
+        chain_as_of="2026-05-06T13:45:00Z",
+        source_type="live",
+        iv_rank_status="available",
+        iv_rank_source="approved_live_iv_history",
+        iv_percentile=68.0,
+        expected_move_source="straddle_mid",
+    )
+
+    assert snapshot_diagnostics.to_dict() == direct_diagnostics.to_dict()
+
+
 def test_unsupported_strategy_returns_fail_closed_diagnostics() -> None:
     contract = _decision_grade_contract("TEM260619C00055000")
 

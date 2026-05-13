@@ -59,6 +59,8 @@ from src.services.options_lab_domain_models import (
     ExpectedMoveEstimate,
     IvGreeksAssessment,
     LiquidityAssessment,
+    OptionContractSnapshot,
+    OptionGreeksSnapshot,
     OptimizerCandidate,
     OptimizerResult,
     RiskRewardAssessment,
@@ -630,6 +632,47 @@ class OptionsLabService:
             breakeven=risk.breakeven,
             requiredMovePct=risk.required_move_pct,
             maxLoss=risk.max_loss,
+        )
+
+    @staticmethod
+    def _map_greeks_snapshot_to_api_greeks(greeks: Optional[OptionGreeksSnapshot]) -> Optional[OptionGreeks]:
+        if greeks is None:
+            return None
+        return OptionGreeks(
+            delta=greeks.delta,
+            gamma=greeks.gamma,
+            theta=greeks.theta,
+            vega=greeks.vega,
+            rho=greeks.rho,
+        )
+
+    @classmethod
+    def _map_contract_snapshot_to_api_contract(cls, contract: OptionContractSnapshot) -> OptionContract:
+        return OptionContract(
+            symbol=contract.symbol,
+            contractSymbol=contract.contract_symbol,
+            side=contract.side,
+            expiration=contract.expiration,
+            strike=contract.strike,
+            multiplier=contract.multiplier,
+            bid=contract.bid,
+            ask=contract.ask,
+            mid=contract.mid,
+            last=contract.last,
+            volume=contract.volume,
+            openInterest=contract.open_interest,
+            impliedVolatility=contract.implied_volatility,
+            greeks=cls._map_greeks_snapshot_to_api_greeks(contract.greeks),
+            dte=contract.dte,
+            moneyness=contract.moneyness,
+            spreadPct=contract.spread_pct,
+            liquidityBucket=contract.liquidity_bucket,
+            asOf=contract.as_of,
+            source=contract.source,
+            freshness=contract.freshness,
+            providerQuality=contract.provider_quality,
+            dataQuality=dict(contract.data_quality),
+            warnings=list(contract.warnings),
         )
 
     @staticmethod
@@ -1572,6 +1615,14 @@ class OptionsLabService:
         }
 
     def _contracts_for_fixture(self, fixture: Dict[str, Any], include_greeks: bool) -> Iterable[OptionContract]:
+        for contract in self._contract_snapshots_for_fixture(fixture, include_greeks=include_greeks):
+            yield self._map_contract_snapshot_to_api_contract(contract)
+
+    def _contract_snapshots_for_fixture(
+        self,
+        fixture: Dict[str, Any],
+        include_greeks: bool,
+    ) -> Iterable[OptionContractSnapshot]:
         expiration_dte = {str(item["date"]): int(item["dte"]) for item in fixture.get("expirations") or []}
         underlying_price = float((fixture.get("underlying") or {}).get("price") or 0)
         for item in sorted(
@@ -1587,9 +1638,12 @@ class OptionsLabService:
             mid = self._mid(bid, ask)
             spread_pct = self._spread_pct(bid, ask, mid)
             expiration = str(item.get("expiration") or "")
-            yield OptionContract(
+            greeks = None
+            if include_greeks and item.get("greeks"):
+                greeks = OptionGreeksSnapshot(**dict(item.get("greeks") or {}))
+            yield OptionContractSnapshot(
                 symbol=fixture["symbol"],
-                contractSymbol=str(item.get("contractSymbol") or ""),
+                contract_symbol=str(item.get("contractSymbol") or ""),
                 side=str(item.get("side") or "").lower(),
                 expiration=expiration,
                 strike=float(item.get("strike") or 0),
@@ -1599,26 +1653,22 @@ class OptionsLabService:
                 mid=mid,
                 last=self._float_or_none(item.get("last")),
                 volume=self._int_or_none(item.get("volume")),
-                openInterest=self._int_or_none(item.get("openInterest")),
-                impliedVolatility=self._float_or_none(item.get("impliedVolatility")),
-                greeks=(
-                    OptionGreeks(**dict(item.get("greeks") or {}))
-                    if include_greeks and item.get("greeks")
-                    else None
-                ),
+                open_interest=self._int_or_none(item.get("openInterest")),
+                implied_volatility=self._float_or_none(item.get("impliedVolatility")),
+                greeks=greeks,
                 dte=expiration_dte.get(expiration, 0),
                 moneyness=self._moneyness(
                     str(item.get("side") or ""),
                     float(item.get("strike") or 0),
                     underlying_price,
                 ),
-                spreadPct=spread_pct,
-                liquidityBucket=self._liquidity_bucket(spread_pct, self._int_or_none(item.get("openInterest"))),
-                asOf=fixture["chainAsOf"],
+                spread_pct=spread_pct,
+                liquidity_bucket=self._liquidity_bucket(spread_pct, self._int_or_none(item.get("openInterest"))),
+                as_of=fixture["chainAsOf"],
                 source=str(item.get("source") or fixture["source"]),
                 freshness=str(item.get("freshness") or (fixture.get("underlying") or {}).get("freshness") or "unknown"),
-                providerQuality=item.get("providerQuality") or fixture.get("providerQuality"),
-                dataQuality=dict(item.get("dataQuality") or fixture.get("dataQuality") or {}),
+                provider_quality=item.get("providerQuality") or fixture.get("providerQuality"),
+                data_quality=dict(item.get("dataQuality") or fixture.get("dataQuality") or {}),
                 warnings=list(
                     dict.fromkeys(
                         list(item.get("warnings") or [])

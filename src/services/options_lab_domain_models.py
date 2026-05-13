@@ -12,6 +12,43 @@ from typing import Any, Optional
 
 
 @dataclass
+class OptionGreeksSnapshot:
+    delta: Optional[float] = None
+    gamma: Optional[float] = None
+    theta: Optional[float] = None
+    vega: Optional[float] = None
+    rho: Optional[float] = None
+
+
+@dataclass
+class OptionContractSnapshot:
+    symbol: str
+    contract_symbol: str
+    side: str
+    expiration: str
+    strike: float
+    multiplier: int = 100
+    bid: Optional[float] = None
+    ask: Optional[float] = None
+    mid: Optional[float] = None
+    last: Optional[float] = None
+    volume: Optional[int] = None
+    open_interest: Optional[int] = None
+    implied_volatility: Optional[float] = None
+    greeks: Optional[OptionGreeksSnapshot] = None
+    dte: int = 0
+    moneyness: str = "unknown"
+    spread_pct: Optional[float] = None
+    liquidity_bucket: str = "unknown"
+    as_of: str = ""
+    source: str = ""
+    freshness: str = "unknown"
+    provider_quality: Optional[str] = None
+    data_quality: dict[str, Any] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
 class DecisionDataQualityAssessment:
     data_quality_score: float
     data_quality_tier: str
