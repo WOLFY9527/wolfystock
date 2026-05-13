@@ -6,6 +6,7 @@ import type { RuleBacktestRunResponse } from '../../types/backtest';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import {
   TerminalButton,
+  TerminalChip,
   TerminalDisclosure,
   TerminalMetric,
   TerminalNestedBlock,
@@ -15,6 +16,14 @@ import {
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
 
+export type BacktestWalkForwardOverview = {
+  stateKey: 'available' | 'partial' | 'unavailable' | 'insufficient_history';
+  stateLabel: string;
+  windowSummary: string | null;
+  meanReturn: string | null;
+  maxDrawdown: string | null;
+};
+
 type BacktestOverviewSummaryProps = {
   resultPage: TranslateFn;
   run: RuleBacktestRunResponse;
@@ -22,6 +31,7 @@ type BacktestOverviewSummaryProps = {
   selectedBenchmarkLabel: string;
   buyAndHoldLabel: string;
   benchmarkStatusNote: string;
+  walkForwardOverview: BacktestWalkForwardOverview;
   decisionReportMarkdown: string;
   onExportDecisionReport: (format: 'md' | 'html') => void;
 };
@@ -33,6 +43,7 @@ const BacktestOverviewSummary: React.FC<BacktestOverviewSummaryProps> = ({
   selectedBenchmarkLabel,
   buyAndHoldLabel,
   benchmarkStatusNote,
+  walkForwardOverview,
   decisionReportMarkdown,
   onExportDecisionReport,
 }) => {
@@ -44,6 +55,44 @@ const BacktestOverviewSummary: React.FC<BacktestOverviewSummaryProps> = ({
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
   };
+
+  const walkForwardMetrics = [
+    walkForwardOverview.windowSummary
+      ? {
+        key: 'windows',
+        label: resultPage('overview.walkForwardWindowsLabel'),
+        value: walkForwardOverview.windowSummary,
+      }
+      : null,
+    walkForwardOverview.meanReturn
+      ? {
+        key: 'mean-return',
+        label: resultPage('overview.walkForwardMeanReturnLabel'),
+        value: walkForwardOverview.meanReturn,
+      }
+      : null,
+    walkForwardOverview.maxDrawdown
+      ? {
+        key: 'drawdown',
+        label: resultPage('overview.walkForwardDrawdownLabel'),
+        value: walkForwardOverview.maxDrawdown,
+      }
+      : null,
+  ].filter(Boolean) as Array<{ key: string; label: string; value: string }>;
+
+  const walkForwardBody = walkForwardOverview.stateKey === 'insufficient_history'
+    ? resultPage('overview.walkForwardInsufficientBody')
+    : walkForwardMetrics.length
+      ? resultPage('overview.walkForwardBody')
+      : resultPage('overview.walkForwardUnavailableBody');
+
+  const walkForwardStateVariant = walkForwardOverview.stateKey === 'available'
+    ? 'success'
+    : walkForwardOverview.stateKey === 'partial'
+      ? 'caution'
+      : walkForwardOverview.stateKey === 'insufficient_history'
+        ? 'caution'
+        : 'neutral';
 
   return (
     <section
@@ -67,6 +116,30 @@ const BacktestOverviewSummary: React.FC<BacktestOverviewSummaryProps> = ({
             { label: resultPage('overview.metricBuyAndHold'), value: pct(run.buyAndHoldReturnPct) },
           ]}
         />
+        <TerminalNestedBlock data-testid="overview-walk-forward-summary" className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">
+                {resultPage('overview.walkForwardEyebrow')}
+              </p>
+              <h3 className="mt-1 text-sm font-medium text-white/90">{resultPage('overview.walkForwardTitle')}</h3>
+              <p className="mt-1 text-xs leading-5 text-white/50">{walkForwardBody}</p>
+            </div>
+            <TerminalChip variant={walkForwardStateVariant}>{walkForwardOverview.stateLabel}</TerminalChip>
+          </div>
+          {walkForwardMetrics.length ? (
+            <div className="grid gap-3 md:grid-cols-3">
+              {walkForwardMetrics.map((item) => (
+                <TerminalMetric
+                  key={item.key}
+                  label={item.label}
+                  value={item.value}
+                  valueClassName="text-sm font-semibold"
+                />
+              ))}
+            </div>
+          ) : null}
+        </TerminalNestedBlock>
         <TerminalDisclosure title={resultPage('overview.benchmarkDisclosure')}>
           <div className="flex flex-col gap-4">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">

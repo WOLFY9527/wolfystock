@@ -10,7 +10,7 @@ import BacktestChartWorkspace, {
   type CoverageTrackItem,
   type RiskControlVisualRow,
 } from '../components/backtest/BacktestChartWorkspace';
-import BacktestOverviewSummary from '../components/backtest/BacktestOverviewSummary';
+import BacktestOverviewSummary, { type BacktestWalkForwardOverview } from '../components/backtest/BacktestOverviewSummary';
 import {
   getDeterministicResultDensityCssVars,
   useDeterministicResultDensity,
@@ -130,6 +130,14 @@ function getFiniteNumber(value: unknown): number | null {
   return null;
 }
 
+function normalizeRobustnessState(value: unknown): 'available' | 'partial' | 'unavailable' | 'insufficient_history' | null {
+  const normalized = String(value || '').trim().toLowerCase().replaceAll('-', '_');
+  if (normalized === 'available' || normalized === 'partial' || normalized === 'unavailable' || normalized === 'insufficient_history') {
+    return normalized;
+  }
+  return null;
+}
+
 function clampRatio(value: number | null): number {
   if (value == null || !Number.isFinite(value)) return 0;
   return Math.min(1, Math.max(0, value));
@@ -147,11 +155,18 @@ function btr(language: UiLanguage, key: string, vars?: Record<string, string | n
 }
 
 function getRobustnessStateLabel(value: unknown, language: UiLanguage): string {
-  const normalized = String(value || '').trim().toLowerCase();
+  const normalized = normalizeRobustnessState(value);
   if (normalized === 'available') return btr(language, 'robustnessState.available');
   if (normalized === 'partial') return btr(language, 'robustnessState.partial');
   if (normalized === 'unavailable') return btr(language, 'robustnessState.unavailable');
-  return normalized ? String(value) : '--';
+  if (normalized === 'insufficient_history') return btr(language, 'robustnessState.insufficientHistory');
+  return typeof value === 'string' && value.trim() ? value.trim() : '--';
+}
+
+function formatDrawdownPct(value: unknown): string | null {
+  const numeric = getFiniteNumber(value);
+  if (numeric == null) return null;
+  return pct(numeric > 0 ? -numeric : numeric);
 }
 
 function getRiskControlVisualRows(
@@ -315,6 +330,33 @@ const DeterministicBacktestResultPage: React.FC = () => {
     walkForwardConfig,
     worstScenario,
   ]);
+  const walkForwardOverview = useMemo<BacktestWalkForwardOverview>(() => {
+    const walkForwardState = normalizeRobustnessState(getObjectField(walkForward, 'state'));
+    const robustnessState = normalizeRobustnessState(getObjectField(robustnessAnalysis, 'state'));
+    const windowCount = getFiniteNumber(getObjectField(walkForward, 'windowCount'));
+    const meanReturn = getFiniteNumber(getObjectField(walkForwardAggregate, 'meanTotalReturnPct'));
+    const maxDrawdown = formatDrawdownPct(
+      getObjectField(walkForwardAggregate, 'maxDrawdownPct')
+      ?? getObjectField(walkForwardAggregate, 'meanMaxDrawdownPct'),
+    );
+    const hasWalkForwardMetrics = windowCount != null || meanReturn != null || maxDrawdown != null;
+    const stateKey: BacktestWalkForwardOverview['stateKey'] = walkForwardState
+      ?? (hasWalkForwardMetrics
+        ? 'available'
+        : (robustnessState === 'insufficient_history' || robustnessState === 'partial' || robustnessState === 'unavailable'
+          ? robustnessState
+          : 'unavailable'));
+
+    return {
+      stateKey,
+      stateLabel: getRobustnessStateLabel(getObjectField(walkForward, 'state') ?? stateKey, language),
+      windowSummary: windowCount == null
+        ? null
+        : btr(language, 'riskControls.walkForwardWindows', { count: formatNumber(windowCount, 0) }),
+      meanReturn: meanReturn == null ? null : pct(meanReturn),
+      maxDrawdown,
+    };
+  }, [language, robustnessAnalysis, walkForward, walkForwardAggregate]);
   const tabs = RESULT_PAGE_TAB_KEYS.map((key) => ({
     key,
     label: backtestCopy(`resultPage.tabs.${key}`),
@@ -965,6 +1007,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
           selectedBenchmarkLabel={selectedBenchmarkLabel}
           buyAndHoldLabel={buyAndHoldLabel}
           benchmarkStatusNote={benchmarkStatusNote}
+          walkForwardOverview={walkForwardOverview}
           decisionReportMarkdown={decisionReportMarkdown}
           onExportDecisionReport={handleExportDecisionReport}
         />

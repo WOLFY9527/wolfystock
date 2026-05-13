@@ -684,6 +684,70 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByTestId('robustness-lens-row-stress-tests')).toHaveTextContent('3 场景');
   });
 
+  it('renders compact walk-forward diagnostics in the overview tab from existing robustness analysis', async () => {
+    const currentRun = makeResultRun({
+      robustnessAnalysis: {
+        state: 'available',
+        walkForward: {
+          state: 'available',
+          windowCount: 4,
+          aggregateMetrics: {
+            meanTotalReturnPct: 6.2,
+            maxDrawdownPct: -3.1,
+          },
+        },
+      },
+    });
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+
+    const overviewSummary = screen.getByTestId('overview-walk-forward-summary');
+    expect(overviewSummary).toHaveTextContent('样本外稳健性');
+    expect(overviewSummary).toHaveTextContent('固定窗口');
+    expect(overviewSummary).toHaveTextContent('可用');
+    expect(overviewSummary).toHaveTextContent('4 窗口');
+    expect(overviewSummary).toHaveTextContent('6.20%');
+    expect(overviewSummary).toHaveTextContent('-3.10%');
+  });
+
+  it('renders a compact insufficient-history state in the overview tab when walk-forward diagnostics cannot run', async () => {
+    const currentRun = makeResultRun({
+      robustnessAnalysis: {
+        state: 'insufficient_history',
+        walkForward: {
+          state: 'insufficient_history',
+        },
+      },
+    });
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+
+    const overviewSummary = screen.getByTestId('overview-walk-forward-summary');
+    expect(overviewSummary).toHaveTextContent('样本外稳健性');
+    expect(overviewSummary).toHaveTextContent('样本不足');
+    expect(overviewSummary).not.toHaveTextContent('4 窗口');
+  });
+
   it('surfaces additive robustness and risk-control panels in the unified dashboard stage', async () => {
     const baselineRun = makeResultRun();
     const currentRun = makeResultRun({
@@ -982,6 +1046,8 @@ describe('DeterministicBacktestResultPage', () => {
     renderResultPage();
 
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+    expect(screen.getByTestId('overview-walk-forward-summary')).toHaveTextContent('样本外稳健性');
+    expect(screen.getByTestId('overview-walk-forward-summary')).toHaveTextContent('不可用');
 
     fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
