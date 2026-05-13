@@ -351,11 +351,16 @@ describe('WatchlistPage', () => {
   it('keeps candidate rows before secondary filters and batch controls', async () => {
     renderWatchlist();
     const rows = await screen.findByTestId('watchlist-candidate-list');
+    const shell = screen.getByTestId('watchlist-page');
+    const secondaryControls = screen.getByTestId('watchlist-secondary-controls');
 
     expect(rows).toContainElement(screen.getByTestId('watchlist-row-NVDA'));
-    expect(screen.getByTestId('watchlist-secondary-controls')).toHaveTextContent('扫描当前筛选');
+    expect(secondaryControls).toHaveTextContent('扫描当前筛选');
     expect(rows).toHaveClass('order-1');
-    expect(screen.getByTestId('watchlist-secondary-controls')).toHaveClass('order-2');
+    expect(secondaryControls).toHaveClass('order-2');
+    expect(shell).toHaveClass('flex', 'flex-col', 'gap-6', 'px-4', 'xl:px-8');
+    expect(rows.parentElement).toBe(shell);
+    expect(secondaryControls.parentElement).toBe(shell);
   });
 
   it('disables intelligence actions for an empty filtered set with a compact reason', async () => {
