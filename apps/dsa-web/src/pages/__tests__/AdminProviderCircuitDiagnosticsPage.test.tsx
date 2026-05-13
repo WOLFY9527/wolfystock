@@ -206,6 +206,16 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.queryByText('SECRET')).not.toBeInTheDocument();
   });
 
+  it('does not keep a page-local pure-black slab on the route root', async () => {
+    getDiagnostics.mockResolvedValue(response);
+
+    render(<AdminProviderCircuitDiagnosticsPage />);
+
+    const routeRoot = await screen.findByTestId('admin-provider-circuit-diagnostics-page');
+
+    expect(routeRoot).not.toHaveClass('bg-[#050505]');
+  });
+
   it('does not render or fetch when provider read capability is missing', () => {
     useProductSurfaceMock.mockReturnValue({ canReadProviders: false });
 
