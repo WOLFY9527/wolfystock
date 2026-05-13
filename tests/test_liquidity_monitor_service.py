@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import ast
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict
@@ -15,6 +17,22 @@ from src.storage import DatabaseManager
 
 
 CN_TZ = timezone(timedelta(hours=8))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+LIQUIDITY_MONITOR_SERVICE_PATH = REPO_ROOT / "src/services/liquidity_monitor_service.py"
+FORBIDDEN_LIQUIDITY_MONITOR_IMPORT_PREFIXES = (
+    "data_provider",
+    "requests",
+    "httpx",
+    "aiohttp",
+    "urllib3",
+    "yfinance",
+)
+FORBIDDEN_LIQUIDITY_MONITOR_CACHE_PATTERNS = (
+    r"\bself\.cache\.get_or_refresh\(",
+    r"\bmarket_cache\.get_or_refresh\(",
+    r"\bself\.cache\.set\(",
+    r"\bmarket_cache\.set\(",
+)
 
 
 @pytest.fixture()
@@ -50,6 +68,54 @@ def _cache_entry(
 
 def _make_service() -> LiquidityMonitorService:
     return LiquidityMonitorService(cache=MarketCache(max_workers=1), db=DatabaseManager.get_instance())
+
+
+def _liquidity_monitor_imports() -> set[str]:
+    tree = ast.parse(LIQUIDITY_MONITOR_SERVICE_PATH.read_text(encoding="utf-8"))
+    imported_modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported_modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported_modules.add(node.module)
+    return imported_modules
+
+
+def test_liquidity_monitor_runtime_source_stays_cache_only() -> None:
+    imported_modules = _liquidity_monitor_imports()
+    forbidden_imports = sorted(
+        module
+        for module in imported_modules
+        if any(
+            module == prefix or module.startswith(prefix + ".")
+            for prefix in FORBIDDEN_LIQUIDITY_MONITOR_IMPORT_PREFIXES
+        )
+    )
+    source_text = LIQUIDITY_MONITOR_SERVICE_PATH.read_text(encoding="utf-8")
+
+    assert not forbidden_imports, (
+        "Liquidity Monitor must remain a cache-only advisory surface. Do not "
+        "add direct provider SDK or raw HTTP imports here; extend it only via "
+        f"existing MarketCache snapshots and metadata. Found {forbidden_imports}"
+    )
+    for pattern in FORBIDDEN_LIQUIDITY_MONITOR_CACHE_PATTERNS:
+        assert re.search(pattern, source_text) is None, (
+            "Liquidity Monitor must not refresh or mutate MarketCache. "
+            "Preserve its existing cache-only/metadata semantics and keep "
+            f"`{pattern}` out of liquidity_monitor_service.py"
+        )
+
+
+def test_liquidity_monitor_metadata_declares_cache_only_boundary(isolated_db: DatabaseManager) -> None:
+    payload = _make_service().get_liquidity_monitor()
+
+    assert payload["endpoint"] == "/api/v1/market/liquidity-monitor"
+    assert payload["sourceMetadata"] == {
+        "externalProviderCalls": False,
+        "providerRuntimeChanged": False,
+        "marketCacheMutation": False,
+    }
+    assert "不触发扫描、回测或组合动作" in payload["advisoryDisclosure"]
 
 
 def test_unavailable_when_fewer_than_three_reliable_indicators(isolated_db: DatabaseManager) -> None:

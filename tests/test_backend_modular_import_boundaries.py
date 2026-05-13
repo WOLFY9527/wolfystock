@@ -237,6 +237,26 @@ EXPECTED_DIRECT_PROVIDER_CLIENT_IMPORTS = {
     "src/services/market_overview_service.py": {"yfinance"},
     "src/services/stock_service.py": {"yfinance"},
 }
+EXPECTED_PROVIDER_HEAVY_SERVICE_FILES = frozenset(
+    {
+        *EXPECTED_PROVIDER_RUNTIME_IMPORTS,
+        *EXPECTED_DIRECT_PROVIDER_CLIENT_IMPORTS,
+    }
+)
+KNOWN_PROVIDER_RUNTIME_HOTSPOTS = {
+    "src/services/market_overview_service.py": {
+        "provider_runtime": {"src.services.market_cache"},
+        "direct_provider_clients": {"yfinance"},
+    },
+    "src/services/market_scanner_service.py": {
+        "provider_runtime": {"data_provider.base"},
+        "direct_provider_clients": set(),
+    },
+}
+STOCK_SERVICE_TRANSITIONAL_PROVIDER_BOUNDARY = {
+    "provider_runtime": {"data_provider.base"},
+    "direct_provider_clients": {"yfinance"},
+}
 RULE_BACKTEST_LLM_IMPORT_PREFIXES = (
     "src.agent",
     "src.config",
@@ -503,6 +523,63 @@ def test_direct_provider_client_import_inventory_is_explicit() -> None:
         "direct provider client imports in backend services must stay explicitly "
         "inventoried. Expected importer->module mapping "
         f"{EXPECTED_DIRECT_PROVIDER_CLIENT_IMPORTS}, found {actual_mapping}"
+    )
+
+
+def test_provider_heavy_service_file_inventory_is_explicit() -> None:
+    actual_service_files = frozenset(
+        {
+            *_import_mapping_for_prefixes((SERVICES_ROOT,), PROVIDER_RUNTIME_IMPORT_PREFIXES),
+            *_import_mapping_for_prefixes((SERVICES_ROOT,), DIRECT_PROVIDER_CLIENT_IMPORT_PREFIXES),
+        }
+    )
+
+    assert actual_service_files == EXPECTED_PROVIDER_HEAVY_SERVICE_FILES, (
+        "provider-heavy service files must stay explicit inventory items. "
+        "New provider/runtime-heavy service files cannot appear accidentally; "
+        f"expected {sorted(EXPECTED_PROVIDER_HEAVY_SERVICE_FILES)}, found {sorted(actual_service_files)}"
+    )
+
+
+def test_known_provider_runtime_hotspots_remain_explicit() -> None:
+    actual_mapping = {
+        relative_path: {
+            "provider_runtime": _imports_for_file(
+                REPO_ROOT / relative_path,
+                PROVIDER_RUNTIME_IMPORT_PREFIXES,
+            ),
+            "direct_provider_clients": _imports_for_file(
+                REPO_ROOT / relative_path,
+                DIRECT_PROVIDER_CLIENT_IMPORT_PREFIXES,
+            ),
+        }
+        for relative_path in KNOWN_PROVIDER_RUNTIME_HOTSPOTS
+    }
+
+    assert actual_mapping == KNOWN_PROVIDER_RUNTIME_HOTSPOTS, (
+        "market_overview_service.py and market_scanner_service.py are known "
+        "high-risk provider/runtime hotspots. Do not refactor them during "
+        "generic service cleanup; any change needs an approved provider "
+        f"adapter slice and an updated explicit inventory. Found {actual_mapping}"
+    )
+
+
+def test_stock_service_transitional_provider_boundary_stays_frozen() -> None:
+    actual_boundary = {
+        "provider_runtime": _imports_for_file(
+            SERVICES_ROOT / "stock_service.py",
+            PROVIDER_RUNTIME_IMPORT_PREFIXES,
+        ),
+        "direct_provider_clients": _imports_for_file(
+            SERVICES_ROOT / "stock_service.py",
+            DIRECT_PROVIDER_CLIENT_IMPORT_PREFIXES,
+        ),
+    }
+
+    assert actual_boundary == STOCK_SERVICE_TRANSITIONAL_PROVIDER_BOUNDARY, (
+        "StockService provider/runtime imports are a transitional boundary. "
+        "Do not broaden its SDK/runtime dependencies without an approved "
+        f"adapter slice. Expected {STOCK_SERVICE_TRANSITIONAL_PROVIDER_BOUNDARY}, found {actual_boundary}"
     )
 
 
