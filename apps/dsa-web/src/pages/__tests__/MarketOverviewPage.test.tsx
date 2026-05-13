@@ -1000,6 +1000,7 @@ describe('MarketOverviewPage', () => {
     expect(shell).toHaveAttribute('data-bento-surface', 'true');
     expect(shell).toHaveClass('bento-surface-root', 'w-full', 'flex', 'flex-1', 'min-h-0', 'min-w-0', 'flex-col', 'gap-6');
     expect(shell).not.toHaveClass('px-4', 'sm:px-6', 'lg:px-8', '2xl:px-10', 'py-6');
+    expect(shell).not.toHaveClass('bg-[#030303]');
     expect(shell.className).not.toContain('max-w-[1280px]');
     expect(shell.className).not.toContain('max-w-[1600px]');
     expect(shell.className).not.toContain('max-w-[1800px]');
