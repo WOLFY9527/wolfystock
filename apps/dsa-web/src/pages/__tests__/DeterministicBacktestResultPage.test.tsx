@@ -64,6 +64,43 @@ const { auditTablesImportGate } = vi.hoisted(() => {
   };
 });
 
+const { reportImportGate } = vi.hoisted(() => {
+  let delayEnabled = false;
+  let releaseResolver: (() => void) | null = null;
+  let pendingPromise: Promise<void> | null = null;
+
+  return {
+    reportImportGate: {
+      enable() {
+        delayEnabled = true;
+      },
+      reset() {
+        delayEnabled = false;
+        pendingPromise = null;
+        const resolve = releaseResolver;
+        releaseResolver = null;
+        resolve?.();
+      },
+      release() {
+        delayEnabled = false;
+        pendingPromise = null;
+        const resolve = releaseResolver;
+        releaseResolver = null;
+        resolve?.();
+      },
+      wait() {
+        if (!delayEnabled) return Promise.resolve();
+        if (!pendingPromise) {
+          pendingPromise = new Promise<void>((resolve) => {
+            releaseResolver = resolve;
+          });
+        }
+        return pendingPromise;
+      },
+    },
+  };
+});
+
 vi.mock('../../api/backtest', () => ({
   backtestApi: {
     getRuleBacktestRun,
@@ -78,6 +115,11 @@ vi.mock('../../api/backtest', () => ({
 vi.mock('../../components/backtest/BacktestAuditTables', async (importOriginal) => {
   await auditTablesImportGate.wait();
   return importOriginal<typeof import('../../components/backtest/BacktestAuditTables')>();
+});
+
+vi.mock('../../components/backtest/BacktestResultReport', async (importOriginal) => {
+  await reportImportGate.wait();
+  return importOriginal<typeof import('../../components/backtest/BacktestResultReport')>();
 });
 
 function renderResultPage(initialEntries: string[] = ['/backtest/results/99']) {
@@ -336,6 +378,7 @@ describe('DeterministicBacktestResultPage', () => {
     vi.useRealTimers();
     vi.stubGlobal('confirm', vi.fn(() => true));
     auditTablesImportGate.reset();
+    reportImportGate.reset();
     writeTextMock.mockReset();
     writeTextMock.mockResolvedValue(undefined);
     originalClipboard = navigator.clipboard;
@@ -355,6 +398,36 @@ describe('DeterministicBacktestResultPage', () => {
       value: originalClipboard,
     });
   });
+
+  it('lazy-loads the completed report surface with a compact fallback', async () => {
+    const currentRun = makeResultRun({ id: 99, runAt: '2026-04-07T08:00:00Z' });
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    reportImportGate.enable();
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-result-report-lazy-fallback')).toBeInTheDocument();
+    expect(screen.getByTestId('deterministic-result-page-bento-hero')).toBeInTheDocument();
+    expect(screen.getByTestId('deterministic-result-page-tabs')).toBeInTheDocument();
+
+    reportImportGate.release();
+
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
+    await waitFor(() => {
+      expect(screen.queryByTestId('deterministic-result-report-lazy-fallback')).not.toBeInTheDocument();
+    });
+  }, 10000);
 
   it('polls processing runs on the result page and then renders the completed analysis workspace', async () => {
     const queuedRun = makeResultRun({

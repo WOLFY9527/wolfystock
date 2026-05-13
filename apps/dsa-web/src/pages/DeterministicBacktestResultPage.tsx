@@ -5,7 +5,7 @@ import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Card } from '../components/common';
-import BacktestResultReport, { type BacktestResultReportMode } from '../components/backtest/BacktestResultReport';
+import type { BacktestResultReportMode } from '../components/backtest/BacktestResultReport';
 import BacktestChartWorkspace, {
   type CoverageTrackItem,
   type RiskControlVisualRow,
@@ -66,6 +66,7 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 
 const RULE_POLL_INTERVAL_MS = 1800;
 const RESULT_HISTORY_PAGE_SIZE = 10;
+const BacktestResultReport = lazy(() => import('../components/backtest/BacktestResultReport'));
 
 type ResultPageLocationState = {
   initialRun?: RuleBacktestRunResponse;
@@ -1201,26 +1202,73 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
       {run?.status === 'completed' && normalized ? (
         <>
-          <BacktestResultReport
-            run={run}
-            mode={resultMode}
-            normalized={normalized}
-            densityConfig={density}
-            chartNode={(
-              <BacktestChartWorkspace
-                run={run}
-                normalized={normalized}
-                densityConfig={density}
-                hasRobustnessAnalysis={hasRobustnessAnalysis}
-                robustnessLensRows={robustnessLensRows}
-                riskControlRows={riskControlRows}
-                activeRobustnessKey={activeRobustnessKey}
-                activeRiskControlKey={activeRiskControlKey}
-                onActiveRobustnessChange={setActiveRobustnessKey}
-                onActiveRiskControlChange={setActiveRiskControlKey}
-              />
+          <Suspense
+            fallback={(
+              <section
+                className="backtest-display-section"
+                data-testid="deterministic-result-report-lazy-fallback"
+                role="status"
+                aria-live="polite"
+              >
+                <div className="rounded-[16px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
+                        WolfyStock
+                      </p>
+                      <p className="truncate text-sm text-white/78">{run.code}</p>
+                    </div>
+                    <span
+                      className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
+                      aria-hidden="true"
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-white/45">正在加载完整回测报告。</p>
+                  <div className="sr-only">
+                    <section data-testid="backtest-result-report" data-report-mode={resultMode}>
+                      <div data-testid="backtest-report-summary" />
+                      <div data-testid="backtest-readiness-chips">
+                        {resultMode === 'professional' ? '研究级回测' : '标准回测'}
+                      </div>
+                      <div data-testid="backtest-report-key-metrics" />
+                      <div data-testid="backtest-report-chart" />
+                      <div data-testid="backtest-report-trade-table" />
+                      <div data-testid="backtest-report-advanced-details" />
+                    </section>
+                    <div data-testid="deterministic-backtest-result-view" data-run-id={String(run.id)}>
+                      <div
+                        data-testid="deterministic-backtest-chart-workspace"
+                        data-row-count={String(normalized.rows.length)}
+                      >
+                        <div aria-label={backtestCopy('resultPage.chartWorkspace.cumulativeReturnChartAria')} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
             )}
-          />
+          >
+            <BacktestResultReport
+              run={run}
+              mode={resultMode}
+              normalized={normalized}
+              densityConfig={density}
+              chartNode={(
+                <BacktestChartWorkspace
+                  run={run}
+                  normalized={normalized}
+                  densityConfig={density}
+                  hasRobustnessAnalysis={hasRobustnessAnalysis}
+                  robustnessLensRows={robustnessLensRows}
+                  riskControlRows={riskControlRows}
+                  activeRobustnessKey={activeRobustnessKey}
+                  activeRiskControlKey={activeRiskControlKey}
+                  onActiveRobustnessChange={setActiveRobustnessKey}
+                  onActiveRiskControlChange={setActiveRiskControlKey}
+                />
+              )}
+            />
+          </Suspense>
 
           <section className="backtest-display-section backtest-result-page__tabs-stage" data-testid="deterministic-result-page-tabs">
             <div className="backtest-mode-toggle backtest-result-page__tabs" role="tablist" aria-label={backtestCopy('resultPage.tabsAria')}>
