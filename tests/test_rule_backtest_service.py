@@ -1296,6 +1296,116 @@ class RuleBacktestTestCase(unittest.TestCase):
             payload["aggregate_metrics"]["p95_total_return_pct"],
         )
 
+    def test_build_robustness_analysis_preserves_default_monte_carlo_configuration_when_omitted(self) -> None:
+        service = RuleBacktestService(self.db)
+        parsed = service._dict_to_parsed_strategy(
+            service.parse_strategy(
+                "Buy when Close > MA3. Sell when Close < MA3.",
+                code="TEST",
+                start_date="2024-01-01",
+                end_date="2024-05-31",
+                initial_capital=100000.0,
+            ),
+            "Buy when Close > MA3. Sell when Close < MA3.",
+        )
+        bars = self._make_bars(
+            [100.0 + (index * 0.45) + ((-1) ** index) * 0.8 for index in range(80)],
+            start=date(2024, 1, 1),
+        )
+
+        payload = service._build_robustness_analysis(
+            code="TEST",
+            parsed=parsed,
+            bars=bars,
+            initial_capital=100000.0,
+            fee_bps=0.0,
+            slippage_bps=0.0,
+            lookback_bars=20,
+            benchmark_mode="auto",
+            benchmark_code=None,
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 5, 31),
+        )
+
+        self.assertEqual(payload["configuration"]["monte_carlo"]["simulation_count"], 12)
+        self.assertEqual(payload["configuration"]["monte_carlo"]["noise_scale"], 0.75)
+        self.assertIsNone(payload["configuration"]["monte_carlo"]["seed"])
+        self.assertEqual(payload["monte_carlo"]["simulation_count"], 12)
+        self.assertEqual(
+            payload["seed"],
+            service._build_robustness_seed(
+                code="TEST",
+                parsed=parsed,
+                start_date=date(2024, 1, 1),
+                end_date=date(2024, 5, 31),
+                lookback_bars=20,
+                initial_capital=100000.0,
+            ),
+        )
+
+    def test_run_backtest_persists_custom_monte_carlo_robustness_config(self) -> None:
+        service = RuleBacktestService(self.db)
+        self._seed_history(
+            "AAPL",
+            [100.0 + (index * 0.35) + ((-1) ** index) * 1.0 for index in range(96)],
+            start=date(2024, 1, 1),
+        )
+
+        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="AAPL",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+                robustness_config={
+                    "monte_carlo": {
+                        "simulation_count": 8,
+                        "seed": 4242,
+                        "noise_scale": 0.5,
+                    }
+                },
+            )
+
+        detail = service.get_run(response["id"])
+        history = service.list_runs(code="AAPL", page=1, limit=10)
+
+        self.assertEqual(response["robustness_analysis"]["seed"], 4242)
+        self.assertEqual(response["robustness_analysis"]["monte_carlo"]["simulation_count"], 8)
+        self.assertEqual(
+            response["robustness_analysis"]["configuration"]["monte_carlo"],
+            {"simulation_count": 8, "seed": 4242, "noise_scale": 0.5},
+        )
+        self.assertEqual(
+            detail["summary"]["request"]["robustness_config"]["monte_carlo"],
+            {"simulation_count": 8, "seed": 4242, "noise_scale": 0.5},
+        )
+        self.assertEqual(
+            detail["robustness_analysis"]["configuration"]["monte_carlo"],
+            {"simulation_count": 8, "seed": 4242, "noise_scale": 0.5},
+        )
+        self.assertEqual(
+            history["items"][0]["summary"]["request"]["robustness_config"]["monte_carlo"],
+            {"simulation_count": 8, "seed": 4242, "noise_scale": 0.5},
+        )
+
+    def test_run_backtest_rejects_out_of_bounds_monte_carlo_simulation_count(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "robustness_config\\.monte_carlo\\.simulation_count",
+        ):
+            service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                confirmed=True,
+                robustness_config={
+                    "monte_carlo": {
+                        "simulation_count": 0,
+                    }
+                },
+            )
+
     def test_build_stress_test_analysis_reports_worst_scenario_metrics(self) -> None:
         service = RuleBacktestService(self.db)
         parsed = service._dict_to_parsed_strategy(

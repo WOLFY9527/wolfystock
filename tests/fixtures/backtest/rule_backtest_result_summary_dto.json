@@ -149,6 +149,28 @@
   "avg_holding_calendar_days": 9.5,
   "final_equity": 112400.0,
   "summary": {
+    "request": {
+      "start_date": "2025-01-02",
+      "end_date": "2025-04-30",
+      "lookback_bars": 80,
+      "initial_capital": 100000.0,
+      "fee_bps": 1.0,
+      "slippage_bps": 2.0,
+      "benchmark_mode": "same_symbol_buy_and_hold",
+      "benchmark_code": "AAPL",
+      "confirmed": true,
+      "execution_model": {
+        "entry_timing": "next_bar_open",
+        "exit_timing": "next_bar_open"
+      },
+      "robustness_config": {
+        "monte_carlo": {
+          "simulation_count": 16,
+          "seed": 4242,
+          "noise_scale": 0.5
+        }
+      }
+    },
     "metrics": {
       "total_return_pct": 12.4,
       "benchmark_return_pct": 8.1,
@@ -190,7 +212,15 @@
   },
   "robustness_analysis": {
     "state": "research_prototype",
-    "profile": "single_symbol_fixture"
+    "profile": "single_symbol_fixture",
+    "seed": 4242,
+    "configuration": {
+      "monte_carlo": {
+        "simulation_count": 16,
+        "seed": 4242,
+        "noise_scale": 0.5
+      }
+    }
   },
   "artifact_availability": {
     "version": "v1",

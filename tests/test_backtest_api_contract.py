@@ -726,6 +726,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
             start_date="2025-01-01",
             end_date="2025-12-31",
             benchmark_mode="index_hs300",
+            robustness_config={"monte_carlo": {"simulation_count": 16, "noise_scale": 0.5, "seed": 20260513}},
             wait_for_completion=False,
             confirmed=True,
         )
@@ -741,6 +742,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(service.submit_backtest.call_args.kwargs["start_date"], "2025-01-01")
         self.assertEqual(service.submit_backtest.call_args.kwargs["end_date"], "2025-12-31")
         self.assertEqual(service.submit_backtest.call_args.kwargs["benchmark_mode"], "index_hs300")
+        self.assertEqual(
+            service.submit_backtest.call_args.kwargs["robustness_config"],
+            {"monte_carlo": {"simulation_count": 16, "noise_scale": 0.5, "seed": 20260513}},
+        )
         service.run_backtest.assert_not_called()
         self.assertEqual(len(background_tasks.tasks), 1)
 
@@ -752,6 +757,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
             end_date="2025-12-31",
             benchmark_mode="custom_code",
             benchmark_code="SPY",
+            robustness_config={"monte_carlo": {"simulation_count": 6, "noise_scale": 0.25}},
             wait_for_completion=True,
             confirmed=True,
         )
@@ -770,6 +776,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(service.run_backtest.call_args.kwargs["end_date"], "2025-12-31")
         self.assertEqual(service.run_backtest.call_args.kwargs["benchmark_mode"], "custom_code")
         self.assertEqual(service.run_backtest.call_args.kwargs["benchmark_code"], "SPY")
+        self.assertEqual(
+            service.run_backtest.call_args.kwargs["robustness_config"],
+            {"monte_carlo": {"simulation_count": 6, "noise_scale": 0.25}},
+        )
         service.submit_backtest.assert_not_called()
         self.assertEqual(len(background_tasks.tasks), 0)
 

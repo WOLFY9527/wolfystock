@@ -406,6 +406,23 @@ class RuleBacktestParseResponse(BaseModel):
     max_lookback: int = 1
 
 
+class RuleBacktestMonteCarloRobustnessConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    simulation_count: Optional[int] = Field(None, description="Monte Carlo 模拟次数")
+    seed: Optional[int] = Field(None, description="Monte Carlo 随机种子；省略时沿用当前默认派生逻辑")
+    noise_scale: Optional[float] = Field(None, description="Monte Carlo 收益扰动强度")
+
+
+class RuleBacktestRobustnessConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    monte_carlo: Optional[RuleBacktestMonteCarloRobustnessConfig] = Field(
+        None,
+        description="稳健性分析配置；当前仅支持 Monte Carlo。",
+    )
+
+
 class RuleBacktestRunRequest(BaseModel):
     code: str = Field(..., description="股票代码")
     strategy_text: str = Field(..., description="策略文本")
@@ -418,6 +435,7 @@ class RuleBacktestRunRequest(BaseModel):
     slippage_bps: float = Field(0.0, ge=0, le=500, description="单边滑点（bp）")
     benchmark_mode: str = Field("auto", description="基准模式")
     benchmark_code: Optional[str] = Field(None, description="自定义基准代码")
+    robustness_config: Optional[RuleBacktestRobustnessConfig] = Field(None, description="可选的稳健性分析配置")
     confirmed: bool = Field(False, description="是否已确认解析结果")
     wait_for_completion: bool = Field(False, description="是否阻塞等待回测完成；默认异步提交并轮询状态")
 

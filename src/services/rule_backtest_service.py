@@ -208,6 +208,12 @@ DEFAULT_ROBUSTNESS_WALK_FORWARD_STEP_BARS = 12
 DEFAULT_ROBUSTNESS_WALK_FORWARD_MAX_WINDOWS = 4
 DEFAULT_ROBUSTNESS_MONTE_CARLO_SIMULATION_COUNT = 12
 DEFAULT_ROBUSTNESS_MONTE_CARLO_NOISE_SCALE = 0.75
+MIN_ROBUSTNESS_MONTE_CARLO_SIMULATION_COUNT = 1
+MAX_ROBUSTNESS_MONTE_CARLO_SIMULATION_COUNT = 64
+MIN_ROBUSTNESS_MONTE_CARLO_SEED = 0
+MAX_ROBUSTNESS_MONTE_CARLO_SEED = 2147483647
+MIN_ROBUSTNESS_MONTE_CARLO_NOISE_SCALE = 0.0
+MAX_ROBUSTNESS_MONTE_CARLO_NOISE_SCALE = 3.0
 
 COMPARE_ROBUSTNESS_DIMENSION_ORDER: List[str] = [
     "market_code",
@@ -569,11 +575,13 @@ class RuleBacktestService:
         slippage_bps: float = 0.0,
         benchmark_mode: str = BENCHMARK_MODE_AUTO,
         benchmark_code: Optional[str] = None,
+        robustness_config: Optional[Dict[str, Any]] = None,
         confirmed: bool = False,
     ) -> Dict[str, Any]:
         """Run a deterministic rule backtest synchronously and persist the completed result."""
 
         normalized_code, raw_text = self._validate_submission_inputs(code=code, strategy_text=strategy_text)
+        normalized_robustness_config = self._sanitize_robustness_config(robustness_config)
         parsed = self._ensure_parsed_strategy(
             raw_text,
             parsed_strategy,
@@ -598,6 +606,7 @@ class RuleBacktestService:
             slippage_bps=slippage_bps,
             benchmark_mode=benchmark_mode,
             benchmark_code=benchmark_code,
+            robustness_config=normalized_robustness_config,
         )
         ai_summary = self._build_ai_summary(parsed, result)
         return self._store_result(
@@ -612,6 +621,7 @@ class RuleBacktestService:
             slippage_bps=slippage_bps,
             benchmark_mode=benchmark_mode,
             benchmark_code=benchmark_code,
+            robustness_config=normalized_robustness_config,
             confirmed=confirmed,
             ai_summary=ai_summary,
         )
@@ -630,11 +640,13 @@ class RuleBacktestService:
         slippage_bps: float = 0.0,
         benchmark_mode: str = BENCHMARK_MODE_AUTO,
         benchmark_code: Optional[str] = None,
+        robustness_config: Optional[Dict[str, Any]] = None,
         confirmed: bool = False,
     ) -> Dict[str, Any]:
         """Create a non-blocking rule backtest run and return immediately."""
 
         normalized_code, raw_text = self._validate_submission_inputs(code=code, strategy_text=strategy_text)
+        normalized_robustness_config = self._sanitize_robustness_config(robustness_config)
         parsed: Optional[ParsedStrategy] = None
         if parsed_strategy:
             parsed = self._dict_to_parsed_strategy(parsed_strategy, raw_text)
@@ -663,6 +675,7 @@ class RuleBacktestService:
                     slippage_bps=slippage_bps,
                     parsed_strategy=parsed,
                 ),
+                robustness_config=normalized_robustness_config,
             ),
             execution_assumptions=self._build_execution_assumptions_payload(
                 execution_model=self._build_execution_model_payload(
@@ -730,6 +743,7 @@ class RuleBacktestService:
             return
 
         request_payload = self._extract_request_payload(row.summary_json)
+        normalized_robustness_config = self._sanitize_robustness_config(request_payload.get("robustness_config"))
         try:
             raw_text = str(row.strategy_text or "").strip()
             parsed_strategy = self._load_parsed_strategy(row.parsed_strategy_json, raw_text)
@@ -773,6 +787,7 @@ class RuleBacktestService:
                 slippage_bps=request_payload["slippage_bps"],
                 benchmark_mode=str(request_payload.get("benchmark_mode") or BENCHMARK_MODE_AUTO),
                 benchmark_code=request_payload.get("benchmark_code"),
+                robustness_config=normalized_robustness_config,
             )
 
             if self._should_stop_run_processing(run_id):
@@ -803,6 +818,7 @@ class RuleBacktestService:
                 slippage_bps=request_payload["slippage_bps"],
                 benchmark_mode=str(request_payload.get("benchmark_mode") or BENCHMARK_MODE_AUTO),
                 benchmark_code=request_payload.get("benchmark_code"),
+                robustness_config=normalized_robustness_config,
                 confirmed=request_payload["confirmed"],
                 ai_summary=ai_summary,
                 existing_run_id=run_id,
@@ -1959,6 +1975,7 @@ class RuleBacktestService:
         slippage_bps: float,
         benchmark_mode: str,
         benchmark_code: Optional[str],
+        robustness_config: Optional[Dict[str, Any]] = None,
     ):
         normalized_start_date, normalized_end_date = self._normalize_date_range(start_date=start_date, end_date=end_date)
         load_count = max(int(lookback_bars) + parsed.max_lookback + 20, int(lookback_bars) + 30)
@@ -2015,12 +2032,13 @@ class RuleBacktestService:
                     initial_capital=initial_capital,
                     fee_bps=fee_bps,
                     slippage_bps=slippage_bps,
-                    lookback_bars=lookback_bars,
-                    benchmark_mode=benchmark_mode,
-                    benchmark_code=benchmark_code,
-                    start_date=normalized_start_date,
-                    end_date=normalized_end_date,
-                ),
+                lookback_bars=lookback_bars,
+                benchmark_mode=benchmark_mode,
+                benchmark_code=benchmark_code,
+                robustness_config=robustness_config,
+                start_date=normalized_start_date,
+                end_date=normalized_end_date,
+            ),
             )
             setattr(
                 result,
@@ -2073,6 +2091,7 @@ class RuleBacktestService:
                 lookback_bars=lookback_bars,
                 benchmark_mode=benchmark_mode,
                 benchmark_code=benchmark_code,
+                robustness_config=robustness_config,
                 start_date=normalized_start_date,
                 end_date=normalized_end_date,
             ),
@@ -2106,10 +2125,11 @@ class RuleBacktestService:
         lookback_bars: int,
         benchmark_mode: str,
         benchmark_code: Optional[str],
+        robustness_config: Optional[Dict[str, Any]] = None,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
     ) -> Dict[str, Any]:
-        seed = self._build_robustness_seed(
+        derived_seed = self._build_robustness_seed(
             code=code,
             parsed=parsed,
             start_date=start_date,
@@ -2117,6 +2137,10 @@ class RuleBacktestService:
             lookback_bars=lookback_bars,
             initial_capital=initial_capital,
         )
+        resolved_robustness_config = self._sanitize_robustness_config(robustness_config)
+        monte_carlo_config = dict(resolved_robustness_config.get("monte_carlo") or {})
+        configured_seed = monte_carlo_config.get("seed")
+        resolved_seed = int(configured_seed) if configured_seed is not None else derived_seed
         walk_forward = self._build_walk_forward_analysis(
             code=code,
             parsed=parsed,
@@ -2144,9 +2168,9 @@ class RuleBacktestService:
             benchmark_code=benchmark_code,
             start_date=start_date,
             end_date=end_date,
-            simulation_count=DEFAULT_ROBUSTNESS_MONTE_CARLO_SIMULATION_COUNT,
-            noise_scale=DEFAULT_ROBUSTNESS_MONTE_CARLO_NOISE_SCALE,
-            seed=seed,
+            simulation_count=int(monte_carlo_config.get("simulation_count", DEFAULT_ROBUSTNESS_MONTE_CARLO_SIMULATION_COUNT)),
+            noise_scale=float(monte_carlo_config.get("noise_scale", DEFAULT_ROBUSTNESS_MONTE_CARLO_NOISE_SCALE)),
+            seed=resolved_seed,
         )
         stress_tests = self._build_stress_test_analysis(
             code=code,
@@ -2174,7 +2198,7 @@ class RuleBacktestService:
         )
         return {
             "state": overall_state,
-            "seed": seed,
+            "seed": resolved_seed,
             "configuration": {
                 "walk_forward": {
                     "train_bars": DEFAULT_ROBUSTNESS_WALK_FORWARD_TRAIN_BARS,
@@ -2182,10 +2206,7 @@ class RuleBacktestService:
                     "step_bars": DEFAULT_ROBUSTNESS_WALK_FORWARD_STEP_BARS,
                     "max_windows": DEFAULT_ROBUSTNESS_WALK_FORWARD_MAX_WINDOWS,
                 },
-                "monte_carlo": {
-                    "simulation_count": DEFAULT_ROBUSTNESS_MONTE_CARLO_SIMULATION_COUNT,
-                    "noise_scale": DEFAULT_ROBUSTNESS_MONTE_CARLO_NOISE_SCALE,
-                },
+                "monte_carlo": monte_carlo_config,
                 "stress_tests": {
                     "scenario_keys": ["single_day_shock_down_15", "volatility_whipsaw"],
                 },
@@ -2588,6 +2609,88 @@ class RuleBacktestService:
             ]
         )
         return int(hashlib.sha256(seed_text.encode("utf-8")).hexdigest()[:12], 16)
+
+    @staticmethod
+    def _validate_bounded_int(
+        value: Any,
+        *,
+        field_name: str,
+        minimum: int,
+        maximum: int,
+    ) -> int:
+        if isinstance(value, bool):
+            raise ValueError(f"{field_name} must be an integer between {minimum} and {maximum}.")
+        try:
+            normalized = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{field_name} must be an integer between {minimum} and {maximum}.") from exc
+        if normalized < minimum or normalized > maximum:
+            raise ValueError(f"{field_name} must be between {minimum} and {maximum}.")
+        return normalized
+
+    @staticmethod
+    def _validate_bounded_float(
+        value: Any,
+        *,
+        field_name: str,
+        minimum: float,
+        maximum: float,
+    ) -> float:
+        if isinstance(value, bool):
+            raise ValueError(f"{field_name} must be a number between {minimum} and {maximum}.")
+        try:
+            normalized = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{field_name} must be a number between {minimum} and {maximum}.") from exc
+        if normalized < minimum or normalized > maximum:
+            raise ValueError(f"{field_name} must be between {minimum} and {maximum}.")
+        return normalized
+
+    @classmethod
+    def _sanitize_robustness_config(cls, robustness_config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        if robustness_config is None:
+            config_payload: Dict[str, Any] = {}
+        elif isinstance(robustness_config, dict):
+            config_payload = dict(robustness_config)
+        else:
+            raise ValueError("robustness_config must be an object.")
+
+        monte_carlo_raw = config_payload.get("monte_carlo")
+        if monte_carlo_raw is None:
+            monte_carlo_payload: Dict[str, Any] = {}
+        elif isinstance(monte_carlo_raw, dict):
+            monte_carlo_payload = dict(monte_carlo_raw)
+        else:
+            raise ValueError("robustness_config.monte_carlo must be an object.")
+
+        simulation_count = cls._validate_bounded_int(
+            monte_carlo_payload.get("simulation_count", DEFAULT_ROBUSTNESS_MONTE_CARLO_SIMULATION_COUNT),
+            field_name="robustness_config.monte_carlo.simulation_count",
+            minimum=MIN_ROBUSTNESS_MONTE_CARLO_SIMULATION_COUNT,
+            maximum=MAX_ROBUSTNESS_MONTE_CARLO_SIMULATION_COUNT,
+        )
+        noise_scale = cls._validate_bounded_float(
+            monte_carlo_payload.get("noise_scale", DEFAULT_ROBUSTNESS_MONTE_CARLO_NOISE_SCALE),
+            field_name="robustness_config.monte_carlo.noise_scale",
+            minimum=MIN_ROBUSTNESS_MONTE_CARLO_NOISE_SCALE,
+            maximum=MAX_ROBUSTNESS_MONTE_CARLO_NOISE_SCALE,
+        )
+        seed = None
+        if monte_carlo_payload.get("seed") is not None:
+            seed = cls._validate_bounded_int(
+                monte_carlo_payload.get("seed"),
+                field_name="robustness_config.monte_carlo.seed",
+                minimum=MIN_ROBUSTNESS_MONTE_CARLO_SEED,
+                maximum=MAX_ROBUSTNESS_MONTE_CARLO_SEED,
+            )
+
+        return {
+            "monte_carlo": {
+                "simulation_count": simulation_count,
+                "seed": seed,
+                "noise_scale": noise_scale,
+            }
+        }
 
     def _ensure_market_history(
         self,
@@ -3150,6 +3253,7 @@ class RuleBacktestService:
         slippage_bps: float,
         benchmark_mode: str,
         benchmark_code: Optional[str],
+        robustness_config: Optional[Dict[str, Any]] = None,
         confirmed: bool,
         ai_summary: Optional[str] = None,
         existing_run_id: Optional[int] = None,
@@ -3210,6 +3314,7 @@ class RuleBacktestService:
                 benchmark_code=benchmark_code,
                 confirmed=confirmed,
                 execution_model=execution_model_payload,
+                robustness_config=robustness_config,
             ),
             metrics=result.metrics,
             parsed_strategy=result.parsed_strategy,
@@ -5143,7 +5248,7 @@ class RuleBacktestService:
     def _extract_request_payload(summary_json: Optional[str]) -> Dict[str, Any]:
         summary = RuleBacktestService._load_summary_payload(summary_json)
         request = summary.get("request") or {}
-        return {
+        payload = {
             "start_date": RuleBacktestService._parse_optional_date(request.get("start_date")),
             "end_date": RuleBacktestService._parse_optional_date(request.get("end_date")),
             "lookback_bars": int(request.get("lookback_bars") or 252),
@@ -5155,6 +5260,9 @@ class RuleBacktestService:
             "confirmed": bool(request.get("confirmed", False)),
             "execution_model": dict(request.get("execution_model") or {}),
         }
+        if isinstance(request.get("robustness_config"), dict):
+            payload["robustness_config"] = dict(request.get("robustness_config") or {})
+        return payload
 
     @staticmethod
     def _build_request_payload(
@@ -5169,8 +5277,9 @@ class RuleBacktestService:
         benchmark_code: Optional[str],
         confirmed: bool,
         execution_model: Optional[Dict[str, Any]] = None,
+        robustness_config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        return {
+        payload = {
             "start_date": start_date.isoformat() if start_date is not None else None,
             "end_date": end_date.isoformat() if end_date is not None else None,
             "lookback_bars": int(lookback_bars),
@@ -5182,6 +5291,9 @@ class RuleBacktestService:
             "confirmed": bool(confirmed),
             "execution_model": dict(execution_model or {}),
         }
+        if robustness_config is not None:
+            payload["robustness_config"] = dict(robustness_config or {})
+        return payload
 
     @staticmethod
     def _append_status_history(
@@ -9223,6 +9335,8 @@ class RuleBacktestService:
             "confirmed": bool(stored_request.get("confirmed", False)),
             "execution_model": dict(stored_request.get("execution_model") or {}),
         }
+        if isinstance(stored_request.get("robustness_config"), dict):
+            request_payload["robustness_config"] = dict(stored_request.get("robustness_config") or {})
 
         missing_fields: List[str] = []
         if not stored_request:

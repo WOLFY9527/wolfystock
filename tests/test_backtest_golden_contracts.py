@@ -122,6 +122,17 @@ def test_backtest_result_summary_golden_fixture_matches_public_readback_contract
     assert result["max_drawdown_pct"] == 5.2
     assert result["win_rate_pct"] == 75.0
     assert result["final_equity"] == 112400.0
+    assert result["summary"]["request"]["robustness_config"]["monte_carlo"] == {
+        "simulation_count": 16,
+        "seed": 4242,
+        "noise_scale": 0.5,
+    }
+    assert result["robustness_analysis"]["seed"] == 4242
+    assert result["robustness_analysis"]["configuration"]["monte_carlo"] == {
+        "simulation_count": 16,
+        "seed": 4242,
+        "noise_scale": 0.5,
+    }
 
     strategy = result["parsed_strategy"]
     assert strategy["strategy_kind"] == "moving_average_crossover"

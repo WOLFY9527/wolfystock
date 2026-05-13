@@ -576,6 +576,7 @@ def run_rule_backtest(
 ) -> RuleBacktestRunResponse:
     def _operation() -> RuleBacktestRunResponse:
         service = _build_rule_backtest_service(db_manager, current_user)
+        robustness_config = request.robustness_config.model_dump(exclude_none=True) if request.robustness_config is not None else None
         if request.wait_for_completion:
             data = service.run_backtest(
                 code=request.code,
@@ -589,6 +590,7 @@ def run_rule_backtest(
                 slippage_bps=request.slippage_bps,
                 benchmark_mode=request.benchmark_mode,
                 benchmark_code=request.benchmark_code,
+                robustness_config=robustness_config,
                 confirmed=request.confirmed,
             )
             return _build_model(RuleBacktestRunResponse, data)
@@ -605,6 +607,7 @@ def run_rule_backtest(
             slippage_bps=request.slippage_bps,
             benchmark_mode=request.benchmark_mode,
             benchmark_code=request.benchmark_code,
+            robustness_config=robustness_config,
             confirmed=request.confirmed,
         )
         background_tasks.add_task(service.process_submitted_run, int(data["id"]))
