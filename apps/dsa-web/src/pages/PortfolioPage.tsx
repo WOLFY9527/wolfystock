@@ -1981,11 +1981,11 @@ const PortfolioPage: React.FC = () => {
               </TerminalPanel>
             </div>
 
-            <div data-testid="portfolio-row-routing" className="order-3 grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
+            <div data-testid="portfolio-row-routing" className="order-3 col-span-12 min-w-0 grid grid-cols-1 xl:grid-cols-12 gap-4 2xl:gap-5 items-start">
               <TerminalPanel
                 as="section"
                 data-testid="portfolio-pnl-summary"
-                className="xl:col-span-6 grid gap-2 sm:grid-cols-3"
+                className="min-w-0 xl:col-span-6 grid gap-2 sm:grid-cols-3"
               >
 	              {renderPnlTile('realized', realizedPnl, realizedPnlDisplay)}
 	              {renderPnlTile('unrealized', unrealizedPnl, unrealizedPnlDisplay)}
@@ -1995,7 +1995,7 @@ const PortfolioPage: React.FC = () => {
 		            <TerminalPanel
                   as="section"
 		              data-testid="portfolio-exposure-card"
-		              className="xl:col-span-6 flex flex-col gap-4"
+		              className="min-w-0 xl:col-span-6 flex flex-col gap-4"
 		            >
 	              <div className="flex flex-wrap items-center justify-between gap-3">
 	                <h2 className="text-xs uppercase tracking-widest text-muted-text">{exposureTitle}</h2>

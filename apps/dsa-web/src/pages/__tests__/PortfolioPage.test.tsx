@@ -576,6 +576,19 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
   });
 
+  it('spans the routing row across the full desktop grid', async () => {
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(screen.getByTestId('portfolio-row-routing')).toHaveClass(
+      'col-span-12',
+      'min-w-0',
+      'grid',
+      'xl:grid-cols-12',
+    );
+  });
+
   it('renders empty portfolio start card and recent activity after analytics for small history', async () => {
     listTrades.mockResolvedValueOnce({
       items: [
