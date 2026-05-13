@@ -1108,6 +1108,10 @@ export interface RuleBacktestSupportBundleReproducibilityManifestResponse {
   resultAuthority: Record<string, unknown>;
 }
 
+export interface RuleBacktestRobustnessEvidenceExportResponse {
+  [key: string]: unknown;
+}
+
 export interface RuleBacktestExecutionTraceExportResponse {
   version?: string | null;
   source?: string | null;

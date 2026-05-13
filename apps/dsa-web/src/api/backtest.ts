@@ -22,6 +22,7 @@ import type {
   RuleBacktestSupportExportIndexResponse,
   RuleBacktestSupportBundleManifestResponse,
   RuleBacktestSupportBundleReproducibilityManifestResponse,
+  RuleBacktestRobustnessEvidenceExportResponse,
   RuleBacktestExecutionTraceExportResponse,
 } from '../types/backtest';
 
@@ -148,6 +149,13 @@ export const backtestApi = {
       `/api/v1/backtest/rule/runs/${encodeURIComponent(runId)}/support-bundle-reproducibility-manifest`,
     );
     return toCamelCase<RuleBacktestSupportBundleReproducibilityManifestResponse>(response.data);
+  },
+
+  getRuleBacktestRobustnessEvidenceJson: async (runId: number): Promise<RuleBacktestRobustnessEvidenceExportResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(
+      `/api/v1/backtest/rule/runs/${encodeURIComponent(runId)}/robustness-evidence.json`,
+    );
+    return toCamelCase<RuleBacktestRobustnessEvidenceExportResponse>(response.data);
   },
 
   getRuleBacktestExecutionTraceJson: async (runId: number): Promise<RuleBacktestExecutionTraceExportResponse> => {

@@ -7,12 +7,14 @@ const {
   getRuleBacktestSupportExportIndex,
   getRuleBacktestSupportBundleManifest,
   getRuleBacktestSupportBundleReproducibilityManifest,
+  getRuleBacktestRobustnessEvidenceJson,
   getRuleBacktestExecutionTraceJson,
   getRuleBacktestExecutionTraceCsv,
 } = vi.hoisted(() => ({
   getRuleBacktestSupportExportIndex: vi.fn(),
   getRuleBacktestSupportBundleManifest: vi.fn(),
   getRuleBacktestSupportBundleReproducibilityManifest: vi.fn(),
+  getRuleBacktestRobustnessEvidenceJson: vi.fn(),
   getRuleBacktestExecutionTraceJson: vi.fn(),
   getRuleBacktestExecutionTraceCsv: vi.fn(),
 }));
@@ -22,6 +24,7 @@ vi.mock('../../../api/backtest', () => ({
     getRuleBacktestSupportExportIndex,
     getRuleBacktestSupportBundleManifest,
     getRuleBacktestSupportBundleReproducibilityManifest,
+    getRuleBacktestRobustnessEvidenceJson,
     getRuleBacktestExecutionTraceJson,
     getRuleBacktestExecutionTraceCsv,
   },
@@ -80,6 +83,16 @@ describe('BacktestSupportExportsDisclosure', () => {
           payloadClass: 'RuleBacktestExecutionTraceExportResponse',
         },
         {
+          key: 'robustness_evidence_json',
+          available: true,
+          availabilityReason: 'ready',
+          format: 'json',
+          mediaType: 'application/json',
+          deliveryMode: 'api',
+          endpointPath: '/api/v1/backtest/rule/runs/99/robustness-evidence.json',
+          payloadClass: 'RuleBacktestRobustnessEvidenceExportResponse',
+        },
+        {
           key: 'execution_trace_csv',
           available: false,
           availabilityReason: 'execution_trace_rows_missing',
@@ -105,12 +118,53 @@ describe('BacktestSupportExportsDisclosure', () => {
 
     expect(screen.getByText('支持包清单 JSON')).toBeInTheDocument();
     expect(screen.getByText('复现清单 JSON')).toBeInTheDocument();
+    expect(screen.getByText('稳健性证据')).toBeInTheDocument();
     expect(screen.getByText('执行轨迹 JSON')).toBeInTheDocument();
     expect(screen.getByText('执行轨迹 CSV')).toBeInTheDocument();
     expect(screen.getByText('这些导出只用于技术支持与复现实证，不替代结果摘要、图表或指标的主要结论口径。')).toBeInTheDocument();
     expect(screen.queryByText('/api/v1/backtest/rule/runs/99/support-bundle-manifest')).not.toBeInTheDocument();
     expect(screen.queryByText('RuleBacktestSupportBundleManifestResponse')).not.toBeInTheDocument();
     expect(screen.queryByText('stored_backtest_result')).not.toBeInTheDocument();
+  });
+
+  it('shows robustness evidence only when the export index marks it available', async () => {
+    getRuleBacktestSupportExportIndex.mockResolvedValueOnce({
+      runId: 99,
+      status: 'completed',
+      exports: [
+        {
+          key: 'support_bundle_manifest_json',
+          available: true,
+          availabilityReason: 'ready',
+          format: 'json',
+          mediaType: 'application/json',
+          deliveryMode: 'api',
+          payloadClass: 'RuleBacktestSupportBundleManifestResponse',
+        },
+        {
+          key: 'robustness_evidence_json',
+          available: false,
+          availabilityReason: 'robustness_analysis_missing',
+          format: 'json',
+          mediaType: 'application/json',
+          deliveryMode: 'api',
+          endpointPath: '/api/v1/backtest/rule/runs/99/robustness-evidence.json',
+          payloadClass: 'RuleBacktestRobustnessEvidenceExportResponse',
+        },
+      ],
+    });
+
+    renderDisclosure();
+
+    fireEvent.click(screen.getByRole('button', { name: '展开 技术支持导出' }));
+
+    await waitFor(() => {
+      expect(getRuleBacktestSupportExportIndex).toHaveBeenCalledWith(99);
+    });
+
+    expect(screen.getByText('支持包清单 JSON')).toBeInTheDocument();
+    expect(screen.queryByText('稳健性证据')).not.toBeInTheDocument();
+    expect(screen.queryByText('下载稳健性证据 JSON')).not.toBeInTheDocument();
   });
 
   it('downloads support artifacts through the existing read-only client methods', async () => {
@@ -146,6 +200,15 @@ describe('BacktestSupportExportsDisclosure', () => {
           payloadClass: 'RuleBacktestExecutionTraceExportResponse',
         },
         {
+          key: 'robustness_evidence_json',
+          available: true,
+          availabilityReason: 'ready',
+          format: 'json',
+          mediaType: 'application/json',
+          deliveryMode: 'api',
+          payloadClass: 'RuleBacktestRobustnessEvidenceExportResponse',
+        },
+        {
           key: 'execution_trace_csv',
           available: true,
           availabilityReason: 'ready',
@@ -178,6 +241,14 @@ describe('BacktestSupportExportsDisclosure', () => {
       executionAssumptionsFingerprint: { sha256: 'abc123' },
       resultAuthority: { source: 'stored_backtest_result' },
     });
+    getRuleBacktestRobustnessEvidenceJson.mockResolvedValue({
+      version: 'rule_backtest_robustness_evidence_export_v1',
+      source: 'stored_robustness_analysis',
+      robustnessAnalysis: {
+        state: 'available',
+        walkForward: { windows: 4 },
+      },
+    });
     getRuleBacktestExecutionTraceJson.mockResolvedValue({
       version: 'rule_backtest_execution_trace_export_v1',
       source: 'stored_execution_trace',
@@ -206,18 +277,20 @@ describe('BacktestSupportExportsDisclosure', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '下载支持包清单 JSON' }));
     fireEvent.click(screen.getByRole('button', { name: '下载复现清单 JSON' }));
+    fireEvent.click(screen.getByRole('button', { name: '下载稳健性证据 JSON' }));
     fireEvent.click(screen.getByRole('button', { name: '下载执行轨迹 JSON' }));
     fireEvent.click(screen.getByRole('button', { name: '下载执行轨迹 CSV' }));
 
     await waitFor(() => {
       expect(getRuleBacktestSupportBundleManifest).toHaveBeenCalledWith(99);
       expect(getRuleBacktestSupportBundleReproducibilityManifest).toHaveBeenCalledWith(99);
+      expect(getRuleBacktestRobustnessEvidenceJson).toHaveBeenCalledWith(99);
       expect(getRuleBacktestExecutionTraceJson).toHaveBeenCalledWith(99);
       expect(getRuleBacktestExecutionTraceCsv).toHaveBeenCalledWith(99);
     });
 
-    expect(createObjectUrlMock).toHaveBeenCalledTimes(4);
-    expect(clickMock).toHaveBeenCalledTimes(4);
+    expect(createObjectUrlMock).toHaveBeenCalledTimes(5);
+    expect(clickMock).toHaveBeenCalledTimes(5);
 
     createObjectUrlMock.mockRestore();
     revokeObjectUrlMock.mockRestore();

@@ -306,6 +306,16 @@ describe('backtestApi support export contract exposure', () => {
             endpoint_path: '/api/v1/backtest/rule/runs/77/support-bundle-manifest',
             payload_class: 'RuleBacktestSupportBundleManifestResponse',
           },
+          {
+            key: 'robustness_evidence_json',
+            available: true,
+            availability_reason: 'ready',
+            format: 'json',
+            media_type: 'application/json',
+            delivery_mode: 'api',
+            endpoint_path: '/api/v1/backtest/rule/runs/77/robustness-evidence.json',
+            payload_class: 'RuleBacktestRobustnessEvidenceExportResponse',
+          },
         ],
       },
     } as never);
@@ -326,6 +336,16 @@ describe('backtestApi support export contract exposure', () => {
           deliveryMode: 'inline',
           endpointPath: '/api/v1/backtest/rule/runs/77/support-bundle-manifest',
           payloadClass: 'RuleBacktestSupportBundleManifestResponse',
+        },
+        {
+          key: 'robustness_evidence_json',
+          available: true,
+          availabilityReason: 'ready',
+          format: 'json',
+          mediaType: 'application/json',
+          deliveryMode: 'api',
+          endpointPath: '/api/v1/backtest/rule/runs/77/robustness-evidence.json',
+          payloadClass: 'RuleBacktestRobustnessEvidenceExportResponse',
         },
       ],
     });
@@ -461,5 +481,36 @@ describe('backtestApi support export contract exposure', () => {
     expect(jsonPayload.benchmarkSummary.resolvedMode).toBe('symbol');
     expect(jsonPayload.fallback.traceRebuilt).toBe(false);
     expect(csvPayload).toContain('date,event_type,action_display,total_portfolio_value');
+  });
+
+  it('loads the rule backtest robustness evidence export through the dedicated support endpoint', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: {
+        version: 'rule_backtest_robustness_evidence_export_v1',
+        source: 'stored_robustness_analysis',
+        robustness_analysis: {
+          state: 'available',
+          walk_forward: {
+            state: 'available',
+            windows: 4,
+          },
+        },
+      },
+    } as never);
+
+    const payload = await backtestApi.getRuleBacktestRobustnessEvidenceJson(77);
+
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/backtest/rule/runs/77/robustness-evidence.json');
+    expect(payload).toMatchObject({
+      version: 'rule_backtest_robustness_evidence_export_v1',
+      source: 'stored_robustness_analysis',
+      robustnessAnalysis: {
+        state: 'available',
+        walkForward: {
+          state: 'available',
+          windows: 4,
+        },
+      },
+    });
   });
 });

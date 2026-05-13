@@ -18,12 +18,21 @@ type BacktestSupportExportsDisclosureProps = {
   code: string;
 };
 
+type LocalizedCopy = {
+  zh: string;
+  en: string;
+};
+
 type SupportExportDefinition = {
-  id: 'supportBundleManifest' | 'supportBundleReproducibilityManifest' | 'executionTraceJson' | 'executionTraceCsv';
+  id: 'supportBundleManifest' | 'supportBundleReproducibilityManifest' | 'robustnessEvidenceJson' | 'executionTraceJson' | 'executionTraceCsv';
   keys: string[];
-  labelKey: string;
-  descriptionKey: string;
-  actionKey: string;
+  labelKey?: string;
+  descriptionKey?: string;
+  actionKey?: string;
+  label?: LocalizedCopy;
+  description?: LocalizedCopy;
+  action?: LocalizedCopy;
+  onlyRenderWhenAvailable?: boolean;
   fileName: (code: string, runId: number) => string;
   mimeType: string;
   loadContent: (runId: number) => Promise<string>;
@@ -73,6 +82,30 @@ const SUPPORT_EXPORT_DEFINITIONS: SupportExportDefinition[] = [
     ),
   },
   {
+    id: 'robustnessEvidenceJson',
+    keys: ['robustness_evidence_json'],
+    label: {
+      zh: '稳健性证据',
+      en: 'Robustness evidence',
+    },
+    description: {
+      zh: '仅导出已存储的稳健性分析证据，用于技术支持 / 复现证据，不作为结果摘要、图表或指标的主要结论口径。',
+      en: 'Exports stored robustness-analysis evidence only for technical support / reproducibility evidence, not as the primary authority for summaries, charts, or metrics.',
+    },
+    action: {
+      zh: '下载稳健性证据 JSON',
+      en: 'Download robustness evidence JSON',
+    },
+    onlyRenderWhenAvailable: true,
+    fileName: (code, runId) => `backtest-robustness-evidence-${code}-${runId}.json`,
+    mimeType: 'application/json;charset=utf-8',
+    loadContent: async (runId) => JSON.stringify(
+      await backtestApi.getRuleBacktestRobustnessEvidenceJson(runId),
+      null,
+      2,
+    ),
+  },
+  {
     id: 'executionTraceCsv',
     keys: ['execution_trace_csv'],
     labelKey: 'backtest.resultPage.supportExports.items.executionTraceCsv.label',
@@ -104,7 +137,7 @@ function getSupportExportItem(
 }
 
 const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosureProps> = ({ runId, code }) => {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [items, setItems] = useState<RuleBacktestSupportExportIndexItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -156,6 +189,25 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
     });
   };
 
+  const getDefinitionCopy = (
+    definition: SupportExportDefinition,
+    key: 'label' | 'description' | 'action',
+  ): string => {
+    const translationKey = definition[`${key}Key`];
+    if (translationKey) {
+      return t(translationKey);
+    }
+    const localizedCopy = definition[key];
+    return localizedCopy?.[language] ?? localizedCopy?.zh ?? '';
+  };
+
+  const visibleDefinitions = SUPPORT_EXPORT_DEFINITIONS.filter((definition) => {
+    if (!definition.onlyRenderWhenAvailable) {
+      return true;
+    }
+    return getSupportExportItem(definition, items)?.available === true;
+  });
+
   if (isLoading) {
     return <p className="text-xs leading-5 text-white/45">{t('backtest.resultPage.supportExports.loading')}</p>;
   }
@@ -181,6 +233,14 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
     );
   }
 
+  if (visibleDefinitions.length === 0) {
+    return (
+      <TerminalEmptyState title={t('backtest.resultPage.supportExports.title')}>
+        {t('backtest.resultPage.supportExports.empty')}
+      </TerminalEmptyState>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <TerminalNotice variant="info">
@@ -188,7 +248,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
       </TerminalNotice>
       <p className="text-xs leading-5 text-white/35">{t('backtest.resultPage.supportExports.note')}</p>
       {downloadError ? <TerminalNotice variant="danger">{downloadError}</TerminalNotice> : null}
-      {SUPPORT_EXPORT_DEFINITIONS.map((definition) => {
+      {visibleDefinitions.map((definition) => {
         const item = getSupportExportItem(definition, items);
         const isAvailable = item?.available === true;
         const isDownloading = downloadingId === definition.id;
@@ -199,14 +259,14 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
           >
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-medium text-white/88">{t(definition.labelKey)}</p>
+                <p className="text-sm font-medium text-white/88">{getDefinitionCopy(definition, 'label')}</p>
                 <TerminalChip variant={isAvailable ? 'success' : 'neutral'}>
                   {isAvailable
                     ? t('backtest.resultPage.supportExports.available')
                     : t('backtest.resultPage.supportExports.unavailable')}
                 </TerminalChip>
               </div>
-              <p className="mt-2 text-xs leading-5 text-white/48">{t(definition.descriptionKey)}</p>
+              <p className="mt-2 text-xs leading-5 text-white/48">{getDefinitionCopy(definition, 'description')}</p>
               <p className="mt-2 text-[11px] leading-5 text-white/35">{getAvailabilityText(item)}</p>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
@@ -215,7 +275,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
                 onClick={() => void handleDownload(definition)}
                 disabled={!isAvailable || isDownloading}
               >
-                {isDownloading ? t('backtest.resultPage.supportExports.downloading') : t(definition.actionKey)}
+                {isDownloading ? t('backtest.resultPage.supportExports.downloading') : getDefinitionCopy(definition, 'action')}
               </TerminalButton>
             </div>
           </TerminalNestedBlock>
