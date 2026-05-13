@@ -29,10 +29,14 @@ import {
 } from '../components/scanner/ScannerBacktestLab';
 import { ScannerActionButton as ActionButton } from '../components/scanner/ScannerActionButton';
 import {
+  ScannerHistoryDrawer,
+  type ScannerHistoryDrawerItem,
+} from '../components/scanner/ScannerHistoryDrawer';
+import {
   useScannerBacktestLab,
   type ScannerBacktestItem,
 } from '../components/scanner/useScannerBacktestLab';
-import { ApiErrorAlert, Drawer, Pagination, PillBadge, SectionShell } from '../components/common';
+import { SectionShell } from '../components/common';
 import {
   TerminalButton,
   TerminalChip,
@@ -2488,13 +2492,35 @@ const UserScannerPage: React.FC = () => {
         ? t('scanner.currentRunFallbackHk')
         : t('scanner.currentRunFallbackCn');
     const matchedSymbols = dedupeTickerSymbols(item.topSymbols);
+    const historyHeadline = formatHistoryHeadline(item.headline, item.topSymbols, fallbackTitle);
     return {
-      ...item,
-      historyHeadline: formatHistoryHeadline(item.headline, item.topSymbols, fallbackTitle),
+      id: item.id,
+      marketLabel: item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn'),
+      marketVariant: marketVariant(item.market),
+      statusLabel: compactScannerStateLabel(item.status, language),
+      statusVariant: statusVariant(item.status),
+      watchlistDateLabel: item.watchlistDate ? formatDateOnly(item.watchlistDate, language) : null,
+      profileLabel: item.profileLabel || item.profile,
+      title: historyHeadline.title,
+      detail: historyHeadline.detail,
+      shortlistSize: item.shortlistSize,
+      universeSize: item.universeSize,
+      evaluatedSize: item.evaluatedSize,
+      runAtLabel: formatTimestamp(item.runAt, language),
+      comparisonLabel: hasComparison(item.changeSummary)
+        ? (language === 'en'
+          ? `new ${item.changeSummary.newCount} · retained ${item.changeSummary.retainedCount} · dropped ${item.changeSummary.droppedCount}`
+          : `新增 ${item.changeSummary.newCount} · 保留 ${item.changeSummary.retainedCount} · 移出 ${item.changeSummary.droppedCount}`)
+        : null,
+      reviewLabel: hasReviewSummary(item.reviewSummary)
+        ? (language === 'en'
+          ? `reviewed ${item.reviewSummary.reviewedCount}/${item.reviewSummary.candidateCount}`
+          : `复盘 ${item.reviewSummary.reviewedCount}/${item.reviewSummary.candidateCount}`)
+        : null,
       matchedSymbols: matchedSymbols.slice(0, 10),
       overflowSymbolCount: Math.max(0, matchedSymbols.length - 10),
-    };
-  }), [historyItems, t]);
+    } satisfies ScannerHistoryDrawerItem;
+  }), [historyItems, language, t]);
   const emptyStateTitle = language === 'en' ? 'No matching scanner results' : '当前无匹配的扫描结果';
   const emptyStateBody = language === 'en' ? 'Adjust the filters on the left or try again later' : '请调整左侧参数或稍后再试';
   const pageErrorSummary = pageError ? sanitizeScannerErrorSummary(pageError.message, language) || compactScannerStateLabel('failed', language) : null;
@@ -3902,105 +3928,28 @@ const UserScannerPage: React.FC = () => {
 		        </TerminalPageShell>
       </div>
 
-      <Drawer
+      <ScannerHistoryDrawer
         isOpen={isHistoryDrawerOpen}
         onClose={() => setIsHistoryDrawerOpen(false)}
-        title={language === 'en' ? 'Historical scan replay' : '历史扫描回放'}
-        width="max-w-4xl"
-      >
-        <div data-testid="user-scanner-bento-drawer" className="ml-auto w-full max-w-4xl rounded-l-[40px] bg-transparent p-6 text-foreground sm:p-8">
-          <div className="grid gap-6">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{language === 'en' ? 'Historical scan replay' : '历史扫描回放'}</p>
-              <h2 className="mt-1 text-xl text-foreground">{language === 'en' ? 'Recent scanner runs' : '近期扫描记录'}</h2>
-            </div>
-
-            {historyError ? <ApiErrorAlert error={historyError} /> : null}
-            {isLoadingHistory ? <div className="theme-panel-subtle rounded-[28px] px-4 py-5 text-sm text-secondary-text">{t('scanner.loadingHistory')}</div> : null}
-            {!isLoadingHistory && historyCards.length ? (
-              <div className="space-y-3">
-                {historyCards.map((item) => (
-	                  <button
-	                    key={item.id}
-	                    type="button"
-	                    className={`w-full flex flex-col gap-3 bg-white/[0.02] border border-white/5 rounded-2xl p-5 hover:bg-white/[0.04] transition-colors text-left ${item.id === selectedRunId ? 'border-white/15 bg-white/[0.05]' : ''}`}
-	                    onClick={() => {
-	                      void loadRun(item.id);
-	                      setIsHistoryDrawerOpen(false);
-	                    }}
-	                  >
-                    <div className="flex w-full max-w-full items-start gap-3 overflow-hidden">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <PillBadge variant={marketVariant(item.market)}>{item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}</PillBadge>
-	                          <PillBadge variant={statusVariant(item.status)}>{compactScannerStateLabel(item.status, language)}</PillBadge>
-                          {item.watchlistDate ? <PillBadge variant="history">{formatDateOnly(item.watchlistDate, language)}</PillBadge> : null}
-                          <PillBadge variant="history">{item.profileLabel || item.profile}</PillBadge>
-                        </div>
-                        <h4 className="mt-3 mb-2 w-full truncate font-bold text-white">
-                          {item.historyHeadline.title}
-                        </h4>
-                        {item.historyHeadline.detail ? (
-                          <p className="break-words whitespace-normal w-full text-sm text-white/70 leading-relaxed">
-                            {item.historyHeadline.detail}
-                          </p>
-                        ) : null}
-                        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-secondary-text">
-                          <span>{`${t('scanner.metricShortlist')}: ${item.shortlistSize}`}</span>
-                          <span>{`${t('scanner.metricUniverse')}: ${item.universeSize}`}</span>
-                          <span>{`${language === 'en' ? 'Evaluated' : '已评估'}: ${item.evaluatedSize}`}</span>
-                          <span>{formatTimestamp(item.runAt, language)}</span>
-                        </div>
-                        {hasReviewSummary(item.reviewSummary) || hasComparison(item.changeSummary) ? (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {hasComparison(item.changeSummary) ? (
-                              <span className="rounded border border-white/8 bg-white/[0.035] px-2 py-1 text-[10px] text-white/52">
-                                {language === 'en'
-                                  ? `new ${item.changeSummary.newCount} · retained ${item.changeSummary.retainedCount} · dropped ${item.changeSummary.droppedCount}`
-                                  : `新增 ${item.changeSummary.newCount} · 保留 ${item.changeSummary.retainedCount} · 移出 ${item.changeSummary.droppedCount}`}
-                              </span>
-                            ) : null}
-                            {hasReviewSummary(item.reviewSummary) ? (
-                              <span className="rounded border border-white/8 bg-white/[0.035] px-2 py-1 text-[10px] text-white/52">
-                                {language === 'en'
-                                  ? `reviewed ${item.reviewSummary.reviewedCount}/${item.reviewSummary.candidateCount}`
-                                  : `复盘 ${item.reviewSummary.reviewedCount}/${item.reviewSummary.candidateCount}`}
-                              </span>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        {item.matchedSymbols.length ? (
-                          <div className="product-chip-list product-chip-list--tight mt-3 w-full" data-testid={`scanner-history-symbols-${item.id}`}>
-                            {item.matchedSymbols.map((symbol) => (
-                              <span
-                                key={`${item.id}-${symbol}`}
-                                className="product-chip shrink-0 text-[10px] px-2 py-1"
-                              >
-                                {symbol}
-                              </span>
-                            ))}
-                            {item.overflowSymbolCount > 0 ? (
-                              <span className="product-chip shrink-0 text-[10px] px-2 py-1">
-                                +{item.overflowSymbolCount}
-                              </span>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {!isLoadingHistory && !historyItems.length ? (
-              <TerminalEmptyState title={emptyStateTitle} className="w-full py-12">
-                {emptyStateBody}
-              </TerminalEmptyState>
-            ) : null}
-            {totalHistoryPages > 1 ? <div className="pt-2"><Pagination currentPage={historyPage} totalPages={totalHistoryPages} onPageChange={(page) => void fetchHistory(page)} /></div> : null}
-          </div>
-        </div>
-      </Drawer>
+        language={language}
+        historyError={historyError}
+        isLoadingHistory={isLoadingHistory}
+        items={historyCards}
+        selectedRunId={selectedRunId}
+        emptyStateTitle={emptyStateTitle}
+        emptyStateBody={emptyStateBody}
+        loadingLabel={t('scanner.loadingHistory')}
+        shortlistMetricLabel={t('scanner.metricShortlist')}
+        universeMetricLabel={t('scanner.metricUniverse')}
+        evaluatedMetricLabel={language === 'en' ? 'Evaluated' : '已评估'}
+        historyPage={historyPage}
+        totalHistoryPages={totalHistoryPages}
+        onPageChange={(page) => void fetchHistory(page)}
+        onSelectRun={(runId) => {
+          void loadRun(runId);
+          setIsHistoryDrawerOpen(false);
+        }}
+      />
     </>
   );
 };
