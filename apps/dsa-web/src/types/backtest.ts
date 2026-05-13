@@ -487,8 +487,16 @@ export interface RuleBacktestMonteCarloRobustnessConfig {
   noiseScale?: number;
 }
 
+export interface RuleBacktestWalkForwardRobustnessConfig {
+  trainWindow?: number;
+  testWindow?: number;
+  step?: number;
+  maxWindows?: number;
+}
+
 export interface RuleBacktestRobustnessConfig {
   monteCarlo?: RuleBacktestMonteCarloRobustnessConfig;
+  walkForward?: RuleBacktestWalkForwardRobustnessConfig;
 }
 
 export interface RuleBacktestRunRequest {

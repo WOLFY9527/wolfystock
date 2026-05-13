@@ -84,6 +84,156 @@ describe('backtestApi support export contract exposure', () => {
     });
   });
 
+  it('serializes walk-forward robustness config to backend snake_case request fields', async () => {
+    vi.mocked(apiClient.post).mockResolvedValueOnce({
+      data: {
+        id: 93,
+        code: 'AAPL',
+        strategy_text: 'buy when close > sma(20)',
+        parsed_strategy: {
+          version: 'rule_v1',
+          timeframe: '1d',
+          source_text: 'buy when close > sma(20)',
+          normalized_text: 'buy when close > sma(20)',
+          entry: { type: 'comparison' },
+          exit: { type: 'comparison' },
+          confidence: 0.91,
+          needs_confirmation: false,
+          ambiguities: [],
+          summary: {},
+          max_lookback: 20,
+        },
+        strategy_hash: 'ghi',
+        timeframe: '1d',
+        lookback_bars: 252,
+        initial_capital: 100000,
+        fee_bps: 0,
+        slippage_bps: 0,
+        needs_confirmation: false,
+        warnings: [],
+        status: 'queued',
+        status_history: [],
+        trade_count: 0,
+        win_count: 0,
+        loss_count: 0,
+        summary: {},
+        execution_assumptions: {},
+        benchmark_curve: [],
+        benchmark_summary: {},
+        daily_return_series: [],
+        exposure_curve: [],
+        equity_curve: [],
+        trades: [],
+      },
+    } as never);
+
+    await backtestApi.runRuleBacktest({
+      code: 'AAPL',
+      strategyText: 'buy when close > sma(20)',
+      confirmed: true,
+      robustnessConfig: {
+        walkForward: {
+          trainWindow: 24,
+          testWindow: 12,
+          step: 12,
+          maxWindows: 4,
+        },
+      },
+    } as never);
+
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/backtest/rule/run', {
+      code: 'AAPL',
+      strategy_text: 'buy when close > sma(20)',
+      confirmed: true,
+      robustness_config: {
+        walk_forward: {
+          train_window: 24,
+          test_window: 12,
+          step: 12,
+          max_windows: 4,
+        },
+      },
+    });
+  });
+
+  it('serializes monte carlo and walk-forward robustness config together when both are enabled', async () => {
+    vi.mocked(apiClient.post).mockResolvedValueOnce({
+      data: {
+        id: 94,
+        code: 'AAPL',
+        strategy_text: 'buy when close > sma(20)',
+        parsed_strategy: {
+          version: 'rule_v1',
+          timeframe: '1d',
+          source_text: 'buy when close > sma(20)',
+          normalized_text: 'buy when close > sma(20)',
+          entry: { type: 'comparison' },
+          exit: { type: 'comparison' },
+          confidence: 0.91,
+          needs_confirmation: false,
+          ambiguities: [],
+          summary: {},
+          max_lookback: 20,
+        },
+        strategy_hash: 'jkl',
+        timeframe: '1d',
+        lookback_bars: 252,
+        initial_capital: 100000,
+        fee_bps: 0,
+        slippage_bps: 0,
+        needs_confirmation: false,
+        warnings: [],
+        status: 'queued',
+        status_history: [],
+        trade_count: 0,
+        win_count: 0,
+        loss_count: 0,
+        summary: {},
+        execution_assumptions: {},
+        benchmark_curve: [],
+        benchmark_summary: {},
+        daily_return_series: [],
+        exposure_curve: [],
+        equity_curve: [],
+        trades: [],
+      },
+    } as never);
+
+    await backtestApi.runRuleBacktest({
+      code: 'AAPL',
+      strategyText: 'buy when close > sma(20)',
+      confirmed: true,
+      robustnessConfig: {
+        monteCarlo: {
+          simulationCount: 16,
+        },
+        walkForward: {
+          trainWindow: 24,
+          testWindow: 12,
+          step: 12,
+          maxWindows: 4,
+        },
+      },
+    } as never);
+
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/backtest/rule/run', {
+      code: 'AAPL',
+      strategy_text: 'buy when close > sma(20)',
+      confirmed: true,
+      robustness_config: {
+        monte_carlo: {
+          simulation_count: 16,
+        },
+        walk_forward: {
+          train_window: 24,
+          test_window: 12,
+          step: 12,
+          max_windows: 4,
+        },
+      },
+    });
+  });
+
   it('omits robustness_config when no robustness config is provided', async () => {
     vi.mocked(apiClient.post).mockResolvedValueOnce({
       data: {

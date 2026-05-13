@@ -1147,16 +1147,26 @@ describe('BacktestPage', () => {
     expect(within(advancedStep).queryByLabelText('启用贝叶斯搜索')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '稳健性' }));
-    expect(within(advancedStep).getByText('滚动样本外验证（计划中）')).toBeInTheDocument();
     expect(within(advancedStep).getByText('Monte Carlo 稳健性诊断')).toBeInTheDocument();
+    expect(within(advancedStep).getByText('滚动样本外稳健性预设')).toBeInTheDocument();
     expect(within(advancedStep).getByLabelText('启用 Monte Carlo 稳健性诊断')).not.toBeChecked();
+    expect(within(advancedStep).getByLabelText('启用滚动样本外稳健性预设')).not.toBeChecked();
     expect(within(advancedStep).queryByLabelText('Monte Carlo 仿真次数')).not.toBeInTheDocument();
+    expect(within(advancedStep).queryByText('24 / 12 / 12 / 4')).not.toBeInTheDocument();
     expect(within(advancedStep).queryByText(/seed/i)).not.toBeInTheDocument();
     expect(within(advancedStep).queryByText(/noise\s*scale/i)).not.toBeInTheDocument();
+    expect(within(advancedStep).queryByLabelText(/训练窗口/i)).not.toBeInTheDocument();
+    expect(within(advancedStep).queryByLabelText(/测试窗口/i)).not.toBeInTheDocument();
+    expect(within(advancedStep).queryByLabelText(/^步长$/i)).not.toBeInTheDocument();
+    expect(within(advancedStep).queryByLabelText(/最大窗口/i)).not.toBeInTheDocument();
 
     fireEvent.click(within(advancedStep).getByText('Monte Carlo 稳健性诊断'));
     expect(await within(advancedStep).findByLabelText('启用 Monte Carlo 稳健性诊断')).toBeInTheDocument();
     expect(within(advancedStep).queryByLabelText('Monte Carlo 仿真次数')).not.toBeInTheDocument();
+
+    fireEvent.click(within(advancedStep).getByText('滚动样本外稳健性预设'));
+    expect(await within(advancedStep).findByLabelText('启用滚动样本外稳健性预设')).toBeInTheDocument();
+    expect(within(advancedStep).queryByText('24 / 12 / 12 / 4')).not.toBeInTheDocument();
 
     expect(screen.getAllByRole('button', { name: '执行回测任务' }).length).toBeGreaterThan(0);
   });
@@ -1373,7 +1383,7 @@ describe('BacktestPage', () => {
     expect(screen.queryByTestId('backtest-report-ledger-table')).not.toBeInTheDocument();
   }, 10000);
 
-  it('sends monte carlo simulation count only when robustness diagnostics are enabled in professional mode', async () => {
+  it('keeps walk-forward robustness preset disabled by default in professional mode', async () => {
     runRuleBacktest.mockResolvedValueOnce(makeRuleRunResponse({
       status: 'completed',
       completedAt: '2026-04-07T08:02:00Z',
@@ -1390,16 +1400,86 @@ describe('BacktestPage', () => {
 
     const advancedStep = await screen.findByTestId('pro-step-advanced');
     fireEvent.click(within(advancedStep).getByRole('button', { name: '稳健性' }));
-    fireEvent.click(within(advancedStep).getByText('Monte Carlo 稳健性诊断'));
 
-    const toggle = await within(advancedStep).findByLabelText('启用 Monte Carlo 稳健性诊断');
+    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
+
+    await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(runRuleBacktest).mock.calls[0]?.[0];
+    expect(payload).not.toHaveProperty('robustnessConfig');
+  });
+
+  it('sends fixed walk-forward preset only when enabled in professional mode', async () => {
+    runRuleBacktest.mockResolvedValueOnce(makeRuleRunResponse({
+      status: 'completed',
+      completedAt: '2026-04-07T08:02:00Z',
+      statusMessage: '规则回测已完成。',
+      tradeCount: 1,
+    }));
+
+    renderBacktestRoutes();
+
+    await parseDeterministicStrategy();
+
+    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
+    fireEvent.click(screen.getByTestId('pro-workflow-step-advanced'));
+
+    const advancedStep = await screen.findByTestId('pro-step-advanced');
+    fireEvent.click(within(advancedStep).getByRole('button', { name: '稳健性' }));
+    fireEvent.click(within(advancedStep).getByText('滚动样本外稳健性预设'));
+
+    const toggle = await within(advancedStep).findByLabelText('启用滚动样本外稳健性预设');
     fireEvent.click(toggle);
+
+    expect(within(advancedStep).getByText('24 / 12 / 12 / 4')).toBeInTheDocument();
+    expect(within(advancedStep).getByText('固定训练窗 / 测试窗 / 步长 / 最大窗口')).toBeInTheDocument();
+
+    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
+
+    await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(runRuleBacktest).mock.calls[0]?.[0];
+    expect(payload).toEqual(expect.objectContaining({
+      robustnessConfig: {
+        walkForward: {
+          trainWindow: 24,
+          testWindow: 12,
+          step: 12,
+          maxWindows: 4,
+        },
+      },
+    }));
+  });
+
+  it('sends monte carlo and fixed walk-forward robustness diagnostics together when both are enabled', async () => {
+    runRuleBacktest.mockResolvedValueOnce(makeRuleRunResponse({
+      status: 'completed',
+      completedAt: '2026-04-07T08:02:00Z',
+      statusMessage: '规则回测已完成。',
+      tradeCount: 1,
+    }));
+
+    renderBacktestRoutes();
+
+    await parseDeterministicStrategy();
+
+    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
+    fireEvent.click(screen.getByTestId('pro-workflow-step-advanced'));
+
+    const advancedStep = await screen.findByTestId('pro-step-advanced');
+    fireEvent.click(within(advancedStep).getByRole('button', { name: '稳健性' }));
+
+    fireEvent.click(within(advancedStep).getByText('Monte Carlo 稳健性诊断'));
+    const monteCarloToggle = await within(advancedStep).findByLabelText('启用 Monte Carlo 稳健性诊断');
+    fireEvent.click(monteCarloToggle);
 
     const simulationCountInput = await within(advancedStep).findByLabelText('Monte Carlo 仿真次数');
     expect(simulationCountInput).toHaveValue(12);
 
     fireEvent.change(simulationCountInput, { target: { value: '24' } });
     expect(simulationCountInput).toHaveValue(24);
+
+    fireEvent.click(within(advancedStep).getByText('滚动样本外稳健性预设'));
+    const walkForwardToggle = await within(advancedStep).findByLabelText('启用滚动样本外稳健性预设');
+    fireEvent.click(walkForwardToggle);
 
     fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
 
@@ -1409,6 +1489,12 @@ describe('BacktestPage', () => {
       robustnessConfig: {
         monteCarlo: {
           simulationCount: 24,
+        },
+        walkForward: {
+          trainWindow: 24,
+          testWindow: 12,
+          step: 12,
+          maxWindows: 4,
         },
       },
     }));

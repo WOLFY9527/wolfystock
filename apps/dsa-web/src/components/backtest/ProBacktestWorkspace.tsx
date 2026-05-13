@@ -47,6 +47,8 @@ type ProBacktestWorkspaceProps = Omit<FlowProps, 'panelMode'> & {
   monteCarloSimulationCount: string;
   onMonteCarloSimulationCountChange: (value: string) => void;
   onMonteCarloSimulationCountBlur: () => void;
+  walkForwardPresetEnabled: boolean;
+  onToggleWalkForwardPresetEnabled: (nextEnabled: boolean) => void;
 };
 
 const ghostCardClass = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md transition-all hover:border-white/10';
@@ -180,6 +182,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   monteCarloSimulationCount,
   onMonteCarloSimulationCountChange,
   onMonteCarloSimulationCountBlur,
+  walkForwardPresetEnabled,
+  onToggleWalkForwardPresetEnabled,
   parsedStrategy,
   confirmed,
   onToggleConfirmed,
@@ -291,6 +295,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const symbolValid = Boolean(code.trim());
   const strategyReady = Boolean(parsedStrategy && parsedExecutable && !parseStale && confirmed);
   const canRun = symbolValid && dateValid && capitalValid && costValid && benchmarkValid && strategyReady;
+  const robustnessEnabled = monteCarloEnabled || walkForwardPresetEnabled;
 
   const readiness = [
     { key: 'symbol', label: language === 'en' ? 'symbol valid' : 'symbol valid', ready: symbolValid },
@@ -317,7 +322,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     strategy: parseStale ? 'error' : confirmed ? 'done' : parsedStrategy ? 'pending' : 'pending',
     orders: riskRows.length > 0 ? 'done' : 'default',
     costs: Number(feeBps) > 0 || Number(slippageBps) > 0 || benchmarkMode === 'custom_code' ? 'modified' : 'default',
-    advanced: monteCarloEnabled ? 'modified' : 'off',
+    advanced: robustnessEnabled ? 'modified' : 'off',
   };
 
   const goToStep = (step: StepDefinition) => {
@@ -810,7 +815,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         advancedTab === 'optimization' ? (language === 'en' ? 'optimization' : '优化') : (language === 'en' ? 'robustness' : '稳健性'),
         advancedTab === 'optimization'
           ? (language === 'en' ? 'planned only' : '计划中')
-          : monteCarloEnabled
+          : robustnessEnabled
             ? (language === 'en' ? 'diagnostics enabled' : '诊断已启用')
             : (language === 'en' ? 'diagnostics optional' : '诊断可选'),
       ])}
@@ -830,8 +835,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                   ? 'The current professional run only uses basic parameters plus the parsed executable strategy. Optimization controls below remain planned placeholders.'
                   : '当前专业模式实际只会提交基础参数与已解析的可执行策略；下方优化控件仍是计划中的占位能力。')
                 : (language === 'en'
-                  ? 'Robustness diagnostics are opt-in. When disabled, no extra diagnostics config is sent. When enabled, only Monte Carlo simulation count is added and the primary strategy logic is unchanged.'
-                  : '稳健性诊断为可选项。关闭时不会附加额外诊断参数；启用后仅增加 Monte Carlo 仿真次数，不会改动主策略逻辑。')}
+                  ? 'Robustness diagnostics are opt-in. When disabled, no extra diagnostics config is sent. When enabled, only the fixed walk-forward preset and chosen Monte Carlo simulation count are added, without changing the primary strategy logic.'
+                  : '稳健性诊断为可选项。关闭时不会附加额外诊断参数；启用后只会追加固定滚动样本外预设和你选择的 Monte Carlo 仿真次数，不会改动主策略逻辑。')}
             </p>
           </div>
           {advancedTab === 'optimization' ? (
@@ -869,7 +874,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                     />
                     <span className="min-w-0">
                       <span className="block font-semibold text-white/82">
-                        {language === 'en' ? 'Opt in to Monte Carlo diagnostics' : '按需启用 Monte Carlo 诊断'}
+                      {language === 'en' ? 'Opt in to Monte Carlo diagnostics' : '按需启用 Monte Carlo 诊断'}
                       </span>
                       <span className="mt-1 block text-xs leading-5 text-white/48">
                         {language === 'en'
@@ -915,12 +920,64 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                   )}
                 </div>
               </details>
-              {renderPlannedCapability(
-                language === 'en' ? 'Walk-forward validation (planned)' : '滚动样本外验证（计划中）',
-                language === 'en'
-                  ? 'Walk-forward validation is not wired into the current run path.'
-                  : '滚动样本外验证尚未接入当前运行路径。',
-              )}
+              <details className={plannedCardClass} data-testid="pro-robustness-walk-forward-panel">
+                <summary className="cursor-pointer text-sm font-semibold text-white/78">
+                  {language === 'en' ? 'Walk-forward robustness preset' : '滚动样本外稳健性预设'}
+                </summary>
+                <div className="mt-4 grid gap-4">
+                  <label className="flex items-start gap-3 rounded-lg border border-white/5 bg-white/[0.02] p-3 text-sm text-white/72">
+                    <input
+                      type="checkbox"
+                      className={checkboxClass}
+                      checked={walkForwardPresetEnabled}
+                      onChange={(event) => onToggleWalkForwardPresetEnabled(event.target.checked)}
+                      aria-label={language === 'en' ? 'Enable walk-forward robustness preset' : '启用滚动样本外稳健性预设'}
+                      data-testid="pro-robustness-walk-forward-toggle"
+                    />
+                    <span className="min-w-0">
+                      <span className="block font-semibold text-white/82">
+                        {language === 'en' ? 'Opt in to a fixed walk-forward sample-out preset' : '按需启用固定滚动样本外诊断预设'}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-white/48">
+                        {language === 'en'
+                          ? 'Professional-mode diagnostics only. This uses fixed train/test windows to inspect sample-out stability, without changing primary strategy logic or requiring a re-parse.'
+                          : '仅用于专业模式下的固定窗口样本外诊断，用训练窗/测试窗观察稳健性，不改变主策略逻辑，也不需要重新解析。'}
+                      </span>
+                    </span>
+                  </label>
+                  {walkForwardPresetEnabled ? (
+                    <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+                      <div className="rounded-lg border border-white/5 bg-black/20 p-3 text-sm text-white/58">
+                        <p className="font-semibold text-white/74">
+                          {language === 'en' ? 'Fixed preset' : '固定预设'}
+                        </p>
+                        <p className="mt-2 font-mono text-base text-white">24 / 12 / 12 / 4</p>
+                        <p className="mt-1 text-xs leading-5 text-white/42">
+                          {language === 'en'
+                            ? 'Fixed train / test / step / max windows'
+                            : '固定训练窗 / 测试窗 / 步长 / 最大窗口'}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-white/5 bg-black/20 p-3 text-sm text-white/58">
+                        <p className="font-semibold text-white/74">
+                          {language === 'en' ? 'Diagnostic scope' : '诊断范围'}
+                        </p>
+                        <p className="mt-2 leading-6">
+                          {language === 'en'
+                            ? 'First release is preset-only. No per-field editing is exposed here, and no extra strategy parser work is required when you toggle it.'
+                            : '首个版本只开放固定预设，不在这里暴露逐项数值编辑；切换开关时也不需要重新解析策略。'}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-white/42">
+                      {language === 'en'
+                        ? 'Disabled by default. The professional run request adds no walk-forward config until you opt in.'
+                        : '默认关闭；未启用前，专业模式运行请求不会附加滚动样本外配置。'}
+                    </p>
+                  )}
+                </div>
+              </details>
             </>
           )}
         </div>

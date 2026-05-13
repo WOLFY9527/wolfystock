@@ -58,6 +58,7 @@ export const backtestApi = {
     if (params.slippageBps != null) requestData.slippage_bps = params.slippageBps;
     if (params.benchmarkMode) requestData.benchmark_mode = params.benchmarkMode;
     if (params.benchmarkCode) requestData.benchmark_code = params.benchmarkCode;
+    const robustnessConfig: Record<string, unknown> = {};
     if (params.robustnessConfig?.monteCarlo) {
       const monteCarloConfig: Record<string, unknown> = {};
       if (params.robustnessConfig.monteCarlo.simulationCount != null) {
@@ -70,8 +71,29 @@ export const backtestApi = {
         monteCarloConfig.noise_scale = params.robustnessConfig.monteCarlo.noiseScale;
       }
       if (Object.keys(monteCarloConfig).length > 0) {
-        requestData.robustness_config = { monte_carlo: monteCarloConfig };
+        robustnessConfig.monte_carlo = monteCarloConfig;
       }
+    }
+    if (params.robustnessConfig?.walkForward) {
+      const walkForwardConfig: Record<string, unknown> = {};
+      if (params.robustnessConfig.walkForward.trainWindow != null) {
+        walkForwardConfig.train_window = params.robustnessConfig.walkForward.trainWindow;
+      }
+      if (params.robustnessConfig.walkForward.testWindow != null) {
+        walkForwardConfig.test_window = params.robustnessConfig.walkForward.testWindow;
+      }
+      if (params.robustnessConfig.walkForward.step != null) {
+        walkForwardConfig.step = params.robustnessConfig.walkForward.step;
+      }
+      if (params.robustnessConfig.walkForward.maxWindows != null) {
+        walkForwardConfig.max_windows = params.robustnessConfig.walkForward.maxWindows;
+      }
+      if (Object.keys(walkForwardConfig).length > 0) {
+        robustnessConfig.walk_forward = walkForwardConfig;
+      }
+    }
+    if (Object.keys(robustnessConfig).length > 0) {
+      requestData.robustness_config = robustnessConfig;
     }
     if (params.waitForCompletion != null) requestData.wait_for_completion = params.waitForCompletion;
 

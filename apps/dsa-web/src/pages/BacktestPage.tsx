@@ -47,6 +47,12 @@ const RULE_HISTORY_PAGE_SIZE = 10;
 const PRO_MONTE_CARLO_SIMULATION_DEFAULT = '12';
 const PRO_MONTE_CARLO_SIMULATION_MIN = 1;
 const PRO_MONTE_CARLO_SIMULATION_MAX = 64;
+const PRO_WALK_FORWARD_PRESET = {
+  trainWindow: 24,
+  testWindow: 12,
+  step: 12,
+  maxWindows: 4,
+} as const;
 const HistoricalEvaluationPanel = lazy(() => import('../components/backtest/HistoricalEvaluationPanel'));
 const ProBacktestWorkspace = lazy(() => import('../components/backtest/ProBacktestWorkspace'));
 
@@ -203,6 +209,7 @@ const BacktestPage: React.FC = () => {
   const [ruleBenchmarkCode, setRuleBenchmarkCode] = useState('');
   const [proMonteCarloEnabled, setProMonteCarloEnabled] = useState(false);
   const [proMonteCarloSimulationCount, setProMonteCarloSimulationCount] = useState('');
+  const [proWalkForwardPresetEnabled, setProWalkForwardPresetEnabled] = useState(false);
   const [ruleParsedStrategy, setRuleParsedStrategy] = useState<RuleBacktestParseResponse | null>(null);
   const [ruleConfirmed, setRuleConfirmed] = useState(false);
   const [isParsingRuleStrategy, setIsParsingRuleStrategy] = useState(false);
@@ -969,19 +976,23 @@ const BacktestPage: React.FC = () => {
     setIsSubmittingRuleBacktest(true);
     setRuleRunError(null);
     try {
-      const robustnessConfig = proMonteCarloEnabled
+      const monteCarloConfig = proMonteCarloEnabled
         ? {
-          monteCarlo: {
-            simulationCount: clampInteger(
-              parsePositiveInt(
-                proMonteCarloSimulationCount,
-                Number.parseInt(PRO_MONTE_CARLO_SIMULATION_DEFAULT, 10),
-                PRO_MONTE_CARLO_SIMULATION_MIN,
-              ),
+          simulationCount: clampInteger(
+            parsePositiveInt(
+              proMonteCarloSimulationCount,
+              Number.parseInt(PRO_MONTE_CARLO_SIMULATION_DEFAULT, 10),
               PRO_MONTE_CARLO_SIMULATION_MIN,
-              PRO_MONTE_CARLO_SIMULATION_MAX,
             ),
-          },
+            PRO_MONTE_CARLO_SIMULATION_MIN,
+            PRO_MONTE_CARLO_SIMULATION_MAX,
+          ),
+        }
+        : undefined;
+      const robustnessConfig = monteCarloConfig || proWalkForwardPresetEnabled
+        ? {
+          ...(monteCarloConfig ? { monteCarlo: monteCarloConfig } : {}),
+          ...(proWalkForwardPresetEnabled ? { walkForward: PRO_WALK_FORWARD_PRESET } : {}),
         }
         : undefined;
       const requestPayload = {
@@ -1179,6 +1190,10 @@ const BacktestPage: React.FC = () => {
     }
   }, []);
 
+  const handleToggleProWalkForwardPreset = useCallback((nextEnabled: boolean) => {
+    setProWalkForwardPresetEnabled(nextEnabled);
+  }, []);
+
   const handleProMonteCarloSimulationCountChange = useCallback((value: string) => {
     if (!value.trim()) {
       setProMonteCarloSimulationCount('');
@@ -1217,6 +1232,7 @@ const BacktestPage: React.FC = () => {
     setRuleBenchmarkCode('');
     setProMonteCarloEnabled(false);
     setProMonteCarloSimulationCount('');
+    setProWalkForwardPresetEnabled(false);
   }, []);
   const moduleTabs = (
     <div className="backtest-mode-toggle" role="tablist" aria-label={bt(language, 'page.moduleTabsLabel')}>
@@ -1473,6 +1489,8 @@ const BacktestPage: React.FC = () => {
                     monteCarloSimulationCount={proMonteCarloSimulationCount}
                     onMonteCarloSimulationCountChange={handleProMonteCarloSimulationCountChange}
                     onMonteCarloSimulationCountBlur={handleProMonteCarloSimulationCountBlur}
+                    walkForwardPresetEnabled={proWalkForwardPresetEnabled}
+                    onToggleWalkForwardPresetEnabled={handleToggleProWalkForwardPreset}
                     parsedStrategy={ruleParsedStrategy}
                     confirmed={ruleConfirmed}
                     onToggleConfirmed={setRuleConfirmed}
