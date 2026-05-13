@@ -562,6 +562,27 @@ class AdminRbacCompatibilityTestCase(unittest.TestCase):
         for capability_counts in inventory.capability_counts.values():
             self.assertTrue(set(capability_counts).issubset(set(ADMIN_RBAC_CAPABILITIES)))
 
+    def test_remaining_require_admin_user_dependencies_are_limited_to_known_transitional_route_files(self) -> None:
+        endpoint_dir = Path(__file__).resolve().parents[1] / "api" / "v1" / "endpoints"
+        coarse_dependency_counts: dict[str, int] = {}
+        for path in endpoint_dir.glob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            count = text.count("Depends(require_admin_user)")
+            if count:
+                coarse_dependency_counts[path.name] = count
+
+        self.assertEqual(
+            {
+                "admin_users.py": 4,
+                "agent.py": 1,
+                "market_provider_operations.py": 1,
+                "quant.py": 9,
+                "scanner.py": 3,
+                "usage.py": 1,
+            },
+            coarse_dependency_counts,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

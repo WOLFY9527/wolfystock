@@ -59,6 +59,92 @@ EXPLICIT_AUTHENTICATED_ROUTE_EXCEPTIONS = {
         "note": "Backtest robustness evidence is authenticated-user scoped outside the admin control-plane inventory.",
     },
 }
+EXPECTED_TRANSITIONAL_ADMIN_USER_ALLOWLIST = {
+    "agent.admin_send": {
+        "surface": "agent_admin_send",
+        "note_fragment": "legacy admin-only route",
+        "routes": [("POST", "/api/v1/agent/chat/send")],
+    },
+    "scanner.admin_watchlists_and_status": {
+        "surface": "scanner_admin",
+        "note_fragment": "legacy admin scanner endpoints",
+        "routes": [
+            ("GET", "/api/v1/scanner/status"),
+            ("GET", "/api/v1/scanner/watchlists/recent"),
+            ("GET", "/api/v1/scanner/watchlists/today"),
+        ],
+    },
+    "usage.admin_summary": {
+        "surface": "usage_admin",
+        "note_fragment": "usage summary",
+        "routes": [("GET", "/api/v1/usage/summary")],
+    },
+    "quant.duckdb.admin_surface": {
+        "surface": "quant_duckdb_admin",
+        "note_fragment": "duckdb admin routes",
+        "routes": [
+            ("GET", "/api/v1/quant/duckdb/coverage"),
+            ("GET", "/api/v1/quant/duckdb/health"),
+            ("POST", "/api/v1/quant/duckdb/benchmark"),
+            ("POST", "/api/v1/quant/duckdb/build-factors"),
+            ("POST", "/api/v1/quant/duckdb/compare-runtime-context"),
+            ("POST", "/api/v1/quant/duckdb/factor-snapshot"),
+            ("POST", "/api/v1/quant/duckdb/ingest-ohlcv"),
+            ("POST", "/api/v1/quant/duckdb/init"),
+            ("POST", "/api/v1/quant/duckdb/validate-factor-path"),
+        ],
+    },
+    "admin.users.legacy_read": {
+        "surface": "admin_user_governance",
+        "note_fragment": "core admin user read routes",
+        "routes": [
+            ("GET", "/api/v1/admin/users"),
+            ("GET", "/api/v1/admin/users/{user_id}"),
+            ("GET", "/api/v1/admin/users/{user_id}/activity"),
+        ],
+    },
+    "admin.activity.legacy_read": {
+        "surface": "admin_activity",
+        "note_fragment": "admin activity feed",
+        "routes": [("GET", "/api/v1/admin/activity")],
+    },
+    "admin.market_providers.operations": {
+        "surface": "admin_market_provider_operations",
+        "note_fragment": "operational provider route",
+        "routes": [("GET", "/api/v1/admin/market-providers/operations")],
+    },
+}
+EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
+    "agent.admin_send": 1,
+    "scanner.admin_watchlists_and_status": 3,
+    "usage.admin_summary": 1,
+    "quant.duckdb.admin_surface": 9,
+    "admin.users.legacy_read": 3,
+    "admin.users.portfolio_read": 4,
+    "admin.users.security_write": 3,
+    "admin.activity.legacy_read": 1,
+    "admin.logs.read": 5,
+    "admin.logs.write": 1,
+    "admin.notifications.read": 2,
+    "admin.notifications.write": 5,
+    "admin.cost.read": 4,
+    "admin.providers.read": 6,
+    "admin.market_providers.operations": 1,
+    "system.config.read": 2,
+    "system.config.validate": 1,
+    "system.config.write": 3,
+    "system.provider_tests.write": 3,
+}
+BACKEND_ONLY_WRITE_CAPABILITY_LABELS = {
+    "ops:notifications:write",
+    "ops:providers:write",
+    "ops:system_config:write",
+}
+FRONTEND_ADMIN_READ_CAPABILITY_LABELS = {
+    "ops:notifications:read",
+    "ops:providers:read",
+    "ops:system_config:read",
+}
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -164,6 +250,17 @@ def _route_matches_group(route: dict[str, str | None], group: dict[str, Any]) ->
     return re.match(group["path_pattern"], route["path"] or "") is not None
 
 
+def _matched_route_signatures(
+    live_routes: dict[tuple[str, str], dict[str, str | None]],
+    group: dict[str, Any],
+) -> list[tuple[str, str]]:
+    return sorted(
+        (route["method"], route["path"] or "")
+        for route in live_routes.values()
+        if _route_matches_group(route, group)
+    )
+
+
 def _extract_route_block(source: str, marker: str, closing: str) -> str:
     start = source.index(marker)
     end = source.index(closing, start)
@@ -195,6 +292,28 @@ def _guest_restriction_markers(path: str) -> set[str]:
         base + "/",
         parent,
         parent + "/",
+    }
+
+
+def _is_control_plane_route(route: dict[str, str | None]) -> bool:
+    path = route["path"] or ""
+    if path.startswith("/api/v1/admin/") or path.startswith("/api/v1/system/"):
+        return True
+    return path in {
+        "/api/v1/agent/chat/send",
+        "/api/v1/scanner/status",
+        "/api/v1/scanner/watchlists/today",
+        "/api/v1/scanner/watchlists/recent",
+        "/api/v1/usage/summary",
+        "/api/v1/quant/duckdb/health",
+        "/api/v1/quant/duckdb/init",
+        "/api/v1/quant/duckdb/ingest-ohlcv",
+        "/api/v1/quant/duckdb/build-factors",
+        "/api/v1/quant/duckdb/factor-snapshot",
+        "/api/v1/quant/duckdb/validate-factor-path",
+        "/api/v1/quant/duckdb/compare-runtime-context",
+        "/api/v1/quant/duckdb/coverage",
+        "/api/v1/quant/duckdb/benchmark",
     }
 
 
@@ -283,6 +402,62 @@ def test_admin_observability_route_inventory_keeps_capabilities_and_transitional
     assert 'require_admin_capability("ops:logs:write")' in admin_logs_source
     assert "require_admin_user" in market_provider_source
     assert 'require_admin_capability(' not in market_provider_source
+
+
+def test_remaining_require_admin_user_route_groups_are_explicitly_allowlisted() -> None:
+    fixture = _load_json(BACKEND_FIXTURE)
+    live_routes = _collect_live_routes()
+    coarse_admin_groups = {
+        group["route_id"]: group
+        for group in fixture["protected_groups"]
+        if group["auth_dependency_label"] == "admin_user"
+    }
+
+    assert set(coarse_admin_groups) == set(EXPECTED_TRANSITIONAL_ADMIN_USER_ALLOWLIST)
+
+    for route_id, expected in EXPECTED_TRANSITIONAL_ADMIN_USER_ALLOWLIST.items():
+        group = coarse_admin_groups[route_id]
+        assert group["surface"] == expected["surface"]
+        assert group["capability_label"] is None
+        assert group["transitional_note"]
+        assert expected["note_fragment"] in group["transitional_note"].lower()
+        assert _matched_route_signatures(live_routes, group) == expected["routes"]
+
+
+def test_control_plane_route_inventory_fails_closed_without_explicit_classification() -> None:
+    fixture = _load_json(BACKEND_FIXTURE)
+    live_routes = _collect_live_routes()
+    groups = {group["route_id"]: group for group in fixture["protected_groups"]}
+
+    assert set(EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS).issubset(groups)
+
+    classified_route_signatures: set[tuple[str, str]] = set()
+    for route_id, expected_count in EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS.items():
+        matches = _matched_route_signatures(live_routes, groups[route_id])
+        assert len(matches) == expected_count, f"unexpected route count for {route_id}: {matches}"
+        classified_route_signatures.update(matches)
+
+    live_control_plane_signatures = {
+        (route["method"], route["path"] or "")
+        for route in live_routes.values()
+        if route["auth_dependency_label"] in {"admin_user", "admin_capability"} and _is_control_plane_route(route)
+    }
+
+    assert classified_route_signatures == live_control_plane_signatures
+
+
+def test_backend_write_only_capabilities_do_not_leak_into_frontend_read_route_flags() -> None:
+    frontend_fixture = _load_json(FRONTEND_FIXTURE)
+    frontend_capability_labels = {
+        entry["capability_label"]
+        for entry in frontend_fixture["admin_surface_routes"]
+    }
+    capability_source = ADMIN_CAPABILITIES_TS.read_text(encoding="utf-8")
+
+    assert FRONTEND_ADMIN_READ_CAPABILITY_LABELS.issubset(frontend_capability_labels)
+    assert frontend_capability_labels.isdisjoint(BACKEND_ONLY_WRITE_CAPABILITY_LABELS)
+    for capability in BACKEND_ONLY_WRITE_CAPABILITY_LABELS:
+        assert capability not in capability_source
 
 
 def test_request_guarded_auth_routes_remain_explicit_in_auth_endpoint_source() -> None:
