@@ -962,7 +962,7 @@ const AdminCostObservabilityPage: React.FC = () => {
       : '暂无明显成本压力';
 
   return (
-    <div data-testid="admin-cost-observability-page" className="min-h-0 flex-1 overflow-y-auto no-scrollbar bg-[#050505] py-4 text-white md:py-6">
+    <div data-testid="admin-cost-observability-page" className="min-h-0 flex-1 overflow-y-auto no-scrollbar py-4 text-white md:py-6">
       <TerminalPageShell>
         <TerminalPanel as="section" className="relative overflow-hidden">
           <TerminalPageHeading

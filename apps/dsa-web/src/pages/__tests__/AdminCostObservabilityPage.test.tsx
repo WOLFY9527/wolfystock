@@ -379,6 +379,17 @@ describe('AdminCostObservabilityPage', () => {
     expect(page.querySelectorAll('[data-terminal-primitive="nested-block"]').length).toBeGreaterThan(8);
   });
 
+  it('does not lock the page root to a pure-black local background slab', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+
+    render(<AdminCostObservabilityPage />);
+
+    const page = screen.getByTestId('admin-cost-observability-page');
+    expect(await screen.findByRole('heading', { name: '成本观测' })).toBeInTheDocument();
+    expect(page.className).not.toContain('bg-[#050505]');
+    expect(page.className).not.toContain('bg-black');
+  });
+
   it('keeps developer details collapsed and does not render secret-like strings in the DOM', async () => {
     getDuplicateSummary.mockResolvedValue(populatedPayload);
 
