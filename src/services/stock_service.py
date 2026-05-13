@@ -39,6 +39,30 @@ def _is_meaningful_stock_name(name: Optional[str], stock_code: str) -> bool:
     return True
 
 
+def _prepare_intraday_yfinance_request(
+    stock_code: str,
+    interval: str,
+    range_period: str,
+) -> tuple[str, Dict[str, Any]]:
+    supported_intervals = {"1m", "2m", "5m", "15m", "30m", "60m", "90m"}
+    supported_ranges = {"1d", "5d", "1mo"}
+    if interval not in supported_intervals:
+        raise ValueError(f"不支持的 interval 参数: {interval}")
+    if range_period not in supported_ranges:
+        raise ValueError(f"不支持的 range 参数: {range_period}")
+
+    symbol = to_yfinance_symbol(stock_code)
+    return symbol, {
+        "tickers": symbol,
+        "period": range_period,
+        "interval": interval,
+        "progress": False,
+        "auto_adjust": True,
+        "prepost": True,
+        "multi_level_index": True,
+    }
+
+
 class StockService:
     """
     股票数据服务
@@ -217,28 +241,17 @@ class StockService:
         """
         获取分钟级 / 日内行情，优先用于报告图表展示。
         """
-        supported_intervals = {"1m", "2m", "5m", "15m", "30m", "60m", "90m"}
-        supported_ranges = {"1d", "5d", "1mo"}
-        if interval not in supported_intervals:
-            raise ValueError(f"不支持的 interval 参数: {interval}")
-        if range_period not in supported_ranges:
-            raise ValueError(f"不支持的 range 参数: {range_period}")
-
         try:
             import yfinance as yf
             from data_provider.base import DataFetcherManager
 
             manager = DataFetcherManager()
-            symbol = to_yfinance_symbol(stock_code)
-            df = yf.download(
-                tickers=symbol,
-                period=range_period,
-                interval=interval,
-                progress=False,
-                auto_adjust=True,
-                prepost=True,
-                multi_level_index=True,
+            symbol, download_kwargs = _prepare_intraday_yfinance_request(
+                stock_code,
+                interval,
+                range_period,
             )
+            df = yf.download(**download_kwargs)
             if isinstance(df.columns, pd.MultiIndex):
                 ticker_level = df.columns.get_level_values(-1)
                 if (ticker_level == symbol).any():
