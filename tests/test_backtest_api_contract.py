@@ -1729,6 +1729,83 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     },
                 },
             },
+            "heatmap_projection": {
+                "contract_kind": "rule_backtest_compare_heatmap_projection",
+                "contract_version": "v1",
+                "source": "stored_compare_projection",
+                "read_mode": "stored_projection_only",
+                "authority": {
+                    "projection_basis": "stored_compare_payloads",
+                    "comparison_source": "stored_rule_backtest_runs",
+                    "execution_mode": "no_reexecution",
+                    "execution_count": 0,
+                    "provider_calls_executed": False,
+                    "compare_payload_reused": True,
+                    "authority_scope": "stored_compare_derived_heatmap_only",
+                },
+                "requested_compare_run_ids": [101, 202, 999],
+                "resolved_compare_run_ids": [101, 202],
+                "source_run_ids": [101, 202],
+                "missing_run_ids": [999],
+                "axes": {
+                    "x": {
+                        "axis_key": "strategy_spec.signal.fast_period",
+                        "axis_label": "fast_period",
+                        "value_type": "integer",
+                        "values": [5, 10],
+                    },
+                    "y": {
+                        "axis_key": "strategy_spec.signal.slow_period",
+                        "axis_label": "slow_period",
+                        "value_type": "integer",
+                        "values": [20, 30],
+                    },
+                },
+                "metric_keys": ["total_return_pct", "max_drawdown_pct"],
+                "cell_availability_states": ["available", "missing", "ambiguous"],
+                "cells": [
+                    {
+                        "x_value": 5,
+                        "y_value": 20,
+                        "availability_state": "available",
+                        "source_run_ids": [101],
+                        "metrics": {
+                            "total_return_pct": {"state": "available", "value": 0.0},
+                            "max_drawdown_pct": {"state": "available", "value": 0.0},
+                        },
+                    },
+                    {
+                        "x_value": 10,
+                        "y_value": 30,
+                        "availability_state": "available",
+                        "source_run_ids": [202],
+                        "metrics": {
+                            "total_return_pct": {"state": "available", "value": 0.0},
+                            "max_drawdown_pct": {"state": "available", "value": 0.0},
+                        },
+                    },
+                    {
+                        "x_value": 5,
+                        "y_value": 30,
+                        "availability_state": "missing",
+                        "source_run_ids": [],
+                        "metrics": {
+                            "total_return_pct": {"state": "missing", "value": None},
+                            "max_drawdown_pct": {"state": "missing", "value": None},
+                        },
+                    },
+                    {
+                        "x_value": 10,
+                        "y_value": 20,
+                        "availability_state": "missing",
+                        "source_run_ids": [],
+                        "metrics": {
+                            "total_return_pct": {"state": "missing", "value": None},
+                            "max_drawdown_pct": {"state": "missing", "value": None},
+                        },
+                    },
+                ],
+            },
             "items": [
                 {
                     "metadata": {
@@ -1893,6 +1970,22 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(
             payload["parameter_comparison"]["missing_parameters"]["strategy_spec.signal.slow_type"]["state"],
             "partial",
+        )
+        self.assertEqual(payload["heatmap_projection"]["source"], "stored_compare_projection")
+        self.assertEqual(payload["heatmap_projection"]["read_mode"], "stored_projection_only")
+        self.assertEqual(payload["heatmap_projection"]["authority"]["execution_count"], 0)
+        self.assertFalse(payload["heatmap_projection"]["authority"]["provider_calls_executed"])
+        self.assertEqual(
+            payload["heatmap_projection"]["metric_keys"],
+            ["total_return_pct", "max_drawdown_pct"],
+        )
+        self.assertEqual(
+            payload["heatmap_projection"]["axes"]["x"]["axis_key"],
+            "strategy_spec.signal.fast_period",
+        )
+        self.assertEqual(
+            payload["heatmap_projection"]["cells"][0]["availability_state"],
+            "available",
         )
         self.assertEqual(len(payload["items"]), 2)
         self.assertEqual(payload["items"][0]["metadata"]["id"], 101)

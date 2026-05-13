@@ -972,6 +972,62 @@ class RuleBacktestCompareHighlightsSummary(BaseModel):
     diagnostics: List[str] = Field(default_factory=list)
 
 
+class RuleBacktestCompareHeatmapAuthority(BaseModel):
+    projection_basis: str
+    comparison_source: str
+    execution_mode: str
+    execution_count: int = 0
+    provider_calls_executed: bool = False
+    compare_payload_reused: bool = True
+    authority_scope: str
+
+
+class RuleBacktestCompareHeatmapAxis(BaseModel):
+    axis_key: str
+    axis_label: str
+    value_type: str
+    values: List[Any] = Field(default_factory=list)
+
+
+class RuleBacktestCompareHeatmapAxes(BaseModel):
+    x: RuleBacktestCompareHeatmapAxis
+    y: RuleBacktestCompareHeatmapAxis
+
+
+class RuleBacktestCompareHeatmapMetricValue(BaseModel):
+    state: Literal["available", "missing", "ambiguous"]
+    value: Optional[float] = None
+
+
+class RuleBacktestCompareHeatmapCellMetrics(BaseModel):
+    total_return_pct: RuleBacktestCompareHeatmapMetricValue
+    max_drawdown_pct: RuleBacktestCompareHeatmapMetricValue
+
+
+class RuleBacktestCompareHeatmapCell(BaseModel):
+    x_value: Any = None
+    y_value: Any = None
+    availability_state: Literal["available", "missing", "ambiguous"]
+    source_run_ids: List[int] = Field(default_factory=list)
+    metrics: RuleBacktestCompareHeatmapCellMetrics
+
+
+class RuleBacktestCompareHeatmapProjection(BaseModel):
+    contract_kind: Literal["rule_backtest_compare_heatmap_projection"]
+    contract_version: Literal["v1"] = "v1"
+    source: Literal["stored_compare_projection"]
+    read_mode: Literal["stored_projection_only"] = "stored_projection_only"
+    authority: RuleBacktestCompareHeatmapAuthority
+    requested_compare_run_ids: List[int] = Field(default_factory=list)
+    resolved_compare_run_ids: List[int] = Field(default_factory=list)
+    source_run_ids: List[int] = Field(default_factory=list)
+    missing_run_ids: List[int] = Field(default_factory=list)
+    axes: RuleBacktestCompareHeatmapAxes
+    metric_keys: List[Literal["total_return_pct", "max_drawdown_pct"]] = Field(default_factory=list)
+    cell_availability_states: List[Literal["available", "missing", "ambiguous"]] = Field(default_factory=list)
+    cells: List[RuleBacktestCompareHeatmapCell] = Field(default_factory=list)
+
+
 class RuleBacktestCompareResponse(BaseModel):
     comparison_source: str
     read_mode: str = "stored_first"
@@ -988,6 +1044,7 @@ class RuleBacktestCompareResponse(BaseModel):
     comparison_profile: Optional[RuleBacktestCompareProfileSummary] = None
     comparison_highlights: Optional[RuleBacktestCompareHighlightsSummary] = None
     parameter_comparison: Optional[RuleBacktestCompareParameterComparison] = None
+    heatmap_projection: Optional[RuleBacktestCompareHeatmapProjection] = None
     items: List[RuleBacktestCompareRunItem] = Field(default_factory=list)
 
 

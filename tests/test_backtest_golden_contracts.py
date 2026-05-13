@@ -275,6 +275,7 @@ def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_bou
 
 def test_compare_golden_fixture_is_stored_first_and_contains_no_recalculation_semantics() -> None:
     payload = _load_fixture("rule_backtest_compare_dto.json")
+    payload["heatmap_projection"] = _load_fixture("rule_backtest_compare_heatmap_dto.json")
 
     compare = RuleBacktestCompareResponse(**payload).model_dump()
 
@@ -292,6 +293,12 @@ def test_compare_golden_fixture_is_stored_first_and_contains_no_recalculation_se
     assert compare["robustness_summary"]["overall_state"] == "partially_comparable"
     assert compare["comparison_profile"]["primary_profile"] == "same_strategy_parameter_variants"
     assert compare["comparison_highlights"]["highlights"]["total_return_pct"]["state"] == "limited_context_winner"
+    assert compare["heatmap_projection"]["source"] == "stored_compare_projection"
+    assert compare["heatmap_projection"]["read_mode"] == "stored_projection_only"
+    assert compare["heatmap_projection"]["authority"]["execution_count"] == 0
+    assert compare["heatmap_projection"]["authority"]["provider_calls_executed"] is False
+    assert compare["heatmap_projection"]["axes"]["x"]["axis_key"] == "strategy_spec.signal.fast_period"
+    assert compare["heatmap_projection"]["metric_keys"] == ["total_return_pct", "max_drawdown_pct"]
     assert len(compare["items"]) == 2
     assert compare["items"][0]["metadata"]["id"] == 7001
     assert compare["items"][1]["metadata"]["id"] == 7002

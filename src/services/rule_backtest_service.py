@@ -921,6 +921,16 @@ class RuleBacktestService:
             parameter_comparison=parameter_comparison,
             robustness_summary=robustness_summary,
         )
+        heatmap_projection = self._build_compare_heatmap_projection(
+            requested_run_ids=requested_run_ids,
+            resolved_run_ids=resolved_run_ids,
+            comparable_run_ids=comparable_run_ids,
+            missing_run_ids=missing_run_ids,
+            comparison_source="stored_rule_backtest_runs",
+            read_mode="stored_first",
+            items=items,
+            parameter_comparison=parameter_comparison,
+        )
 
         return {
             "comparison_source": "stored_rule_backtest_runs",
@@ -942,6 +952,7 @@ class RuleBacktestService:
                 comparison_profile=comparison_profile,
             ),
             "parameter_comparison": parameter_comparison,
+            "heatmap_projection": heatmap_projection,
             "items": items,
         }
 
@@ -4348,6 +4359,274 @@ class RuleBacktestService:
             "relationship": relationship or None,
             "meaningfully_comparable": bool(period_comparison.get("meaningfully_comparable")),
             "diagnostics": list(period_comparison.get("diagnostics") or []),
+        }
+
+    @classmethod
+    def _build_compare_heatmap_projection(
+        cls,
+        *,
+        requested_run_ids: List[int],
+        resolved_run_ids: List[int],
+        comparable_run_ids: List[int],
+        missing_run_ids: List[int],
+        comparison_source: str,
+        read_mode: str,
+        items: List[Dict[str, Any]],
+        parameter_comparison: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        if comparison_source != "stored_rule_backtest_runs" or read_mode != "stored_first":
+            return None
+        if len(comparable_run_ids) < 2 or len(items) < 2:
+            return None
+
+        def _normalize_axis_value(value: Any) -> Any:
+            if value is None:
+                return None
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, int):
+                return value
+            if isinstance(value, float):
+                return float(value)
+            if isinstance(value, str):
+                normalized = value.strip()
+                return normalized if normalized else None
+            return _UNSET
+
+        def _infer_axis_value_type(values: List[Any]) -> Optional[str]:
+            non_null_values = [value for value in values if value is not None]
+            if not non_null_values:
+                return None
+            if all(isinstance(value, bool) for value in non_null_values):
+                base_type = "boolean"
+            elif all(isinstance(value, int) and not isinstance(value, bool) for value in non_null_values):
+                base_type = "integer"
+            elif all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in non_null_values):
+                base_type = "number"
+            elif all(isinstance(value, str) for value in non_null_values):
+                base_type = "string"
+            else:
+                return None
+            if any(value is None for value in values):
+                return f"{base_type}_or_missing"
+            return base_type
+
+        metric_by_run_id: Dict[int, Dict[str, Optional[float]]] = {}
+        run_ids_in_order: List[int] = []
+        for item in items:
+            metadata = dict(item.get("metadata") or {})
+            run_id = metadata.get("id")
+            if run_id is None:
+                return None
+            normalized_run_id = int(run_id)
+            run_ids_in_order.append(normalized_run_id)
+            metrics = dict(item.get("metrics") or {})
+            metric_by_run_id[normalized_run_id] = {
+                "total_return_pct": cls._normalize_compare_metric_value(metrics.get("total_return_pct")),
+                "max_drawdown_pct": cls._normalize_compare_metric_value(metrics.get("max_drawdown_pct")),
+            }
+
+        if run_ids_in_order != [int(run_id) for run_id in comparable_run_ids]:
+            return None
+
+        differing_parameters = dict(parameter_comparison.get("differing_parameters") or {})
+        missing_parameters = dict(parameter_comparison.get("missing_parameters") or {})
+        candidate_axis_keys: List[str] = []
+        seen_axis_keys: set[str] = set()
+        for axis_key in [
+            *list(parameter_comparison.get("differing_parameter_keys") or []),
+            *list(parameter_comparison.get("missing_parameter_keys") or []),
+        ]:
+            normalized_key = str(axis_key or "").strip()
+            if not normalized_key or normalized_key in seen_axis_keys:
+                continue
+            seen_axis_keys.add(normalized_key)
+            candidate_axis_keys.append(normalized_key)
+
+        axis_payloads: List[Dict[str, Any]] = []
+        axis_run_values: Dict[str, Dict[int, Any]] = {}
+
+        for axis_key in candidate_axis_keys:
+            detail = dict(differing_parameters.get(axis_key) or missing_parameters.get(axis_key) or {})
+            value_rows = list(detail.get("values") or [])
+            unavailable_run_ids = {int(run_id) for run_id in list(detail.get("unavailable_run_ids") or [])}
+            value_by_run_id: Dict[int, Any] = {}
+            ordered_values: List[Any] = []
+            axis_valid = True
+
+            for row in value_rows:
+                if not isinstance(row, dict) or row.get("run_id") is None:
+                    axis_valid = False
+                    break
+                normalized_value = _normalize_axis_value(row.get("value"))
+                if normalized_value is _UNSET:
+                    axis_valid = False
+                    break
+                normalized_run_id = int(row["run_id"])
+                value_by_run_id[normalized_run_id] = normalized_value
+
+            if not axis_valid:
+                continue
+
+            run_value_map: Dict[int, Any] = {}
+            for run_id in run_ids_in_order:
+                if run_id in value_by_run_id:
+                    axis_value = value_by_run_id[run_id]
+                elif run_id in unavailable_run_ids:
+                    axis_value = None
+                else:
+                    axis_valid = False
+                    break
+                run_value_map[run_id] = axis_value
+                if axis_value not in ordered_values:
+                    ordered_values.append(axis_value)
+
+            if not axis_valid:
+                continue
+
+            if len(ordered_values) < 2 or all(value is None for value in ordered_values):
+                continue
+
+            value_type = _infer_axis_value_type(ordered_values)
+            if value_type is None:
+                continue
+
+            axis_payloads.append(
+                {
+                    "axis_key": axis_key,
+                    "axis_label": axis_key.split(".")[-1],
+                    "value_type": value_type,
+                    "values": ordered_values,
+                }
+            )
+            axis_run_values[axis_key] = run_value_map
+            if len(axis_payloads) == 2:
+                break
+
+        if len(axis_payloads) < 2:
+            return None
+
+        x_axis = axis_payloads[0]
+        y_axis = axis_payloads[1]
+        x_run_values = axis_run_values[x_axis["axis_key"]]
+        y_run_values = axis_run_values[y_axis["axis_key"]]
+
+        coordinate_order: List[tuple[Any, Any]] = []
+        coordinate_runs: Dict[tuple[Any, Any], List[int]] = {}
+        full_coordinate_order: List[tuple[Any, Any]] = []
+        full_coordinate_runs: Dict[tuple[Any, Any], List[int]] = {}
+        partial_coordinate_order: List[tuple[Any, Any]] = []
+        partial_coordinate_runs: Dict[tuple[Any, Any], List[int]] = {}
+
+        for run_id in run_ids_in_order:
+            coordinate = (x_run_values.get(run_id), y_run_values.get(run_id))
+            if coordinate not in coordinate_runs:
+                coordinate_order.append(coordinate)
+                coordinate_runs[coordinate] = []
+            coordinate_runs[coordinate].append(run_id)
+            if coordinate[0] is None or coordinate[1] is None:
+                if coordinate not in partial_coordinate_runs:
+                    partial_coordinate_order.append(coordinate)
+                    partial_coordinate_runs[coordinate] = []
+                partial_coordinate_runs[coordinate].append(run_id)
+            else:
+                if coordinate not in full_coordinate_runs:
+                    full_coordinate_order.append(coordinate)
+                    full_coordinate_runs[coordinate] = []
+                full_coordinate_runs[coordinate].append(run_id)
+
+        cells: List[Dict[str, Any]] = []
+        for coordinate in full_coordinate_order:
+            run_group = list(full_coordinate_runs.get(coordinate) or [])
+            availability_state = "available" if len(run_group) == 1 else "ambiguous"
+            metrics_payload = {
+                metric_name: {
+                    "state": "available",
+                    "value": metric_by_run_id[run_group[0]].get(metric_name),
+                }
+                for metric_name in ("total_return_pct", "max_drawdown_pct")
+            }
+            if availability_state == "ambiguous":
+                metrics_payload = {
+                    metric_name: {"state": "ambiguous", "value": None}
+                    for metric_name in ("total_return_pct", "max_drawdown_pct")
+                }
+            cells.append(
+                {
+                    "x_value": coordinate[0],
+                    "y_value": coordinate[1],
+                    "availability_state": availability_state,
+                    "source_run_ids": run_group,
+                    "metrics": metrics_payload,
+                }
+            )
+
+        x_full_values = [value for value in x_axis["values"] if value is not None]
+        y_full_values = [value for value in y_axis["values"] if value is not None]
+        for x_value in x_full_values:
+            for y_value in y_full_values:
+                coordinate = (x_value, y_value)
+                if coordinate in full_coordinate_runs:
+                    continue
+                blocked_by_incomplete_context = any(
+                    (partial_coordinate[0] is None or partial_coordinate[0] == x_value)
+                    and (partial_coordinate[1] is None or partial_coordinate[1] == y_value)
+                    for partial_coordinate in partial_coordinate_order
+                )
+                if blocked_by_incomplete_context:
+                    continue
+                cells.append(
+                    {
+                        "x_value": x_value,
+                        "y_value": y_value,
+                        "availability_state": "missing",
+                        "source_run_ids": [],
+                        "metrics": {
+                            "total_return_pct": {"state": "missing", "value": None},
+                            "max_drawdown_pct": {"state": "missing", "value": None},
+                        },
+                    }
+                )
+
+        for coordinate in partial_coordinate_order:
+            cells.append(
+                {
+                    "x_value": coordinate[0],
+                    "y_value": coordinate[1],
+                    "availability_state": "ambiguous",
+                    "source_run_ids": list(partial_coordinate_runs.get(coordinate) or []),
+                    "metrics": {
+                        "total_return_pct": {"state": "ambiguous", "value": None},
+                        "max_drawdown_pct": {"state": "ambiguous", "value": None},
+                    },
+                }
+            )
+
+        return {
+            "contract_kind": "rule_backtest_compare_heatmap_projection",
+            "contract_version": "v1",
+            "source": "stored_compare_projection",
+            "read_mode": "stored_projection_only",
+            "authority": {
+                "projection_basis": "stored_compare_payloads",
+                "comparison_source": comparison_source,
+                "execution_mode": "no_reexecution",
+                "execution_count": 0,
+                "provider_calls_executed": False,
+                "compare_payload_reused": True,
+                "authority_scope": "stored_compare_derived_heatmap_only",
+            },
+            "requested_compare_run_ids": [int(run_id) for run_id in requested_run_ids],
+            "resolved_compare_run_ids": [int(run_id) for run_id in resolved_run_ids],
+            "source_run_ids": [int(run_id) for run_id in comparable_run_ids],
+            "missing_run_ids": [int(run_id) for run_id in missing_run_ids],
+            "axes": {
+                "x": x_axis,
+                "y": y_axis,
+            },
+            "metric_keys": ["total_return_pct", "max_drawdown_pct"],
+            "cell_availability_states": ["available", "missing", "ambiguous"],
+            "cells": cells,
         }
 
     @classmethod

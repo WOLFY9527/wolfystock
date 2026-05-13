@@ -2922,6 +2922,221 @@ class RuleBacktestTestCase(unittest.TestCase):
             ],
         )
 
+    def test_compare_runs_adds_stored_compare_derived_heatmap_projection(self) -> None:
+        service = RuleBacktestService(self.db)
+        first_payload = self._compare_run_payload(
+            run_id=101,
+            code="600519",
+            parsed_strategy={
+                "strategy_kind": "moving_average_crossover",
+                "strategy_spec": {
+                    "strategy_type": "moving_average_crossover",
+                    "strategy_family": "moving_average_crossover",
+                    "signal": {
+                        "indicator_family": "moving_average",
+                        "fast_period": 5,
+                        "slow_period": 20,
+                        "fast_type": "simple",
+                        "slow_type": "simple",
+                        "entry_condition": "fast_crosses_above_slow",
+                        "exit_condition": "fast_crosses_below_slow",
+                    },
+                    "execution": {
+                        "frequency": "daily",
+                        "signal_timing": "bar_close",
+                        "fill_timing": "next_bar_open",
+                    },
+                    "position_behavior": {
+                        "direction": "long_only",
+                        "entry_sizing": "all_in",
+                        "max_positions": 1,
+                        "pyramiding": False,
+                    },
+                    "end_behavior": {"policy": "liquidate_at_end", "price_basis": "close"},
+                },
+            },
+        )
+        first_payload["total_return_pct"] = 12.4
+        first_payload["max_drawdown_pct"] = 5.2
+
+        second_payload = self._compare_run_payload(
+            run_id=202,
+            code="600519",
+            parsed_strategy={
+                "strategy_kind": "moving_average_crossover",
+                "strategy_spec": {
+                    "strategy_type": "moving_average_crossover",
+                    "strategy_family": "moving_average_crossover",
+                    "signal": {
+                        "indicator_family": "moving_average",
+                        "fast_period": 10,
+                        "slow_period": 50,
+                        "fast_type": "simple",
+                        "slow_type": "simple",
+                        "entry_condition": "fast_crosses_above_slow",
+                        "exit_condition": "fast_crosses_below_slow",
+                    },
+                    "execution": {
+                        "frequency": "daily",
+                        "signal_timing": "bar_close",
+                        "fill_timing": "next_bar_open",
+                    },
+                    "position_behavior": {
+                        "direction": "long_only",
+                        "entry_sizing": "all_in",
+                        "max_positions": 1,
+                        "pyramiding": False,
+                    },
+                    "end_behavior": {"policy": "liquidate_at_end", "price_basis": "close"},
+                },
+            },
+        )
+        second_payload["total_return_pct"] = 14.6
+        second_payload["max_drawdown_pct"] = 6.0
+
+        third_payload = self._compare_run_payload(
+            run_id=303,
+            code="600519",
+            parsed_strategy={
+                "strategy_kind": "moving_average_crossover",
+                "strategy_spec": {
+                    "strategy_type": "moving_average_crossover",
+                    "strategy_family": "moving_average_crossover",
+                    "signal": {
+                        "indicator_family": "moving_average",
+                        "fast_period": 10,
+                        "fast_type": "simple",
+                        "entry_condition": "fast_crosses_above_slow",
+                        "exit_condition": "fast_crosses_below_slow",
+                    },
+                    "execution": {
+                        "frequency": "daily",
+                        "signal_timing": "bar_close",
+                        "fill_timing": "next_bar_open",
+                    },
+                    "position_behavior": {
+                        "direction": "long_only",
+                        "entry_sizing": "all_in",
+                        "max_positions": 1,
+                        "pyramiding": False,
+                    },
+                    "end_behavior": {"policy": "liquidate_at_end", "price_basis": "close"},
+                },
+            },
+        )
+        third_payload["total_return_pct"] = 9.1
+        third_payload["max_drawdown_pct"] = 7.4
+
+        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202), SimpleNamespace(id=303)]
+        with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
+            service,
+            "_run_row_to_dict",
+            side_effect=[first_payload, second_payload, third_payload],
+        ):
+            payload = service.compare_runs([101, 202, 303, 999999])
+
+        projection = payload["heatmap_projection"]
+        self.assertIsNotNone(projection)
+        self.assertEqual(projection["contract_kind"], "rule_backtest_compare_heatmap_projection")
+        self.assertEqual(projection["contract_version"], "v1")
+        self.assertEqual(projection["source"], "stored_compare_projection")
+        self.assertEqual(projection["read_mode"], "stored_projection_only")
+        self.assertEqual(projection["requested_compare_run_ids"], [101, 202, 303, 999999])
+        self.assertEqual(projection["resolved_compare_run_ids"], [101, 202, 303])
+        self.assertEqual(projection["source_run_ids"], [101, 202, 303])
+        self.assertEqual(projection["missing_run_ids"], [999999])
+        self.assertEqual(projection["metric_keys"], ["total_return_pct", "max_drawdown_pct"])
+        self.assertEqual(projection["authority"]["comparison_source"], "stored_rule_backtest_runs")
+        self.assertEqual(projection["authority"]["execution_count"], 0)
+        self.assertFalse(projection["authority"]["provider_calls_executed"])
+        self.assertEqual(projection["axes"]["x"]["axis_key"], "strategy_spec.signal.fast_period")
+        self.assertEqual(projection["axes"]["x"]["values"], [5, 10])
+        self.assertEqual(projection["axes"]["y"]["axis_key"], "strategy_spec.signal.slow_period")
+        self.assertEqual(projection["axes"]["y"]["values"], [20, 50, None])
+        self.assertEqual(
+            projection["cell_availability_states"],
+            ["available", "missing", "ambiguous"],
+        )
+
+        cells = {
+            (cell["x_value"], cell["y_value"]): cell
+            for cell in projection["cells"]
+        }
+        self.assertEqual(cells[(5, 20)]["availability_state"], "available")
+        self.assertEqual(cells[(5, 20)]["source_run_ids"], [101])
+        self.assertEqual(cells[(5, 20)]["metrics"]["total_return_pct"]["value"], 12.4)
+        self.assertEqual(cells[(5, 20)]["metrics"]["max_drawdown_pct"]["value"], 5.2)
+        self.assertEqual(cells[(10, 50)]["availability_state"], "available")
+        self.assertEqual(cells[(10, 50)]["source_run_ids"], [202])
+        self.assertEqual(cells[(5, 50)]["availability_state"], "missing")
+        self.assertEqual(cells[(5, 50)]["metrics"]["total_return_pct"]["value"], None)
+        self.assertEqual(cells[(10, None)]["availability_state"], "ambiguous")
+        self.assertEqual(cells[(10, None)]["source_run_ids"], [303])
+        self.assertEqual(cells[(10, None)]["metrics"]["total_return_pct"]["state"], "ambiguous")
+
+    def test_compare_runs_omits_heatmap_projection_without_two_usable_axes(self) -> None:
+        service = RuleBacktestService(self.db)
+        first_payload = self._compare_run_payload(
+            run_id=101,
+            code="600519",
+            parsed_strategy={
+                "strategy_kind": "moving_average_crossover",
+                "strategy_spec": {
+                    "strategy_type": "moving_average_crossover",
+                    "strategy_family": "moving_average_crossover",
+                    "signal": {
+                        "indicator_family": "moving_average",
+                        "fast_period": 5,
+                        "slow_period": 20,
+                        "fast_type": "simple",
+                        "slow_type": "simple",
+                        "entry_condition": "fast_crosses_above_slow",
+                        "exit_condition": "fast_crosses_below_slow",
+                    },
+                    "execution": {
+                        "frequency": "daily",
+                        "signal_timing": "bar_close",
+                        "fill_timing": "next_bar_open",
+                    },
+                },
+            },
+        )
+        second_payload = self._compare_run_payload(
+            run_id=202,
+            code="600519",
+            parsed_strategy={
+                "strategy_kind": "moving_average_crossover",
+                "strategy_spec": {
+                    "strategy_type": "moving_average_crossover",
+                    "strategy_family": "moving_average_crossover",
+                    "signal": {
+                        "indicator_family": "moving_average",
+                        "fast_period": 10,
+                        "slow_period": 20,
+                        "fast_type": "simple",
+                        "slow_type": "simple",
+                        "entry_condition": "fast_crosses_above_slow",
+                        "exit_condition": "fast_crosses_below_slow",
+                    },
+                    "execution": {
+                        "frequency": "daily",
+                        "signal_timing": "bar_close",
+                        "fill_timing": "next_bar_open",
+                    },
+                },
+            },
+        )
+
+        rows = [SimpleNamespace(id=101), SimpleNamespace(id=202)]
+        with patch.object(service.repo, "get_runs_by_ids", return_value=rows), patch.object(
+            service,
+            "_run_row_to_dict",
+            side_effect=[first_payload, second_payload],
+        ):
+            payload = service.compare_runs([101, 202])
+
+        self.assertIsNone(payload["heatmap_projection"])
+
     def test_compare_runs_parameter_comparison_marks_different_families(self) -> None:
         service = RuleBacktestService(self.db)
 
