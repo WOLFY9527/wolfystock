@@ -19,6 +19,10 @@ import type {
   RuleBacktestHistoryResponse,
   RuleBacktestStatusResponse,
   RuleBacktestCancelResponse,
+  RuleBacktestSupportExportIndexResponse,
+  RuleBacktestSupportBundleManifestResponse,
+  RuleBacktestSupportBundleReproducibilityManifestResponse,
+  RuleBacktestExecutionTraceExportResponse,
 } from '../types/backtest';
 
 // ============ API ============
@@ -86,6 +90,42 @@ export const backtestApi = {
       `/api/v1/backtest/rule/runs/${encodeURIComponent(runId)}/status`,
     );
     return toCamelCase<RuleBacktestStatusResponse>(response.data);
+  },
+
+  getRuleBacktestSupportExportIndex: async (runId: number): Promise<RuleBacktestSupportExportIndexResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(
+      `/api/v1/backtest/rule/runs/${encodeURIComponent(runId)}/export-index`,
+    );
+    return toCamelCase<RuleBacktestSupportExportIndexResponse>(response.data);
+  },
+
+  getRuleBacktestSupportBundleManifest: async (runId: number): Promise<RuleBacktestSupportBundleManifestResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(
+      `/api/v1/backtest/rule/runs/${encodeURIComponent(runId)}/support-bundle-manifest`,
+    );
+    return toCamelCase<RuleBacktestSupportBundleManifestResponse>(response.data);
+  },
+
+  getRuleBacktestSupportBundleReproducibilityManifest: async (runId: number): Promise<RuleBacktestSupportBundleReproducibilityManifestResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(
+      `/api/v1/backtest/rule/runs/${encodeURIComponent(runId)}/support-bundle-reproducibility-manifest`,
+    );
+    return toCamelCase<RuleBacktestSupportBundleReproducibilityManifestResponse>(response.data);
+  },
+
+  getRuleBacktestExecutionTraceJson: async (runId: number): Promise<RuleBacktestExecutionTraceExportResponse> => {
+    const response = await apiClient.get<Record<string, unknown>>(
+      `/api/v1/backtest/rule/runs/${encodeURIComponent(runId)}/execution-trace.json`,
+    );
+    return toCamelCase<RuleBacktestExecutionTraceExportResponse>(response.data);
+  },
+
+  getRuleBacktestExecutionTraceCsv: async (runId: number): Promise<string> => {
+    const response = await apiClient.get<string>(
+      `/api/v1/backtest/rule/runs/${encodeURIComponent(runId)}/execution-trace.csv`,
+      { responseType: 'text' },
+    );
+    return response.data;
   },
 
   cancelRuleBacktestRun: async (runId: number): Promise<RuleBacktestCancelResponse> => {

@@ -1048,6 +1048,60 @@ export interface RuleBacktestHistoryResponse {
   items: RuleBacktestHistoryItem[];
 }
 
+export interface RuleBacktestSupportExportIndexItem {
+  key: string;
+  available: boolean;
+  availabilityReason: string;
+  format: string;
+  mediaType: string;
+  deliveryMode: string;
+  endpointPath?: string | null;
+  payloadClass: string;
+}
+
+export interface RuleBacktestSupportExportIndexResponse {
+  runId: number;
+  status: string;
+  exports: RuleBacktestSupportExportIndexItem[];
+}
+
+export interface RuleBacktestSupportBundleManifestResponse {
+  manifestVersion: string;
+  manifestKind: string;
+  run: Record<string, unknown>;
+  runTiming: Record<string, unknown>;
+  runDiagnostics: Record<string, unknown>;
+  artifactAvailability: Record<string, unknown>;
+  readbackIntegrity: Record<string, unknown>;
+  resultAuthority: Record<string, unknown>;
+  artifactCounts: Record<string, number>;
+}
+
+export interface RuleBacktestSupportBundleReproducibilityManifestResponse {
+  manifestVersion: string;
+  manifestKind: string;
+  run: Record<string, unknown>;
+  runTiming: Record<string, unknown>;
+  runDiagnostics: Record<string, unknown>;
+  artifactAvailability: Record<string, unknown>;
+  readbackIntegrity: Record<string, unknown>;
+  executionAssumptionsFingerprint: Record<string, unknown>;
+  resultAuthority: Record<string, unknown>;
+}
+
+export interface RuleBacktestExecutionTraceExportResponse {
+  version?: string | null;
+  source?: string | null;
+  completeness?: string | null;
+  missingFields: string[];
+  traceRows: RuleBacktestExecutionTraceRowItem[];
+  assumptions: Record<string, unknown>;
+  executionModel: RuleBacktestExecutionModel;
+  executionAssumptions: AssumptionMap;
+  benchmarkSummary: RuleBacktestBenchmarkSummary;
+  fallback: RuleBacktestExecutionTraceFallback;
+}
+
 // ============ Result Item ============
 
 export interface BacktestResultItem {
