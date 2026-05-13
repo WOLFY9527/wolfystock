@@ -368,6 +368,8 @@ describe('OptionsLabPage', () => {
     const pageRoot = screen.getByTestId('options-lab-page-root');
     expect(pageRoot).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(pageRoot).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6');
+    expect(pageRoot.closest('main')).toHaveClass('w-full', 'overflow-x-hidden', 'text-white');
+    expect(pageRoot.closest('main')).not.toHaveClass('py-4');
     expect(pageRoot.className).not.toMatch(/\bbg-(black|\[#000\]|\[#050505\]|gray-|zinc-|slate-|neutral-)/);
     const snapshotPanel = screen.getByTestId('options-lab-snapshot-panel');
     expect(snapshotPanel).toHaveTextContent('标的快照');

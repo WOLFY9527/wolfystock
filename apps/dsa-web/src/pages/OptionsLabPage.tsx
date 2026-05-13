@@ -886,7 +886,7 @@ export class OptionsLabErrorBoundary extends React.Component<{ children: React.R
     }
 
     return (
-      <main className="w-full overflow-x-hidden py-4 text-white">
+      <main className="w-full overflow-x-hidden text-white">
         <TerminalPageShell>
           <section className="mx-auto flex w-full max-w-[920px] flex-col gap-4 rounded-[24px] border border-rose-300/20 bg-white/[0.02] p-5 backdrop-blur-md md:p-6">
             <div className="flex items-start gap-3">
@@ -1163,7 +1163,7 @@ const OptionsLabPageContent: React.FC = () => {
   }, [hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
 
   return (
-    <main className="w-full overflow-x-hidden py-4 text-white">
+    <main className="w-full overflow-x-hidden text-white">
       <TerminalPageShell data-testid="options-lab-page-root">
         <TerminalPageHeading
           data-testid="options-lab-page-heading"
