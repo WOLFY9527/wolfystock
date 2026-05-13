@@ -207,8 +207,26 @@ describe('RuleBacktestComparePage', () => {
         sharedParameters: {
           'strategy_spec.execution.signal_timing': 'bar_close',
         },
-        differingParameters: {},
-        missingParameters: {},
+        differingParameters: {
+          'strategy_spec.signal.fast_period': {
+            state: 'different_parameter',
+            availableRunIds: [101, 202],
+            values: [
+              { runId: 101, value: 10 },
+              { runId: 202, value: 20 },
+            ],
+          },
+        },
+        missingParameters: {
+          'strategy_spec.signal.slow_type': {
+            state: 'missing_parameter',
+            availableRunIds: [101],
+            unavailableRunIds: [202],
+            values: [
+              { runId: 101, value: 'ema' },
+            ],
+          },
+        },
       },
       items: [
         {
@@ -270,7 +288,7 @@ describe('RuleBacktestComparePage', () => {
             endDate: '2025-12-31',
             periodStart: '2025-03-01',
             periodEnd: '2025-12-31',
-            lookbackBars: 252,
+            lookbackBars: 126,
             initialCapital: 100000,
             feeBps: 0,
             slippageBps: 0,
@@ -320,6 +338,7 @@ describe('RuleBacktestComparePage', () => {
     expect(screen.getByRole('link', { name: '指标条带' })).toHaveAttribute('href', '#compare-chart-strip');
     expect(screen.getByRole('link', { name: '比较亮点' })).toHaveAttribute('href', '#compare-highlights');
     expect(screen.getByRole('link', { name: '指标矩阵' })).toHaveAttribute('href', '#compare-metric-matrix');
+    expect(screen.getByRole('link', { name: '参数敏感度' })).toHaveAttribute('href', '#compare-parameter-sensitivity');
     expect(screen.getByRole('link', { name: '稳健性画像' })).toHaveAttribute('href', '#compare-robustness');
     expect(screen.getByRole('link', { name: '市场与区间' })).toHaveAttribute('href', '#compare-market-period');
     expect(screen.getByRole('link', { name: '参数与指标' })).toHaveAttribute('href', '#compare-parameter-metrics');
@@ -331,7 +350,7 @@ describe('RuleBacktestComparePage', () => {
     expect(screen.getAllByText('同标的不同区间').length).toBeGreaterThan(0);
     expect(screen.getAllByText('部分可比').length).toBeGreaterThan(0);
     expect(screen.getAllByText('有限上下文领先').length).toBeGreaterThan(0);
-    expect(screen.getByText('同类可比')).toBeInTheDocument();
+    expect(screen.getAllByText('同类可比').length).toBeGreaterThan(0);
     expect(screen.getAllByText('指标不可用').length).toBeGreaterThan(0);
     expect(screen.getByTestId('compare-metric-matrix')).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: /#101 基准/ })).toBeInTheDocument();
@@ -346,6 +365,10 @@ describe('RuleBacktestComparePage', () => {
     expect(screen.getByTestId('compare-chart-strip-totalReturnPct-101')).toHaveAttribute('data-role', 'baseline');
     expect(screen.getByTestId('compare-chart-strip-totalReturnPct-202')).toHaveAttribute('data-role', 'candidate');
     expect(screen.getByTestId('compare-chart-strip-annualizedReturnPct-202')).toHaveAttribute('data-state', 'unavailable');
+    expect(screen.getByTestId('compare-sensitivity-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('compare-sensitivity-row-strategy-spec-signal-fast-period')).toBeInTheDocument();
+    expect(screen.getByTestId('compare-sensitivity-row-lookback-bars')).toBeInTheDocument();
+    expect(screen.getByTestId('compare-sensitivity-row-strategy-spec-signal-slow-type')).toBeInTheDocument();
 
     fireEvent.click(parameterSummary.closest('summary') ?? parameterSummary);
     expect(parameterDisclosure).not.toHaveAttribute('open');
@@ -550,6 +573,7 @@ describe('RuleBacktestComparePage', () => {
     renderComparePage();
 
     expect(await screen.findByRole('heading', { name: '规则回测比较工作台' })).toBeInTheDocument();
+    expect(screen.getByTestId('compare-sensitivity-empty')).toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole('button', { name: '打开结果页 202' }));
 

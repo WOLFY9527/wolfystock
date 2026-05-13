@@ -15,6 +15,8 @@ import {
 import type {
   RuleBacktestCompareHighlightItem,
   RuleBacktestCompareMetricDelta,
+  RuleBacktestCompareParameterComparison,
+  RuleBacktestCompareParameterDetail,
   RuleBacktestCompareResponse,
   RuleBacktestCompareRobustnessDimension,
   RuleBacktestCompareRunItem,
@@ -33,6 +35,7 @@ const COMPARE_SECTION_LINKS = [
   { id: 'compare-chart-strip', label: '指标条带' },
   { id: 'compare-highlights', label: '比较亮点' },
   { id: 'compare-metric-matrix', label: '指标矩阵' },
+  { id: 'compare-parameter-sensitivity', label: '参数敏感度' },
   { id: 'compare-robustness', label: '稳健性画像' },
   { id: 'compare-market-period', label: '市场与区间' },
   { id: 'compare-parameter-metrics', label: '参数与指标' },
@@ -65,6 +68,8 @@ function formatCompareStateLabel(value?: string | null): string {
   if (!key) return '--';
   const normalized = key.toLowerCase();
   const labels: Record<string, string> = {
+    aligned: '一致',
+    divergent: '差异',
     available: '可用',
     unavailable: '不可用',
     partial: '部分',
@@ -86,6 +91,19 @@ function formatCompareStateLabel(value?: string | null): string {
     same_parameter: '参数一致',
     different_parameter: '参数不同',
     missing_parameter: '参数缺失',
+    stored_rule_backtest_runs: '已存储比较运行',
+    stored_first: '存储优先',
+    first_comparable_run_by_request_order: '按请求顺序首个可比运行',
+    market_code_comparison: '市场与代码',
+    period_comparison: '区间',
+    comparison_summary: '比较摘要',
+    market_code: '市场 / 代码',
+    periods: '区间',
+    moving_average_crossover: '均线交叉',
+    macd_crossover: 'MACD 交叉',
+    rsi_threshold: 'RSI 阈值',
+    same_normalized_code: '代码一致',
+    overlapping_periods: '区间重叠',
   };
   return labels[normalized] || key.replaceAll('_', ' ');
 }
@@ -98,6 +116,260 @@ function formatCompareStateWithRaw(value?: string | null): string {
   const raw = String(value || '').trim();
   const label = formatCompareStateLabel(raw);
   return raw && label !== raw.replaceAll('_', ' ') ? label : label;
+}
+
+function formatCompareList(values?: Array<string | null | undefined>): string {
+  if (!values?.length) return '--';
+  return values.map((value) => formatCompareStateWithRaw(value)).join(', ');
+}
+
+function slugifyCompareKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function normalizeCompareKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function formatSensitivityLabel(key: string): string {
+  const labels: Record<string, string> = {
+    'strategy_spec.signal.fast_period': '快线周期',
+    'strategy_spec.signal.fast_type': '快线类型',
+    'strategy_spec.signal.slow_period': '慢线周期',
+    'strategy_spec.signal.slow_type': '慢线类型',
+    'strategy_spec.signal.signal_period': '信号周期',
+    'strategy_spec.signal.lower_threshold': '下阈值',
+    'strategy_spec.signal.upper_threshold': '上阈值',
+    'strategy_spec.execution.signal_timing': '信号时点',
+    lookback_bars: '回看窗口',
+    lookbackBars: '回看窗口',
+    fee_bps: '手续费',
+    feeBps: '手续费',
+    slippage_bps: '滑点',
+    slippageBps: '滑点',
+    benchmark_mode: '基准模式',
+    benchmarkMode: '基准模式',
+    benchmark_code: '基准代码',
+    benchmarkCode: '基准代码',
+    period_window: '回测区间',
+  };
+  if (labels[key]) return labels[key];
+
+  const fallback = key.split('.').at(-1) || key;
+  return fallback.replaceAll('_', ' ').replaceAll(/([a-z0-9])([A-Z])/g, '$1 $2');
+}
+
+function formatSensitivityValue(value: unknown): string {
+  if (value == null) return '缺失';
+  if (typeof value === 'boolean') return renderBooleanLabel(value);
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return '--';
+    return Number.isInteger(value) ? String(value) : formatNumber(value);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || '--';
+  }
+  if (Array.isArray(value)) {
+    const parts = value.map((entry) => formatSensitivityValue(entry)).filter(Boolean);
+    return parts.length ? parts.join(' / ') : '--';
+  }
+  return '复杂值';
+}
+
+type CompareSensitivityMetricSignal = {
+  metricKey: string;
+  label: string;
+  state?: string;
+  winners: string[];
+};
+
+type CompareSensitivityRunValue = {
+  runId: number;
+  label: string;
+  isBaseline: boolean;
+};
+
+type CompareSensitivityRow = {
+  key: string;
+  label: string;
+  sourceLabel: string;
+  state?: string;
+  values: CompareSensitivityRunValue[];
+  signals: CompareSensitivityMetricSignal[];
+};
+
+function buildSensitivitySignals({
+  metricEntries,
+  valuesByRun,
+}: {
+  metricEntries: Array<[string, RuleBacktestCompareHighlightItem]>;
+  valuesByRun: Map<number, string>;
+}): CompareSensitivityMetricSignal[] {
+  return metricEntries.map(([metricKey, highlight]) => ({
+    metricKey,
+    label: formatMetricLabel(metricKey, highlight.metric),
+    state: highlight.state,
+    winners: highlight.winnerRunIds.map((runId) => `#${runId} · ${valuesByRun.get(runId) || '--'}`),
+  }));
+}
+
+function buildSensitivityRowsFromDetail({
+  keys,
+  details,
+  sourceLabel,
+  items,
+  baselineRunId,
+  metricEntries,
+}: {
+  keys: string[];
+  details: Record<string, RuleBacktestCompareParameterDetail>;
+  sourceLabel: string;
+  items: RuleBacktestCompareRunItem[];
+  baselineRunId?: number | null;
+  metricEntries: Array<[string, RuleBacktestCompareHighlightItem]>;
+}): CompareSensitivityRow[] {
+  return keys.reduce<CompareSensitivityRow[]>((rows, key) => {
+    const detail = details[key];
+    if (!detail?.values?.length) return rows;
+
+    const valuesByRun = new Map(detail.values.map((entry) => [entry.runId, formatSensitivityValue(entry.value)]));
+    const values = items.map((item) => ({
+      runId: item.metadata.id,
+      label: valuesByRun.get(item.metadata.id) || '缺失',
+      isBaseline: item.metadata.id === baselineRunId,
+    }));
+    const distinctValues = new Set(values.map((entry) => entry.label));
+    if (distinctValues.size <= 1) return rows;
+
+    rows.push({
+      key,
+      label: formatSensitivityLabel(key),
+      sourceLabel,
+      state: detail.state,
+      values,
+      signals: buildSensitivitySignals({ metricEntries, valuesByRun }),
+    });
+    return rows;
+  }, []);
+}
+
+function buildScenarioMetadataSensitivityRows({
+  items,
+  baselineRunId,
+  metricEntries,
+  excludedKeys,
+}: {
+  items: RuleBacktestCompareRunItem[];
+  baselineRunId?: number | null;
+  metricEntries: Array<[string, RuleBacktestCompareHighlightItem]>;
+  excludedKeys: Set<string>;
+}): CompareSensitivityRow[] {
+  const candidates = [
+    {
+      key: 'lookback_bars',
+      label: formatSensitivityLabel('lookback_bars'),
+      getValue: (item: RuleBacktestCompareRunItem) => item.metadata.lookbackBars,
+    },
+    {
+      key: 'fee_bps',
+      label: formatSensitivityLabel('fee_bps'),
+      getValue: (item: RuleBacktestCompareRunItem) => item.metadata.feeBps == null ? null : `${formatNumber(item.metadata.feeBps, 1)}bp`,
+    },
+    {
+      key: 'slippage_bps',
+      label: formatSensitivityLabel('slippage_bps'),
+      getValue: (item: RuleBacktestCompareRunItem) => item.metadata.slippageBps == null ? null : `${formatNumber(item.metadata.slippageBps, 1)}bp`,
+    },
+    {
+      key: 'period_window',
+      label: formatSensitivityLabel('period_window'),
+      getValue: (item: RuleBacktestCompareRunItem) => {
+        const start = item.metadata.startDate || item.metadata.periodStart;
+        const end = item.metadata.endDate || item.metadata.periodEnd;
+        return start || end ? `${start || '--'} -> ${end || '--'}` : null;
+      },
+    },
+  ];
+
+  return candidates.reduce<CompareSensitivityRow[]>((rows, candidate) => {
+    if (excludedKeys.has(normalizeCompareKey(candidate.key))) return rows;
+
+    const values = items.map((item) => ({
+      runId: item.metadata.id,
+      label: formatSensitivityValue(candidate.getValue(item)),
+      isBaseline: item.metadata.id === baselineRunId,
+    }));
+    const distinctValues = new Set(values.map((entry) => entry.label));
+    if (distinctValues.size <= 1) return rows;
+
+    const valuesByRun = new Map(values.map((entry) => [entry.runId, entry.label]));
+    rows.push({
+      key: candidate.key,
+      label: candidate.label,
+      sourceLabel: '场景元数据',
+      state: 'different_parameter',
+      values,
+      signals: buildSensitivitySignals({ metricEntries, valuesByRun }),
+    });
+    return rows;
+  }, []);
+}
+
+function buildCompareSensitivityRows({
+  items,
+  baselineRunId,
+  parameterComparison,
+  highlights,
+}: {
+  items: RuleBacktestCompareRunItem[];
+  baselineRunId?: number | null;
+  parameterComparison?: RuleBacktestCompareParameterComparison | null;
+  highlights: Record<string, RuleBacktestCompareHighlightItem>;
+}): CompareSensitivityRow[] {
+  if (!items.length) return [];
+
+  const metricEntries = Object.entries(highlights || {})
+    .filter(([, highlight]) => highlight.winnerRunIds.length > 0 || highlight.availableRunIds.length > 1)
+    .slice(0, 4);
+
+  if (!metricEntries.length) return [];
+
+  const parameterRows = [
+    ...buildSensitivityRowsFromDetail({
+      keys: parameterComparison?.differingParameterKeys || [],
+      details: parameterComparison?.differingParameters || {},
+      sourceLabel: '参数差异',
+      items,
+      baselineRunId,
+      metricEntries,
+    }),
+    ...buildSensitivityRowsFromDetail({
+      keys: parameterComparison?.missingParameterKeys || [],
+      details: parameterComparison?.missingParameters || {},
+      sourceLabel: '参数缺失',
+      items,
+      baselineRunId,
+      metricEntries,
+    }),
+  ];
+
+  const excludedKeys = new Set(parameterRows.map((row) => normalizeCompareKey(row.key)));
+  const scenarioRows = buildScenarioMetadataSensitivityRows({
+    items,
+    baselineRunId,
+    metricEntries,
+    excludedKeys,
+  });
+
+  return [...parameterRows, ...scenarioRows];
 }
 
 function DiagnosticChipList({ diagnostics }: { diagnostics?: string[] }) {
@@ -574,6 +846,94 @@ function CompareItemsTable({
   );
 }
 
+function CompareSensitivityGrid({
+  items,
+  baselineRunId,
+  parameterComparison,
+  highlights,
+}: {
+  items: RuleBacktestCompareRunItem[];
+  baselineRunId?: number | null;
+  parameterComparison?: RuleBacktestCompareParameterComparison | null;
+  highlights: Record<string, RuleBacktestCompareHighlightItem>;
+}) {
+  const rows = buildCompareSensitivityRows({
+    items,
+    baselineRunId,
+    parameterComparison,
+    highlights,
+  });
+
+  if (!rows.length) {
+    return (
+      <div className="product-empty-state product-empty-state--compact" data-testid="compare-sensitivity-empty">
+        当前比较缺少可归因的参数差异或已校验亮点，暂不展示敏感度网格。
+      </div>
+    );
+  }
+
+  const parameterRows = rows.filter((row) => row.sourceLabel !== '场景元数据').length;
+  const scenarioRows = rows.filter((row) => row.sourceLabel === '场景元数据').length;
+
+  return (
+    <div data-testid="compare-sensitivity-grid">
+      <SummaryStrip
+        items={[
+          {
+            label: '可归因行',
+            value: String(rows.length),
+            note: `参数 ${parameterRows} / 元数据 ${scenarioRows}`,
+          },
+          {
+            label: '参数状态',
+            value: formatCompareStateWithRaw(parameterComparison?.state),
+            note: `共享 ${parameterComparison?.sharedParameterKeys.length ?? 0}`,
+          },
+          {
+            label: '亮点覆盖',
+            value: String(Object.keys(highlights || {}).length),
+            note: '仅复用已存储比较亮点',
+          },
+        ]}
+      />
+
+      <div className="preview-grid mt-4">
+        {rows.map((row) => (
+          <article
+            key={row.key}
+            className="preview-card"
+            data-testid={`compare-sensitivity-row-${slugifyCompareKey(row.key)}`}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="metric-card__label">{row.sourceLabel}</p>
+                <p className="preview-card__text">{row.label}</p>
+              </div>
+              <span className="compare-metric-badge" data-tone={getMetricSummaryTone(row.state)}>{formatCompareStateWithRaw(row.state)}</span>
+            </div>
+
+            <div className="product-chip-list product-chip-list--tight mt-3">
+              {row.values.map((value) => (
+                <span key={`${row.key}-${value.runId}`} className="product-chip">
+                  {`#${value.runId} ${formatCompareRoleLabel(value.isBaseline)} · ${value.label}`}
+                </span>
+              ))}
+            </div>
+
+            <div className="product-chip-list product-chip-list--tight mt-3">
+              {row.signals.map((signal) => (
+                <span key={`${row.key}-${signal.metricKey}`} className="product-chip">
+                  {`${signal.label}: ${signal.winners.length ? signal.winners.join(' / ') : formatCompareStateWithRaw(signal.state)}`}
+                </span>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const RuleBacktestComparePage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -771,12 +1131,12 @@ const RuleBacktestComparePage: React.FC = () => {
                   {
                     label: '主要画像',
                     value: formatCompareStateWithRaw(comparisonProfile?.primaryProfile),
-                    note: comparisonProfile?.drivingDimensions.map(formatCompareStateWithRaw).join(', ') || '无驱动维度',
+                    note: comparisonProfile?.drivingDimensions?.length ? formatCompareList(comparisonProfile.drivingDimensions) : '无驱动维度',
                   },
                   {
                     label: '比较来源',
-                    value: response.comparisonSource,
-                    note: response.readMode,
+                    value: formatCompareStateWithRaw(response.comparisonSource),
+                    note: formatCompareStateWithRaw(response.readMode),
                   },
                 ]}
               />
@@ -801,7 +1161,7 @@ const RuleBacktestComparePage: React.FC = () => {
                 </div>
                 <div className="preview-card">
                   <p className="metric-card__label">字段分组</p>
-                  <p className="preview-card__text">{response.fieldGroups.join(', ') || '--'}</p>
+                  <p className="preview-card__text">{formatCompareList(response.fieldGroups)}</p>
                 </div>
               </div>
               {response.unavailableRuns.length ? (
@@ -835,7 +1195,7 @@ const RuleBacktestComparePage: React.FC = () => {
                     {
                       label: '主要画像',
                       value: formatCompareStateWithRaw(comparisonHighlights?.primaryProfile),
-                      note: comparisonHighlights?.selectionRule || '--',
+                      note: formatCompareStateWithRaw(comparisonHighlights?.selectionRule),
                     },
                     {
                       label: '整体上下文',
@@ -888,6 +1248,19 @@ const RuleBacktestComparePage: React.FC = () => {
             </Card>
           </section>
 
+          <section id="compare-parameter-sensitivity" className="backtest-display-section">
+            <Card title="参数敏感度网格" subtitle="只复用已存储的参数差异、亮点指标与场景元数据，不追加后端计算" className="product-section-card product-section-card--backtest-secondary">
+              <Disclosure defaultOpen summary="展开 / 参数敏感度" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
+                <CompareSensitivityGrid
+                  items={orderedItems}
+                  baselineRunId={baselineRunId}
+                  parameterComparison={parameterComparison}
+                  highlights={comparisonHighlights?.highlights || {}}
+                />
+              </Disclosure>
+            </Card>
+          </section>
+
           <section id="compare-robustness" className="backtest-display-section">
             <Card title="稳健性画像" subtitle="明确显示部分、有限、不可用状态，而不是静默吞掉" className="product-section-card product-section-card--backtest-secondary">
               <SummaryStrip
@@ -900,17 +1273,17 @@ const RuleBacktestComparePage: React.FC = () => {
                   {
                     label: '一致维度',
                     value: String(robustnessSummary?.alignedDimensions.length ?? 0),
-                    note: robustnessSummary?.alignedDimensions.join(', ') || '--',
+                    note: formatCompareList(robustnessSummary?.alignedDimensions),
                   },
                   {
                     label: '部分维度',
                     value: String(robustnessSummary?.partialDimensions.length ?? 0),
-                    note: robustnessSummary?.partialDimensions.join(', ') || '--',
+                    note: formatCompareList(robustnessSummary?.partialDimensions),
                   },
                   {
                     label: '主要画像',
                     value: formatCompareStateWithRaw(comparisonProfile?.primaryProfile),
-                    note: comparisonProfile?.diagnostics.join(', ') || '--',
+                    note: formatCompareList(comparisonProfile?.diagnostics),
                   },
                 ]}
               />
