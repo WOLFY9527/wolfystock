@@ -290,8 +290,8 @@ describe('RuleBacktestComparePage', () => {
             periodEnd: '2025-12-31',
             lookbackBars: 126,
             initialCapital: 100000,
-            feeBps: 0,
-            slippageBps: 0,
+            feeBps: 5,
+            slippageBps: 10,
           },
           metrics: {
             tradeCount: 9,
@@ -369,6 +369,11 @@ describe('RuleBacktestComparePage', () => {
     expect(screen.getByTestId('compare-sensitivity-row-strategy-spec-signal-fast-period')).toBeInTheDocument();
     expect(screen.getByTestId('compare-sensitivity-row-lookback-bars')).toBeInTheDocument();
     expect(screen.getByTestId('compare-sensitivity-row-strategy-spec-signal-slow-type')).toBeInTheDocument();
+    expect(screen.getByTestId('compare-cost-slippage-panel')).toBeInTheDocument();
+    expect(screen.getByText('费用 / 滑点')).toBeInTheDocument();
+    expect(screen.getByText('费滑场景')).toBeInTheDocument();
+    expect(screen.getByText('#101 基准 · 手续费 0.0bp · 滑点 0.0bp')).toBeInTheDocument();
+    expect(screen.getByText('#202 候选 · 手续费 5.0bp · 滑点 10.0bp')).toBeInTheDocument();
 
     fireEvent.click(parameterSummary.closest('summary') ?? parameterSummary);
     expect(parameterDisclosure).not.toHaveAttribute('open');
@@ -574,6 +579,7 @@ describe('RuleBacktestComparePage', () => {
 
     expect(await screen.findByRole('heading', { name: '规则回测比较工作台' })).toBeInTheDocument();
     expect(screen.getByTestId('compare-sensitivity-empty')).toBeInTheDocument();
+    expect(screen.getByTestId('compare-cost-slippage-empty')).toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole('button', { name: '打开结果页 202' }));
 

@@ -5,6 +5,7 @@ import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Card, Disclosure, WorkspacePageHeader } from '../components/common';
+import { TerminalChip, TerminalEmptyState, TerminalNestedBlock, TerminalSectionHeader } from '../components/terminal';
 import {
   Banner,
   SummaryStrip,
@@ -206,6 +207,62 @@ type CompareSensitivityRow = {
   signals: CompareSensitivityMetricSignal[];
 };
 
+type CompareCostSlippageScenario = {
+  runId: number;
+  label: string;
+  isBaseline: boolean;
+  feeLabel: string;
+  slippageLabel: string;
+};
+
+type CompareCostSlippageMetricSignal = {
+  metricKey: string;
+  label: string;
+  state?: string;
+  entries: string[];
+};
+
+type CompareCostSlippagePanelData = {
+  scenarios: CompareCostSlippageScenario[];
+  state?: string;
+  sourceLabels: string[];
+  signals: CompareCostSlippageMetricSignal[];
+};
+
+function formatBpsValue(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '缺失';
+  return `${formatNumber(value, 1)}bp`;
+}
+
+function formatCostSlippageScenarioLabel({
+  feeLabel,
+  slippageLabel,
+}: {
+  feeLabel: string;
+  slippageLabel: string;
+}): string {
+  return `手续费 ${feeLabel} · 滑点 ${slippageLabel}`;
+}
+
+function isFeeCompareKey(key: string): boolean {
+  const normalized = normalizeCompareKey(key);
+  return normalized === 'feebps' || normalized === 'feebpsperside';
+}
+
+function isSlippageCompareKey(key: string): boolean {
+  const normalized = normalizeCompareKey(key);
+  return normalized === 'slippagebps' || normalized === 'slippagebpsperside';
+}
+
+function getTerminalChipVariantFromState(state?: string): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  const normalized = String(state || '').toLowerCase();
+  if (normalized.includes('winner') || normalized.includes('aligned') || normalized.includes('direct')) return 'success';
+  if (normalized.includes('missing') || normalized.includes('unavailable')) return 'danger';
+  if (normalized.includes('limited') || normalized.includes('partial')) return 'caution';
+  if (normalized.includes('different') || normalized.includes('divergent') || normalized.includes('comparable')) return 'info';
+  return 'neutral';
+}
+
 function buildSensitivitySignals({
   metricEntries,
   valuesByRun,
@@ -370,6 +427,81 @@ function buildCompareSensitivityRows({
   });
 
   return [...parameterRows, ...scenarioRows];
+}
+
+function buildCompareCostSlippagePanelData({
+  items,
+  baselineRunId,
+  parameterComparison,
+  highlights,
+  metricDeltas,
+}: {
+  items: RuleBacktestCompareRunItem[];
+  baselineRunId?: number | null;
+  parameterComparison?: RuleBacktestCompareParameterComparison | null;
+  highlights: Record<string, RuleBacktestCompareHighlightItem>;
+  metricDeltas: Record<string, RuleBacktestCompareMetricDelta>;
+}): CompareCostSlippagePanelData | null {
+  if (!items.length) return null;
+
+  const scenarios = items.map((item) => {
+    const feeLabel = formatBpsValue(item.metadata.feeBps);
+    const slippageLabel = formatBpsValue(item.metadata.slippageBps);
+    return {
+      runId: item.metadata.id,
+      label: formatCostSlippageScenarioLabel({ feeLabel, slippageLabel }),
+      isBaseline: item.metadata.id === baselineRunId,
+      feeLabel,
+      slippageLabel,
+    };
+  });
+
+  const distinctScenarioCount = new Set(scenarios.map((scenario) => `${scenario.feeLabel}|${scenario.slippageLabel}`)).size;
+  const sourceLabels: string[] = [];
+
+  if (distinctScenarioCount > 1) sourceLabels.push('场景元数据');
+
+  const differingKeys = parameterComparison?.differingParameterKeys || [];
+  const missingKeys = parameterComparison?.missingParameterKeys || [];
+  const hasDifferingCostKeys = differingKeys.some((key) => isFeeCompareKey(key) || isSlippageCompareKey(key));
+  const hasMissingCostKeys = missingKeys.some((key) => isFeeCompareKey(key) || isSlippageCompareKey(key));
+
+  if (hasDifferingCostKeys) sourceLabels.push('参数差异');
+  if (hasMissingCostKeys) sourceLabels.push('参数缺失');
+
+  if (!sourceLabels.length) {
+    return null;
+  }
+
+  const scenarioLabelsByRun = new Map(scenarios.map((scenario) => [scenario.runId, scenario.label]));
+  const signals = Object.entries(metricDeltas || {})
+    .filter(([, metric]) => metric.deltas.some((entry) => entry.runId !== baselineRunId && entry.deltaVsBaseline != null))
+    .slice(0, 3)
+    .map(([metricKey, metric]) => {
+      const highlight = highlights[metricKey];
+      const entries = metric.deltas
+        .filter((entry) => entry.runId !== baselineRunId && entry.deltaVsBaseline != null)
+        .map((entry) => {
+          const scenarioLabel = scenarioLabelsByRun.get(entry.runId) || `#${entry.runId}`;
+          const role = highlight?.winnerRunIds.includes(entry.runId) ? '领先' : '相对基准';
+          return `${scenarioLabel} · ${role} ${formatSignedPct(entry.deltaVsBaseline)}`;
+        });
+
+      return {
+        metricKey,
+        label: formatMetricLabel(metricKey, metric.label),
+        state: highlight?.state || metric.state,
+        entries,
+      };
+    })
+    .filter((signal) => signal.entries.length > 0);
+
+  return {
+    scenarios,
+    state: distinctScenarioCount > 1 ? 'different_parameter' : parameterComparison?.state,
+    sourceLabels,
+    signals,
+  };
 }
 
 function DiagnosticChipList({ diagnostics }: { diagnostics?: string[] }) {
@@ -934,6 +1066,75 @@ function CompareSensitivityGrid({
   );
 }
 
+function CompareCostSlippagePanel({
+  items,
+  baselineRunId,
+  parameterComparison,
+  highlights,
+  metricDeltas,
+}: {
+  items: RuleBacktestCompareRunItem[];
+  baselineRunId?: number | null;
+  parameterComparison?: RuleBacktestCompareParameterComparison | null;
+  highlights: Record<string, RuleBacktestCompareHighlightItem>;
+  metricDeltas: Record<string, RuleBacktestCompareMetricDelta>;
+}) {
+  const panelData = buildCompareCostSlippagePanelData({
+    items,
+    baselineRunId,
+    parameterComparison,
+    highlights,
+    metricDeltas,
+  });
+
+  if (!panelData) {
+    return (
+      <TerminalEmptyState title="费用 / 滑点" className="mt-4" data-testid="compare-cost-slippage-empty">
+        当前比较的费率与滑点设定没有形成可读差异，暂不单独展开费滑敏感度。
+      </TerminalEmptyState>
+    );
+  }
+
+  return (
+    <TerminalNestedBlock className="mt-4 space-y-3 min-w-0" data-testid="compare-cost-slippage-panel">
+      <TerminalSectionHeader
+        eyebrow="费用 / 滑点"
+        title="费滑场景"
+        action={<TerminalChip variant={getTerminalChipVariantFromState(panelData.state)}>{formatCompareStateWithRaw(panelData.state)}</TerminalChip>}
+      />
+
+      <div className="flex flex-wrap gap-2">
+        {panelData.sourceLabels.map((sourceLabel) => (
+          <TerminalChip key={sourceLabel} variant="neutral">{sourceLabel}</TerminalChip>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {panelData.scenarios.map((scenario) => (
+          <TerminalChip key={scenario.runId} variant={scenario.isBaseline ? 'info' : 'neutral'} className="whitespace-normal">
+            {`#${scenario.runId} ${formatCompareRoleLabel(scenario.isBaseline)} · ${scenario.label}`}
+          </TerminalChip>
+        ))}
+      </div>
+
+      {panelData.signals.length ? (
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">已存储指标差异</p>
+          <div className="flex flex-wrap gap-2">
+            {panelData.signals.map((signal) => (
+              <TerminalChip key={signal.metricKey} variant={getTerminalChipVariantFromState(signal.state)} className="whitespace-normal">
+                {`${signal.label} · ${signal.entries.join(' / ')}`}
+              </TerminalChip>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="product-footnote">当前比较没有可映射到费滑场景的已存储指标差异。</p>
+      )}
+    </TerminalNestedBlock>
+  );
+}
+
 const RuleBacktestComparePage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1251,6 +1452,13 @@ const RuleBacktestComparePage: React.FC = () => {
           <section id="compare-parameter-sensitivity" className="backtest-display-section">
             <Card title="参数敏感度网格" subtitle="只复用已存储的参数差异、亮点指标与场景元数据，不追加后端计算" className="product-section-card product-section-card--backtest-secondary">
               <Disclosure defaultOpen summary="展开 / 参数敏感度" className="compare-section-disclosure" summaryClassName="compare-section-disclosure__summary" bodyClassName="compare-section-disclosure__body">
+                <CompareCostSlippagePanel
+                  items={orderedItems}
+                  baselineRunId={baselineRunId}
+                  parameterComparison={parameterComparison}
+                  highlights={comparisonHighlights?.highlights || {}}
+                  metricDeltas={comparisonSummary?.metricDeltas || {}}
+                />
                 <CompareSensitivityGrid
                   items={orderedItems}
                   baselineRunId={baselineRunId}
