@@ -11,7 +11,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.v1.endpoints import options
-from api.v1.schemas.options import OptionsMetadata
 from src.services.options_lab_domain_models import (
     AnalyzeCandidateModel,
     AnalyzeResultModel,
@@ -27,6 +26,7 @@ from src.services.options_lab_domain_models import (
     OptionChainResultModel,
     OptionExpirationModel,
     OptionExpirationsResultModel,
+    OptionsLabMetadataModel,
     OptionUnderlyingSummaryResultModel,
     OptimizerCandidate,
     OptimizerResult,
@@ -144,7 +144,7 @@ def test_summary_and_expirations_endpoint_mappers_preserve_alias_contracts() -> 
         as_of="2026-05-06T14:30:00Z",
         source="synthetic_fixture",
         warnings=["synthetic_fixture_data", "options_are_high_risk"],
-        metadata=OptionsMetadata(providerName="synthetic_fixture"),
+        metadata=OptionsLabMetadataModel(provider_name="synthetic_fixture"),
     )
     assert options._map_underlying_summary_response(summary_result).model_dump(by_alias=True) == {
         "symbol": "TEM",
@@ -168,7 +168,7 @@ def test_summary_and_expirations_endpoint_mappers_preserve_alias_contracts() -> 
             "noOrderPlacement": True,
             "noBrokerExecution": True,
         },
-        "metadata": summary_result.metadata.model_dump(by_alias=True),
+        "metadata": options._map_options_metadata(summary_result.metadata).model_dump(by_alias=True),
     }
 
     expirations_result = OptionExpirationsResultModel(
@@ -197,7 +197,7 @@ def test_summary_and_expirations_endpoint_mappers_preserve_alias_contracts() -> 
         as_of="2026-05-06T14:30:00Z",
         source="synthetic_fixture",
         warnings=["synthetic_fixture_data", "options_are_high_risk"],
-        metadata=OptionsMetadata(providerName="synthetic_fixture"),
+        metadata=OptionsLabMetadataModel(provider_name="synthetic_fixture"),
     )
     assert options._map_expirations_response(expirations_result).model_dump(by_alias=True) == {
         "symbol": "TEM",
@@ -233,7 +233,7 @@ def test_summary_and_expirations_endpoint_mappers_preserve_alias_contracts() -> 
             "noOrderPlacement": True,
             "noBrokerExecution": True,
         },
-        "metadata": expirations_result.metadata.model_dump(by_alias=True),
+        "metadata": options._map_options_metadata(expirations_result.metadata).model_dump(by_alias=True),
     }
 
 
@@ -799,7 +799,7 @@ def test_analyze_scenario_and_compare_endpoint_mappers_preserve_alias_contracts(
         ],
         risks=["options_are_high_risk"],
         limitations=["synthetic_fixture_data_only"],
-        metadata=OptionsMetadata(scoringEngine="deterministic_fixture_scoring_v1"),
+        metadata=OptionsLabMetadataModel(scoring_engine="deterministic_fixture_scoring_v1"),
     )
     assert options._map_analyze_response(analyze_result).model_dump(by_alias=True) == {
         "symbol": "TEM",
@@ -866,7 +866,7 @@ def test_analyze_scenario_and_compare_endpoint_mappers_preserve_alias_contracts(
         ],
         "risks": ["options_are_high_risk"],
         "limitations": ["synthetic_fixture_data_only"],
-        "metadata": analyze_result.metadata.model_dump(by_alias=True),
+        "metadata": options._map_options_metadata(analyze_result.metadata).model_dump(by_alias=True),
     }
 
     scenario_result = ScenarioResultModel(
@@ -894,7 +894,7 @@ def test_analyze_scenario_and_compare_endpoint_mappers_preserve_alias_contracts(
             "reason": "phase3_expiration_payoff_only",
         },
         limitations=["synthetic_fixture_data_only"],
-        metadata=OptionsMetadata(strategyEngine="expiration_payoff_v1"),
+        metadata=OptionsLabMetadataModel(strategy_engine="expiration_payoff_v1"),
     )
     assert options._map_scenario_response(scenario_result).model_dump(by_alias=True) == {
         "symbol": "TEM",
@@ -921,7 +921,7 @@ def test_analyze_scenario_and_compare_endpoint_mappers_preserve_alias_contracts(
             "reason": "phase3_expiration_payoff_only",
         },
         "limitations": ["synthetic_fixture_data_only"],
-        "metadata": scenario_result.metadata.model_dump(by_alias=True),
+        "metadata": options._map_options_metadata(scenario_result.metadata).model_dump(by_alias=True),
     }
 
     compare_result = StrategyCompareResultModel(
@@ -974,7 +974,7 @@ def test_analyze_scenario_and_compare_endpoint_mappers_preserve_alias_contracts(
             )
         ],
         limitations=["synthetic_fixture_data_only"],
-        metadata=OptionsMetadata(strategyEngine="defined_risk_strategy_compare_v1"),
+        metadata=OptionsLabMetadataModel(strategy_engine="defined_risk_strategy_compare_v1"),
     )
     assert options._map_strategy_compare_response(compare_result).model_dump(by_alias=True) == {
         "symbol": "TEM",
@@ -1029,7 +1029,7 @@ def test_analyze_scenario_and_compare_endpoint_mappers_preserve_alias_contracts(
             }
         ],
         "limitations": ["synthetic_fixture_data_only"],
-        "metadata": compare_result.metadata.model_dump(by_alias=True),
+        "metadata": options._map_options_metadata(compare_result.metadata).model_dump(by_alias=True),
     }
 
 
@@ -1431,13 +1431,13 @@ def test_decision_endpoint_mapper_preserves_existing_alias_shape() -> None:
             freshness="synthetic_delayed",
             as_of="2026-05-06T16:00:00Z",
         ),
-        metadata=OptionsMetadata(
-            forceRefreshIgnored=True,
-            scoringEngine="options_decision_engine_r2",
-            strategyEngine="options_decision_engine_r2",
-            providerName="synthetic_fixture",
-            providerCapabilities={"liveEnabled": False},
-            liveProviderEnabled=False,
+        metadata=OptionsLabMetadataModel(
+            force_refresh_ignored=True,
+            scoring_engine="options_decision_engine_r2",
+            strategy_engine="options_decision_engine_r2",
+            provider_name="synthetic_fixture",
+            provider_capabilities={"liveEnabled": False},
+            live_provider_enabled=False,
         ),
     )
 

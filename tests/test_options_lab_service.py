@@ -26,6 +26,7 @@ from src.services.options_lab_domain_models import (
     OptionChainResultModel,
     OptionContractSnapshot,
     OptionGreeksSnapshot,
+    OptionsLabMetadataModel,
     OptionUnderlyingSummaryResultModel,
     OptimizerCandidate,
     OptimizerResult,
@@ -97,6 +98,7 @@ def test_tem_summary_uses_synthetic_fixture_and_risk_metadata() -> None:
     assert summary.underlying["price"] == 52.4
     assert summary.options_availability["supported"] is True
     assert summary.options_availability["provider"] == "synthetic_fixture"
+    assert isinstance(summary.metadata, OptionsLabMetadataModel)
     assert summary.metadata.no_external_calls is True
     assert summary.metadata.no_order_placement is True
     assert summary.metadata.read_only is True
@@ -112,6 +114,7 @@ def test_tem_expirations_are_normalized_and_sorted() -> None:
     assert isinstance(response.expirations[0], OptionExpirationModel)
     assert response.expirations[0].dte == 44
     assert response.expirations[0].chain_available is True
+    assert isinstance(response.metadata, OptionsLabMetadataModel)
     assert response.metadata.fixture_backed is True
     assert "synthetic_fixture_data" in response.expirations[0].warnings
 
@@ -134,6 +137,7 @@ def test_tem_chain_returns_calls_puts_and_safe_derived_fields() -> None:
     assert response.calls[0].freshness == "synthetic_delayed"
     assert response.calls[0].provider_quality == "synthetic_demo_only"
     assert response.calls[0].data_quality["tradeable"] is False
+    assert isinstance(response.metadata, OptionsLabMetadataModel)
     assert response.metadata.provider_name == "synthetic_fixture"
     assert response.metadata.live_provider_enabled is False
 
@@ -251,6 +255,7 @@ def test_analyze_bullish_tem_returns_ranked_call_candidates() -> None:
     assert scores == sorted(scores, reverse=True)
     assert response.candidate_contracts[0].strategy == "long_call"
     assert response.candidate_contracts[0].sub_scores.directional_fit == 100
+    assert isinstance(response.metadata, OptionsLabMetadataModel)
     assert response.metadata.scoring_engine == "deterministic_fixture_scoring_v1"
     assert "phase4_spreads_deferred" in response.limitations
 

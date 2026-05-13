@@ -619,6 +619,18 @@ def test_service_api_upward_import_inventory_is_frozen() -> None:
     )
 
 
+def test_options_lab_service_no_longer_imports_public_options_metadata() -> None:
+    records = _service_api_import_records().get("src/services/options_lab_service.py", ())
+    imported_names = {
+        name
+        for record in records
+        if record.module == "api.v1.schemas.options"
+        for name in record.imported_names
+    }
+
+    assert "OptionsMetadata" not in imported_names
+
+
 def test_services_do_not_import_forbidden_api_surfaces() -> None:
     forbidden_imports = {
         service_file: sorted(

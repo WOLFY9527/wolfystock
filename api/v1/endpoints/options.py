@@ -11,6 +11,7 @@ from api.v1.schemas.options import (
     OptionContractScoring,
     OptionExpirationItem,
     OptionExpirationsResponse,
+    OptionsMetadata,
     OptionScenarioPayoffRow,
     OptionScenarioRisk,
     OptionScoringSubScores,
@@ -52,6 +53,7 @@ from src.services.options_lab_domain_models import (
     OptionChainResultModel,
     OptionExpirationModel,
     OptionExpirationsResultModel,
+    OptionsLabMetadataModel,
     OptionUnderlyingSummaryResultModel,
     OptimizerCandidate,
     OptimizerResult,
@@ -107,6 +109,28 @@ def _map_decision_data_quality(data_quality: DecisionDataQualityAssessment) -> O
     )
 
 
+def _map_options_metadata(metadata: OptionsLabMetadataModel | None) -> OptionsMetadata:
+    if metadata is None:
+        return OptionsMetadata()
+    return OptionsMetadata(
+        read_only=metadata.read_only,
+        fixture_backed=metadata.fixture_backed,
+        synthetic_data=metadata.synthetic_data,
+        no_external_calls=metadata.no_external_calls,
+        no_llm_calls=metadata.no_llm_calls,
+        no_order_placement=metadata.no_order_placement,
+        no_broker_connection=metadata.no_broker_connection,
+        no_portfolio_mutation=metadata.no_portfolio_mutation,
+        no_trading_recommendation=metadata.no_trading_recommendation,
+        scoring_engine=metadata.scoring_engine,
+        strategy_engine=metadata.strategy_engine,
+        force_refresh_ignored=metadata.force_refresh_ignored,
+        provider_name=metadata.provider_name,
+        provider_capabilities=dict(metadata.provider_capabilities),
+        live_provider_enabled=metadata.live_provider_enabled,
+    )
+
+
 def _map_underlying_summary_response(result: OptionUnderlyingSummaryResultModel) -> OptionUnderlyingSummaryResponse:
     return OptionUnderlyingSummaryResponse(
         symbol=result.symbol,
@@ -117,7 +141,7 @@ def _map_underlying_summary_response(result: OptionUnderlyingSummaryResultModel)
         asOf=result.as_of,
         source=result.source,
         warnings=list(result.warnings),
-        metadata=result.metadata,
+        metadata=_map_options_metadata(result.metadata),
     )
 
 
@@ -141,7 +165,7 @@ def _map_expirations_response(result: OptionExpirationsResultModel) -> OptionExp
         asOf=result.as_of,
         source=result.source,
         warnings=list(result.warnings),
-        metadata=result.metadata,
+        metadata=_map_options_metadata(result.metadata),
     )
 
 
@@ -157,7 +181,7 @@ def _map_chain_response(result: OptionChainResultModel) -> OptionChainResponse:
         chainAsOf=result.chain_as_of,
         source=result.source,
         warnings=list(result.warnings),
-        metadata=result.metadata,
+        metadata=_map_options_metadata(result.metadata),
     )
 
 
@@ -214,7 +238,7 @@ def _map_analyze_response(result: AnalyzeResultModel) -> OptionsAnalyzeResponse:
         candidateContracts=[_map_analyze_candidate(candidate) for candidate in result.candidate_contracts],
         risks=list(result.risks),
         limitations=list(result.limitations),
-        metadata=result.metadata,
+        metadata=_map_options_metadata(result.metadata),
     )
 
 
@@ -247,7 +271,7 @@ def _map_scenario_response(result: ScenarioResultModel) -> OptionsScenarioRespon
         risk=_map_scenario_risk(result.risk),
         preExpirationTheoreticalPricing=dict(result.pre_expiration_theoretical_pricing),
         limitations=list(result.limitations),
-        metadata=result.metadata,
+        metadata=_map_options_metadata(result.metadata),
     )
 
 
@@ -289,7 +313,7 @@ def _map_strategy_compare_response(result: StrategyCompareResultModel) -> Option
         assumptions=dict(result.assumptions),
         strategies=[_map_strategy_comparison(item) for item in result.strategies],
         limitations=list(result.limitations),
-        metadata=result.metadata,
+        metadata=_map_options_metadata(result.metadata),
     )
 
 
@@ -423,7 +447,7 @@ def _map_decision_response(result: DecisionEvaluationResult) -> OptionsDecisionR
             freshness=result.freshness.freshness if result.freshness is not None else "unknown",
             asOf=result.freshness.as_of if result.freshness is not None else None,
         ),
-        metadata=result.metadata,
+        metadata=_map_options_metadata(result.metadata),
     )
 
 

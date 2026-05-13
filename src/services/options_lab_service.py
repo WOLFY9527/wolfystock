@@ -17,7 +17,6 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 from api.v1.schemas.options import (
     OptionContract,
     OptionGreeks,
-    OptionsMetadata,
     OptionsAnalyzeRequest,
     OptionsDecisionLeg,
     OptionsDecisionRequest,
@@ -42,6 +41,7 @@ from src.services.options_lab_domain_models import (
     OptionExpirationModel,
     OptionExpirationsResultModel,
     OptionGreeksSnapshot,
+    OptionsLabMetadataModel,
     OptionUnderlyingSummaryResultModel,
     OptimizerCandidate,
     OptimizerResult,
@@ -1368,16 +1368,16 @@ class OptionsLabService:
         fixture: Optional[Dict[str, Any]] = None,
         scoring_engine: str = "not_implemented_until_scoring_phase",
         strategy_engine: str = "not_implemented_until_later_phase",
-    ) -> OptionsMetadata:
+    ) -> OptionsLabMetadataModel:
         capabilities = dict((fixture or {}).get("providerCapabilities") or {})
         provider_name = str((fixture or {}).get("providerName") or DEFAULT_OPTIONS_PROVIDER_NAME)
-        return OptionsMetadata(
-            forceRefreshIgnored=bool(force_refresh),
-            scoringEngine=scoring_engine,
-            strategyEngine=strategy_engine,
-            providerName=provider_name,
-            providerCapabilities=capabilities,
-            liveProviderEnabled=bool(capabilities.get("liveEnabled", False)),
+        return OptionsLabMetadataModel(
+            force_refresh_ignored=bool(force_refresh),
+            scoring_engine=scoring_engine,
+            strategy_engine=strategy_engine,
+            provider_name=provider_name,
+            provider_capabilities=capabilities,
+            live_provider_enabled=bool(capabilities.get("liveEnabled", False)),
         )
 
     @staticmethod

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Internal Options Lab decision assessment models.
+"""Internal Options Lab assessment and response models.
 
-These dataclasses intentionally cover only the evaluate_decision intermediate
-assessment layer. Public API DTOs remain defined in api.v1.schemas.options.
+These dataclasses intentionally cover Options Lab service-local intermediate
+state. Public API DTOs remain defined in api.v1.schemas.options.
 """
 
 from __future__ import annotations
@@ -49,6 +49,25 @@ class OptionContractSnapshot:
 
 
 @dataclass
+class OptionsLabMetadataModel:
+    read_only: bool = True
+    fixture_backed: bool = True
+    synthetic_data: bool = True
+    no_external_calls: bool = True
+    no_llm_calls: bool = True
+    no_order_placement: bool = True
+    no_broker_connection: bool = True
+    no_portfolio_mutation: bool = True
+    no_trading_recommendation: bool = True
+    scoring_engine: str = "not_implemented_until_scoring_phase"
+    strategy_engine: str = "not_implemented_until_later_phase"
+    force_refresh_ignored: bool = False
+    provider_name: str = "synthetic_fixture"
+    provider_capabilities: dict[str, Any] = field(default_factory=dict)
+    live_provider_enabled: bool = False
+
+
+@dataclass
 class OptionUnderlyingSummaryResultModel:
     symbol: str
     market: str
@@ -58,7 +77,7 @@ class OptionUnderlyingSummaryResultModel:
     as_of: str = ""
     source: str = ""
     warnings: list[str] = field(default_factory=list)
-    metadata: Any = None
+    metadata: OptionsLabMetadataModel = field(default_factory=OptionsLabMetadataModel)
 
 
 @dataclass
@@ -80,7 +99,7 @@ class OptionExpirationsResultModel:
     as_of: str = ""
     source: str = ""
     warnings: list[str] = field(default_factory=list)
-    metadata: Any = None
+    metadata: OptionsLabMetadataModel = field(default_factory=OptionsLabMetadataModel)
 
 
 @dataclass
@@ -95,7 +114,7 @@ class OptionChainResultModel:
     chain_as_of: str = ""
     source: str = ""
     warnings: list[str] = field(default_factory=list)
-    metadata: Any = None
+    metadata: OptionsLabMetadataModel = field(default_factory=OptionsLabMetadataModel)
 
 
 @dataclass
@@ -216,7 +235,7 @@ class DecisionEvaluationResult:
     better_alternative: Optional[DecisionAlternativeModel] = None
     no_advice_disclosure: str = ""
     freshness: Optional[DecisionFreshnessModel] = None
-    metadata: Any = None
+    metadata: OptionsLabMetadataModel = field(default_factory=OptionsLabMetadataModel)
 
     @property
     def iv_rank(self) -> Optional[float]:
@@ -279,7 +298,7 @@ class AnalyzeResultModel:
     candidate_contracts: list[AnalyzeCandidateModel] = field(default_factory=list)
     risks: list[str] = field(default_factory=list)
     limitations: list[str] = field(default_factory=list)
-    metadata: Any = None
+    metadata: OptionsLabMetadataModel = field(default_factory=OptionsLabMetadataModel)
 
 
 @dataclass
@@ -309,7 +328,7 @@ class ScenarioResultModel:
     risk: ScenarioRiskModel | None = None
     pre_expiration_theoretical_pricing: dict[str, Any] = field(default_factory=dict)
     limitations: list[str] = field(default_factory=list)
-    metadata: Any = None
+    metadata: OptionsLabMetadataModel = field(default_factory=OptionsLabMetadataModel)
 
 
 @dataclass
@@ -348,4 +367,4 @@ class StrategyCompareResultModel:
     assumptions: dict[str, Any]
     strategies: list[StrategyComparisonModel] = field(default_factory=list)
     limitations: list[str] = field(default_factory=list)
-    metadata: Any = None
+    metadata: OptionsLabMetadataModel = field(default_factory=OptionsLabMetadataModel)
