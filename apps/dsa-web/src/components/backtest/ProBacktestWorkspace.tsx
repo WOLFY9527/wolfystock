@@ -1255,7 +1255,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
       <section
         data-testid="pro-backtest-workspace"
         data-module="rule"
-        className="mx-auto flex w-full max-w-[1680px] min-w-0 flex-col gap-4 pb-12 lg:pb-0"
+        className="flex w-full min-w-0 flex-col gap-4 pb-12 lg:pb-0"
       >
         <div data-testid="pro-run-summary-strip" className={`${ghostCardClass} flex min-w-0 flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between`}>
           <div className="min-w-0">

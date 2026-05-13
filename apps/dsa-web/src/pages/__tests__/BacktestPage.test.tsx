@@ -904,9 +904,10 @@ describe('BacktestPage', () => {
 
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
 
-    expect(screen.getByTestId('backtest-bento-page')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'gap-6', 'min-w-0', 'min-h-0', 'bg-transparent');
-    expect(screen.getByTestId('backtest-bento-page')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12');
+    expect(screen.getByTestId('backtest-bento-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'min-h-0', 'bg-transparent');
+    expect(screen.getByTestId('backtest-bento-page')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'max-w-[1600px]');
     expect(screen.getByTestId('backtest-bento-page')).not.toHaveClass('container', 'mx-auto', 'max-w-[1600px]');
+    expect(screen.getByTestId('backtest-page-shell')).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6');
     expect(screen.getByTestId('backtest-subnav')).toHaveClass('w-full', 'rounded-[24px]', 'border', 'border-white/5', 'bg-white/[0.02]');
     expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6', 'bg-transparent');
     expect(screen.getByTestId('backtest-v1-page')).not.toHaveClass('pt-6');
@@ -1009,7 +1010,8 @@ describe('BacktestPage', () => {
     await switchToProfessionalMode();
 
     expect(screen.getByRole('tab', { name: bt('zh', 'page.professionalMode') })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByTestId('pro-backtest-workspace')).toHaveClass('max-w-[1680px]', 'w-full', 'mx-auto', 'pb-12');
+    expect(screen.getByTestId('pro-backtest-workspace')).toHaveClass('w-full', 'pb-12');
+    expect(screen.getByTestId('pro-backtest-workspace')).not.toHaveClass('max-w-[1680px]', 'mx-auto');
     expect(screen.getByTestId('pro-workflow-rail')).toHaveClass('hidden', 'lg:flex', 'lg:sticky');
     expect(screen.getByTestId('pro-mobile-step-chips')).toHaveClass('lg:hidden', 'overflow-x-auto', 'no-scrollbar');
     expect(screen.getByTestId('pro-workspace-grid')).toHaveClass('lg:grid-cols-[220px_minmax(0,1fr)_320px]');

@@ -39,7 +39,7 @@ import {
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import { translate } from '../i18n/core';
-import { TerminalPageHeading } from '../components/terminal';
+import { TerminalPageHeading, TerminalPageShell } from '../components/terminal';
 
 const HISTORICAL_PAGE_SIZE = 20;
 const HISTORY_PAGE_SIZE = 10;
@@ -1294,36 +1294,37 @@ const BacktestPage: React.FC = () => {
       data-testid="backtest-bento-page"
       aria-hidden={shouldGuardA11y && !isSafariReady ? true : undefined}
       aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
-      className={getSafariReadySurfaceClassName(isSafariReady, 'w-full flex-1 flex flex-col gap-6 min-w-0 min-h-0 bg-transparent')}
+      className={getSafariReadySurfaceClassName(isSafariReady, 'w-full flex-1 min-w-0 min-h-0 bg-transparent')}
     >
-      <TerminalPageHeading
-        data-testid="backtest-page-heading"
-        title={language === 'en' ? 'Backtest' : '回测'}
-      />
-      <div
-        data-testid="backtest-subnav"
-        className="w-full rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-sm"
-      >
-        <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <nav
-            className="flex min-w-0 items-center gap-4 overflow-x-auto no-scrollbar"
-            aria-label={bt(language, 'page.moduleTabsLabel')}
-          >
-            {moduleTabs}
-          </nav>
-          <nav
-            className="flex min-w-0 items-center gap-4 overflow-x-auto no-scrollbar xl:justify-end"
-            aria-label={bt(language, 'page.controlModeLabel')}
-          >
-            {controlModeTabs}
-          </nav>
+      <TerminalPageShell data-testid="backtest-page-shell" className="flex-1 min-w-0 min-h-0 py-5 md:py-6">
+        <TerminalPageHeading
+          data-testid="backtest-page-heading"
+          title={language === 'en' ? 'Backtest' : '回测'}
+        />
+        <div
+          data-testid="backtest-subnav"
+          className="w-full rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-sm"
+        >
+          <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <nav
+              className="flex min-w-0 items-center gap-4 overflow-x-auto no-scrollbar"
+              aria-label={bt(language, 'page.moduleTabsLabel')}
+            >
+              {moduleTabs}
+            </nav>
+            <nav
+              className="flex min-w-0 items-center gap-4 overflow-x-auto no-scrollbar xl:justify-end"
+              aria-label={bt(language, 'page.controlModeLabel')}
+            >
+              {controlModeTabs}
+            </nav>
+          </div>
         </div>
-      </div>
 
-      <main
-        data-testid="backtest-v1-page"
-        className="w-full flex-1 min-w-0 flex flex-col gap-6 bg-transparent"
-      >
+        <main
+          data-testid="backtest-v1-page"
+          className="w-full flex-1 min-w-0 flex flex-col gap-6 bg-transparent"
+        >
         {scannerHandoff ? (
           <section className="rounded-[24px] border border-sky-400/15 bg-sky-400/10 px-4 py-3 text-sm text-sky-50">
             <div className="flex flex-wrap items-center gap-2">
@@ -1521,7 +1522,8 @@ const BacktestPage: React.FC = () => {
             </Suspense>
           </motion.div>
         </AnimatePresence>
-      </main>
+        </main>
+      </TerminalPageShell>
     </div>
   );
 };
