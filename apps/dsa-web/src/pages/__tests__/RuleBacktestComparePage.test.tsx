@@ -228,6 +228,83 @@ describe('RuleBacktestComparePage', () => {
           },
         },
       },
+      heatmapProjection: {
+        contractKind: 'rule_backtest_compare_heatmap_projection',
+        contractVersion: 'v1',
+        source: 'stored_compare_projection',
+        readMode: 'stored_projection_only',
+        authority: {
+          projectionBasis: 'stored_compare_payloads',
+          comparisonSource: 'stored_rule_backtest_runs',
+          executionMode: 'no_reexecution',
+          executionCount: 0,
+          providerCallsExecuted: false,
+          comparePayloadReused: true,
+          authorityScope: 'stored_compare_derived_heatmap_only',
+        },
+        requestedCompareRunIds: [101, 202],
+        resolvedCompareRunIds: [101, 202],
+        sourceRunIds: [101, 202],
+        missingRunIds: [],
+        axes: {
+          x: {
+            axisKey: 'strategy_spec.signal.fast_period',
+            axisLabel: 'fast_period',
+            valueType: 'integer',
+            values: [10, 20],
+          },
+          y: {
+            axisKey: 'strategy_spec.signal.slow_period',
+            axisLabel: 'slow_period',
+            valueType: 'integer_or_missing',
+            values: [50, null],
+          },
+        },
+        metricKeys: ['total_return_pct', 'max_drawdown_pct'],
+        cellAvailabilityStates: ['available', 'missing', 'ambiguous'],
+        cells: [
+          {
+            xValue: 10,
+            yValue: 50,
+            availabilityState: 'available',
+            sourceRunIds: [101],
+            metrics: {
+              totalReturnPct: { state: 'available', value: 12 },
+              maxDrawdownPct: { state: 'available', value: 8.5 },
+            },
+          },
+          {
+            xValue: 20,
+            yValue: 50,
+            availabilityState: 'missing',
+            sourceRunIds: [],
+            metrics: {
+              totalReturnPct: { state: 'missing', value: null },
+              maxDrawdownPct: { state: 'missing', value: null },
+            },
+          },
+          {
+            xValue: 10,
+            yValue: null,
+            availabilityState: 'ambiguous',
+            sourceRunIds: [101, 202],
+            metrics: {
+              totalReturnPct: { state: 'ambiguous', value: null },
+              maxDrawdownPct: { state: 'ambiguous', value: null },
+            },
+          },
+          {
+            xValue: 20,
+            yValue: null,
+            availabilityState: 'available',
+            sourceRunIds: [202],
+            metrics: {
+              totalReturnPct: { state: 'available', value: 18 },
+              maxDrawdownPct: { state: 'available', value: 9.2 },
+            },
+          },
+        ],
+      },
       items: [
         {
           metadata: {
@@ -370,8 +447,18 @@ describe('RuleBacktestComparePage', () => {
     expect(screen.getByTestId('compare-sensitivity-row-lookback-bars')).toBeInTheDocument();
     expect(screen.getByTestId('compare-sensitivity-row-strategy-spec-signal-slow-type')).toBeInTheDocument();
     expect(screen.getByTestId('compare-cost-slippage-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('compare-heatmap-panel')).toBeInTheDocument();
     expect(screen.getByText('费用 / 滑点')).toBeInTheDocument();
     expect(screen.getByText('费滑场景')).toBeInTheDocument();
+    expect(screen.getByText('参数热力投影')).toBeInTheDocument();
+    expect(screen.getByText('基于已完成回测的存储对比生成，不重新执行回测。')).toBeInTheDocument();
+    expect(screen.getByText('执行次数 0')).toBeInTheDocument();
+    expect(screen.getByText('未触发数据调用')).toBeInTheDocument();
+    expect(screen.getByTestId('compare-heatmap-cell-0-0')).toHaveAttribute('data-state', 'available');
+    expect(screen.getByTestId('compare-heatmap-cell-0-1')).toHaveAttribute('data-state', 'missing');
+    expect(screen.getByTestId('compare-heatmap-cell-1-0')).toHaveAttribute('data-state', 'ambiguous');
+    expect(screen.getByText('总收益 12.00%')).toBeInTheDocument();
+    expect(screen.getByText('最大回撤 8.50%')).toBeInTheDocument();
     expect(screen.getByText('#101 基准 · 手续费 0.0bp · 滑点 0.0bp')).toBeInTheDocument();
     expect(screen.getByText('#202 候选 · 手续费 5.0bp · 滑点 10.0bp')).toBeInTheDocument();
 
@@ -580,6 +667,7 @@ describe('RuleBacktestComparePage', () => {
     expect(await screen.findByRole('heading', { name: '规则回测比较工作台' })).toBeInTheDocument();
     expect(screen.getByTestId('compare-sensitivity-empty')).toBeInTheDocument();
     expect(screen.getByTestId('compare-cost-slippage-empty')).toBeInTheDocument();
+    expect(screen.getByTestId('compare-heatmap-empty')).toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole('button', { name: '打开结果页 202' }));
 

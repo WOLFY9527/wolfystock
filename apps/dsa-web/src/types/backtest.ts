@@ -960,6 +960,55 @@ export interface RuleBacktestCompareHighlightsSummary {
   diagnostics: string[];
 }
 
+export interface RuleBacktestCompareHeatmapProjectionAuthority {
+  projectionBasis?: string | null;
+  comparisonSource?: string | null;
+  executionMode?: string | null;
+  executionCount?: number | null;
+  providerCallsExecuted?: boolean | null;
+  comparePayloadReused?: boolean | null;
+  authorityScope?: string | null;
+}
+
+export interface RuleBacktestCompareHeatmapProjectionAxis {
+  axisKey: string;
+  axisLabel?: string | null;
+  valueType?: string | null;
+  values: Array<string | number | boolean | null>;
+}
+
+export interface RuleBacktestCompareHeatmapProjectionMetricValue {
+  state?: string | null;
+  value?: number | null;
+}
+
+export interface RuleBacktestCompareHeatmapProjectionCell {
+  xValue?: string | number | boolean | null;
+  yValue?: string | number | boolean | null;
+  availabilityState: string;
+  sourceRunIds: number[];
+  metrics?: Record<string, RuleBacktestCompareHeatmapProjectionMetricValue>;
+}
+
+export interface RuleBacktestCompareHeatmapProjection {
+  contractKind?: string | null;
+  contractVersion?: string | null;
+  source: string;
+  readMode: string;
+  authority?: RuleBacktestCompareHeatmapProjectionAuthority | null;
+  requestedCompareRunIds?: number[];
+  resolvedCompareRunIds?: number[];
+  sourceRunIds?: number[];
+  missingRunIds?: number[];
+  axes: {
+    x: RuleBacktestCompareHeatmapProjectionAxis;
+    y: RuleBacktestCompareHeatmapProjectionAxis;
+  };
+  metricKeys: string[];
+  cellAvailabilityStates: string[];
+  cells: RuleBacktestCompareHeatmapProjectionCell[];
+}
+
 export interface RuleBacktestCompareResponse {
   comparisonSource: string;
   readMode: string;
@@ -976,6 +1025,7 @@ export interface RuleBacktestCompareResponse {
   comparisonProfile?: RuleBacktestCompareProfileSummary | null;
   comparisonHighlights?: RuleBacktestCompareHighlightsSummary | null;
   parameterComparison?: RuleBacktestCompareParameterComparison | null;
+  heatmapProjection?: RuleBacktestCompareHeatmapProjection | null;
   items: RuleBacktestCompareRunItem[];
 }
 
