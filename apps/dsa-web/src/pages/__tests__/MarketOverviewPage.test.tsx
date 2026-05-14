@@ -1001,14 +1001,42 @@ describe('MarketOverviewPage', () => {
     const shell = screen.getByTestId('market-overview-shell');
     const workbench = screen.getByTestId('market-overview-workbench');
     expect(shell).toHaveAttribute('data-bento-surface', 'true');
-    expect(shell).toHaveClass('bento-surface-root', 'w-full', 'flex', 'flex-1', 'min-h-0', 'min-w-0', 'flex-col', 'gap-6');
-    expect(shell).not.toHaveClass('px-4', 'sm:px-6', 'lg:px-8', '2xl:px-10', 'py-6');
-    expect(shell).not.toHaveClass('bg-[#030303]');
+    expect(shell).toHaveClass(
+      'bento-surface-root',
+      'w-full',
+      'flex',
+      'flex-1',
+      'min-h-0',
+      'min-w-0',
+      'flex-col',
+      'gap-6',
+      'overflow-y-auto',
+      'overflow-x-hidden',
+      'no-scrollbar',
+    );
+    expect(shell).not.toHaveClass('py-5', 'md:py-6', 'px-4', 'sm:px-6', 'lg:px-8', '2xl:px-10', 'py-6');
+    expect(shell).not.toHaveClass('bg-[#030303]', 'bg-[#050505]');
+    expect(shell.className).not.toContain('bg-black');
     expect(shell.className).not.toContain('max-w-[1280px]');
     expect(shell.className).not.toContain('max-w-[1600px]');
     expect(shell.className).not.toContain('max-w-[1800px]');
     expect(workbench).toHaveAttribute('data-terminal-primitive', 'page-shell');
-    expect(workbench).toHaveClass('flex', 'w-full', 'flex-1', 'min-h-0', 'flex-col', 'gap-6', 'mx-auto', 'max-w-[1600px]', 'px-4', 'xl:px-8');
+    expect(workbench).toHaveClass(
+      'flex',
+      'w-full',
+      'flex-1',
+      'min-h-0',
+      'flex-col',
+      'gap-6',
+      'mx-auto',
+      'max-w-[1600px]',
+      'px-4',
+      'xl:px-8',
+      'py-5',
+      'md:py-6',
+    );
+    expect(workbench).not.toHaveClass('overflow-y-auto', 'overflow-x-auto', 'no-scrollbar', 'bg-[#030303]', 'bg-[#050505]');
+    expect(workbench.className).not.toContain('bg-black');
     expect(shell.className).not.toContain('max-w-5xl');
     expect(shell.className).not.toContain('max-w-6xl');
     expect(screen.getByTestId('market-overview-category-tabs')).toHaveClass('w-full', 'flex', 'bg-white/[0.02]', 'backdrop-blur-md');

@@ -1653,9 +1653,9 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     <div
       data-testid="market-overview-shell"
       data-bento-surface="true"
-      className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 text-white"
+      className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden no-scrollbar text-white"
     >
-      <TerminalPageShell data-testid="market-overview-workbench" className="flex min-h-0 flex-1">
+      <TerminalPageShell data-testid="market-overview-workbench" className="flex min-h-0 flex-1 py-5 md:py-6">
         <MarketOverviewWorkbenchTopSurface
           heading={heading}
           decisionText={marketDecision.text}
