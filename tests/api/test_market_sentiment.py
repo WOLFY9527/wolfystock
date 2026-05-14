@@ -7,6 +7,8 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from api.v1.endpoints import market
 from src.services.market_overview_service import MarketOverviewService
 
@@ -178,6 +180,93 @@ class MarketSentimentApiTestCase(unittest.TestCase):
         self.assertIn(payload["providerHealth"]["status"], {"live", "cache"})
         self.assertTrue(all(item["source"] == "alternative_me" for item in payload["items"]))
         self.assertTrue(all(item["sourceLabel"] == "Alternative.me" for item in payload["items"]))
+
+
+class _ExecutionLogStub:
+    def record_market_overview_fetch(self, **_: object) -> str:
+        return "log-sentiment"
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="T-145 sentinel: shared sentiment cache key still lets legacy /market-overview panel shape leak into /market DTO items.",
+)
+def test_market_sentiment_cache_key_does_not_accept_legacy_overview_item_family() -> None:
+    service = MarketOverviewService()
+    service._market_cache.clear()
+    service._market_data_cache.clear()
+    service._market_cache.set(
+        "sentiment",
+        {
+            "panel_name": "MarketSentimentCard",
+            "last_refresh_at": "2026-05-15T10:00:00+08:00",
+            "status": "success",
+            "source": "cnn",
+            "items": [
+                {
+                    "symbol": "FGI",
+                    "label": "Fear & Greed",
+                    "value": 52,
+                    "unit": "score",
+                    "change_pct": -3.0,
+                    "trend": [60, 55, 52],
+                    "risk_direction": "increasing",
+                    "source": "cnn",
+                }
+            ],
+        },
+        ttl_seconds=1800,
+    )
+
+    with patch("src.services.market_overview_service.ExecutionLogService", _ExecutionLogStub):
+        payload = service.get_market_sentiment()
+
+    first_item = payload["items"][0]
+    assert "price" in first_item
+    assert "change" in first_item
+    assert "value" not in first_item
+    assert "change_pct" not in first_item
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="T-145 sentinel: shared sentiment cache key still lets /market snapshot shape leak back into legacy /market-overview panel items.",
+)
+def test_market_overview_sentiment_cache_key_does_not_accept_market_snapshot_item_family() -> None:
+    service = MarketOverviewService()
+    service._market_cache.clear()
+    service._market_data_cache.clear()
+    service._market_cache.set(
+        "sentiment",
+        {
+            "items": [
+                {
+                    "symbol": "FGI",
+                    "label": "Fear & Greed",
+                    "price": 52,
+                    "change": -3.0,
+                    "trend": [60, 55, 52],
+                    "last_update": "2026-05-15T10:00:00+08:00",
+                    "error": None,
+                    "source": "cnn",
+                }
+            ],
+            "last_update": "2026-05-15T10:00:00+08:00",
+            "error": None,
+            "fallback_used": False,
+            "source": "cnn",
+        },
+        ttl_seconds=1800,
+    )
+
+    with patch("src.services.market_overview_service.ExecutionLogService", _ExecutionLogStub):
+        payload = service.get_sentiment()
+
+    first_item = payload["items"][0]
+    assert "value" in first_item
+    assert "change_pct" in first_item
+    assert "price" not in first_item
+    assert "change" not in first_item
 
 
 if __name__ == "__main__":

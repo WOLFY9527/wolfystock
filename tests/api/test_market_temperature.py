@@ -7,6 +7,8 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from api.v1.endpoints import market
 from src.services.market_overview_service import (
     MarketOverviewService,
@@ -274,3 +276,49 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="T-145 sentinel: legacy sentiment panel items still count as reliable temperature inputs under the shared sentiment cache seam.",
+)
+def test_temperature_confidence_excludes_legacy_sentiment_panel_family() -> None:
+    service = MarketOverviewService()
+    legacy_sentiment_panel = {
+        "source": "cnn",
+        "sourceLabel": "CNN",
+        "freshness": "live",
+        "isFallback": False,
+        "items": [
+            {
+                "symbol": "FGI",
+                "label": "Fear & Greed",
+                "value": 52,
+                "unit": "score",
+                "change_pct": -3.0,
+                "trend": [60, 55, 52],
+                "source": "cnn",
+                "freshness": "live",
+                "isFallback": False,
+            }
+        ],
+    }
+
+    trust = service._summarize_market_temperature_confidence(
+        {
+            "indices": {"items": []},
+            "breadth": {"items": []},
+            "flows": {"items": []},
+            "sectors": {"items": []},
+            "rates": {"items": []},
+            "fx": {"items": []},
+            "futures": {"items": []},
+            "sentiment": legacy_sentiment_panel,
+            "crypto": {"items": []},
+        }
+    )
+
+    assert trust["reliableInputCount"] == 0
+    assert trust["fallbackInputCount"] >= 1
+    assert trust["excludedInputCount"] >= 1
+    assert trust["isReliable"] is False

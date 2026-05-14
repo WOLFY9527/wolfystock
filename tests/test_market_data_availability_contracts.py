@@ -203,6 +203,40 @@ def test_fx_commodities_and_futures_proxy_or_stub_provenance_never_projects_as_o
     assert all(payload["freshnessLabel"] != "实时" for payload in cases.values())
 
 
+def test_sentiment_proxy_fallback_and_synthetic_payloads_never_project_as_live_or_official() -> None:
+    cases = {
+        "sentiment_fallback": project_source_provenance(
+            source="fallback",
+            freshness="live",
+            is_fallback=True,
+        ),
+        "sentiment_snapshot": project_source_provenance(
+            source="cached",
+            freshness="stale",
+            is_from_snapshot=True,
+        ),
+        "sentiment_proxy": project_source_provenance(
+            source="yfinance_proxy",
+            source_type="proxy_public",
+            freshness="delayed",
+        ),
+        "sentiment_synthetic": project_source_provenance(
+            source="synthetic_fixture",
+            freshness="synthetic_delayed",
+        ),
+    }
+
+    assert cases["sentiment_fallback"]["sourceType"] == "fallback_static"
+    assert cases["sentiment_snapshot"]["freshnessLabel"] != "实时"
+    assert cases["sentiment_proxy"]["sourceType"] == "unofficial_proxy"
+    assert cases["sentiment_synthetic"]["sourceType"] == "synthetic_fixture"
+    assert all(
+        payload["sourceType"] not in {"official_public", "exchange_public"}
+        for payload in cases.values()
+    )
+    assert all(payload["freshnessLabel"] != "实时" for payload in cases.values())
+
+
 def test_market_reliability_classifier_excludes_fallback_static_synthetic_missing_and_stale_inputs() -> None:
     cases = [
         (
@@ -404,3 +438,96 @@ def test_liquidity_monitor_only_scores_reliable_non_fallback_signals(
     assert indicators["futures_premarket"]["includedInScore"] is False
     assert indicators["futures_premarket"]["status"] == "unavailable"
     assert indicators["futures_premarket"]["freshness"] == "fallback"
+
+
+def test_liquidity_monitor_ignores_sentiment_cache_shape_variants(
+    isolated_db: DatabaseManager,
+) -> None:
+    def seed_panels(service: LiquidityMonitorService) -> None:
+        now = datetime(2026, 5, 7, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+        service.cache.set(
+            "volatility",
+            _cache_entry(
+                source="yfinance_proxy",
+                freshness="live",
+                items=[{"symbol": "VIX", "label": "VIX", "changePercent": -2.5, "value": 15.2}],
+                updated_at=now,
+                as_of=now,
+            ),
+            ttl_seconds=30,
+        )
+        service.cache.set(
+            "us_breadth",
+            _cache_entry(
+                source="yfinance_proxy",
+                freshness="live",
+                items=[
+                    {"symbol": "SECTORS_UP", "label": "Sectors Up", "value": 8},
+                    {"symbol": "SECTORS_DOWN", "label": "Sectors Down", "value": 3},
+                ],
+                updated_at=now,
+                as_of=now,
+            ),
+            ttl_seconds=30,
+        )
+        service.cache.set(
+            "funds_flow",
+            _cache_entry(
+                source="yfinance_proxy",
+                freshness="live",
+                items=[{"symbol": "ETF", "label": "ETF flows", "value": 1.2}],
+                updated_at=now,
+                as_of=now,
+            ),
+            ttl_seconds=30,
+        )
+        service.cache.set(
+            "cn_flows",
+            _cache_entry(
+                source="fallback",
+                freshness="fallback",
+                is_fallback=True,
+                items=[{"symbol": "NORTHBOUND", "label": "北向资金", "value": 88.8}],
+                updated_at=now,
+                as_of=now,
+                warning="备用快照",
+            ),
+            ttl_seconds=30,
+        )
+        service.cache.set(
+            "futures",
+            _cache_entry(
+                source="fallback",
+                freshness="fallback",
+                is_fallback=True,
+                items=[{"symbol": "NQ", "label": "纳指期货", "changePercent": 1.5, "value": 18420.0}],
+                updated_at=now,
+                as_of=now,
+                warning="备用快照",
+            ),
+            ttl_seconds=30,
+        )
+
+    baseline = _make_service()
+    seed_panels(baseline)
+    baseline_payload = baseline.get_liquidity_monitor()
+
+    poisoned = _make_service()
+    seed_panels(poisoned)
+    poisoned.cache.set(
+        "sentiment",
+        {
+            "source": "computed",
+            "updatedAt": "2026-05-15T10:00:00+08:00",
+            "scores": {"overall": {"value": 90, "label": "过热"}},
+        },
+        ttl_seconds=1800,
+    )
+    poisoned_payload = poisoned.get_liquidity_monitor()
+
+    assert baseline_payload["score"] == poisoned_payload["score"]
+    assert baseline_payload["freshness"] == poisoned_payload["freshness"]
+    assert [item["key"] for item in baseline_payload["indicators"]] == [
+        item["key"] for item in poisoned_payload["indicators"]
+    ]
+    assert all("sentiment" not in item["key"] for item in poisoned_payload["indicators"])

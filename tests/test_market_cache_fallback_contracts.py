@@ -3,13 +3,18 @@
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import Mock, patch
+
+import pytest
 
 from src.services.market_cache import MarketCache
 from src.services.market_overview_service import MarketOverviewService
+from src.storage import DatabaseManager
 
 
 CN_TZ = timezone(timedelta(hours=8))
@@ -131,3 +136,87 @@ def test_refresh_failure_preserves_old_safe_snapshot_and_sanitized_metadata() ->
     assert second["isStale"] is True
     assert second["isRefreshing"] is False
     assert cache.get("sentiment").data["value"] == 52
+
+
+def test_market_briefing_degrades_instead_of_emitting_strong_narrative_from_legacy_sentiment_shape_only() -> None:
+    service = MarketOverviewService()
+    service._market_cache.clear()
+    service._market_data_cache.clear()
+
+    legacy_sentiment_panel = {
+        "source": "cnn",
+        "sourceLabel": "CNN",
+        "freshness": "live",
+        "isFallback": False,
+        "items": [
+            {
+                "symbol": "FGI",
+                "label": "Fear & Greed",
+                "value": 52,
+                "unit": "score",
+                "change_pct": -3.0,
+                "trend": [60, 55, 52],
+                "source": "cnn",
+                "freshness": "live",
+                "isFallback": False,
+            }
+        ],
+    }
+    inputs = {
+        "indices": {"items": []},
+        "breadth": {"items": []},
+        "flows": {"items": []},
+        "sectors": {"items": []},
+        "rates": {"items": []},
+        "fx": {"items": []},
+        "futures": {"items": []},
+        "sentiment": legacy_sentiment_panel,
+        "crypto": {"items": []},
+        "fallback_notice": True,
+    }
+
+    with patch.object(service, "_build_market_temperature_inputs", return_value=inputs):
+        payload = service.get_market_briefing()
+
+    assert payload["source"] == "mixed"
+    assert payload["warning"] == "当前真实数据不足，暂不生成强市场判断。"
+    assert [item["title"] for item in payload["items"]] == [
+        "当前真实数据不足",
+        "备用数据已降级",
+        "等待真实行情源",
+    ]
+    assert all(item["category"] == "risk" for item in payload["items"])
+    assert all(item["severity"] in {"warning", "neutral"} for item in payload["items"])
+
+
+def test_persistent_cross_panel_sentiment_snapshot_is_served_stale_not_live(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "t145-sentiment-persistent.sqlite"
+    DatabaseManager.reset_instance()
+    DatabaseManager(db_url=f"sqlite:///{db_path}")
+    DatabaseManager.get_instance().save_market_overview_snapshot(
+        key="market_overview:sentiment",
+        payload={
+            "source": "computed",
+            "updatedAt": "2026-05-15T10:00:00+08:00",
+            "scores": {"overall": {"value": 62, "label": "偏暖"}},
+        },
+    )
+
+    service = MarketOverviewService()
+    service._market_cache.clear()
+    service._market_data_cache.clear()
+    with patch.dict(os.environ, {"MARKET_OVERVIEW_SNAPSHOT_TEST_DB": "1"}, clear=False):
+        with patch.object(service, "_fetch_market_sentiment_snapshot", side_effect=RuntimeError("provider down")):
+            payload = service.get_market_sentiment()
+
+    assert payload["isFromSnapshot"] is True
+    assert payload["freshness"] == "stale"
+    assert payload["freshness"] != "live"
+    assert payload["items"] == []
+    assert payload["warning"] == "数据源刷新失败，当前显示最近成功快照"
+    assert payload["providerHealth"]["status"] not in {"live", "cache"}
+    assert payload["providerHealth"]["sourceLabel"] == "Snapshot"
+
+    DatabaseManager.reset_instance()
