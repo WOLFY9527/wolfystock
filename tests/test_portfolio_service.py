@@ -686,6 +686,113 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(self.service.list_cash_ledger_events(account_id=aid)["total"], 1)
         self.assertEqual(self.service.list_corporate_action_events(account_id=aid)["total"], 1)
 
+    def test_risk_read_projection_cache_writes_remain_distinct_from_ledger_authority_rows(self) -> None:
+        account = self.service.create_account(name="Risk Cache", broker="Demo", market="us", base_currency="USD")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 4, 1),
+            direction="in",
+            amount=5000,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 4, 2),
+            side="buy",
+            quantity=20,
+            price=100,
+            fee=2,
+            tax=0,
+            market="us",
+            currency="USD",
+        )
+        self.service.record_corporate_action(
+            account_id=aid,
+            symbol="AAPL",
+            effective_date=date(2026, 4, 3),
+            action_type="cash_dividend",
+            market="us",
+            currency="USD",
+            cash_dividend_per_share=0.5,
+        )
+        self._save_close("AAPL", date(2026, 4, 4), 105.0)
+        before = self._ledger_counts()
+
+        with self.db.get_session() as session:
+            trade_ids_before = [
+                row.id
+                for row in session.execute(
+                    select(PortfolioTrade).where(PortfolioTrade.account_id == aid)
+                ).scalars().all()
+            ]
+            cash_ids_before = [
+                row.id
+                for row in session.execute(
+                    select(PortfolioCashLedger).where(PortfolioCashLedger.account_id == aid)
+                ).scalars().all()
+            ]
+            action_ids_before = [
+                row.id
+                for row in session.execute(
+                    select(PortfolioCorporateAction).where(PortfolioCorporateAction.account_id == aid)
+                ).scalars().all()
+            ]
+            self.assertEqual(
+                session.execute(
+                    select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == aid)
+                ).scalars().all(),
+                [],
+            )
+
+        report = PortfolioRiskService(portfolio_service=self.service).get_risk_report(
+            account_id=aid,
+            as_of=date(2026, 4, 4),
+            cost_method="fifo",
+        )
+
+        self.assertIn("riskDiagnostics", report)
+        self.assertIn("portfolioRiskEvidence", report)
+
+        with self.db.get_session() as session:
+            snapshot_rows = session.execute(
+                select(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id == aid)
+            ).scalars().all()
+            position_rows = session.execute(
+                select(PortfolioPosition).where(PortfolioPosition.account_id == aid)
+            ).scalars().all()
+            lot_rows = session.execute(
+                select(PortfolioPositionLot).where(PortfolioPositionLot.account_id == aid)
+            ).scalars().all()
+            trade_ids_after = [
+                row.id
+                for row in session.execute(
+                    select(PortfolioTrade).where(PortfolioTrade.account_id == aid)
+                ).scalars().all()
+            ]
+            cash_ids_after = [
+                row.id
+                for row in session.execute(
+                    select(PortfolioCashLedger).where(PortfolioCashLedger.account_id == aid)
+                ).scalars().all()
+            ]
+            action_ids_after = [
+                row.id
+                for row in session.execute(
+                    select(PortfolioCorporateAction).where(PortfolioCorporateAction.account_id == aid)
+                ).scalars().all()
+            ]
+
+        self.assertEqual(self._ledger_counts(), before)
+        self.assertEqual(trade_ids_after, trade_ids_before)
+        self.assertEqual(cash_ids_after, cash_ids_before)
+        self.assertEqual(action_ids_after, action_ids_before)
+        self.assertGreaterEqual(len(snapshot_rows), 1)
+        self.assertTrue(any(row.snapshot_date == date(2026, 4, 4) for row in snapshot_rows))
+        self.assertGreaterEqual(len(position_rows), 1)
+        self.assertGreaterEqual(len(lot_rows), 1)
+
     def test_snapshot_and_risk_reads_keep_ledger_rows_stable_across_risk_board_outcomes(self) -> None:
         scenarios = (
             ("success", [{"name": "白酒", "type": "行业"}], "白酒", 0, 0),
@@ -760,6 +867,11 @@ class PortfolioServiceTestCase(unittest.TestCase):
                 snapshot["portfolio_attribution"]["industry_attribution"]["top_industries"][0]["industry"],
                 expected_industry,
             )
+            self.assertEqual(snapshot["sourceAuthorityState"], "manual")
+            self.assertEqual(report["sourceAuthorityState"], "manual")
+            self.assertEqual(report["fxFreshnessState"], "fresh")
+            self.assertTrue(report["portfolioRiskEvidence"]["admin_diagnostics"]["sanitized_only"])
+            self.assertFalse(report["portfolioRiskEvidence"]["admin_diagnostics"]["raw_payload_stored"])
             self.assertEqual(report["industry_attribution"]["top_industries"][0]["industry"], expected_industry)
             self.assertEqual(report["sector_concentration"]["top_sectors"][0]["sector"], expected_industry)
             self.assertEqual(report["industry_attribution"]["coverage"]["failed_count"], expected_failed_count)

@@ -370,6 +370,36 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
             self._assert_public_export_safe_text(text)
         self.assertEqual(self._portfolio_counts(), before)
 
+    def test_snapshot_and_risk_reads_do_not_invoke_sync_import_or_fx_refresh_paths(self) -> None:
+        account_id = self._create_account(self.alice_client, "Alice Snapshot")
+        self._seed_activity(self.alice_client, account_id, "AAPL", "alice-snapshot-trade")
+        before = self._portfolio_counts()
+
+        with patch(
+            "src.services.portfolio_ibkr_sync_service.PortfolioIbkrSyncService.sync_read_only_account_state",
+            side_effect=AssertionError("sync called"),
+        ), patch(
+            "src.services.portfolio_import_service.PortfolioImportService.commit_import_records",
+            side_effect=AssertionError("import commit called"),
+        ), patch(
+            "src.services.portfolio_service.PortfolioService.refresh_fx_rates",
+            side_effect=AssertionError("fx refresh called"),
+        ):
+            snapshot = self.alice_client.get(
+                "/api/v1/portfolio/snapshot",
+                params={"account_id": account_id, "as_of": "2026-01-03", "cost_method": "fifo"},
+            )
+            risk = self.alice_client.get(
+                "/api/v1/portfolio/risk",
+                params={"account_id": account_id, "as_of": "2026-01-03", "cost_method": "fifo"},
+            )
+
+        self.assertEqual(snapshot.status_code, 200)
+        self.assertEqual(risk.status_code, 200)
+        self.assertIn("riskDiagnostics", self._json_text(snapshot))
+        self.assertIn("riskDiagnostics", self._json_text(risk))
+        self.assertEqual(self._portfolio_counts(), before)
+
     def test_import_idempotency_stays_with_authenticated_owner(self) -> None:
         alice_account = self._create_account(self.alice_client, "Alice Import")
         bob_account = self._create_account(self.bob_client, "Bob Import")

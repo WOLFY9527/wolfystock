@@ -134,6 +134,39 @@ class PortfolioRiskDiagnosticsTestCase(unittest.TestCase):
                 "sync_import.status",
             },
         )
+        self.assertTrue(diagnostics["portfolioRiskEvidence"]["admin_diagnostics"]["sanitized_only"])
+        self.assertFalse(diagnostics["portfolioRiskEvidence"]["admin_diagnostics"]["raw_payload_stored"])
+        self.assertEqual(
+            [
+                {
+                    "source_ref_id": item["source_ref_id"],
+                    "provider": item["provider"],
+                    "category": item["category"],
+                    "source_class": item["source_class"],
+                    "raw_payload_stored": item["raw_payload_stored"],
+                    "sanitized_reason_code": item["sanitized_reason_code"],
+                }
+                for item in diagnostics["portfolioRiskEvidence"]["source_refs"]
+            ],
+            [
+                {
+                    "source_ref_id": "portfolio_snapshot",
+                    "provider": "portfolio_snapshot",
+                    "category": "portfolio",
+                    "source_class": "local",
+                    "raw_payload_stored": False,
+                    "sanitized_reason_code": "snapshot_summary_only",
+                },
+                {
+                    "source_ref_id": "fx_snapshot",
+                    "provider": "fx_cache",
+                    "category": "portfolio",
+                    "source_class": "local",
+                    "raw_payload_stored": False,
+                    "sanitized_reason_code": "fx_summary_only",
+                },
+            ],
+        )
 
     def test_missing_holdings_cash_and_unknown_authority_fail_closed(self) -> None:
         snapshot = {
@@ -264,6 +297,8 @@ class PortfolioRiskDiagnosticsTestCase(unittest.TestCase):
         self.assertIn("factor_risk_claims_disabled", diagnostics["confidenceCap"]["disabled_claims"])
         self.assertIn("基准映射暂缺", diagnostics["confidenceCap"]["limitation_labels"])
         self.assertIn("因子映射暂缺", diagnostics["confidenceCap"]["limitation_labels"])
+        self.assertTrue(diagnostics["portfolioRiskEvidence"]["admin_diagnostics"]["sanitized_only"])
+        self.assertFalse(diagnostics["portfolioRiskEvidence"]["admin_diagnostics"]["raw_payload_stored"])
 
         payload_text = json.dumps(diagnostics, ensure_ascii=False, sort_keys=True)
         self.assertNotIn("SUPERSECRET", payload_text)

@@ -79,9 +79,13 @@ SNAPSHOT_REQUIRED_KEYS = {
     "fxFreshnessState",
     "holdingsLineageState",
     "cashLedgerCompletenessState",
+    "benchmarkMappingState",
+    "factorMappingState",
     "confidenceCap",
     "accounts",
 }
+RISK_DIAGNOSTICS_REQUIRED_KEYS = {"version", "authority", "calculation_owner", "warnings"}
+RISK_DIAGNOSTIC_WARNING_KEYS = {"code", "severity", "message"}
 POSITION_REQUIRED_KEYS = {
     "symbol",
     "market",
@@ -161,12 +165,17 @@ def test_portfolio_snapshot_golden_fixture_matches_public_read_model_contract() 
     assert risk["holding_count"] == sum(len(account["positions"]) for account in snapshot["accounts"])
     assert risk["account_count"] == snapshot["account_count"]
     assert risk["warnings"] == ["usd_fx_rate_stale"]
+    assert set(snapshot["riskDiagnostics"]) == RISK_DIAGNOSTICS_REQUIRED_KEYS
     assert snapshot["riskDiagnostics"]["authority"] == "backend_read_model"
     assert snapshot["riskDiagnostics"]["calculation_owner"] == "backend"
+    assert all(set(item) == RISK_DIAGNOSTIC_WARNING_KEYS for item in snapshot["riskDiagnostics"]["warnings"])
     assert snapshot["portfolioRiskEvidence"]["source_payload_redacted"] is True
     assert snapshot["sourceAuthorityState"] == "backend_authoritative_read_model"
+    assert snapshot["fxFreshnessState"] == "stale"
     assert snapshot["holdingsLineageState"] == "ledger_backed"
     assert snapshot["cashLedgerCompletenessState"] == "complete"
+    assert snapshot["benchmarkMappingState"] == "mapped"
+    assert snapshot["factorMappingState"] == "partial"
 
     for account in snapshot["accounts"]:
         assert account["total_equity"] == account["total_cash"] + account["total_market_value"]
@@ -231,6 +240,11 @@ def test_portfolio_ledger_and_transaction_fixtures_freeze_backend_owned_mutation
         "read_model_owner": "backend",
         "ui_authoritative_accounting": False,
     }
+    assert sorted(payload["authority"]) == [
+        "mutation_owner",
+        "read_model_owner",
+        "ui_authoritative_accounting",
+    ]
     _assert_no_sensitive_public_payload(payload)
     _assert_no_ui_owned_accounting_authority(payload)
 
