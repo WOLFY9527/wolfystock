@@ -34,6 +34,24 @@ class MarketCnFlowsApiTestCase(unittest.TestCase):
         self.assertTrue(payload["fallbackUsed"])
         self.assertTrue(payload["items"])
 
+    def test_cn_flows_remain_fallback_and_do_not_reuse_tickflow_breadth(self) -> None:
+        service = MarketOverviewService()
+        service._market_cache.clear()
+        MarketOverviewService._market_data_cache.clear()
+
+        with patch(
+            "src.services.market_overview_service.fetch_tickflow_cn_breadth_snapshot",
+            side_effect=AssertionError("CN flows must not reuse TickFlow breadth"),
+        ):
+            payload = service.get_cn_flows()
+
+        self.assertEqual(payload["source"], "fallback")
+        self.assertEqual(payload["sourceLabel"], "备用数据")
+        self.assertTrue(payload["fallbackUsed"])
+        self.assertTrue(all(item["source"] == "fallback" for item in payload["items"]))
+        self.assertNotIn("tickflow", str(payload).lower())
+        self.assertNotIn("TickFlow", str(payload))
+
 
 if __name__ == "__main__":
     unittest.main()

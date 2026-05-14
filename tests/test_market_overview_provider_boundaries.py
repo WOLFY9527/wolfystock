@@ -150,6 +150,26 @@ def _yfinance_history_call_shapes(path: Path) -> list[dict[str, object]]:
     return call_shapes
 
 
+def _method_call_names(path: Path, class_name: str, method_name: str) -> set[str]:
+    tree = _python_tree(path)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef) or node.name != class_name:
+            continue
+        for child in node.body:
+            if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) or child.name != method_name:
+                continue
+            calls: set[str] = set()
+            for descendant in ast.walk(child):
+                if not isinstance(descendant, ast.Call):
+                    continue
+                if isinstance(descendant.func, ast.Attribute):
+                    calls.add(descendant.func.attr)
+                elif isinstance(descendant.func, ast.Name):
+                    calls.add(descendant.func.id)
+            return calls
+    raise AssertionError(f"expected {class_name}.{method_name} in {path}")
+
+
 def test_market_endpoints_delegate_to_market_overview_service() -> None:
     expected_calls = {
         "get_crypto": "get_crypto",
@@ -240,6 +260,23 @@ def test_market_overview_tickflow_breadth_provider_keeps_runtime_boundary_narrow
         or module == "yfinance"
         or module.startswith("yfinance.")
     }
+
+
+def test_market_overview_service_keeps_cn_flows_and_tickflow_breadth_separate() -> None:
+    cn_breadth_calls = _method_call_names(
+        MARKET_OVERVIEW_SERVICE_FILE,
+        "MarketOverviewService",
+        "_fetch_cn_breadth_snapshot",
+    )
+    cn_flows_calls = _method_call_names(
+        MARKET_OVERVIEW_SERVICE_FILE,
+        "MarketOverviewService",
+        "_fetch_cn_flows_snapshot",
+    )
+
+    assert "fetch_tickflow_cn_breadth_snapshot" in cn_breadth_calls
+    assert "fetch_tickflow_cn_breadth_snapshot" not in cn_flows_calls
+    assert "_fallback_cn_flows_snapshot" in cn_flows_calls
 
 
 def test_market_overview_transport_modules_stay_runtime_lightweight() -> None:

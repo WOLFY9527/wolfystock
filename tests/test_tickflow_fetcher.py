@@ -246,6 +246,19 @@ class TestTickFlowFetcher(unittest.TestCase):
 
         self.assertIsNone(fetcher.get_market_stats())
 
+    def test_get_market_stats_ignores_non_cn_equity_rows(self):
+        fetcher = TickFlowFetcher(api_key="sk-test")
+        fetcher._client = _FakeClient(
+            universe_data=[
+                _quote("00700.HK", last_price=500.0, prev_close=495.0, amount=1e8, name="Tencent"),
+                _quote("AAPL.US", last_price=200.0, prev_close=198.0, amount=1e8, name="Apple"),
+                _quote("BTCUSDT", last_price=65000.0, prev_close=64000.0, amount=1e8, name="BTC"),
+            ]
+        )
+
+        self.assertIsNone(fetcher.get_market_stats())
+        self.assertEqual(fetcher._client.quotes.calls[0]["universes"], ["CN_Equity_A"])
+
     def test_get_market_stats_returns_none_when_universe_query_not_supported(self):
         fetcher = TickFlowFetcher(api_key="sk-test")
         fetcher._client = _FakeClient(

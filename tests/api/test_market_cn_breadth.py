@@ -96,6 +96,62 @@ class MarketCnBreadthApiTestCase(unittest.TestCase):
         self.assertNotIn("SECRET", str(payload))
         self.assertNotIn("https://api.tickflow.test/raw", str(payload))
 
+    def test_cn_breadth_keeps_tickflow_provenance_bounded_and_non_official(self) -> None:
+        service = MarketOverviewService()
+        service._market_cache.clear()
+        MarketOverviewService._market_data_cache.clear()
+
+        with patch(
+            "src.services.market_overview_service.fetch_tickflow_cn_breadth_snapshot",
+            return_value={
+                "source": "tickflow",
+                "sourceLabel": "TickFlow",
+                "sourceType": "public_api",
+                "updatedAt": "2026-05-14T09:30:00+08:00",
+                "asOf": "2026-05-14T09:30:00+08:00",
+                "advancers": 2800,
+                "decliners": 1700,
+                "limitUp": 72,
+                "limitDown": 19,
+                "advRatio": 61.2,
+                "effect": 61,
+            },
+        ):
+            payload = service.get_cn_breadth()
+
+        self.assertEqual(payload["source"], "tickflow")
+        self.assertEqual(payload["sourceLabel"], "TickFlow")
+        self.assertEqual(payload["sourceType"], "public_api")
+        self.assertNotIn(payload["sourceType"], {"official_public", "exchange_public"})
+        self.assertTrue(all(item["source"] == "tickflow" for item in payload["items"]))
+        self.assertTrue(all(item["sourceLabel"] == "TickFlow" for item in payload["items"]))
+        self.assertTrue(all(item["sourceType"] == "public_api" for item in payload["items"]))
+
+    def test_cn_breadth_falls_back_for_tickflow_guard_reason_codes(self) -> None:
+        service = MarketOverviewService()
+        service._market_cache.clear()
+        MarketOverviewService._market_data_cache.clear()
+
+        for reason in (
+            "tickflow_not_configured",
+            "tickflow_permission_unavailable",
+            "tickflow_market_stats_empty",
+            "tickflow_market_stats_malformed",
+        ):
+            with self.subTest(reason=reason):
+                service._market_cache.clear()
+                MarketOverviewService._market_data_cache.clear()
+                with patch(
+                    "src.services.market_overview_service.fetch_tickflow_cn_breadth_snapshot",
+                    side_effect=RuntimeError(reason),
+                ):
+                    payload = service.get_cn_breadth()
+
+                self.assertEqual(payload["source"], "fallback")
+                self.assertTrue(payload["fallbackUsed"])
+                self.assertEqual(payload["fallbackReason"], reason)
+                self.assertTrue(payload["items"])
+
 
 if __name__ == "__main__":
     unittest.main()

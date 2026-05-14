@@ -179,3 +179,38 @@ def test_provider_capability_import_has_no_runtime_planner_side_effect() -> None
     after = planner.build_analysis_provider_plan("AAPL", market="us").categories
 
     assert before == after
+
+
+def test_cn_hk_runtime_providers_are_not_accidentally_advertised_in_capability_matrix() -> None:
+    for provider_id in ("tickflow", "akshare", "efinance", "tushare"):
+        assert get_provider_capability(provider_id) is None
+
+
+def test_hk_quote_and_ohlcv_provider_matrix_remains_bounded_to_current_metadata() -> None:
+    hk_quote_providers = {
+        capability.provider_id
+        for capability in providers_for_domain(ProviderDomain.QUOTE)
+        if ProviderMarket.HK in capability.markets
+    }
+    hk_ohlcv_providers = {
+        capability.provider_id
+        for capability in providers_for_domain(ProviderDomain.OHLCV)
+        if ProviderMarket.HK in capability.markets
+    }
+
+    assert hk_quote_providers == {
+        "local_cache",
+        "twelve_data",
+        "yahoo_yfinance",
+    }
+    assert hk_ohlcv_providers == {
+        "local_cache",
+        "local_ohlcv",
+        "twelve_data",
+        "yahoo_yfinance",
+    }
+
+    twelve_data = get_provider_capability("twelve_data")
+    assert twelve_data is not None
+    assert twelve_data.scanner_usage is ScannerUsage.TOP_N_ONLY
+    assert twelve_data.freshness_class is FreshnessClass.DELAYED
