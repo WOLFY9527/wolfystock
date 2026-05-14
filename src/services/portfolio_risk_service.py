@@ -22,11 +22,12 @@ class PortfolioRiskService:
         repo: Optional[PortfolioRepository] = None,
         portfolio_service: Optional[PortfolioService] = None,
         config: Optional[Config] = None,
+        board_lookup: Optional[PortfolioRiskBoardLookup] = None,
     ):
         self.repo = repo or PortfolioRepository()
         self.portfolio_service = portfolio_service or PortfolioService(repo=self.repo)
         self.config = config or get_config()
-        self._board_lookup = PortfolioRiskBoardLookup()
+        self._board_lookup = board_lookup or PortfolioRiskBoardLookup()
 
     def get_risk_report(
         self,

@@ -76,14 +76,14 @@ class PortfolioRiskBoardLookupTestCase(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "lookup failed"):
             adapter.fetch_belong_boards("600519")
 
-    def test_portfolio_risk_service_fetch_belong_boards_remains_delegating_patch_point(self) -> None:
+    def test_portfolio_risk_service_fetch_belong_boards_uses_constructor_injected_lookup(self) -> None:
         fake_lookup = SimpleNamespace(fetch_belong_boards=MagicMock(return_value=[{"name": "白酒", "type": "行业"}]))
         service = PortfolioRiskService(
             repo=MagicMock(),
             portfolio_service=MagicMock(),
             config=SimpleNamespace(),
+            board_lookup=fake_lookup,
         )
-        service._board_lookup = fake_lookup
 
         result = service._fetch_belong_boards("600519")
 
