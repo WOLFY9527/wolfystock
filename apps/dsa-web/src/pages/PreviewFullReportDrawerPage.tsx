@@ -1,13 +1,17 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { WorkspacePageHeader } from '../components/common';
 import { TerminalPageShell } from '../components/terminal';
-import { ReportMarkdown } from '../components/report';
 import { previewReport } from '../dev/reportPreviewFixture';
 import { normalizeFrontendReportContract } from '../api/reportNormalizer';
 import type { ReportLanguage } from '../types/analysis';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { translate } from '../i18n/core';
+
+const LazyReportMarkdown = lazy(async () => {
+  const module = await import('../components/report/ReportMarkdown');
+  return { default: module.ReportMarkdown };
+});
 
 const PreviewFullReportDrawerPage: React.FC = () => {
   const { t } = useI18n();
@@ -70,15 +74,35 @@ const PreviewFullReportDrawerPage: React.FC = () => {
       </div>
 
       {drawerOpen ? (
-        <ReportMarkdown
-          recordId={-1}
-          stockName={stockName}
-          stockCode="NVDA"
-          onClose={() => setDrawerOpen(false)}
-          reportLanguage={language}
-          standardReport={normalizedPreviewReport.details?.standardReport}
-          initialContent={content}
-        />
+        <Suspense
+          fallback={(
+            <div
+              data-testid="preview-full-report-loading"
+              aria-busy="true"
+              aria-live="polite"
+              aria-label={t('previewFullReport.title')}
+              className="theme-panel-subtle rounded-[1.25rem] px-5 py-5 md:px-6"
+            >
+              <div className="flex items-center gap-3">
+                <div className="home-spinner h-5 w-5 animate-spin border-2" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-32 rounded-full bg-white/10" />
+                  <div className="h-3 w-full max-w-[22rem] rounded-full bg-white/5" />
+                </div>
+              </div>
+            </div>
+          )}
+        >
+          <LazyReportMarkdown
+            recordId={-1}
+            stockName={stockName}
+            stockCode="NVDA"
+            onClose={() => setDrawerOpen(false)}
+            reportLanguage={language}
+            standardReport={normalizedPreviewReport.details?.standardReport}
+            initialContent={content}
+          />
+        </Suspense>
       ) : null}
     </TerminalPageShell>
   );

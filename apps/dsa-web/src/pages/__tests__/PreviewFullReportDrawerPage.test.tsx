@@ -5,7 +5,12 @@ import { translate } from '../../i18n/core';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import PreviewFullReportDrawerPage from '../PreviewFullReportDrawerPage';
 
-vi.mock('../../components/report', () => ({
+vi.mock('../../components/report/ReportMarkdown', async () => {
+  await new Promise((resolve) => {
+    setTimeout(resolve, 25);
+  });
+
+  return {
   ReportMarkdown: ({ onClose, stockName, initialContent }: { onClose: () => void; stockName: string; initialContent: string }) => (
     <div>
       <div data-testid="report-markdown">drawer content</div>
@@ -14,10 +19,11 @@ vi.mock('../../components/report', () => ({
       <button type="button" onClick={onClose}>close</button>
     </div>
   ),
-}));
+  };
+});
 
 describe('PreviewFullReportDrawerPage', () => {
-  it('opens the drawer in Chinese and English', () => {
+  it('opens the drawer in Chinese and English', async () => {
     render(
       <MemoryRouter initialEntries={['/__preview/full-report']}>
         <UiLanguageProvider>
@@ -32,7 +38,9 @@ describe('PreviewFullReportDrawerPage', () => {
     expect(page).not.toHaveClass('workspace-page--preview');
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'previewFullReport.openChinese') }));
-    expect(screen.getByTestId('report-markdown')).toBeInTheDocument();
+    expect(await screen.findByTestId('preview-full-report-loading')).toBeInTheDocument();
+    expect(await screen.findByTestId('report-markdown')).toBeInTheDocument();
+    expect(screen.queryByTestId('preview-full-report-loading')).not.toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'previewFullReport.stockName'))).toBeInTheDocument();
     expect(screen.getByTestId('report-markdown-content').textContent).toContain(translate('zh', 'previewFullReport.markdown').slice(0, 24));
 
