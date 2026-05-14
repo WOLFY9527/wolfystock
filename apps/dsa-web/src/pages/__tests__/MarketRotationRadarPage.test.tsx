@@ -392,6 +392,16 @@ describe('MarketRotationRadarPage', () => {
     expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
   });
 
+  it('keeps shell spacing on TerminalPageShell with the shared desktop rhythm', async () => {
+    render(<MarketRotationRadarPage />);
+
+    const page = await screen.findByTestId('market-rotation-radar-page');
+    const shell = page.querySelector('[data-terminal-primitive="page-shell"]');
+
+    expect(page).not.toHaveClass('py-5', 'md:py-6');
+    expect(shell).toHaveClass('py-5', 'md:py-6');
+  });
+
   it('switches market tabs to populated CN HK and Crypto taxonomy universes', async () => {
     render(<MarketRotationRadarPage />);
 
