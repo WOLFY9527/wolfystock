@@ -72,3 +72,43 @@ def test_missing_source_defaults_to_missing_labels() -> None:
     assert resolve_source_type(source=None, source_type=None) == "missing"
     assert resolve_source_label(source=None, source_type=None) == "未接入"
     assert resolve_freshness_label("unavailable") == "不可用"
+
+
+def test_scanner_local_sources_keep_specific_cache_labels() -> None:
+    expected = {
+        "local_universe_cache": ("cache_snapshot", "本地候选缓存"),
+        "local_us_parquet_dir": ("cache_snapshot", "本地 Parquet 历史"),
+        "local_db": ("cache_snapshot", "本地数据库历史"),
+        "local_db_us_history": ("cache_snapshot", "本地数据库历史"),
+        "local_db_hk_history": ("cache_snapshot", "本地数据库历史"),
+    }
+
+    for source, (source_type, source_label) in expected.items():
+        assert resolve_source_type(source=source) == source_type
+        assert resolve_source_label(source=source, source_type=source_type) == source_label
+
+
+def test_scanner_seed_and_degraded_sources_keep_fallback_labels() -> None:
+    expected = {
+        "curated_us_liquid_seed": ("fallback_static", "精选美股种子池"),
+        "curated_hk_liquid_seed": ("fallback_static", "精选港股种子池"),
+        "builtin_stock_mapping": ("fallback_static", "内置股票映射"),
+        "local_history_degraded": ("fallback_static", "本地历史降级快照"),
+    }
+
+    for source, (source_type, source_label) in expected.items():
+        assert resolve_source_type(source=source) == source_type
+        assert resolve_source_label(source=source, source_type=source_type) == source_label
+
+
+def test_scanner_fetcher_and_manager_sources_keep_provider_labels() -> None:
+    expected = {
+        "TushareFetcher": ("official_public", "Tushare"),
+        "AkshareFetcher": ("public_proxy", "AkShare"),
+        "EfinanceFetcher": ("public_proxy", "Efinance"),
+        "DataFetcherManager": ("public_proxy", "DataFetcherManager"),
+    }
+
+    for source, (source_type, source_label) in expected.items():
+        assert resolve_source_type(source=source) == source_type
+        assert resolve_source_label(source=source, source_type=source_type) == source_label

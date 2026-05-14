@@ -18,21 +18,34 @@ CANONICAL_SOURCE_TYPES = {
 }
 
 SOURCE_TYPE_BY_SOURCE = {
+    "aksharefetcher": "public_proxy",
     "alternative": "official_public",
     "alternative_me": "official_public",
     "binance": "exchange_public",
     "binance_ws": "exchange_public",
+    "builtin_stock_mapping": "fallback_static",
     "cache": "cache_snapshot",
     "cached": "cache_snapshot",
     "cnn": "official_public",
+    "curated_hk_liquid_seed": "fallback_static",
+    "curated_us_liquid_seed": "fallback_static",
+    "datafetchermanager": "public_proxy",
     "eastmoney": "official_public",
+    "efinancefetcher": "public_proxy",
     "fallback": "fallback_static",
     "fixture": "synthetic_fixture",
+    "local_db": "cache_snapshot",
+    "local_db_hk_history": "cache_snapshot",
+    "local_db_us_history": "cache_snapshot",
+    "local_history_degraded": "fallback_static",
+    "local_universe_cache": "cache_snapshot",
+    "local_us_parquet_dir": "cache_snapshot",
     "mock": "synthetic_fixture",
     "snapshot": "cache_snapshot",
     "sina": "official_public",
     "synthetic": "synthetic_fixture",
     "synthetic_fixture": "synthetic_fixture",
+    "tusharefetcher": "official_public",
     "unit_fixture": "synthetic_fixture",
     "unavailable": "missing",
     "yahoo": "unofficial_proxy",
@@ -66,21 +79,34 @@ SOURCE_TYPE_ALIASES = {
 }
 
 SOURCE_LABEL_BY_SOURCE = {
+    "aksharefetcher": "AkShare",
     "alternative": "Alternative.me",
     "alternative_me": "Alternative.me",
     "binance": "Binance",
     "binance_ws": "Binance",
+    "builtin_stock_mapping": "内置股票映射",
     "cache": "缓存快照",
     "cached": "缓存快照",
     "cnn": "CNN",
+    "curated_hk_liquid_seed": "精选港股种子池",
+    "curated_us_liquid_seed": "精选美股种子池",
+    "datafetchermanager": "DataFetcherManager",
     "eastmoney": "东方财富",
+    "efinancefetcher": "Efinance",
     "fallback": "备用数据",
     "fixture": "Synthetic Fixture",
+    "local_db": "本地数据库历史",
+    "local_db_hk_history": "本地数据库历史",
+    "local_db_us_history": "本地数据库历史",
+    "local_history_degraded": "本地历史降级快照",
+    "local_universe_cache": "本地候选缓存",
+    "local_us_parquet_dir": "本地 Parquet 历史",
     "mock": "模拟数据",
     "snapshot": "缓存快照",
     "sina": "新浪财经",
     "synthetic": "Synthetic Fixture",
     "synthetic_fixture": "Synthetic Fixture",
+    "tusharefetcher": "Tushare",
     "unit_fixture": "Unit Fixture",
     "unavailable": "未接入",
     "yahoo": "Yahoo Finance",
@@ -168,10 +194,13 @@ def resolve_source_label(
         is_from_snapshot=is_from_snapshot,
         no_external_calls=no_external_calls,
     )
+    if (
+        normalized_source in SOURCE_LABEL_BY_SOURCE
+        and SOURCE_TYPE_BY_SOURCE.get(normalized_source) == resolved_type
+    ):
+        return SOURCE_LABEL_BY_SOURCE[normalized_source]
     if resolved_type in {"cache_snapshot", "fallback_static", "missing"}:
         return SOURCE_LABEL_BY_TYPE.get(resolved_type, "公开数据")
-    if normalized_source in SOURCE_LABEL_BY_SOURCE:
-        return SOURCE_LABEL_BY_SOURCE[normalized_source]
     return SOURCE_LABEL_BY_TYPE.get(resolved_type, "公开数据")
 
 

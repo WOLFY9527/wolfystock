@@ -20,6 +20,7 @@ from data_provider.base import BaseFetcher, DataFetchError, DataFetcherManager, 
 from src.repositories.stock_repo import StockRepository
 from src.core.scanner_profile import get_scanner_profile
 from src.core.scanner_theme_registry import create_ai_scanner_theme, get_scanner_theme
+from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
 from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION
 from src.storage import DatabaseManager, MarketScannerRun
@@ -1745,6 +1746,42 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             providers["providers_used"],
             ["FakeDailySource", "FakeSnapshotSource", "local_db", "local_universe_cache"],
         )
+
+    def test_scanner_runtime_source_tokens_keep_registry_backed_provenance_labels(self) -> None:
+        detail = self.service.run_scan(
+            market="cn",
+            profile="cn_preopen_v1",
+            shortlist_size=2,
+            universe_limit=50,
+            detail_limit=10,
+        )
+
+        providers = detail["diagnostics"]["provider_diagnostics"]["providers_used"]
+        self.assertIn("local_db", providers)
+        self.assertIn("local_universe_cache", providers)
+        self.assertEqual(resolve_source_type("local_db"), "cache_snapshot")
+        self.assertEqual(resolve_source_label("local_db"), "本地数据库历史")
+        self.assertEqual(resolve_source_type("local_universe_cache"), "cache_snapshot")
+        self.assertEqual(resolve_source_label("local_universe_cache"), "本地候选缓存")
+
+        profile = get_scanner_profile(market="us", profile="us_preopen_v1")
+        with patch.object(
+            MarketScannerService,
+            "_load_local_us_universe_from_parquet",
+            return_value=["NVDA", "AAPL"],
+        ):
+            with patch.object(self.service, "_load_local_us_universe_from_db", return_value=["PLTR"]):
+                universe = self.service._resolve_us_stock_universe(profile=profile, target_symbol_count=50)
+
+        self.assertTrue(universe["source"].startswith("local_us_parquet_dir"))
+        self.assertIn("curated_us_liquid_seed", universe["source"])
+        self.assertEqual(resolve_source_type("local_us_parquet_dir"), "cache_snapshot")
+        self.assertEqual(resolve_source_label("local_us_parquet_dir"), "本地 Parquet 历史")
+        self.assertEqual(resolve_source_type("curated_us_liquid_seed"), "fallback_static")
+        self.assertEqual(resolve_source_label("curated_us_liquid_seed"), "精选美股种子池")
+
+        self.assertEqual(resolve_source_type("local_history_degraded"), "fallback_static")
+        self.assertEqual(resolve_source_label("local_history_degraded"), "本地历史降级快照")
 
 
 if __name__ == "__main__":
