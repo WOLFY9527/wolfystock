@@ -10,6 +10,7 @@ import sys
 from src.services.market_data_source_registry import CANONICAL_SOURCE_TYPES
 from src.services.official_macro_source_registry import (
     get_official_macro_source,
+    get_official_macro_source_for_transport_source,
     list_official_macro_sources,
 )
 
@@ -55,6 +56,16 @@ def test_lookup_is_case_insensitive_and_exposes_expected_series_codes() -> None:
     assert contract.source_id == "FRED_DGS10"
     assert contract.display_name == "FRED US Treasury 10Y Constant Maturity"
     assert contract.series_codes == ("DGS10",)
+
+
+def test_transport_source_lookup_maps_runtime_source_ids_back_to_contracts() -> None:
+    treasury_contract = get_official_macro_source_for_transport_source("treasury:daily_treasury_yield_curve")
+    vix_contract = get_official_macro_source_for_transport_source("fred:VIXCLS")
+
+    assert treasury_contract is not None
+    assert treasury_contract.source_id == "TREASURY_DAILY_RATES"
+    assert vix_contract is not None
+    assert vix_contract.source_id == "FRED_VIXCLS"
 
 
 def test_optional_credit_spread_contract_stays_observation_only_placeholder() -> None:

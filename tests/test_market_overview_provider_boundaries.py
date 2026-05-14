@@ -10,11 +10,13 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MARKET_ENDPOINT_FILE = REPO_ROOT / "api" / "v1" / "endpoints" / "market.py"
 MARKET_OVERVIEW_SERVICE_FILE = REPO_ROOT / "src" / "services" / "market_overview_service.py"
+OFFICIAL_MACRO_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "official_macro_transport.py"
 MARKET_OVERVIEW_BINANCE_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_binance_transport.py"
 MARKET_OVERVIEW_SENTIMENT_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_sentiment_transport.py"
 MARKET_OVERVIEW_SINA_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_sina_transport.py"
 MARKET_OVERVIEW_YFINANCE_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_yfinance_transport.py"
 MARKET_OVERVIEW_TRANSPORT_FILES = (
+    OFFICIAL_MACRO_TRANSPORT_FILE,
     MARKET_OVERVIEW_BINANCE_TRANSPORT_FILE,
     MARKET_OVERVIEW_SENTIMENT_TRANSPORT_FILE,
     MARKET_OVERVIEW_SINA_TRANSPORT_FILE,
@@ -186,6 +188,8 @@ def test_market_overview_service_extracts_raw_transport_boundaries() -> None:
     service_urls = _requests_get_urls(MARKET_OVERVIEW_SERVICE_FILE)
 
     assert "src.services.market_data_source_registry" in service_imports
+    assert "src.services.official_macro_source_registry" in service_imports
+    assert "src.services.official_macro_transport" in service_imports
     assert "src.services.market_overview_binance_transport" in service_imports
     assert "src.services.market_overview_sentiment_transport" in service_imports
     assert "src.services.market_overview_sina_transport" in service_imports
@@ -228,11 +232,13 @@ def test_market_overview_raw_http_calls_are_confined_to_http_transport_modules()
             MARKET_OVERVIEW_SENTIMENT_TRANSPORT_FILE,
             MARKET_OVERVIEW_SINA_TRANSPORT_FILE,
             MARKET_OVERVIEW_YFINANCE_TRANSPORT_FILE,
+            OFFICIAL_MACRO_TRANSPORT_FILE,
             MARKET_OVERVIEW_SERVICE_FILE,
         )
     }
 
     assert actual_mapping == {
+        "official_macro_transport.py": set(),
         "market_overview_binance_transport.py": {
             "https://api.binance.com/api/v3/ticker/24hr",
             "https://api.binance.com/api/v3/klines",
@@ -299,6 +305,7 @@ def test_market_overview_yfinance_transport_owns_yfinance_history_call_shapes() 
 
 
 def test_market_overview_yfinance_history_calls_are_confined_to_yfinance_transport() -> None:
+    assert _yfinance_history_call_shapes(OFFICIAL_MACRO_TRANSPORT_FILE) == []
     assert _yfinance_history_call_shapes(MARKET_OVERVIEW_BINANCE_TRANSPORT_FILE) == []
     assert _yfinance_history_call_shapes(MARKET_OVERVIEW_SENTIMENT_TRANSPORT_FILE) == []
     assert _yfinance_history_call_shapes(MARKET_OVERVIEW_SINA_TRANSPORT_FILE) == []

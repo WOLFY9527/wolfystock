@@ -151,6 +151,33 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertEqual(trust["confidence"], 0.7)
         self.assertLess(trust["confidence"], 1.0)
 
+    def test_official_public_inputs_count_as_reliable_temperature_sources(self) -> None:
+        service = MarketOverviewService()
+        inputs = {
+            "futures": {
+                "items": [
+                    {"symbol": "ES", "value": 5238, "changePercent": 0.2, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+                    {"symbol": "NQ", "value": 18320, "changePercent": 0.4, "source": "yahoo", "freshness": "delayed", "isFallback": False},
+                ]
+            },
+            "sentiment": {"items": [{"symbol": "FGI", "value": 70, "source": "cnn", "freshness": "cached", "isFallback": False}]},
+            "rates": {
+                "items": [
+                    {"symbol": "US10Y", "value": 4.41, "changePercent": -0.9, "source": "treasury", "sourceType": "official_public", "freshness": "cached", "isFallback": False},
+                    {"symbol": "VIX", "value": 18.22, "changePercent": -4.66, "source": "fred", "sourceType": "official_public", "freshness": "cached", "isFallback": False},
+                ]
+            },
+            "fx": {"items": [{"symbol": "DXY", "value": 104.2, "changePercent": -0.3, "source": "yahoo", "freshness": "delayed", "isFallback": False}]},
+        }
+
+        with patch.object(service, "_build_market_temperature_inputs", return_value=inputs):
+            payload = service.get_market_temperature()
+
+        self.assertTrue(payload["isReliable"])
+        self.assertGreaterEqual(payload["reliableInputCount"], 5)
+        self.assertEqual(payload["fallbackInputCount"], 0)
+        self.assertGreater(payload["confidence"], 0.7)
+
     def test_missing_required_market_inputs_blocks_temperature_decision_output(self) -> None:
         service = MarketOverviewService()
         inputs = {

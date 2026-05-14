@@ -7,7 +7,10 @@ from dataclasses import dataclass, field
 import csv
 from datetime import datetime
 from io import StringIO
+import json
 from typing import Any, Iterable, Mapping, Sequence
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 
 FRED_OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations"
@@ -32,6 +35,7 @@ FRED_FRESHNESS_HINTS = {
 }
 TREASURY_FRESHNESS_HINT = "daily_1530_et"
 NYFED_SOFR_UNSUPPORTED_REASON = "nyfed_sofr_shape_undocumented"
+DEFAULT_TRANSPORT_TIMEOUT_SECONDS = 4.0
 
 
 @dataclass(frozen=True)
@@ -119,25 +123,35 @@ def parse_fred_observations_payload(series_id: str, payload: Any) -> MacroObserv
     normalized_series = _validate_fred_series_id(series_id)
     source_id = f"fred:{normalized_series}"
     freshness_hint = FRED_FRESHNESS_HINTS[normalized_series]
-
-    if not isinstance(payload, Mapping):
+    points = parse_fred_observation_points_payload(normalized_series, payload, limit=1)
+    if not points:
         return _unavailable_observation(
             normalized_series,
             source_id=source_id,
             freshness_hint=freshness_hint,
-            reason="fred_payload_not_mapping",
+            reason="fred_observation_value_unavailable",
         )
+    return points[0]
+
+
+def parse_fred_observation_points_payload(
+    series_id: str,
+    payload: Any,
+    *,
+    limit: int = 2,
+) -> list[MacroObservation]:
+    normalized_series = _validate_fred_series_id(series_id)
+    source_id = f"fred:{normalized_series}"
+    freshness_hint = FRED_FRESHNESS_HINTS[normalized_series]
+
+    if not isinstance(payload, Mapping):
+        return []
 
     observations = payload.get("observations")
     if not isinstance(observations, Sequence) or isinstance(observations, (str, bytes)):
-        return _unavailable_observation(
-            normalized_series,
-            source_id=source_id,
-            freshness_hint=freshness_hint,
-            reason="fred_observations_missing",
-        )
+        return []
 
-    latest_valid: tuple[str, float] | None = None
+    valid_points: list[tuple[str, float]] = []
     for item in observations:
         if not isinstance(item, Mapping):
             continue
@@ -145,26 +159,21 @@ def parse_fred_observations_payload(series_id: str, payload: Any) -> MacroObserv
         raw_value = _parse_numeric(item.get("value"))
         if raw_date is None or raw_value is None:
             continue
-        if latest_valid is None or raw_date > latest_valid[0]:
-            latest_valid = (raw_date, raw_value)
+        valid_points.append((raw_date, raw_value))
 
-    if latest_valid is None:
-        return _unavailable_observation(
-            normalized_series,
+    valid_points.sort(key=lambda item: item[0], reverse=True)
+    return [
+        MacroObservation(
+            symbol=normalized_series,
+            value=value,
+            date=point_date,
+            as_of=point_date,
             source_id=source_id,
+            source_type=OFFICIAL_SOURCE_TYPE,
             freshness_hint=freshness_hint,
-            reason="fred_observation_value_unavailable",
         )
-
-    return MacroObservation(
-        symbol=normalized_series,
-        value=latest_valid[1],
-        date=latest_valid[0],
-        as_of=latest_valid[0],
-        source_id=source_id,
-        source_type=OFFICIAL_SOURCE_TYPE,
-        freshness_hint=freshness_hint,
-    )
+        for point_date, value in valid_points[: max(0, limit)]
+    ]
 
 
 def parse_treasury_daily_rates_csv(text: str) -> list[MacroObservation]:
@@ -226,6 +235,50 @@ def parse_treasury_daily_rates_rows(rows: Iterable[Mapping[str, Any]]) -> list[M
     return observations
 
 
+def parse_treasury_daily_rate_observation_points_csv(text: str, *, limit: int = 2) -> dict[str, list[MacroObservation]]:
+    reader = csv.DictReader(StringIO(text))
+    return parse_treasury_daily_rate_observation_points_rows(list(reader), limit=limit)
+
+
+def parse_treasury_daily_rate_observation_points_rows(
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    limit: int = 2,
+) -> dict[str, list[MacroObservation]]:
+    materialized_rows = [row for row in rows if isinstance(row, Mapping)]
+    sorted_rows = sorted(
+        (
+            (_normalize_treasury_date(row.get("Date") or row.get("DATE") or row.get("date")), row)
+            for row in materialized_rows
+        ),
+        key=lambda item: item[0] or "",
+        reverse=True,
+    )
+    source_id = "treasury:daily_treasury_yield_curve"
+    points: dict[str, list[MacroObservation]] = {symbol: [] for symbol in TREASURY_RATE_SYMBOLS}
+    for row_date, row in sorted_rows:
+        if row_date is None:
+            continue
+        for symbol in TREASURY_RATE_SYMBOLS:
+            if len(points[symbol]) >= max(0, limit):
+                continue
+            value = _parse_numeric(_lookup_treasury_value(row, symbol))
+            if value is None:
+                continue
+            points[symbol].append(
+                MacroObservation(
+                    symbol=symbol,
+                    value=value,
+                    date=row_date,
+                    as_of=row_date,
+                    source_id=source_id,
+                    source_type=OFFICIAL_SOURCE_TYPE,
+                    freshness_hint=TREASURY_FRESHNESS_HINT,
+                )
+            )
+    return points
+
+
 def parse_nyfed_sofr_payload(_: Any) -> MacroObservation:
     return _unavailable_observation(
         "SOFR",
@@ -233,6 +286,36 @@ def parse_nyfed_sofr_payload(_: Any) -> MacroObservation:
         freshness_hint="unsupported_shape",
         reason=NYFED_SOFR_UNSUPPORTED_REASON,
     )
+
+
+def fetch_fred_observation_points(
+    series_id: str,
+    *,
+    api_key: str | None = None,
+    limit: int = 2,
+    timeout: float = DEFAULT_TRANSPORT_TIMEOUT_SECONDS,
+) -> list[MacroObservation]:
+    request = build_fred_observations_request(series_id, api_key=api_key, limit=limit)
+    payload = json.loads(_fetch_transport_bytes(request, timeout=timeout).decode("utf-8"))
+    return parse_fred_observation_points_payload(series_id, payload, limit=limit)
+
+
+def fetch_treasury_daily_rate_observation_points(
+    *,
+    limit: int = 2,
+    timeout: float = DEFAULT_TRANSPORT_TIMEOUT_SECONDS,
+) -> dict[str, list[MacroObservation]]:
+    request = build_treasury_daily_rates_request()
+    text = _fetch_transport_bytes(request, timeout=timeout).decode("utf-8-sig")
+    return parse_treasury_daily_rate_observation_points_csv(text, limit=limit)
+
+
+def _fetch_transport_bytes(request: MacroTransportRequest, *, timeout: float) -> bytes:
+    query = urlencode(request.params)
+    url = f"{request.url}?{query}" if query else request.url
+    http_request = Request(url=url, headers=request.headers, method=request.method)
+    with urlopen(http_request, timeout=timeout) as response:
+        return response.read()
 
 
 def _lookup_treasury_value(row: Mapping[str, Any], symbol: str) -> Any:

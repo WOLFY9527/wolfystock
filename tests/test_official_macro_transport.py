@@ -16,8 +16,10 @@ from src.services.official_macro_transport import (
     build_fred_observations_request,
     build_supported_fred_requests,
     build_treasury_daily_rates_request,
+    parse_fred_observation_points_payload,
     parse_fred_observations_payload,
     parse_nyfed_sofr_payload,
+    parse_treasury_daily_rate_observation_points_csv,
     parse_treasury_daily_rates_csv,
     parse_treasury_daily_rates_rows,
 )
@@ -132,6 +134,33 @@ def test_parse_fred_observations_payload_returns_unavailable_for_missing_values(
     assert observation.unavailable_reason == "fred_observation_value_unavailable"
 
 
+def test_parse_fred_observation_points_payload_returns_latest_two_valid_points() -> None:
+    points = parse_fred_observation_points_payload("VIXCLS", _load_json_fixture("fred_vixcls.json"), limit=2)
+
+    assert [point.to_dict() for point in points] == [
+        {
+            "symbol": "VIXCLS",
+            "value": 18.22,
+            "date": "2026-05-13",
+            "asOf": "2026-05-13",
+            "source_id": "fred:VIXCLS",
+            "source_type": "official_public",
+            "freshness_hint": "daily_close",
+            "unavailable_reason": None,
+        },
+        {
+            "symbol": "VIXCLS",
+            "value": 17.05,
+            "date": "2026-05-12",
+            "asOf": "2026-05-12",
+            "source_id": "fred:VIXCLS",
+            "source_type": "official_public",
+            "freshness_hint": "daily_close",
+            "unavailable_reason": None,
+        },
+    ]
+
+
 def test_build_treasury_daily_rates_request_matches_official_csv_download() -> None:
     request = build_treasury_daily_rates_request()
 
@@ -217,6 +246,55 @@ def test_parse_treasury_daily_rates_rows_handles_json_like_rows_and_missing_valu
             "source_type": "official_public",
             "freshness_hint": "daily_1530_et",
             "unavailable_reason": "treasury_rate_unavailable",
+        },
+    ]
+
+
+def test_parse_treasury_daily_rate_observation_points_csv_returns_latest_two_rows_per_symbol() -> None:
+    points = parse_treasury_daily_rate_observation_points_csv(_load_text_fixture("treasury_daily_rates.csv"), limit=2)
+
+    assert [item.to_dict() for item in points["DGS2"]] == [
+        {
+            "symbol": "DGS2",
+            "value": 3.87,
+            "date": "2026-05-13",
+            "asOf": "2026-05-13",
+            "source_id": "treasury:daily_treasury_yield_curve",
+            "source_type": "official_public",
+            "freshness_hint": "daily_1530_et",
+            "unavailable_reason": None,
+        },
+        {
+            "symbol": "DGS2",
+            "value": 3.91,
+            "date": "2026-05-12",
+            "asOf": "2026-05-12",
+            "source_id": "treasury:daily_treasury_yield_curve",
+            "source_type": "official_public",
+            "freshness_hint": "daily_1530_et",
+            "unavailable_reason": None,
+        },
+    ]
+    assert [item.to_dict() for item in points["DGS10"]] == [
+        {
+            "symbol": "DGS10",
+            "value": 4.41,
+            "date": "2026-05-13",
+            "asOf": "2026-05-13",
+            "source_id": "treasury:daily_treasury_yield_curve",
+            "source_type": "official_public",
+            "freshness_hint": "daily_1530_et",
+            "unavailable_reason": None,
+        },
+        {
+            "symbol": "DGS10",
+            "value": 4.45,
+            "date": "2026-05-12",
+            "asOf": "2026-05-12",
+            "source_id": "treasury:daily_treasury_yield_curve",
+            "source_type": "official_public",
+            "freshness_hint": "daily_1530_et",
+            "unavailable_reason": None,
         },
     ]
 

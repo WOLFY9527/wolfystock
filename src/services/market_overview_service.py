@@ -13,6 +13,12 @@ from typing import Any, Callable, Dict, List, Optional
 
 from src.services.execution_log_service import ExecutionLogService
 from src.services.market_data_source_registry import resolve_source_label
+from src.services.official_macro_source_registry import get_official_macro_source_for_transport_source
+from src.services.official_macro_transport import (
+    MacroObservation,
+    fetch_fred_observation_points,
+    fetch_treasury_daily_rate_observation_points,
+)
 from src.services.market_overview_binance_transport import (
     fetch_binance_funding_row,
     fetch_binance_kline_history_rows,
@@ -47,6 +53,7 @@ CONFIDENCE_BY_FRESHNESS = {
 
 SOURCE_TYPE_CONFIDENCE = {
     "official_api": 1.0,
+    "official_public": 1.0,
     "exchange_public": 1.0,
     "public_api": 0.9,
     "unofficial_public_api": 0.7,
@@ -63,15 +70,19 @@ SOURCE_TYPE_BY_SOURCE = {
     "yfinance": "unofficial_public_api",
     "yfinance_proxy": "unofficial_public_api",
     "eastmoney": "public_api",
+    "fred": "official_public",
     "alternative": "public_api",
     "alternative_me": "public_api",
     "cnn": "public_api",
     "computed": "computed_from_real",
+    "treasury": "official_public",
 }
 
 SOURCE_LABELS = {
     "eastmoney": resolve_source_label("eastmoney"),
+    "fred": "FRED",
     "sina": resolve_source_label("sina"),
+    "treasury": "US Treasury",
     "yahoo": resolve_source_label("yahoo"),
     "yfinance": resolve_source_label("yfinance"),
     "yfinance_proxy": resolve_source_label("yfinance_proxy"),
@@ -214,6 +225,7 @@ def get_freshness_status(
     source: str,
     is_fallback: bool,
     *,
+    source_type: str = "",
     now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """Return normalized market data freshness metadata for UI trust labeling."""
@@ -266,6 +278,9 @@ def get_freshness_status(
             freshness = "live"
         else:
             freshness = "cached"
+    elif category_key == "macro_rate" and str(source_type or "").lower() == "official_public":
+        days_old = (current.date() - parsed_as_of.date()).days
+        freshness = "delayed" if days_old <= 3 else "stale"
     elif category_key == "macro_rate" and delay_minutes > stale_minutes["macro_rate"]:
         freshness = "cached" if parsed_as_of.date() == current.date() else "stale"
     else:
@@ -312,6 +327,11 @@ class MarketOverviewService:
         "DXY": ("US Dollar Index", "DX-Y.NYB", "idx"),
         "GOLD": ("Gold futures", "GC=F", "USD"),
         "OIL": ("WTI crude", "CL=F", "USD"),
+    }
+    OFFICIAL_RATE_SERIES = {
+        "US2Y": ("DGS2", "US 2Y", "%", "US"),
+        "US10Y": ("DGS10", "US 10Y", "%", "US"),
+        "US30Y": ("DGS30", "US 30Y", "%", "US"),
     }
     US_SECTOR_ETFS = {
         "XLK": "Technology",
@@ -1059,7 +1079,7 @@ class MarketOverviewService:
         is_fallback = bool(payload.get("isFallback") or source.lower() in {"fallback", "mock"})
         updated_at = payload.get("updatedAt") or payload.get("last_update") or payload.get("last_refresh_at") or _now_iso()
         as_of = payload.get("asOf") or payload.get("last_update") or payload.get("last_refresh_at") or updated_at
-        freshness = get_freshness_status(as_of, category, source, is_fallback)
+        freshness = get_freshness_status(as_of, category, source, is_fallback, source_type=payload.get("sourceType") or "")
         if payload.get("isFromSnapshot"):
             snapshot_freshness = str(payload.get("freshness") or "").lower()
             if snapshot_freshness in {"stale", "fallback", "mock", "error"}:
@@ -1096,7 +1116,7 @@ class MarketOverviewService:
         is_fallback = bool(item.get("isFallback") or item.get("fallbackUsed") or source.lower() in {"fallback", "mock"})
         as_of = item.get("asOf") or item.get("last_update") or item.get("updatedAt") or panel.get("asOf") or panel.get("updatedAt")
         updated_at = item.get("updatedAt") or panel.get("updatedAt") or _now_iso()
-        freshness = get_freshness_status(as_of, category, source, is_fallback)
+        freshness = get_freshness_status(as_of, category, source, is_fallback, source_type=item.get("sourceType") or panel.get("sourceType") or "")
         if item.get("isFromSnapshot") or panel.get("isFromSnapshot"):
             snapshot_freshness = str(item.get("freshness") or panel.get("freshness") or "").lower()
             if snapshot_freshness in {"stale", "fallback", "mock", "error"}:
@@ -1128,13 +1148,26 @@ class MarketOverviewService:
 
     def _fetch_volatility(self) -> PanelPayload:
         items = self._quote_items(self.VOL_SYMBOLS)
+        official_vix = self._official_macro_item(
+            "VIX",
+            "VIX",
+            self._official_macro_points().get("VIXCLS", []),
+            unit="pts",
+            change_scale=1.0,
+        )
+        if official_vix:
+            items = [official_vix if str(item.get("symbol") or "") == "VIX" else item for item in items]
         try:
             atr_item = self._atr_item()
         except Exception:
             atr_item = None
         if atr_item:
             items.append(atr_item)
-        return self._success_panel("VolatilityCard", items)
+        payload = self._success_panel("VolatilityCard", items)
+        payload["source"] = "mixed" if official_vix else "yfinance"
+        payload["sourceLabel"] = self._source_label(payload["source"])
+        payload["fallbackUsed"] = False
+        return payload
 
     def _fetch_sentiment(self) -> PanelPayload:
         snapshot = self._fetch_market_sentiment_snapshot()
@@ -1447,15 +1480,35 @@ class MarketOverviewService:
         return self._success_panel("FundsFlowCard", items)
 
     def _fetch_macro(self) -> PanelPayload:
-        items = self._quote_items(self.MACRO_SYMBOLS)
-        items.extend([
-            {"symbol": "US2Y", "label": "2Y yield", "value": None, "unit": "%", "risk_direction": "neutral", "source": "pending_public_feed"},
-            {"symbol": "FEDFUNDS", "label": "Fed Funds", "value": None, "unit": "%", "risk_direction": "neutral", "source": "pending_public_feed"},
-            {"symbol": "CPI", "label": "CPI", "value": None, "unit": "YoY %", "risk_direction": "neutral", "source": "pending_public_feed"},
-            {"symbol": "PPI", "label": "PPI", "value": None, "unit": "YoY %", "risk_direction": "neutral", "source": "pending_public_feed"},
-            {"symbol": "CREDIT", "label": "Credit spreads", "value": None, "unit": "bps", "risk_direction": "neutral", "source": "pending_public_feed"},
-        ])
-        return self._success_panel("MacroIndicatorsCard", items)
+        official_points = self._official_macro_points()
+        item_map = {
+            str(item.get("symbol") or ""): item
+            for item in self._quote_items(self.MACRO_SYMBOLS)
+        }
+        for panel_symbol, (series_id, label, unit, market) in self.OFFICIAL_RATE_SERIES.items():
+            official_item = self._official_macro_item(panel_symbol, label, official_points.get(series_id, []), unit=unit, market=market)
+            if official_item:
+                item_map[panel_symbol] = official_item
+        official_sofr = self._official_macro_item("SOFR", "SOFR", official_points.get("SOFR", []), unit="%", market="US")
+        if official_sofr:
+            item_map["SOFR"] = official_sofr
+        official_vix = self._official_macro_item("VIX", "VIX", official_points.get("VIXCLS", []), unit="pts", change_scale=1.0)
+        if official_vix:
+            item_map["VIX"] = official_vix
+        for symbol, label, unit in (
+            ("FEDFUNDS", "Fed Funds", "%"),
+            ("CPI", "CPI", "YoY %"),
+            ("PPI", "PPI", "YoY %"),
+            ("CREDIT", "Credit spreads", "bps"),
+        ):
+            item_map.setdefault(symbol, {"symbol": symbol, "label": label, "value": None, "unit": unit, "risk_direction": "neutral", "source": "pending_public_feed"})
+        ordered_symbols = ["US2Y", "US10Y", "US30Y", "SOFR", "VIX", "DXY", "GOLD", "OIL", "FEDFUNDS", "CPI", "PPI", "CREDIT"]
+        items = [item_map[symbol] for symbol in ordered_symbols if symbol in item_map]
+        payload = self._success_panel("MacroIndicatorsCard", items)
+        payload["source"] = "mixed"
+        payload["sourceLabel"] = self._source_label("mixed")
+        payload["fallbackUsed"] = False
+        return payload
 
     def _fetch_cn_indices_snapshot(self) -> Dict[str, Any]:
         fallback = self._fallback_cn_indices_snapshot()
@@ -1645,7 +1698,116 @@ class MarketOverviewService:
         return self._fallback_sector_rotation_snapshot()
 
     def _fetch_rates_snapshot(self) -> Dict[str, Any]:
-        return self._fallback_rates_snapshot()
+        fallback = self._fallback_rates_snapshot()
+        official_points = self._official_macro_points()
+        fallback_items = {
+            str(item.get("symbol") or ""): item
+            for item in fallback.get("items", [])
+            if isinstance(item, dict)
+        }
+        items: List[Dict[str, Any]] = []
+        official_count = 0
+        for symbol in ("US2Y", "US10Y", "US30Y"):
+            series_id, label, unit, market = self.OFFICIAL_RATE_SERIES[symbol]
+            official_item = self._official_macro_item(symbol, label, official_points.get(series_id, []), unit=unit, market=market)
+            if official_item:
+                items.append(official_item)
+                official_count += 1
+            elif symbol in fallback_items:
+                items.append(fallback_items[symbol])
+        if "US10Y2Y" in fallback_items:
+            items.append(fallback_items["US10Y2Y"])
+        if "US10Y3M" in fallback_items:
+            items.append(fallback_items["US10Y3M"])
+        official_sofr = self._official_macro_item("SOFR", "SOFR", official_points.get("SOFR", []), unit="%", market="US")
+        if official_sofr:
+            items.append(official_sofr)
+        for symbol in ("CN10Y", "DR007", "SHIBOR", "LPR"):
+            if symbol in fallback_items:
+                items.append(fallback_items[symbol])
+
+        if official_count == 0 and not official_sofr:
+            return fallback
+
+        return {
+            **fallback,
+            "source": "mixed",
+            "sourceLabel": self._source_label("mixed"),
+            "items": items,
+            "fallbackUsed": any(bool(item.get("isFallback")) for item in items),
+            "isFallback": False,
+            "warning": FALLBACK_WARNING if any(bool(item.get("isFallback")) for item in items) else None,
+        }
+
+    def _official_macro_points(self) -> Dict[str, List[MacroObservation]]:
+        points: Dict[str, List[MacroObservation]] = {}
+        try:
+            points.update(fetch_treasury_daily_rate_observation_points(limit=2))
+        except Exception:
+            pass
+        for series_id in ("DGS2", "DGS10", "DGS30", "VIXCLS", "SOFR"):
+            if series_id in points and points[series_id]:
+                continue
+            try:
+                series_points = fetch_fred_observation_points(series_id, limit=2)
+            except Exception:
+                series_points = []
+            if series_points:
+                points[series_id] = series_points
+        return points
+
+    def _official_macro_item(
+        self,
+        symbol: str,
+        label: str,
+        observations: List[MacroObservation],
+        *,
+        unit: str,
+        market: Optional[str] = None,
+        change_scale: float = 100.0,
+    ) -> Optional[Dict[str, Any]]:
+        latest = observations[0] if observations else None
+        if latest is None or latest.value is None:
+            return None
+        previous = next(
+            (point for point in observations[1:] if point.value is not None),
+            None,
+        )
+        previous_value = previous.value if previous is not None else None
+        change = None if previous_value is None else round((latest.value - previous_value) * change_scale, 3)
+        change_percent = self._percent_change(previous_value, latest.value)
+        source_label = self._official_source_label(latest.source_id)
+        item: Dict[str, Any] = {
+            "name": label,
+            "label": label,
+            "symbol": symbol,
+            "value": round(latest.value, 3),
+            "price": round(latest.value, 3),
+            "change": change,
+            "changePercent": round(change_percent, 3) if change_percent is not None else None,
+            "change_text": f"{change:+.2f}" if change is not None else "待确认",
+            "sparkline": [round(point.value, 3) for point in reversed(observations) if point.value is not None],
+            "trend": [round(point.value, 3) for point in reversed(observations) if point.value is not None],
+            "unit": unit,
+            "source": latest.source_id.split(":", 1)[0],
+            "sourceId": latest.source_id,
+            "sourceType": latest.source_type,
+            "sourceLabel": source_label,
+            "asOf": latest.as_of,
+            "updatedAt": latest.as_of,
+            "isFallback": False,
+            "risk_direction": self._risk_direction(change_percent),
+            "hover_details": [source_label, f"Official as of {latest.as_of}"] if latest.as_of else [source_label],
+        }
+        if market:
+            item["market"] = market
+        return item
+
+    def _official_source_label(self, source_id: str) -> str:
+        contract = get_official_macro_source_for_transport_source(source_id)
+        if contract is not None:
+            return contract.display_name
+        return resolve_source_label(source_type="official_public")
 
     def _fetch_fx_commodities_snapshot(self) -> Dict[str, Any]:
         return self._fallback_fx_commodities_snapshot()

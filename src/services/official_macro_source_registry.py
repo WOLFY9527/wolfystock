@@ -164,6 +164,15 @@ _CONTRACTS = tuple(
 )
 
 _CONTRACTS_BY_ID = MappingProxyType({item.source_id: item for item in _CONTRACTS})
+_CONTRACT_IDS_BY_TRANSPORT_SOURCE = MappingProxyType({
+    "fred:DGS10": "FRED_DGS10",
+    "fred:DGS2": "FRED_DGS2",
+    "fred:DGS30": "FRED_DGS30",
+    "fred:SOFR": "FRED_SOFR",
+    "fred:VIXCLS": "FRED_VIXCLS",
+    "nyfed:sofr": "NYFED_SOFR",
+    "treasury:daily_treasury_yield_curve": "TREASURY_DAILY_RATES",
+})
 
 
 def list_official_macro_sources() -> tuple[OfficialMacroSourceContract, ...]:
@@ -177,3 +186,14 @@ def get_official_macro_source(source_id: str | None) -> OfficialMacroSourceContr
     if not normalized:
         return None
     return _CONTRACTS_BY_ID.get(normalized)
+
+
+def get_official_macro_source_for_transport_source(source_id: str | None) -> OfficialMacroSourceContract | None:
+    """Map a transport/runtime source id back to the inert contract registry."""
+    normalized = str(source_id or "").strip()
+    if not normalized:
+        return None
+    contract_id = _CONTRACT_IDS_BY_TRANSPORT_SOURCE.get(normalized)
+    if not contract_id:
+        return None
+    return _CONTRACTS_BY_ID.get(contract_id)
