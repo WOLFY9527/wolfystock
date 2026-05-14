@@ -204,6 +204,44 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertNotIn("000001.SS", quotes)
         self.assertNotIn("000300.SS", quotes)
 
+    def test_cn_indices_service_owns_public_metadata_after_sina_transport_rows(self) -> None:
+        service = MarketOverviewService()
+
+        def row(name: str, open_price: str, previous: str, latest: str, high: str, low: str) -> list[str]:
+            values = [""] * 32
+            values[0] = name
+            values[1] = open_price
+            values[2] = previous
+            values[3] = latest
+            values[4] = high
+            values[5] = low
+            values[30] = "2026-05-14"
+            values[31] = "15:00:00"
+            return values
+
+        transport_rows = {
+            "sh000001": row("上证指数", "4090.00", "4078.63", "4107.51", "4112.00", "4088.10"),
+            "sz399001": row("深证成指", "10210.00", "10239.22", "10288.10", "10302.50", "10198.00"),
+            "sh000300": row("沪深300", "3900.00", "3892.00", "3918.88", "3928.50", "3888.20"),
+        }
+
+        with patch("src.services.market_overview_service.fetch_sina_cn_index_rows", return_value=transport_rows):
+            payload = service.get_cn_indices()
+
+        self.assertEqual(payload["source"], "mixed")
+        self.assertEqual(payload["sourceLabel"], "多来源")
+        self.assertTrue(payload["fallbackUsed"])
+        self.assertFalse(payload["isFallback"])
+        self.assertEqual(payload["providerHealth"]["provider"], "mixed")
+        self.assertEqual(payload["providerHealth"]["status"], "partial")
+        live_item = next(item for item in payload["items"] if item["symbol"] == "000001.SH")
+        fallback_item = next(item for item in payload["items"] if item["symbol"] == "399006.SZ")
+        self.assertEqual(live_item["source"], "sina")
+        self.assertEqual(live_item["sourceLabel"], "新浪财经")
+        self.assertFalse(live_item["isFallback"])
+        self.assertEqual(fallback_item["source"], "fallback")
+        self.assertTrue(fallback_item["isFallback"])
+
     def test_cn_indices_uses_cache_within_ttl(self) -> None:
         calls = 0
 

@@ -290,6 +290,12 @@ MARKET_OVERVIEW_RUNTIME_FILES = (
     "src/services/market_overview_service.py",
     "src/services/market_rotation_radar_service.py",
 )
+MARKET_OVERVIEW_TRANSPORT_FILES = (
+    "src/services/market_overview_binance_transport.py",
+    "src/services/market_overview_sentiment_transport.py",
+    "src/services/market_overview_sina_transport.py",
+    "src/services/market_overview_yfinance_transport.py",
+)
 EXPECTED_MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORTS = {
     "api/v1/endpoints/market.py": set(),
     "api/v1/endpoints/market_overview.py": set(),
@@ -301,6 +307,17 @@ EXPECTED_MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORTS = {
     "src/services/market_overview_service.py": set(),
     "src/services/market_rotation_radar_service.py": set(),
 }
+FORBIDDEN_MARKET_OVERVIEW_TRANSPORT_BOUNDARY_PREFIXES = (
+    "api",
+    "fastapi",
+    "apps",
+    "data_provider",
+    "src.providers",
+    "src.services.analysis_provider_planner",
+    "src.services.market_cache",
+    "src.services.market_overview_service",
+    "src.services.market_provider_operations_service",
+)
 STOCK_SERVICE_TRANSITIONAL_PROVIDER_BOUNDARY = {
     "provider_runtime": {"data_provider.base"},
     "direct_provider_clients": {"yfinance"},
@@ -681,6 +698,25 @@ def test_market_overview_runtime_direct_provider_imports_stay_frozen() -> None:
         "imports limited to the dedicated transport seams plus the remaining "
         "service-level sentiment/yfinance seams. "
         f"Expected {EXPECTED_MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORTS}, found {actual_mapping}"
+    )
+
+
+def test_market_overview_transport_modules_do_not_import_runtime_or_api_domains() -> None:
+    actual_mapping = {
+        relative_path: _imports_for_file(
+            REPO_ROOT / relative_path,
+            FORBIDDEN_MARKET_OVERVIEW_TRANSPORT_BOUNDARY_PREFIXES,
+        )
+        for relative_path in MARKET_OVERVIEW_TRANSPORT_FILES
+    }
+
+    assert actual_mapping == {
+        relative_path: set()
+        for relative_path in MARKET_OVERVIEW_TRANSPORT_FILES
+    }, (
+        "Market Overview transport modules must stay raw transport-only and "
+        "must not import MarketCache, API/FastAPI surfaces, frontend code, or "
+        "unrelated provider runtime managers."
     )
 
 

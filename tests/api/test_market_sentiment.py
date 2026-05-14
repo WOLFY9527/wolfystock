@@ -149,6 +149,36 @@ class MarketSentimentApiTestCase(unittest.TestCase):
         self.assertEqual(payload["error"], "cnn unavailable")
         self.assertTrue(all(item["source"] == "alternative_me" for item in payload["items"]))
 
+    def test_get_sentiment_service_owns_provider_order_and_public_metadata_from_transport_payloads(self) -> None:
+        service = MarketOverviewService()
+        alternative_payload = {
+            "data": [
+                {"value": "21"},
+                {"value": "28"},
+                {"value": "34"},
+            ]
+        }
+
+        with patch(
+            "src.services.market_overview_service.fetch_cnn_fear_greed_payload",
+            side_effect=RuntimeError("cnn unavailable"),
+        ) as cnn_fetch, patch(
+            "src.services.market_overview_service.fetch_alternative_fear_greed_payload",
+            return_value=alternative_payload,
+        ) as alternative_fetch:
+            payload = service.get_market_sentiment()
+
+        cnn_fetch.assert_called_once_with()
+        alternative_fetch.assert_called_once_with()
+        self.assertEqual(payload["source"], "alternative_me")
+        self.assertEqual(payload["sourceLabel"], "Alternative.me")
+        self.assertFalse(payload["fallback_used"])
+        self.assertFalse(payload["isFallback"])
+        self.assertEqual(payload["providerHealth"]["provider"], "alternative_me")
+        self.assertIn(payload["providerHealth"]["status"], {"live", "cache"})
+        self.assertTrue(all(item["source"] == "alternative_me" for item in payload["items"]))
+        self.assertTrue(all(item["sourceLabel"] == "Alternative.me" for item in payload["items"]))
+
 
 if __name__ == "__main__":
     unittest.main()

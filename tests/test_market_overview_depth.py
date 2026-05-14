@@ -22,6 +22,29 @@ def teardown_function() -> None:
     MarketOverviewService._market_data_cache.clear()
 
 
+class _FrameColumn:
+    def __init__(self, values: list[float]) -> None:
+        self._values = values
+
+    def tolist(self) -> list[float]:
+        return list(self._values)
+
+
+class _HistoryFrame:
+    def __init__(self, closes: list[float], volumes: list[float]) -> None:
+        self.empty = False
+        self._columns = {
+            "Close": _FrameColumn(closes),
+            "Volume": _FrameColumn(volumes),
+        }
+
+    def __getitem__(self, key: str) -> _FrameColumn:
+        return self._columns[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._columns
+
+
 def test_us_breadth_sector_proxy_returns_stable_shape_with_metadata() -> None:
     service = MarketOverviewService()
     quotes = {
@@ -164,6 +187,25 @@ def test_market_us_breadth_endpoint_uses_market_service() -> None:
 
     assert payload["items"][0]["symbol"] == "SECTORS_UP"
     service.get_us_breadth.assert_called_once()
+
+
+def test_latest_quote_service_shapes_yfinance_transport_history_frame() -> None:
+    service = MarketOverviewService()
+    frame = _HistoryFrame(
+        closes=[510.0, 515.5, 520.25],
+        volumes=[1000000.0, 1200000.0, 1400000.0],
+    )
+
+    with patch("src.services.market_overview_service.fetch_yfinance_quote_history_frame", return_value=frame) as mock_fetch:
+        quote = service._latest_quote("SPY")
+
+    mock_fetch.assert_called_once_with("SPY")
+    assert quote == {
+        "value": 520.25,
+        "change_pct": 0.921,
+        "trend": [510.0, 515.5, 520.25],
+        "volume": 1400000.0,
+    }
 
 
 def test_crypto_snapshot_includes_sol_and_funding_when_binance_public_data_available() -> None:

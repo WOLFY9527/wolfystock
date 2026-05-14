@@ -293,6 +293,52 @@ class MarketCryptoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["items"][0]["trend"], [70000.0, 71000.0])
         self.assertEqual(payload["items"][0]["hover_details"][0], "24H +1.50%")
 
+    def test_get_crypto_service_owns_public_payload_after_binance_transport_calls(self) -> None:
+        service = MarketOverviewService()
+        ticker_rows = [
+            {"symbol": "BTCUSDT", "lastPrice": "70000", "priceChangePercent": "1.2", "quoteVolume": "2200000000", "highPrice": "71000", "lowPrice": "69000"},
+            {"symbol": "ETHUSDT", "lastPrice": "3500", "priceChangePercent": "0.4", "quoteVolume": "1200000000", "highPrice": "3550", "lowPrice": "3400"},
+            {"symbol": "SOLUSDT", "lastPrice": "155", "priceChangePercent": "2.4", "quoteVolume": "700000000", "highPrice": "160", "lowPrice": "150"},
+            {"symbol": "BNBUSDT", "lastPrice": "610", "priceChangePercent": "-0.2", "quoteVolume": "320000000", "highPrice": "618", "lowPrice": "604"},
+        ]
+        funding_rows = {
+            "BTCUSDT": {"lastFundingRate": "0.00012"},
+            "ETHUSDT": {"lastFundingRate": "0.00008"},
+            "SOLUSDT": {"lastFundingRate": "-0.00005"},
+            "BNBUSDT": {"lastFundingRate": "0.00003"},
+        }
+
+        def history_rows(symbol: str) -> list[list[str]]:
+            close_map = {
+                "BTCUSDT": ["68000", "69000", "70000"],
+                "ETHUSDT": ["3300", "3400", "3500"],
+                "SOLUSDT": ["145", "150", "155"],
+                "BNBUSDT": ["600", "605", "610"],
+            }
+            return [["0", "0", "0", "0", close, "0"] for close in close_map[symbol]]
+
+        with (
+            patch("src.services.market_overview_service.fetch_binance_ticker_snapshot", return_value=ticker_rows) as mock_ticker,
+            patch("src.services.market_overview_service.fetch_binance_kline_history_rows", side_effect=history_rows) as mock_klines,
+            patch("src.services.market_overview_service.fetch_binance_funding_row", side_effect=lambda symbol: funding_rows[symbol]) as mock_funding,
+        ):
+            payload = service.get_crypto()
+
+        mock_ticker.assert_called_once_with(["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"])
+        self.assertEqual(mock_klines.call_count, 4)
+        self.assertEqual(mock_funding.call_count, 4)
+        self.assertEqual(payload["source"], "binance")
+        self.assertEqual(payload["sourceLabel"], "Binance")
+        self.assertFalse(payload["fallback_used"])
+        self.assertFalse(payload["isFallback"])
+        self.assertEqual(payload["providerHealth"]["provider"], "binance")
+        self.assertEqual(payload["providerHealth"]["status"], "partial")
+        btc_item = next(item for item in payload["items"] if item["symbol"] == "BTC")
+        self.assertEqual(btc_item["source"], "binance")
+        self.assertEqual(btc_item["sourceLabel"], "Binance")
+        self.assertFalse(btc_item["isFallback"])
+        self.assertTrue(btc_item["trend"])
+
 
 if __name__ == "__main__":
     unittest.main()

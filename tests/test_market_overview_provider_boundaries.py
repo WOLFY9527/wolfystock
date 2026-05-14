@@ -14,6 +14,23 @@ MARKET_OVERVIEW_BINANCE_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "marke
 MARKET_OVERVIEW_SENTIMENT_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_sentiment_transport.py"
 MARKET_OVERVIEW_SINA_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_sina_transport.py"
 MARKET_OVERVIEW_YFINANCE_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_yfinance_transport.py"
+MARKET_OVERVIEW_TRANSPORT_FILES = (
+    MARKET_OVERVIEW_BINANCE_TRANSPORT_FILE,
+    MARKET_OVERVIEW_SENTIMENT_TRANSPORT_FILE,
+    MARKET_OVERVIEW_SINA_TRANSPORT_FILE,
+    MARKET_OVERVIEW_YFINANCE_TRANSPORT_FILE,
+)
+FORBIDDEN_TRANSPORT_IMPORT_PREFIXES = (
+    "api",
+    "fastapi",
+    "apps",
+    "data_provider",
+    "src.providers",
+    "src.services.analysis_provider_planner",
+    "src.services.market_cache",
+    "src.services.market_overview_service",
+    "src.services.market_provider_operations_service",
+)
 
 
 def _market_endpoint_tree() -> ast.AST:
@@ -60,6 +77,14 @@ def _module_imports_for_file(path: Path) -> set[str]:
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             imports.add(node.module)
     return imports
+
+
+def _module_imports_matching_prefixes(path: Path, prefixes: tuple[str, ...]) -> set[str]:
+    return {
+        module
+        for module in _module_imports_for_file(path)
+        if any(module == prefix or module.startswith(prefix + ".") for prefix in prefixes)
+    }
 
 
 def _requests_get_urls(path: Path) -> set[str]:
@@ -167,7 +192,10 @@ def test_market_overview_service_extracts_raw_transport_boundaries() -> None:
     assert not {
         module
         for module in service_imports
-        if module == "yfinance" or module.startswith("yfinance.")
+        if module == "requests"
+        or module.startswith("requests.")
+        or module == "yfinance"
+        or module.startswith("yfinance.")
     }
     assert not {
         url
@@ -176,6 +204,48 @@ def test_market_overview_service_extracts_raw_transport_boundaries() -> None:
         or "sinajs.cn" in url
         or "dataviz.cnn.io" in url
         or "alternative.me" in url
+    }
+
+
+def test_market_overview_transport_modules_stay_runtime_lightweight() -> None:
+    actual_mapping = {
+        path.name: _module_imports_matching_prefixes(path, FORBIDDEN_TRANSPORT_IMPORT_PREFIXES)
+        for path in MARKET_OVERVIEW_TRANSPORT_FILES
+    }
+
+    assert actual_mapping == {
+        path.name: set()
+        for path in MARKET_OVERVIEW_TRANSPORT_FILES
+    }
+
+
+def test_market_overview_raw_http_calls_are_confined_to_http_transport_modules() -> None:
+    actual_mapping = {
+        path.name: _requests_get_urls(path)
+        for path in (
+            MARKET_OVERVIEW_BINANCE_TRANSPORT_FILE,
+            MARKET_OVERVIEW_SENTIMENT_TRANSPORT_FILE,
+            MARKET_OVERVIEW_SINA_TRANSPORT_FILE,
+            MARKET_OVERVIEW_YFINANCE_TRANSPORT_FILE,
+            MARKET_OVERVIEW_SERVICE_FILE,
+        )
+    }
+
+    assert actual_mapping == {
+        "market_overview_binance_transport.py": {
+            "https://api.binance.com/api/v3/ticker/24hr",
+            "https://api.binance.com/api/v3/klines",
+            "https://fapi.binance.com/fapi/v1/premiumIndex",
+        },
+        "market_overview_sentiment_transport.py": {
+            "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
+            "https://api.alternative.me/fng/",
+        },
+        "market_overview_sina_transport.py": {
+            "https://hq.sinajs.cn/list=",
+        },
+        "market_overview_yfinance_transport.py": set(),
+        "market_overview_service.py": set(),
     }
 
 
@@ -225,3 +295,10 @@ def test_market_overview_yfinance_transport_owns_yfinance_history_call_shapes() 
             "auto_adjust": False,
         },
     ]
+
+
+def test_market_overview_yfinance_history_calls_are_confined_to_yfinance_transport() -> None:
+    assert _yfinance_history_call_shapes(MARKET_OVERVIEW_BINANCE_TRANSPORT_FILE) == []
+    assert _yfinance_history_call_shapes(MARKET_OVERVIEW_SENTIMENT_TRANSPORT_FILE) == []
+    assert _yfinance_history_call_shapes(MARKET_OVERVIEW_SINA_TRANSPORT_FILE) == []
+    assert _yfinance_history_call_shapes(MARKET_OVERVIEW_SERVICE_FILE) == []
