@@ -547,6 +547,7 @@ describe('DeterministicBacktestResultPage', () => {
     expect(pageShell).toHaveAttribute('data-density', 'dense');
     expect(pageShell).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-6');
     expect(pageShell).not.toHaveClass('theme-page-transition', 'backtest-v1-page', 'workspace-page--backtest');
+    expect(pageShell.querySelector('.workspace-page--backtest')).toBeNull();
     expect(screen.getByTestId('deterministic-result-page-hero')).toBeInTheDocument();
     expect(screen.getByTestId('deterministic-result-dashboard')).toBeInTheDocument();
     expect(screen.queryByText('结果指标')).not.toBeInTheDocument();

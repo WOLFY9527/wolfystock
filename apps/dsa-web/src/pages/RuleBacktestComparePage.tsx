@@ -1270,22 +1270,21 @@ const RuleBacktestComparePage: React.FC = () => {
   return (
     <main className="w-full overflow-x-hidden py-4 text-white">
       <TerminalPageShell data-testid="rule-backtest-compare-page">
-        <div className="workspace-page--backtest flex min-h-0 min-w-0 flex-col gap-6">
-          <WorkspacePageHeader
-            eyebrow="WolfyStock"
-            title="规则回测比较工作台"
-            description={`按请求顺序对比已完成规则回测运行。当前 runIds: ${runIds.length ? runIds.join(', ') : '--'}`}
-            actions={(
-              <div className="product-action-row">
-                <Button variant="ghost" onClick={() => navigate('/backtest')}>
-                  返回回测工作区
-                </Button>
-                <Button variant="secondary" onClick={() => void fetchCompare()} disabled={runIds.length < 2}>
-                  {isLoading ? '刷新中…' : '刷新比较'}
-                </Button>
-              </div>
-            )}
-          />
+        <WorkspacePageHeader
+          eyebrow="WolfyStock"
+          title="规则回测比较工作台"
+          description={`按请求顺序对比已完成规则回测运行。当前 runIds: ${runIds.length ? runIds.join(', ') : '--'}`}
+          actions={(
+            <div className="product-action-row">
+              <Button variant="ghost" onClick={() => navigate('/backtest')}>
+                返回回测工作区
+              </Button>
+              <Button variant="secondary" onClick={() => void fetchCompare()} disabled={runIds.length < 2}>
+                {isLoading ? '刷新中…' : '刷新比较'}
+              </Button>
+            </div>
+          )}
+        />
 
           {runIds.length < 2 ? (
             <section className="backtest-display-section">
@@ -1591,7 +1590,6 @@ const RuleBacktestComparePage: React.FC = () => {
           </section>
             </>
           ) : null}
-        </div>
       </TerminalPageShell>
     </main>
   );

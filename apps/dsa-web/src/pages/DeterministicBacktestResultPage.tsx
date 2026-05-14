@@ -1308,7 +1308,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
         data-density={density.mode}
         style={getDeterministicResultDensityCssVars(density)}
       >
-        <div className="workspace-page--backtest backtest-result-page flex min-h-0 min-w-0 flex-col">
+        <div className="backtest-result-page flex min-h-0 min-w-0 flex-col">
           {run?.status === 'completed' && normalized ? renderCompletedHero() : (
             <section className="backtest-result-page__hero" data-testid="deterministic-result-page-hero">
               <div className="backtest-result-page__hero-copy">
