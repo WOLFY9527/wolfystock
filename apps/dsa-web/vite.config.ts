@@ -14,6 +14,12 @@ function getManualChunk(id: string) {
   ) {
     return 'vendor-react'
   }
+  if (
+    normalizedId.includes('/node_modules/echarts/') ||
+    normalizedId.includes('/node_modules/zrender/')
+  ) {
+    return 'vendor-echarts'
+  }
   if (normalizedId.includes('/node_modules/react-router')) {
     return 'vendor-router'
   }
