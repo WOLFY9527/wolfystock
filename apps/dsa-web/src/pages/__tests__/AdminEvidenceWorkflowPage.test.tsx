@@ -300,4 +300,14 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(commandGrid).toHaveClass('grid-cols-1', 'xl:grid-cols-3');
     expect(runbookGrid).toHaveClass('grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-5');
   });
+
+  it('keeps vertical shell spacing on TerminalPageShell instead of the route scroll wrapper', () => {
+    render(<AdminEvidenceWorkflowPage />);
+
+    const page = screen.getByTestId('admin-evidence-workflow-page');
+    const shell = page.querySelector('[data-terminal-primitive="page-shell"]');
+
+    expect(page).not.toHaveClass('py-5', 'md:py-6');
+    expect(shell).toHaveClass('py-5', 'md:py-6');
+  });
 });

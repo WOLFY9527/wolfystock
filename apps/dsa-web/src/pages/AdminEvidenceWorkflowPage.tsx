@@ -170,9 +170,9 @@ function toneVariant(tone: Tone): React.ComponentProps<typeof TerminalChip>['var
 const AdminEvidenceWorkflowPage: React.FC = () => (
   <div
     data-testid="admin-evidence-workflow-page"
-    className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto no-scrollbar py-5 text-white md:py-6"
+    className="min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto no-scrollbar text-white"
   >
-    <TerminalPageShell>
+    <TerminalPageShell className="py-5 md:py-6">
       <TerminalPanel as="section" className="relative overflow-hidden">
         <TerminalPageHeading
           eyebrow="ADMIN EVIDENCE REVIEW"
